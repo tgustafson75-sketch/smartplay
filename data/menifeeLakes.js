@@ -3,7 +3,7 @@
 // Coordinates are calibrated in-app via the green calibration system
 export const menifeeLakes = {
   1:  { danger: 'none',                 bias: 'center',       note: 'Wide landing area, open tee shot' },
-  2:  { danger: 'water short-left',     bias: 'center-right', note: 'Water short-left, aim center' },
+  2:  { danger: 'water short-left',     bias: 'center-right', note: 'Par 4 — water short-left, aim center' },
   3:  { danger: 'trees right corner',   bias: 'left center',  note: 'Dogleg right, trees on corner' },
   4:  { danger: 'bunkers right',        bias: 'left center',  note: 'Reachable par 5, bunkers right' },
   5:  { danger: 'none',                 bias: 'center',       note: 'Long par 4, slight dogleg left' },

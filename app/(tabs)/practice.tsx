@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Image, Platform, Animated, TextInput, Modal, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
+// eslint-disable-next-line @typescript-eslint/no-deprecated
 import { Audio, Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';

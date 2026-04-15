@@ -537,11 +537,6 @@ export default function Caddie() {
               <Text style={{ color: missColor, fontSize: 11, fontWeight: '700' }}>{missLabel}</Text>
             </View>
           </View>
-          <Pressable
-            onPress={() => { void (!quietMode && speak(advice)); }}
-          >
-            <Text style={{ color: '#A7F3D0', fontSize: 12, fontWeight: '600' }}>🔊 Speak</Text>
-          </Pressable>
         </View>
         <Text style={styles.adviceText} numberOfLines={4}>{advice}</Text>
 

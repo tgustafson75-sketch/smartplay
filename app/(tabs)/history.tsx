@@ -13,13 +13,13 @@ import { useMemoryStore } from '../../store/memoryStore';
 import { useRoundStore } from '../../store/roundStore';
 import { useUserStore } from '../../store/userStore';
 
-// Mini course data for slope/rating lookup � mirrors PlayScreenClean COURSE_DB
+// Mini course data for slope/rating lookup — mirrors PlayScreenClean COURSE_DB
 const COURSE_RATINGS: Record<string, { slope: number; rating: number }> = {
-  'Menifee Lakes':         { slope: 118, rating: 69.8 },
-  'Menifee Lakes � Palms': { slope: 118, rating: 69.8 },
-  'Menifee Lakes � Lakes': { slope: 121, rating: 70.4 },
-  'Temecula Creek':        { slope: 125, rating: 71.2 },
-  'Moreno Valley Ranch':   { slope: 122, rating: 70.5 },
+  'Menifee Lakes':           { slope: 118, rating: 69.8 },
+  'Menifee Lakes – Palms':   { slope: 118, rating: 69.8 },
+  'Menifee Lakes – Lakes':   { slope: 121, rating: 70.4 },
+  'Temecula Creek':          { slope: 125, rating: 71.2 },
+  'Moreno Valley Ranch':     { slope: 122, rating: 70.5 },
 };
 
 // -- Round History helpers (pure) ------------------------------------------------
