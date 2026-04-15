@@ -16,6 +16,7 @@
  */
 
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -31,8 +32,8 @@ const IS_VALID_API_KEY = ELEVEN_API_KEY.length >= 32;
 // Voice IDs — your custom ElevenLabs voices
 // If your account cannot access a custom voice, it will fall back to Adam (free pre-made voice)
 const VOICES = {
-  male:   '1fz2mW1imKTf5Ryjk5su',
-  female: 'RGb96Dcl0k5eVje8EBch',
+  male:   '1fz2mW1imKTf5Ryjk5su', // Kevin
+  female: 'RGb96Dcl0k5eVje8EBch', // Serena
 };
 // Pre-made ElevenLabs voices available on all plans (fallback)
 const FALLBACK_VOICES = {
@@ -187,9 +188,15 @@ export const speak = async (text, gender = null) => {
 
     await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
 
+    // Write to a temp file — Android cannot play data: URIs via expo-av
+    const tmpUri = FileSystem.cacheDirectory + 'caddie_tts_' + Date.now() + '.mp3';
+    await FileSystem.writeAsStringAsync(tmpUri, base64Audio, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
     const sound = new Audio.Sound();
     _currentSound = sound;
-    await sound.loadAsync({ uri: `data:audio/mpeg;base64,${base64Audio}` });
+    await sound.loadAsync({ uri: tmpUri });
     await sound.playAsync();
 
     // Await playback completion
@@ -210,6 +217,15 @@ export const speak = async (text, gender = null) => {
       _currentSound = null;
     }
     _isSpeaking = false;
+    // Clean up temp audio file
+    try {
+      const tmpFiles = await FileSystem.readDirectoryAsync(FileSystem.cacheDirectory);
+      for (const f of tmpFiles) {
+        if (f.startsWith('caddie_tts_')) {
+          await FileSystem.deleteAsync(FileSystem.cacheDirectory + f, { idempotent: true });
+        }
+      }
+    } catch {}
   }
 };
 
