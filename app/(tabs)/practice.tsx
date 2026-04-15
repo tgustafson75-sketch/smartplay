@@ -10,6 +10,7 @@ import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo
 import { Accelerometer, Gyroscope } from 'expo-sensors';
 import { useSwingDetector, getSwingFeedback } from '../../hooks/useSwingDetector';
 import { auth } from '../../lib/firebase';
+import VoiceOverlay from '../../components/VoiceOverlay';
 import { useSwingStore } from '../../store/swingStore';
 import { playerProfile } from '../../store/playerProfile';
 import { useUserStore } from '../../store/userStore';
@@ -1327,35 +1328,13 @@ export default function Practice() {
   return (
     <>
     <PracticeTutorialOverlay visible={showTutorial} onDismiss={handleDismissTutorial} />
-    {/* Listening / Thinking / Speaking fullscreen overlay — same as play screen */}
-    {(listening || isThinking || isSpeaking) && (
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.93)', justifyContent: 'center', alignItems: 'center', zIndex: 999, paddingHorizontal: 28 }}>
-        <View style={{
-          borderRadius: 999, padding: 6,
-          borderWidth: isSpeaking ? 3 : 2,
-          borderColor: isThinking ? '#60a5fa' : '#4ade80',
-          shadowColor: isThinking ? '#60a5fa' : '#4ade80',
-          shadowOpacity: 0.95, shadowRadius: 32, elevation: 16,
-        }}>
-          <View style={{ transform: [{ scale: (listening || isSpeaking) ? pulse : 1 }] }}>
-            <Image source={LOGO} style={{ width: 110, height: 110, borderRadius: 999, overflow: 'hidden' }} resizeMode="cover" />
-          </View>
-        </View>
-        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600', marginTop: 20, textAlign: 'center' }}>
-          {isSpeaking ? 'Speaking...' : isThinking ? 'Thinking...' : listeningPhase === 'processing' ? 'Processing...' : 'Listening...'}
-        </Text>
-        {isSpeaking && caddieResponse ? (
-          <View style={{ marginTop: 16, backgroundColor: 'rgba(20,83,45,0.85)', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#4ade80', maxWidth: 340 }}>
-            <Text style={{ color: '#A7F3D0', fontSize: 15, lineHeight: 22, textAlign: 'center' }}>{caddieResponse}</Text>
-          </View>
-        ) : null}
-        {listening && (
-          <Pressable onPress={stopPracticeListening} style={{ marginTop: 30, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.12)' }}>
-            <Text style={{ color: '#A7F3D0', fontSize: 14 }}>Cancel</Text>
-          </Pressable>
-        )}
-      </View>
-    )}
+    {/* Listening / Thinking / Speaking fullscreen overlay */}
+    <VoiceOverlay
+      visible={listening || isThinking || isSpeaking}
+      phase={isSpeaking ? 'speaking' : isThinking ? 'thinking' : listeningPhase as any}
+      text={isSpeaking ? caddieResponse : undefined}
+      onCancel={listening && !isSpeaking ? stopPracticeListening : undefined}
+    />
 
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       {/* Header */}
