@@ -13,8 +13,6 @@ import PracticeTutorialOverlay from '../components/PracticeTutorialOverlay';
 import { useCaddieMemory } from '../store/CaddieMemory';
 import { extractFrames } from '../services/VideoAnalysisHelper';
 import { analyzeSwing } from '../services/SwingAnalysisEngine';
-import { extractFrames } from '../services/VideoAnalysisHelper';
-import { analyzeSwing } from '../services/SwingAnalysisEngine';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ShotDirection = 'left' | 'straight' | 'right';
