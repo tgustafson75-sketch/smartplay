@@ -84,7 +84,7 @@ const COURSE_DB: Course[] = [
     rating: 69.8,
     holes: [
       { hole: 1,  par: 4, distance: 356, note: 'Wide landing area, open tee shot',   front: { lat: 33.6892, lng: -117.1820 }, middle: { lat: 33.6891, lng: -117.1820 }, back: { lat: 33.6890, lng: -117.1820 } },
-      { hole: 2,  par: 3, distance: 155, note: 'Water short-left, aim center',        front: { lat: 33.6896, lng: -117.1832 }, middle: { lat: 33.6895, lng: -117.1832 }, back: { lat: 33.6894, lng: -117.1832 } },
+      { hole: 2,  par: 4, distance: 355, note: 'Water short-left, aim center',        front: { lat: 33.6896, lng: -117.1832 }, middle: { lat: 33.6895, lng: -117.1832 }, back: { lat: 33.6894, lng: -117.1832 } },
       { hole: 3,  par: 4, distance: 356, note: 'Dogleg right, trees on corner',       front: { lat: 33.6903, lng: -117.1845 }, middle: { lat: 33.6902, lng: -117.1845 }, back: { lat: 33.6901, lng: -117.1845 } },
       { hole: 4,  par: 5, distance: 489, note: 'Reachable par 5, bunkers right',      front: { lat: 33.6911, lng: -117.1858 }, middle: { lat: 33.6910, lng: -117.1858 }, back: { lat: 33.6909, lng: -117.1858 } },
       { hole: 5,  par: 4, distance: 371, note: 'Long par 4, slight dogleg left',      front: { lat: 33.6919, lng: -117.1870 }, middle: { lat: 33.6918, lng: -117.1870 }, back: { lat: 33.6917, lng: -117.1870 } },
