@@ -255,25 +255,33 @@ export default function Caddie() {
     }, 1500);
   };
 
-  const ask = () => {
+  const ask = async () => {
     const advice = getContextualAdvice();
     setLastAdvice(advice);
     setShowWhy(false);
+
+    // Phase 1 — Listening animation (1.8s)
     setListeningPhase('listening');
     setListening(true);
     setAvatarState('listening');
     startListeningAnim();
-    setTimeout(() => {
-      setListeningPhase('processing');
-      setAvatarState('speaking');
-      startSpeakingAnim();
-      setTimeout(() => {
-        stopAnim();
-        setListening(false);
-        setAvatarState('idle');
-        void (!quietMode && speak(advice));
-      }, 500);
-    }, 1800);
+    await new Promise((r) => setTimeout(r, 1800));
+
+    // Phase 2 — Processing animation (0.5s)
+    setListeningPhase('processing');
+    setAvatarState('speaking');
+    startSpeakingAnim();
+    await new Promise((r) => setTimeout(r, 500));
+
+    // Phase 3 — Speak (overlay stays visible + speaking animation during playback)
+    if (!quietMode) {
+      await speak(advice);
+    }
+
+    // Phase 4 — Done
+    stopAnim();
+    setListening(false);
+    setAvatarState('idle');
   };
 
   const stop = () => {
@@ -293,11 +301,20 @@ export default function Caddie() {
       {/* Listening overlay */}
       {listening && (
         <View style={styles.listeningOverlay}>
-          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-            <Image source={LOGO} style={{ width: 100, height: 100, borderRadius: 999 }} resizeMode="cover" />
+          <Animated.View style={[
+            { transform: [{ scale: pulseAnim }] },
+            avatarState === 'listening' && { borderWidth: 3, borderColor: '#4ade80', borderRadius: 999 },
+            avatarState === 'speaking'  && { borderWidth: 3, borderColor: '#facc15', borderRadius: 999 },
+          ]}>
+            <Image source={LOGO} style={{ width: 110, height: 110, borderRadius: 999 }} resizeMode="cover" />
           </Animated.View>
-          <Text style={styles.listeningText}>
-            {listeningPhase === 'processing' ? 'Processing...' : 'Listening...'}
+          <Text style={[
+            styles.listeningText,
+            avatarState === 'speaking' && { color: '#facc15' },
+          ]}>
+            {avatarState === 'speaking'
+              ? listeningPhase === 'processing' ? 'Processing...' : '🎙️ Speaking...'
+              : '🎤 Listening...'}
           </Text>
           <Pressable onPress={stop} style={styles.cancelBtn}>
             <Text style={{ color: '#ccc', fontSize: 14 }}>Cancel</Text>
