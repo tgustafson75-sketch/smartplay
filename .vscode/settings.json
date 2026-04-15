@@ -1,0 +1,13 @@
+{
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit",
+    "source.organizeImports": "explicit",
+    "source.sortMembers": "explicit"
+  },
+  "chat.tools.terminal.autoApprove": {
+    "/^node -e \"const pkg = require\\('C:/Users/tgust/SmartPlayCaddieV2/node_modules/expo-av/package\\.json'\\); console\\.log\\(pkg\\.version\\)\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  }
+}

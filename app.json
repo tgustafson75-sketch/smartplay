@@ -1,0 +1,96 @@
+{
+  "expo": {
+    "name": "SmartPlayCaddieV2",
+    "slug": "SmartPlayCaddieV2",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "smartplaycaddiev2",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.smartplaycaddie.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "SmartPlay uses the camera for the rangefinder and swing video analysis.",
+        "NSMicrophoneUsageDescription": "SmartPlay uses the microphone for caddie listening and voice control.",
+        "NSLocationWhenInUseUsageDescription": "SmartPlay uses your location to measure accurate golf yardages.",
+        "NSPhotoLibraryUsageDescription": "SmartPlay saves your swing videos and rangefinder photos to your library.",
+        "NSPhotoLibraryAddUsageDescription": "SmartPlay saves your swing videos and rangefinder photos to your library."
+      }
+    },
+    "android": {
+      "package": "com.tgustafson76.smartplaycaddiev2",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/favicon.png",
+      "name": "SmartPlay Caddie",
+      "shortName": "SmartPlay",
+      "description": "Your AI Golf Coach & Caddie",
+      "lang": "en",
+      "backgroundColor": "#0B3D2E",
+      "themeColor": "#0B3D2E"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "SmartPlay uses the camera for rangefinder mode and swing capture.",
+          "microphonePermission": "SmartPlay uses the microphone for voice commands and shot feedback."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SmartPlay uses your location to provide front, middle, and back yardages."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "SmartPlay accesses your photos so you can review saved swing videos.",
+          "savePhotosPermission": "SmartPlay saves your golf images and videos to your library."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f81c2ac1-db52-4643-8828-481b27d2f376"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/f81c2ac1-db52-4643-8828-481b27d2f376"
+    }
+  }
+}
