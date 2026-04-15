@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, Image, Animated, ScrollView } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { speak, stopSpeaking } from '../../services/voiceService';
+import VoiceOverlay from '../../components/VoiceOverlay';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -27,7 +28,9 @@ export default function Caddie() {
   const setIsGuest = useUserStore((s) => s.setIsGuest);
   const [gpsMiddle, setGpsMiddle] = useState<number | null>(null);
   const [listening, setListening] = useState(false);
-  const [listeningPhase, setListeningPhase] = useState<'listening' | 'processing'>('listening');
+  const [listeningPhase, setListeningPhase] = useState<'listening' | 'processing' | 'thinking' | 'speaking'>('listening');
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [caddieText, setCaddieText] = useState('');
   const [transcript, setTranscript] = useState('');
   const [response, setResponse] = useState('');
   const [isListening, setIsListening] = useState(false);
@@ -258,11 +261,13 @@ export default function Caddie() {
   const ask = async () => {
     const advice = getContextualAdvice();
     setLastAdvice(advice);
+    setCaddieText(advice);
     setShowWhy(false);
 
     // Phase 1 — Listening animation (1.8s)
     setListeningPhase('listening');
     setListening(true);
+    setIsSpeaking(false);
     setAvatarState('listening');
     startListeningAnim();
     await new Promise((r) => setTimeout(r, 1800));
@@ -273,7 +278,9 @@ export default function Caddie() {
     startSpeakingAnim();
     await new Promise((r) => setTimeout(r, 500));
 
-    // Phase 3 — Speak (overlay stays visible + speaking animation during playback)
+    // Phase 3 — Speaking (yellow ring, show text card)
+    setListeningPhase('speaking');
+    setIsSpeaking(true);
     if (!quietMode) {
       await speak(advice);
     }
@@ -281,12 +288,14 @@ export default function Caddie() {
     // Phase 4 — Done
     stopAnim();
     setListening(false);
+    setIsSpeaking(false);
     setAvatarState('idle');
   };
 
   const stop = () => {
     stopAnim();
     setListening(false);
+    setIsSpeaking(false);
     setAvatarState('idle');
     void stopSpeaking();
   };
@@ -298,29 +307,13 @@ export default function Caddie() {
 
   return (
     <View style={styles.root}>
-      {/* Listening overlay */}
-      {listening && (
-        <View style={styles.listeningOverlay}>
-          <Animated.View style={[
-            { transform: [{ scale: pulseAnim }] },
-            avatarState === 'listening' && { borderWidth: 3, borderColor: '#4ade80', borderRadius: 999 },
-            avatarState === 'speaking'  && { borderWidth: 3, borderColor: '#facc15', borderRadius: 999 },
-          ]}>
-            <Image source={LOGO} style={{ width: 110, height: 110, borderRadius: 999 }} resizeMode="cover" />
-          </Animated.View>
-          <Text style={[
-            styles.listeningText,
-            avatarState === 'speaking' && { color: '#facc15' },
-          ]}>
-            {avatarState === 'speaking'
-              ? listeningPhase === 'processing' ? 'Processing...' : '🎙️ Speaking...'
-              : '🎤 Listening...'}
-          </Text>
-          <Pressable onPress={stop} style={styles.cancelBtn}>
-            <Text style={{ color: '#ccc', fontSize: 14 }}>Cancel</Text>
-          </Pressable>
-        </View>
-      )}
+      {/* ── Voice Overlay (shared component) ── */}
+      <VoiceOverlay
+        visible={listening || isSpeaking}
+        phase={isSpeaking ? 'speaking' : listeningPhase}
+        text={isSpeaking ? caddieText : undefined}
+        onCancel={listening && !isSpeaking ? stop : undefined}
+      />
 
       {/* ── Header ── */}
       <View style={styles.header}>
@@ -581,16 +574,6 @@ export default function Caddie() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0e0e0e' },
-  listeningOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.93)', zIndex: 999,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  listeningText: { color: '#fff', fontSize: 16, fontFamily: 'Outfit_500Medium', marginTop: 20 },
-  cancelBtn: {
-    marginTop: 28, paddingHorizontal: 24, paddingVertical: 10,
-    borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)',
-  },
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingTop: 52, paddingBottom: 12, paddingHorizontal: 16,

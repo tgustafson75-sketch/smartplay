@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
-import { Image, View, StyleSheet } from 'react-native';
+import { Image, View, StyleSheet, Pressable, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRef, useState, useCallback } from 'react';
 
 const ICON_CADDIE      = require('../../assets/images/logo-transparent.png');
 const ICON_PLAY        = require('../../assets/images/icon-clubs-badge.png');
@@ -49,8 +50,39 @@ const rfStyles = StyleSheet.create({
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = 62 + insets.bottom;
+
+  // Auto-hide tab bar — translates down when hidden, slides back on tap
+  const translateY = useRef(new Animated.Value(0)).current;
+  const [tabBarVisible, setTabBarVisible] = useState(true);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showTabBar = useCallback(() => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    setTabBarVisible(true);
+    Animated.spring(translateY, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 80,
+      friction: 12,
+    }).start();
+    // Auto-hide again after 4 seconds of inactivity
+    hideTimer.current = setTimeout(() => {
+      Animated.timing(translateY, {
+        toValue: tabBarHeight,
+        duration: 280,
+        useNativeDriver: true,
+      }).start(() => setTabBarVisible(false));
+    }, 4000);
+  }, [tabBarHeight, translateY]);
+
+  // Tap anywhere on screen to show tab bar
+  const handleScreenTap = useCallback(() => {
+    showTabBar();
+  }, [showTabBar]);
 
   return (
+    <Pressable style={{ flex: 1 }} onPress={handleScreenTap}>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -58,8 +90,9 @@ export default function TabLayout() {
           backgroundColor: '#0B3D2E',
           borderTopColor: '#1a5e30',
           borderTopWidth: 1,
-          height: 62 + insets.bottom,
+          height: tabBarHeight,
           paddingBottom: 8 + insets.bottom,
+          transform: [{ translateY }],
         },
         tabBarActiveTintColor: '#A7F3D0',
         tabBarInactiveTintColor: '#4a7c5e',
@@ -73,5 +106,6 @@ export default function TabLayout() {
       <Tabs.Screen name="history"   options={{ title: 'Dashboard', tabBarIcon: ({ focused }) => tabIcon(ICON_HISTORY,   focused) }} />
       <Tabs.Screen name="dashboard" options={{ href: null }} />
     </Tabs>
+    </Pressable>
   );
 }
