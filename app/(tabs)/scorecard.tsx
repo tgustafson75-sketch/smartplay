@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, TextInput, Animated } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useRef } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
@@ -330,8 +331,8 @@ export default function Scorecard() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 52, paddingBottom: 8, paddingHorizontal: 16 }}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 12, paddingBottom: 8, paddingHorizontal: 16 }}>
         <Pressable onPress={() => {
           animateLogo();
           if (!quietMode) void speak('Great golfers review their scorecards to find patterns. What hole cost you strokes today?');
@@ -739,7 +740,7 @@ export default function Scorecard() {
         </Pressable>
       </Animated.View>
 
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -747,7 +748,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0B3D2E',
-    paddingTop: 32,
+    paddingTop: 0,
     paddingHorizontal: 18,
   },
   title: {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { StyleSheet, View, Text, ScrollView, Image, Pressable, Animated } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -223,7 +224,7 @@ export default function History() {
   const aimPct = aim === 'left edge' ? 10 : aim === 'left center' ? 30 : aim === 'center' ? 50 : aim === 'right center' ? 70 : 90;
 
   return (
-    <>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
     <ScrollView style={styles.scroll} contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + 8 }]}>
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, marginBottom: 12, paddingHorizontal: 4 }}>
@@ -646,7 +647,7 @@ export default function History() {
     <Pressable
       onPress={() => router.push('/rangefinder')}
       style={{
-        position: 'absolute', bottom: 90, right: 16, zIndex: 51,
+        position: 'absolute', bottom: tabBarHeight + 10, right: 16, zIndex: 51,
         width: 52, height: 52, borderRadius: 26,
         backgroundColor: '#0B3D2E', borderWidth: 2, borderColor: '#FFE600',
         justifyContent: 'center', alignItems: 'center',
@@ -655,11 +656,15 @@ export default function History() {
     >
       <Image source={ICON_RANGEFINDER} style={{ width: 28, height: 28, tintColor: '#FFE600' }} resizeMode="contain" />
     </Pressable>
-    </>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: '#0B1F16',
+  },
   scroll: {
     flex: 1,
     backgroundColor: '#0B1F16',

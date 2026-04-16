@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, Pressable, ScrollView, Image, Platform, Animated, TextInput, Modal, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
 // eslint-disable-next-line @typescript-eslint/no-deprecated
 import { Audio, Video, ResizeMode } from 'expo-av';
@@ -1329,7 +1330,7 @@ export default function Practice() {
   };
 
   return (
-    <>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
     <PracticeTutorialOverlay visible={showTutorial} onDismiss={handleDismissTutorial} />
 
     <ScrollView style={styles.scroll} contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + 8 }]}>
@@ -3092,11 +3093,15 @@ export default function Practice() {
       </KeyboardAvoidingView>
     </Modal>
 
-    </>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: '#0B3D2E',
+  },
   scroll: {
     flex: 1,
     backgroundColor: '#0B3D2E',

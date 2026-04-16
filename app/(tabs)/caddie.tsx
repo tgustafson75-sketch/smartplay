@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, Image, Animated, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { signOut } from 'firebase/auth';
 import { speak, stopSpeaking } from '../../services/voiceService';
@@ -308,7 +309,7 @@ export default function Caddie() {
   const tabBarHeight = useBottomTabBarHeight();
 
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
       {/* ── Header ── */}
       <View style={styles.header}>
         <Animated.View style={[styles.avatarWrap, { opacity: idleGlow }]}>
@@ -543,7 +544,7 @@ export default function Caddie() {
           <Image source={ICON_RANGEFINDER} style={{ width: 26, height: 26, tintColor: '#FFE600' }} resizeMode="contain" />
         </Pressable>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -551,7 +552,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0e0e0e' },
   header: {
     flexDirection: 'row', alignItems: 'center',
-    paddingTop: 52, paddingBottom: 12, paddingHorizontal: 16,
+    paddingTop: 12, paddingBottom: 12, paddingHorizontal: 16,
     borderBottomWidth: 1, borderBottomColor: '#1a1a1a',
   },
   avatarWrap: { width: 44, height: 44, borderRadius: 999, overflow: 'hidden' },
