@@ -5246,13 +5246,13 @@ export default function PlayScreenClean() {
     )}
     {!watchMode && !showDetails && isRoundActive && (
       <View
-        style={[{ flex: 1, backgroundColor: highContrast ? '#000' : '#0B3D2E', paddingTop: 48, paddingBottom: Math.max(tabBarHeight, 16) }, debugStyle]}
+        style={[{ flex: 1, backgroundColor: highContrast ? '#000' : '#0B3D2E' }, debugStyle]}
       >
 
         {/* Swing toast (absolute so it floats over all sections) */}
         {swingToast && (
           <View style={{
-            position: 'absolute', top: 10, left: 14, right: 14, zIndex: 999,
+            position: 'absolute', top: 58, left: 14, right: 14, zIndex: 999,
             backgroundColor: swingTempoLabel === 'smooth' ? 'rgba(27,94,32,0.97)' : swingTempoLabel === 'fast' ? 'rgba(127,62,0,0.97)' : 'rgba(26,58,92,0.97)',
             paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12,
             flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -5262,6 +5262,7 @@ export default function PlayScreenClean() {
           </View>
         )}
 
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: 48, paddingBottom: tabBarHeight + 60 }} keyboardShouldPersistTaps="handled">
         {/* ── HEADER: Logo mic · Hole · Strategy ─────────────────────────────── */}
         <View style={[{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 6 }, debugGreen]}>
           <CaddieMicButton
@@ -5431,21 +5432,21 @@ export default function PlayScreenClean() {
           const insightColor = biasKey === 'right' ? '#fca5a5' : biasKey === 'left' ? '#93c5fd' : '#6ee7b7';
           return (
             <View style={{ marginHorizontal: 16, marginBottom: 6, backgroundColor: 'rgba(0,0,0,0.45)',
-              borderRadius: 18, paddingHorizontal: 20, paddingVertical: 16, alignItems: 'center',
+              borderRadius: 18, paddingHorizontal: 16, paddingVertical: 13, alignItems: 'center',
               borderWidth: 1.5, borderColor: '#10B981' }}>
 
               {/* BIG: Club — Aim */}
-              <Text style={{ color: '#ffffff', fontSize: 32, fontWeight: '900', letterSpacing: 0.3, textAlign: 'center', lineHeight: 38 }}>
+              <Text style={{ color: '#ffffff', fontSize: 26, fontWeight: '900', letterSpacing: 0.3, textAlign: 'center', lineHeight: 31 }}>
                 {d.club}{' — '}{d.aimLabel}
               </Text>
 
               {/* SMALL: Miss danger */}
-              <Text style={{ color: d.missColor, fontSize: 14, fontWeight: '700', marginTop: 5, textAlign: 'center', letterSpacing: 0.2 }}>
+              <Text style={{ color: d.missColor, fontSize: 11, fontWeight: '700', marginTop: 4, textAlign: 'center', letterSpacing: 0.2 }}>
                 {d.miss}
               </Text>
 
               {/* Confidence badge */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
                 <View style={{ backgroundColor: confBg, borderRadius: 20, borderWidth: 1.5, borderColor: confColor,
                   paddingHorizontal: 14, paddingVertical: 4 }}>
                   <Text style={{ color: confColor, fontSize: 13, fontWeight: '800', letterSpacing: 0.3 }}>
@@ -5510,7 +5511,7 @@ export default function PlayScreenClean() {
               </Text>
 
               {/* Action buttons row */}
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
                 {/* Hear Advice */}
                 <Pressable
                   onPress={() => {
@@ -5519,11 +5520,11 @@ export default function PlayScreenClean() {
                   }}
                   style={({ pressed }) => ({
                     flexDirection: 'row', alignItems: 'center', gap: 6,
-                    paddingHorizontal: 18, paddingVertical: 8,
+                    paddingHorizontal: 14, paddingVertical: 6,
                     borderRadius: 20, borderWidth: 1.5, borderColor: '#10B981',
                     backgroundColor: pressed ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.08)' })}>
-                  <Text style={{ fontSize: 15 }}>🔊</Text>
-                  <Text style={{ color: '#6ee7b7', fontSize: 13, fontWeight: '700', letterSpacing: 0.4 }}>Hear Advice</Text>
+                  <Text style={{ fontSize: 13 }}>🔊</Text>
+                  <Text style={{ color: '#6ee7b7', fontSize: 11, fontWeight: '700', letterSpacing: 0.4 }}>Hear Advice</Text>
                 </Pressable>
 
                 {/* Aim Assist */}
@@ -5536,11 +5537,11 @@ export default function PlayScreenClean() {
                   }}
                   style={({ pressed }) => ({
                     flexDirection: 'row', alignItems: 'center', gap: 6,
-                    paddingHorizontal: 18, paddingVertical: 8,
+                    paddingHorizontal: 14, paddingVertical: 6,
                     borderRadius: 20, borderWidth: 1.5, borderColor: '#60a5fa',
                     backgroundColor: pressed ? 'rgba(96,165,250,0.18)' : 'rgba(96,165,250,0.08)' })}>
-                  <Text style={{ fontSize: 15 }}>🎯</Text>
-                  <Text style={{ color: '#93c5fd', fontSize: 13, fontWeight: '700', letterSpacing: 0.4 }}>Aim Assist</Text>
+                  <Text style={{ fontSize: 13 }}>🎯</Text>
+                  <Text style={{ color: '#93c5fd', fontSize: 11, fontWeight: '700', letterSpacing: 0.4 }}>Aim Assist</Text>
                 </Pressable>
               </View>
             </View>
@@ -5551,11 +5552,11 @@ export default function PlayScreenClean() {
         <Pressable
           onPress={() => setSwingThought(FOCUS_MESSAGES[Math.floor(Math.random() * FOCUS_MESSAGES.length)])}
           style={[{ marginHorizontal: 16, backgroundColor: 'rgba(0,0,0,0.28)', borderRadius: 16,
-            paddingHorizontal: 18, paddingVertical: 12, marginBottom: 6, alignItems: 'center' }, debugGreen]}>
+            paddingHorizontal: 14, paddingVertical: 10, marginBottom: 6, alignItems: 'center' }, debugGreen]}>
           {aiThinking ? (
-            <Text style={{ color: '#6ee7b7', fontSize: 16, fontStyle: 'italic' }}>Thinking...</Text>
+            <Text style={{ color: '#6ee7b7', fontSize: 13, fontStyle: 'italic' }}>Thinking...</Text>
           ) : (
-            <Text style={{ color: '#A7F3D0', fontSize: 18, fontWeight: '700', textAlign: 'center', lineHeight: 26 }} numberOfLines={3}>
+            <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '700', textAlign: 'center', lineHeight: 21 }} numberOfLines={3}>
               {caddieMessage || caddieAdvice || 'Commit to your target.'}
             </Text>
           )}
@@ -5954,6 +5955,7 @@ export default function PlayScreenClean() {
             </Text>
           </Pressable>
         </View>
+        </ScrollView>
 
       </View>
     )}

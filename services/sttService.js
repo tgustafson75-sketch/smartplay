@@ -9,6 +9,7 @@
  */
 
 import * as FileSystem from 'expo-file-system';
+import { Audio } from 'expo-av';
 
 const OPENAI_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY ?? '';
 const WHISPER_URL = 'https://api.openai.com/v1/audio/transcriptions';
@@ -37,9 +38,29 @@ export async function startSTT(setTranscript, audioRecordingRef = null) {
   return new Promise(async (resolve) => {
     _resolveRef = resolve;
 
-    // If we have an active recording ref from a screen, use it
+    // If we have an active recording ref from a screen, use it — otherwise start our own
     if (audioRecordingRef?.current) {
       _recording = audioRecordingRef.current;
+    } else {
+      try {
+        // Request mic permissions
+        const { granted } = await Audio.requestPermissionsAsync();
+        if (granted) {
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: true,
+            playsInSilentModeIOS: true,
+          });
+          const { recording } = await Audio.Recording.createAsync(
+            Audio.RecordingOptionsPresets.HIGH_QUALITY,
+          );
+          _recording = recording;
+          console.log('[sttService] Recording started');
+        } else {
+          console.warn('[sttService] Microphone permission denied');
+        }
+      } catch (recErr) {
+        console.error('[sttService] Failed to start recording:', recErr?.message ?? recErr);
+      }
     }
 
     // Safety timeout — always resolves after MAX_DURATION_MS even with no audio
@@ -96,7 +117,7 @@ async function _finalizeRecording(audioRecordingRef) {
     if (!OPENAI_KEY || OPENAI_KEY.length < 20) return '';
 
     const form = new FormData();
-    form.append('file', { uri, name: 'voice.m4a', type: 'audio/m4a' } as any);
+    form.append('file', { uri, name: 'voice.m4a', type: 'audio/m4a' });
     form.append('model', 'whisper-1');
     form.append('language', 'en');
 
