@@ -1633,6 +1633,10 @@ export default function PlayScreenClean() {
       if (earbudMode && seeds.middle && seeds.middle > 0 && seeds.middle < 700) {
         void voiceSpeak(`${seeds.middle} yards to the middle`, 'calm');
       }
+      // ACTIVE_PLAY: VoiceIntelligence pre-shot — fires at most once per 8s, no repeats
+      if (seeds.middle && seeds.middle > 0 && seeds.middle < 700) {
+        void viSpeakPreShot({ distance: seeds.middle });
+      }
 
       gpsWatchRef.current = await Location.watchPositionAsync(
         {
@@ -2291,7 +2295,9 @@ export default function PlayScreenClean() {
         ? " You've been missing right. Let's aim slightly left today."
         : " You've been missing left. Let's aim slightly right today.";
     })();
-    void voiceSpeak(`Round started. Stay smooth.${cmOpeningTip}`, 'calm');
+    // Use VoiceIntelligence INTRO state — fires once per round, obeys all speech rules
+    void speakIntro('round');
+    if (cmOpeningTip) void voiceSpeak(cmOpeningTip, 'calm');
   };
 
   const endRound = async () => {
@@ -3385,7 +3391,7 @@ export default function PlayScreenClean() {
   // speakCaddie -- routes through voiceSpeak for unified rate-limiting + stop behaviour
   const speakCaddie = (text: string): void => voiceSpeak(text, 'calm');
 
-  const { respond, getTempoCue, checkMissPattern, getFrustrationReply, proactiveCoach, setVoiceGender, setMuted, getSpeakOpts, handleSpeech, startMaxWindow, cancelSilence } = useVoiceCaddie();
+  const { respond, getTempoCue, checkMissPattern, getFrustrationReply, proactiveCoach, setVoiceGender, setMuted, getSpeakOpts, handleSpeech, startMaxWindow, cancelSilence, speakIntro, speakPreShot: viSpeakPreShot, speakShotFeedback, VoiceIntelligence } = useVoiceCaddie();
 
   // Keep the hook's mute gate in sync whenever quietMode or voiceEnabled changes
   useEffect(() => { setMuted(quietMode, voiceEnabled); }, [quietMode, voiceEnabled, setMuted]);
@@ -4687,7 +4693,15 @@ export default function PlayScreenClean() {
     setCaddieMessage(post);
 
     if (voiceEnabled && !quietMode) {
-      void speak(post);
+      // Route through VoiceIntelligence REACTIVE state:
+      // - picks varied phrasing, detects miss patterns, respects 8s cooldown
+      // Falls back to post message if VI returns nothing (e.g. within cooldown)
+      const recentResults = updatedShots.slice(-5).map((s) => s.result);
+      const viSpoken = await speakShotFeedback(
+        result as 'left' | 'right' | 'straight',
+        recentResults
+      );
+      if (!viSpoken) void speak(post);
     }
 
     const { bias: shotBias, confidence: newConfidence } = analyzeShotPattern(updatedShots);

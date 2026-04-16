@@ -4,6 +4,15 @@ import { VoiceController } from '../services/VoiceController';
 import { startSTT, stopSTT } from '../services/sttService';
 import { getAIResponse } from '../services/aiService';
 import { useVoiceStore } from '../store/voiceStore';
+import {
+  VoiceIntelligence,
+  PRIORITY,
+  autoSpeak as viAutoSpeak,
+  getIntroMessage,
+  getPreShotMessage,
+  getShotFeedback,
+  resetIntro,
+} from '../services/VoiceIntelligence';
 
 /**
  * useVoiceCaddie — Global AI Caddie Voice Hook
@@ -291,7 +300,7 @@ export const useVoiceCaddie = () => {
       setCaddieResponse(finalText);
 
       // SPEAKING phase (VoiceController handles state transition to IDLE)
-      await VoiceController.speak(finalText, setVoiceState, genderPrefRef.current);
+      await VoiceController.speak(finalText, setVoiceState, genderPrefRef.current as unknown as null);
 
     } catch (e) {
       console.error('[useVoiceCaddie] pipeline error:', e);
@@ -303,6 +312,32 @@ export const useVoiceCaddie = () => {
   const cancelVoice = () => {
     cancelSilence();
     VoiceController.cancel(setVoiceState);
+  };
+
+  // ── Voice Intelligence auto-speak helpers ──────────────────────────────────
+
+  /** Speak once on app launch or round start. OK to call on every render — fires only once. */
+  const speakIntro = async (trigger: 'app' | 'round' = 'app') => {
+    const msg = getIntroMessage(trigger);
+    if (!msg) return;
+    await viAutoSpeak(PRIORITY.AMBIENT, msg, (text) => playElevenLabsAudio(text));
+  };
+
+  /** Speak pre-shot distance advice. Respects cooldown — safe to call on GPS updates. */
+  const speakPreShot = async (ctx: { distance: number; club?: string }) => {
+    const msg = getPreShotMessage(ctx);
+    if (!msg) return;
+    await viAutoSpeak(PRIORITY.STRATEGY, msg, (text) => playElevenLabsAudio(text));
+  };
+
+  /** Speak post-shot feedback. Pass recentResults for pattern detection. */
+  const speakShotFeedback = async (
+    result: 'left' | 'right' | 'straight',
+    recentResults: string[] = []
+  ): Promise<boolean> => {
+    const msg = getShotFeedback(result, recentResults);
+    if (!msg) return false;
+    return viAutoSpeak(PRIORITY.SHOT, msg, (text) => playElevenLabsAudio(text));
   };
 
   return {
@@ -324,5 +359,11 @@ export const useVoiceCaddie = () => {
     handleSpeech,
     startMaxWindow,
     cancelSilence,
+    // ── Voice Intelligence ──────────────────────────────────────────────────
+    speakIntro,
+    speakPreShot,
+    speakShotFeedback,
+    resetIntro,
+    VoiceIntelligence,
   };
 };

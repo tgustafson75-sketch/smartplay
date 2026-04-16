@@ -12,6 +12,7 @@
  */
 
 import { speak, stopSpeaking } from './voiceService';
+import { setListening as viSetListening } from './VoiceIntelligence';
 
 // ── Singleton flags ───────────────────────────────────────────────────────────
 let _isListening = false;
@@ -52,6 +53,7 @@ export const VoiceController = {
     _aborted     = false;
     _sessionId   += 1;
     const sessionId = _sessionId;
+    viSetListening(true);  // suppress auto-speech while mic is open
     setVoiceState('LISTENING');
     console.log(`[VoiceController] LISTENING (session ${sessionId})`);
 
@@ -63,6 +65,7 @@ export const VoiceController = {
       return '';
     } finally {
       _isListening = false;
+      viSetListening(false);  // re-enable auto-speech
     }
   },
 
@@ -143,6 +146,7 @@ export const VoiceController = {
     _isSpeaking = false;
     _isListening = false;
     _sessionId += 1; // Invalidate any pending speak() finally blocks
+    viSetListening(false);
     try { stopSpeaking(); } catch {}
     if (setVoiceState) setVoiceState('IDLE');
     console.log('[VoiceController] CANCELLED → IDLE');
