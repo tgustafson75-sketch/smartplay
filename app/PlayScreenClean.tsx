@@ -997,7 +997,7 @@ export default function PlayScreenClean() {
       const msg = `First insight unlocked!${biasLine}`;
       setMilestoneMessage(msg);
       milestoneShotRef.current = n;
-      if (isRoundActive) { stopSpeaking(); void playElevenLabsAudio(msg); }
+      if (isRoundActive) { void speak(msg); }
     } else if (n === 10) {
       const mb = getMissBias();
       const patternLine = mb
@@ -1010,7 +1010,7 @@ export default function PlayScreenClean() {
       const msg = `10 shots in. ${patternLine}`;
       setMilestoneMessage(msg);
       milestoneShotRef.current = n;
-      if (isRoundActive) { stopSpeaking(); void playElevenLabsAudio(msg); }
+      if (isRoundActive) { void speak(msg); }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shots.length]);

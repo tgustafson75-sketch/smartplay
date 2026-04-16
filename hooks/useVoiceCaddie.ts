@@ -35,10 +35,13 @@ import {
  *  - ALL flows go through triggerVoice() or respond()
  */
 export const useVoiceCaddie = () => {
-  const silenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSpokenRef = useRef(0);
-  const isSpeakingRef = useRef(false);
-  const mutedRef = useRef(false);
+  const silenceTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSpokenRef  = useRef(0);
+  // NOTE: isSpeakingRef is used only within guardedSpeak as a local re-entrancy
+  // guard. The definitive isSpeaking state lives in voiceService (_isSpeaking)
+  // and is readable via VoiceController.getState().isSpeaking.
+  const isSpeakingRef  = useRef(false);
+  const mutedRef       = useRef(false);
 
   // ── Global voice store (shared across ALL tabs) ───────────────────────────
   const setVoiceState    = useVoiceStore((s) => s.setVoiceState);
@@ -171,7 +174,8 @@ export const useVoiceCaddie = () => {
     if (!finalText?.trim()) return;
     if (mutedRef.current) return;           // respect quietMode / voiceEnabled
     if (now - lastSpokenRef.current < 5000) return;
-    if (isSpeakingRef.current) return;
+    // Use global voiceService lock so this path never overlaps with other callers
+    if (isSpeakingRef.current || VoiceController.getState().isSpeaking) return;
 
     try {
       isSpeakingRef.current = true;

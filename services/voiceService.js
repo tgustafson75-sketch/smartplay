@@ -57,9 +57,13 @@ export const getGlobalGender = () => _globalGender;
 // ---------------------------------------------------------------------------
 // Internal playback state
 // ---------------------------------------------------------------------------
-let _currentSound = null;
-let _lastSpokenAt = 0;
-let _isSpeaking = false;
+let _currentSound  = null;
+let _lastSpokenAt  = 0;
+let _isSpeaking    = false;
+let _fetchAbortCtrl = null; // AbortController for in-flight ElevenLabs fetch
+
+/** Read-only access for VoiceController / useVoiceCaddie synchronisation. */
+export const getIsSpeaking = () => _isSpeaking;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -95,11 +99,16 @@ export const speak = async (text, gender = null) => {
   const activeGender = (gender === 'male' || gender === 'female') ? gender : _globalGender;
 
   const now = Date.now();
-  // 1200ms throttle — prevents dropped messages in fast-fire practice scenarios.
-  // Preemption (stop + restart) is handled at the PlayScreenClean layer after the
-  // 4s rate-limit window; the 1200ms guard here stops true rapid-fire at the
-  // service level regardless of calling layer.
+  // 1200ms service-level throttle — prevents true rapid-fire at the lowest layer.
+  // Intentionally short; rate-limiting decisions sit in VoiceController/PlayScreen.
+  // After stopSpeaking(), _lastSpokenAt is reset to 0 so next call fires immediately.
   if (now - _lastSpokenAt < 1200) return;
+
+  // Cancel any in-flight fetch from a previous call that is still downloading
+  if (_fetchAbortCtrl) {
+    _fetchAbortCtrl.abort();
+    _fetchAbortCtrl = null;
+  }
 
   try {
     _isSpeaking = true;
@@ -122,6 +131,11 @@ export const speak = async (text, gender = null) => {
       console.error('[voiceService] No valid ElevenLabs API key. Set EXPO_PUBLIC_ELEVENLABS_API_KEY in .env. Voice disabled.');
       return;
     }
+
+    // Create a fresh AbortController for this request so stopSpeaking() can
+    // cancel a pending fetch before audio is even downloaded.
+    const abortCtrl = new AbortController();
+    _fetchAbortCtrl = abortCtrl;
 
     /**
      * fetchTTS — attempt TTS with the given voice ID.
@@ -147,6 +161,7 @@ export const speak = async (text, gender = null) => {
               use_speaker_boost: true,
             },
           }),
+          signal: abortCtrl.signal,
         },
       );
       if (!res.ok) {
@@ -166,7 +181,9 @@ export const speak = async (text, gender = null) => {
     try {
       arrayBuffer = await fetchTTS(voiceId);
     } catch (primaryErr) {
-      // Fall back to pre-made voices on ANY HTTP 4xx error (custom voice not on plan, quota exceeded, etc.)
+      // AbortError = intentional cancellation — exit silently
+      if (primaryErr.name === 'AbortError') return;
+      // Fall back to pre-made voices on ANY HTTP 4xx error
       const httpStatus = primaryErr.status ?? 0;
       if (httpStatus >= 400 || primaryErr.message?.includes('ElevenLabs')) {
         const fallbackId = FALLBACK_VOICES[activeGender] ?? FALLBACK_VOICES.male;
@@ -174,6 +191,7 @@ export const speak = async (text, gender = null) => {
         try {
           arrayBuffer = await fetchTTS(fallbackId);
         } catch (fallbackErr) {
+          if (fallbackErr.name === 'AbortError') return;
           console.error('[voiceService] Fallback voice also failed:', fallbackErr?.message ?? fallbackErr);
           return; // Give up silently — no device TTS
         }
@@ -211,8 +229,10 @@ export const speak = async (text, gender = null) => {
     });
 
   } catch (error) {
+    if (error?.name === 'AbortError') return; // clean cancellation
     console.error('[ELEVEN ERROR]', error?.message ?? error);
   } finally {
+    _fetchAbortCtrl = null;
     if (_currentSound) {
       try { await _currentSound.unloadAsync(); } catch {}
       _currentSound = null;
@@ -234,12 +254,19 @@ export const speak = async (text, gender = null) => {
 // stopSpeaking() — interrupt current playback immediately
 // ---------------------------------------------------------------------------
 export const stopSpeaking = async () => {
+  // Cancel any in-flight fetch immediately so the next speak() isn't bottlenecked
+  // by the 1200ms throttle left from a cancelled request.
+  if (_fetchAbortCtrl) {
+    _fetchAbortCtrl.abort();
+    _fetchAbortCtrl = null;
+  }
   if (_currentSound) {
     try { await _currentSound.stopAsync(); } catch {}
     try { await _currentSound.unloadAsync(); } catch {}
     _currentSound = null;
   }
-  _isSpeaking = false;
+  _isSpeaking   = false;
+  _lastSpokenAt = 0; // reset throttle so next speak() fires immediately after cancel
 };
 
 // ---------------------------------------------------------------------------
