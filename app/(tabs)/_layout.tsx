@@ -1,7 +1,6 @@
 import { Tabs } from 'expo-router';
-import { Image, View, StyleSheet, Pressable, Animated } from 'react-native';
+import { Image, View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRef, useState, useCallback } from 'react';
 import VoiceOverlay from '../../components/VoiceOverlay';
 import { useVoiceStore } from '../../store/voiceStore';
 import { VoiceController } from '../../services/VoiceController';
@@ -55,35 +54,6 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = 62 + insets.bottom;
 
-  // Auto-hide tab bar — translates down when hidden, slides back on tap
-  const translateY = useRef(new Animated.Value(0)).current;
-  const [tabBarVisible, setTabBarVisible] = useState(true);
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const showTabBar = useCallback(() => {
-    if (hideTimer.current) clearTimeout(hideTimer.current);
-    setTabBarVisible(true);
-    Animated.spring(translateY, {
-      toValue: 0,
-      useNativeDriver: true,
-      tension: 80,
-      friction: 12,
-    }).start();
-    // Auto-hide again after 4 seconds of inactivity
-    hideTimer.current = setTimeout(() => {
-      Animated.timing(translateY, {
-        toValue: tabBarHeight,
-        duration: 280,
-        useNativeDriver: true,
-      }).start(() => setTabBarVisible(false));
-    }, 4000);
-  }, [tabBarHeight, translateY]);
-
-  // Tap anywhere on screen to show tab bar
-  const handleScreenTap = useCallback(() => {
-    showTabBar();
-  }, [showTabBar]);
-
   const voiceState    = useVoiceStore((s) => s.voiceState);
   const caddieResponse = useVoiceStore((s) => s.caddieResponse);
   const setVoiceState  = useVoiceStore((s) => s.setVoiceState);
@@ -94,7 +64,7 @@ export default function TabLayout() {
                      : 'listening';
 
   return (
-    <Pressable style={{ flex: 1 }} onPress={handleScreenTap}>
+    <View style={{ flex: 1 }}>
     {/* Global Voice Overlay — driven by voiceStore, shared across all tabs */}
     <VoiceOverlay
       visible={voiceState !== 'IDLE'}
@@ -111,7 +81,6 @@ export default function TabLayout() {
           borderTopWidth: 1,
           height: tabBarHeight,
           paddingBottom: 8 + insets.bottom,
-          transform: [{ translateY }],
         },
         tabBarActiveTintColor: '#A7F3D0',
         tabBarInactiveTintColor: '#4a7c5e',
@@ -125,6 +94,6 @@ export default function TabLayout() {
       <Tabs.Screen name="history"   options={{ title: 'Dashboard', tabBarIcon: ({ focused }) => tabIcon(ICON_HISTORY,   focused) }} />
       <Tabs.Screen name="dashboard" options={{ href: null }} />
     </Tabs>
-    </Pressable>
+    </View>
   );
 }

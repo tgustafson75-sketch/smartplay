@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, Image, Animated, ScrollView } from 'react-native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { signOut } from 'firebase/auth';
 import { speak, stopSpeaking } from '../../services/voiceService';
 import CaddieMicButton from '../../components/CaddieMicButton';
@@ -304,6 +305,7 @@ export default function Caddie() {
   const miss = getMissPattern();
   const missColor = miss === 'right' ? '#f87171' : miss === 'left' ? '#60a5fa' : '#A7F3D0';
   const missLabel = miss === 'right' ? 'Tends right' : miss === 'left' ? 'Tends left' : 'Balanced';
+  const tabBarHeight = useBottomTabBarHeight();
 
   return (
     <View style={styles.root}>
@@ -519,7 +521,7 @@ export default function Caddie() {
       </View>
 
       {/* ── Bottom Bar (horizontal icon strip) ── */}
-      <View style={[styles.bottomBar, { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' }]}>
+      <View style={[styles.bottomBar, { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingBottom: Math.max(24, tabBarHeight - 20) }]}>
         {/* Speak advice */}
         <Pressable
           onPress={() => { void (!quietMode && speak(advice)); }}

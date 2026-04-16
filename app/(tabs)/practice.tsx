@@ -1653,6 +1653,19 @@ export default function Practice() {
                 </Pressable>
               );
             })}
+            {/* Swing Lab — navigates to the full video + shot-logger screen */}
+            <Pressable
+              onPress={() => router.push('/swing-lab')}
+              style={{
+                width: '30%', flexGrow: 1,
+                backgroundColor: '#0d1f33',
+                borderRadius: 12, paddingVertical: 10, alignItems: 'center',
+                borderWidth: 1.5, borderColor: '#3b82f6',
+              }}
+            >
+              <Text style={{ fontSize: 20, marginBottom: 3 }}>🎥</Text>
+              <Text style={{ color: '#93c5fd', fontSize: 11, fontWeight: '700', textAlign: 'center' }}>Swing Lab</Text>
+            </Pressable>
           </View>
         );
       })()}

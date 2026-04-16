@@ -5973,7 +5973,7 @@ export default function PlayScreenClean() {
     )}
 
     {/* ── Full details (original ScrollView, shown on demand) ─────────────── */}
-    {!watchMode && showDetails && <ScrollView style={[styles.scroll, { backgroundColor: highContrast ? '#000' : '#0B3D2E' }]} contentContainerStyle={[styles.container, { paddingTop: 48 }]} scrollEnabled={!voiceOverlayActive}>
+    {!watchMode && showDetails && <ScrollView style={[styles.scroll, { backgroundColor: highContrast ? '#000' : '#0B3D2E' }]} contentContainerStyle={[styles.container, { paddingTop: 48, paddingBottom: tabBarHeight + 16 }]} scrollEnabled={!voiceOverlayActive}>
       {/* -- Swing Toast Overlay ---------------------------------------------- */}
       {swingToast && (
         <View style={{
