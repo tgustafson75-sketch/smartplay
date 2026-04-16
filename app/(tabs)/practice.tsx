@@ -11,6 +11,7 @@ import { Accelerometer, Gyroscope } from 'expo-sensors';
 import { useSwingDetector, getSwingFeedback } from '../../hooks/useSwingDetector';
 import { auth } from '../../lib/firebase';
 import VoiceOverlay from '../../components/VoiceOverlay';
+import CaddieMicButton from '../../components/CaddieMicButton';
 import { useSwingStore } from '../../store/swingStore';
 import { playerProfile } from '../../store/playerProfile';
 import { useUserStore } from '../../store/userStore';
@@ -1328,35 +1329,12 @@ export default function Practice() {
   return (
     <>
     <PracticeTutorialOverlay visible={showTutorial} onDismiss={handleDismissTutorial} />
-    {/* Listening / Thinking / Speaking fullscreen overlay */}
-    <VoiceOverlay
-      visible={listening || isThinking || isSpeaking}
-      phase={isSpeaking ? 'speaking' : isThinking ? 'thinking' : listeningPhase as any}
-      text={isSpeaking ? caddieResponse : undefined}
-      onCancel={listening && !isSpeaking ? stopPracticeListening : undefined}
-    />
 
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, marginBottom: 8, paddingHorizontal: 4 }}>
-        {/* Logo mic — tap to toggle listening (same as play screen) */}
-        <View style={{ alignItems: 'center' }}>
-          <Pressable
-            onPress={handlePracticeListeningToggle}
-            style={({ pressed }) => ({
-              backgroundColor: listening ? '#1b5e20' : pressed ? '#1b5e20' : '#143d22',
-              borderRadius: 999, width: 56, height: 56,
-              justifyContent: 'center', alignItems: 'center',
-              borderWidth: 2.5, borderColor: listening ? '#4ade80' : '#4caf50',
-              shadowColor: '#4ade80', shadowOpacity: listening ? 0.9 : 0.5, shadowRadius: 12, elevation: 8,
-            })}
-          >
-            <Image source={LOGO} style={{ width: 44, height: 44, borderRadius: 999 }} resizeMode="cover" />
-          </Pressable>
-          <Text style={{ color: listening ? '#4ade80' : '#4caf50', fontSize: 8, fontWeight: '700', marginTop: 2, letterSpacing: 0.8 }}>
-            {listening ? 'LISTENING' : 'ASK CADDIE'}
-          </Text>
-        </View>
+        {/* Logo mic — unified caddie mic button */}
+        <CaddieMicButton size={56} showLabel={true} />
         <Text style={[styles.heading, { flex: 1, marginLeft: 10, fontSize: 18 }]}>Practice</Text>
         {/* Score HUD */}
         <View style={{ alignItems: 'flex-end', marginRight: 8 }}>
