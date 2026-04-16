@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { StyleSheet, View, Text, ScrollView, Image, Pressable, Animated } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -66,6 +67,7 @@ function getGreeting(): string {
 }
 
 export default function History() {
+  const tabBarHeight = useBottomTabBarHeight();
   const courseMemory = useMemoryStore((s) => s.courseMemory);
   const courses = Object.keys(courseMemory || {});
   const handicapIndex = useUserStore((s) => s.handicap);
@@ -222,7 +224,7 @@ export default function History() {
 
   return (
     <>
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+    <ScrollView style={styles.scroll} contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + 8 }]}>
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, marginBottom: 12, paddingHorizontal: 4 }}>
         <Pressable onPress={() => { safeSpeak(getInsight()); }}>

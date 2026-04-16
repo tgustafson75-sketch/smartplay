@@ -5261,28 +5261,13 @@ export default function PlayScreenClean() {
           </View>
         )}
 
-        {/* Listening / Thinking / Speaking fullscreen overlay */}
-        <VoiceOverlay
-          visible={listening || isThinking || isSpeaking}
-          phase={isSpeaking ? 'speaking' : isThinking ? 'thinking' : listeningPhase as any}
-          text={isSpeaking ? caddieMessage : undefined}
-          onCancel={listening && !isSpeaking ? stopListening : undefined}
-        />
-
         {/* ── HEADER: Logo mic · Hole · Strategy ─────────────────────────────── */}
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 6 }}>
-          <Pressable
-            onPress={handleListeningVoiceToggle}
-            style={({ pressed }) => ({
-              backgroundColor: listening ? '#1b5e20' : pressed ? '#1b5e20' : '#143d22',
-              borderRadius: 999, width: 52, height: 52,
-              justifyContent: 'center', alignItems: 'center',
-              borderWidth: 2, borderColor: listening ? '#4ade80' : '#4caf50',
-              shadowColor: '#4ade80', shadowOpacity: listening ? 0.9 : 0.5, shadowRadius: 10, elevation: 6,
-            })}
-          >
-            <Image source={LOGO} style={{ width: 42, height: 42, borderRadius: 999 }} resizeMode="cover" />
-          </Pressable>
+          <CaddieMicButton
+            size={52}
+            showLabel={false}
+            context={{ hole: currentHoleData.hole, par: currentHoleData.par, distance: currentHoleData.distance }}
+          />
           <View style={{ flex: 1, alignItems: 'center' }}>
             <Pressable onPress={() => setShowCourseSelect((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
               <Text style={{ color: '#6ee7b7', fontSize: 12, fontWeight: '700' }} numberOfLines={1}>{activeCourse.name}</Text>

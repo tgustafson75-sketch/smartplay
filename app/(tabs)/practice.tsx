@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet, Pressable, ScrollView, Image, Platform, Animated, TextInput, Modal, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
 // eslint-disable-next-line @typescript-eslint/no-deprecated
 import { Audio, Video, ResizeMode } from 'expo-av';
@@ -109,6 +110,7 @@ function generatePracticeFocusSet(
 // -----------------------------------------------------------------------------
 
 export default function Practice() {
+  const tabBarHeight = useBottomTabBarHeight();
   const setIsGuest = useUserStore((s) => s.setIsGuest);
   const ppMiss     = usePlayerProfileStore((s) => s.typicalMiss);
   const ppStruggle = usePlayerProfileStore((s) => s.biggestStruggle);
@@ -1330,7 +1332,7 @@ export default function Practice() {
     <>
     <PracticeTutorialOverlay visible={showTutorial} onDismiss={handleDismissTutorial} />
 
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+    <ScrollView style={styles.scroll} contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + 8 }]}>
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, marginBottom: 8, paddingHorizontal: 4 }}>
         {/* Logo mic — unified caddie mic button */}

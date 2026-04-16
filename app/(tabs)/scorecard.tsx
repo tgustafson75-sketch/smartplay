@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, TextInput, Animated } from 'react-native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useState, useRef } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
@@ -14,6 +15,7 @@ type ShotEntry = { result: string; club: string; hole?: number };
 type HoleEntry = { hole: number; par: number; scores: number[] };
 
 export default function Scorecard() {
+  const tabBarHeight = useBottomTabBarHeight();
   const logoScale = useRef(new Animated.Value(1)).current;
 
   const animateLogo = () => {
@@ -396,7 +398,7 @@ export default function Scorecard() {
       <Pressable
         onPress={() => router.push('/rangefinder')}
         style={{
-          position: 'absolute', bottom: 90, right: 16, zIndex: 51,
+          position: 'absolute', bottom: tabBarHeight + 10, right: 16, zIndex: 51,
           width: 52, height: 52, borderRadius: 26,
           backgroundColor: '#0B3D2E', borderWidth: 2, borderColor: '#FFE600',
           justifyContent: 'center', alignItems: 'center',
@@ -405,7 +407,7 @@ export default function Scorecard() {
       >
         <Image source={ICON_RANGEFINDER} style={{ width: 28, height: 28, tintColor: '#FFE600' }} resizeMode="contain" />
       </Pressable>
-      <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + 8 }]} showsVerticalScrollIndicator={false}>
 
         {/* ── 4-player tab bar ── */}
         <View style={{ flexDirection: 'row', gap: 6, marginBottom: 14 }}>
@@ -722,7 +724,7 @@ export default function Scorecard() {
       </ScrollView>
 
       {/* Floating Rangefinder Button */}
-      <Animated.View style={[{ position: 'absolute', bottom: 24, right: 20 }, { transform: [{ scale: rfScale }] }]}>
+      <Animated.View style={[{ position: 'absolute', bottom: tabBarHeight, right: 20 }, { transform: [{ scale: rfScale }] }]}>
         <Pressable
           onPress={() => {
             Animated.sequence([
