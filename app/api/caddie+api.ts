@@ -1,17 +1,17 @@
-import { ExpoRequest, ExpoResponse } from 'expo-router/server';
+// Expo Router API route — POST /api/caddie
 
-export async function POST(request: ExpoRequest): Promise<ExpoResponse> {
+export async function POST(request: Request): Promise<Response> {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      return ExpoResponse.json({ error: 'API key not configured' }, { status: 500 });
+      return Response.json({ error: 'API key not configured' }, { status: 500 });
     }
 
     const body = await request.json();
     const { prompt } = body as { prompt: string };
 
     if (!prompt || typeof prompt !== 'string') {
-      return ExpoResponse.json({ error: 'Invalid request' }, { status: 400 });
+      return Response.json({ error: 'Invalid request' }, { status: 400 });
     }
 
     const openAIRes = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -31,15 +31,15 @@ export async function POST(request: ExpoRequest): Promise<ExpoResponse> {
     });
 
     if (!openAIRes.ok) {
-      return ExpoResponse.json({ error: 'OpenAI request failed' }, { status: 502 });
+      return Response.json({ error: 'OpenAI request failed' }, { status: 502 });
     }
 
     const data = await openAIRes.json();
     const message = (data.choices?.[0]?.message?.content as string)?.trim() ?? null;
 
-    return ExpoResponse.json({ message });
+    return Response.json({ message });
   } catch (err) {
     console.error('[/api/caddie] error:', err);
-    return ExpoResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return Response.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
