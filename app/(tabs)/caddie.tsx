@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, Image, Animated, ScrollView } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { speak, stopSpeaking } from '../../services/voiceService';
-import VoiceOverlay from '../../components/VoiceOverlay';
+import CaddieMicButton from '../../components/CaddieMicButton';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -307,34 +307,11 @@ export default function Caddie() {
 
   return (
     <View style={styles.root}>
-      {/* ── Voice Overlay (shared component) ── */}
-      <VoiceOverlay
-        visible={listening || isSpeaking}
-        phase={isSpeaking ? 'speaking' : listeningPhase}
-        text={isSpeaking ? caddieText : undefined}
-        onCancel={listening && !isSpeaking ? stop : undefined}
-      />
-
       {/* ── Header ── */}
       <View style={styles.header}>
-        <Pressable onPress={ask}>
-          <Animated.View style={[
-            styles.avatarWrap,
-            avatarState === 'idle' && { opacity: idleGlow },
-            avatarState === 'listening' && {
-              shadowColor: '#4ade80', shadowRadius: 12, shadowOpacity: 1,
-              borderWidth: 2, borderColor: '#4ade80',
-              transform: [{ scale: pulseAnim }],
-            },
-            avatarState === 'speaking' && {
-              shadowColor: '#facc15', shadowRadius: 10, shadowOpacity: 0.9,
-              borderWidth: 2, borderColor: '#facc15',
-              transform: [{ scale: pulseAnim }],
-            },
-          ]}>
-            <Image source={LOGO} style={{ width: 44, height: 44, borderRadius: 999 }} resizeMode="cover" />
-          </Animated.View>
-        </Pressable>
+        <Animated.View style={[styles.avatarWrap, { opacity: idleGlow }]}>
+          <Image source={LOGO} style={{ width: 44, height: 44, borderRadius: 999 }} resizeMode="cover" />
+        </Animated.View>
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={styles.headerTitle}>SmartPlay AI Caddie</Text>
           <Text style={styles.headerSub}>Hole {currentHole} • {activeCourse}</Text>
@@ -550,16 +527,12 @@ export default function Caddie() {
         >
           <Text style={{ fontSize: 24, lineHeight: 26 }}>{quietMode ? '🔕' : '🔊'}</Text>
         </Pressable>
-        {/* Ask Caddie — logo FAB */}
-        <Pressable onPress={listening ? stop : ask}>
-          <View style={[styles.askFab, listening && { backgroundColor: '#b71c1c', borderColor: '#ef4444' }]}>
-            {listening ? (
-              <Text style={{ color: '#fff', fontSize: 22 }}>⏹</Text>
-            ) : (
-              <Image source={LOGO} style={{ width: 62, height: 62, borderRadius: 999 }} resizeMode="cover" />
-            )}
-          </View>
-        </Pressable>
+        {/* Ask Caddie — unified mic button */}
+        <CaddieMicButton
+          context={{ hole: currentHole, distance: displayDistance, club, missPattern: getMissPattern() }}
+          size={72}
+          showLabel={false}
+        />
         {/* Rangefinder */}
         <Pressable
           onPress={() => router.push('/rangefinder')}

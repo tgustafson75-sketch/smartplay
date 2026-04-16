@@ -18,7 +18,8 @@ import { getClubStats as computeClubDistances } from '../services/clubStats';
 import { selectClub } from '../services/clubSelector';
 import { calculateStrokesGained } from '../services/strokesGained';
 import { getRoundInsights } from '../services/roundInsights';
-import VoiceOverlay from '../components/VoiceOverlay';
+import CaddieMicButton from '../components/CaddieMicButton';
+import { useVoiceStore } from '../store/voiceStore';
 import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Image, Animated, Platform, Modal, Share, useWindowDimensions } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -4894,7 +4895,7 @@ export default function PlayScreenClean() {
     [round, roundPars, par]
   );
   const recommendedClub = decision.club || safeClub;   // sourced from single engine, fallback 7i
-  const voiceOverlayActive = listening || isThinking;
+  const voiceOverlayActive = useVoiceStore((s) => s.voiceState !== 'IDLE');
   const tabBarHeight = useBottomTabBarHeight();
 
   return (
@@ -6008,42 +6009,12 @@ export default function PlayScreenClean() {
       )}
 
       {/* Listening / Thinking / Speaking overlay */}
-      <VoiceOverlay
-        visible={listening || isThinking || isSpeaking}
-        phase={isSpeaking ? 'speaking' : isThinking ? 'thinking' : listeningPhase as any}
-        text={isSpeaking ? caddieMessage : undefined}
-        onCancel={listening && !isSpeaking ? stopListening : undefined}
+      <CaddieMicButton
+        size={60}
+        showLabel={true}
+        style={{ marginBottom: 10 }}
+        context={{ hole: currentHoleData.hole, par: currentHoleData.par, distance: currentHoleData.distance }}
       />
-
-      {/* Mic Button — compact horizontal row */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 12 }}>
-        <Pressable
-          onPress={startListening}
-          style={({ pressed }) => ({
-            backgroundColor: pressed ? '#1b5e20' : '#2e7d32',
-            width: 60,
-            height: 60,
-            borderRadius: 30,
-            justifyContent: 'center',
-            alignItems: 'center',
-            borderWidth: 2,
-            borderColor: '#66bb6a',
-            shadowColor: '#4ade80',
-            shadowOpacity: 0.55,
-            shadowRadius: 10,
-            elevation: 8,
-          })}
-        >
-          <Image source={LOGO} style={{ width: 42, height: 42, borderRadius: 999, overflow: 'hidden' }} resizeMode="cover" />
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.8 }}>SmartPlay Caddie</Text>
-          <Text style={{ color: '#4ade80', fontSize: 11, marginTop: 1 }}>Tap to speak a command</Text>
-        </View>
-        {Platform.OS === 'web' && (
-          <Text style={{ color: '#6b7280', fontSize: 11 }}>Mobile only</Text>
-        )}
-      </View>
 
       {/* Voice Response Card — shows last caddie response after listening */}
       {commandResponse.length > 0 && !isThinking && !listening && (
@@ -6106,12 +6077,12 @@ export default function PlayScreenClean() {
               >
                 <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '800' }}>⚡</Text>
               </Pressable>
-              <Pressable
-                onPress={startListening}
-                style={({ pressed }) => ({ width: 32, height: 32, borderRadius: 16, backgroundColor: pressed ? '#1b5e20' : earbudMode ? '#1b5e20' : '#143d22', borderWidth: 1, borderColor: earbudMode ? '#4ade80' : '#2e7d32', justifyContent: 'center', alignItems: 'center', marginLeft: 4 })}
-              >
-                <Image source={LOGO} style={{ width: 22, height: 22, borderRadius: 999 }} resizeMode="cover" />
-              </Pressable>
+              <CaddieMicButton
+                size={32}
+                showLabel={false}
+                style={{ marginLeft: 4 }}
+                context={{ hole: currentHoleData.hole, par: currentHoleData.par, distance: currentHoleData.distance }}
+              />
             </View>
             <Text style={styles.holeInfo}>Par {currentHoleData.par} · {currentHoleData.distance} yds · Strokes {strokes}</Text>
             {currentHoleData.note ? <Text style={{ color: '#ccc', fontSize: 12, marginTop: 1 }}>{currentHoleData.note}</Text> : null}

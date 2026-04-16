@@ -1,28 +1,43 @@
 import { useRef } from 'react';
 import { speak as playElevenLabsAudio } from '../services/voiceService';
+import { VoiceController } from '../services/VoiceController';
+import { startSTT, stopSTT } from '../services/sttService';
+import { getAIResponse } from '../services/aiService';
+import { useVoiceStore } from '../store/voiceStore';
 
 /**
- * useVoiceCaddie
+ * useVoiceCaddie — Global AI Caddie Voice Hook
  *
- * Full voice pipeline + intelligent response layer:
+ * SINGLE entry point for ALL voice interactions across the app.
+ * Pipeline: IDLE → LISTENING → PROCESSING → SPEAKING → IDLE
+ *
+ * Built-in intelligence:
  *  1. Variation Engine    — rotates phrases so nothing feels repetitive
  *  2. Pattern Awareness   — detects repeated miss direction (last 5 shots)
  *  3. Emotional Awareness — catches frustration words, responds calmly
- *  4. Proactive Coaching  — hole-change nudge (call proactiveCoach(hole))
- *  5. Voice Selection     — male/female English voice, auto-loaded on init
+ *  4. Proactive Coaching  — hole-change nudge
+ *  5. Voice Selection     — male/female ElevenLabs voice
  *  6. Silence debounce    — handleSpeech / startMaxWindow / cancelSilence
- *  7. Respond pipeline    — simplify → acknowledge → no-overlap delay → speak
+ *  7. Global state        — voiceStore drives ALL overlays/UI simultaneously
+ *
+ * Rules enforced:
+ *  - NEVER call speak() directly from UI
+ *  - NEVER start mic outside this hook
+ *  - ALL flows go through triggerVoice() or respond()
  */
 export const useVoiceCaddie = () => {
   const silenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSpokenRef = useRef(0);
   const isSpeakingRef = useRef(false);
-  // Mute gate — set by the parent screen whenever quietMode or voiceEnabled changes
   const mutedRef = useRef(false);
 
-  /** Call this whenever quietMode or voiceEnabled changes. guardedSpeak will
-   * return early silently when muted=true, matching the behaviour of the
-   * component-level speak() hook. */
+  // ── Global voice store (shared across ALL tabs) ───────────────────────────
+  const setVoiceState    = useVoiceStore((s) => s.setVoiceState);
+  const setTranscript    = useVoiceStore((s) => s.setTranscript);
+  const setCaddieResponse = useVoiceStore((s) => s.setCaddieResponse);
+  const voiceState       = useVoiceStore((s) => s.voiceState);
+
+  /** Call this whenever quietMode or voiceEnabled changes. */
   const setMuted = (quietMode: boolean, voiceEnabled: boolean): void => {
     mutedRef.current = quietMode || !voiceEnabled;
   };
@@ -197,6 +212,13 @@ export const useVoiceCaddie = () => {
     }, delay);
   };
 
+  /** Returns a miss-pattern reply if transcript asks about misses, null otherwise. */
+  const getMissPatternReply = (text: string): string | null => {
+    const lower = text.toLowerCase();
+    if (!/(miss|slice|hook|pull|push|right|left)/.test(lower)) return null;
+    return getFrustrationReply(text); // reuse pattern
+  };
+
   // ── Silence / listening timers ───────────────────────────────────────────────
 
   /** Reset silence countdown on each partial result. Fires after 1800 ms of silence. */
@@ -219,7 +241,72 @@ export const useVoiceCaddie = () => {
     }
   };
 
+  // ── Global pipeline: triggerVoice ─────────────────────────────────────────
+  /**
+   * triggerVoice(context?)
+   *
+   * Runs the complete IDLE → LISTENING → PROCESSING → SPEAKING → IDLE pipeline.
+   * Pass optional round context so the AI can give hole-aware advice.
+   *
+   * @param context  { hole, distance, club, missPattern, par }
+   */
+  const triggerVoice = async (context?: Record<string, any>) => {
+    if (mutedRef.current) return;
+    try {
+      // LISTENING phase
+      const transcript = await VoiceController.startListening(
+        () => startSTT(setTranscript),
+        setVoiceState,
+      );
+
+      if (!transcript && !context) {
+        setVoiceState('IDLE');
+        return;
+      }
+
+      // PROCESSING phase
+      setVoiceState('PROCESSING');
+
+      // Check for emotional content first
+      const frustrationReply = transcript ? getFrustrationReply(transcript) : null;
+      const missReply = transcript ? getMissPatternReply(transcript) : null;
+
+      let response: string;
+      if (frustrationReply) {
+        response = frustrationReply;
+      } else if (missReply) {
+        response = missReply;
+      } else {
+        // Full AI response
+        response = await getAIResponse(transcript ?? '', context ?? {});
+      }
+
+      // Humanize + acknowledge
+      const finalText = addAcknowledgement(humanizeText(response));
+      setCaddieResponse(finalText);
+
+      // SPEAKING phase (VoiceController handles state transition to IDLE)
+      await VoiceController.speak(finalText, setVoiceState, genderPrefRef.current);
+
+    } catch (e) {
+      console.error('[useVoiceCaddie] pipeline error:', e);
+      setVoiceState('IDLE');
+    }
+  };
+
+  /** Cancel any active voice pipeline and reset to IDLE */
+  const cancelVoice = () => {
+    cancelSilence();
+    VoiceController.cancel(setVoiceState);
+  };
+
   return {
+    // ── Global pipeline ──
+    triggerVoice,
+    cancelVoice,
+    voiceState,
+
+    // ── Legacy respond API (used by PlayScreenClean for non-mic speech) ──
     respond,
     getTempoCue,
     checkMissPattern,

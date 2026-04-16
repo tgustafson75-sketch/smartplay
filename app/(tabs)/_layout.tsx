@@ -2,6 +2,9 @@ import { Tabs } from 'expo-router';
 import { Image, View, StyleSheet, Pressable, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRef, useState, useCallback } from 'react';
+import VoiceOverlay from '../../components/VoiceOverlay';
+import { useVoiceStore } from '../../store/voiceStore';
+import { VoiceController } from '../../services/VoiceController';
 
 const ICON_CADDIE      = require('../../assets/images/logo-transparent.png');
 const ICON_PLAY        = require('../../assets/images/icon-clubs-badge.png');
@@ -81,8 +84,24 @@ export default function TabLayout() {
     showTabBar();
   }, [showTabBar]);
 
+  const voiceState    = useVoiceStore((s) => s.voiceState);
+  const caddieResponse = useVoiceStore((s) => s.caddieResponse);
+  const setVoiceState  = useVoiceStore((s) => s.setVoiceState);
+
+  const overlayPhase = voiceState === 'SPEAKING'   ? 'speaking'
+                     : voiceState === 'LISTENING'  ? 'listening'
+                     : voiceState === 'PROCESSING' ? 'processing'
+                     : 'listening';
+
   return (
     <Pressable style={{ flex: 1 }} onPress={handleScreenTap}>
+    {/* Global Voice Overlay — driven by voiceStore, shared across all tabs */}
+    <VoiceOverlay
+      visible={voiceState !== 'IDLE'}
+      phase={overlayPhase}
+      text={voiceState === 'SPEAKING' ? caddieResponse : undefined}
+      onCancel={voiceState === 'LISTENING' ? () => VoiceController.cancel(setVoiceState) : undefined}
+    />
     <Tabs
       screenOptions={{
         headerShown: false,
