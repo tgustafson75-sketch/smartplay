@@ -7963,19 +7963,31 @@ export default function PlayScreenClean() {
         style={{
           position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
           zIndex: 9000, justifyContent: 'center', alignItems: 'center',
-          backgroundColor: 'transparent',
+          backgroundColor: '#000000',
         }}
       >
+        {/* Logo */}
+        <Image
+          source={require('../assets/images/logo-transparent.png')}
+          style={{ width: 110, height: 110, opacity: 0.18, marginBottom: 36 }}
+          resizeMode="contain"
+        />
+
+        {/* Mic icon */}
         <View style={{
-          backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 14, paddingHorizontal: 28,
-          borderRadius: 18, borderWidth: 1, borderColor: '#2d6a4f', alignItems: 'center', gap: 4,
+          width: 72, height: 72, borderRadius: 36,
+          backgroundColor: 'rgba(255,255,255,0.06)',
+          borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+          justifyContent: 'center', alignItems: 'center',
+          marginBottom: 28,
         }}>
-          <Text style={{ color: '#A7F3D0', fontSize: 28 }}>🔋</Text>
-          <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '700' }}>Low Power</Text>
-          <Text style={{ color: '#6b7280', fontSize: 11 }}>
-            {shakeWakeEnabled ? 'Tap or shake to wake' : 'Tap to wake'}
-          </Text>
+          <Text style={{ fontSize: 30 }}>🎤</Text>
         </View>
+
+        {/* Wake hint */}
+        <Text style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, letterSpacing: 1 }}>
+          {shakeWakeEnabled ? 'TAP OR SHAKE TO WAKE' : 'TAP TO WAKE'}
+        </Text>
       </Pressable>
     )}
 
