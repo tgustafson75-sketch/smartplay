@@ -31,6 +31,7 @@ Address exactly what was asked. Speak like an experienced caddie on the bag.`;
 export async function getAIResponse(transcript, context = {}) {
   if (!transcript?.trim()) return getFallback(context);
 
+  console.log(`[aiService] AI INPUT: "${transcript}"`);
   const lower = transcript.toLowerCase();
 
   // Try OpenAI first if key is available

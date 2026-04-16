@@ -26,6 +26,14 @@ let _recording  = null;  // expo-av Audio.Recording instance
  * @returns {Promise<string>} resolved transcript
  */
 export async function startSTT(setTranscript, audioRecordingRef = null) {
+  // Guard: if a session is already running, resolve immediately with empty string
+  // so the caller's VoiceController.startListening guard handles it cleanly.
+  if (_resolveRef !== null) {
+    console.warn('[sttService] startSTT called while already active — ignoring double-start');
+    return '';
+  }
+
+  console.log('[sttService] STT START');
   return new Promise(async (resolve) => {
     _resolveRef = resolve;
 
@@ -38,6 +46,7 @@ export async function startSTT(setTranscript, audioRecordingRef = null) {
     _timeoutRef = setTimeout(async () => {
       const text = await _finalizeRecording(audioRecordingRef);
       setTranscript(text);
+      console.log(`[sttService] STT RESULT: "${text || '(empty)'}"`);
       _resolveRef?.(text);
       _resolveRef = null;
     }, MAX_DURATION_MS);
@@ -51,6 +60,7 @@ export async function startSTT(setTranscript, audioRecordingRef = null) {
  * Cancels the timer and finalizes the recording immediately.
  */
 export async function stopSTT(setTranscript, audioRecordingRef = null) {
+  console.log('[sttService] STT STOP');
   if (_timeoutRef) {
     clearTimeout(_timeoutRef);
     _timeoutRef = null;
@@ -59,6 +69,7 @@ export async function stopSTT(setTranscript, audioRecordingRef = null) {
   if (_resolveRef) {
     const text = await _finalizeRecording(audioRecordingRef);
     if (setTranscript) setTranscript(text);
+    console.log(`[sttService] STT RESULT (early stop): "${text || '(empty)'}"`);
     _resolveRef(text);
     _resolveRef = null;
   }

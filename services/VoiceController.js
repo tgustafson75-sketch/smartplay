@@ -17,6 +17,10 @@ import { speak, stopSpeaking } from './voiceService';
 let _isListening = false;
 let _isSpeaking  = false;
 let _aborted     = false;
+// Session counter — increments on every new startListening() call.
+// speak() captures the session ID at call-time and only sets IDLE if
+// no newer session has started by the time finally{} runs.
+let _sessionId   = 0;
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -46,7 +50,10 @@ export const VoiceController = {
 
     _isListening = true;
     _aborted     = false;
+    _sessionId   += 1;
+    const sessionId = _sessionId;
     setVoiceState('LISTENING');
+    console.log(`[VoiceController] LISTENING (session ${sessionId})`);
 
     try {
       const transcript = await startSTT();
@@ -97,8 +104,11 @@ export const VoiceController = {
       await wait(80);
     }
 
+    // Capture session at speak-start so stale finally blocks don't overwrite state
+    const speakSession = _sessionId;
     _isSpeaking = true;
     setVoiceState('SPEAKING');
+    console.log(`[VoiceController] SPEAKING (session ${speakSession})`);
 
     try {
       await speak(text, gender);
@@ -106,7 +116,11 @@ export const VoiceController = {
       console.error('[VoiceController] speak error:', e);
     } finally {
       _isSpeaking = false;
-      if (!_aborted) setVoiceState('IDLE');
+      // Only reset to IDLE if no newer session has started since we began speaking
+      if (!_aborted && _sessionId === speakSession) {
+        setVoiceState('IDLE');
+        console.log(`[VoiceController] IDLE (session ${speakSession})`);
+      }
     }
   },
 
@@ -128,7 +142,9 @@ export const VoiceController = {
     _aborted = true;
     _isSpeaking = false;
     _isListening = false;
+    _sessionId += 1; // Invalidate any pending speak() finally blocks
     try { stopSpeaking(); } catch {}
     if (setVoiceState) setVoiceState('IDLE');
+    console.log('[VoiceController] CANCELLED → IDLE');
   },
 };

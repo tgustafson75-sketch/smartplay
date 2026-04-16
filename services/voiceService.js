@@ -91,6 +91,7 @@ const arrayBufferToBase64 = (buffer) => {
 export const speak = async (text, gender = null) => {
   if (!text?.trim()) return;
 
+  console.log(`[voiceService] VOICE: SPEAKING — "${text.slice(0, 60)}${text.length > 60 ? '…' : ''}"`);
   const activeGender = (gender === 'male' || gender === 'female') ? gender : _globalGender;
 
   const now = Date.now();
@@ -210,7 +211,7 @@ export const speak = async (text, gender = null) => {
     });
 
   } catch (error) {
-    console.error('[voiceService] ElevenLabs error:', error?.message ?? error);
+    console.error('[ELEVEN ERROR]', error?.message ?? error);
   } finally {
     if (_currentSound) {
       try { await _currentSound.unloadAsync(); } catch {}

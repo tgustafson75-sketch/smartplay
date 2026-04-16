@@ -259,6 +259,10 @@ export const useVoiceCaddie = () => {
         setVoiceState,
       );
 
+      // null means VoiceController was already active — bail WITHOUT resetting state
+      if (transcript === null) return;
+
+      // Empty transcript with no context — nothing useful to say
       if (!transcript && !context) {
         setVoiceState('IDLE');
         return;
@@ -266,6 +270,7 @@ export const useVoiceCaddie = () => {
 
       // PROCESSING phase
       setVoiceState('PROCESSING');
+      console.log(`[useVoiceCaddie] AI INPUT: "${transcript ?? '(context-only)'}"`);
 
       // Check for emotional content first
       const frustrationReply = transcript ? getFrustrationReply(transcript) : null;
