@@ -540,6 +540,26 @@ function AimLine({
 }
 
 export default function PlayScreenClean() {
+  // ── DEBUG UI — set false to remove all wireframe borders ───────────────────
+  const DEBUG_UI = true;
+  const debugStyle = DEBUG_UI ? { borderWidth: 1, borderColor: 'red' } : {};
+  const debugGreen  = DEBUG_UI ? { borderWidth: 1, borderColor: '#00ff88' } : {};
+  const debugBlue   = DEBUG_UI ? { borderWidth: 1, borderColor: '#60a5fa' } : {};
+  const debugYellow = DEBUG_UI ? { borderWidth: 1, borderColor: '#fbbf24' } : {};
+  const debugPurple = DEBUG_UI ? { borderWidth: 1, borderColor: '#c084fc' } : {};
+  // ── Responsive dimensions ─────────────────────────────────────────
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  const isSmall  = screenW < 375;   // iPhone SE, small Android
+  const isMedium = screenW < 414;   // iPhone 13/14 standard
+  // Scales: shot buttons height, quick-mode circle buttons, distance hero font
+  const shotBtnH    = isSmall ? 76 : isMedium ? 88 : 96;
+  const shotBtnR    = isSmall ? 14 : 18;
+  const shotBtnEmoji = isSmall ? 24 : 30;
+  const qBtnSize    = isSmall ? 64 : isMedium ? 72 : 78;
+  const distFontSz  = isSmall ? 68 : isMedium ? 80 : 88;
+  const distLineH   = distFontSz + 2;
+  const watchCardW  = Math.min(screenW - 48, 220);
+  const watchCardFontSz = isSmall ? 52 : 68;
   const [mentalState, setMentalState] = useState('neutral');
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   const [simCourse, setSimCourse] = useState<keyof typeof SIM_COURSES>('standard');
@@ -4901,7 +4921,7 @@ export default function PlayScreenClean() {
   return (
     <>
     <Animated.View
-      style={{ flex: 1, opacity: dimAnim }}
+      style={[{ flex: 1, opacity: dimAnim }, debugStyle]}
       onStartShouldSetResponder={() => { resetIdleTimer(); return false; }}
     >
 
@@ -4934,15 +4954,15 @@ export default function PlayScreenClean() {
         </View>
 
         <View style={{ flexDirection: 'row', gap: 20, marginBottom: 32 }}>
-          <Pressable onPress={onShotLeftPress} style={{ width: 78, height: 78, backgroundColor: '#1a1a1a', borderRadius: 39, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#ef4444' }}>
+          <Pressable onPress={onShotLeftPress} style={{ width: qBtnSize, height: qBtnSize, backgroundColor: '#1a1a1a', borderRadius: qBtnSize / 2, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#ef4444' }}>
             <Text style={{ fontSize: 22, lineHeight: 24 }}>↙️</Text>
             <Text style={{ color: '#ef4444', fontSize: 11, fontWeight: '800', marginTop: 1 }}>LEFT</Text>
           </Pressable>
-          <Pressable onPress={onShotStraightPress} style={{ width: 78, height: 78, backgroundColor: '#1a1a1a', borderRadius: 39, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#6ee7b7' }}>
+          <Pressable onPress={onShotStraightPress} style={{ width: qBtnSize, height: qBtnSize, backgroundColor: '#1a1a1a', borderRadius: qBtnSize / 2, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#6ee7b7' }}>
             <Text style={{ fontSize: 22, lineHeight: 24 }}>⬆️</Text>
             <Text style={{ color: '#6ee7b7', fontSize: 11, fontWeight: '800', marginTop: 1 }}>STR</Text>
           </Pressable>
-          <Pressable onPress={onShotRightPress} style={{ width: 78, height: 78, backgroundColor: '#1a1a1a', borderRadius: 39, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#f59e0b' }}>
+          <Pressable onPress={onShotRightPress} style={{ width: qBtnSize, height: qBtnSize, backgroundColor: '#1a1a1a', borderRadius: qBtnSize / 2, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#f59e0b' }}>
             <Text style={{ fontSize: 22, lineHeight: 24 }}>↘️</Text>
             <Text style={{ color: '#f59e0b', fontSize: 11, fontWeight: '800', marginTop: 1 }}>RIGHT</Text>
           </Pressable>
@@ -5094,9 +5114,9 @@ export default function PlayScreenClean() {
             </Pressable>
           </View>
         ) : (
-          <View style={{ backgroundColor: '#111', borderRadius: 28, padding: 24, alignItems: 'center', borderWidth: 2, borderColor: '#2e7d32', width: 220, shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 8 }}>
+          <View style={{ backgroundColor: '#111', borderRadius: 28, padding: 24, alignItems: 'center', borderWidth: 2, borderColor: '#2e7d32', width: watchCardW, shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 8 }}>
             <Text style={{ color: '#ccc', fontSize: 13, fontWeight: '700', letterSpacing: 1.5, marginBottom: 4 }}>HOLE {currentHoleData.hole} — PAR {currentHoleData.par}</Text>
-            <Text style={{ color: '#fff', fontSize: 68, fontWeight: '800', lineHeight: 74 }}>
+            <Text style={{ color: '#fff', fontSize: watchCardFontSz, fontWeight: '800', lineHeight: watchCardFontSz + 6 }}>
               {targetDistance ?? currentHoleData.distance}
             </Text>
             <Text style={{ color: '#ccc', fontSize: 13, marginBottom: 12 }}>yds to middle</Text>
@@ -5245,7 +5265,7 @@ export default function PlayScreenClean() {
     )}
     {!watchMode && !showDetails && isRoundActive && (
       <View
-        style={{ flex: 1, backgroundColor: highContrast ? '#000' : '#0B3D2E', paddingTop: 48, paddingBottom: Math.max(tabBarHeight, 16) }}
+        style={[{ flex: 1, backgroundColor: highContrast ? '#000' : '#0B3D2E', paddingTop: 48, paddingBottom: Math.max(tabBarHeight, 16) }, debugStyle]}
       >
 
         {/* Swing toast (absolute so it floats over all sections) */}
@@ -5262,7 +5282,7 @@ export default function PlayScreenClean() {
         )}
 
         {/* ── HEADER: Logo mic · Hole · Strategy ─────────────────────────────── */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 6 }}>
+        <View style={[{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 6 }, debugGreen]}>
           <CaddieMicButton
             size={52}
             showLabel={false}
@@ -5321,10 +5341,10 @@ export default function PlayScreenClean() {
         )}
 
         {/* ── SECTION 1: DISTANCE BLOCK ─────────────────────────────────────── */}
-        <View style={{ alignItems: 'center', paddingHorizontal: 16, marginBottom: 6 }}>
+        <View style={[{ alignItems: 'center', paddingHorizontal: 16, marginBottom: 6 }, debugBlue]}>
 
           {/* BIG: distance */}
-          <Text style={{ color: '#ffffff', fontSize: 88, fontWeight: '900', lineHeight: 90, letterSpacing: -3 }}>
+          <Text style={{ color: '#ffffff', fontSize: distFontSz, fontWeight: '900', lineHeight: distLineH, letterSpacing: -3 }}>
             {targetDistance ?? gpsYards?.middle ?? currentHoleData.distance}
           </Text>
 
@@ -5549,8 +5569,8 @@ export default function PlayScreenClean() {
         {/* ── SECTION 2: CADDIE CALL ────────────────────────────────────────── */}
         <Pressable
           onPress={() => setSwingThought(FOCUS_MESSAGES[Math.floor(Math.random() * FOCUS_MESSAGES.length)])}
-          style={{ marginHorizontal: 16, backgroundColor: 'rgba(0,0,0,0.28)', borderRadius: 16,
-            paddingHorizontal: 18, paddingVertical: 12, marginBottom: 6, alignItems: 'center' }}>
+          style={[{ marginHorizontal: 16, backgroundColor: 'rgba(0,0,0,0.28)', borderRadius: 16,
+            paddingHorizontal: 18, paddingVertical: 12, marginBottom: 6, alignItems: 'center' }, debugGreen]}>
           {aiThinking ? (
             <Text style={{ color: '#6ee7b7', fontSize: 16, fontStyle: 'italic' }}>Thinking...</Text>
           ) : (
@@ -5711,7 +5731,7 @@ export default function PlayScreenClean() {
 
         {/* ── SECTION 4: ACTION BUTTONS ────────────────────────────────────── */}
         {/* Target selector */}
-        <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 16, marginBottom: 6 }}>
+        <View style={[{ flexDirection: 'row', gap: 8, marginHorizontal: 16, marginBottom: 6 }, debugYellow]}>
           {(['left', 'center', 'right'] as const).map((t) => (
             <Pressable key={t} onPress={() => setShotTarget(t)}
               style={{ flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center',
@@ -5725,34 +5745,34 @@ export default function PlayScreenClean() {
           ))}
         </View>
         {/* Large 3-up shot result row */}
-        <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 16, marginBottom: 6 }}>
+        <View style={[{ flexDirection: 'row', gap: 8, marginHorizontal: 16, marginBottom: 6 }, debugYellow]}>
           <Pressable onPress={onShotLeftPress}
-            style={({ pressed }) => ({ flex: 1, height: 96, borderRadius: 18, justifyContent: 'center', alignItems: 'center',
+            style={({ pressed }) => ({ flex: 1, height: shotBtnH, borderRadius: shotBtnR, justifyContent: 'center', alignItems: 'center',
               backgroundColor: pressed ? '#7f1d1d' : '#1c0f0f',
               borderWidth: 2.5, borderColor: '#ef4444',
               shadowColor: '#ef4444', shadowOpacity: pressed ? 0.55 : 0.25, shadowRadius: 10, elevation: 5 })}>
-            <Text style={{ fontSize: 30 }}>↙️</Text>
+            <Text style={{ fontSize: shotBtnEmoji }}>↙️</Text>
             <Text style={{ color: '#ef4444', fontSize: 15, fontWeight: '900', marginTop: 3, letterSpacing: 0.5 }}>LEFT</Text>
           </Pressable>
           <Pressable onPress={onShotStraightPress}
-            style={({ pressed }) => ({ flex: 1, height: 96, borderRadius: 18, justifyContent: 'center', alignItems: 'center',
+            style={({ pressed }) => ({ flex: 1, height: shotBtnH, borderRadius: shotBtnR, justifyContent: 'center', alignItems: 'center',
               backgroundColor: pressed ? '#064e3b' : '#0c1f18',
               borderWidth: 2.5, borderColor: '#6ee7b7',
               shadowColor: '#6ee7b7', shadowOpacity: pressed ? 0.65 : 0.35, shadowRadius: 12, elevation: 7 })}>
-            <Text style={{ fontSize: 32 }}>⬆️</Text>
+            <Text style={{ fontSize: shotBtnEmoji + 2 }}>⬆️</Text>
             <Text style={{ color: '#6ee7b7', fontSize: 15, fontWeight: '900', marginTop: 3, letterSpacing: 0.5 }}>STRAIGHT</Text>
           </Pressable>
           <Pressable onPress={onShotRightPress}
-            style={({ pressed }) => ({ flex: 1, height: 96, borderRadius: 18, justifyContent: 'center', alignItems: 'center',
+            style={({ pressed }) => ({ flex: 1, height: shotBtnH, borderRadius: shotBtnR, justifyContent: 'center', alignItems: 'center',
               backgroundColor: pressed ? '#78350f' : '#1c1508',
               borderWidth: 2.5, borderColor: '#f59e0b',
               shadowColor: '#f59e0b', shadowOpacity: pressed ? 0.55 : 0.25, shadowRadius: 10, elevation: 5 })}>
-            <Text style={{ fontSize: 30 }}>↘️</Text>
+            <Text style={{ fontSize: shotBtnEmoji }}>↘️</Text>
             <Text style={{ color: '#f59e0b', fontSize: 15, fontWeight: '900', marginTop: 3, letterSpacing: 0.5 }}>RIGHT</Text>
           </Pressable>
         </View>
         {/* GPS Mark row */}
-        <View style={{ marginHorizontal: 16, marginBottom: 6, alignItems: 'center' }}>
+        <View style={[{ marginHorizontal: 16, marginBottom: 6, alignItems: 'center' }, debugBlue]}>
           <Pressable onPress={() => { void handleMarkBall(); }}
             style={({ pressed }) => ({ flexDirection: 'row', gap: 8, alignItems: 'center',
               paddingHorizontal: 24, paddingVertical: 10, borderRadius: 12,
@@ -5800,7 +5820,7 @@ export default function PlayScreenClean() {
         </View>
 
         {/* ── SECTION 5: SHOT INPUT (SCORING) ──────────────────────────────── */}
-        <View style={{ marginHorizontal: 16, gap: 5 }}>
+        <View style={[{ marginHorizontal: 16, gap: 5 }, debugPurple]}>
           {/* Player score rows — one row per active player */}
           {Array.from({ length: activePlayerCount }).map((_, i) => {
             // Player 0 uses the main `strokes` state (drives shot tracking).

@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { View, Text, Pressable, StyleSheet, Image, Animated, ScrollView } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Image, Animated, ScrollView, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { signOut } from 'firebase/auth';
@@ -27,6 +27,10 @@ const DEFAULT_CLUB_YARDS: Record<string, number> = {
 
 export default function Caddie() {
   const router = useRouter();
+  const { width: screenW } = useWindowDimensions();
+  const isSmall = screenW < 375;
+  const scoreFontSz = isSmall ? 36 : 48;
+  const stepBtnSz   = isSmall ? 38 : 44;
   const setIsGuest = useUserStore((s) => s.setIsGuest);
   const [gpsMiddle, setGpsMiddle] = useState<number | null>(null);
   const [listening, setListening] = useState(false);
@@ -453,12 +457,12 @@ export default function Caddie() {
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#111', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#2a2a2a' }}>
           <Pressable
             onPress={() => setHoleScore((s) => Math.max(1, s - 1))}
-            style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: stepBtnSz, height: stepBtnSz, borderRadius: 10, backgroundColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center' }}
           >
             <Text style={{ color: '#fff', fontSize: 24, fontWeight: '700' }}>−</Text>
           </Pressable>
           <View style={{ alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 48, fontWeight: '800', lineHeight: 52 }}>{holeScore}</Text>
+            <Text style={{ color: '#fff', fontSize: scoreFontSz, fontWeight: '800', lineHeight: scoreFontSz + 4 }}>{holeScore}</Text>
             {(() => {
               const diff = holeScore - holePar;
               const label = diff <= -2 ? '🦅 Eagle' : diff === -1 ? '🐦 Birdie' : diff === 0 ? '⭕ Par' : diff === 1 ? '📍 Bogey' : diff === 2 ? '🔴 Double' : `+${diff} Over`;
@@ -468,7 +472,7 @@ export default function Caddie() {
           </View>
           <Pressable
             onPress={() => setHoleScore((s) => s + 1)}
-            style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: '#2e7d32', alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: stepBtnSz, height: stepBtnSz, borderRadius: 10, backgroundColor: '#2e7d32', alignItems: 'center', justifyContent: 'center' }}
           >
             <Text style={{ color: '#fff', fontSize: 24, fontWeight: '700' }}>+</Text>
           </Pressable>
