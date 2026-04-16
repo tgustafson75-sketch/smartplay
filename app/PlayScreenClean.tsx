@@ -9,6 +9,7 @@ import { updateCourseMemory } from '../services/courseMemory';
 import { updateScore, resetRoundState } from '../services/scoringEngine';
 import { useVoiceCaddie } from '../hooks/useVoiceCaddie';
 import { getAIResponse } from '../services/aiCoach';
+import { getAIResponse as getAIServiceResponse } from '../services/aiService';
 import { getCaddieAdvice as getAICaddieAdvice } from '../services/caddieBrain';
 import { speakCaddie as speakCaddieAI } from '../services/voice';
 import { getDispersion as getClubMissDispersion } from '../services/dispersion';
@@ -2340,37 +2341,17 @@ export default function PlayScreenClean() {
     );
   };
 
+  // Route through aiService — centralised AI gateway, no direct OpenAI fetches in UI
   const callOpenAI = async (prompt: string, context?: { hole?: number; par?: number; yardage?: number; club?: string; pattern?: string }): Promise<string | null> => {
-    const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-    if (!apiKey || apiKey === 'sk-your-key-here') return null;
     const ctx = context ?? {};
-    const systemPrompt =
-      `You are an expert golf caddie AI assistant. You know every USGA and R&A rule in detail. ` +
-      `You give concise, direct, actionable advice in 1-3 sentences. No filler phrases. ` +
-      (ctx.hole ? `Current hole: ${ctx.hole}, par ${ctx.par ?? '?'}. ` : '') +
-      (ctx.yardage ? `Remaining distance: ~${ctx.yardage} yards. ` : '') +
-      (ctx.club ? `Club in hand: ${ctx.club}. ` : '') +
-      (ctx.pattern ? `Player shot tendency: ${ctx.pattern}. ` : '') +
-      `If the question is about a golf rule, cite the rule number if you know it.`;
     try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          max_tokens: 150,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: prompt },
-          ],
-        }),
+      return await getAIServiceResponse(prompt, {
+        hole:        ctx.hole,
+        par:         ctx.par,
+        distance:    ctx.yardage,
+        club:        ctx.club,
+        missPattern: ctx.pattern as any,
       });
-      if (!res.ok) return null;
-      const json = await res.json();
-      return (json.choices?.[0]?.message?.content as string)?.trim() ?? null;
     } catch {
       return null;
     }
@@ -6015,8 +5996,8 @@ export default function PlayScreenClean() {
 
       {/* Listening / Thinking / Speaking overlay */}
       <CaddieMicButton
-        size={60}
-        showLabel={true}
+        size={72}
+        showLabel={false}
         style={{ marginBottom: 10 }}
         context={{ hole: currentHoleData.hole, par: currentHoleData.par, distance: currentHoleData.distance }}
       />
@@ -6083,7 +6064,7 @@ export default function PlayScreenClean() {
                 <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '800' }}>⚡</Text>
               </Pressable>
               <CaddieMicButton
-                size={32}
+                size={44}
                 showLabel={false}
                 style={{ marginLeft: 4 }}
                 context={{ hole: currentHoleData.hole, par: currentHoleData.par, distance: currentHoleData.distance }}

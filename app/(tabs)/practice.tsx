@@ -7,6 +7,7 @@ import { Audio, Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import { speak, stopSpeaking, setGlobalGender, getGlobalGender } from '../../services/voiceService';
+import { getAIResponse } from '../../services/aiService';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { Accelerometer, Gyroscope } from 'expo-sensors';
@@ -1297,31 +1298,8 @@ export default function Practice() {
     setAskLoading(true);
     setAskAnswer('');
     try {
-      // Try OpenAI if a public key is configured
-      const apiKey = (process.env as any).EXPO_PUBLIC_OPENAI_API_KEY;
-      let answer: string | null = null;
-      if (apiKey && apiKey !== 'sk-your-key-here' && apiKey.length > 20) {
-        try {
-          const res = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-            body: JSON.stringify({
-              model: 'gpt-4o-mini',
-              max_tokens: 200,
-              messages: [
-                { role: 'system', content: 'You are an expert golf caddie AI. Give direct, specific, practical advice in 2-3 sentences. No filler. Address the exact question asked.' },
-                { role: 'user', content: q },
-              ],
-            }),
-          });
-          if (res.ok) {
-            const json = await res.json();
-            answer = (json.choices?.[0]?.message?.content as string) ?? null;
-          }
-        } catch (_) { answer = null; }
-      }
-      // Fall back to local knowledge engine
-      if (!answer) answer = localCaddieAnswer(q);
+      // Route through centralized aiService — never fetch OpenAI directly from UI
+      const answer = await getAIResponse(q);
       setAskAnswer(answer);
       if (!quietMode) safeSpeak(answer);
     } finally {
