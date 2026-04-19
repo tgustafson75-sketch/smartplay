@@ -17,7 +17,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { speakJob, cancelAll as engineCancelAll, PRIORITY as ENGINE_PRIORITY, getEngineState } from '../../services/VoiceEngine';
 import { setGlobalGender } from '../../services/voiceService';
-import CaddieMicButton from '../../components/CaddieMicButton';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -74,7 +73,6 @@ import { buildTodaySwing } from '../../features/smartCaddie/engine/TodaySwing';
 import { combineModels } from '../../features/smartCaddie/engine/CombinedPlayerModel';
 import { speakHoleChange, speakPressureCue } from '../../features/smartCaddie/hooks/useCaddieVoice';
 import { useVoiceController } from '../../features/voice/useVoiceController';
-import { VoiceMicButton } from '../../features/voice/VoiceMicButton';
 import { PuttLine } from '../../features/playView/components/PuttLine';
 import { calculateBreak, type SlopeDirection } from '../../features/playView/engine/GreenRead';
 import { detectHazardsOnLine } from '../../features/playView/engine/LineProjection';
@@ -85,6 +83,9 @@ import { handleFocusInput } from '../../engine/focusEngine';
 import { haversineYards, pixelToGPS } from '../../utils/gpsMapping';
 import { buildFocusContext } from '../../engine/contextBuilder';
 import { getAIResponse as _focusAICaller } from '../../services/aiService';
+import { getSafeContext } from '../../utils/contextCache';
+import { logEvent } from '../../utils/logger';
+import { ErrorBoundary } from '../../components/ErrorBoundary';
 const ICON_RANGEFINDER  = require('../../assets/images/icon-rangefinder.png');
 
 const DEFAULT_CLUB_YARDS: Record<string, number> = {
@@ -140,7 +141,7 @@ const HOLE_OVERLAYS: (HoleOverlay | null)[] = [
 
 const LOGO             = require('../../assets/images/logo.png');
 
-export default function Caddie() {
+function CaddieScreen() {
   const router       = useRouter();
   const { screenW, isLarge, hPad, cardPadding } = useLayout();
   const tabBarHeight = useBottomTabBarHeight();
@@ -259,6 +260,8 @@ export default function Caddie() {
   // lowPowerMode is persisted in settingsStore — single source of truth shared across screens
   const lowPowerMode    = useSettingsStore((s) => s.lowPowerMode);
   const setLowPowerMode = useSettingsStore((s) => s.setLowPowerMode);
+  const hasOnboarded    = useSettingsStore((s) => s.hasOnboarded);
+  const setHasOnboarded = useSettingsStore((s) => s.setHasOnboarded);
   const [shakeWakeEnabled, setShakeWakeEnabled] = useState(false);
   const biometricEnabled    = useUserStore((s) => s.biometricEnabled);
   const setBiometricEnabled = useUserStore((s) => s.setBiometricEnabled);
@@ -580,7 +583,7 @@ export default function Caddie() {
 
   // ── Live GPS → ball dot (unified continuous GPS) ─────────────────────────
   // Drives the ball-position dot on the hole map when the preview is open.
-  // Requires the course to have teeCoords + pinCoords per hole; silently
+  // Requires the course to have tee + middle coords per hole; silently
   // skips when those fields are absent (no false movement).
   useEffect(() => {
     if (!showHolePreview || !isRoundActive) return;
@@ -589,9 +592,9 @@ export default function Caddie() {
     const overlay = HOLE_OVERLAYS[currentHole - 1];
     if (!overlay) return;
     const courseHole = activeCourseData?.holes[currentHole - 1] as any;
-    if (!courseHole?.teeCoords || !courseHole?.pinCoords) return;
-    const { lat: tLat, lng: tLng } = courseHole.teeCoords as { lat: number; lng: number };
-    const { lat: pLat, lng: pLng } = courseHole.pinCoords as { lat: number; lng: number };
+    if (!courseHole?.tee || !courseHole?.middle) return;
+    const { lat: tLat, lng: tLng } = courseHole.tee as { lat: number; lng: number };
+    const { lat: pLat, lng: pLng } = courseHole.middle as { lat: number; lng: number };
     const holeDx  = pLat - tLat;
     const holeDy  = pLng - tLng;
     const holeLen2 = holeDx * holeDx + holeDy * holeDy;
@@ -841,6 +844,9 @@ export default function Caddie() {
     try {
     try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
 
+    // Log shot event for analytics
+    logEvent('shot', { result, club, hole: currentHole, distance: displayDistance });
+
     // ── Capture shot start pixel for post-shot visualization ─────────────────
     if (mapSize.w > 1) {
       setShotStartPixel({
@@ -1055,6 +1061,7 @@ export default function Caddie() {
     listening: micListening,
     transcript: micTranscript,
     toggle: toggleMic,
+    startListening,
   } = useVoiceController({
     distance:        displayDistance,
     recommendedClub: caddie.recommendedClub ?? club,
@@ -1071,12 +1078,14 @@ export default function Caddie() {
     onStartVideo:    () => void _attemptSmartVision(),
     onGetAdvice:     getContextualAdvice,
     onFreeformQuery: async (query: string) => {
-      const focusCtx = buildFocusContext({
+      const rawCtx = buildFocusContext({
         hole:     currentHole,
         distance: displayDistance ?? null,
         shots,
         holeNote: activeCourseData?.holes[currentHole - 1]?.note ?? null,
       });
+      const focusCtx = getSafeContext(rawCtx) ?? rawCtx;
+      logEvent('intent', { query, hole: currentHole, distance: displayDistance });
       const aiCaller = (q: string) => _focusAICaller(q, { hole: currentHole, distance: displayDistance ?? undefined });
       return handleFocusInput(query, focusCtx, aiCaller);
     },
@@ -1769,404 +1778,36 @@ export default function Caddie() {
             transparent={false}
             onRequestClose={() => setShowHolePreview(false)}
           >
-          <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top','left','right','bottom']}>
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#0d1117' }} edges={['top','left','right','bottom']}>
 
-            {/* ── Header: hole nav ─────────────────────────────── */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' }}>
-              <Pressable
-                onPress={() => { if (currentHole > 1) setCurrentHole(currentHole - 1); }}
-                style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: currentHole > 1 ? '#f0f4f0' : 'transparent' }}
-              >
-                <Text style={{ fontSize: 22, color: currentHole > 1 ? '#1a1a1a' : '#ccc', fontWeight: '600', lineHeight: 26 }}>‹</Text>
-              </Pressable>
-              <Text style={{ flex: 1, textAlign: 'center', color: '#1a1a1a', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 }}>
-                Hole {currentHole}  ·  Par {holePar}  ·  {holeYards} yds
-              </Text>
-              <Pressable
-                onPress={() => { if (currentHole < 18) setCurrentHole(currentHole + 1); }}
-                style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: currentHole < 18 ? '#f0f4f0' : 'transparent' }}
-              >
-                <Text style={{ fontSize: 22, color: currentHole < 18 ? '#1a1a1a' : '#ccc', fontWeight: '600', lineHeight: 26 }}>›</Text>
-              </Pressable>
-              <Pressable onPress={() => setShowHolePreview(false)} style={{ marginLeft: 8, width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ fontSize: 18, color: '#999' }}>✕</Text>
-              </Pressable>
-            </View>
-
-            {/* ── Main content: left yardage sidebar + right map ─ */}
-            <View style={{ flex: 1, flexDirection: 'row' }}>
-
-              {/* Left sidebar — Back / Green Center / Front / Par */}
-              <View style={{ width: '38%', justifyContent: 'center', paddingLeft: 22, paddingRight: 8, backgroundColor: '#fff' }}>
-                <Text style={{ color: '#888', fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' }}>Hole</Text>
-                <Text style={{ color: '#111', fontSize: 52, fontWeight: '900', lineHeight: 56, marginBottom: 4 }}>{currentHole}</Text>
-
-                <View style={{ height: 1, backgroundColor: '#ebebeb', marginVertical: 10 }} />
-                <Text style={{ color: '#666', fontSize: 13 }}>Back Edge</Text>
-                <Text style={{ color: '#111', fontSize: 34, fontWeight: '800', lineHeight: 38 }}>{backDist}</Text>
-
-                <View style={{ height: 1, backgroundColor: '#ebebeb', marginVertical: 10 }} />
-                <Text style={{ color: '#27ae60', fontSize: 13, fontWeight: '700' }}>Green Center</Text>
-                <Text style={{ color: '#27ae60', fontSize: 40, fontWeight: '900', lineHeight: 44 }}>{centerDist}</Text>
-
-                <View style={{ height: 1, backgroundColor: '#ebebeb', marginVertical: 10 }} />
-                <Text style={{ color: '#666', fontSize: 13 }}>Front Edge</Text>
-                <Text style={{ color: '#111', fontSize: 34, fontWeight: '800', lineHeight: 38 }}>{frontDist}</Text>
-
-                <View style={{ height: 1, backgroundColor: '#ebebeb', marginVertical: 10 }} />
-                <Text style={{ color: '#666', fontSize: 13 }}>Par</Text>
-                <Text style={{ color: '#111', fontSize: 28, fontWeight: '800' }}>{holePar}</Text>
-
-                {/* Target distance (shows when user taps the map) */}
-                {distToTarget !== null && (
-                  <>
-                    <View style={{ height: 1, backgroundColor: '#ebebeb', marginVertical: 10 }} />
-                    <Text style={{ color: '#2563eb', fontSize: 12, fontWeight: '600' }}>To Target</Text>
-                    <Text style={{ color: '#2563eb', fontSize: 28, fontWeight: '900' }}>{distToTarget}</Text>
-                  </>
-                )}
-
-                {/* Auto safe target distance (shows when no user tap) */}
-                {distToTarget === null && mapSize.w > 1 && (
-                  <>
-                    <View style={{ height: 1, backgroundColor: '#ebebeb', marginVertical: 10 }} />
-                    <Text style={{ color: '#16a34a', fontSize: 12, fontWeight: '700' }}>Safe Zone</Text>
-                    <Text style={{ color: '#16a34a', fontSize: 28, fontWeight: '900' }}>{autoSafeTarget.dist}</Text>
-                  </>
-                )}
-
-                {/* Plays like — wind/elevation adjustment */}
-                {effectiveDistResult.isAdjusted && (
-                  <>
-                    <View style={{ height: 1, backgroundColor: '#ebebeb', marginVertical: 10 }} />
-                    <Text style={{ color: '#d97706', fontSize: 11, fontWeight: '700' }}>
-                      {wind.direction === 'head' ? '↑' : wind.direction === 'tail' ? '↓' : wind.direction === 'left' ? '←' : wind.direction === 'right' ? '→' : ''}
-                      {wind.speed > 0 ? ` ${wind.speed} mph` : ''}
-                      {elevation !== 'flat' ? ` · ${elevation === 'up' ? '▲' : '▼'}` : ''}
-                    </Text>
-                    <Text style={{ color: '#d97706', fontSize: 13, fontWeight: '800' }}>
-                      {displayDistance} plays like {effectiveDistance}
-                    </Text>
-                  </>
-                )}
-              </View>
-
-              {/* Right map panel */}
-              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fafafa' }}>
-                <View
-                  style={{ width: '88%', flex: 1, maxHeight: '96%', borderRadius: 48, overflow: 'hidden', backgroundColor: '#d0e8d0' }}
-                  onLayout={(e) => {
-                    const { width: w, height: h } = e.nativeEvent.layout;
-                    setMapSize({ w, h });
-                    setPreviewImgSize({ w, h });
-                  }}
+              {/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#0d1117' }}>
+                <Pressable
+                  onPress={() => { if (currentHole > 1) setCurrentHole(currentHole - 1); }}
+                  style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
                 >
-                  {/* Background hole image */}
-                  {fullSource ? (
-                    <Image
-                      source={fullSource}
-                      style={{ position: 'absolute', width: '100%', height: '100%' }}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={{ position: 'absolute', width: '100%', height: '100%', backgroundColor: '#2d5a27' }}>
-                      <Text style={{ color: 'rgba(255,255,255,0.15)', fontSize: 60, fontWeight: '900', textAlign: 'center', marginTop: '40%' }}>{currentHole}</Text>
-                    </View>
-                  )}
-
-                  {/* Touch surface */}
-                  <View
-                    style={{ position: 'absolute', width: '100%', height: '100%' }}
-                    onStartShouldSetResponder={() => true}
-                    onResponderGrant={(e) => {
-                      const { locationX, locationY } = e.nativeEvent;
-                      if (puttMode) {
-                        if (!puttBall) { setPuttBall({ x: locationX, y: locationY }); try { void Haptics.selectionAsync(); } catch {} }
-                        else { setPuttHole({ x: locationX, y: locationY }); triggerHaptic(Haptics.ImpactFeedbackStyle.Medium); }
-                        return;
-                      }
-                      lastNudgedHazardRef.current = null;
-                      // Capture original tap for "Your Aim" line (held until hole changes)
-                      const newTarget = { px: locationX, py: locationY };
-                      setOriginalTarget(newTarget);
-                      originalFadeAnim.setValue(1);
-                      if (originalFadeTimer.current) clearTimeout(originalFadeTimer.current);
-                      // Auto-fade "Your Aim" line after 2 seconds
-                      originalFadeTimer.current = setTimeout(() => {
-                        Animated.timing(originalFadeAnim, {
-                          toValue: 0, duration: 600, useNativeDriver: true,
-                        }).start();
-                      }, 2000);
-                      setTargetPosition({ px: locationX, py: locationY });
-                      triggerHaptic(Haptics.ImpactFeedbackStyle.Light);
-                      playSoundTap();
-                    }}
-                    onResponderMove={(e) => {
-                      if (!targetPosition) return;
-                      const { locationX, locationY } = e.nativeEvent;
-                      if (dragDebounceRef.current) return;
-                      dragDebounceRef.current = setTimeout(() => {
-                        dragDebounceRef.current = null;
-                        setTargetPosition({ px: locationX, py: locationY });
-                        triggerHaptic(Haptics.ImpactFeedbackStyle.Light, 500);
-                      }, 60);
-                    }}
-                    onResponderRelease={() => {
-                      if (dragDebounceRef.current) { clearTimeout(dragDebounceRef.current); dragDebounceRef.current = null; }
-                    }}
-                  />
-
-                  {/* ── Before/After: "Your Aim" fading layer + comparison legend ─── */}
-                  {originalTarget && targetPosition && mapSize.w > 1 && (
-                    <Animated.View
-                      style={{ position: 'absolute', width: '100%', height: '100%', opacity: originalFadeAnim }}
-                      pointerEvents="none"
-                    >
-                      <Svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
-                        {/* Yellow dashed "Your Aim" line */}
-                        <Path
-                          d={`M ${bx} ${by} L ${originalTarget.px} ${originalTarget.py}`}
-                          stroke="#facc15"
-                          strokeWidth={2.5}
-                          strokeDasharray="7,5"
-                          fill="none"
-                          strokeLinecap="round"
-                          opacity={0.85}
-                        />
-                        {/* Small yellow circle at original tap point */}
-                        <Circle cx={originalTarget.px} cy={originalTarget.py} r={7} fill="none" stroke="#facc15" strokeWidth="2" opacity={0.85} />
-                        <Circle cx={originalTarget.px} cy={originalTarget.py} r={3} fill="#facc15" opacity={0.85} />
-                      </Svg>
-
-                      {/* "Your Aim" label at midpoint of yellow line */}
-                      <View
-                        style={{
-                          position: 'absolute',
-                          left: (bx + originalTarget.px) / 2 + 6,
-                          top: (by + originalTarget.py) / 2 - 18,
-                          backgroundColor: 'rgba(250,204,21,0.92)',
-                          borderRadius: 5,
-                          paddingHorizontal: 6,
-                          paddingVertical: 2,
-                        }}
-                        pointerEvents="none"
-                      >
-                        <Text style={{ color: '#000', fontSize: 10, fontWeight: '700' }}>Your Aim</Text>
-                      </View>
-
-                      {/* Comparison legend — top-left corner, only when adjustment is visible */}
-                      {isAdjusted && (
-                        <View style={{
-                          position: 'absolute', top: 10, left: 10,
-                          backgroundColor: 'rgba(0,0,0,0.72)',
-                          borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7,
-                          gap: 5,
-                        }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <View style={{ width: 20, height: 2, backgroundColor: '#facc15', borderRadius: 1, borderStyle: 'dashed' }} />
-                            <Text style={{ color: '#facc15', fontSize: 11, fontWeight: '700' }}>Your Aim</Text>
-                          </View>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <View style={{ width: 20, height: 2.5, backgroundColor: '#4ade80', borderRadius: 1 }} />
-                            <Text style={{ color: '#4ade80', fontSize: 11, fontWeight: '700' }}>Caddie</Text>
-                          </View>
-                        </View>
-                      )}
-                    </Animated.View>
-                  )}
-
-                  {/* "Caddie Adjusted" label on green line — appears when adjustment is active */}
-                  {isAdjusted && targetPosition && mapSize.w > 1 && (
-                    <View
-                      style={{
-                        position: 'absolute',
-                        left: adjMidX + 6,
-                        top: adjMidY - 18,
-                        backgroundColor: 'rgba(74,222,128,0.92)',
-                        borderRadius: 5,
-                        paddingHorizontal: 6,
-                        paddingVertical: 2,
-                      }}
-                      pointerEvents="none"
-                    >
-                      <Text style={{ color: '#000', fontSize: 10, fontWeight: '700' }}>Caddie</Text>
-                    </View>
-                  )}
-
-                  {/* SVG overlay */}
-                  {mapSize.w > 1 && (
-                    <Svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }} pointerEvents="none">
-                      {/* Shot line: ball → target or ball → pin (Caddie adjusted line) */}
-                      <Path
-                        d={shotPath}
-                        stroke={targetPosition ? '#4ade80' : 'rgba(255,255,255,0.9)'}
-                        strokeWidth={targetPosition ? 2.5 : 2}
-                        strokeDasharray={targetPosition ? undefined : '8,6'}
-                        fill="none"
-                        strokeLinecap="round"
-                      />
-                      {/* Pin ring (teal/cyan like Golfshot) */}
-                      <Circle cx={gx} cy={gy} r={22} fill="none" stroke="rgba(0,200,180,0.7)" strokeWidth="3" />
-                      <Circle cx={gx} cy={gy} r={14} fill="rgba(0,200,180,0.35)" />
-                      <Circle cx={gx} cy={gy} r={4} fill="#fff" />
-
-                      {/* Auto safe target (green) — visible when no user tap */}
-                      {mapSize.w > 1 && (
-                        <>
-                          <Circle
-                            cx={autoSafeTarget.px}
-                            cy={autoSafeTarget.py}
-                            r={16}
-                            fill="rgba(34,197,94,0.22)"
-                            stroke="#22c55e"
-                            strokeWidth="2"
-                            opacity={targetPosition ? 0.45 : 0.9}
-                          />
-                          <Circle cx={autoSafeTarget.px} cy={autoSafeTarget.py} r={5} fill="#22c55e" opacity={targetPosition ? 0.4 : 0.9} />
-                        </>
-                      )}
-
-                      {/* Target ring (user tap — blue) */}
-                      {tx !== null && ty !== null && (
-                        <Animated.View
-                          style={{ position: 'absolute', width: 30, height: 30, left: animatedTarget.x, top: animatedTarget.y, transform: [{ scale: nudgeAnim }] }}
-                          pointerEvents="none"
-                        >
-                          <Svg width="30" height="30">
-                            <Circle cx={15} cy={15} r={12} fill="none" stroke="#facc15" strokeWidth="2.5" />
-                            <Circle cx={15} cy={15} r={4} fill="#facc15" />
-                          </Svg>
-                        </Animated.View>
-                      )}
-
-                      {/* Actual shot line — after shot logged */}
-                      {shotStartPixel && (
-                        <Path d={`M ${shotStartPixel.x} ${shotStartPixel.y} L ${bx} ${by}`} stroke="#38BDF8" strokeWidth="2.5" strokeLinecap="round" fill="none" opacity={0.85} />
-                      )}
-
-                      {/* Tee ball (blue like Golfshot) */}
-                      <Circle cx={bx} cy={by} r={12} fill="rgba(255,255,255,0.9)" />
-                      <Circle cx={bx} cy={by} r={9} fill="#4FC8E8" />
-                      <Circle cx={bx} cy={by} r={4} fill="#fff" />
-
-                      {/* Hazard diamonds */}
-                      {hazardWarnings.map((hw, i) => {
-                        const col = hw.type === 'water' ? '#3b82f6' : hw.type === 'ob' ? '#ef4444' : '#f59e0b';
-                        const cx = hw.projPx.x; const cy = hw.projPx.y; const s = 7;
-                        return (
-                          <React.Fragment key={`hz-${i}`}>
-                            <Path d={`M ${cx} ${cy - s} L ${cx + s} ${cy} L ${cx} ${cy + s} L ${cx - s} ${cy} Z`} fill={col} opacity={0.9} />
-                          </React.Fragment>
-                        );
-                      })}
-                    </Svg>
-                  )}
-
-                  {/* Distance label on shot line — center of line */}
-                  {mapSize.w > 1 && (
-                    <View
-                      style={{ position: 'absolute', left: (tMidX ?? midX) - 28, top: (tMidY ?? midY) - 14, width: 56, height: 28, alignItems: 'center', justifyContent: 'center' }}
-                      pointerEvents="none"
-                    >
-                      <View style={{ backgroundColor: 'rgba(0,0,0,0.58)', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 }}>
-                        <Text style={{ color: '#fff', fontSize: 16, fontWeight: '900', textAlign: 'center' }}>
-                          {distToTarget !== null ? distToTarget : centerDist}
-                        </Text>
-                      </View>
-                    </View>
-                  )}
-
-                  {/* Hazard warnings */}
-                  {hazardWarnings.length > 0 && (
-                    <View style={{ position: 'absolute', bottom: 10, left: 8, right: 8 }} pointerEvents="none">
-                      {hazardWarnings.map((hw, i) => {
-                        const col = hw.type === 'water' ? '#3b82f6' : hw.type === 'ob' ? '#ef4444' : '#f59e0b';
-                        const icon = hw.type === 'water' ? '💧' : hw.type === 'ob' ? '⚠️' : '⛳';
-                        return (
-                          <View key={i} style={{ backgroundColor: 'rgba(0,0,0,0.75)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, marginBottom: 4, borderLeftWidth: 3, borderLeftColor: col }}>
-                            <Text style={{ color: col, fontSize: 12, fontWeight: '800' }}>{icon} {hw.label}: Carry {hw.carry} / Clear {hw.clear}</Text>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  )}
-
-                  {/* Putt mode overlays */}
-                  {puttMode && puttBall && puttHole && (
-                    <PuttLine start={puttBall} end={puttHole} slope={slopeDirection} />
-                  )}
+                  <Text style={{ fontSize: 24, color: currentHole > 1 ? '#fff' : '#333', fontWeight: '600' }}>&#x2039;</Text>
+                </Pressable>
+                <View style={{ flex: 1, alignItems: 'center' }}>
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800', letterSpacing: 0.3 }}>
+                    Hole {currentHole}  &#xB7;  Par {holePar}
+                  </Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 1 }}>
+                    {holeYards} yds{effectiveDistResult.isAdjusted ? `  Â·  plays like ${effectiveDistance}` : ''}
+                  </Text>
                 </View>
-              </View>
-            </View>
-
-            {/* ── Bottom bar: Clear / Putt Mode / Done ─────────── */}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f0f0f0' }}>
-              {puttMode ? (
-                <Pressable onPress={() => { setPuttBall(null); setPuttHole(null); setSlopeDirection(null); }} style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#d8b4fe' }}>
-                  <Text style={{ color: '#7c3aed', fontSize: 12, fontWeight: '600' }}>Reset Putt</Text>
+                <Pressable
+                  onPress={() => { if (currentHole < 18) setCurrentHole(currentHole + 1); }}
+                  style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Text style={{ fontSize: 24, color: currentHole < 18 ? '#fff' : '#333', fontWeight: '600' }}>&#x203A;</Text>
                 </Pressable>
-              ) : (
-                <Pressable onPress={() => setTargetPosition(null)} style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#e5e7eb' }}>
-                  <Text style={{ color: '#6b7280', fontSize: 12 }}>Clear Target</Text>
+                <Pressable onPress={() => setShowHolePreview(false)} style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center' }}>
+                  <MCIcon name="close" size={20} color="#888" />
                 </Pressable>
-              )}
-
-              {/* Putt mode slope selector */}
-              {puttMode && puttBall && puttHole && (() => {
-                const dx = puttHole.x - puttBall.x;
-                const dy = puttHole.y - puttBall.y;
-                const pxDist = Math.sqrt(dx * dx + dy * dy);
-                const pixelsPerYard = mapSize.h > 1 ? mapSize.h / holeYards : 2;
-                const puttFt = Math.round((pxDist / pixelsPerYard) * 3);
-                const { speedHint, slopeLabel } = calculateBreak({ start: puttBall, end: puttHole, slope: slopeDirection });
-                return (
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={{ color: '#7c3aed', fontSize: 14, fontWeight: '700' }}>{puttFt} ft · {slopeLabel}</Text>
-                    <Text style={{ color: '#6b7280', fontSize: 11 }}>{speedHint}</Text>
-                  </View>
-                );
-              })()}
-
-              <Pressable
-                onPress={() => { const next = !puttMode; setPuttMode(next); if (next) { setPuttBall(null); setPuttHole(null); setSlopeDirection(null); checkAndShow('putt_mode', () => showTip('putt_mode', "Tap your ball position, then the hole to read your putt.")); } }}
-                style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: puttMode ? '#7c3aed' : '#e5e7eb', backgroundColor: puttMode ? 'rgba(124,58,237,0.08)' : 'transparent' }}
-              >
-                <Text style={{ color: puttMode ? '#7c3aed' : '#6b7280', fontSize: 12, fontWeight: '700' }}>
-                  🟣 {puttMode ? 'Exit Putt' : 'Putt Mode'}
-                </Text>
-              </Pressable>
-
-              <Pressable onPress={() => setShowHolePreview(false)} style={{ paddingHorizontal: 20, paddingVertical: 9, borderRadius: 20, backgroundColor: '#111' }}>
-                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Done</Text>
-              </Pressable>
-            </View>
-
-            {/* Putt mode instructions */}
-            {puttMode && (
-              <View style={{ alignItems: 'center', paddingBottom: 8 }}>
-                {(['left','right','uphill','downhill'] as SlopeDirection[]).length > 0 && (
-                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center', paddingHorizontal: 12 }}>
-                    {(['left','right','uphill','downhill'] as SlopeDirection[]).map((dir) => {
-                      const labels: Record<string, string> = { left:'⬅️ Left', right:'➡️ Right', uphill:'⬆️ Up', downhill:'⬇️ Down' };
-                      const active = slopeDirection === dir;
-                      return (
-                        <Pressable key={dir!} onPress={() => setSlopeDirection(active ? null : dir)} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, borderWidth: 1.5, borderColor: active ? '#7c3aed' : '#e5e7eb', backgroundColor: active ? 'rgba(124,58,237,0.1)' : 'transparent' }}>
-                          <Text style={{ color: active ? '#7c3aed' : '#6b7280', fontSize: 12 }}>{labels[dir!]}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                )}
-                <Text style={{ color: '#9ca3af', fontSize: 11, marginTop: 4 }}>
-                  {!puttBall ? 'Tap ball position on map' : !puttHole ? 'Tap hole on map' : 'Select break direction'}
-                </Text>
               </View>
-            )}
 
-          </SafeAreaView>
-          
-
-              {/* Map area — tappable to set target */}
+              {/* â”€â”€ Full-bleed map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
               <View
                 style={{ flex: 1 }}
                 onLayout={(e) => {
@@ -2175,46 +1816,49 @@ export default function Caddie() {
                   setPreviewImgSize({ w, h });
                 }}
               >
-                {/* Background image or solid fallback */}
+                {/* Hole image */}
                 {fullSource ? (
                   <Image
                     source={fullSource}
                     style={{ position: 'absolute', width: '100%', height: '100%' }}
                     resizeMode="cover"
-                    onError={() => setShowHolePreview(false)}
                   />
                 ) : (
-                  <View style={{ position: 'absolute', width: '100%', height: '100%', backgroundColor: '#0a1f0e' }} />
+                  <View style={{ position: 'absolute', width: '100%', height: '100%', backgroundColor: '#1a2e1a' }}>
+                    <Text style={{ color: 'rgba(255,255,255,0.08)', fontSize: 90, fontWeight: '900', textAlign: 'center', marginTop: '35%' }}>{currentHole}</Text>
+                  </View>
                 )}
 
-                {/* Touch surface — tap to set target; drag to move it (drag enabled after first tap) */}
+                {/* Dark vignette for overlay legibility */}
+                <View style={{ position: 'absolute', width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.22)' }} pointerEvents="none" />
+
+                {/* Touch surface â€” tap to set target, drag to move */}
                 <View
                   style={{ position: 'absolute', width: '100%', height: '100%' }}
                   onStartShouldSetResponder={() => true}
                   onResponderGrant={(e) => {
                     const { locationX, locationY } = e.nativeEvent;
                     if (puttMode) {
-                      if (!puttBall) {
-                        setPuttBall({ x: locationX, y: locationY });
-                        try { void Haptics.selectionAsync(); } catch {}
-                      } else {
-                        setPuttHole({ x: locationX, y: locationY });
-                        triggerHaptic(Haptics.ImpactFeedbackStyle.Medium);
-                      }
+                      if (!puttBall) { setPuttBall({ x: locationX, y: locationY }); try { void Haptics.selectionAsync(); } catch {} }
+                      else { setPuttHole({ x: locationX, y: locationY }); triggerHaptic(Haptics.ImpactFeedbackStyle.Medium); }
                       return;
                     }
-                    lastNudgedHazardRef.current = null; // reset on new gesture
+                    lastNudgedHazardRef.current = null;
+                    const newTarget = { px: locationX, py: locationY };
+                    setOriginalTarget(newTarget);
+                    originalFadeAnim.setValue(1);
+                    if (originalFadeTimer.current) clearTimeout(originalFadeTimer.current);
+                    originalFadeTimer.current = setTimeout(() => {
+                      Animated.timing(originalFadeAnim, { toValue: 0, duration: 600, useNativeDriver: true }).start();
+                    }, 2000);
                     setTargetPosition({ px: locationX, py: locationY });
                     triggerHaptic(Haptics.ImpactFeedbackStyle.Light);
                     playSoundTap();
-                    // Tip: first time user taps the map
                     checkAndShow('target_tap', () => showTip('target_tap', "Tap anywhere to plan your shot. Caddie will handle the rest."));
                   }}
                   onResponderMove={(e) => {
-                    // Only drag-update after target is already set
                     if (!targetPosition) return;
                     const { locationX, locationY } = e.nativeEvent;
-                    // Debounce at 60ms — prevents excessive re-renders during fast moves
                     if (dragDebounceRef.current) return;
                     dragDebounceRef.current = setTimeout(() => {
                       dragDebounceRef.current = null;
@@ -2223,125 +1867,304 @@ export default function Caddie() {
                     }, 60);
                   }}
                   onResponderRelease={() => {
-                    if (dragDebounceRef.current) {
-                      clearTimeout(dragDebounceRef.current);
-                      dragDebounceRef.current = null;
-                    }
+                    if (dragDebounceRef.current) { clearTimeout(dragDebounceRef.current); dragDebounceRef.current = null; }
                   }}
                 />
 
-                {/* SVG overlay — ball, pin, target, shot line; no re-renders per frame */}
+                {/* SVG overlay â€” shot line, pin, ball, hazards, layup rings */}
                 {mapSize.w > 1 && (
-                  <Animated.View
-                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-                      opacity: targetPosition ? svFadeAnim : 1 }}
-                    pointerEvents="none"
-                  >
-                  <Svg
-                    width="100%" height="100%"
-                    style={{ position: 'absolute', top: 0, left: 0 }}
-                    pointerEvents="none"
-                  >
-                    {/* Shot line: ball → target (solid) or ball → pin (dashed) */}
+                  <Svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }} pointerEvents="none">
+
+                    {/* Shot line: ball â†’ safe-target (solid green) or ball â†’ pin (dashed white) */}
                     <Path
                       d={shotPath}
-                      stroke={targetPosition ? Palette.positive : 'rgba(255,255,255,0.25)'}
-                      strokeWidth="2"
-                      strokeDasharray={targetPosition ? undefined : '6,5'}
+                      stroke={targetPosition ? Palette.positive : 'rgba(255,255,255,0.3)'}
+                      strokeWidth="2.5"
+                      strokeDasharray={targetPosition ? undefined : '7,5'}
                       fill="none"
                       strokeLinecap="round"
                     />
-                    {/* Green pin */}
-                    <Circle cx={gx} cy={gy} r={8} fill="#e63946" opacity={0.9} />
-                    <Circle cx={gx} cy={gy} r={3} fill="#fff" />
-                    {/* Target ring — animates to tap position smoothly */}
-                    {tx !== null && ty !== null && (
-                      <Animated.View
-                        style={[
-                          { position: 'absolute', width: 26, height: 26,
-                            left: animatedTarget.x,
-                            top:  animatedTarget.y,
-                            transform: [{ scale: nudgeAnim }] },
-                        ]}
-                        pointerEvents="none"
-                      >
-                        <Svg width="26" height="26">
-                          <Circle cx={13} cy={13} r={10} fill="none" stroke={Palette.positive} strokeWidth="2.5" />
-                          <Circle cx={13} cy={13} r={3}  fill={Palette.positive} />
-                        </Svg>
-                      </Animated.View>
+
+                    {/* "Your Aim" fading dashed yellow line */}
+                    {originalTarget && targetPosition && (
+                      <Path
+                        d={`M ${bx} ${by} L ${originalTarget.px} ${originalTarget.py}`}
+                        stroke="#facc15"
+                        strokeWidth="2"
+                        strokeDasharray="6,4"
+                        fill="none"
+                        strokeLinecap="round"
+                        opacity={0.65}
+                      />
                     )}
-                    {/* Actual shot line — blue, shown after shot is hit */}
+
+                    {/* Green pin â€” Golfshot teal concentric rings */}
+                    <Circle cx={gx} cy={gy} r={26} fill="none" stroke="rgba(0,200,180,0.4)" strokeWidth="1.5" />
+                    <Circle cx={gx} cy={gy} r={16} fill="rgba(0,200,180,0.2)" />
+                    <Circle cx={gx} cy={gy} r={6}  fill="rgba(0,200,180,0.9)" />
+                    <Circle cx={gx} cy={gy} r={2.5} fill="#fff" />
+
+                    {/* Layup rings â€” 100 and 150 yds from green along hole line */}
+                    {(() => {
+                      const totalPx = Math.sqrt((gx - bx) ** 2 + (gy - by) ** 2);
+                      const pxPerYd = totalPx / Math.max(1, holeYards);
+                      const dxU = (bx - gx) / Math.max(1, totalPx);
+                      const dyU = (by - gy) / Math.max(1, totalPx);
+                      return [100, 150].map((yds) => {
+                        const lx = gx + dxU * yds * pxPerYd;
+                        const ly = gy + dyU * yds * pxPerYd;
+                        if (lx < 0 || lx > mapSize.w || ly < 0 || ly > mapSize.h) return null;
+                        return (
+                          <React.Fragment key={`layup-ring-${yds}`}>
+                            <Circle cx={lx} cy={ly} r={20} fill="none" stroke="rgba(255,255,255,0.28)" strokeWidth="1.5" strokeDasharray="4,3" />
+                            <Circle cx={lx} cy={ly} r={3} fill="rgba(255,255,255,0.45)" />
+                          </React.Fragment>
+                        );
+                      });
+                    })()}
+
+                    {/* Auto safe target (green) â€” visible when no user tap */}
+                    {!targetPosition && (
+                      <>
+                        <Circle cx={autoSafeTarget.px} cy={autoSafeTarget.py} r={18} fill="rgba(34,197,94,0.18)" stroke="#22c55e" strokeWidth="1.5" />
+                        <Circle cx={autoSafeTarget.px} cy={autoSafeTarget.py} r={5} fill="#22c55e" />
+                      </>
+                    )}
+
+                    {/* Actual shot trail â€” shown after a shot is recorded */}
                     {shotStartPixel && (
                       <Path
                         d={`M ${shotStartPixel.x} ${shotStartPixel.y} L ${bx} ${by}`}
                         stroke="#38BDF8"
                         strokeWidth="2.5"
                         strokeLinecap="round"
-                        strokeDasharray="none"
                         fill="none"
                         opacity={0.85}
                       />
                     )}
-                    {/* Ball (white outer, dark inner) */}
-                    <Circle cx={bx} cy={by} r={8} fill="#fff" />
-                    <Circle cx={bx} cy={by} r={5} fill="#1a1a1a" />
-                    {/* Hazard markers on line — diamond at carry position */}
+
+                    {/* Player ball â€” Golfshot light-blue style */}
+                    <Circle cx={bx} cy={by} r={11} fill="rgba(255,255,255,0.9)" />
+                    <Circle cx={bx} cy={by} r={8}  fill="#4FC8E8" />
+                    <Circle cx={bx} cy={by} r={3.5} fill="#fff" />
+
+                    {/* Hazard diamonds on shot line */}
                     {hazardWarnings.map((hw, i) => {
                       const col = hw.type === 'water' ? '#60a5fa' : hw.type === 'ob' ? '#f87171' : '#fcd34d';
-                      const cx  = hw.projPx.x;
-                      const cy  = hw.projPx.y;
-                      const s   = 7; // half-size of diamond
+                      const hcx = hw.projPx.x; const hcy = hw.projPx.y; const s = 7;
                       return (
                         <React.Fragment key={`hz-${i}`}>
-                          <Path
-                            d={`M ${cx} ${cy - s} L ${cx + s} ${cy} L ${cx} ${cy + s} L ${cx - s} ${cy} Z`}
-                            fill={col}
-                            opacity={0.88}
-                          />
+                          <Path d={`M ${hcx} ${hcy - s} L ${hcx + s} ${hcy} L ${hcx} ${hcy + s} L ${hcx - s} ${hcy} Z`} fill={col} opacity={0.9} />
                         </React.Fragment>
                       );
                     })}
                   </Svg>
+                )}
+
+                {/* Target ring â€” animates to tap position */}
+                {tx !== null && ty !== null && (
+                  <Animated.View
+                    style={{ position: 'absolute', width: 28, height: 28, left: animatedTarget.x, top: animatedTarget.y, transform: [{ scale: nudgeAnim }] }}
+                    pointerEvents="none"
+                  >
+                    <Svg width="28" height="28">
+                      <Circle cx={14} cy={14} r={11} fill="none" stroke="#facc15" strokeWidth="2.5" />
+                      <Circle cx={14} cy={14} r={4} fill="#facc15" />
+                    </Svg>
                   </Animated.View>
                 )}
 
-                {/* Post-shot result badge — auto-fades after 6s */}
+                {/* Distance bubbles near the green â€” Golfshot style */}
+                {mapSize.w > 1 && (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      left: Math.max(4, Math.min(mapSize.w - 84, gx - 38)),
+                      top: Math.max(4, gy - 118),
+                      alignItems: 'center',
+                      gap: 2,
+                    }}
+                    pointerEvents="none"
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.68)', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 }}>
+                      <Text style={{ color: '#999', fontSize: 9, fontWeight: '700' }}>B</Text>
+                      <Text style={{ color: '#ddd', fontSize: 14, fontWeight: '800' }}>{backDist}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: 'rgba(0,0,0,0.82)', borderRadius: 7, paddingHorizontal: 9, paddingVertical: 4, borderWidth: 1, borderColor: 'rgba(0,200,180,0.7)' }}>
+                      <Text style={{ color: 'rgba(0,210,190,1)', fontSize: 22, fontWeight: '900' }}>{distToTarget !== null ? distToTarget : centerDist}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.68)', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 }}>
+                      <Text style={{ color: '#999', fontSize: 9, fontWeight: '700' }}>F</Text>
+                      <Text style={{ color: '#ddd', fontSize: 14, fontWeight: '800' }}>{frontDist}</Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Layup distance labels alongside the rings */}
+                {mapSize.w > 1 && (() => {
+                  const totalPx = Math.sqrt((gx - bx) ** 2 + (gy - by) ** 2);
+                  const pxPerYd = totalPx / Math.max(1, holeYards);
+                  const dxU = (bx - gx) / Math.max(1, totalPx);
+                  const dyU = (by - gy) / Math.max(1, totalPx);
+                  return [150, 100].map((yds) => {
+                    const lx = gx + dxU * yds * pxPerYd;
+                    const ly = gy + dyU * yds * pxPerYd;
+                    if (lx < 8 || lx > mapSize.w - 8 || ly < 8 || ly > mapSize.h - 24) return null;
+                    return (
+                      <View key={`layup-label-${yds}`} style={{ position: 'absolute', left: lx + 16, top: ly - 10 }} pointerEvents="none">
+                        <View style={{ backgroundColor: 'rgba(0,0,0,0.62)', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
+                          <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11, fontWeight: '700' }}>{yds}</Text>
+                        </View>
+                      </View>
+                    );
+                  });
+                })()}
+
+                {/* Wind indicator â€” top-left corner */}
+                {wind.speed > 0 && (
+                  <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: 'rgba(0,0,0,0.65)', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', gap: 5 }} pointerEvents="none">
+                    <Text style={{ color: '#93c5fd', fontSize: 14 }}>
+                      {wind.direction === 'head' ? '\u2191' : wind.direction === 'tail' ? '\u2193' : wind.direction === 'left' ? '\u2190' : '\u2192'}
+                    </Text>
+                    <Text style={{ color: '#93c5fd', fontSize: 12, fontWeight: '700' }}>{wind.speed} mph</Text>
+                  </View>
+                )}
+
+                {/* Post-shot result badge */}
                 {actualShotResult !== null && (
-                  <View style={{
-                    position: 'absolute', top: 10, left: 10,
-                    flexDirection: 'row', alignItems: 'center', gap: 6,
-                    backgroundColor: 'rgba(0,0,0,0.72)',
-                    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5,
-                    borderWidth: 1, borderColor: '#38BDF8',
-                  }} pointerEvents="none">
+                  <View style={{ position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.72)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#38BDF8' }} pointerEvents="none">
                     <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#38BDF8' }} />
-                    <Text style={{ color: '#38BDF8', fontSize: 13, fontWeight: '700' }}>
-                      Shot: {actualShotResult === 'good' ? 'On target' : actualShotResult}
+                    <Text style={{ color: '#38BDF8', fontSize: 13, fontWeight: '700' }}>Shot: {actualShotResult === 'good' ? 'On target' : actualShotResult}</Text>
+                  </View>
+                )}
+
+                {/* Hazard warning strip â€” bottom of map */}
+                {hazardWarnings.length > 0 && (
+                  <View style={{ position: 'absolute', bottom: 8, left: 8, right: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 4 }} pointerEvents="none">
+                    {hazardWarnings.map((hw, i) => {
+                      const col = hw.type === 'water' ? '#60a5fa' : hw.type === 'ob' ? '#f87171' : '#fcd34d';
+                      const icon = hw.type === 'water' ? '\uD83D\uDCA7' : hw.type === 'ob' ? '\u26A0\uFE0F' : '\u26F3';
+                      return (
+                        <View key={i} style={{ backgroundColor: 'rgba(0,0,0,0.8)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, borderLeftWidth: 3, borderLeftColor: col }}>
+                          <Text style={{ color: col, fontSize: 11, fontWeight: '800' }}>{icon} {hw.label}: {hw.carry}â€“{hw.clear} yds</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+
+                {/* Putt overlays */}
+                {puttMode && puttBall && puttHole && (
+                  <PuttLine start={puttBall} end={puttHole} slope={slopeDirection} />
+                )}
+
+              </View>
+
+              {/* â”€â”€ Bottom dock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+              <View style={{ backgroundColor: '#0d1117', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.07)' }}>
+
+                {/* F / Center / B  +  Club rec */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-end' }}>
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ color: '#555', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>FRONT</Text>
+                      <Text style={{ color: '#aaa', fontSize: 20, fontWeight: '800' }}>{frontDist}</Text>
+                    </View>
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ color: 'rgba(0,200,180,0.7)', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>CENTER</Text>
+                      <Text style={{ color: 'rgba(0,210,190,1)', fontSize: 30, fontWeight: '900', lineHeight: 32 }}>
+                        {distToTarget !== null ? distToTarget : centerDist}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ color: '#555', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 }}>BACK</Text>
+                      <Text style={{ color: '#aaa', fontSize: 20, fontWeight: '800' }}>{backDist}</Text>
+                    </View>
+                  </View>
+
+                  {(caddie.recommendedClub ?? club) ? (
+                    <View style={{ alignItems: 'center', backgroundColor: 'rgba(46,204,113,0.1)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 7, borderWidth: 1, borderColor: 'rgba(46,204,113,0.28)' }}>
+                      <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 9, fontWeight: '700', letterSpacing: 0.5 }}>CLUB</Text>
+                      <Text style={{ color: Palette.positive, fontSize: 19, fontWeight: '900' }}>{caddie.recommendedClub ?? club}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {/* Plays-like row (wind / elevation) */}
+                {effectiveDistResult.isAdjusted && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 9 }}>
+                    <Text style={{ color: '#d97706', fontSize: 12, fontWeight: '700' }}>
+                      {wind.direction === 'head' ? '\u2191 Into wind' : wind.direction === 'tail' ? '\u2193 With wind' : wind.direction === 'left' ? '\u2190 Cross L' : wind.direction === 'right' ? '\u2192 Cross R' : ''}
+                      {elevation !== 'flat' ? (elevation === 'up' ? '  \u25B2 Uphill' : '  \u25BC Downhill') : ''}
+                    </Text>
+                    <Text style={{ color: '#d97706', fontSize: 12, fontWeight: '800' }}>Â· plays like {effectiveDistance} yds</Text>
+                  </View>
+                )}
+
+                {/* Action bar */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  {puttMode ? (
+                    <Pressable onPress={() => { setPuttBall(null); setPuttHole(null); setSlopeDirection(null); }} style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18, borderWidth: 1, borderColor: '#7c3aed' }}>
+                      <Text style={{ color: '#c4b5fd', fontSize: 12, fontWeight: '700' }}>Reset Putt</Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable onPress={() => setTargetPosition(null)} style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }}>
+                      <Text style={{ color: '#666', fontSize: 12 }}>Clear</Text>
+                    </Pressable>
+                  )}
+
+                  {puttMode && puttBall && puttHole && (() => {
+                    const dx = puttHole.x - puttBall.x;
+                    const dy = puttHole.y - puttBall.y;
+                    const pxDist = Math.sqrt(dx * dx + dy * dy);
+                    const pixelsPerYard = mapSize.h > 1 ? mapSize.h / holeYards : 2;
+                    const puttFt = Math.round((pxDist / pixelsPerYard) * 3);
+                    const { speedHint, slopeLabel } = calculateBreak({ start: puttBall, end: puttHole, slope: slopeDirection });
+                    return (
+                      <View style={{ alignItems: 'center' }}>
+                        <Text style={{ color: '#c4b5fd', fontSize: 14, fontWeight: '800' }}>{puttFt} ft Â· {slopeLabel}</Text>
+                        <Text style={{ color: '#666', fontSize: 11 }}>{speedHint}</Text>
+                      </View>
+                    );
+                  })()}
+
+                  <Pressable
+                    onPress={() => { const next = !puttMode; setPuttMode(next); if (next) { setPuttBall(null); setPuttHole(null); setSlopeDirection(null); checkAndShow('putt_mode', () => showTip('putt_mode', "Tap your ball position, then the hole to read the break.")); } }}
+                    style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18, borderWidth: 1.5, borderColor: puttMode ? '#7c3aed' : 'rgba(255,255,255,0.12)', backgroundColor: puttMode ? 'rgba(124,58,237,0.1)' : 'transparent' }}
+                  >
+                    <Text style={{ color: puttMode ? '#c4b5fd' : '#666', fontSize: 12, fontWeight: '700' }}>
+                      {puttMode ? 'Exit Putt' : 'Putt Mode'}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable onPress={() => setShowHolePreview(false)} style={{ paddingHorizontal: 20, paddingVertical: 9, borderRadius: 18, backgroundColor: Palette.positive }}>
+                    <Text style={{ color: '#000', fontSize: 13, fontWeight: '800' }}>Done</Text>
+                  </Pressable>
+                </View>
+
+                {/* Putt slope selector */}
+                {puttMode && (
+                  <View style={{ marginTop: 8 }}>
+                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+                      {(['left','right','uphill','downhill'] as SlopeDirection[]).map((dir) => {
+                        const labels: Record<string, string> = { left: '\u2B05\uFE0F Left', right: '\u27A1\uFE0F Right', uphill: '\u2B06\uFE0F Up', downhill: '\u2B07\uFE0F Down' };
+                        const active = slopeDirection === dir;
+                        return (
+                          <Pressable key={dir!} onPress={() => setSlopeDirection(active ? null : dir)} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, borderWidth: 1.5, borderColor: active ? '#7c3aed' : 'rgba(255,255,255,0.12)', backgroundColor: active ? 'rgba(124,58,237,0.1)' : 'transparent' }}>
+                            <Text style={{ color: active ? '#c4b5fd' : '#555', fontSize: 12 }}>{labels[dir!]}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    <Text style={{ color: '#444', fontSize: 11, textAlign: 'center', marginTop: 4 }}>
+                      {!puttBall ? 'Tap ball position on map' : !puttHole ? 'Tap hole location on map' : 'Select break direction'}
                     </Text>
                   </View>
                 )}
 
-                {/* Legend: green = planned, blue = actual */}
-                {shotStartPixel !== null && (
-                  <View style={{
-                    position: 'absolute', top: 10, right: 10,
-                    flexDirection: 'column', gap: 4,
-                    backgroundColor: 'rgba(0,0,0,0.6)',
-                    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5,
-                  }} pointerEvents="none">
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                      <View style={{ width: 14, height: 2, backgroundColor: Palette.positive, borderRadius: 1 }} />
-                      <Text style={{ color: Palette.positive, fontSize: 10 }}>Planned</Text>
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                      <View style={{ width: 14, height: 2, backgroundColor: '#38BDF8', borderRadius: 1 }} />
-                      <Text style={{ color: '#38BDF8', fontSize: 10 }}>Actual</Text>
-                    </View>
-                  </View>
-                )}
               </View>
 
+            </SafeAreaView>
           </Modal>
         );
       })()}
@@ -2737,23 +2560,17 @@ export default function Caddie() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Animated.View style={{ flex: 1, transform: [{ scale: pulseAnim }] }}>
             <Pressable
-              onPress={() => { isSpeaking ? stop() : void ask(); }}
-              style={[s.askBtn, isSpeaking && s.askBtnActive]}
+              onPress={() => { if (isSpeaking) { stop(); } else if (micListening) { toggleMic(); } else { void startListening(); } }}
+              style={[s.askBtn, (isSpeaking || micListening) && s.askBtnActive]}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View style={[s.logoBtnRing, isSpeaking && { borderColor: Palette.miss }]}>
+                <View style={[s.logoBtnRing, (isSpeaking || micListening) && { borderColor: Palette.miss }]}>
                   <Image source={LOGO} style={s.logoBtnImg} resizeMode="cover" />
                 </View>
-                <Text style={s.askBtnText}>{isSpeaking ? 'Stop' : 'Ask Caddie'}</Text>
+                <Text style={s.askBtnText}>{isSpeaking ? 'Stop' : micListening ? 'Listening...' : 'Ask Caddie'}</Text>
               </View>
             </Pressable>
           </Animated.View>
-          <VoiceMicButton
-            listening={micListening}
-            onPress={toggleMic}
-            transcript={micTranscript}
-            size={48}
-          />
         </View>
 
         {/* â”€â”€ Secondary Row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
@@ -2917,12 +2734,49 @@ export default function Caddie() {
               </View>
             )}
           </View>
-          <Text style={s.adviceText} numberOfLines={2}>
-            {caddieMsg || (clubRec.reason ?? currentAdvice)}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={[s.adviceText, { flex: 1 }]} numberOfLines={2}>
+              {caddieMsg || (clubRec.reason ?? currentAdvice)}
+            </Text>
+            <Pressable
+              onPress={() => { void ask(); }}
+              style={{ padding: 6, borderRadius: 20, backgroundColor: isSpeaking ? 'rgba(46,204,113,0.15)' : 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: isSpeaking ? Palette.positive : Palette.borderActive }}
+            >
+              <MCIcon name={isSpeaking ? 'stop-circle' : 'microphone'} size={16} color={isSpeaking ? Palette.positive : Palette.muted} />
+            </Pressable>
+          </View>
         </View>
 
       </ScrollView>
+
+      {/* ── First-launch onboarding tips ──────────────────────────────── */}
+      <Modal visible={!hasOnboarded} transparent animationType="fade" onRequestClose={() => setHasOnboarded(true)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', justifyContent: 'flex-end', padding: 24, paddingBottom: 40 }}>
+          <View style={{ backgroundColor: '#0B1E13', borderRadius: 20, borderWidth: 1, borderColor: 'rgba(74,222,128,0.25)', padding: 24 }}>
+            <Text style={{ color: '#4ade80', fontSize: 11, fontWeight: '800', letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 4 }}>Welcome to SmartPlay Caddie</Text>
+            <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', marginBottom: 20 }}>3 things to know</Text>
+            {[
+              { icon: '🎙️', title: 'Ask anything using the mic', body: 'Tap "Ask Caddie" and speak — club, distance, strategy, or any question.' },
+              { icon: '⛳', title: 'Tap to track your shots', body: 'After each shot, tap Left, Straight, or Right to log it. Your caddie learns your game.' },
+              { icon: '🤖', title: 'Your caddie guides you automatically', body: 'Advice updates every hole. The more you play, the smarter it gets.' },
+            ].map((tip, i) => (
+              <View key={i} style={{ flexDirection: 'row', gap: 14, marginBottom: 16, alignItems: 'flex-start' }}>
+                <Text style={{ fontSize: 28, lineHeight: 36 }}>{tip.icon}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: '#e2e8f0', fontSize: 15, fontWeight: '700', marginBottom: 3 }}>{tip.title}</Text>
+                  <Text style={{ color: '#6b7280', fontSize: 13, lineHeight: 20 }}>{tip.body}</Text>
+                </View>
+              </View>
+            ))}
+            <Pressable
+              onPress={() => { setHasOnboarded(true); logEvent('session', { event: 'onboarding_complete' }); }}
+              style={{ backgroundColor: '#4ade80', borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: 4 }}
+            >
+              <Text style={{ color: '#071E16', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 }}>Let's Play</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
     </SafeAreaView>
   );
@@ -3107,4 +2961,16 @@ const s = StyleSheet.create({
   feedbackDir:     { color: Palette.textPrimary, fontSize: 28, fontWeight: '700' },
   feedbackInsight: { color: Palette.positiveFaint, fontSize: Type.body, marginTop: 8, textAlign: 'center' },
 });
+
+// ---------------------------------------------------------------------------
+// Export — wrapped in ErrorBoundary for crash-safe production use.
+// ---------------------------------------------------------------------------
+
+export default function Caddie() {
+  return (
+    <ErrorBoundary>
+      <CaddieScreen />
+    </ErrorBoundary>
+  );
+}
 

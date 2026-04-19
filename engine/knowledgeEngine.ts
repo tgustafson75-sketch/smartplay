@@ -54,13 +54,22 @@ const fallbackKnowledge = (context: FocusContext): string => {
   return "Not totally sure on that one — but we're in a good spot here.";
 };
 
+/** Race the AI call against a 3 s timeout — never hang the caddie UI. */
+const withTimeout = <T>(promise: Promise<T>, ms = 3000): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('knowledge timeout')), ms),
+    ),
+  ]);
+
 export const knowledgeEngine = async (
   query: string,
   context: FocusContext,
   aiCaller: AICallerFn,
 ): Promise<string> => {
   try {
-    const answer = await aiCaller(query);
+    const answer = await withTimeout(aiCaller(query));
 
     if (!answer) return fallbackKnowledge(context);
 

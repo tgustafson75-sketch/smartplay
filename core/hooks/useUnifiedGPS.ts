@@ -63,6 +63,7 @@ const METRES_PER_YARD = 0.9144;
 // ── Dead-zone constants ───────────────────────────────────────────────────────
 
 const MIN_MOVE_METRES = 0.8; // suppress updates smaller than this
+const MAX_JUMP_METRES = 27.4; // ~30 yards — reject GPS teleport errors
 const SMOOTH_ALPHA    = 0.35; // new = 0.65 * old + 0.35 * raw — responsive yet jitter-free at walking pace
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
@@ -121,6 +122,8 @@ export function useUnifiedGPS(): UseUnifiedGPSResult {
           if (prev) {
             const moved = haversineMetres(prev.lat, prev.lng, lat, lng);
             if (moved < MIN_MOVE_METRES) return;
+            // Reject GPS teleport errors (> 30 yards in one update)
+            if (moved > MAX_JUMP_METRES) return;
           }
 
           // Exponential smoothing

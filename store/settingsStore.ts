@@ -49,6 +49,10 @@ interface SettingsState {
   setAutoSmartVision:      (v: boolean) => void;
   smartVisionSetupDone:    boolean;
   setSmartVisionSetupDone: (v: boolean) => void;
+
+  // First-launch onboarding
+  hasOnboarded:    boolean;
+  setHasOnboarded: (v: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -88,6 +92,9 @@ export const useSettingsStore = create<SettingsState>()(
       setAutoSmartVision:      (v) => set({ autoSmartVision: v }),
       smartVisionSetupDone:    false,
       setSmartVisionSetupDone: (v) => set({ smartVisionSetupDone: v }),
+
+      hasOnboarded:    false,
+      setHasOnboarded: (v) => set({ hasOnboarded: v }),
     }),
     {
       name: 'smartplay-settings',
