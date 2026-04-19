@@ -10,13 +10,13 @@
  *   await speakCaddie('Take dead aim at the flag.');
  */
 
-import { speak } from './voiceService';
+import { speakJob, PRIORITY } from './VoiceEngine';
 
 /**
- * Speak caddie advice using the existing ElevenLabs male voice.
+ * Speak caddie advice at SHOT priority via VoiceEngine.
  * Returns a promise that resolves when audio finishes (or silently on error).
  *
  * @param {string} text
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>}
  */
-export const speakCaddie = (text) => speak(text, 'male');
+export const speakCaddie = (text) => speakJob(text, PRIORITY.SHOT, 'male');

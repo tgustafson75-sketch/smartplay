@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
-import { AppState, Text } from 'react-native';
+import { Text } from 'react-native';
+import { shouldShowTutorial } from '../screens/TutorialScreen';
 import { onAuthStateChanged } from 'firebase/auth';
-import LockScreen from '../components/LockScreen';
-import { checkBiometricSupport } from '../services/BiometricService';
 import {
   useFonts,
   Outfit_400Regular,
@@ -23,6 +23,11 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { auth } from '../lib/firebase';
 import { useUserStore } from '../store/userStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { useRoundStore } from '../store/roundStore';
+import { RoundProvider } from '../context/RoundContext';
+import { CaddieProvider } from '../context/CaddieContext';
+import { Audio } from 'expo-av';
+import { useWatchBle } from '../hooks/useWatchBle';
 
 /**
  * Module-level bridge so other screens (e.g. PlayScreenClean) can
@@ -32,9 +37,11 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 export const BiometricLayoutControls: {
   _setBiometricEnabled: ((v: boolean) => void) | null;
   _lockApp: (() => void) | null;
+  _updateLastActive: (() => void) | null;
 } = {
   _setBiometricEnabled: null,
   _lockApp:             null,
+  _updateLastActive:    null,
 };
 
 export default function RootLayout() {
@@ -43,52 +50,30 @@ export default function RootLayout() {
   const segments = useSegments();
   const setIsGuest = useUserStore((s) => s.setIsGuest);
   const isGuest = useUserStore((s) => s.isGuest);
+  const initGuestSession = useUserStore((s) => s.initGuestSession);
   const profileComplete = usePlayerProfileStore((s) => s.profileComplete);
+  const isRoundActive = useRoundStore((s) => s.isRoundActive);
   const [mounted, setMounted] = useState(false);
 
-  // ── Biometric lock state ────────────────────────────────────────────────
-  // biometricEnabled: user preference — defaults to true but only activates
-  //                   when the device actually supports biometrics.
-  const [biometricEnabled, setBiometricEnabled] = useState(true);
-  const [isUnlocked,       setIsUnlocked]       = useState(false);
-  const [biometricReady,   setBiometricReady]   = useState(false);
-  const lastActiveTimeRef = useRef<number>(Date.now());
+  // Galaxy Watch 7 — BLE scan runs for the lifetime of the app
+  useWatchBle();
 
-  // Check hardware support once on mount; if unavailable skip the lock gate
+  // ── Bluetooth audio routing ────────────────────────────────────────────────
   useEffect(() => {
-    checkBiometricSupport().then((supported) => {
-      if (!supported) {
-        // Device has no enrolled biometrics — bypass lock entirely
-        setIsUnlocked(true);
-        setBiometricEnabled(false);
-      }
-      setBiometricReady(true);
-    });
+    Audio.setAudioModeAsync({
+      allowsRecordingIOS:         false,
+      playsInSilentModeIOS:       true,
+      staysActiveInBackground:    false,
+      shouldDuckAndroid:          true,
+      playThroughEarpieceAndroid: false,
+    }).catch(() => {});
   }, []);
 
-  // Re-lock after 2 min in background (only when biometrics are enabled)
+  // Keep BiometricLayoutControls as stable no-ops (biometric disabled for now)
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'background' || nextState === 'inactive') {
-        lastActiveTimeRef.current = Date.now();
-      }
-      if (nextState === 'active') {
-        const diff = Date.now() - lastActiveTimeRef.current;
-        // 2 minutes = 120 000 ms; never re-lock in low-power (dim) session
-        if (biometricEnabled && diff > 120_000) {
-          setIsUnlocked(false);
-        }
-      }
-    });
-    return () => subscription.remove();
-  }, [biometricEnabled]);
-
-  // Expose setters globally so PlayScreenClean can toggle biometrics / lock app.
-  // We attach them to a stable module-level ref instead of global to avoid
-  // polluting the global scope and breaking strict-mode.
-  useEffect(() => {
-    BiometricLayoutControls._setBiometricEnabled = setBiometricEnabled;
-    BiometricLayoutControls._lockApp = () => setIsUnlocked(false);
+    BiometricLayoutControls._setBiometricEnabled = () => {};
+    BiometricLayoutControls._lockApp             = () => {};
+    BiometricLayoutControls._updateLastActive    = () => {};
   });
 
   const [fontsLoaded, fontError] = useFonts({
@@ -119,38 +104,54 @@ export default function RootLayout() {
       if (user) {
         setIsGuest(false);
         if (inAuthGroup) {
-          // Skip splash — route straight to play (Pro mode default)
-          router.replace(profileComplete ? '/(tabs)/play' : '/profile-setup');
+          if (!profileComplete) {
+            router.replace('/profile-setup');
+          } else if (isRoundActive) {
+            router.replace('/(tabs)/caddie');
+          } else {
+            void shouldShowTutorial().then((show) => {
+              router.replace(show ? '/tutorial' : '/(tabs)/caddie');
+            });
+          }
         }
       } else if (!isGuest && !inAuthGroup && !inSetupGroup) {
-        // Not signed in and not a guest — send to auth
-        router.replace('/auth');
+        // No Firebase user and no guest session — auto-create guest session and go to caddie.
+        initGuestSession();
+        void shouldShowTutorial().then((show) => {
+          router.replace(show ? '/tutorial' : '/(tabs)/caddie');
+        });
       }
     });
     return unsubscribe;
   }, [segments, mounted]);
 
   if (!fontsLoaded && !fontError) return null;
-  // Wait for biometric hardware check before rendering anything
-  if (!biometricReady) return null;
-
-  // Show lock screen when auth is required
-  if (biometricEnabled && !isUnlocked) {
-    return <LockScreen onUnlock={() => setIsUnlocked(true)} />;
-  }
 
   return (
+    <ErrorBoundary>
+    <CaddieProvider>
+    <RoundProvider>
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="splash" options={{ headerShown: false }} />
-        <Stack.Screen name="auth" options={{ headerShown: false }} />
-        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-        <Stack.Screen name="profile-setup" options={{ headerShown: false }} />
-        <Stack.Screen name="settings" options={{ headerShown: false }} />
-        <Stack.Screen name="swing-lab" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack
+        screenOptions={{
+          animation: 'fade',
+          animationDuration: 250,
+          headerShown: false,
+        }}
+      >
+        <Stack.Screen name="tutorial" />
+        <Stack.Screen name="splash" />
+        <Stack.Screen name="auth" />
+        <Stack.Screen name="onboarding" />
+        <Stack.Screen name="profile-setup" />
+        <Stack.Screen name="settings" />
+        <Stack.Screen name="swing-lab" />
+        <Stack.Screen name="(tabs)" />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
+    </RoundProvider>
+    </CaddieProvider>
+    </ErrorBoundary>
   );
 }

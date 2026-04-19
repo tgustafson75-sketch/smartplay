@@ -2,10 +2,12 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type PlayerMode   = 'beginner' | 'break90' | 'break80';
-export type RiskDefault  = 'safe' | 'neutral' | 'attack';
-export type VoiceStyle   = 'calm' | 'aggressive';
-export type VoiceGender  = 'male' | 'female';
+export type PlayerMode       = 'beginner' | 'break90' | 'break80';
+export type RiskDefault      = 'safe' | 'neutral' | 'attack';
+export type VoiceStyle       = 'calm' | 'aggressive';
+export type VoiceGender      = 'male' | 'female';
+export type ResponseMode     = 'short' | 'neutral' | 'detailed';
+export type CaddiePersonality = 'calm' | 'aggressive' | 'coach';
 
 interface SettingsState {
   // Voice
@@ -27,6 +29,26 @@ interface SettingsState {
   // Display
   highContrast:  boolean;
   setHighContrast: (v: boolean) => void;
+  brightMode:    boolean;
+  setBrightMode: (v: boolean) => void;
+
+  // Caddie personality
+  caddiePersonality:    CaddiePersonality;
+  setCaddiePersonality: (p: CaddiePersonality) => void;
+
+  // Response verbosity
+  responseMode:    ResponseMode;
+  setResponseMode: (m: ResponseMode) => void;
+
+  // Performance
+  lowPowerMode:    boolean;
+  setLowPowerMode: (v: boolean) => void;
+
+  // SmartVision
+  autoSmartVision:         boolean;
+  setAutoSmartVision:      (v: boolean) => void;
+  smartVisionSetupDone:    boolean;
+  setSmartVisionSetupDone: (v: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -49,6 +71,23 @@ export const useSettingsStore = create<SettingsState>()(
 
       highContrast:    false,
       setHighContrast: (v) => set({ highContrast: v }),
+
+      brightMode:      false,
+      setBrightMode:   (v) => set({ brightMode: v }),
+
+      caddiePersonality:    'calm',
+      setCaddiePersonality: (p) => set({ caddiePersonality: p }),
+
+      responseMode:    'short',
+      setResponseMode: (m) => set({ responseMode: m }),
+
+      lowPowerMode:    false,
+      setLowPowerMode: (v) => set({ lowPowerMode: v }),
+
+      autoSmartVision:         false,
+      setAutoSmartVision:      (v) => set({ autoSmartVision: v }),
+      smartVisionSetupDone:    false,
+      setSmartVisionSetupDone: (v) => set({ smartVisionSetupDone: v }),
     }),
     {
       name: 'smartplay-settings',

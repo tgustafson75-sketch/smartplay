@@ -24,12 +24,19 @@ interface UseSwingDetectorOptions {
 }
 
 // Phase-based detection thresholds
-const ENTER_G  = 1.4;   // g-force to open a swing window
-const EXIT_G   = 0.8;   // g-force to close a swing window
-const PEAK_MIN = 1.8;   // minimum peak to count as a real swing (not a wrist flick)
-const COOLDOWN = 1200;  // ms to block new detection after a swing fires
-const MIN_MS   = 150;   // shortest valid swing window
-const MAX_MS   = 2500;  // longest valid swing window
+const ENTER_G        = 1.4;   // g-force to open a swing window
+const EXIT_G         = 0.8;   // g-force to close a swing window
+const PEAK_MIN       = 1.8;   // minimum peak to count as a real swing (not a wrist flick)
+const COOLDOWN       = 1200;  // ms to block new detection after a swing fires
+const MIN_MS         = 150;   // shortest valid swing window
+const MAX_MS         = 2500;  // longest valid swing window
+/**
+ * Minimum body-yaw or forearm-roll rate (rad/s) required to validate a swing.
+ * Walking and cart motion rarely exceed ~0.8 rad/s.  A real golf swing produces
+ * 3–8 rad/s of forearm/body rotation through impact.
+ * This is the primary false-positive filter for walking and cart bumps.
+ */
+const GYRO_SWING_MIN = 1.5;   // rad/s — filters walking/cart motion
 
 /**
  * Classifies a swing window duration into a tempo label.
@@ -100,6 +107,7 @@ export function useSwingDetector(options: UseSwingDetectorOptions = {}) {
     if (Platform.OS === 'web') return;
 
     Accelerometer.setUpdateInterval(updateIntervalMs);
+    try {
     subRef.current = Accelerometer.addListener(({ x, y, z }) => {
       const g   = Math.sqrt(x * x + y * y + z * z);
       const now = Date.now();
@@ -122,6 +130,16 @@ export function useSwingDetector(options: UseSwingDetectorOptions = {}) {
           lastEndRef.current = now;
 
           if (duration >= MIN_MS && duration <= MAX_MS && peakGRef.current >= PEAK_MIN) {
+            // Walking / cart filter: require meaningful gyroscope rotation.
+            // A real swing always produces high forearm roll (gyroY) OR body yaw (gyroZ).
+            // Cart bumps and footsteps stay below GYRO_SWING_MIN on both axes.
+            const hasSwingRotation =
+              Math.abs(peakRotYRef.current) >= GYRO_SWING_MIN ||
+              Math.abs(peakRotZRef.current) >= GYRO_SWING_MIN;
+            if (!hasSwingRotation) {
+              // Likely walking or cart movement — skip this detection
+              return;
+            }
             const tempo = classifyTempo(duration);
             setSwingCount((c) => c + 1);
             setLastTempo(tempo);
@@ -137,15 +155,24 @@ export function useSwingDetector(options: UseSwingDetectorOptions = {}) {
         }
       }
     });
+    } catch {
+      // Accelerometer unavailable on this device — swing detection disabled silently
+      subRef.current = null;
+    }
 
     // Gyroscope — captures rotation rates throughout the swing window
     Gyroscope.setUpdateInterval(updateIntervalMs);
+    try {
     gyroSubRef.current = Gyroscope.addListener(({ y, z }) => {
       if (phaseRef.current === 'swinging') {
         if (Math.abs(y) > Math.abs(peakRotYRef.current)) peakRotYRef.current = y;
         if (Math.abs(z) > Math.abs(peakRotZRef.current)) peakRotZRef.current = z;
       }
     });
+    } catch {
+      // Gyroscope unavailable — swing rotation filter disabled, detection still runs on accel only
+      gyroSubRef.current = null;
+    }
   }, [updateIntervalMs]);
 
   const stop = useCallback(() => {

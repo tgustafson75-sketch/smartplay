@@ -4,6 +4,7 @@
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
   },
+  "typescript.tsconfig.autoDetect": "off",
   "chat.tools.terminal.autoApprove": {
     "/^node -e \"const pkg = require\\('C:/Users/tgust/SmartPlayCaddieV2/node_modules/expo-av/package\\.json'\\); console\\.log\\(pkg\\.version\\)\"$/": {
       "approve": true,

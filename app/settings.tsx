@@ -1,6 +1,7 @@
 import { View, Text, ScrollView, Pressable, SafeAreaView, Switch, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSettingsStore, PlayerMode, RiskDefault, VoiceStyle } from '../store/settingsStore';
+import { useSettingsStore, PlayerMode, RiskDefault, VoiceStyle, CaddiePersonality } from '../store/settingsStore';
+import { PERSONALITIES } from '../features/caddie/personalities';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,8 @@ export default function SettingsScreen() {
     playerMode,     setPlayerMode,
     riskDefault,    setRiskDefault,
     highContrast,   setHighContrast,
+    brightMode,     setBrightMode,
+    caddiePersonality, setCaddiePersonality,
   } = useSettingsStore();
 
   return (
@@ -72,7 +75,7 @@ export default function SettingsScreen() {
         <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
           <Text style={styles.backArrow}>‹</Text>
         </Pressable>
-        <Text style={styles.title}>Settings</Text>
+        <Text style={styles.title}>SmartPlay Settings</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -122,6 +125,28 @@ export default function SettingsScreen() {
               { value: 'female', label: 'Female', emoji: '♀', color: '#f472b6' },
             ]}
           />
+
+          <View style={styles.divider} />
+
+          {/* Caddie personality */}
+          <Row>
+            <RowLabel
+              text="Caddie personality"
+              sub="Tone of advice and messaging during the round"
+            />
+          </Row>
+          <PillGroup<CaddiePersonality>
+            value={caddiePersonality}
+            onSelect={setCaddiePersonality}
+            options={[
+              { value: 'calm',       label: PERSONALITIES.calm.name,       emoji: '🧘', color: '#4ade80' },
+              { value: 'aggressive', label: PERSONALITIES.aggressive.name,  emoji: '🔥', color: '#ef4444' },
+              { value: 'coach',      label: PERSONALITIES.coach.name,       emoji: '🎓', color: '#60a5fa' },
+            ]}
+          />
+          <View style={styles.modeDesc}>
+            <Text style={styles.modeDescText}>{PERSONALITIES[caddiePersonality].description}</Text>
+          </View>
         </View>
 
         {/* ── PLAYER MODE ────────────────────────────────────────── */}
@@ -199,8 +224,21 @@ export default function SettingsScreen() {
 
         <View style={styles.card}>
           <Row>
-            <RowLabel
-              text="High contrast"
+            <RowLabel              text="Light mode"
+              sub="Lighter green background — same app, brighter look"
+            />
+            <Switch
+              value={brightMode}
+              onValueChange={setBrightMode}
+              trackColor={{ false: '#333', true: '#16a34a' }}
+              thumbColor={brightMode ? '#22c55e' : '#888'}
+            />
+          </Row>
+
+          <View style={styles.divider} />
+
+          <Row>
+            <RowLabel              text="High contrast"
               sub="Brighter text and borders for outdoor sunlight visibility"
             />
             <Switch

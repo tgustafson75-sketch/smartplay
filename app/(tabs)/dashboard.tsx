@@ -12,11 +12,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { auth, db } from '../../lib/firebase';
-import { speak } from '../../services/voiceService';
+import { speakJob, PRIORITY as ENGINE_PRIORITY } from '../../services/VoiceEngine';
 import { useUserStore } from '../../store/userStore';
 import { useMemoryStore } from '../../store/memoryStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useRoundStore } from '../../store/roundStore';
+import BrandHeader from '../../components/BrandHeader';
 
 const ICON_RANGEFINDER = require('../../assets/images/icon-rangefinder.png');
 
@@ -191,7 +192,7 @@ export default function DashboardScreen() {
       : progress === 'Slight regression'
       ? `Slight regression. Watch the ${commonMiss.toLowerCase()} miss.`
       : `You're consistent. Common miss is ${commonMiss.toLowerCase()}.`;
-      setTimeout(() => { void speak(cue); }, 1200);
+      setTimeout(() => { void speakJob(cue); }, 1200);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localRounds]);
 
@@ -205,21 +206,21 @@ export default function DashboardScreen() {
   const getShotColor = (result: string) =>
     result === 'left' ? '#60a5fa' : result === 'right' ? '#f87171' : '#A7F3D0';
 
-  const logShot = (result: string) => {
+  const logShot = (result: import('../../store/roundStore').ShotResult) => {
     addShot({ result, mental: '', club, aim, timestamp: Date.now(), hole: 0, distance: 0 });
-    if (result === 'left') void speak('Pulled left.');
-    else if (result === 'right') void speak('Missed right.');
-    else void speak('Straight.');
+    if (result === 'left') void speakJob('Pulled left.');
+    else if (result === 'right') void speakJob('Missed right.');
+    else void speakJob('Straight.');
   };
 
   const getClubStats = () => {
-    const stats: Record<string, { left: number; right: number; straight: number; total: number }> = {};
+    const stats: Record<string, { left: number; right: number; center: number; total: number }> = {};
     shots.forEach((s) => {
-      if (!stats[s.club]) stats[s.club] = { left: 0, right: 0, straight: 0, total: 0 };
+      if (!stats[s.club]) stats[s.club] = { left: 0, right: 0, center: 0, total: 0 };
       stats[s.club].total++;
       if (s.result === 'left') stats[s.club].left++;
       else if (s.result === 'right') stats[s.club].right++;
-      else stats[s.club].straight++;
+      else stats[s.club].center++;
     });
     return stats;
   };
@@ -228,11 +229,11 @@ export default function DashboardScreen() {
     if (shots.length === 0) return null;
     const left = shots.filter((s) => s.result === 'left').length;
     const right = shots.filter((s) => s.result === 'right').length;
-    const straight = shots.filter((s) => s.result === 'straight').length;
+    const center = shots.filter((s) => s.result === 'center').length;
     return {
       left: Math.round((left / shots.length) * 100),
       right: Math.round((right / shots.length) * 100),
-      straight: Math.round((straight / shots.length) * 100),
+      straight: Math.round((center / shots.length) * 100),
     };
   };
 
@@ -248,8 +249,8 @@ export default function DashboardScreen() {
   const getPlayerMemory = () => {
     if (shots.length < 10) return 'Building player profile -- keep logging shots.';
     const recent = shots.slice(-10);
-    const wideCount = recent.filter((s) => s.result !== 'straight').length;
-    const tightCount = recent.filter((s) => s.result === 'straight').length;
+    const wideCount = recent.filter((s) => s.result !== 'center').length;
+    const tightCount = recent.filter((s) => s.result === 'center').length;
     if (wideCount > tightCount) return "You tend to struggle when shots spread out -- play safer.";
     if (tightCount > wideCount) return "You perform best when dialled in -- trust your swing.";
     return "You're showing a balanced pattern today.";
@@ -259,6 +260,7 @@ export default function DashboardScreen() {
 
   return (
     <>
+      <BrandHeader />
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -474,7 +476,7 @@ export default function DashboardScreen() {
                 )}
               </View>
               <View style={{ flexDirection: 'row', gap: 8 }}>
-                {(['left', 'straight', 'right'] as const).map((val) => (
+                {(['left', 'center', 'right'] as const).map((val) => (
                   <Pressable
                     key={val}
                     onPress={() => logShot(val)}
@@ -551,7 +553,7 @@ export default function DashboardScreen() {
                       </View>
                       <Text style={{ color: '#d1fae5', fontSize: 14, marginTop: 10, lineHeight: 20 }}>{getInsight()}</Text>
                       <Pressable
-                      onPress={() => { void speak(getInsight()); }}
+                      onPress={() => { void speakJob(getInsight()); }}
                         style={({ pressed }) => ({ backgroundColor: pressed ? '#1b5e20' : '#1a1a1a', borderRadius: 8, padding: 8, alignItems: 'center', marginTop: 10, borderWidth: 1, borderColor: '#2e7d32' })}
                       >
                         <Text style={{ color: '#A7F3D0', fontSize: 13 }}>Speak Insight</Text>
@@ -569,7 +571,7 @@ export default function DashboardScreen() {
               ) : (
                 <View style={{ marginTop: 8 }}>
                   {Object.entries(getClubStats()).map(([c, d]) => {
-                    const acc = Math.round((d.straight / d.total) * 100);
+                    const acc = Math.round((d.center / d.total) * 100);
                     const tendency = d.left > d.right ? 'left' : d.right > d.left ? 'right' : null;
                     return (
                       <View key={c} style={{ backgroundColor: '#111', borderRadius: 10, padding: 12, marginBottom: 8 }}>
@@ -579,12 +581,12 @@ export default function DashboardScreen() {
                         </View>
                         <View style={{ flexDirection: 'row', height: 6, borderRadius: 3, overflow: 'hidden', marginTop: 8, marginBottom: 6 }}>
                           <View style={{ flex: d.left, backgroundColor: '#60a5fa' }} />
-                          <View style={{ flex: d.straight, backgroundColor: '#A7F3D0' }} />
+                          <View style={{ flex: d.center, backgroundColor: '#A7F3D0' }} />
                           <View style={{ flex: d.right, backgroundColor: '#f87171' }} />
                         </View>
                         <View style={{ flexDirection: 'row', gap: 12 }}>
                           <Text style={{ color: '#60a5fa', fontSize: 11 }}>L: {d.left}</Text>
-                          <Text style={{ color: '#A7F3D0', fontSize: 11 }}>S: {d.straight}</Text>
+                          <Text style={{ color: '#A7F3D0', fontSize: 11 }}>S: {d.center}</Text>
                           <Text style={{ color: '#f87171', fontSize: 11 }}>R: {d.right}</Text>
                           {tendency && <Text style={{ color: '#fbbf24', fontSize: 11, marginLeft: 'auto' }}>tends {tendency}</Text>}
                         </View>
@@ -626,7 +628,7 @@ export default function DashboardScreen() {
                           : progress === 'Slight regression'
                           ? `Slight regression. Watch the ${commonMiss.toLowerCase()} miss.`
                           : `You're consistent. Common miss is ${commonMiss.toLowerCase()}.`;
-                        void speak(cue);
+                        void speakJob(cue);
                       }}
                       style={{ marginTop: 8, backgroundColor: '#1a1a1a', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 12, alignSelf: 'flex-start', borderWidth: 1, borderColor: '#2e7d32' }}
                     >

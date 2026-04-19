@@ -17,7 +17,9 @@
         "NSMicrophoneUsageDescription": "SmartPlay uses the microphone for caddie listening and voice control.",
         "NSLocationWhenInUseUsageDescription": "SmartPlay uses your location to measure accurate golf yardages.",
         "NSPhotoLibraryUsageDescription": "SmartPlay saves your swing videos and rangefinder photos to your library.",
-        "NSPhotoLibraryAddUsageDescription": "SmartPlay saves your swing videos and rangefinder photos to your library."
+        "NSPhotoLibraryAddUsageDescription": "SmartPlay saves your swing videos and rangefinder photos to your library.",
+        "NSBluetoothAlwaysUsageDescription": "SmartPlay uses Bluetooth to connect to your Galaxy Watch for yardage display and shot tracking.",
+        "NSBluetoothPeripheralUsageDescription": "SmartPlay uses Bluetooth to connect to your Galaxy Watch for yardage display and shot tracking."
       }
     },
     "android": {
@@ -29,7 +31,14 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "output": "single",
@@ -74,7 +83,9 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "react-native-ble-plx",
+      "expo-speech-recognition"
     ],
     "experiments": {
       "typedRoutes": true,

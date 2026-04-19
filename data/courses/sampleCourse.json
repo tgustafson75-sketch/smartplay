@@ -1,0 +1,207 @@
+{
+  "name": "Sample Golf Club",
+  "city": "Anytown",
+  "state": "CA",
+  "slope": 113,
+  "rating": 69.0,
+  "holes": [
+    {
+      "holeNumber": 1,
+      "par": 4,
+      "yardages": { "front": 340, "middle": 355, "back": 370 },
+      "note": "Wide landing area, open tee shot",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 2,
+      "par": 3,
+      "yardages": { "front": 140, "middle": 155, "back": 170 },
+      "note": "Short iron to elevated green",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 3,
+      "par": 5,
+      "yardages": { "front": 490, "middle": 510, "back": 535 },
+      "note": "Reachable par 5, two bunkers guard green",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 4,
+      "par": 4,
+      "yardages": { "front": 355, "middle": 370, "back": 385 },
+      "note": "Dogleg right, trees on corner",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 5,
+      "par": 4,
+      "yardages": { "front": 360, "middle": 375, "back": 390 },
+      "note": "Water short-left, aim center",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 6,
+      "par": 3,
+      "yardages": { "front": 150, "middle": 165, "back": 180 },
+      "note": "Bunker guards green front-right",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 7,
+      "par": 4,
+      "yardages": { "front": 370, "middle": 385, "back": 400 },
+      "note": "Tight fairway, bunker short-left",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 8,
+      "par": 5,
+      "yardages": { "front": 475, "middle": 495, "back": 515 },
+      "note": "Finishing front nine, birdie hole",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 9,
+      "par": 4,
+      "yardages": { "front": 380, "middle": 395, "back": 410 },
+      "note": "Long par 4, slight dogleg left",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 10,
+      "par": 4,
+      "yardages": { "front": 360, "middle": 375, "back": 390 },
+      "note": "Slight dogleg right, open approach",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 11,
+      "par": 4,
+      "yardages": { "front": 395, "middle": 410, "back": 425 },
+      "note": "Long par 4, elevated green",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 12,
+      "par": 3,
+      "yardages": { "front": 145, "middle": 160, "back": 175 },
+      "note": "Wind exposed, aim at the flag",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 13,
+      "par": 5,
+      "yardages": { "front": 460, "middle": 480, "back": 500 },
+      "note": "Long par 5, bunkers both sides",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 14,
+      "par": 4,
+      "yardages": { "front": 350, "middle": 365, "back": 380 },
+      "note": "Straight hole, tight landing zone",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 15,
+      "par": 4,
+      "yardages": { "front": 365, "middle": 380, "back": 395 },
+      "note": "Subtle dogleg left, water short",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 16,
+      "par": 3,
+      "yardages": { "front": 145, "middle": 160, "back": 175 },
+      "note": "All carry required over front bunker",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 17,
+      "par": 4,
+      "yardages": { "front": 360, "middle": 375, "back": 390 },
+      "note": "Water left off tee, bail right",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    },
+    {
+      "holeNumber": 18,
+      "par": 5,
+      "yardages": { "front": 480, "middle": 500, "back": 520 },
+      "note": "Finishing hole, risk-reward approach",
+      "green": {
+        "front":  { "latitude": null, "longitude": null },
+        "middle": { "latitude": null, "longitude": null },
+        "back":   { "latitude": null, "longitude": null }
+      }
+    }
+  ]
+}

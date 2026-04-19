@@ -302,6 +302,21 @@ export const getShotFeedback = (result, recentResults = []) => {
 };
 
 /**
+ * shouldSpeakYardage — returns true when a GPS yardage update is significant
+ * enough to trigger auto-speech.  Uses a 5-yard walking threshold.
+ *
+ * @param {number}      newYards
+ * @param {number|null} lastSpokenYards  — null = first reading, always speaks
+ * @param {number}      [threshold=5]
+ * @returns {boolean}
+ */
+export const shouldSpeakYardage = (newYards, lastSpokenYards, threshold = 5) => {
+  if (newYards < 5 || newYards > 700) return false;
+  if (lastSpokenYards === null || lastSpokenYards === undefined) return true;
+  return Math.abs(newYards - lastSpokenYards) > threshold;
+};
+
+/**
  * SILENT MODE guard — returns true if we should stay quiet.
  * Centralises all silence logic.
  *
@@ -328,4 +343,5 @@ export const VoiceIntelligence = {
   getPreShotMessage,
   getShotFeedback,
   isSilent,
+  shouldSpeakYardage,
 };

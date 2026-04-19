@@ -1,22 +1,16 @@
-﻿/**
- * voiceService.js — ElevenLabs TTS (fetch-based, global gender)
+/**
+ * voiceService.js — ElevenLabs TTS (fetch-based, no filesystem)
  *
- * Converts text to speech via ElevenLabs and plays it immediately with expo-av.
- * Uses fetch (not axios) for reliable binary handling in React Native / Hermes.
- * Gender is stored globally so all tabs share the same voice preference.
+ * Playback strategy — no disk writes:
+ *   Web   : blob → URL.createObjectURL → Audio.Sound
+ *   Native: ArrayBuffer → base64 → data:audio/mpeg;base64,… → Audio.Sound
  *
- * ElevenLabs is the ONLY voice engine — there is no fallback to device TTS.
- * If playback fails, the error is logged and the call returns silently.
- *
- * Usage:
- *   import { speak, setGlobalGender } from '../services/voiceService';
- *   await speak('Take a smooth swing.');        // uses global gender
- *   await speak('Commit to your target.', 'female');  // explicit override
- *   setGlobalGender('female');                  // toggle from any tab
+ * IMPORTANT: expo-speech is NOT used here. All TTS output goes through
+ * ElevenLabs only. Route all calls via core/voice/VoiceManager.ts.
  */
 
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
+import { Platform } from 'react-native';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -24,25 +18,21 @@ import * as FileSystem from 'expo-file-system';
 
 const ELEVEN_API_KEY_RAW =
   process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY ?? '';
-const ELEVEN_API_KEY = String(ELEVEN_API_KEY_RAW).replace(/^['"]|['"]$/g, '').trim();
+const ELEVEN_API_KEY = String(ELEVEN_API_KEY_RAW).replace(/^['"]/,'').replace(/['"]/g,'').trim();
 
-// ElevenLabs keys are either "sk_..." format or a 64-char hex string.
 const IS_VALID_API_KEY = ELEVEN_API_KEY.length >= 32;
 
-// Voice IDs — your custom ElevenLabs voices
-// If your account cannot access a custom voice, it will fall back to Adam (free pre-made voice)
 const VOICES = {
   male:   '1fz2mW1imKTf5Ryjk5su', // Kevin
   female: 'RGb96Dcl0k5eVje8EBch', // Serena
 };
-// Pre-made ElevenLabs voices available on all plans (fallback)
 const FALLBACK_VOICES = {
   male:   'pNInz6obpgDQGcFmaJgB', // Adam
   female: '21m00Tcm4TlvDq8ikWAM', // Rachel
 };
 
 // ---------------------------------------------------------------------------
-// Global gender state — shared by ALL tabs and screens
+// Global gender state
 // ---------------------------------------------------------------------------
 let _globalGender = 'male';
 
@@ -55,68 +45,69 @@ export const setGlobalGender = (gender) => {
 export const getGlobalGender = () => _globalGender;
 
 // ---------------------------------------------------------------------------
-// Internal playback state
+// Internal state
 // ---------------------------------------------------------------------------
-let _currentSound  = null;
-let _lastSpokenAt  = 0;
-let _isSpeaking    = false;
-let _fetchAbortCtrl = null; // AbortController for in-flight ElevenLabs fetch
+let _currentSound   = null;
+let _isSpeaking     = false;
+let _fetchAbortCtrl = null;
+let _blobUrl        = null;
 
-/** Read-only access for VoiceController / useVoiceCaddie synchronisation. */
 export const getIsSpeaking = () => _isSpeaking;
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------------------------------------------------------------------------
-// Safe ArrayBuffer -> base64 (Hermes-compatible)
+// ArrayBuffer → base64 (Hermes-compatible)
 // ---------------------------------------------------------------------------
 const arrayBufferToBase64 = (buffer) => {
   const uint8 = new Uint8Array(buffer);
   const chunkSize = 4096;
   let binary = '';
   for (let i = 0; i < uint8.length; i += chunkSize) {
-    // Array.from ensures TypedArray spreading works correctly in Hermes
     binary += String.fromCharCode.apply(null, Array.from(uint8.subarray(i, i + chunkSize)));
   }
   return btoa(binary);
 };
 
 // ---------------------------------------------------------------------------
+// Build audio URI — no file writes
+// ---------------------------------------------------------------------------
+const buildAudioUri = (arrayBuffer) => {
+  if (Platform.OS === 'web' && typeof URL !== 'undefined' && URL.createObjectURL) {
+    const blob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
+    const url = URL.createObjectURL(blob);
+    _blobUrl = url;
+    return url;
+  }
+  // Native: data URI loaded directly by expo-av AVPlayer
+  const base64 = arrayBufferToBase64(arrayBuffer);
+  return `data:audio/mpeg;base64,${base64}`;
+};
+
+// ---------------------------------------------------------------------------
 // speak(text, gender?) — primary entry point
 // ---------------------------------------------------------------------------
-
-/**
- * Convert text to speech via ElevenLabs and await playback completion.
- * If gender is omitted, uses the global gender set via setGlobalGender().
- *
- * @param {string} text
- * @param {'male'|'female'} [gender] — optional override; defaults to global gender
- */
 export const speak = async (text, gender = null) => {
   if (!text?.trim()) return;
 
-  console.log(`[voiceService] VOICE: SPEAKING — "${text.slice(0, 60)}${text.length > 60 ? '…' : ''}"`);
+  console.log(`[voiceService] SPEAKING — "${text.slice(0, 60)}${text.length > 60 ? '…' : ''}"`);
   const activeGender = (gender === 'male' || gender === 'female') ? gender : _globalGender;
 
-  const now = Date.now();
-  // 1200ms service-level throttle — prevents true rapid-fire at the lowest layer.
-  // Intentionally short; rate-limiting decisions sit in VoiceController/PlayScreen.
-  // After stopSpeaking(), _lastSpokenAt is reset to 0 so next call fires immediately.
-  if (now - _lastSpokenAt < 1200) return;
-
-  // Cancel any in-flight fetch from a previous call that is still downloading
+  // Cancel any in-flight fetch
   if (_fetchAbortCtrl) {
     _fetchAbortCtrl.abort();
     _fetchAbortCtrl = null;
   }
+  // Revoke previous web blob URL
+  if (_blobUrl) {
+    try { URL.revokeObjectURL(_blobUrl); } catch {}
+    _blobUrl = null;
+  }
 
   try {
     _isSpeaking = true;
-    _lastSpokenAt = now;
 
-    // Stop any currently playing audio before starting the new request.
-    // Placed AFTER the rate-limit check so rapid-fire calls don't repeatedly
-    // stop+start; only calls that pass the gate reach here.
+    // Stop any currently playing audio
     if (_currentSound) {
       try { await _currentSound.stopAsync(); } catch {}
       try { await _currentSound.unloadAsync(); } catch {}
@@ -132,15 +123,9 @@ export const speak = async (text, gender = null) => {
       return;
     }
 
-    // Create a fresh AbortController for this request so stopSpeaking() can
-    // cancel a pending fetch before audio is even downloaded.
     const abortCtrl = new AbortController();
     _fetchAbortCtrl = abortCtrl;
 
-    /**
-     * fetchTTS — attempt TTS with the given voice ID.
-     * Returns the ArrayBuffer on success, throws on failure.
-     */
     const fetchTTS = async (vid) => {
       const res = await fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${vid}`,
@@ -181,55 +166,67 @@ export const speak = async (text, gender = null) => {
     try {
       arrayBuffer = await fetchTTS(voiceId);
     } catch (primaryErr) {
-      // AbortError = intentional cancellation — exit silently
       if (primaryErr.name === 'AbortError') return;
-      // Fall back to pre-made voices on ANY HTTP 4xx error
       const httpStatus = primaryErr.status ?? 0;
       if (httpStatus >= 400 || primaryErr.message?.includes('ElevenLabs')) {
-        const fallbackId = FALLBACK_VOICES[activeGender] ?? FALLBACK_VOICES.male;
-        console.warn(`[voiceService] Custom voice rejected (${primaryErr.message}). Falling back to pre-made voice ${fallbackId}.`);
+        console.warn(`[voiceService] Primary voice failed (${primaryErr.message}). Retrying once…`);
         try {
-          arrayBuffer = await fetchTTS(fallbackId);
-        } catch (fallbackErr) {
-          if (fallbackErr.name === 'AbortError') return;
-          console.error('[voiceService] Fallback voice also failed:', fallbackErr?.message ?? fallbackErr);
-          return; // Give up silently — no device TTS
+          arrayBuffer = await fetchTTS(voiceId);
+        } catch (retryErr) {
+          if (retryErr.name === 'AbortError') return;
+          const fallbackId = FALLBACK_VOICES[activeGender] ?? FALLBACK_VOICES.male;
+          console.warn(`[voiceService] Retry failed. Falling back to pre-made voice ${fallbackId}.`);
+          try {
+            arrayBuffer = await fetchTTS(fallbackId);
+          } catch (fallbackErr) {
+            if (fallbackErr.name === 'AbortError') return;
+            console.error('[voiceService] All ElevenLabs voices failed:', fallbackErr?.message ?? fallbackErr);
+            // Voice silent-fails — no expo-speech fallback (ElevenLabs is the only output path)
+            return;
+          }
         }
       } else {
         throw primaryErr;
       }
     }
+
     if (!arrayBuffer || arrayBuffer.byteLength === 0) {
       throw new Error('ElevenLabs returned empty audio buffer');
     }
 
-    const base64Audio = arrayBufferToBase64(arrayBuffer);
-
-    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-
-    // Write to a temp file — Android cannot play data: URIs via expo-av
-    const tmpUri = FileSystem.cacheDirectory + 'caddie_tts_' + Date.now() + '.mp3';
-    await FileSystem.writeAsStringAsync(tmpUri, base64Audio, {
-      encoding: FileSystem.EncodingType.Base64,
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,   // restore A2DP — BT earbuds play at full quality
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,  // route to BT headset / loudspeaker, not earpiece
     });
 
+    const audioUri = buildAudioUri(arrayBuffer);
     const sound = new Audio.Sound();
     _currentSound = sound;
-    await sound.loadAsync({ uri: tmpUri });
-    await sound.playAsync();
 
-    // Await playback completion
-    await new Promise((resolve) => {
-      let done = false;
-      const finish = () => { if (!done) { done = true; resolve(); } };
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (!status.isLoaded || status.didJustFinish) finish();
+    try {
+      await sound.loadAsync({ uri: audioUri });
+      await sound.playAsync();
+
+      await new Promise((resolve) => {
+        let done = false;
+        const finish = () => { if (!done) { done = true; resolve(); } };
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (!status.isLoaded || status.didJustFinish) finish();
+        });
+        setTimeout(finish, Math.min(15000, Math.max(2000, text.length * 100)));
       });
-      setTimeout(finish, Math.min(15000, Math.max(2000, text.length * 100)));
-    });
+    } catch (avErr) {
+      // expo-av failed to play audio — silent fail (ElevenLabs is the only output path)
+      console.warn('[voiceService] expo-av playback failed:', avErr?.message ?? avErr);
+    }
+
+    console.log('[voiceService] VOICE DONE');
 
   } catch (error) {
-    if (error?.name === 'AbortError') return; // clean cancellation
+    if (error?.name === 'AbortError') return;
     console.error('[ELEVEN ERROR]', error?.message ?? error);
   } finally {
     _fetchAbortCtrl = null;
@@ -237,25 +234,18 @@ export const speak = async (text, gender = null) => {
       try { await _currentSound.unloadAsync(); } catch {}
       _currentSound = null;
     }
+    if (_blobUrl) {
+      try { URL.revokeObjectURL(_blobUrl); } catch {}
+      _blobUrl = null;
+    }
     _isSpeaking = false;
-    // Clean up temp audio file
-    try {
-      const tmpFiles = await FileSystem.readDirectoryAsync(FileSystem.cacheDirectory);
-      for (const f of tmpFiles) {
-        if (f.startsWith('caddie_tts_')) {
-          await FileSystem.deleteAsync(FileSystem.cacheDirectory + f, { idempotent: true });
-        }
-      }
-    } catch {}
   }
 };
 
 // ---------------------------------------------------------------------------
-// stopSpeaking() — interrupt current playback immediately
+// stopSpeaking() — interrupt current playback
 // ---------------------------------------------------------------------------
 export const stopSpeaking = async () => {
-  // Cancel any in-flight fetch immediately so the next speak() isn't bottlenecked
-  // by the 1200ms throttle left from a cancelled request.
   if (_fetchAbortCtrl) {
     _fetchAbortCtrl.abort();
     _fetchAbortCtrl = null;
@@ -265,8 +255,11 @@ export const stopSpeaking = async () => {
     try { await _currentSound.unloadAsync(); } catch {}
     _currentSound = null;
   }
-  _isSpeaking   = false;
-  _lastSpokenAt = 0; // reset throttle so next speak() fires immediately after cancel
+  if (_blobUrl) {
+    try { URL.revokeObjectURL(_blobUrl); } catch {}
+    _blobUrl = null;
+  }
+  _isSpeaking = false;
 };
 
 // ---------------------------------------------------------------------------

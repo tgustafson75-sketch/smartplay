@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { DS, Palette, Space, Type, Radius } from '../../constants/theme';
+import { useLayout } from '../../hooks/use-layout';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StyleSheet, View, Text, ScrollView, Image, Pressable, Animated } from 'react-native';
@@ -8,12 +10,17 @@ import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { auth, db } from '../../lib/firebase';
-import { speak } from '../../services/voiceService';
+import { MaterialCommunityIcons as MCIcon } from '@expo/vector-icons';
+import { speakJob, PRIORITY as ENGINE_PRIORITY } from '../../services/VoiceEngine';
 
 const ICON_RANGEFINDER = require('../../assets/images/icon-rangefinder.png');
 import { useMemoryStore } from '../../store/memoryStore';
 import { useRoundStore } from '../../store/roundStore';
 import { useUserStore } from '../../store/userStore';
+import { useSettingsStore } from '../../store/settingsStore';
+import { useAiProfileStore } from '../../store/aiProfileStore';
+import { analyzeTrends } from '../../features/smartCaddie/engine/TrendEngine';
+import { generateLongTermInsights } from '../../features/smartCaddie/engine/LongTermInsights';
 
 // Mini course data for slope/rating lookup — mirrors PlayScreenClean COURSE_DB
 const COURSE_RATINGS: Record<string, { slope: number; rating: number }> = {
@@ -68,6 +75,7 @@ function getGreeting(): string {
 }
 
 export default function History() {
+  const layout = useLayout();
   const tabBarHeight = useBottomTabBarHeight();
   const courseMemory = useMemoryStore((s) => s.courseMemory);
   const courses = Object.keys(courseMemory || {});
@@ -91,16 +99,18 @@ export default function History() {
 
   const [section, setSection] = useState<'current' | 'past'>('current');
   const router = useRouter();
+  const brightMode    = useSettingsStore((s) => s.brightMode);
+  const setBrightMode = useSettingsStore((s) => s.setBrightMode);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [quietMode, setQuietMode] = useState(false);
   const quietModeRef = useRef(false);
   quietModeRef.current = quietMode;
-  const safeSpeak = (msg: string) => { if (!quietModeRef.current) void speak(msg); };
+  const safeSpeak = (msg: string) => { if (!quietModeRef.current) void speakJob(msg, ENGINE_PRIORITY.AMBIENT); };
   const [cloudRounds, setCloudRounds] = useState<any[]>([]);
 
   const handleOpenProfile = () => {
     setShowToolsMenu(false);
-    router.push('/profile-setup');
+    router.push('/profile' as any);
   };
 
   const handleLogout = async () => {
@@ -165,7 +175,7 @@ export default function History() {
     return '#A7F3D0';
   };
 
-  const logShot = (result: string) => {
+  const logShot = (result: import('../../store/roundStore').ShotResult) => {
     addShot({ result, mental: '', club, aim, timestamp: Date.now(), hole: 0, distance: 0 });
     if (result === 'left') safeSpeak('Pulled left.');
     else if (result === 'right') safeSpeak('Missed right.');
@@ -174,13 +184,13 @@ export default function History() {
 
   // Club performance table
   const getClubStats = () => {
-    const stats: Record<string, { left: number; right: number; straight: number; total: number }> = {};
+    const stats: Record<string, { left: number; right: number; center: number; total: number }> = {};
     shots.forEach((s) => {
-      if (!stats[s.club]) stats[s.club] = { left: 0, right: 0, straight: 0, total: 0 };
+      if (!stats[s.club]) stats[s.club] = { left: 0, right: 0, center: 0, total: 0 };
       stats[s.club].total++;
       if (s.result === 'left') stats[s.club].left++;
       else if (s.result === 'right') stats[s.club].right++;
-      else stats[s.club].straight++;
+      else stats[s.club].center++;
     });
     return stats;
   };
@@ -190,11 +200,11 @@ export default function History() {
     if (shots.length === 0) return null;
     const left = shots.filter((s) => s.result === 'left').length;
     const right = shots.filter((s) => s.result === 'right').length;
-    const straight = shots.filter((s) => s.result === 'straight').length;
+    const center = shots.filter((s) => s.result === 'center').length;
     return {
       left: Math.round((left / shots.length) * 100),
       right: Math.round((right / shots.length) * 100),
-      straight: Math.round((straight / shots.length) * 100),
+      straight: Math.round((center / shots.length) * 100),
     };
   };
 
@@ -214,7 +224,7 @@ export default function History() {
     let tightCount = 0;
     recent.forEach((shot) => {
       if (shot.result === 'left' || shot.result === 'right') wideCount++;
-      if (shot.result === 'straight') tightCount++;
+      if (shot.result === 'center') tightCount++;
     });
     if (wideCount > tightCount) return 'You tend to struggle when shots spread out � consider playing safer.';
     if (tightCount > wideCount) return 'You perform best when dialed in � trust your swing.';
@@ -225,7 +235,22 @@ export default function History() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-    <ScrollView style={styles.scroll} contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + 8 }]}>
+    <ScrollView style={styles.scroll} contentContainerStyle={[styles.container, { paddingHorizontal: layout.hPad, paddingBottom: tabBarHeight + 8 }]}>
+      {/* ── My Profile banner ─────────────────────────────────────── */}
+      <Pressable
+        onPress={() => router.push('/profile' as any)}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(46,204,113,0.08)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: 'rgba(46,204,113,0.3)', marginBottom: 4 }}
+      >
+        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(46,204,113,0.18)', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: Palette.positive }}>
+          <Text style={{ fontSize: 20 }}>👤</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>My Golf Profile</Text>
+          <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 1 }}>Stats · Trends · Highlights</Text>
+        </View>
+        <Text style={{ color: Palette.positive, fontSize: 18 }}>›</Text>
+      </Pressable>
+
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, marginBottom: 12, paddingHorizontal: 4 }}>
         <Pressable onPress={() => { safeSpeak(getInsight()); }}>
@@ -234,9 +259,9 @@ export default function History() {
         <Text style={[styles.title, { flex: 1, marginLeft: 12, marginBottom: 0 }]}>Dashboard</Text>
         <Pressable
           onPress={() => setShowToolsMenu((v) => !v)}
-          style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: showToolsMenu ? '#143d22' : '#1a1a1a', borderWidth: 1.5, borderColor: showToolsMenu ? '#4caf50' : '#2a2a2a', justifyContent: 'center', alignItems: 'center' }}
+          style={{ height: 32, paddingHorizontal: 12, borderRadius: 16, backgroundColor: showToolsMenu ? '#143d22' : '#1a1a1a', borderWidth: 1.5, borderColor: showToolsMenu ? '#4caf50' : '#2a2a2a', justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 3 }}
         >
-          <Text style={{ fontSize: 20 }}>⚙️</Text>
+          {[0,1,2].map((i) => <View key={i} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: showToolsMenu ? '#4ade80' : '#aaa' }} />)}
         </Pressable>
       </View>
 
@@ -254,28 +279,49 @@ export default function History() {
             style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#332900', borderWidth: 1, borderColor: '#FFE600' }}
           >
             <Image source={ICON_RANGEFINDER} style={{ width: 20, height: 20, tintColor: '#FFE600' }} resizeMode="contain" />
-            <Text style={{ color: '#FFE600', fontSize: 13, fontWeight: '600' }}>Rangefinder</Text>
+            <Text style={{ color: '#FFE600', fontSize: 14, fontWeight: '600' }}>Rangefinder</Text>
           </Pressable>
           <Pressable
             onPress={() => setQuietMode((q) => !q)}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: quietMode ? '#143d22' : '#1a1a1a', borderWidth: 1, borderColor: quietMode ? '#4caf50' : '#2a2a2a' }}
           >
-            <Text style={{ fontSize: 18 }}>{quietMode ? '🔇' : '🔊'}</Text>
-            <Text style={{ color: quietMode ? '#A7F3D0' : '#aaa', fontSize: 13, fontWeight: '600' }}>{quietMode ? 'Voice Off' : 'Voice On'}</Text>
+            <MCIcon name={quietMode ? 'volume-off' : 'volume-high'} size={18} color={quietMode ? '#A7F3D0' : '#aaa'} />
+            <Text style={{ color: quietMode ? '#A7F3D0' : '#aaa', fontSize: 14, fontWeight: '600' }}>{quietMode ? 'Voice Off' : 'Voice On'}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setBrightMode(!brightMode)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: brightMode ? '#143d22' : '#1a1a1a', borderWidth: 1, borderColor: brightMode ? '#4caf50' : '#2a2a2a' }}
+          >
+            <MCIcon name="white-balance-sunny" size={18} color={brightMode ? '#A7F3D0' : '#aaa'} />
+            <Text style={{ color: brightMode ? '#A7F3D0' : '#aaa', fontSize: 14, fontWeight: '600' }}>Bright Mode {brightMode ? 'On' : 'Off'}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => { setShowToolsMenu(false); router.push('/analytics'); }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#1a1535', borderWidth: 1, borderColor: '#a78bfa' }}
+          >
+            <MCIcon name="chart-bar" size={18} color="#c4b5fd" />
+            <Text style={{ color: '#c4b5fd', fontSize: 14, fontWeight: '600' }}>Deep Analytics</Text>
           </Pressable>
           <Pressable
             onPress={handleOpenProfile}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#143d22', borderWidth: 1, borderColor: '#4caf50' }}
           >
-            <Text style={{ fontSize: 18 }}>👤</Text>
-            <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '600' }}>Profile</Text>
+            <MCIcon name="account-outline" size={18} color="#A7F3D0" />
+            <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '600' }}>Profile</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => { setShowToolsMenu(false); router.push('/tutorial'); }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#0f2a1e', borderWidth: 1, borderColor: '#34d399' }}
+          >
+            <MCIcon name="book-open-outline" size={18} color="#6ee7b7" />
+            <Text style={{ color: '#6ee7b7', fontSize: 14, fontWeight: '600' }}>View Tutorial</Text>
           </Pressable>
           <Pressable
             onPress={() => { void handleLogout(); }}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#2a1111', borderWidth: 1, borderColor: '#ef4444' }}
           >
-            <Text style={{ fontSize: 18 }}>↩️</Text>
-            <Text style={{ color: '#fca5a5', fontSize: 13, fontWeight: '600' }}>Log Out</Text>
+            <MCIcon name="logout" size={18} color="#fca5a5" />
+            <Text style={{ color: '#fca5a5', fontSize: 14, fontWeight: '600' }}>Log Out</Text>
           </Pressable>
         </View>
       )}
@@ -285,16 +331,16 @@ export default function History() {
         {/* Greeting row */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <View>
-            <Text style={{ color: '#6b7280', fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>{getGreeting()}</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 14, fontWeight: '700', letterSpacing: 1 }}>{getGreeting()}</Text>
             <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700', marginTop: 2 }}>{displayName}</Text>
           </View>
           <View style={{ alignItems: 'flex-end', gap: 4 }}>
             <View style={{ backgroundColor: '#1b5e20', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10, borderWidth: 1, borderColor: '#4ade80' }}>
-              <Text style={{ color: '#86efac', fontSize: 12, fontWeight: '700' }}>HCP {handicapIndex % 1 === 0 ? handicapIndex : handicapIndex.toFixed(1)}</Text>
+            <Text style={{ color: '#86efac', fontSize: 14, fontWeight: '700' }}>HCP {handicapIndex % 1 === 0 ? handicapIndex : handicapIndex.toFixed(1)}</Text>
             </View>
             {goal && (
               <View style={{ backgroundColor: '#172554', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 }}>
-                <Text style={{ color: '#93c5fd', fontSize: 11, fontWeight: '600' }}>{goal === 'break90' ? 'Goal: Break 90' : 'Goal: Break 100'}</Text>
+                <Text style={{ color: '#93c5fd', fontSize: 14, fontWeight: '600' }}>{goal === 'break90' ? 'Goal: Break 90' : 'Goal: Break 100'}</Text>
               </View>
             )}
           </View>
@@ -304,19 +350,19 @@ export default function History() {
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
           <View style={{ flex: 1, backgroundColor: '#0a1a0a', borderRadius: 10, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: '#1b5e20' }}>
             <Text style={{ color: '#A7F3D0', fontWeight: '700', fontSize: 18 }}>{localRounds.length}</Text>
-            <Text style={{ color: '#6b7280', fontSize: 11, marginTop: 2 }}>Rounds</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 14, marginTop: 2 }}>Rounds</Text>
           </View>
           <View style={{ flex: 1, backgroundColor: '#0a1a0a', borderRadius: 10, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: '#ca8a04' }}>
-            <Text style={{ color: '#fbbf24', fontWeight: '700', fontSize: 18 }}>{shots.length > 0 ? Math.round((shots.filter((s) => s.result === 'straight').length / shots.length) * 100) : 0}%</Text>
-            <Text style={{ color: '#6b7280', fontSize: 11, marginTop: 2 }}>Accuracy</Text>
+            <Text style={{ color: '#fbbf24', fontWeight: '700', fontSize: 18 }}>{shots.length > 0 ? Math.round((shots.filter((s) => s.result === 'center').length / shots.length) * 100) : 0}%</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 14, marginTop: 2 }}>Accuracy</Text>
           </View>
           <View style={{ flex: 1, backgroundColor: '#0a1a0a', borderRadius: 10, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: '#1e40af' }}>
             <Text style={{ color: '#93c5fd', fontWeight: '700', fontSize: 18 }}>{shots.length}</Text>
-            <Text style={{ color: '#6b7280', fontSize: 11, marginTop: 2 }}>Shots</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 14, marginTop: 2 }}>Shots</Text>
           </View>
         </View>
 
-        <Text style={{ fontSize: 13, lineHeight: 20, marginBottom: 12, color: shots.length < 10 ? '#666' : '#A7F3D0' }}>
+        <Text style={{ fontSize: 14, lineHeight: 22, marginBottom: 12, color: shots.length < 10 ? 'rgba(255,255,255,0.55)' : '#A7F3D0' }}>
           {getPlayerMemory()}
         </Text>
 
@@ -324,20 +370,20 @@ export default function History() {
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingTop: 10, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
           <View style={{ alignItems: 'center' }}>
             <Text style={{ color: '#A7F3D0', fontWeight: '700', fontSize: 18 }}>{handicapIndex % 1 === 0 ? handicapIndex : handicapIndex.toFixed(1)}</Text>
-            <Text style={{ color: '#888', fontSize: 12, marginTop: 2 }}>Handicap Index</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 14, marginTop: 2 }}>Handicap Index</Text>
           </View>
           <View style={{ width: 1, backgroundColor: 'rgba(255,255,255,0.1)' }} />
           <View style={{ alignItems: 'center' }}>
             <Text style={{ color: '#A7F3D0', fontWeight: '700', fontSize: 18 }}>{Math.round(handicapIndex * (slopeRating / 113))}</Text>
-            <Text style={{ color: '#888', fontSize: 12, marginTop: 2 }}>Course Hcp</Text>
-            <Text style={{ color: '#555', fontSize: 11, marginTop: 1 }}>Slope {slopeRating} � CR {defaultRating}</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 14, marginTop: 2 }}>Course Hcp</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 1 }}>Slope {slopeRating} · CR {defaultRating}</Text>
           </View>
           <View style={{ width: 1, backgroundColor: 'rgba(255,255,255,0.1)' }} />
           <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
             <Pressable onPress={() => setSlopeRating((p) => Math.max(55, p - 1))} style={{ backgroundColor: '#1e1e1e', borderRadius: 6, width: 26, height: 26, alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ color: '#fff', fontSize: 16 }}>-</Text>
             </Pressable>
-            <Text style={{ color: '#888', fontSize: 12 }}>Slope</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13 }}>Slope</Text>
             <Pressable onPress={() => setSlopeRating((p) => Math.min(155, p + 1))} style={{ backgroundColor: '#1e1e1e', borderRadius: 6, width: 26, height: 26, alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ color: '#fff', fontSize: 16 }}>+</Text>
             </Pressable>
@@ -370,12 +416,12 @@ export default function History() {
               <Text style={styles.cardTitle}>Log Shot</Text>
               {shots.length > 0 && (
                 <Pressable onPress={clearRound}>
-                  <Text style={{ color: '#c62828', fontSize: 12 }}>Clear Round</Text>
+                  <Text style={{ color: '#ef5350', fontSize: 14 }}>Clear Round</Text>
                 </Pressable>
               )}
             </View>
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              {(['left', 'straight', 'right'] as const).map((val) => (
+              {(['left', 'center', 'right'] as const).map((val) => (
                 <Pressable
                   key={val}
                   onPress={() => logShot(val)}
@@ -397,9 +443,26 @@ export default function History() {
                 </Pressable>
               ))}
             </View>
-            <Text style={{ color: '#555', fontSize: 11, marginTop: 8, textAlign: 'center' }}>
+            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 8, textAlign: 'center' }}>
               {shots.length} shot{shots.length !== 1 ? 's' : ''} logged this round
             </Text>
+            {shots.length > 0 && (
+              <View style={{ gap: 8, marginTop: 10 }}>
+                <Pressable
+                  onPress={() => router.push('/round-replay' as any)}
+                  style={{ backgroundColor: 'rgba(46,204,113,0.12)', borderRadius: 10, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: Palette.positive }}
+                >
+                  <Text style={{ color: Palette.positive, fontWeight: '700', fontSize: 13 }}>▶ Replay Round</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => router.push('/highlight-reel' as any)}
+                  style={{ backgroundColor: 'rgba(46,204,113,0.18)', borderRadius: 10, paddingVertical: 11, alignItems: 'center', borderWidth: 1, borderColor: Palette.positive, flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                >
+                  <Text style={{ color: '#fcd34d', fontSize: 15 }}>⭐</Text>
+                  <Text style={{ color: Palette.positive, fontWeight: '800', fontSize: 14, letterSpacing: 0.3 }}>Watch Highlights</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
 
           {/* Shot Map */}
@@ -429,11 +492,11 @@ export default function History() {
             </View>
             <View style={{ flexDirection: 'row', marginTop: 4 }}>
               {[{ label: 'ROUGH', flex: 1 }, { label: 'FAIRWAY', flex: 1.5 }, { label: 'CENTER', flex: 1 }, { label: 'FAIRWAY', flex: 1.5 }, { label: 'ROUGH', flex: 1 }].map((z, i) => (
-                <Text key={i} style={{ flex: z.flex, color: '#666', fontSize: 9, textAlign: 'center' }}>{z.label}</Text>
+                <Text key={i} style={{ flex: z.flex, color: '#888', fontSize: 10, textAlign: 'center' }}>{z.label}</Text>
               ))}
             </View>
-            {shots.length === 0 && <Text style={{ color: '#555', fontSize: 11, textAlign: 'center', marginTop: 8 }}>Log shots to see dispersion</Text>}
-            <Text style={{ color: '#555', fontSize: 10, marginTop: 6, textAlign: 'center' }}>🟢 aim  ·  🔴 left  ·  ⚪ straight  ·  🔵 right  (last 10)</Text>
+            {shots.length === 0 && <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, textAlign: 'center', marginTop: 8 }}>Log shots to see dispersion</Text>}
+            <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 6, textAlign: 'center' }}>🟢 aim  ·  🔴 left  ·  ⚪ straight  ·  🔵 right  (last 10)</Text>
           </View>
 
           {/* Shot Record / History dots */}
@@ -456,16 +519,16 @@ export default function History() {
                       <View style={{ flex: getPattern()!.right, backgroundColor: '#f87171' }} />
                     </View>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                      <Text style={{ color: '#60a5fa', fontSize: 12 }}>Left {getPattern()!.left}%</Text>
-                      <Text style={{ color: '#A7F3D0', fontSize: 12 }}>Straight {getPattern()!.straight}%</Text>
-                      <Text style={{ color: '#f87171', fontSize: 12 }}>Right {getPattern()!.right}%</Text>
+                      <Text style={{ color: '#60a5fa', fontSize: 14 }}>Left {getPattern()!.left}%</Text>
+                      <Text style={{ color: '#A7F3D0', fontSize: 14 }}>Straight {getPattern()!.straight}%</Text>
+                      <Text style={{ color: '#f87171', fontSize: 14 }}>Right {getPattern()!.right}%</Text>
                     </View>
-                    <Text style={{ color: '#ccc', fontSize: 13, marginTop: 10, lineHeight: 19 }}>{getInsight()}</Text>
+                    <Text style={{ color: '#ccc', fontSize: 14, marginTop: 10, lineHeight: 19 }}>{getInsight()}</Text>
                     <Pressable
                         onPress={() => { safeSpeak(getInsight()); }}
                       style={({ pressed }) => ({ backgroundColor: pressed ? '#1b5e20' : '#1a1a1a', borderRadius: 8, padding: 8, alignItems: 'center', marginTop: 10, borderWidth: 1, borderColor: '#333' })}
                     >
-                      <Text style={{ color: '#A7F3D0', fontSize: 12 }}>🎙 Speak Insight</Text>
+                      <Text style={{ color: '#A7F3D0', fontSize: 14 }}>🎙 Speak Insight</Text>
                     </Pressable>
                   </View>
                 )}
@@ -481,24 +544,24 @@ export default function History() {
             ) : (
               <View style={{ marginTop: 8 }}>
                 {Object.entries(getClubStats()).map(([c, d]) => {
-                  const acc = Math.round((d.straight / d.total) * 100);
+                  const acc = Math.round((d.center / d.total) * 100);
                   const tendency = d.left > d.right ? 'left' : d.right > d.left ? 'right' : null;
                   return (
                     <View key={c} style={{ backgroundColor: '#111', borderRadius: 10, padding: 12, marginBottom: 8 }}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{c}</Text>
-                        <Text style={{ color: acc >= 60 ? '#66bb6a' : acc >= 40 ? '#f9a825' : '#ff5252', fontWeight: '700', fontSize: 13 }}>{acc}% accurate</Text>
+                        <Text style={{ color: acc >= 60 ? '#66bb6a' : acc >= 40 ? '#f9a825' : '#ff5252', fontWeight: '700', fontSize: 14 }}>{acc}% accurate</Text>
                       </View>
                       <View style={{ flexDirection: 'row', height: 6, borderRadius: 3, overflow: 'hidden', marginTop: 8, marginBottom: 6 }}>
                         <View style={{ flex: d.left, backgroundColor: '#60a5fa' }} />
-                        <View style={{ flex: d.straight, backgroundColor: '#A7F3D0' }} />
+                        <View style={{ flex: d.center, backgroundColor: '#A7F3D0' }} />
                         <View style={{ flex: d.right, backgroundColor: '#f87171' }} />
                       </View>
                       <View style={{ flexDirection: 'row', gap: 12 }}>
-                        <Text style={{ color: '#60a5fa', fontSize: 11 }}>L: {d.left}</Text>
-                        <Text style={{ color: '#A7F3D0', fontSize: 11 }}>S: {d.straight}</Text>
-                        <Text style={{ color: '#f87171', fontSize: 11 }}>R: {d.right}</Text>
-                        {tendency && <Text style={{ color: '#f9a825', fontSize: 11, marginLeft: 'auto' }}>⚠ tends {tendency}</Text>}
+                        <Text style={{ color: '#60a5fa', fontSize: 13 }}>L: {d.left}</Text>
+                        <Text style={{ color: '#A7F3D0', fontSize: 13 }}>S: {d.center}</Text>
+                        <Text style={{ color: '#f87171', fontSize: 13 }}>R: {d.right}</Text>
+                        {tendency && <Text style={{ color: '#f9a825', fontSize: 13, marginLeft: 'auto' }}>tends {tendency}</Text>}
                       </View>
                     </View>
                   );
@@ -523,12 +586,12 @@ export default function History() {
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>📊 Tendencies</Text>
                 {avgScore !== null && <Text style={{ color: '#fff', fontSize: 14, marginTop: 4 }}>Avg Score: {avgScore}</Text>}
-                <Text style={{ color: '#ccc', fontSize: 13, marginTop: 2 }}>Common Miss: {commonMiss}</Text>
+                <Text style={{ color: '#ccc', fontSize: 14, marginTop: 2 }}>Common Miss: {commonMiss}</Text>
                 <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={{ color: progressColor, fontSize: 13, fontWeight: '700' }}>{progress}</Text>
-                  {progress === 'Trending better' && <Text style={{ color: '#A7F3D0', fontSize: 12 }}>📈</Text>}
-                  {progress === 'Slight regression' && <Text style={{ color: '#fca5a5', fontSize: 12 }}>📉</Text>}
-                  {progress === 'Consistent' && <Text style={{ color: '#9CA3AF', fontSize: 12 }}>�</Text>}
+                  <Text style={{ color: progressColor, fontSize: 14, fontWeight: '700' }}>{progress}</Text>
+                  {progress === 'Trending better' && <Text style={{ color: '#A7F3D0', fontSize: 14 }}>📈</Text>}
+                  {progress === 'Slight regression' && <Text style={{ color: '#fca5a5', fontSize: 14 }}>📉</Text>}
+                  {progress === 'Consistent' && <Text style={{ color: '#9CA3AF', fontSize: 14 }}>—</Text>}
                 </View>
                 {summaries.length >= 2 && (
                   <Pressable
@@ -542,18 +605,75 @@ export default function History() {
                     }}
                     style={{ marginTop: 8, backgroundColor: '#1a1a1a', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 12, alignSelf: 'flex-start', borderWidth: 1, borderColor: '#333' }}
                   >
-                    <Text style={{ color: '#A7F3D0', fontSize: 12 }}>🎙 Speak Summary</Text>
+                    <Text style={{ color: '#A7F3D0', fontSize: 14 }}>🎙 Speak Summary</Text>
                   </Pressable>
                 )}
               </View>
             );
           })()}
+          {/* ── My Trends (cross-round AI coaching) ── */}
+          {(() => {
+            const roundHistory = useAiProfileStore.getState().roundHistory;
+            const trends = analyzeTrends(roundHistory);
+            if (!trends) return null;
+            const insights = generateLongTermInsights(trends);
+            const toneColor = (tone: string) =>
+              tone === 'positive' ? '#A7F3D0' : tone === 'warning' ? '#fca5a5' : '#fcd34d';
+            const improvementText =
+              trends.improvement.hasData
+                ? trends.improvement.direction === 'improving'
+                  ? `📈 +${trends.improvement.scoreDelta} pts — improving`
+                  : trends.improvement.direction === 'declining'
+                  ? `📉 ${trends.improvement.scoreDelta} pts — regressing`
+                  : '→ Steady'
+                : null;
+            return (
+              <View style={[styles.card, { marginTop: 12, borderColor: '#1a3322', borderWidth: 1 }]}>
+                <Text style={[styles.cardTitle, { marginBottom: 8 }]}>🔍 My Game Trends</Text>
+                {/* Stat pills row */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                  <View style={{ backgroundColor: '#122', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}>
+                    <Text style={{ color: '#A7F3D0', fontSize: 12 }}>{trends.roundCount} rounds</Text>
+                  </View>
+                  {improvementText && (
+                    <View style={{ backgroundColor: '#122', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}>
+                      <Text style={{ color: trends.improvement.direction === 'improving' ? '#A7F3D0' : trends.improvement.direction === 'declining' ? '#fca5a5' : '#9CA3AF', fontSize: 12 }}>{improvementText}</Text>
+                    </View>
+                  )}
+                  {trends.topClub && (
+                    <View style={{ backgroundColor: '#122', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}>
+                      <Text style={{ color: '#fcd34d', fontSize: 12 }}>Top club: {trends.topClub}</Text>
+                    </View>
+                  )}
+                </View>
+                {/* Insight cards */}
+                {insights.map((ins) => (
+                  <View
+                    key={ins.id}
+                    style={{
+                      borderLeftWidth: 3,
+                      borderLeftColor: toneColor(ins.tone),
+                      paddingLeft: 10,
+                      marginBottom: 8,
+                      backgroundColor: '#0d1f14',
+                      borderRadius: 6,
+                      padding: 10,
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>{ins.emoji} {ins.headline}</Text>
+                    <Text style={{ color: '#aaa', fontSize: 12, marginTop: 3 }}>{ins.detail}</Text>
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
+
           {/* Local rounds (from AsyncStorage) */}
           {localRounds.length > 0 && localRounds.map((r, index) => (
             <View key={`local-${index}`} style={styles.courseCard}>
               <Text style={styles.courseName}>Round {index + 1}</Text>
               <Text style={styles.courseDetail}>Date: {new Date(r.date).toLocaleDateString()}</Text>
-              <Text style={{ color: '#A7F3D0', fontSize: 13 }}>Shots: {r.shots.length}</Text>
+              <Text style={{ color: '#A7F3D0', fontSize: 14 }}>Shots: {r.shots.length}</Text>
             </View>
           ))}
 
@@ -563,7 +683,7 @@ export default function History() {
               <Text style={styles.courseName}>{r.course ?? 'Round'}</Text>
               <Text style={styles.courseDetail}>{r.date ? new Date(r.date).toLocaleDateString() : ''}</Text>
               {Array.isArray(r.players) && r.totals && r.players.map((p: string, i: number) => (
-                <Text key={i} style={{ color: p === r.winner ? '#66bb6a' : '#aaa', fontSize: 13 }}>
+                <Text key={i} style={{ color: p === r.winner ? '#66bb6a' : '#aaa', fontSize: 14 }}>
                   {p}: {r.totals[i]}{p === r.winner ? ' ??' : ''}
                 </Text>
               ))}
@@ -661,68 +781,49 @@ export default function History() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#0B1F16',
-  },
-  scroll: {
-    flex: 1,
-    backgroundColor: '#0B1F16',
-  },
-  container: {
-    padding: 16,
-    paddingBottom: 48,
-  },
+  safe:      DS.screen,
+  scroll:    DS.screen,
+  container: { padding: Space.lg, paddingBottom: 48 },
   title: {
-    fontSize: 22,
-    fontFamily: 'Outfit_700Bold',
-    color: '#A7F3D0',
+    fontSize: Type.h2,
+    fontWeight: Type.bold,
+    color: Palette.positiveFaint,
     marginBottom: 0,
   },
   card: {
-    backgroundColor: '#111',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#1e1e1e',
+    ...DS.card,
+    marginBottom: Space.md,
   },
   cardTitle: {
-    color: '#A7F3D0',
-    fontFamily: 'Outfit_700Bold',
-    fontSize: 15,
+    color: Palette.positiveFaint,
+    fontSize: Type.md,
+    fontWeight: Type.semibold,
     marginBottom: 2,
   },
   empty: {
-    fontSize: 14,
-    fontFamily: 'Outfit_400Regular',
-    color: '#555',
+    fontSize: Type.md,
+    color: Palette.textMuted,
     marginTop: 40,
     textAlign: 'center',
   },
   courseCard: {
-    backgroundColor: '#111',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#1e3a2a',
+    ...DS.card,
+    marginBottom: Space.md,
   },
   courseName: {
-    fontSize: 16,
-    fontFamily: 'Outfit_700Bold',
-    color: '#A7F3D0',
-    marginBottom: 4,
+    fontSize: Type.lg - 1,
+    fontWeight: Type.semibold,
+    color: Palette.positiveFaint,
+    marginBottom: Space.xs,
   },
   courseDetail: {
-    fontSize: 13,
-    fontFamily: 'Outfit_400Regular',
-    color: '#888',
-    marginBottom: 4,
+    fontSize: Type.body,
+    color: Palette.textMuted,
+    marginBottom: Space.xs,
   },
   troubleText: {
-    fontSize: 13,
-    fontFamily: 'Outfit_500Medium',
+    fontSize: Type.body,
+    fontWeight: Type.medium,
     color: '#f9a825',
   },
 });

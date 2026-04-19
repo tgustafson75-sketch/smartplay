@@ -120,10 +120,12 @@ export default function AuthScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Image source={require('../assets/images/logo-transparent.png')} style={styles.logo} resizeMode="cover" />
-      <Text style={styles.title}>SmartPlay Caddie</Text>
-      <Text style={styles.tagline}>Play smarter. Swing with confidence.</Text>
-      <Text style={styles.supporting}>Your intelligent on-course caddie.</Text>
-      <Text style={styles.subtitle}>{mode === 'login' ? 'Welcome back' : 'Create your account'}</Text>
+      <Text style={styles.title}>
+        <Text style={{ color: '#A7F3D0' }}>SmartPlay</Text>
+        <Text style={{ color: '#fff' }}> Caddie</Text>
+      </Text>
+      <Text style={styles.tagline}>REAL-TIME CADDIE INTELLIGENCE</Text>
+      <Text style={styles.subtitle}>{mode === 'login' ? 'Welcome back' : "Let's get started"}</Text>
 
       <TextInput
         style={styles.input}
@@ -243,13 +245,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Outfit_700Bold',
     color: '#A7F3D0',
     marginBottom: 4,
+    letterSpacing: 3,
+    textTransform: 'uppercase',
   },
   tagline: {
-    fontSize: 15,
+    fontSize: 13,
     fontFamily: 'Outfit_600SemiBold',
     color: '#A7F3D0',
-    textAlign: 'center',
-    marginBottom: 4,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 2,
+    opacity: 0.75,
   },
   supporting: {
     fontSize: 13,

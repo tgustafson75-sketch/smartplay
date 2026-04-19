@@ -1,44 +1,77 @@
 /**
  * aiService.js — Caddie AI response engine
  *
- * Routes voice commands through two layers:
- *   1. OpenAI GPT-4o-mini (if key available + network up)
- *   2. Local knowledge engine (always available, instant, zero latency)
+ * Routes voice commands through three layers:
+ *   1. Local response builder (structured, domain-classified, mode-aware)
+ *   2. OpenAI GPT-4o-mini (if key available + network up)
+ *   3. Local knowledge engine (always available, instant, zero latency)
  *
  * ALL AI calls in the app funnel through here.
  * Never call OpenAI directly from UI components.
+ *
+ * Response modes:
+ *   short    — 1 sentence, max 12 words
+ *   detailed — up to 2 sentences
  */
+
+import { matchLocalResponse, formatAIResponse, classifyDomain, detectIntent, FALLBACK_RESPONSE } from './caddieResponseBuilder.js';
 
 const OPENAI_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY ?? '';
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 
-const SYSTEM_PROMPT = `You are SmartPlay, an expert AI golf caddie. 
-Give direct, specific, practical advice in 1-2 sentences max.
-No filler phrases. No "Great question!". No preamble.
-Address exactly what was asked. Speak like an experienced caddie on the bag.`;
+// System prompt varies by domain and mode for consistent tone
+const buildSystemPrompt = (domain, mode) => {
+  const length = mode === 'short'
+    ? 'Respond in exactly ONE sentence, max 10 words. No filler.'
+    : mode === 'neutral'
+    ? 'Respond in ONE clear sentence. No filler.'
+    : 'Respond in 1-2 sentences max. First sentence: answer. Second: one specific adjustment if needed.';
+
+  const tone = domain === 'app'    ? 'Explain what the feature does and how to use it.'
+             : domain === 'course' ? 'Give a direct recommendation only. No explanation.'
+             :                       'State the pattern, then give one specific fix.';
+
+  return `You are SmartCaddie, a concise expert golf caddie AI.
+${length}
+${tone}
+No filler phrases. No "Great question!". No preamble. No "I recommend".
+Speak like a caddie on the bag, not a coach giving a lesson.`;
+};
 
 // ---------------------------------------------------------------------------
 // PUBLIC API
 // ---------------------------------------------------------------------------
 
 /**
- * getAIResponse(transcript, context?)
+ * getAIResponse(transcript, context?, mode?)
  *
  * @param {string} transcript — what the golfer said
- * @param {object} [context]  — optional round context (hole, distance, club, missPattern)
+ * @param {object} [context]  — optional round context (hole, distance, club, missPattern, par)
+ * @param {'short' | 'neutral' | 'detailed'} [mode] — response length mode (default: 'short')
  * @returns {Promise<string>} caddie response text
  */
-export async function getAIResponse(transcript, context = {}) {
-  if (!transcript?.trim()) return getFallback(context);
+export async function getAIResponse(transcript, context = {}, mode = 'short') {
+  if (!transcript?.trim()) return getFallback(context, mode);
 
-  console.log(`[aiService] AI INPUT: "${transcript}"`);
-  const lower = transcript.toLowerCase();
+  const intent = detectIntent(transcript);
+  console.log(`[aiService] INPUT: "${transcript}" | intent: ${intent?.key ?? 'none'} | domain: ${intent?.type ?? classifyDomain(transcript)} | mode: ${mode}`);
 
-  // Try OpenAI first if key is available
+  // Layer 1 — structured local response library (instant, zero latency, fully consistent)
+  const local = matchLocalResponse(transcript, context, mode);
+  if (local) return local;
+
+  const domain = intent?.type ?? classifyDomain(transcript);
+  const lower  = transcript.toLowerCase();
+
+  // Layer 2 — OpenAI with domain-tuned system prompt
   if (OPENAI_KEY && OPENAI_KEY.length >= 20 && OPENAI_KEY !== 'sk-your-key-here') {
     try {
       const contextHint = buildContextHint(context);
       const userMessage  = contextHint ? `${contextHint}\n\nGolfer: "${transcript}"` : transcript;
+
+      // 8-second hard timeout — never blocks gameplay if OpenAI is slow
+      const controller = new AbortController();
+      const timeoutId  = setTimeout(() => controller.abort(), 8000);
 
       const res = await fetch(OPENAI_URL, {
         method:  'POST',
@@ -48,26 +81,32 @@ export async function getAIResponse(transcript, context = {}) {
         },
         body: JSON.stringify({
           model:      'gpt-4o-mini',
-          max_tokens: 120,
+          max_tokens: mode === 'short' ? 40 : mode === 'neutral' ? 55 : 80,
           messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user',   content: userMessage   },
+            { role: 'system', content: buildSystemPrompt(domain, mode) },
+            { role: 'user',   content: userMessage },
           ],
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (res.ok) {
         const json   = await res.json();
-        const answer = json.choices?.[0]?.message?.content?.trim();
-        if (answer) return answer;
+        const raw    = json.choices?.[0]?.message?.content?.trim();
+        if (raw) return formatAIResponse(raw, mode);
       }
     } catch {
-      // Fall through to local engine
+      // Timeout, network error, or parse failure — fall through to local engine
     }
   }
 
-  // Local knowledge fallback
-  return localEngine(lower, context);
+  // Layer 3 — local knowledge engine
+  const engineResult = localEngine(lower, context);
+  // If localEngine returned a generic fallback, use the structured FALLBACK_RESPONSE instead
+  if (!engineResult || engineResult === FALLBACK_RESPONSE) return FALLBACK_RESPONSE;
+  return formatAIResponse(engineResult, mode);
 }
 
 // ---------------------------------------------------------------------------
@@ -87,11 +126,13 @@ function buildContextHint(ctx) {
 // ---------------------------------------------------------------------------
 // Internal: local golf knowledge engine
 // ---------------------------------------------------------------------------
-function getFallback(ctx) {
+function getFallback(ctx, mode = 'short') {
   if (ctx?.distance) {
-    return `${ctx.distance} yards — commit to a smooth swing and trust your ${ctx.club || 'club'}.`;
+    const s = `${ctx.distance} yards — trust your ${ctx.club || 'club'}.`;
+    if (mode === 'detailed') return `${s} Commit to a smooth swing and hit your target.`;
+    return s;
   }
-  return 'Pick your target. Trust your swing. One shot at a time.';
+  return 'Pick your target. Trust your swing.';
 }
 
 function localEngine(lower, ctx) {

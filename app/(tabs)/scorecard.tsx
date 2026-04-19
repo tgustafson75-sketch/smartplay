@@ -1,22 +1,26 @@
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, TextInput, Animated } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { MaterialCommunityIcons as MCIcon } from '@expo/vector-icons';
+import { DS, Palette, Space, Type, Radius } from '../../constants/theme';
+import { useLayout } from '../../hooks/use-layout';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useRef } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
-import { speak } from '../../services/voiceService';
+import { speakJob, PRIORITY as ENGINE_PRIORITY } from '../../services/VoiceEngine';
 import { auth } from '../../lib/firebase';
-import { useRoundStore } from '../../store/roundStore';
+import { useRoundStore, HoleEntry } from '../../store/roundStore';
 
 const ICON_RANGEFINDER = require('../../assets/images/icon-rangefinder.png');
 import { useMemoryStore } from '../../store/memoryStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { useUserStore } from '../../store/userStore';
 
 type ShotEntry = { result: string; club: string; hole?: number };
-type HoleEntry = { hole: number; par: number; scores: number[] };
 
 export default function Scorecard() {
   const tabBarHeight = useBottomTabBarHeight();
+  const layout = useLayout();
   const logoScale = useRef(new Animated.Value(1)).current;
 
   const animateLogo = () => {
@@ -28,13 +32,24 @@ export default function Scorecard() {
   const { round, shots: shotsParam, pars: parsedParsParam, players: playersParam, multiRound: multiRoundParam, skins: skinsParam, course: courseParam } =
     useLocalSearchParams<{ round?: string; shots?: string; pars?: string; players?: string; multiRound?: string; skins?: string; course?: string }>();
 
-  const storedCourse = useRoundStore((s) => s.activeCourse);
+  const storedCourse          = useRoundStore((s) => s.activeCourse);
+  const storePlayers          = useRoundStore((s) => s.players);
+  const storeActivePlayerCount = useRoundStore((s) => s.activePlayerCount);
+  const storeMultiRound       = useRoundStore((s) => s.multiRound);
+
   const courseName: string = courseParam ?? (storedCourse || 'Scorecard');
   const parsedRound: number[] = round ? JSON.parse(round) : [];
   const parsedShots: ShotEntry[] = shotsParam ? JSON.parse(shotsParam) : [];
   const parsedPars: number[] = parsedParsParam ? JSON.parse(parsedParsParam) : [];
-  const players: string[] = playersParam ? JSON.parse(playersParam) : ['You'];
-  const multiRound: HoleEntry[] = multiRoundParam ? JSON.parse(multiRoundParam) : [];
+
+  // Players — prefer URL params (end-of-round navigation), fall back to live store
+  const players: string[] = playersParam
+    ? JSON.parse(playersParam)
+    : storePlayers.slice(0, storeActivePlayerCount);
+
+  // Per-hole scores — prefer URL params, fall back to live store
+  const multiRound: HoleEntry[] = multiRoundParam ? JSON.parse(multiRoundParam) : storeMultiRound;
+
   const skinsData: number[] = skinsParam ? JSON.parse(skinsParam) : players.map(() => 0);
 
   const storeScores = useRoundStore((s) => s.scores);
@@ -226,11 +241,20 @@ export default function Scorecard() {
   const registeredName = useUserStore((s) => s.name);
   const handicapIndex = useUserStore((s) => s.handicap);
   const setIsGuest = useUserStore((s) => s.setIsGuest);
+  const voiceEnabled    = useSettingsStore((s) => s.voiceEnabled);
+  const setVoiceEnabled = useSettingsStore((s) => s.setVoiceEnabled);
+  const voiceStyle     = useSettingsStore((s) => s.voiceStyle);
+  const setVoiceStyle  = useSettingsStore((s) => s.setVoiceStyle);
+  const voiceGender    = useSettingsStore((s) => s.voiceGender);
+  const setVoiceGender = useSettingsStore((s) => s.setVoiceGender);
+  const highContrast    = useSettingsStore((s) => s.highContrast);
+  const setHighContrast = useSettingsStore((s) => s.setHighContrast);
+  const brightMode      = useSettingsStore((s) => s.brightMode);
+  const setBrightMode   = useSettingsStore((s) => s.setBrightMode);
   const [activePlayer, setActivePlayer] = useState(0);
   const router = useRouter();
   const rfScale = useRef(new Animated.Value(1)).current;
   const [showToolsMenu, setShowToolsMenu] = useState(false);
-  const [quietMode, setQuietMode] = useState(false);
 
   const handleOpenProfile = () => {
     setShowToolsMenu(false);
@@ -245,6 +269,16 @@ export default function Scorecard() {
     setIsGuest(false);
     router.replace('/auth');
   };
+  // ── Unified grid from store (single source of truth) ──────────────────
+  const gridScores        = useRoundStore((s) => s.gridScores);
+  const gridPlayerNames   = useRoundStore((s) => s.gridPlayerNames);
+  const setCourseHoleScore = useRoundStore((s) => s.setCourseHoleScore);
+  const setGridPlayerName  = useRoundStore((s) => s.setGridPlayerName);
+  const storeActiveCourse  = useRoundStore((s) => s.activeCourse);
+
+  // Alias for all helpers that still reference manualScores
+  const manualScores = gridScores;
+
   // Always maintain 4 player slots; Player 1 = registered user (not editable here)
   const [tabNames, setTabNames] = useState<string[]>(() => {
     const defaults = [registeredName || 'You', 'Player 2', 'Player 3', 'Player 4'];
@@ -253,27 +287,10 @@ export default function Scorecard() {
   });
   const [editingTab, setEditingTab] = useState<number | null>(null);
 
-  // ── 18-hole manual scores: manualScores[playerIdx][holeIdx 0..17] ──
-  const [manualScores, setManualScores] = useState<number[][]>(() => {
-    const grid = Array.from({ length: 4 }, () => Array(18).fill(0));
-    // Pre-fill from multiRound if available
-    multiRound.forEach((h) => {
-      const idx = h.hole - 1;
-      if (idx >= 0 && idx < 18) {
-        h.scores.forEach((s, pi) => { if (pi < 4) grid[pi][idx] = s; });
-      }
-    });
-    // Pre-fill player 0 from parsedRound
-    parsedRound.forEach((s, idx) => { if (idx < 18) grid[0][idx] = s; });
-    return grid;
-  });
-
   const adjustScore = (playerIdx: number, holeIdx: number, delta: number) => {
-    setManualScores((prev) => {
-      const next = prev.map((row) => [...row]);
-      next[playerIdx][holeIdx] = Math.max(0, (next[playerIdx][holeIdx] ?? 0) + delta);
-      return next;
-    });
+    const current = gridScores[playerIdx]?.[holeIdx] ?? 0;
+    const next = Math.max(0, current + delta);
+    setCourseHoleScore(playerIdx, holeIdx, next, storeActiveCourse);
   };
 
   // Build 18 par values — use parsedPars first, else use course default pars
@@ -335,9 +352,9 @@ export default function Scorecard() {
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 12, paddingBottom: 8, paddingHorizontal: 16 }}>
         <Pressable onPress={() => {
           animateLogo();
-          if (!quietMode) void speak('Great golfers review their scorecards to find patterns. What hole cost you strokes today?');
+          if (voiceEnabled) void speakJob('Great golfers review their scorecards to find patterns. What hole cost you strokes today?', ENGINE_PRIORITY.AMBIENT);
         }}>
-          <Animated.View style={{ transform: [{ scale: logoScale }], shadowColor: '#4ade80', shadowOpacity: 0.5, shadowRadius: 10, elevation: 6 }}>
+          <Animated.View style={{ transform: [{ scale: logoScale }] }}>
             <Image source={require('../../assets/images/logo.png')} style={{ width: 48, height: 48, borderRadius: 999, overflow: 'hidden' }} resizeMode="cover" />
           </Animated.View>
         </Pressable>
@@ -349,9 +366,9 @@ export default function Scorecard() {
         </View>
         <Pressable
           onPress={() => setShowToolsMenu((v) => !v)}
-          style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: showToolsMenu ? '#143d22' : '#1a1a1a', borderWidth: 1.5, borderColor: showToolsMenu ? '#4caf50' : '#2a2a2a', justifyContent: 'center', alignItems: 'center' }}
+          style={{ height: 32, paddingHorizontal: 12, borderRadius: 16, backgroundColor: showToolsMenu ? '#122a1e' : '#0e1612', borderWidth: 1.5, borderColor: showToolsMenu ? '#3d7a58' : '#1a3326', justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 3 }}
         >
-          <Text style={{ fontSize: 20 }}>⚙️</Text>
+          {[0,1,2].map((i) => <View key={i} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: showToolsMenu ? '#4d8f6a' : '#556a5e' }} />)}
         </Pressable>
       </View>
 
@@ -359,38 +376,72 @@ export default function Scorecard() {
       {showToolsMenu && (
         <View style={{
           position: 'absolute', top: 106, right: 16, zIndex: 52,
-          backgroundColor: '#111', borderRadius: 14,
-          borderWidth: 1, borderColor: '#2a2a2a',
-          padding: 10, gap: 8, minWidth: 190,
-          shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 12, elevation: 8,
+          backgroundColor: Palette.cardBg, borderRadius: 14,
+          borderWidth: 1, borderColor: Palette.border,
+          padding: 10, gap: 6, minWidth: 190,
         }}>
           <Pressable
             onPress={() => { setShowToolsMenu(false); router.push('/rangefinder'); }}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#332900', borderWidth: 1, borderColor: '#FFE600' }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: Palette.cardBgDark, borderWidth: 1, borderColor: Palette.accent }}
           >
-            <Image source={ICON_RANGEFINDER} style={{ width: 20, height: 20, tintColor: '#FFE600' }} resizeMode="contain" />
-            <Text style={{ color: '#FFE600', fontSize: 13, fontWeight: '600' }}>Rangefinder</Text>
+            <Image source={ICON_RANGEFINDER} style={{ width: 20, height: 20, tintColor: Palette.accent }} resizeMode="contain" />
+            <Text style={{ color: Palette.accent, fontSize: 14, fontWeight: '600' }}>AR Rangefinder</Text>
           </Pressable>
           <Pressable
-            onPress={() => setQuietMode((q) => !q)}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: quietMode ? '#143d22' : '#1a1a1a', borderWidth: 1, borderColor: quietMode ? '#4caf50' : '#2a2a2a' }}
+            onPress={() => setVoiceEnabled(!voiceEnabled)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: Palette.cardBg }}
           >
-            <Text style={{ fontSize: 18 }}>{quietMode ? '🔕' : '🔊'}</Text>
-            <Text style={{ color: quietMode ? '#A7F3D0' : '#aaa', fontSize: 13, fontWeight: '600' }}>{quietMode ? 'Voice Off' : 'Voice On'}</Text>
+            <MCIcon name={voiceEnabled ? 'volume-high' : 'volume-off'} size={16} color={voiceEnabled ? Palette.textPrimary : Palette.muted} />
+            <Text style={{ color: voiceEnabled ? Palette.textPrimary : Palette.muted, fontSize: 14, fontWeight: '500' }}>{voiceEnabled ? 'Voice On' : 'Voice Off'}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setVoiceStyle(voiceStyle === 'calm' ? 'aggressive' : 'calm')}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: Palette.cardBg }}
+          >
+            <MCIcon name={voiceStyle === 'aggressive' ? 'bullhorn-outline' : 'meditation'} size={16} color={Palette.textSub} />
+            <Text style={{ color: Palette.textSub, fontSize: 14, fontWeight: '500' }}>{voiceStyle === 'aggressive' ? 'Aggressive' : 'Calm'} Voice</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setVoiceGender(voiceGender === 'male' ? 'female' : 'male')}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: Palette.cardBg }}
+          >
+            <MCIcon name="account-voice" size={16} color={Palette.textSub} />
+            <Text style={{ color: Palette.textSub, fontSize: 14, fontWeight: '500' }}>{voiceGender === 'male' ? 'Male' : 'Female'} Voice</Text>
           </Pressable>
           <Pressable
             onPress={handleOpenProfile}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#143d22', borderWidth: 1, borderColor: '#4caf50' }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: Palette.cardBg }}
           >
-            <Text style={{ fontSize: 18 }}>👤</Text>
-            <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '600' }}>Profile</Text>
+            <MCIcon name="account-circle-outline" size={16} color={Palette.textSub} />
+            <Text style={{ color: Palette.textSub, fontSize: 14, fontWeight: '500' }}>Profile</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => { setShowToolsMenu(false); router.push('/settings' as any); }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: Palette.cardBg }}
+          >
+            <MCIcon name="cog-outline" size={16} color={Palette.textSub} />
+            <Text style={{ color: Palette.textSub, fontSize: 14, fontWeight: '500' }}>Settings</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setHighContrast(!highContrast)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: Palette.cardBg }}
+          >
+            <MCIcon name="contrast-circle" size={16} color={highContrast ? Palette.textPrimary : Palette.muted} />
+            <Text style={{ color: highContrast ? Palette.textPrimary : Palette.muted, fontSize: 14, fontWeight: '500' }}>{highContrast ? 'High Contrast' : 'Normal'}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setBrightMode(!brightMode)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: Palette.cardBg }}
+          >
+            <MCIcon name="white-balance-sunny" size={16} color={brightMode ? Palette.textPrimary : Palette.muted} />
+            <Text style={{ color: brightMode ? Palette.textPrimary : Palette.muted, fontSize: 14, fontWeight: '500' }}>Bright Mode {brightMode ? 'On' : 'Off'}</Text>
           </Pressable>
           <Pressable
             onPress={() => { void handleLogout(); }}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#2a1111', borderWidth: 1, borderColor: '#ef4444' }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#1A0C0C', borderWidth: 1, borderColor: '#3D2020' }}
           >
-            <Text style={{ fontSize: 18 }}>↩️</Text>
-            <Text style={{ color: '#fca5a5', fontSize: 13, fontWeight: '600' }}>Log Out</Text>
+            <MCIcon name="logout" size={16} color="#e8a0a0" />
+            <Text style={{ color: '#e8a0a0', fontSize: 14, fontWeight: '500' }}>Sign Out</Text>
           </Pressable>
         </View>
       )}
@@ -400,15 +451,14 @@ export default function Scorecard() {
         onPress={() => router.push('/rangefinder')}
         style={{
           position: 'absolute', bottom: tabBarHeight + 10, right: 16, zIndex: 51,
-          width: 52, height: 52, borderRadius: 26,
-          backgroundColor: '#0B3D2E', borderWidth: 2, borderColor: '#FFE600',
+          width: 48, height: 48, borderRadius: 24,
+          backgroundColor: Palette.cardBg, borderWidth: 1, borderColor: Palette.accent,
           justifyContent: 'center', alignItems: 'center',
-          shadowColor: '#FFE600', shadowOpacity: 0.35, shadowRadius: 8, elevation: 7,
         }}
       >
         <Image source={ICON_RANGEFINDER} style={{ width: 28, height: 28, tintColor: '#FFE600' }} resizeMode="contain" />
       </Pressable>
-      <ScrollView contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + 8 }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.list, { paddingHorizontal: layout.hPad, paddingBottom: tabBarHeight + 8 }]} showsVerticalScrollIndicator={false}>
 
         {/* ── 4-player tab bar ── */}
         <View style={{ flexDirection: 'row', gap: 6, marginBottom: 14 }}>
@@ -426,7 +476,7 @@ export default function Scorecard() {
                 borderColor: activePlayer === i ? '#66bb6a' : 'rgba(255,255,255,0.1)',
               })}
             >
-              <Text style={{ color: activePlayer === i ? '#fff' : '#aaa', fontWeight: activePlayer === i ? '700' : '400', fontSize: 12 }} numberOfLines={1}>
+              <Text style={{ color: activePlayer === i ? '#fff' : 'rgba(255,255,255,0.65)', fontWeight: activePlayer === i ? '700' : '500', fontSize: 14 }} numberOfLines={1}>
                 {tabNames[i]}
               </Text>
             </Pressable>
@@ -436,9 +486,9 @@ export default function Scorecard() {
         {/* ── Player 1: registered name badge (read-only) ── */}
         {activePlayer === 0 && (
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 }}>
-            <Text style={{ color: '#A7F3D0', fontWeight: '700', fontSize: 15 }}>{tabNames[0]}</Text>
-            <View style={{ backgroundColor: '#2e7d32', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 }}>
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>YOU</Text>
+            <Text style={{ color: Palette.textPrimary, fontWeight: '600', fontSize: 15 }}>{tabNames[0]}</Text>
+            <View style={{ backgroundColor: Palette.bgActive, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 }}>
+              <Text style={{ color: Palette.positive, fontSize: 14, fontWeight: '700' }}>YOU</Text>
             </View>
           </View>
         )}
@@ -452,7 +502,7 @@ export default function Scorecard() {
                 onChangeText={(v) => setTabNames((prev) => { const n = [...prev]; n[activePlayer] = v; return n; })}
                 onBlur={() => setEditingTab(null)}
                 autoFocus
-                style={{ backgroundColor: '#1a1a1a', color: '#fff', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, borderWidth: 1, borderColor: '#66bb6a' }}
+                style={{ backgroundColor: Palette.cardBgDark, color: Palette.textPrimary, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, borderWidth: 1, borderColor: Palette.borderActive }}
                 placeholder="Enter player name"
                 placeholderTextColor="#555"
                 maxLength={20}
@@ -460,7 +510,7 @@ export default function Scorecard() {
             ) : (
               <Pressable onPress={() => setEditingTab(activePlayer)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Text style={{ color: '#A7F3D0', fontWeight: '700', fontSize: 15 }}>{tabNames[activePlayer]}</Text>
-                <Text style={{ color: '#aaa', fontSize: 12 }}>✏ tap to edit</Text>
+                <Text style={{ color: '#aaa', fontSize: 14 }}>✏ tap to edit</Text>
               </Pressable>
             )}
           </View>
@@ -481,7 +531,7 @@ export default function Scorecard() {
             return (
               <View key={holeIdx} style={styles.row}>
                 <Text style={styles.holeNum}>H{holeIdx + 1}</Text>
-                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', width: 36 }}>P{par}</Text>
+                <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.65)', width: 36 }}>P{par}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Pressable onPress={() => adjustScore(activePlayer, holeIdx, -1)} style={styles.adjBtn}>
                     <Text style={styles.adjBtnText}>−</Text>
@@ -492,7 +542,7 @@ export default function Scorecard() {
                   </Pressable>
                   {vsp !== '' && <Text style={[styles.vspLabel, { color: vspColor(score, par) }]}>{vsp}</Text>}
                   {score > 0 && strokes > 0 && (
-                    <Text style={{ color: '#ffcc00', fontSize: 11, fontWeight: '600', marginLeft: 2 }}>NET {netScore}</Text>
+                    <Text style={{ color: '#ffcc00', fontSize: 14, fontWeight: '600', marginLeft: 2 }}>NET {netScore}</Text>
                   )}
                 </View>
               </View>
@@ -501,7 +551,7 @@ export default function Scorecard() {
           <View style={styles.subtotalRow}>
             <Text style={{ color: '#A7F3D0', fontWeight: '700', fontSize: 14 }}>Front 9</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              {(() => { const f = getPlayerFront9(activePlayer); const vsp = formatVsPar(f, front9Par); return vsp ? <Text style={{ color: vspColor(f, front9Par), fontWeight: '600', fontSize: 13 }}>{vsp}</Text> : null; })()}
+              {(() => { const f = getPlayerFront9(activePlayer); const vsp = formatVsPar(f, front9Par); return vsp ? <Text style={{ color: vspColor(f, front9Par), fontWeight: '600', fontSize: 14 }}>{vsp}</Text> : null; })()}
               <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{getPlayerFront9(activePlayer) || '—'}</Text>
             </View>
           </View>
@@ -521,7 +571,7 @@ export default function Scorecard() {
             return (
               <View key={holeIdx} style={styles.row}>
                 <Text style={styles.holeNum}>H{holeIdx + 1}</Text>
-                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', width: 36 }}>P{par}</Text>
+                <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.65)', width: 36 }}>P{par}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Pressable onPress={() => adjustScore(activePlayer, holeIdx, -1)} style={styles.adjBtn}>
                     <Text style={styles.adjBtnText}>−</Text>
@@ -532,7 +582,7 @@ export default function Scorecard() {
                   </Pressable>
                   {vsp !== '' && <Text style={[styles.vspLabel, { color: vspColor(score, par) }]}>{vsp}</Text>}
                   {score > 0 && strokes > 0 && (
-                    <Text style={{ color: '#ffcc00', fontSize: 11, fontWeight: '600', marginLeft: 2 }}>NET {netScore}</Text>
+                    <Text style={{ color: '#ffcc00', fontSize: 14, fontWeight: '600', marginLeft: 2 }}>NET {netScore}</Text>
                   )}
                 </View>
               </View>
@@ -541,7 +591,7 @@ export default function Scorecard() {
           <View style={styles.subtotalRow}>
             <Text style={{ color: '#A7F3D0', fontWeight: '700', fontSize: 14 }}>Back 9</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              {(() => { const b = getPlayerBack9(activePlayer); const vsp = formatVsPar(b, back9Par); return vsp ? <Text style={{ color: vspColor(b, back9Par), fontWeight: '600', fontSize: 13 }}>{vsp}</Text> : null; })()}
+              {(() => { const b = getPlayerBack9(activePlayer); const vsp = formatVsPar(b, back9Par); return vsp ? <Text style={{ color: vspColor(b, back9Par), fontWeight: '600', fontSize: 14 }}>{vsp}</Text> : null; })()}
               <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{getPlayerBack9(activePlayer) || '—'}</Text>
             </View>
           </View>
@@ -576,13 +626,13 @@ export default function Scorecard() {
             <Text style={{ color: '#ffcc00', fontWeight: '600', marginBottom: 6 }}>
               Match: {getMatchStatus()}
             </Text>
-            <Text style={{ color: '#ccc', fontSize: 14, lineHeight: 21 }}>{getPlayerInsights()}</Text>
+            <Text style={{ color: '#ccc', fontSize: 15, lineHeight: 22 }}>{getPlayerInsights()}</Text>
             {multiRound.map((holeEntry, idx) => {
               const winners = getHoleWinner(holeEntry);
               return (
                 <View key={idx} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.06)', marginTop: 4 }}>
-                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Hole {holeEntry.hole}</Text>
-                  <Text style={{ color: '#66bb6a', fontSize: 13 }}>W: {winners.map((i) => tabNames[i] ?? players[i]).join(', ')}</Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Hole {holeEntry.hole}</Text>
+                  <Text style={{ color: '#66bb6a', fontSize: 14 }}>W: {winners.map((i) => tabNames[i] ?? players[i]).join(', ')}</Text>
                 </View>
               );
             })}
@@ -613,7 +663,7 @@ export default function Scorecard() {
               <View key={holeKey} style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: 12, borderRadius: 12, marginBottom: 12 }}>
                 <Text style={{ color: '#fff', fontWeight: '600', marginBottom: 6 }}>Hole {holeKey}</Text>
                 {/* Shot dispersion map */}
-                <View style={{ height: 120, backgroundColor: '#1a4d2e', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
+                <View style={{ height: 110, backgroundColor: Palette.bgActive, borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
                   {shotsByHole[holeKey].map((shot, idx) => {
                     const pos = getShotPosition(shot.result, idx);
                     const dotColor = shot.result === 'left' ? '#ff5252' : shot.result === 'right' ? '#42a5f5' : '#66bb6a';
@@ -639,12 +689,12 @@ export default function Scorecard() {
                   {[['#ff5252', 'Left'], ['#66bb6a', 'Center'], ['#42a5f5', 'Right']].map(([c, l]) => (
                     <View key={l} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c }} />
-                      <Text style={{ color: '#aaa', fontSize: 11 }}>{l}</Text>
+                      <Text style={{ color: '#aaa', fontSize: 14 }}>{l}</Text>
                     </View>
                   ))}
                 </View>
                 {shotsByHole[holeKey].map((shot, idx) => (
-                  <Text key={idx} style={{ color: '#ccc', fontSize: 13, lineHeight: 20 }}>
+                  <Text key={idx} style={{ color: '#ccc', fontSize: 14, lineHeight: 20 }}>
                     {idx + 1}. {shot.club} → {shot.result}
                   </Text>
                 ))}
@@ -679,11 +729,11 @@ export default function Scorecard() {
             <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 }}>
               <View style={{ alignItems: 'center' }}>
                 <Text style={{ color: '#ff5252', fontSize: 22, fontWeight: '700' }}>{strokesLost.offTee}</Text>
-                <Text style={{ color: '#aaa', fontSize: 12 }}>Off the Tee</Text>
+                <Text style={{ color: '#aaa', fontSize: 14 }}>Off the Tee</Text>
               </View>
               <View style={{ alignItems: 'center' }}>
                 <Text style={{ color: '#ffa726', fontSize: 22, fontWeight: '700' }}>{strokesLost.approach}</Text>
-                <Text style={{ color: '#aaa', fontSize: 12 }}>Approach</Text>
+                <Text style={{ color: '#aaa', fontSize: 14 }}>Approach</Text>
               </View>
             </View>
             <Text style={{ color: '#ccc', fontSize: 14, lineHeight: 21 }}>{getStrokesInsight(strokesLost)}</Text>
@@ -703,8 +753,8 @@ export default function Scorecard() {
           <Text style={styles.sectionTitle}>Round Summary</Text>
           {players.length > 1 && multiRound.length > 0 && (
             <>
-              <Text style={{ color: '#66bb6a', fontSize: 14, marginBottom: 4 }}>🏆 Winner: {getRoundWinner()}</Text>
-              <Text style={{ color: '#ffcc00', fontSize: 14, marginBottom: 8 }}>💰 Skins: {getSkinsWinner()}</Text>
+              <Text style={{ color: '#c4d9cc', fontSize: 14, marginBottom: 4, fontWeight: '600' }}>Winner: {getRoundWinner()}</Text>
+              <Text style={{ color: '#b08840', fontSize: 14, marginBottom: 8, fontWeight: '600' }}>Skins: {getSkinsWinner()}</Text>
             </>
           )}
           <Text style={{ color: scores.length < 3 ? '#aaa' : '#ccc', fontSize: 14, lineHeight: 22 }}>
@@ -734,9 +784,9 @@ export default function Scorecard() {
             ]).start();
             router.push('/rangefinder');
           }}
-          style={{ backgroundColor: '#0a2e1a', width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#2e7d32', shadowColor: '#4ade80', shadowOpacity: 0.4, shadowRadius: 8, elevation: 8 }}
+          style={{ backgroundColor: Palette.cardBg, width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Palette.border }}
         >
-          <Image source={ICON_RANGEFINDER} style={{ width: 28, height: 28, tintColor: '#A7F3D0' }} resizeMode="contain" />
+          <Image source={ICON_RANGEFINDER} style={{ width: 24, height: 24, tintColor: Palette.accent }} resizeMode="contain" />
         </Pressable>
       </Animated.View>
 
@@ -747,69 +797,65 @@ export default function Scorecard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B3D2E',
+    backgroundColor: Palette.brand,
     paddingTop: 0,
-    paddingHorizontal: 18,
+    paddingHorizontal: Space.lg + 2,
   },
   title: {
-    fontSize: 22,
-    fontFamily: 'Outfit_700Bold',
-    color: '#fff',
-    marginBottom: 18,
+    fontSize: Type.h2,
+    fontWeight: Type.bold,
+    color: Palette.white,
+    marginBottom: Space.lg + 2,
     textAlign: 'center',
     letterSpacing: 0.3,
   },
-  list: {
-    paddingBottom: 40,
-  },
+  list: { paddingBottom: 40 },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: Space.md,
+    paddingHorizontal: Space.md + 2,
     borderBottomWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 8,
-    marginBottom: 4,
+    borderColor: Palette.borderSubtle,
+    backgroundColor: Palette.cardBg,
+    borderRadius: Radius.sm,
+    marginBottom: Space.xs,
   },
   holeNum: {
-    fontSize: 14,
+    fontSize: Type.md,
     color: 'rgba(255,255,255,0.75)',
-    fontFamily: 'Outfit_500Medium',
   },
   score: {
-    fontSize: 16,
-    color: '#A7F3D0',
-    fontFamily: 'Outfit_700Bold',
+    fontSize: Type.lg - 1,
+    color: Palette.positiveFaint,
+    fontWeight: Type.semibold,
   },
   scoreEmpty: {
-    fontSize: 16,
-    color: '#888',
-    fontFamily: 'Outfit_700Bold',
+    fontSize: Type.lg - 1,
+    color: Palette.textMuted,
+    fontWeight: Type.semibold,
     minWidth: 24,
     textAlign: 'center',
   },
   adjBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: '#1a1a1a',
+    width: 30, height: 30,
+    borderRadius: Radius.sm,
+    backgroundColor: Palette.cardBg,
     borderWidth: 1,
-    borderColor: '#2e7d32',
+    borderColor: Palette.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   adjBtnText: {
-    color: '#A7F3D0',
-    fontSize: 18,
-    fontFamily: 'Outfit_700Bold',
+    color: Palette.positiveFaint,
+    fontSize: Type.xl - 2,
+    fontWeight: Type.semibold,
     lineHeight: 22,
   },
   vspLabel: {
-    fontSize: 12,
-    fontFamily: 'Outfit_600SemiBold',
+    fontSize: Type.body,
+    fontWeight: Type.medium,
     minWidth: 28,
     textAlign: 'right',
   },
@@ -817,82 +863,55 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 4,
+    paddingVertical: Space.md - 2,
+    paddingHorizontal: Space.xs,
     borderTopWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    marginTop: 6,
+    borderColor: Palette.borderSubtle,
+    marginTop: Space.sm,
   },
   totalRow: {
+    ...DS.card,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-    marginTop: 12,
+    paddingVertical: Space.md + 2,
+    marginTop: Space.md,
   },
   totalLabel: {
-    fontSize: 18,
-    fontFamily: 'Outfit_700Bold',
-    color: '#fff',
+    fontSize: Type.xl - 2,
+    fontWeight: Type.semibold,
+    color: Palette.white,
   },
   totalScore: {
-    fontSize: 18,
-    fontFamily: 'Outfit_700Bold',
-    color: '#A7F3D0',
+    fontSize: Type.xl - 2,
+    fontWeight: Type.semibold,
+    color: Palette.positiveFaint,
   },
   clubUsageSection: {
-    marginTop: 20,
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    ...DS.card,
+    marginTop: Space.xl,
   },
   section: {
-    marginTop: 20,
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    ...DS.card,
+    marginTop: Space.xl,
   },
-  sectionTitle: {
-    fontSize: 11,
-    fontFamily: 'Outfit_700Bold',
-    color: '#A7F3D0',
-    marginBottom: 10,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-  },
-  clubUsageTitle: {
-    fontSize: 11,
-    fontFamily: 'Outfit_700Bold',
-    color: '#A7F3D0',
-    marginBottom: 10,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-  },
+  sectionTitle:    DS.caption as any,
+  clubUsageTitle:  DS.caption as any,
   clubUsageRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 7,
     borderBottomWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: Palette.borderSubtle,
   },
   clubName: {
-    fontSize: 14,
-    fontFamily: 'Outfit_400Regular',
+    fontSize: Type.md,
     color: 'rgba(255,255,255,0.75)',
   },
   clubCount: {
-    fontSize: 14,
-    color: '#66bb6a',
-    fontFamily: 'Outfit_700Bold',
+    fontSize: Type.md,
+    color: Palette.positive,
+    fontWeight: Type.semibold,
   },
 });

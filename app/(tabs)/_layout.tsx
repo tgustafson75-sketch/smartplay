@@ -1,62 +1,79 @@
-import { Tabs } from 'expo-router';
-import { Image, View, StyleSheet } from 'react-native';
+import { Tabs, useRouter } from 'expo-router';
+import { View, Image, StyleSheet } from 'react-native';
+import { useEffect, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import VoiceOverlay from '../../components/VoiceOverlay';
 import { useVoiceStore } from '../../store/voiceStore';
 import { VoiceController } from '../../services/VoiceController';
+import { useRoundStore } from '../../store/roundStore';
+import {
+  PlayIcon,
+  ScorecardIcon,
+  PracticeIcon,
+  HistoryIcon,
+  RangeIcon,
+} from '../../components/icons/IconBase';
 
-const ICON_CADDIE      = require('../../assets/images/logo-transparent.png');
-const ICON_PLAY        = require('../../assets/images/icon-clubs-badge.png');
-const ICON_PRACTICE    = require('../../assets/images/icon-golf-bag.png');
-const ICON_SCORECARD   = require('../../assets/images/icon-golf-1.png');
-const ICON_HISTORY     = require('../../assets/images/icon-golf-4.png');
-const ICON_RANGEFINDER = require('../../assets/images/icon-rangefinder.png');
+const LOGO = require('../../assets/images/logo-transparent.png');
 
-const tabIcon = (src: number, focused: boolean) => (
+const caddieTabIcon = (focused: boolean) => (
   <Image
-    source={src}
-    style={{ width: 26, height: 26, opacity: focused ? 1 : 0.45 }}
+    source={LOGO}
+    style={{ width: 28, height: 28, opacity: focused ? 1 : 0.45 }}
     resizeMode="contain"
   />
 );
 
-const tabIconWithRf = (src: number, focused: boolean) => (
+const tabIcon = (
+  IconComponent: React.ComponentType<{ active?: boolean; size?: number }>,
+  focused: boolean,
+) => <IconComponent active={focused} size={26} />;
+
+const tabIconWithRf = (focused: boolean) => (
   <View style={rfStyles.wrap}>
-    <Image
-      source={src}
-      style={[rfStyles.main, { opacity: focused ? 1 : 0.45 }]}
-      resizeMode="contain"
-    />
-    {/* Rangefinder badge — solid circle so it's always visible */}
+    <PlayIcon active={focused} size={26} />
+    {/* Rangefinder badge */}
     <View style={[rfStyles.badge, { backgroundColor: focused ? '#A7F3D0' : '#2e5a40' }]}>
-      <Image
-        source={ICON_RANGEFINDER}
-        style={rfStyles.badgeIcon}
-        resizeMode="contain"
-      />
+      <RangeIcon active={false} size={10} />
     </View>
   </View>
 );
 
 const rfStyles = StyleSheet.create({
-  wrap:      { width: 32, height: 32 },
-  main:      { width: 26, height: 26 },
-  badge:     {
+  wrap:  { width: 32, height: 32 },
+  badge: {
     position: 'absolute', bottom: -1, right: -1,
     width: 14, height: 14, borderRadius: 7,
     justifyContent: 'center', alignItems: 'center',
     borderWidth: 1, borderColor: '#0B3D2E',
+    overflow: 'hidden',
   },
-  badgeIcon: { width: 10, height: 10, tintColor: '#0B3D2E' },
 });
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = 62 + insets.bottom;
+  const router = useRouter();
 
-  const voiceState    = useVoiceStore((s) => s.voiceState);
+  const voiceState     = useVoiceStore((s) => s.voiceState);
   const caddieResponse = useVoiceStore((s) => s.caddieResponse);
   const setVoiceState  = useVoiceStore((s) => s.setVoiceState);
+
+  const isRoundActive  = useRoundStore((s) => s.isRoundActive);
+  const prevActiveRef  = useRef(isRoundActive);
+
+  // Phase-driven navigation:
+  //  false → true  : round started  → go to Caddie tab
+  //  true  → false : round ended    → go to Play tab
+  useEffect(() => {
+    const prev = prevActiveRef.current;
+    if (!prev && isRoundActive) {
+      router.replace('/(tabs)/caddie');
+    } else if (prev && !isRoundActive) {
+      router.replace('/(tabs)/play');
+    }
+    prevActiveRef.current = isRoundActive;
+  }, [isRoundActive]);
 
   const overlayPhase = voiceState === 'SPEAKING'   ? 'speaking'
                      : voiceState === 'LISTENING'  ? 'listening'
@@ -85,14 +102,17 @@ export default function TabLayout() {
         tabBarActiveTintColor: '#A7F3D0',
         tabBarInactiveTintColor: '#4a7c5e',
         tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
+        tabBarItemStyle: { paddingHorizontal: 0 },
+        tabBarIconStyle: { marginBottom: -2 },
       }}
     >
-      <Tabs.Screen name="caddie"    options={{ title: 'Caddie',    tabBarIcon: ({ focused }) => tabIcon(ICON_CADDIE,    focused) }} />
-      <Tabs.Screen name="play"      options={{ title: 'Play',      tabBarIcon: ({ focused }) => tabIconWithRf(ICON_PLAY,      focused) }} />
-      <Tabs.Screen name="scorecard" options={{ title: 'Scorecard', tabBarIcon: ({ focused }) => tabIcon(ICON_SCORECARD, focused) }} />
-      <Tabs.Screen name="practice"  options={{ title: 'Practice',  tabBarIcon: ({ focused }) => tabIcon(ICON_PRACTICE,  focused) }} />
-      <Tabs.Screen name="history"   options={{ title: 'Dashboard', tabBarIcon: ({ focused }) => tabIcon(ICON_HISTORY,   focused) }} />
-      <Tabs.Screen name="dashboard" options={{ href: null }} />
+      <Tabs.Screen name="caddie"    options={{ title: 'Caddie',    tabBarIcon: ({ focused }) => caddieTabIcon(focused) }} />
+      <Tabs.Screen name="play"      options={{ title: 'Play',      tabBarIcon: ({ focused }) => tabIconWithRf(focused) }} />
+      <Tabs.Screen name="scorecard" options={{ title: 'Scorecard', tabBarIcon: ({ focused }) => tabIcon(ScorecardIcon, focused) }} />
+      <Tabs.Screen name="practice"  options={{ title: 'Practice',  tabBarIcon: ({ focused }) => tabIcon(PracticeIcon, focused) }} />
+      <Tabs.Screen name="history"   options={{ title: 'Dashboard', tabBarIcon: ({ focused }) => tabIcon(HistoryIcon, focused) }} />
+      <Tabs.Screen name="dashboard"      options={{ href: null }} />
+      <Tabs.Screen name="dev"            options={{ href: null }} />
     </Tabs>
     </View>
   );

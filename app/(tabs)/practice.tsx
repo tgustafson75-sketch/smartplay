@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { MaterialCommunityIcons as MCIcon } from '@expo/vector-icons';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, Pressable, ScrollView, Image, Platform, Animated, TextInput, Modal, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
@@ -6,7 +7,8 @@ import { View, Text, StyleSheet, Pressable, ScrollView, Image, Platform, Animate
 import { Audio, Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
-import { speak, stopSpeaking, setGlobalGender, getGlobalGender } from '../../services/voiceService';
+import { speakJob, cancelAll as engineCancelAll, PRIORITY as ENGINE_PRIORITY } from '../../services/VoiceEngine';
+import { setGlobalGender, getGlobalGender } from '../../services/voiceService';
 import { getAIResponse } from '../../services/aiService';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
@@ -37,21 +39,27 @@ import { saveSession as saveSessionHistory, getHistory } from '../../services/Se
 import { analyzeTrends } from '../../services/TrendEngine';
 import * as Sharing from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
+import ShotVisionPlayer from '../../components/ShotVisionPlayer';
+import { speakWithCaddie } from '../../services/caddieController';
+import { getCaddieMessage } from '../../caddie/messages';
+import BrandHeader from '../../components/BrandHeader';
+import { useCaddie } from '../../context/CaddieContext';
+import { useSettingsStore } from '../../store/settingsStore';
 
 const ICON_RANGEFINDER = require('../../assets/images/icon-rangefinder.png');
 const LOGO = require('../../assets/images/logo.png');
-const PUTT_ROLL_SFX  = require('../../assets/sounds/putt-roll.mp3');
-const SWING_SWOOSH_SFX = require('../../assets/sounds/swing-swoosh.mp3');
 
-const DRILLS = [
-  { id: 'putting', label: 'Putting Practice', description: 'Track putts by distance with IMU stroke detection.' },
-  { id: 'short-game', label: 'Short Game', description: 'Hit chip shots to a target. Score by landing zone.' },
-  { id: 'alignment', label: 'Alignment & Aim', description: 'Set up alignment rods and hit 10 shots focusing on aiming at your target.' },
-  { id: 'tempo', label: 'Tempo & Rhythm', description: 'Hit 10 shots at 80% power. Focus on a smooth, consistent tempo.' },
-  { id: 'driver-straight', label: 'Driver', description: 'Hit 10 driver shots. Count how many land in the fairway.' },
-  { id: 'iron-accuracy', label: 'Irons', description: 'Pick a target and hit 10 iron shots. Track how many are within 20 yards.' },
-  { id: 'indoor', label: 'Indoor', description: 'Small-space training with tempo trainer and rep tracking.' },
-  { id: 'swing-detect', label: 'Swing Detect', description: 'IMU swing detection, camera capture and analysis.' },
+
+const DRILLS: { id: string; label: string; description: string; smartVision: 'auto' | 'pattern' | 'manual' | 'none' }[] = [
+  { id: 'putting',         label: 'Putting Practice',  description: 'Track putts by distance with IMU stroke detection.',                         smartVision: 'none'    },
+  { id: 'short-game',      label: 'Short Game',         description: 'Hit chip shots to a target. Score by landing zone.',                         smartVision: 'none'    },
+  { id: 'alignment',       label: 'Alignment & Aim',    description: 'Set up alignment rods and hit 10 shots focusing on aiming at your target.',  smartVision: 'manual'  },
+  { id: 'tempo',           label: 'Tempo & Rhythm',     description: 'Hit 10 shots at 80% power. Focus on a smooth, consistent tempo.',            smartVision: 'manual'  },
+  { id: 'driver',          label: 'Driver',             description: 'Hit 10 driver shots. Record your swing with Shot Vision.',                   smartVision: 'auto'    },
+  { id: 'driver-straight', label: 'Driver Straight',    description: 'Hit 10 driver shots. Count how many land in the fairway.',                   smartVision: 'auto'    },
+  { id: 'iron-accuracy',   label: 'Irons',              description: 'Pick a target and hit 10 iron shots. Track how many are within 20 yards.',   smartVision: 'auto'    },
+  { id: 'indoor',          label: 'Indoor',             description: 'Small-space training with tempo trainer and rep tracking.',                  smartVision: 'none'    },
+  { id: 'swing-detect',    label: 'Swing Detect',       description: 'IMU swing detection, camera capture and analysis.',                          smartVision: 'pattern' },
 ];
 
 const ZONE_POINTS: Record<string, number> = { bull: 10, inner: 5, outer: 2, miss: 0 };
@@ -124,9 +132,14 @@ export default function Practice() {
   const updateMemoryFromSession = useCaddieMemory((s) => s.updateMemoryFromSession);
   const updateLongTermBias      = useCaddieMemory((s) => s.updateLongTermBias);
   const memoryMissBias          = useCaddieMemory((s) => s.missBias);
+  const { setState: setCaddieState } = useCaddie() ?? {};
 
-  const [selectedDrill, setSelectedDrill] = useState(DRILLS[0].id);
+  const [selectedDrill, setSelectedDrill] = useState<string | null>(null);
   const [drillCount, setDrillCount] = useState(0);
+  const [showShotVision, setShowShotVision] = useState(false);
+  const [shotVisionUri, setShotVisionUri] = useState<string | null>(null);
+  const [patternShots, setPatternShots] = useState<string[]>([]);
+  const [lastVideoUri, setLastVideoUri] = useState<string | null>(null);
   const [goodShots, setGoodShots] = useState(0);
   const [missShots, setMissShots] = useState(0);
   const [missLeft, setMissLeft] = useState(0);
@@ -181,10 +194,11 @@ export default function Practice() {
   const [drillVariantIdx, setDrillVariantIdx] = useState(0);
   const drillVariantsRef = useRef<PracticeFocus[]>([]);
 
-  // Low Power Mode
-  const [lowPowerMode, setLowPowerMode] = useState(false);
+  // Low Power Mode — reads persisted value from settingsStore (single source of truth)
+  const lowPowerMode    = useSettingsStore((s) => s.lowPowerMode);
+  const _setStoreLowPowerMode = useSettingsStore((s) => s.setLowPowerMode);
   const toggleLowPowerMode = (next: boolean) => {
-    setLowPowerMode(next);
+    _setStoreLowPowerMode(next);
     vpSetLowPowerMode(next);
     if (next) {
       // Pause live frame processing; disable auto-detect to save battery
@@ -202,10 +216,17 @@ export default function Practice() {
 
   // Swing Camera
   const router = useRouter();
+  const brightMode    = useSettingsStore((s) => s.brightMode);
+  const setBrightMode = useSettingsStore((s) => s.setBrightMode);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
 
   // Tutorial — shown on first visit; also openable via "How to Setup" in tools menu
   const [showTutorial, setShowTutorial] = useState(false);
+  useEffect(() => {
+    if (!showShotVision) return;
+    const t = setTimeout(() => setShowShotVision(false), 3000);
+    return () => clearTimeout(t);
+  }, [showShotVision]);
   useEffect(() => {
     AsyncStorage.getItem('practiceTutorialSeen').then((v) => {
       if (!v) setShowTutorial(true);
@@ -219,7 +240,7 @@ export default function Practice() {
   const [voiceGender, setVoiceGender] = useState<'male' | 'female'>(getGlobalGender() as 'male' | 'female');
   const quietModeRef = useRef(false);
   quietModeRef.current = quietMode;
-  const safeSpeak = (msg: string) => { if (!quietModeRef.current) void speak(msg); };
+  const safeSpeak = (msg: string) => { if (!quietModeRef.current) void speakJob(msg, ENGINE_PRIORITY.AMBIENT); };
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
   const [recording, setRecording] = useState(false);
@@ -353,8 +374,6 @@ export default function Practice() {
       setSensorTempoFeedback(feedback);
       setSensorReps((r) => r + 1);
       setLastSwing(tempo, tempoMs);
-      // Play swoosh on every detected swing
-      playSound(SWING_SWOOSH_SFX);
       if (tempo === 'smooth') {
         setSensorTempoGood((g) => g + 1);
         safeSpeak(feedback);
@@ -420,7 +439,6 @@ export default function Practice() {
     ]).start(() => {
       if (made) {
         setPuttAnimResult('made');
-        playSound(PUTT_ROLL_SFX);
         Animated.parallel([
           Animated.timing(puttBallScale, { toValue: 0.1, duration: 300, useNativeDriver: true }),
           Animated.timing(puttBallOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
@@ -540,7 +558,7 @@ export default function Practice() {
   const streakTarget = 5;
   const tempoStreakTarget = 5;
 
-  const drill = DRILLS.find((d) => d.id === selectedDrill) ?? DRILLS[0];
+  const drill = (selectedDrill ? DRILLS.find((d) => d.id === selectedDrill) : null) ?? DRILLS[0];
   const progress = Math.min(drillCount / drillTarget, 1);
   const successRate = drillCount > 0 ? Math.round((goodShots / drillCount) * 100) : 0;
 
@@ -549,6 +567,30 @@ export default function Practice() {
     if (difficulty === 2) return 'left center';
     if (difficulty === 3) return 'right center';
     return 'left edge';
+  };
+
+  const triggerShotVision = (uri: string | null) => {
+    if (!uri) return;
+    setShotVisionUri(uri);
+    setShowShotVision(true);
+  };
+
+  const storeShotForPattern = (uri: string | null) => {
+    if (!uri) return;
+    setPatternShots((prev) => [...prev.slice(-4), uri]); // keep last 5
+  };
+
+  const getDrillFeedback = (id: string): string => {
+    const mode = 'female'; // TODO: pull from userStore when mode setting is wired
+    switch (id) {
+      case 'driver':          return getCaddieMessage('fade', mode);
+      case 'driver-straight': return getCaddieMessage('fade', mode);
+      case 'iron-accuracy':   return getCaddieMessage('iron', mode);
+      case 'swing-detect':    return getCaddieMessage('swingDetect', mode);
+      case 'alignment':       return getCaddieMessage('alignment', mode);
+      case 'tempo':           return getCaddieMessage('tempo', mode);
+      default:                return getCaddieMessage('goodShot', mode);
+    }
   };
 
   const getDrillRecommendation = (drillId: string): string => {
@@ -867,6 +909,16 @@ export default function Practice() {
       if (difficulty > 1 && successRate < 40) setDifficulty((d) => Math.max(1, d - 1));
     }
     setDrillCount((c) => c + 1);
+    const activeDrill = DRILLS.find((d) => d.id === selectedDrill);
+    if (activeDrill && setCaddieState) {
+      void speakWithCaddie(getDrillFeedback(activeDrill.id), { setState: setCaddieState });
+    }
+    if (activeDrill?.smartVision === 'auto' || activeDrill?.smartVision === 'pattern') {
+      triggerShotVision(lastVideoUri);
+    }
+    if (activeDrill?.smartVision === 'pattern') {
+      storeShotForPattern(lastVideoUri);
+    }
   };
 
   /**
@@ -1049,12 +1101,19 @@ export default function Practice() {
   }, [drillCount, focusShots, goodShots, missLeft, missRight, updateMemoryFromSession, videoUri]);
 
   const handleSelectDrill = useCallback((drillId: string) => {
+    // Toggle: pressing an already-active drill closes it
+    if (selectedDrill === drillId) {
+      setSelectedDrill(null);
+      resetPracticeCounters();
+      setPracticeMode('free');
+      return;
+    }
     setSelectedDrill(drillId);
     resetPracticeCounters();
     if (drillId === 'putting') setPracticeMode('putting');
     else if (drillId === 'short-game') setPracticeMode('chipping');
     else setPracticeMode('free');
-  }, [resetPracticeCounters]);
+  }, [selectedDrill, resetPracticeCounters]);
 
   const handleOpenProfile = useCallback(() => {
     setShowToolsMenu(false);
@@ -1076,11 +1135,10 @@ export default function Practice() {
         });
       } else {
         // Fallback: save to camera roll
-        const { status } = await MediaLibrary.requestPermissionsAsync();
-        if (status === 'granted') {
+        try {
           await MediaLibrary.saveToLibraryAsync(uri);
           safeSpeak('Swing saved to your camera roll.');
-        }
+        } catch {}
       }
     } catch {
       // share cancelled or failed — no UI feedback needed
@@ -1092,8 +1150,6 @@ export default function Practice() {
    */
   const handleSaveSwingToLibrary = useCallback(async (uri: string) => {
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') return;
       await MediaLibrary.saveToLibraryAsync(uri);
       safeSpeak('Saved to camera roll.');
     } catch {}
@@ -1134,7 +1190,7 @@ export default function Practice() {
       });
     }, 60);
     try {
-      await speak(text, voiceGender);
+      await speakJob(text, ENGINE_PRIORITY.STRATEGY, voiceGender);
     } finally {
       clearInterval(si);
       setPulse(1);
@@ -1212,7 +1268,7 @@ export default function Practice() {
 
   const startPracticeListening = () => {
     if (listening) return;
-    void stopSpeaking();
+    void engineCancelAll();
     setListeningPhase('listening');
     setListening(true);
     setPulse(1);
@@ -1240,7 +1296,7 @@ export default function Practice() {
       void speakWithOverlay('Quiet.');
     } else {
       startPracticeListening();
-      void speak('Listening.', voiceGender);
+      void speakJob('Listening.', ENGINE_PRIORITY.AMBIENT, voiceGender);
     }
   };
 
@@ -1309,7 +1365,41 @@ export default function Practice() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <BrandHeader rightSlot={
+      <Pressable
+        onPress={() => setShowToolsMenu((v) => !v)}
+        style={{ backgroundColor: showToolsMenu ? '#143d22' : '#1a1a1a', height: 32, paddingHorizontal: 12, borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: showToolsMenu ? '#4caf50' : '#333', flexDirection: 'row', gap: 3 }}
+      >
+        {[0,1,2].map((i) => <View key={i} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: showToolsMenu ? '#4ade80' : '#aaa' }} />)}
+      </Pressable>
+    } />
     <PracticeTutorialOverlay visible={showTutorial} onDismiss={handleDismissTutorial} />
+
+    {/* Shot Vision Overlay */}
+    {showShotVision && shotVisionUri ? (
+      <View
+        pointerEvents="none"
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 50 }}
+      >
+        <ShotVisionPlayer uri={shotVisionUri} />
+      </View>
+    ) : null}
+
+    {/* Shot Pattern Overlay — swing-detect pattern mode, ≥3 shots */}
+    {!showShotVision && selectedDrill === 'swing-detect' && patternShots.length >= 3 ? (
+      <View
+        pointerEvents="none"
+        style={{ position: 'absolute', bottom: 100, left: 0, right: 0, alignItems: 'center', zIndex: 40 }}
+      >
+        <View style={{ backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12, paddingVertical: 8, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ color: '#3CBF8F', fontSize: 13, fontWeight: '700', letterSpacing: 1 }}>PATTERN</Text>
+          {patternShots.map((_, i) => (
+            <View key={i} style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#3CBF8F', opacity: 0.4 + i * 0.15 }} />
+          ))}
+          <Text style={{ color: '#A7B3AF', fontSize: 13 }}>{patternShots.length} shots</Text>
+        </View>
+      </View>
+    ) : null}
 
     <ScrollView style={styles.scroll} contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + 8 }]}>
       {/* Header */}
@@ -1320,107 +1410,23 @@ export default function Practice() {
         {/* Score HUD */}
         <View style={{ alignItems: 'flex-end', marginRight: 8 }}>
           <Text style={{ color: '#FFE600', fontSize: 17, fontWeight: '800', lineHeight: 20 }}>{sessionPoints} pts</Text>
-          {comboMult > 1 && <Text style={{ color: '#f9a825', fontSize: 10, fontWeight: '700' }}>{comboMult}x COMBO</Text>}
+          {comboMult > 1 && <Text style={{ color: '#f9a825', fontSize: 12, fontWeight: '700' }}>{comboMult}x COMBO</Text>}
         </View>
-        <Pressable
-          onPress={() => setShowToolsMenu((v) => !v)}
-          style={{ backgroundColor: showToolsMenu ? '#143d22' : '#1a1a1a', width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: showToolsMenu ? '#4caf50' : '#333' }}
-        >
-          <Text style={{ fontSize: 18 }}>⚙️</Text>
-        </Pressable>
       </View>
 
-      {/* Tools dropdown */}
-      {showToolsMenu && (
-        <View style={{
-          position: 'absolute', top: 68, right: 16, zIndex: 52,
-          backgroundColor: '#111', borderRadius: 14,
-          borderWidth: 1, borderColor: '#2a2a2a',
-          padding: 10, gap: 8, minWidth: 190,
-          shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 12, elevation: 8,
-        }}>
-          <Pressable
-            onPress={() => { setShowToolsMenu(false); setShowTutorial(true); }}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#0d2318', borderWidth: 1, borderColor: '#4ade80' }}
-          >
-            <Text style={{ fontSize: 18 }}>🏌️</Text>
-            <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '600' }}>How to Setup</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => { setShowToolsMenu(false); router.push('/rangefinder'); }}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#332900', borderWidth: 1, borderColor: '#FFE600' }}
-          >
-            <Image source={ICON_RANGEFINDER} style={{ width: 20, height: 20, tintColor: '#FFE600' }} resizeMode="contain" />
-            <Text style={{ color: '#FFE600', fontSize: 13, fontWeight: '600' }}>Rangefinder</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setQuietMode((q) => !q)}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: quietMode ? '#143d22' : '#1a1a1a', borderWidth: 1, borderColor: quietMode ? '#4caf50' : '#2a2a2a' }}
-          >
-            <Text style={{ fontSize: 18 }}>{quietMode ? '🔇' : '🔊'}</Text>
-            <Text style={{ color: quietMode ? '#A7F3D0' : '#aaa', fontSize: 13, fontWeight: '600' }}>{quietMode ? 'Voice Off' : 'Voice On'}</Text>
-          </Pressable>
-          {/* Low Power Mode toggle */}
-          <Pressable
-            onPress={() => { toggleLowPowerMode(!lowPowerMode); setShowToolsMenu(false); }}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: lowPowerMode ? '#1a2a0e' : '#1a1a1a', borderWidth: 1, borderColor: lowPowerMode ? '#84cc16' : '#2a2a2a' }}
-          >
-            <Text style={{ fontSize: 18 }}>🔋</Text>
-            <Text style={{ color: lowPowerMode ? '#bef264' : '#aaa', fontSize: 13, fontWeight: '600' }}>Low Power {lowPowerMode ? 'On' : 'Off'}</Text>
-          </Pressable>
-          {/* Voice gender — explicit Male / Female toggle */}
-          <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 4 }}>
-            <Pressable
-              onPress={() => { setVoiceGender('male'); setGlobalGender('male'); }}
-              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-                paddingVertical: 8, borderRadius: 10,
-                backgroundColor: voiceGender === 'male' ? '#1a2e4a' : '#111',
-                borderWidth: 1, borderColor: voiceGender === 'male' ? '#60a5fa' : '#2a2a2a' }}
-            >
-              <Text style={{ fontSize: 14 }}>👨</Text>
-              <Text style={{ color: voiceGender === 'male' ? '#93c5fd' : '#555', fontSize: 12, fontWeight: '700' }}>Male</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => { setVoiceGender('female'); setGlobalGender('female'); }}
-              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-                paddingVertical: 8, borderRadius: 10,
-                backgroundColor: voiceGender === 'female' ? '#2d1b69' : '#111',
-                borderWidth: 1, borderColor: voiceGender === 'female' ? '#a78bfa' : '#2a2a2a' }}
-            >
-              <Text style={{ fontSize: 14 }}>👩</Text>
-              <Text style={{ color: voiceGender === 'female' ? '#c4b5fd' : '#555', fontSize: 12, fontWeight: '700' }}>Female</Text>
-            </Pressable>
-          </View>
-          <Pressable
-            onPress={handleOpenProfile}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#143d22', borderWidth: 1, borderColor: '#4caf50' }}
-          >
-            <Text style={{ fontSize: 18 }}>👤</Text>
-            <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '600' }}>Profile</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => { void handleLogout(); }}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#2a1111', borderWidth: 1, borderColor: '#ef4444' }}
-          >
-            <Text style={{ fontSize: 18 }}>↩️</Text>
-            <Text style={{ color: '#fca5a5', fontSize: 13, fontWeight: '600' }}>Log Out</Text>
-          </Pressable>
-        </View>
-      )}
 
-
+      {/* Low Power Mode banner */}
       {/* Low Power Mode banner */}
       {lowPowerMode && (
         <View style={{
           flexDirection: 'row', alignItems: 'center', gap: 8,
-          backgroundColor: '#1a2a0e', borderRadius: 10, paddingVertical: 8,
+          backgroundColor: '#121e0c', borderRadius: 10, paddingVertical: 8,
           paddingHorizontal: 14, marginBottom: 10, marginHorizontal: 0,
-          borderWidth: 1, borderColor: '#84cc16',
+          borderWidth: 1, borderColor: '#5a7a3a',
         }}>
-          <Text style={{ fontSize: 16 }}>🔋</Text>
-          <Text style={{ color: '#bef264', fontSize: 12, fontWeight: '700', flex: 1 }}>Battery-saving mode active</Text>
+          <Text style={{ color: '#aac070', fontSize: 14, fontWeight: '700', flex: 1 }}>Battery-saving mode active</Text>
           <Pressable onPress={() => toggleLowPowerMode(false)}>
-            <Text style={{ color: '#6b7280', fontSize: 11 }}>Turn off</Text>
+            <Text style={{ color: '#6b7280', fontSize: 13 }}>Turn off</Text>
           </Pressable>
         </View>
       )}
@@ -1462,13 +1468,13 @@ export default function Practice() {
             {/* Header + level selector + pressure toggle */}
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6, marginBottom: 0 }}>
-                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Today's Focus</Text>
+                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>{"Today's Focus"}</Text>
                 {drillCount > 0 && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3,
                     backgroundColor: '#1b4332', borderRadius: 8, paddingHorizontal: 7,
                     paddingVertical: 2, borderWidth: 1, borderColor: '#2d6a4f' }}>
                     <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#4ade80' }} />
-                    <Text style={{ color: '#86efac', fontSize: 9, fontWeight: '700', letterSpacing: 0.5 }}>SESSION ACTIVE</Text>
+                    <Text style={{ color: '#86efac', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 }}>SESSION ACTIVE</Text>
                   </View>
                 )}
               </View>
@@ -1478,8 +1484,8 @@ export default function Practice() {
                     style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
                       backgroundColor: practiceLevel === lv ? '#1a3a2a' : '#111',
                       borderWidth: 1, borderColor: practiceLevel === lv ? '#2e7d32' : '#333' }}>
-                    <Text style={{ color: practiceLevel === lv ? '#A7F3D0' : '#555', fontSize: 10, fontWeight: '700' }}>
-                      {lv === 'easy' ? 'Easy' : lv === 'standard' ? 'Std' : '🔥'}
+                    <Text style={{ color: practiceLevel === lv ? '#A7F3D0' : '#555', fontSize: 12, fontWeight: '700' }}>
+                      {lv === 'easy' ? 'Easy' : lv === 'standard' ? 'Std' : 'Hard'}
                     </Text>
                   </Pressable>
                 ))}
@@ -1489,8 +1495,8 @@ export default function Practice() {
                     backgroundColor: pressureMode ? '#3a1a1a' : '#1a1a1a', borderRadius: 8,
                     paddingHorizontal: 8, paddingVertical: 4,
                     borderWidth: 1, borderColor: pressureMode ? '#c62828' : '#333' }}>
-                  <Text style={{ color: pressureMode ? '#ef9a9a' : '#666', fontSize: 10, fontWeight: '700' }}>
-                    ⚡ {pressureMode ? 'ON' : 'OFF'}
+                  <Text style={{ color: pressureMode ? '#ef9a9a' : '#666', fontSize: 12, fontWeight: '700' }}>
+                    {pressureMode ? 'ON' : 'OFF'}
                   </Text>
                 </Pressable>
               </View>
@@ -1498,11 +1504,11 @@ export default function Practice() {
 
             {/* Plan */}
             <Text style={{ color: '#A7F3D0', fontSize: 16, fontWeight: '700', marginBottom: 4 }}>{plan.focus}</Text>
-            <Text style={{ color: '#ccc', fontSize: 13, marginBottom: 4 }}>{plan.drill}</Text>
-            <Text style={{ color: '#9CA3AF', fontSize: 12, fontStyle: 'italic', marginBottom: 10 }}>{plan.cue}</Text>
+            <Text style={{ color: '#ccc', fontSize: 14, marginBottom: 4 }}>{plan.drill}</Text>
+            <Text style={{ color: '#9CA3AF', fontSize: 13, fontStyle: 'italic', marginBottom: 10 }}>{plan.cue}</Text>
 
             {pressureMode && (
-              <Text style={{ color: '#9CA3AF', fontSize: 12, marginBottom: 8 }}>
+              <Text style={{ color: '#9CA3AF', fontSize: 13, marginBottom: 8 }}>
                 {pressureComplete ? 'Drill complete!' : `${pressureStreak} / ${pressureRequired} in a row`}
               </Text>
             )}
@@ -1517,14 +1523,14 @@ export default function Practice() {
               paddingVertical: 8,
               borderRadius: 10,
               borderWidth: 1,
-              borderColor: autoDetectEnabled ? 'rgba(74,222,128,0.35)' : 'rgba(255,255,255,0.08)',
-              backgroundColor: autoDetectEnabled ? 'rgba(74,222,128,0.08)' : 'rgba(255,255,255,0.02)',
+              borderColor: autoDetectEnabled ? 'rgba(77,143,106,0.35)' : 'rgba(255,255,255,0.08)',
+              backgroundColor: autoDetectEnabled ? 'rgba(77,143,106,0.08)' : 'rgba(255,255,255,0.02)',
             }}>
               <View>
-                <Text style={{ color: autoDetectEnabled ? '#4ade80' : '#9ca3af', fontSize: 12, fontWeight: '800', letterSpacing: 0.3 }}>
-                  {autoDetectEnabled ? '🎙️ Auto-detect ON' : '👆 Manual mode'}
+                <Text style={{ color: autoDetectEnabled ? '#4d8f6a' : '#9ca3af', fontSize: 14, fontWeight: '700', letterSpacing: 0.3 }}>
+                  {autoDetectEnabled ? 'Auto-detect ON' : 'Manual mode'}
                 </Text>
-                <Text style={{ color: '#6b7280', fontSize: 10, marginTop: 1 }}>
+                <Text style={{ color: '#6b7280', fontSize: 12, marginTop: 1 }}>
                   {autoDetectEnabled
                     ? 'Swing detected by accelerometer'
                     : 'Tap Good / Left / Right to log'}
@@ -1541,7 +1547,7 @@ export default function Practice() {
                   borderColor: autoDetectEnabled ? '#4ade80' : '#374151',
                 }}
               >
-                <Text style={{ color: autoDetectEnabled ? '#4ade80' : '#9ca3af', fontSize: 11, fontWeight: '700' }}>
+                <Text style={{ color: autoDetectEnabled ? '#4ade80' : '#9ca3af', fontSize: 13, fontWeight: '700' }}>
                   {autoDetectEnabled ? 'Disable' : 'Enable'}
                 </Text>
               </Pressable>
@@ -1564,37 +1570,37 @@ export default function Practice() {
             </View>
 
             {/* Streak feedback */}
-            {goodStreak2 && <Text style={{ color: '#A7F3D0', fontSize: 13, marginBottom: 4 }}>That's two good swings. Keep it going.</Text>}
-            {missStreak2R && <Text style={{ color: '#fca5a5', fontSize: 13, marginBottom: 4 }}>Still missing right. Adjust more left.</Text>}
-            {missStreak2L && <Text style={{ color: '#90caf9', fontSize: 13, marginBottom: 4 }}>Two left in a row. Hold the face open.</Text>}
+            {goodStreak2 && <Text style={{ color: '#A7F3D0', fontSize: 14, marginBottom: 4 }}>{"That's two good swings. Keep it going."}</Text>}
+            {missStreak2R && <Text style={{ color: '#fca5a5', fontSize: 14, marginBottom: 4 }}>Still missing right. Adjust more left.</Text>}
+            {missStreak2L && <Text style={{ color: '#90caf9', fontSize: 14, marginBottom: 4 }}>Two left in a row. Hold the face open.</Text>}
 
             {/* Rep counter */}
             {total > 0 && (
-              <Text style={{ color: '#aaa', fontSize: 12, marginBottom: 4 }}>
+              <Text style={{ color: '#aaa', fontSize: 13, marginBottom: 4 }}>
                 {total} rep{total !== 1 ? 's' : ''} - Last: {focusShots[focusShots.length - 1].result}
               </Text>
             )}
 
             {/* Session feedback */}
             {feedback && (
-              <Text style={{ color: done && goods >= Math.ceil(total * 0.6) ? '#A7F3D0' : feedback.startsWith('Better') ? '#A7F3D0' : feedback.startsWith('Keep going') ? '#e2e8b0' : '#fca5a5', fontSize: 13, marginBottom: 6 }}>
+              <Text style={{ color: done && goods >= Math.ceil(total * 0.6) ? '#A7F3D0' : feedback.startsWith('Better') ? '#A7F3D0' : feedback.startsWith('Keep going') ? '#e2e8b0' : '#fca5a5', fontSize: 14, marginBottom: 6 }}>
                 {feedback}
               </Text>
             )}
 
             {/* Completion moment */}
-            {done && <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '700', marginBottom: 6 }}>Good work. That's your feel.</Text>}
+            {done && <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '700', marginBottom: 6 }}>{"Good work. That's your feel."}</Text>}
 
             {/* Footer actions */}
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
               {total > 0 && (
                 <Pressable onPress={() => { setFocusShots([]); aiFocusVoiceRef.current = 0; setPressureStreak(0); }} style={{ flex: 1 }}>
-                  <Text style={{ color: '#aaa', fontSize: 12 }}>Reset</Text>
+                  <Text style={{ color: '#aaa', fontSize: 13 }}>Reset</Text>
                 </Pressable>
               )}
               {drillVariantsRef.current.length > 1 && (
                 <Pressable onPress={() => { setDrillVariantIdx((i) => (i + 1) % drillVariantsRef.current.length); setFocusShots([]); aiFocusVoiceRef.current = 0; setPressureStreak(0); }} style={{ flex: 1, alignItems: 'flex-end' }}>
-                  <Text style={{ color: '#aaa', fontSize: 12 }}>Next Drill</Text>
+                  <Text style={{ color: '#aaa', fontSize: 13 }}>Next Drill</Text>
                 </Pressable>
               )}
             </View>
@@ -1605,9 +1611,9 @@ export default function Practice() {
       {/* Drill tiles - compact 3-column grid */}
       {(() => {
         const DRILL_ICONS: Record<string, string> = {
-          putting: '⛳', alignment: '🎯', tempo: '🎵',
-          'short-game': '🏌️', 'driver-straight': '🏌️‍♂️', 'iron-accuracy': '🏑',
-          indoor: '🏠', 'swing-detect': '📱',
+          putting: '-', alignment: '-', tempo: '-',
+          'short-game': '-', 'driver-straight': '-', 'iron-accuracy': '-',
+          indoor: '-', 'swing-detect': '-',
         };
         const DRILL_SHORT: Record<string, string> = {
           putting: 'Putting', alignment: 'Aim', tempo: 'Tempo',
@@ -1629,32 +1635,40 @@ export default function Practice() {
                     borderWidth: 1.5, borderColor: active ? '#4caf50' : '#2a2a2a',
                   }}
                 >
-                  <Text style={{ fontSize: 20, marginBottom: 3 }}>{DRILL_ICONS[d.id] ?? '?'}</Text>
-                  <Text style={{ color: active ? '#A7F3D0' : '#aaa', fontSize: 11, fontWeight: '700', textAlign: 'center' }}>{DRILL_SHORT[d.id] ?? d.label}</Text>
+                  <Text style={{ color: active ? '#c4d9cc' : '#527a64', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>{DRILL_SHORT[d.id] ?? d.label}</Text>
                 </Pressable>
               );
             })}
-            {/* Swing Lab — navigates to the full video + shot-logger screen */}
-            <Pressable
-              onPress={() => router.push('/swing-lab')}
-              style={{
-                width: '30%', flexGrow: 1,
-                backgroundColor: '#0d1f33',
-                borderRadius: 12, paddingVertical: 10, alignItems: 'center',
-                borderWidth: 1.5, borderColor: '#3b82f6',
-              }}
-            >
-              <Text style={{ fontSize: 20, marginBottom: 3 }}>🎥</Text>
-              <Text style={{ color: '#93c5fd', fontSize: 11, fontWeight: '700', textAlign: 'center' }}>Swing Lab</Text>
-            </Pressable>
           </View>
         );
       })()}
 
+      {/* Swing Lab card — always visible below drill buttons */}
+      <Pressable
+        onPress={() => router.push('/swing-lab')}
+        style={{
+          flexDirection: 'row', alignItems: 'center', gap: 12,
+          backgroundColor: '#0a1620', borderRadius: 14, padding: 14,
+          borderWidth: 1, borderColor: '#2a4a6a', marginBottom: 12,
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: '#8ab0d4', fontSize: 14, fontWeight: '700', letterSpacing: 0.3 }}>Swing Lab</Text>
+          <Text style={{ color: '#5a7a9a', fontSize: 13, marginTop: 2 }}>Record, analyse, and compare your swing</Text>
+        </View>
+        <Text style={{ color: '#5a7a9a', fontSize: 16, fontWeight: '600' }}>›</Text>
+      </Pressable>
+
       {/* Active Drill - selected shortcut only */}
-      {selectedDrill !== 'putting' && selectedDrill !== 'short-game' && selectedDrill !== 'indoor' && selectedDrill !== 'swing-detect' && (
+      {selectedDrill !== null && selectedDrill !== 'putting' && selectedDrill !== 'short-game' && selectedDrill !== 'indoor' && selectedDrill !== 'swing-detect' && (
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>{drill.label}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <Text style={styles.sectionTitle}>{drill.label}</Text>
+          <Pressable onPress={() => { setSelectedDrill(null); resetPracticeCounters(); setPracticeMode('free'); }}
+            style={{ backgroundColor: '#2a1111', borderRadius: 20, width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#ef4444' }}>
+            <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '800' }}>×</Text>
+          </Pressable>
+        </View>
         <Text style={styles.description}>{drill.description}</Text>
 
         {/* Target */}
@@ -1683,7 +1697,7 @@ export default function Practice() {
         {/* Shot Dispersion */}
         {focusShots.length > 0 && (
           <View style={{ marginTop: 20, alignItems: 'center' }}>
-            <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '700', letterSpacing: 0.5, marginBottom: 10 }}>
+            <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '700', letterSpacing: 0.5, marginBottom: 10 }}>
               Shot Dispersion
             </Text>
             <DispersionMap
@@ -1709,14 +1723,14 @@ export default function Practice() {
                   backgroundColor: 'rgba(251,191,36,0.07)',
                   width: 300,
                 }}>
-                  <Text style={{ color: '#fbbf24', fontSize: 12, fontWeight: '800', marginBottom: 4 }}>
-                    ⚠️ Start line vs result mismatch ({mismatches.length} shot{mismatches.length > 1 ? 's' : ''})
+                  <Text style={{ color: '#fbbf24', fontSize: 13, fontWeight: '800', marginBottom: 4 }}>
+                    Start line vs result mismatch ({mismatches.length} shot{mismatches.length > 1 ? 's' : ''})
                   </Text>
-                  <Text style={{ color: '#d1d5db', fontSize: 11, lineHeight: 16 }}>
+                  <Text style={{ color: '#d1d5db', fontSize: 12, lineHeight: 16 }}>
                     Last: started <Text style={{ color: '#60a5fa', fontWeight: '700' }}>{lastMismatch.ballStart}</Text>
                     {' '}but finished <Text style={{ color: '#ef4444', fontWeight: '700' }}>{lastMismatch.result === 'good' ? 'straight' : lastMismatch.result}</Text>.
                   </Text>
-                  <Text style={{ color: '#9ca3af', fontSize: 10, marginTop: 4 }}>
+                  <Text style={{ color: '#9ca3af', fontSize: 12, marginTop: 4 }}>
                     Ball is curving after launch — check face angle at impact.
                   </Text>
                 </View>
@@ -1953,7 +1967,7 @@ export default function Practice() {
               if (!insight) return null;
               return (
                 <View style={{ marginTop: 12, backgroundColor: '#0a0f1a', borderRadius: 10, padding: 10, borderLeftWidth: 3, borderLeftColor: insight.color }}>
-                  <Text style={{ color: insight.color, fontWeight: '700', fontSize: 12, lineHeight: 18 }}>
+                  <Text style={{ color: insight.color, fontWeight: '700', fontSize: 14, lineHeight: 18 }}>
                     {insight.text}
                   </Text>
                 </View>
@@ -1971,23 +1985,23 @@ export default function Practice() {
               if (!tip) return null;
               return (
                 <View style={{ marginTop: 14, backgroundColor: '#111827', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#374151' }}>
-                  <Text style={{ color: '#a78bfa', fontWeight: '800', fontSize: 13, marginBottom: 10, letterSpacing: 0.3 }}>
-                    🏇 Coach Mode
+                  <Text style={{ color: '#a78bfa', fontWeight: '800', fontSize: 14, marginBottom: 10, letterSpacing: 0.3 }}>
+                    Coach Mode
                   </Text>
                   {/* What */}
                   <View style={{ flexDirection: 'row', marginBottom: 8, gap: 8 }}>
-                    <Text style={{ color: '#f87171', fontWeight: '800', fontSize: 11, width: 36, paddingTop: 1 }}>WHAT</Text>
-                    <Text style={{ color: '#e5e7eb', fontSize: 12, flex: 1, lineHeight: 18 }}>{tip.what}</Text>
+                    <Text style={{ color: '#f87171', fontWeight: '800', fontSize: 12, width: 36, paddingTop: 1 }}>WHAT</Text>
+                    <Text style={{ color: '#e5e7eb', fontSize: 13, flex: 1, lineHeight: 18 }}>{tip.what}</Text>
                   </View>
                   {/* Why */}
                   <View style={{ flexDirection: 'row', marginBottom: 8, gap: 8 }}>
-                    <Text style={{ color: '#fbbf24', fontWeight: '800', fontSize: 11, width: 36, paddingTop: 1 }}>WHY</Text>
-                    <Text style={{ color: '#e5e7eb', fontSize: 12, flex: 1, lineHeight: 18 }}>{tip.why}</Text>
+                    <Text style={{ color: '#fbbf24', fontWeight: '800', fontSize: 12, width: 36, paddingTop: 1 }}>WHY</Text>
+                    <Text style={{ color: '#e5e7eb', fontSize: 13, flex: 1, lineHeight: 18 }}>{tip.why}</Text>
                   </View>
                   {/* Fix */}
                   <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <Text style={{ color: '#4ade80', fontWeight: '800', fontSize: 11, width: 36, paddingTop: 1 }}>FIX</Text>
-                    <Text style={{ color: '#e5e7eb', fontSize: 12, flex: 1, lineHeight: 18 }}>{tip.fix}</Text>
+                    <Text style={{ color: '#4ade80', fontWeight: '800', fontSize: 12, width: 36, paddingTop: 1 }}>FIX</Text>
+                    <Text style={{ color: '#e5e7eb', fontSize: 13, flex: 1, lineHeight: 18 }}>{tip.fix}</Text>
                   </View>
                 </View>
               );
@@ -1997,7 +2011,7 @@ export default function Practice() {
               onPress={() => setSwingAnalysis(null)}
               style={{ alignSelf: 'flex-end', marginTop: 12 }}
             >
-              <Text style={{ color: '#475569', fontSize: 11 }}>Dismiss</Text>
+              <Text style={{ color: '#475569', fontSize: 13 }}>Dismiss</Text>
             </Pressable>
           </View>
         )}
@@ -2008,13 +2022,13 @@ export default function Practice() {
             <Text style={{ color: currentStreak >= streakTarget ? '#66bb6a' : '#fff', fontSize: 14, fontWeight: '600' }}>
               Streak: {currentStreak} / {streakTarget}
             </Text>
-            <Text style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>Best: {bestStreak}</Text>
-            <Text style={{ color: '#ccc', fontSize: 12, marginTop: 2 }}>Difficulty Level: {difficulty}</Text>
+            <Text style={{ color: '#aaa', fontSize: 13, marginTop: 2 }}>Best: {bestStreak}</Text>
+            <Text style={{ color: '#ccc', fontSize: 13, marginTop: 2 }}>Difficulty Level: {difficulty}</Text>
             {getDifficultyFeedback() !== '' && (
-              <Text style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>{getDifficultyFeedback()}</Text>
+              <Text style={{ color: '#aaa', fontSize: 13, marginTop: 2 }}>{getDifficultyFeedback()}</Text>
             )}
             {difficulty >= 3 && (
-              <Text style={{ color: '#66bb6a', fontSize: 12, marginTop: 2 }}>Difficulty increased - tighter target</Text>
+              <Text style={{ color: '#66bb6a', fontSize: 13, marginTop: 2 }}>Difficulty increased - tighter target</Text>
             )}
           </View>
         )}
@@ -2026,22 +2040,31 @@ export default function Practice() {
           <Text style={[styles.complete, { color: '#FFD700' }]}>{streakTarget} in a row - great consistency!</Text>
         )}
 
+        {lastVideoUri && drill.smartVision === 'manual' ? (
+          <Pressable
+            onPress={() => triggerShotVision(lastVideoUri)}
+            style={{ marginTop: 10, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: '#1b3a2a', borderRadius: 10, borderWidth: 1, borderColor: '#3CBF8F', alignItems: 'center' }}
+          >
+            <Text style={{ color: '#3CBF8F', fontSize: 14, fontWeight: '700' }}>View Shot</Text>
+          </Pressable>
+        ) : null}
+
         {/* Coaching Feedback */}
         <View style={{ backgroundColor: getFeedbackColor(), padding: 12, borderRadius: 12, marginTop: 12 }}>
           <Text style={{ color: '#fff', fontWeight: '600', marginBottom: 4 }}>Coaching Feedback</Text>
-          <Text style={{ color: drillCount < 3 ? '#aaa' : '#fff', fontSize: 13 }}>{getPracticeFeedback()}</Text>
+          <Text style={{ color: drillCount < 3 ? '#aaa' : '#fff', fontSize: 14 }}>{getPracticeFeedback()}</Text>
         </View>
 
         {/* Practice Plan */}
         <View style={{ backgroundColor: '#0d2b0d', padding: 12, borderRadius: 12, marginTop: 10, borderWidth: 1, borderColor: '#2e7d32' }}>
           <Text style={{ color: '#A7F3D0', fontWeight: '600', marginBottom: 4 }}>Practice Plan</Text>
-          <Text style={{ color: '#ccc', fontSize: 13, lineHeight: 20 }}>{getPracticePlan()}</Text>
+          <Text style={{ color: '#ccc', fontSize: 14, lineHeight: 20 }}>{getPracticePlan()}</Text>
         </View>
 
         {/* Personalized Drill Tip */}
         <View style={{ backgroundColor: '#1a2e1a', padding: 12, borderRadius: 12, marginTop: 10 }}>
           <Text style={{ color: '#66bb6a', fontWeight: '600', marginBottom: 4 }}>Drill for {drill.label}</Text>
-          <Text style={{ color: '#ccc', fontSize: 13, lineHeight: 20 }}>{getDrillRecommendation(selectedDrill)}</Text>
+          <Text style={{ color: '#ccc', fontSize: 14, lineHeight: 20 }}>{getDrillRecommendation(selectedDrill)}</Text>
         </View>
       </View>
       )}
@@ -2049,14 +2072,20 @@ export default function Practice() {
       {/* Chipping Challenge */}
       {selectedDrill === 'short-game' && (
       <View style={styles.card}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <Text style={styles.sectionTitle}>\uD83C\uDFCC\uFE0F Chipping Challenge</Text>
-          <Text style={{ color: '#FFE600', fontSize: 16, fontWeight: '700' }}>{chipPoints} pts</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <Text style={styles.sectionTitle}>Chipping Challenge</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ color: '#FFE600', fontSize: 16, fontWeight: '700' }}>{chipPoints} pts</Text>
+            <Pressable onPress={() => { setSelectedDrill(null); resetPracticeCounters(); setPracticeMode('free'); }}
+              style={{ backgroundColor: '#2a1111', borderRadius: 20, width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#ef4444' }}>
+              <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '800' }}>×</Text>
+            </Pressable>
+          </View>
         </View>
-        <Text style={{ color: '#aaa', fontSize: 13, marginBottom: 12 }}>Hit chip shots to a target. Score by landing zone. Build your streak!</Text>
+        <Text style={{ color: '#aaa', fontSize: 14, marginBottom: 12 }}>Hit chip shots to a target. Score by landing zone. Build your streak!</Text>
 
         {/* Distance selector */}
-        <Text style={{ color: '#A7F3D0', fontWeight: '600', fontSize: 13, marginBottom: 8 }}>Target Distance</Text>
+        <Text style={{ color: '#A7F3D0', fontWeight: '600', fontSize: 14, marginBottom: 8 }}>Target Distance</Text>
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
           {[10, 20, 30, 40, 50].map((d) => (
             <Pressable key={d} onPress={() => setChipTarget(d)}
@@ -2106,8 +2135,8 @@ export default function Practice() {
                 }}
                 style={({ pressed }) => ({ flex: 1, backgroundColor: pressed ? '#111' : cfg.bg, padding: 10, borderRadius: 10, alignItems: 'center' })}
               >
-                <Text style={{ color: cfg.fg, fontWeight: '800', fontSize: 12 }}>{cfg.label}</Text>
-                <Text style={{ color: cfg.fg === '#fff' ? 'rgba(255,255,255,0.6)' : '#555', fontSize: 10 }}>+{cfg.base}</Text>
+                <Text style={{ color: cfg.fg, fontWeight: '800', fontSize: 13 }}>{cfg.label}</Text>
+                <Text style={{ color: cfg.fg === '#fff' ? 'rgba(255,255,255,0.6)' : '#555', fontSize: 11 }}>+{cfg.base}</Text>
               </Pressable>
             );
           })}
@@ -2118,7 +2147,7 @@ export default function Practice() {
           <View style={{ flexDirection: 'row', backgroundColor: '#121212', borderRadius: 10, padding: 12, gap: 8, marginBottom: 10 }}>
             {[['Shots', String(chipTotal), '#fff'],['Points', String(chipPoints), '#FFE600'],['Streak', String(chipStreak), chipStreak >= 3 ? '#FFE600' : '#fff'],['Best', String(chipBestStreak), '#66bb6a']].map(([l, v, c]) => (
               <View key={l} style={{ flex: 1, alignItems: 'center' }}>
-                <Text style={{ color: '#aaa', fontSize: 10, textTransform: 'uppercase' }}>{l}</Text>
+                <Text style={{ color: '#aaa', fontSize: 11, textTransform: 'uppercase' }}>{l}</Text>
                 <Text style={{ color: c, fontSize: 18, fontWeight: '700' }}>{v}</Text>
               </View>
             ))}
@@ -2134,11 +2163,17 @@ export default function Practice() {
       {/* Indoor Practice */}
       {selectedDrill === 'indoor' && (
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Indoor Practice</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <Text style={styles.sectionTitle}>Indoor Practice</Text>
+          <Pressable onPress={() => { setSelectedDrill(null); resetPracticeCounters(); setPracticeMode('free'); }}
+            style={{ backgroundColor: '#2a1111', borderRadius: 20, width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#ef4444' }}>
+            <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '800' }}>×</Text>
+          </Pressable>
+        </View>
         <Text style={styles.description}>Small-space training. Focus on control, tempo, and balance.</Text>
 
         {/* Swing % Selector */}
-        <Text style={{ color: '#aaa', fontSize: 12, marginBottom: 8 }}>Swing Percentage</Text>
+        <Text style={{ color: '#aaa', fontSize: 13, marginBottom: 8 }}>Swing Percentage</Text>
         <View style={{ flexDirection: 'row' }}>
           {[25, 50, 75, 100].map((percent) => (
             <Pressable
@@ -2151,8 +2186,7 @@ export default function Practice() {
           ))}
         </View>
 
-        <Text style={{ color: '#ccc', fontSize: 13, marginTop: 10, lineHeight: 20 }}>
-          Practice smooth {swingPercent}% swings. Focus on control and balance.
+        <Text style={{ color: '#ccc', fontSize: 14, marginTop: 10, lineHeight: 20 }}>
         </Text>
 
         {/* Rep Tracking */}
@@ -2169,15 +2203,15 @@ export default function Practice() {
           <Text style={{ color: '#fff', fontWeight: '600' }}>Log Swing</Text>
         </Pressable>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-          <Text style={{ color: '#ccc', fontSize: 13 }}>Swings: {indoorReps}</Text>
+          <Text style={{ color: '#ccc', fontSize: 14 }}>Swings: {indoorReps}</Text>
           <Pressable onPress={() => setIndoorReps(0)}>
-            <Text style={{ color: '#aaa', fontSize: 12 }}>Reset</Text>
+            <Text style={{ color: '#aaa', fontSize: 13 }}>Reset</Text>
           </Pressable>
         </View>
 
         {/* Tempo Trainer */}
         <View style={{ marginTop: 20, alignItems: 'center' }}>
-          <Text style={{ color: '#A7F3D0', fontSize: 12, fontWeight: 'bold', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 10 }}>Tempo Trainer</Text>
+          <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: 'bold', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 10 }}>Tempo Trainer</Text>
           <Text style={{
             color: tempoText === 'SWING' ? '#FFD700' : tempoText === 'Ready' ? '#555' : '#66bb6a',
             fontSize: 36,
@@ -2245,13 +2279,13 @@ export default function Practice() {
               </Text>
               {/* Indoor Drill Tip */}
               <View style={{ backgroundColor: '#1a2e1a', padding: 10, borderRadius: 10, marginTop: 10, width: '100%' }}>
-                <Text style={{ color: '#66bb6a', fontWeight: '600', fontSize: 12, marginBottom: 4 }}>Indoor Drill</Text>
-                <Text style={{ color: '#ccc', fontSize: 12, lineHeight: 18 }}>{getDrillRecommendation('tempo')}</Text>
+                <Text style={{ color: '#66bb6a', fontWeight: '600', fontSize: 13, marginBottom: 4 }}>Indoor Drill</Text>
+                <Text style={{ color: '#ccc', fontSize: 13, lineHeight: 18 }}>{getDrillRecommendation('tempo')}</Text>
               </View>
-              <Text style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>
+              <Text style={{ color: '#aaa', fontSize: 13, marginTop: 2 }}>
                 Good: {tempoGood} | Off: {tempoMiss}
               </Text>
-              <Text style={{ color: '#66bb6a', fontSize: 12, marginTop: 4 }}>{getTempoFeedback()}</Text>
+              <Text style={{ color: '#66bb6a', fontSize: 13, marginTop: 4 }}>{getTempoFeedback()}</Text>
 
               {/* Tempo Goal */}
               {(() => {
@@ -2266,19 +2300,19 @@ export default function Practice() {
                     )}
                     {goalMet && tempoGoal < 95 && (
                       <Pressable onPress={() => { /* goal advances automatically via getAdaptiveGoal */ }} style={{ marginTop: 6 }}>
-                        <Text style={{ color: '#A7F3D0', fontSize: 12 }}>Next goal: {Math.min(tempoGoal + 5, 95)}% - tap to advance</Text>
+                        <Text style={{ color: '#A7F3D0', fontSize: 13 }}>Next goal: {Math.min(tempoGoal + 5, 95)}% - tap to advance</Text>
                       </Pressable>
                     )}
                   </View>
                 );
               })()}
 
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', marginTop: 10 }}>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', marginTop: 10 }}>
                 Tempo Streak: {tempoStreak} / {tempoStreakTarget}
               </Text>
-              <Text style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>Best: {bestTempoStreak}</Text>
+              <Text style={{ color: '#aaa', fontSize: 13, marginTop: 2 }}>Best: {bestTempoStreak}</Text>
               {tempoStreak >= tempoStreakTarget && (
-                <Text style={{ color: '#66bb6a', fontSize: 13, fontWeight: '600', marginTop: 6 }}>
+                <Text style={{ color: '#66bb6a', fontSize: 14, fontWeight: '600', marginTop: 6 }}>
                   Challenge complete - elite tempo ??
                 </Text>
               )}
@@ -2293,8 +2327,8 @@ export default function Practice() {
         const dayDelta = getDayComparison();
         return (
           <View style={{ backgroundColor: '#121212', padding: 12, borderRadius: 12, marginTop: 8 }}>
-            <Text style={{ color: '#A7F3D0', fontSize: 12, fontWeight: 'bold', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6 }}>Session Summary</Text>
-            <Text style={{ color: '#ccc', fontSize: 13, lineHeight: 20 }}>{getIndoorSummary()}</Text>
+            <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: 'bold', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6 }}>Session Summary</Text>
+            <Text style={{ color: '#ccc', fontSize: 14, lineHeight: 20 }}>{getIndoorSummary()}</Text>
             <Text style={{ color: '#66bb6a', fontWeight: '600', marginTop: 12 }}>?? Streak: {streak} day{streak !== 1 ? 's' : ''}</Text>
             {dayDelta !== null && (
               <Text style={{ marginTop: 6, color: dayDelta >= 0 ? '#66bb6a' : '#ff5252', fontWeight: '600' }}>
@@ -2306,13 +2340,13 @@ export default function Practice() {
             )}
             {indoorReps >= 10 && weeklyHistory.length === 0 && (
               <Pressable onPress={saveSession} style={{ marginTop: 10 }}>
-                <Text style={{ color: '#A7F3D0', fontSize: 12 }}>Save session to history</Text>
+                <Text style={{ color: '#A7F3D0', fontSize: 13 }}>Save session to history</Text>
               </Pressable>
             )}
             {indoorReps >= 10 && weeklyHistory.length > 0 && (() => {
               const trend = getWeeklyTrend();
               return trend !== null ? (
-                <Text style={{ color: trend >= 0 ? '#66bb6a' : '#ff5252', fontSize: 12, marginTop: 6 }}>
+                <Text style={{ color: trend >= 0 ? '#66bb6a' : '#ff5252', fontSize: 13, marginTop: 6 }}>
                   {trend >= 0 ? `+${trend}% vs last session` : `${trend}% vs last session`}
                 </Text>
               ) : null;
@@ -2324,7 +2358,13 @@ export default function Practice() {
       {/* Putting Practice */}
       {selectedDrill === 'putting' && (
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Putting Practice</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <Text style={styles.sectionTitle}>Putting Practice</Text>
+          <Pressable onPress={() => { setSelectedDrill(null); resetPracticeCounters(); setPracticeMode('free'); }}
+            style={{ backgroundColor: '#2a1111', borderRadius: 20, width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#ef4444' }}>
+            <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '800' }}>×</Text>
+          </Pressable>
+        </View>
         <Text style={{ color: '#aaa', fontSize: 13, marginBottom: 12 }}>Hold phone like a putter grip. Motion + gyro detects your stroke - then log result.</Text>
 
         {/* -- Video-game putting green animation ----------------------------- */}
@@ -2437,13 +2477,13 @@ export default function Practice() {
                     onPress={() => { logPutt(true); setPuttStrokeDetected(false); setPuttMotionFeedback('Ready - make your stroke'); setPuttPathFeedback(''); }}
                     style={({ pressed }) => ({ backgroundColor: pressed ? '#1b5e20' : '#2e7d32', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10 })}
                   >
-                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>? Made</Text>
+                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Made</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => { logPutt(false); setPuttStrokeDetected(false); setPuttMotionFeedback('Ready - make your stroke'); setPuttPathFeedback(''); }}
                     style={({ pressed }) => ({ backgroundColor: pressed ? '#b71c1c' : '#c62828', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10 })}
                   >
-                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>? Miss</Text>
+                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Miss</Text>
                   </Pressable>
                 </View>
               )}
@@ -2469,13 +2509,13 @@ export default function Practice() {
             onPress={() => logPutt(true)}
             style={({ pressed }) => [styles.btn, { backgroundColor: pressed ? '#1b5e20' : '#2e7d32', flex: 1 }]}
           >
-            <Text style={[styles.btnText, { fontSize: 16 }]}>? Made</Text>
+            <Text style={[styles.btnText, { fontSize: 16 }]}>Made</Text>
           </Pressable>
           <Pressable
             onPress={() => logPutt(false)}
             style={({ pressed }) => [styles.btn, { backgroundColor: pressed ? '#b71c1c' : '#c62828', flex: 1 }]}
           >
-            <Text style={[styles.btnText, { fontSize: 16 }]}>? Miss</Text>
+            <Text style={[styles.btnText, { fontSize: 16 }]}>Miss</Text>
           </Pressable>
         </View>
 
@@ -2584,7 +2624,13 @@ export default function Practice() {
       {/* Swing Detection */}
       {selectedDrill === 'swing-detect' && (
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Swing Detection</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <Text style={styles.sectionTitle}>Swing Detection</Text>
+          <Pressable onPress={() => { setSelectedDrill(null); resetPracticeCounters(); setPracticeMode('free'); }}
+            style={{ backgroundColor: '#2a1111', borderRadius: 20, width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#ef4444' }}>
+            <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '800' }}>×</Text>
+          </Pressable>
+        </View>
         <Text style={{ color: '#ccc', fontSize: 13, marginBottom: 12 }}>
           Hold your phone like a club and swing. The accelerometer counts detected swings.
         </Text>
@@ -2870,9 +2916,9 @@ export default function Practice() {
 
                   {/* Coaching cues */}
                   <View style={{ backgroundColor: '#1a0a2e', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#6a1b9a' }}>
-                    <Text style={{ color: '#ce93d8', fontWeight: '700', fontSize: 12, marginBottom: 6 }}>Coaching Cues</Text>
+                    <Text style={{ color: '#ce93d8', fontWeight: '700', fontSize: 13, marginBottom: 6 }}>Coaching Cues</Text>
                     {a.cues.map((cue, ci) => (
-                      <Text key={ci} style={{ color: '#ccc', fontSize: 12, lineHeight: 18, marginBottom: 2 }}>{cue}</Text>
+                      <Text key={ci} style={{ color: '#ccc', fontSize: 13, lineHeight: 18, marginBottom: 2 }}>{cue}</Text>
                     ))}
                   </View>
                 </View>
@@ -2929,17 +2975,17 @@ export default function Practice() {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <Text style={styles.sectionTitle}>Swing Library</Text>
               <Pressable onPress={() => setSwingLibrary([])}>
-                <Text style={{ color: '#c62828', fontSize: 12 }}>Clear All</Text>
+                <Text style={{ color: '#c62828', fontSize: 13 }}>Clear All</Text>
               </Pressable>
             </View>
-            <Text style={{ color: '#aaa', fontSize: 12, marginBottom: 10 }}>{swingLibrary.length} swing{swingLibrary.length !== 1 ? 's' : ''} saved</Text>
+            <Text style={{ color: '#aaa', fontSize: 13, marginBottom: 10 }}>{swingLibrary.length} swing{swingLibrary.length !== 1 ? 's' : ''} saved</Text>
 
             {/* Best Swing */}
             {bestSwing && (
               <View style={{ backgroundColor: '#2e7d32', padding: 12, borderRadius: 12, marginBottom: 16 }}>
                 <Text style={{ color: '#fff', fontWeight: '600', marginBottom: 6 }}>Best Swing ??</Text>
                 <Video source={{ uri: bestSwing.uri }} style={{ height: 180, borderRadius: 8 }} useNativeControls resizeMode={ResizeMode.CONTAIN} />
-                <Text style={{ color: '#e0f2f1', fontSize: 12, marginTop: 6 }}>Use this as your reference</Text>
+                <Text style={{ color: '#e0f2f1', fontSize: 13, marginTop: 6 }}>Use this as your reference</Text>
               </View>
             )}
 
@@ -2949,11 +2995,11 @@ export default function Practice() {
                 <Text style={{ color: '#fff', fontWeight: '600', marginBottom: 10 }}>Compare Swings</Text>
                 <View style={{ flexDirection: 'row' }}>
                   <View style={{ flex: 1, marginRight: 4 }}>
-                    <Text style={{ color: '#66bb6a', fontSize: 12, marginBottom: 4 }}>Best</Text>
+                    <Text style={{ color: '#66bb6a', fontSize: 13, marginBottom: 4 }}>Best</Text>
                     <Video source={{ uri: bestSwing.uri }} style={{ height: 140, borderRadius: 8 }} useNativeControls resizeMode={ResizeMode.CONTAIN} />
                   </View>
                   <View style={{ flex: 1, marginLeft: 4 }}>
-                    <Text style={{ color: '#ccc', fontSize: 12, marginBottom: 4 }}>Latest</Text>
+                    <Text style={{ color: '#ccc', fontSize: 13, marginBottom: 4 }}>Latest</Text>
                     <Video source={{ uri: latestSwing.uri }} style={{ height: 140, borderRadius: 8 }} useNativeControls resizeMode={ResizeMode.CONTAIN} />
                   </View>
                 </View>
@@ -2968,37 +3014,37 @@ export default function Practice() {
               {(['all', 'good', 'bad'] as const).map((type) => (
                 <Pressable key={type} onPress={() => setSwingFilter(type)}
                   style={{ backgroundColor: swingFilter === type ? '#2e7d32' : '#1e1e1e', padding: 8, borderRadius: 8, marginRight: 6 }}>
-                  <Text style={{ color: '#fff', fontSize: 12, fontWeight: swingFilter === type ? '700' : '400' }}>{type.toUpperCase()}</Text>
+                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: swingFilter === type ? '700' : '400' }}>{type.toUpperCase()}</Text>
                 </Pressable>
               ))}
             </View>
 
             {filteredSwings.length === 0 ? (
-              <Text style={{ color: '#aaa', fontSize: 13 }}>No swings match this filter.</Text>
+              <Text style={{ color: '#aaa', fontSize: 14 }}>No swings match this filter.</Text>
             ) : (
               filteredSwings.map((swing, index) => (
                 <View key={index} style={{ backgroundColor: '#1e1e1e', padding: 10, borderRadius: 10, marginBottom: 10 }}>
                   <Video source={{ uri: swing.uri }} style={{ height: 150, borderRadius: 8 }} useNativeControls resizeMode={ResizeMode.CONTAIN} />
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
                     <View>
-                      <Text style={{ color: '#ccc', fontSize: 12 }}>{swing.time}</Text>
-                      <Text style={{ color: swing.tempo.includes('Good') ? '#66bb6a' : swing.tempo === 'Manual' ? '#aaa' : '#ff5252', fontSize: 12, marginTop: 2 }}>{swing.tempo}</Text>
+                      <Text style={{ color: '#ccc', fontSize: 13 }}>{swing.time}</Text>
+                      <Text style={{ color: swing.tempo.includes('Good') ? '#66bb6a' : swing.tempo === 'Manual' ? '#aaa' : '#ff5252', fontSize: 13, marginTop: 2 }}>{swing.tempo}</Text>
                     </View>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       <Pressable
                         onPress={() => handleSaveSwingToLibrary(swing.uri)}
                         style={({ pressed }) => [{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: pressed ? '#1565c0' : '#1976d2' }]}
                       >
-                        <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>Save</Text>
+                        <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Save</Text>
                       </Pressable>
                       <Pressable
                         onPress={() => handleShareSwing(swing.uri)}
                         style={({ pressed }) => [{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: pressed ? '#555' : '#37474f' }]}
                       >
-                        <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>Share</Text>
+                        <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Share</Text>
                       </Pressable>
                       <Pressable onPress={() => setSwingLibrary((prev) => prev.filter((_, i) => i !== index))}>
-                        <Text style={{ color: '#c62828', fontSize: 12 }}>Delete</Text>
+                        <Text style={{ color: '#c62828', fontSize: 13 }}>Delete</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -3032,7 +3078,7 @@ export default function Practice() {
             {/* Header */}
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
               <Image source={require('../../assets/images/logo.png')} style={{ width: 36, height: 36, borderRadius: 999 }} resizeMode="cover" />
-              <Text style={{ color: '#A7F3D0', fontSize: 17, fontWeight: '800', marginLeft: 10, flex: 1 }}>Ask Your Caddie 🎙</Text>
+              <Text style={{ color: '#A7F3D0', fontSize: 17, fontWeight: '800', marginLeft: 10, flex: 1 }}>Ask Your Caddie</Text>
               <Pressable onPress={() => setShowAskCaddie(false)} style={{ padding: 6 }}>
                 <Text style={{ color: '#6b7280', fontSize: 20 }}>✕</Text>
               </Pressable>
@@ -3057,7 +3103,12 @@ export default function Practice() {
             >
               {askLoading
                 ? <ActivityIndicator color="#A7F3D0" />
-                : <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>🎙 Ask Caddie</Text>}
+                : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Image source={LOGO} style={{ width: 22, height: 22, tintColor: '#A7F3D0' }} resizeMode="contain" />
+                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>Ask Caddie</Text>
+                  </View>
+                )}
             </Pressable>
 
             {/* Answer card */}
@@ -3070,6 +3121,89 @@ export default function Practice() {
         </View>
       </KeyboardAvoidingView>
     </Modal>
+
+    {/* ── Tools dropdown — rendered as sibling of ScrollView so zIndex works ── */}
+    {showToolsMenu && (
+      <>
+        {/* Dismiss backdrop */}
+        <Pressable
+          onPress={() => setShowToolsMenu(false)}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 51 }}
+        />
+        {/* Dropdown card */}
+        <View style={{
+          position: 'absolute', top: 68, right: 16, zIndex: 52,
+          backgroundColor: '#0d2419', borderRadius: 14,
+          borderWidth: 1, borderColor: '#1a3326',
+          padding: 10, gap: 8, minWidth: 190,
+        }}>
+          <Pressable
+            onPress={() => { setShowToolsMenu(false); setShowTutorial(true); }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#0d2419', borderWidth: 1, borderColor: '#3d7a58' }}
+          >
+            <Text style={{ color: '#c4d9cc', fontSize: 14, fontWeight: '600' }}>How to Setup</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => { setShowToolsMenu(false); router.push('/rangefinder'); }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#332900', borderWidth: 1, borderColor: '#FFE600' }}
+          >
+            <Image source={ICON_RANGEFINDER} style={{ width: 20, height: 20, tintColor: '#FFE600' }} resizeMode="contain" />
+            <Text style={{ color: '#FFE600', fontSize: 14, fontWeight: '600' }}>Rangefinder</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setQuietMode((q) => !q)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: quietMode ? '#122a1e' : '#0e1612', borderWidth: 1, borderColor: quietMode ? '#3d7a58' : '#1a3326' }}
+          >
+            <Text style={{ color: quietMode ? '#c4d9cc' : '#527a64', fontSize: 14, fontWeight: '600' }}>{quietMode ? 'Voice Off' : 'Voice On'}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => { toggleLowPowerMode(!lowPowerMode); setShowToolsMenu(false); }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: lowPowerMode ? '#121e0c' : '#0e1612', borderWidth: 1, borderColor: lowPowerMode ? '#5a7a3a' : '#1a3326' }}
+          >
+            <Text style={{ color: lowPowerMode ? '#aac070' : '#527a64', fontSize: 14, fontWeight: '600' }}>Low Power {lowPowerMode ? 'On' : 'Off'}</Text>
+          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 4 }}>
+            <Pressable
+              onPress={() => { setVoiceGender('male'); setGlobalGender('male'); }}
+              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+                paddingVertical: 8, borderRadius: 10,
+                backgroundColor: voiceGender === 'male' ? '#0e1e30' : '#0a1210',
+                borderWidth: 1, borderColor: voiceGender === 'male' ? '#4a7aaa' : '#1a3326' }}
+            >
+              <Text style={{ color: voiceGender === 'male' ? '#8ab2d0' : '#527a64', fontSize: 14, fontWeight: '700' }}>Male</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => { setVoiceGender('female'); setGlobalGender('female'); }}
+              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+                paddingVertical: 8, borderRadius: 10,
+                backgroundColor: voiceGender === 'female' ? '#1e1040' : '#0a1210',
+                borderWidth: 1, borderColor: voiceGender === 'female' ? '#7a60c0' : '#1a3326' }}
+            >
+              <Text style={{ color: voiceGender === 'female' ? '#b0a0e0' : '#527a64', fontSize: 14, fontWeight: '700' }}>Female</Text>
+            </Pressable>
+          </View>
+          <Pressable
+            onPress={handleOpenProfile}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#122a1e', borderWidth: 1, borderColor: '#3d7a58' }}
+          >
+            <Text style={{ color: '#c4d9cc', fontSize: 14, fontWeight: '600' }}>Profile</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setBrightMode(!brightMode)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: brightMode ? '#122a1e' : '#0e1612', borderWidth: 1, borderColor: brightMode ? '#3d7a58' : '#1a3326' }}
+          >
+            <MCIcon name="white-balance-sunny" size={18} color={brightMode ? '#A7F3D0' : '#527a64'} />
+            <Text style={{ color: brightMode ? '#A7F3D0' : '#527a64', fontSize: 14, fontWeight: '600' }}>Bright Mode {brightMode ? 'On' : 'Off'}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => { void handleLogout(); }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#1a0c0c', borderWidth: 1, borderColor: '#6b2020' }}
+          >
+            <Text style={{ color: '#e8a0a0', fontSize: 14, fontWeight: '600' }}>Sign Out</Text>
+          </Pressable>
+        </View>
+      </>
+    )}
 
     </SafeAreaView>
   );

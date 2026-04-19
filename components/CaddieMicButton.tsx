@@ -11,7 +11,7 @@
  * The context prop passes round data to the AI so responses are hole-aware.
  */
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { Pressable, Image, Text, View, StyleSheet } from 'react-native';
 import { useVoiceCaddie } from '../hooks/useVoiceCaddie';
 import { useVoiceStore } from '../store/voiceStore';
@@ -33,6 +33,8 @@ interface CaddieMicButtonProps {
   showLabel?: boolean;
   /** Style override for the outer wrapper */
   style?: object;
+  /** Called the first time the user taps the mic (once per mount, or use with show-once logic) */
+  onFirstUse?: () => void;
 }
 
 export default function CaddieMicButton({
@@ -40,10 +42,12 @@ export default function CaddieMicButton({
   size = 64,
   showLabel = true,
   style,
+  onFirstUse,
 }: CaddieMicButtonProps) {
   const { triggerVoice, cancelVoice } = useVoiceCaddie();
   const voiceState    = useVoiceStore((s) => s.voiceState);
   const caddieResponse = useVoiceStore((s) => s.caddieResponse);
+  const firstUseRef = useRef(true);
 
   const isActive = voiceState !== 'IDLE';
   const isListening = voiceState === 'LISTENING';
@@ -65,6 +69,11 @@ export default function CaddieMicButton({
     if (isActive) {
       cancelVoice();
     } else {
+      // Fire onFirstUse callback exactly once
+      if (firstUseRef.current && onFirstUse) {
+        firstUseRef.current = false;
+        onFirstUse();
+      }
       void triggerVoice(context);
     }
   };
@@ -105,7 +114,8 @@ export default function CaddieMicButton({
           </Text>
         )}
       </View>
-
+  );
+}
 
 const styles = StyleSheet.create({
   wrapper: {

@@ -1,6 +1,7 @@
-﻿import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+﻿import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import { useRouter } from 'expo-router';
-import { speak as playElevenLabsAudio, stopSpeaking, setGlobalGender } from '../services/voiceService';
+import { speakJob, cancelAll as engineCancelAll, forceStop as engineForceStop, PRIORITY as ENGINE_PRIORITY } from '../services/VoiceEngine';
+import { setGlobalGender } from '../services/voiceService';
 import { runCaddie } from '../services/caddieOrchestrator';
 import { buildContext, getAdvancedPatterns } from '../services/contextBuilder';
 import { updatePlayerModel } from '../services/playerModel';
@@ -22,6 +23,7 @@ import { getRoundInsights } from '../services/roundInsights';
 import CaddieMicButton from '../components/CaddieMicButton';
 import { useVoiceStore } from '../store/voiceStore';
 import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Image, Animated, Platform, Modal, Share, useWindowDimensions } from 'react-native';
+import { useLayout } from '../hooks/use-layout';
 import * as Haptics from 'expo-haptics';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Location from 'expo-location';
@@ -34,14 +36,18 @@ import { Video, ResizeMode, Audio } from 'expo-av';
 import { playerProfile } from '../store/playerProfile';
 import { usePlayerProfileStore, buildProfileHint } from '../store/playerProfileStore';
 import { useRoundStore } from '../store/roundStore';
-import type { Shot } from '../store/roundStore';
+import type { Shot, ShotResult } from '../store/roundStore';
 import { useUserStore } from '../store/userStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { collection, addDoc, onSnapshot, doc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import { Accelerometer, Gyroscope } from 'expo-sensors';
-import { useSwingDetector, getSwingFeedback } from '../hooks/useSwingDetector';
+import { generateInsight } from '../utils/insightEngine';
+import { handleFocusInput } from '../engine/focusEngine';
+import { buildFocusContext } from '../engine/contextBuilder';
+import { checkProactiveTriggers } from '../engine/proactiveEngine';
+import { useSwingDetector, getSwingFeedback, type SwingResult } from '../hooks/useSwingDetector';
 import { useSwingStore } from '../store/swingStore';
 import { useCaddieMemory } from '../store/CaddieMemory';
 import { BiometricLayoutControls } from './_layout';
@@ -57,8 +63,18 @@ import {
 
 const LOGO = require('../assets/images/logo.png');
 const ICON_RANGEFINDER = require('../assets/images/icon-rangefinder.png');
-const SWING_SWOOSH_SFX = require('../assets/sounds/swing-swoosh.mp3');
-const PUTT_ROLL_SFX   = require('../assets/sounds/putt-roll.mp3');
+import YardageDisplay from '../components/YardageDisplay'
+import { isWeakAccuracy } from '../utils/distance';
+import { getCaddieRecommendation } from '../engine/caddieEngine';
+import { computePlaysLike, type WindDirection } from '../utils/playsLikeEngine';
+import { getSituationDecision, getPlayModeDisplay } from '../engine/situationEngine';
+import * as caddieVoice from '../voice/caddieVoice';
+import ShotDispersionMap from '../components/ShotDispersionMap';
+import HoleMapView from '../components/HoleMapView';
+import ConversationalCaddie from '../components/ConversationalCaddie';
+import WarmupCalibration from '../components/WarmupCalibration';
+import { useCaddie } from '../context/CaddieContext';
+
 const IMG_SWING_FACE_OPEN_CLOSED = require('../assets/images/swing-face-open-closed.jpg');
 const IMG_SWING_PATH_INSIDE_OUT = require('../assets/images/swing-path-inside-out.jpg');
 const IMG_SWING_DRIVER_IMPACT = require('../assets/images/swing-driver-impact.jpg');
@@ -77,119 +93,21 @@ const HOLE_IMAGES: Record<number, number> = {
   9: require('../assets/images/hole9.jpg'),
 };
 
-type CourseHole = { hole: number; par: number; distance: number; note: string; front: { lat: number; lng: number }; middle: { lat: number; lng: number }; back: { lat: number; lng: number } };
-type Course = { name: string; slope: number; rating: number; holes: CourseHole[] };
-
-const COURSE_DB: Course[] = [
-  {
-    name: 'Menifee Lakes – Palms',
-    slope: 118,
-    rating: 69.8,
-    holes: [
-      { hole: 1,  par: 4, distance: 356, note: 'Wide landing area, open tee shot',   front: { lat: 33.6892, lng: -117.1820 }, middle: { lat: 33.6891, lng: -117.1820 }, back: { lat: 33.6890, lng: -117.1820 } },
-      { hole: 2,  par: 4, distance: 355, note: 'Water short-left, aim center',        front: { lat: 33.6896, lng: -117.1832 }, middle: { lat: 33.6895, lng: -117.1832 }, back: { lat: 33.6894, lng: -117.1832 } },
-      { hole: 3,  par: 4, distance: 356, note: 'Dogleg right, trees on corner',       front: { lat: 33.6903, lng: -117.1845 }, middle: { lat: 33.6902, lng: -117.1845 }, back: { lat: 33.6901, lng: -117.1845 } },
-      { hole: 4,  par: 5, distance: 489, note: 'Reachable par 5, bunkers right',      front: { lat: 33.6911, lng: -117.1858 }, middle: { lat: 33.6910, lng: -117.1858 }, back: { lat: 33.6909, lng: -117.1858 } },
-      { hole: 5,  par: 4, distance: 371, note: 'Long par 4, slight dogleg left',      front: { lat: 33.6919, lng: -117.1870 }, middle: { lat: 33.6918, lng: -117.1870 }, back: { lat: 33.6917, lng: -117.1870 } },
-      { hole: 6,  par: 3, distance: 170, note: 'Bunker guards green, aim center',     front: { lat: 33.6926, lng: -117.1883 }, middle: { lat: 33.6925, lng: -117.1883 }, back: { lat: 33.6924, lng: -117.1883 } },
-      { hole: 7,  par: 4, distance: 375, note: 'Water right of green, lay up left',   front: { lat: 33.6934, lng: -117.1896 }, middle: { lat: 33.6933, lng: -117.1896 }, back: { lat: 33.6932, lng: -117.1896 } },
-      { hole: 8,  par: 4, distance: 375, note: 'Tight fairway, bunker short-left',    front: { lat: 33.6941, lng: -117.1908 }, middle: { lat: 33.6940, lng: -117.1908 }, back: { lat: 33.6939, lng: -117.1908 } },
-      { hole: 9,  par: 5, distance: 491, note: 'Finishing front nine, birdie chance', front: { lat: 33.6949, lng: -117.1921 }, middle: { lat: 33.6948, lng: -117.1921 }, back: { lat: 33.6947, lng: -117.1921 } },
-      { hole: 10, par: 4, distance: 390, note: 'Slight dogleg right, open approach',  front: { lat: 33.6957, lng: -117.1934 }, middle: { lat: 33.6956, lng: -117.1934 }, back: { lat: 33.6955, lng: -117.1934 } },
-      { hole: 11, par: 4, distance: 410, note: 'Long par 4, elevated green',          front: { lat: 33.6964, lng: -117.1947 }, middle: { lat: 33.6963, lng: -117.1947 }, back: { lat: 33.6962, lng: -117.1947 } },
-      { hole: 12, par: 3, distance: 155, note: 'Short iron to elevated green',        front: { lat: 33.6972, lng: -117.1960 }, middle: { lat: 33.6971, lng: -117.1960 }, back: { lat: 33.6970, lng: -117.1960 } },
-      { hole: 13, par: 5, distance: 480, note: 'Long par 5, bunkers both sides',      front: { lat: 33.6980, lng: -117.1972 }, middle: { lat: 33.6979, lng: -117.1972 }, back: { lat: 33.6978, lng: -117.1972 } },
-      { hole: 14, par: 4, distance: 365, note: 'Straight hole, tight landing zone',   front: { lat: 33.6987, lng: -117.1985 }, middle: { lat: 33.6986, lng: -117.1985 }, back: { lat: 33.6985, lng: -117.1985 } },
-      { hole: 15, par: 4, distance: 380, note: 'Subtle dogleg left, water short',     front: { lat: 33.6995, lng: -117.1998 }, middle: { lat: 33.6994, lng: -117.1998 }, back: { lat: 33.6993, lng: -117.1998 } },
-      { hole: 16, par: 3, distance: 160, note: 'Island green, all carry required',    front: { lat: 33.7003, lng: -117.2011 }, middle: { lat: 33.7002, lng: -117.2011 }, back: { lat: 33.7001, lng: -117.2011 } },
-      { hole: 17, par: 4, distance: 375, note: 'Water left off tee, bail right',      front: { lat: 33.7010, lng: -117.2024 }, middle: { lat: 33.7009, lng: -117.2024 }, back: { lat: 33.7008, lng: -117.2024 } },
-      { hole: 18, par: 5, distance: 501, note: 'Finishing hole, risk-reward approach',front: { lat: 33.7018, lng: -117.2037 }, middle: { lat: 33.7017, lng: -117.2037 }, back: { lat: 33.7016, lng: -117.2037 } },
-    ],
-  },
-  {
-    name: 'Menifee Lakes – Lakes',
-    slope: 121,
-    rating: 70.4,
-    holes: [
-      { hole: 1,  par: 4, distance: 395, note: 'Lake left, wide tee',   front: { lat: 33.6900, lng: -117.1900 }, middle: { lat: 33.6899, lng: -117.1900 }, back: { lat: 33.6898, lng: -117.1900 } },
-      { hole: 2,  par: 4, distance: 375, note: 'Over water hazard',      front: { lat: 33.6908, lng: -117.1912 }, middle: { lat: 33.6907, lng: -117.1912 }, back: { lat: 33.6906, lng: -117.1912 } },
-      { hole: 3,  par: 5, distance: 545, note: 'Creek crosses fairway',  front: { lat: 33.6915, lng: -117.1925 }, middle: { lat: 33.6914, lng: -117.1925 }, back: { lat: 33.6913, lng: -117.1925 } },
-      { hole: 4,  par: 3, distance: 170, note: 'Carry over water',       front: { lat: 33.6923, lng: -117.1937 }, middle: { lat: 33.6922, lng: -117.1937 }, back: { lat: 33.6921, lng: -117.1937 } },
-      { hole: 5,  par: 4, distance: 415, note: 'Dogleg right, bunker',   front: { lat: 33.6930, lng: -117.1950 }, middle: { lat: 33.6929, lng: -117.1950 }, back: { lat: 33.6928, lng: -117.1950 } },
-      { hole: 6,  par: 4, distance: 385, note: 'Water right of green',   front: { lat: 33.6938, lng: -117.1962 }, middle: { lat: 33.6937, lng: -117.1962 }, back: { lat: 33.6936, lng: -117.1962 } },
-      { hole: 7,  par: 3, distance: 185, note: 'Island green, par 3',    front: { lat: 33.6945, lng: -117.1975 }, middle: { lat: 33.6944, lng: -117.1975 }, back: { lat: 33.6943, lng: -117.1975 } },
-      { hole: 8,  par: 5, distance: 560, note: 'Two lakes in play',      front: { lat: 33.6953, lng: -117.1988 }, middle: { lat: 33.6952, lng: -117.1988 }, back: { lat: 33.6951, lng: -117.1988 } },
-      { hole: 9,  par: 4, distance: 400, note: 'Finishing nine, uphill', front: { lat: 33.6960, lng: -117.2000 }, middle: { lat: 33.6959, lng: -117.2000 }, back: { lat: 33.6958, lng: -117.2000 } },
-      { hole: 10, par: 4, distance: 370, note: 'Lake along right side',  front: { lat: 33.6968, lng: -117.2013 }, middle: { lat: 33.6967, lng: -117.2013 }, back: { lat: 33.6966, lng: -117.2013 } },
-      { hole: 11, par: 3, distance: 155, note: 'Short iron over creek',  front: { lat: 33.6975, lng: -117.2025 }, middle: { lat: 33.6974, lng: -117.2025 }, back: { lat: 33.6973, lng: -117.2025 } },
-      { hole: 12, par: 5, distance: 525, note: 'Reachable eagle hole',   front: { lat: 33.6983, lng: -117.2038 }, middle: { lat: 33.6982, lng: -117.2038 }, back: { lat: 33.6981, lng: -117.2038 } },
-      { hole: 13, par: 4, distance: 420, note: 'Tight tee, water left',  front: { lat: 33.6990, lng: -117.2050 }, middle: { lat: 33.6989, lng: -117.2050 }, back: { lat: 33.6988, lng: -117.2050 } },
-      { hole: 14, par: 4, distance: 390, note: 'Bunkers guard green',    front: { lat: 33.6998, lng: -117.2063 }, middle: { lat: 33.6997, lng: -117.2063 }, back: { lat: 33.6996, lng: -117.2063 } },
-      { hole: 15, par: 3, distance: 165, note: 'Wind off the lake',      front: { lat: 33.7005, lng: -117.2075 }, middle: { lat: 33.7004, lng: -117.2075 }, back: { lat: 33.7003, lng: -117.2075 } },
-      { hole: 16, par: 4, distance: 405, note: 'Dogleg around lake',     front: { lat: 33.7013, lng: -117.2088 }, middle: { lat: 33.7012, lng: -117.2088 }, back: { lat: 33.7011, lng: -117.2088 } },
-      { hole: 17, par: 5, distance: 540, note: 'Eagle opportunity',      front: { lat: 33.7020, lng: -117.2100 }, middle: { lat: 33.7019, lng: -117.2100 }, back: { lat: 33.7018, lng: -117.2100 } },
-      { hole: 18, par: 4, distance: 430, note: 'Lake behind green',      front: { lat: 33.7028, lng: -117.2113 }, middle: { lat: 33.7027, lng: -117.2113 }, back: { lat: 33.7026, lng: -117.2113 } },
-    ],
-  },
-  {
-    name: 'Temecula Creek',
-    slope: 125,
-    rating: 71.2,
-    holes: [
-      { hole: 1,  par: 4, distance: 400, note: 'Open tee shot',      front: { lat: 33.5010, lng: -117.0800 }, middle: { lat: 33.5009, lng: -117.0800 }, back: { lat: 33.5008, lng: -117.0800 } },
-      { hole: 2,  par: 5, distance: 530, note: 'Creek right',        front: { lat: 33.5017, lng: -117.0813 }, middle: { lat: 33.5016, lng: -117.0813 }, back: { lat: 33.5015, lng: -117.0813 } },
-      { hole: 3,  par: 3, distance: 165, note: 'Elevated tee',       front: { lat: 33.5025, lng: -117.0826 }, middle: { lat: 33.5024, lng: -117.0826 }, back: { lat: 33.5023, lng: -117.0826 } },
-      { hole: 4,  par: 4, distance: 385, note: 'Dogleg right',       front: { lat: 33.5032, lng: -117.0838 }, middle: { lat: 33.5031, lng: -117.0838 }, back: { lat: 33.5030, lng: -117.0838 } },
-      { hole: 5,  par: 4, distance: 415, note: 'Bunker at 220',      front: { lat: 33.5040, lng: -117.0851 }, middle: { lat: 33.5039, lng: -117.0851 }, back: { lat: 33.5038, lng: -117.0851 } },
-      { hole: 6,  par: 3, distance: 190, note: 'Wind factor',        front: { lat: 33.5047, lng: -117.0864 }, middle: { lat: 33.5046, lng: -117.0864 }, back: { lat: 33.5045, lng: -117.0864 } },
-      { hole: 7,  par: 5, distance: 545, note: 'Birdie opportunity', front: { lat: 33.5055, lng: -117.0876 }, middle: { lat: 33.5054, lng: -117.0876 }, back: { lat: 33.5053, lng: -117.0876 } },
-      { hole: 8,  par: 4, distance: 375, note: 'Tight tee shot',     front: { lat: 33.5062, lng: -117.0889 }, middle: { lat: 33.5061, lng: -117.0889 }, back: { lat: 33.5060, lng: -117.0889 } },
-      { hole: 9,  par: 4, distance: 395, note: 'Long par 4',         front: { lat: 33.5070, lng: -117.0902 }, middle: { lat: 33.5069, lng: -117.0902 }, back: { lat: 33.5068, lng: -117.0902 } },
-      { hole: 10, par: 4, distance: 410, note: 'Slight uphill',      front: { lat: 33.5077, lng: -117.0915 }, middle: { lat: 33.5076, lng: -117.0915 }, back: { lat: 33.5075, lng: -117.0915 } },
-      { hole: 11, par: 3, distance: 155, note: 'Club up into the wind',    front: { lat: 33.5085, lng: -117.0927 }, middle: { lat: 33.5084, lng: -117.0927 }, back: { lat: 33.5083, lng: -117.0927 } },
-      { hole: 12, par: 5, distance: 520, note: 'Reachable in 2',     front: { lat: 33.5092, lng: -117.0940 }, middle: { lat: 33.5091, lng: -117.0940 }, back: { lat: 33.5090, lng: -117.0940 } },
-      { hole: 13, par: 4, distance: 365, note: 'Water left',         front: { lat: 33.5100, lng: -117.0953 }, middle: { lat: 33.5099, lng: -117.0953 }, back: { lat: 33.5098, lng: -117.0953 } },
-      { hole: 14, par: 4, distance: 430, note: 'Hardest hole',       front: { lat: 33.5107, lng: -117.0965 }, middle: { lat: 33.5106, lng: -117.0965 }, back: { lat: 33.5105, lng: -117.0965 } },
-      { hole: 15, par: 3, distance: 170, note: 'Over the creek',     front: { lat: 33.5115, lng: -117.0978 }, middle: { lat: 33.5114, lng: -117.0978 }, back: { lat: 33.5113, lng: -117.0978 } },
-      { hole: 16, par: 4, distance: 390, note: 'Fairway bunkers',    front: { lat: 33.5122, lng: -117.0991 }, middle: { lat: 33.5121, lng: -117.0991 }, back: { lat: 33.5120, lng: -117.0991 } },
-      { hole: 17, par: 5, distance: 560, note: 'Big par 5 finish',   front: { lat: 33.5130, lng: -117.1004 }, middle: { lat: 33.5129, lng: -117.1004 }, back: { lat: 33.5128, lng: -117.1004 } },
-      { hole: 18, par: 4, distance: 405, note: 'Home hole',          front: { lat: 33.5137, lng: -117.1016 }, middle: { lat: 33.5136, lng: -117.1016 }, back: { lat: 33.5135, lng: -117.1016 } },
-    ],
-  },
-  {
-    name: 'Moreno Valley Ranch',
-    slope: 122,
-    rating: 70.5,
-    holes: [
-      { hole: 1,  par: 5, distance: 520, note: 'Wide open par 5',   front: { lat: 33.9250, lng: -117.2200 }, middle: { lat: 33.9249, lng: -117.2200 }, back: { lat: 33.9248, lng: -117.2200 } },
-      { hole: 2,  par: 4, distance: 390, note: 'Fairway slopes right', front: { lat: 33.9257, lng: -117.2213 }, middle: { lat: 33.9256, lng: -117.2213 }, back: { lat: 33.9255, lng: -117.2213 } },
-      { hole: 3,  par: 3, distance: 155, note: 'Small green',        front: { lat: 33.9265, lng: -117.2226 }, middle: { lat: 33.9264, lng: -117.2226 }, back: { lat: 33.9263, lng: -117.2226 } },
-      { hole: 4,  par: 4, distance: 405, note: 'Uphill approach',    front: { lat: 33.9272, lng: -117.2238 }, middle: { lat: 33.9271, lng: -117.2238 }, back: { lat: 33.9270, lng: -117.2238 } },
-      { hole: 5,  par: 4, distance: 375, note: 'Dogleg left',        front: { lat: 33.9280, lng: -117.2251 }, middle: { lat: 33.9279, lng: -117.2251 }, back: { lat: 33.9278, lng: -117.2251 } },
-      { hole: 6,  par: 3, distance: 185, note: 'Over water',         front: { lat: 33.9287, lng: -117.2264 }, middle: { lat: 33.9286, lng: -117.2264 }, back: { lat: 33.9285, lng: -117.2264 } },
-      { hole: 7,  par: 5, distance: 535, note: 'Reachable eagle chance', front: { lat: 33.9295, lng: -117.2277 }, middle: { lat: 33.9294, lng: -117.2277 }, back: { lat: 33.9293, lng: -117.2277 } },
-      { hole: 8,  par: 4, distance: 360, note: 'Short par 4',        front: { lat: 33.9302, lng: -117.2289 }, middle: { lat: 33.9301, lng: -117.2289 }, back: { lat: 33.9300, lng: -117.2289 } },
-      { hole: 9,  par: 4, distance: 415, note: 'Long uphill',        front: { lat: 33.9310, lng: -117.2302 }, middle: { lat: 33.9309, lng: -117.2302 }, back: { lat: 33.9308, lng: -117.2302 } },
-      { hole: 10, par: 4, distance: 380, note: 'Bunker fronts green', front: { lat: 33.9317, lng: -117.2315 }, middle: { lat: 33.9316, lng: -117.2315 }, back: { lat: 33.9315, lng: -117.2315 } },
-      { hole: 11, par: 3, distance: 160, note: 'Wind exposed',       front: { lat: 33.9325, lng: -117.2328 }, middle: { lat: 33.9324, lng: -117.2328 }, back: { lat: 33.9323, lng: -117.2328 } },
-      { hole: 12, par: 5, distance: 525, note: 'Two-shot par 5',     front: { lat: 33.9332, lng: -117.2340 }, middle: { lat: 33.9331, lng: -117.2340 }, back: { lat: 33.9330, lng: -117.2340 } },
-      { hole: 13, par: 4, distance: 395, note: 'Tough driving hole', front: { lat: 33.9340, lng: -117.2353 }, middle: { lat: 33.9339, lng: -117.2353 }, back: { lat: 33.9338, lng: -117.2353 } },
-      { hole: 14, par: 4, distance: 370, note: 'Approach over bunker', front: { lat: 33.9347, lng: -117.2366 }, middle: { lat: 33.9346, lng: -117.2366 }, back: { lat: 33.9345, lng: -117.2366 } },
-      { hole: 15, par: 3, distance: 140, note: 'Short iron',         front: { lat: 33.9355, lng: -117.2379 }, middle: { lat: 33.9354, lng: -117.2379 }, back: { lat: 33.9353, lng: -117.2379 } },
-      { hole: 16, par: 5, distance: 515, note: 'Scoring opportunity', front: { lat: 33.9362, lng: -117.2391 }, middle: { lat: 33.9361, lng: -117.2391 }, back: { lat: 33.9360, lng: -117.2391 } },
-      { hole: 17, par: 4, distance: 400, note: 'Signature hole',     front: { lat: 33.9370, lng: -117.2404 }, middle: { lat: 33.9369, lng: -117.2404 }, back: { lat: 33.9368, lng: -117.2404 } },
-      { hole: 18, par: 4, distance: 425, note: 'Uphill home hole',   front: { lat: 33.9377, lng: -117.2417 }, middle: { lat: 33.9376, lng: -117.2417 }, back: { lat: 33.9375, lng: -117.2417 } },
-    ],
-  },
-];
+// ── Course database — imported from the single source of truth ──────────────
+import { COURSE_DB } from '../data/courses';
+type CourseHole = import('../data/courses').CourseHole;
+type Course = import('../data/courses').Course;
 
 const MENIFEE_LAKES = COURSE_DB[0];
 
-const SWING_FIXES: Record<string, { title: string; cause: string; fix: string; drill: string; cue: string; image: number }> = {
+// ────────────────────────────────────────────────────────────────────────────
+
+// SWING_FEEDBACK — feedback cards shown in shot analysis panel
+const SWING_FEEDBACK = {
   right: {
-    title: 'Slice / Miss Right',
-    cause: 'Open clubface or outside-in swing path',
-    fix: 'Focus on closing the clubface and swinging from the inside',
+    title: 'Push / Miss Right',
+    cause: 'Open club face or outside-in path',
+    fix: 'Focus on squaring the face and attacking from inside',
     drill: 'Place a headcover outside the ball and avoid hitting it',
     cue: "Feel like you're swinging out to right field",
     image: IMG_SWING_FACE_OPEN_CLOSED,
@@ -250,7 +168,7 @@ function buildSimProfile(shotList: Shot[]): SimProfile {
   }
   const l = shotList.filter((s) => s.result === 'left').length;
   const r = shotList.filter((s) => s.result === 'right').length;
-  const st = shotList.filter((s) => s.result === 'straight').length;
+  const st = shotList.filter((s) => s.result === 'center').length;
   const total = shotList.length;
   let missBias: SimProfile['missBias'] = 'neutral';
   if (r > l && r > st) missBias = 'right';
@@ -412,20 +330,20 @@ function generateGamePlan(profile: SimProfile, sim: SimResult | null): GamePlan 
   const strategy = profile.pressureBias !== 'neutral' || profile.consistency < 0.5
     ? 'Play safe on hard holes'
     : profile.consistency >= 0.7
-    ? 'Be aggressive — you\'re consistent today'
+    ? 'Be aggressive ? you\'re consistent today'
     : 'Stay patient and pick your spots';
 
   const worstMental = Object.entries(profile.mentalBias)
     .find(([, v]) => v !== 'straight')?.[0];
   const focus = worstMental
-    ? `Avoid rushing — your ${worstMental} tempo causes misses`
+    ? `Avoid rushing ? your ${worstMental} tempo causes misses`
     : 'Commit to smooth tempo on every shot';
 
   const warning = profile.pressureBias === 'right' ? 'You tend to miss right under pressure'
     : profile.pressureBias === 'left'  ? 'You tend to miss left under pressure'
-    : profile.missBias === 'right'     ? 'Watch the right miss — aim a touch left'
-    : profile.missBias === 'left'      ? 'Watch the left miss — stay centered'
-    : sim ? `Sim avg: ${sim.averageScore} — stay within yourself`
+    : profile.missBias === 'right'     ? 'Watch the right miss ? aim a touch left'
+    : profile.missBias === 'left'      ? 'Watch the left miss ? stay centered'
+    : sim ? `Sim avg: ${sim.averageScore} ? stay within yourself`
     : 'Trust your swing';
   return { strategy, focus, warning };
 }
@@ -433,12 +351,12 @@ function generateGamePlan(profile: SimProfile, sim: SimResult | null): GamePlan 
 function getLiveInsights(shotList: Shot[], holeCount = 18): LiveInsights {
   if (shotList.length === 0) return { trend: 'neutral', streak: null, pressure: false };
   const last3 = shotList.slice(-3);
-  const straights = last3.filter((s) => s.result === 'straight').length;
-  const misses   = last3.filter((s) => s.result !== 'straight').length;
+  const straights = last3.filter((s) => s.result === 'center').length;
+  const misses   = last3.filter((s) => s.result !== 'center').length;
   const trend = straights >= 2 ? 'improving' : misses >= 2 ? 'struggling' : 'neutral';
   const last2 = shotList.slice(-2);
   const streak: 'right' | 'left' | null =
-    last2.length === 2 && last2[0].result === last2[1].result && last2[0].result !== 'straight'
+    last2.length === 2 && last2[0].result === last2[1].result && last2[0].result !== 'center'
       ? (last2[0].result as 'right' | 'left')
       : null;
   const pressureThreshold = holeCount === 9 ? 4 : 6;
@@ -447,7 +365,7 @@ function getLiveInsights(shotList: Shot[], holeCount = 18): LiveInsights {
 }
 // -----------------------------------------------------------------------------
 
-// Default amateur carry distances (yards) — used when the player has no
+// Default amateur carry distances (yards) ? used when the player has no
 // personal history yet for a club.  Ordered longest ? shortest.
 const DEFAULT_CLUB_YARDS: [string, number][] = [
   ['Driver',  230],
@@ -467,12 +385,12 @@ const DEFAULT_CLUB_YARDS: [string, number][] = [
   ['Putter',   10],
 ];
 
-// ─── AimLine ─────────────────────────────────────────────────────────────────
+// --- AimLine -----------------------------------------------------------------
 // Draws the aim-assist line overlay inside the fullscreen camera modal.
-//   screenOffset  — horizontal pixel offset applied to the vertical aim line
+//   screenOffset  ? horizontal pixel offset applied to the vertical aim line
 //                   (negative = left, positive = right, 0 = center)
-//   lineColor     — stroke colour (reflects CaddieMemory bias)
-//   target        — locked tap target { x, y } or null
+//   lineColor     ? stroke colour (reflects CaddieMemory bias)
+//   target        ? locked tap target { x, y } or null
 function AimLine({
   screenOffset,
   lineColor,
@@ -492,7 +410,7 @@ function AimLine({
       style={StyleSheet.absoluteFillObject}
       pointerEvents="none"
     >
-      {/* Vertical aim line — full screen height, dashed when target locked */}
+      {/* Vertical aim line ? full screen height, dashed when target locked */}
       <SvgLine
         x1={cx} y1={height}
         x2={cx} y2={0}
@@ -539,29 +457,40 @@ function AimLine({
     </Svg>
   );
 }
+// Memoized: only re-renders when screenOffset, lineColor, or target changes
+const AimLineMemo = memo(AimLine);
 
 export default function PlayScreenClean() {
-  // ── DEBUG UI — set false to remove all wireframe borders ───────────────────
+  const {
+    setState: setCaddieState,
+    memory,
+    roundState,
+    addShotToMemory,
+    addShotToRound,
+    markRoundInsightShown,
+  } = useCaddie() ?? {};
+  // -- DEBUG UI ? set false to remove all wireframe borders -------------------
   const DEBUG_UI = true;
   const debugStyle = DEBUG_UI ? { borderWidth: 1, borderColor: 'red' } : {};
   const debugGreen  = DEBUG_UI ? { borderWidth: 1, borderColor: '#00ff88' } : {};
   const debugBlue   = DEBUG_UI ? { borderWidth: 1, borderColor: '#60a5fa' } : {};
   const debugYellow = DEBUG_UI ? { borderWidth: 1, borderColor: '#fbbf24' } : {};
   const debugPurple = DEBUG_UI ? { borderWidth: 1, borderColor: '#c084fc' } : {};
-  // ── Responsive dimensions ─────────────────────────────────────────
+  // -- Responsive dimensions -----------------------------------------
   const { width: screenW, height: screenH } = useWindowDimensions();
-  const isSmall  = screenW < 375;   // iPhone SE, small Android
-  const isMedium = screenW < 414;   // iPhone 13/14 standard
-  // Scales: shot buttons height, quick-mode circle buttons, distance hero font
-  const shotBtnH    = isSmall ? 76 : isMedium ? 88 : 96;
-  const shotBtnR    = isSmall ? 14 : 18;
-  const shotBtnEmoji = isSmall ? 24 : 30;
-  const qBtnSize    = isSmall ? 64 : isMedium ? 72 : 78;
-  const distFontSz  = isSmall ? 68 : isMedium ? 80 : 88;
-  const distLineH   = distFontSz + 2;
-  const watchCardW  = Math.min(screenW - 48, 220);
-  const watchCardFontSz = isSmall ? 52 : 68;
+  const {
+    isSmall, isMedium, isLarge, isWide,
+    heroFontSize: distFontSz, hPad,
+    shotBtnH, shotBtnRadius: shotBtnR, shotBtnEmoji,
+    qBtnSize, watchCardW, watchFontSize: watchCardFontSz,
+    blockGap, cardPadding,
+  } = useLayout();
+  const distLineH = distFontSz + 2;
   const [mentalState, setMentalState] = useState('neutral');
+  const [lieType, setLieType] = useState<'fairway' | 'rough' | 'bunker' | 'tee'>('fairway');
+  const [windSpeed, setWindSpeed] = useState(0);         // mph
+  const [windDir, setWindDir]     = useState<WindDirection>('cross');
+  const [elevChange, setElevChange] = useState(0);       // feet, + uphill / - downhill
   const [simResult, setSimResult] = useState<SimResult | null>(null);
   const [simCourse, setSimCourse] = useState<keyof typeof SIM_COURSES>('standard');
   const [roundLength, setRoundLength] = useState<9 | 18>(18);
@@ -577,7 +506,7 @@ export default function PlayScreenClean() {
   const aim = useRoundStore((s) => s.aim);
   const storeSetAim = useRoundStore((s) => s.setAim);
 
-  // ── Safe fallback constants — always usable, never undefined ─────────
+  // -- Safe fallback constants ? always usable, never undefined ---------
   // Prefer live store values; fall back to sensible mid-iron defaults so
   // every downstream function receives a valid value on first render and
   // during store hydration.
@@ -585,6 +514,9 @@ export default function PlayScreenClean() {
   const safeAim      = aim      || 'center';
   const clearRound = useRoundStore((s) => s.clearRound);
   const setActiveCourse = useRoundStore((s) => s.setActiveCourse);
+  const setCourseHoleScore = useRoundStore((s) => s.setCourseHoleScore);
+  const storeActiveCourse  = useRoundStore((s) => s.activeCourse);
+  const storeSetIsRoundActive = useRoundStore((s) => s.setIsRoundActive);
   const [distance, setDistance] = useState('150');
   const [hole, setHole] = useState(1);
   const [isOnline, setIsOnline] = useState(true);
@@ -606,7 +538,7 @@ export default function PlayScreenClean() {
   const ppComplete   = usePlayerProfileStore((s) => s.profileComplete);
   const ppCoachingStyle = usePlayerProfileStore((s) => s.coachingStyle);
 
-  // CaddieMemory — player tendencies derived from practice sessions
+  // CaddieMemory ? player tendencies derived from practice sessions
   const cmMissBias       = useCaddieMemory((s) => s.missBias);
   const cmConfidence     = useCaddieMemory((s) => s.confidence);
   const cmUpdated        = useCaddieMemory((s) => s.lastUpdated);
@@ -618,7 +550,35 @@ export default function PlayScreenClean() {
   const [lastInsight, setLastInsight] = useState<string | null>(null);
   const [milestoneMessage, setMilestoneMessage] = useState<string | null>(null);
   const milestoneShotRef = useRef<number>(0); // last shot count that triggered a milestone
-  const [roundSummary, setRoundSummary] = useState<{ totalShots: number; bias: string | null; biasConfidence: number | null; keyMessage: string } | null>(null);
+
+  /** Full AI Coach round analysis — computed on endRound, displayed on the summary card. */
+  type RoundAnalysis = {
+    /** e.g. "You missed right 62% of the time. Focus on alignment." */
+    keyInsight:       string;
+    /** e.g. "8 Iron — 78% straight" or "Driver — most consistent today" */
+    strengthClub:     string | null;
+    strengthPct:      number | null;
+    /** e.g. "Right miss — 62%" */
+    focusArea:        string;
+    focusPct:         number;
+    /** Club with worst accuracy that has ≥ 3 uses */
+    weakestClub:      string | null;
+    weakestPct:       number | null;
+    /** Short spoken summary sentence */
+    voiceSummary:     string;
+    /** One actionable practice tip */
+    practiceTip:      string;
+    /** Raw stats */
+    totalShots:       number;
+    totalHoles:       number;
+    rightPct:         number;
+    leftPct:          number;
+    straightPct:      number;
+    /** Score vs par, or null if par data unavailable */
+    scoreToPar:       number | null;
+  };
+
+  const [roundSummary, setRoundSummary] = useState<RoundAnalysis | null>(null);
   const lastConfidenceBoostRef = useRef<number>(0);
   const pressureInsightShotRef = useRef<number>(0); // shot count at last pressure-voice trigger
   const mentalInsightShotRef = useRef<number>(0);   // shot count at last mental/trend voice trigger
@@ -627,7 +587,11 @@ export default function PlayScreenClean() {
   const [caddieMessage, setCaddieMessage] = useState('');
   const [confidence, setConfidence] = useState(50);
   const [currentRound, setCurrentRound] = useState<Shot[]>([]);
-  const [isRoundActive, setIsRoundActive] = useState(false);
+  const [isRoundActive, setIsRoundActiveLocal] = useState(false);
+  const setIsRoundActive = (active: boolean) => {
+    setIsRoundActiveLocal(active);
+    storeSetIsRoundActive(active);
+  };
   const [savedRounds, setSavedRounds] = useState<Array<{ date: string; shots: Shot[] }>>([]);
   const [longTermPattern, setLongTermPattern] = useState<'push' | 'pull' | 'neutral' | null>(null);
   const [aiThinking, setAiThinking] = useState(false);
@@ -639,7 +603,9 @@ export default function PlayScreenClean() {
   const [lastSpokenTime, setLastSpokenTime] = useState(0); // kept for any read-only display consumers
   const [quickMode, setQuickMode] = useState(false);
   const [lastShotTime, setLastShotTime] = useState(0);
-  // Increments each time a shot is recorded — drives post-shot decision refresh.
+  /** IDs of proactive triggers already shown this round — prevents repetition */
+  const [proactiveShownIds, setProactiveShownIds] = useState<Set<string>>(new Set());
+  // Increments each time a shot is recorded ? drives post-shot decision refresh.
   const [lastShotEpoch, setLastShotEpoch] = useState(0);
   const [shotTarget, setShotTarget] = useState<'left' | 'center' | 'right'>('center');
   const [pocketMode, setPocketMode] = useState(false);
@@ -681,7 +647,7 @@ export default function PlayScreenClean() {
   useEffect(() => { useSettingsStore.getState().setVoiceStyle(voiceStyle); }, [voiceStyle]);
   useEffect(() => { useSettingsStore.getState().setVoiceGender(localGender); }, [localGender]);
 
-  // Focus Mode+ state (additive — no existing logic affected)
+  // Focus Mode+ state (additive ? no existing logic affected)
   const [focusMode, setFocusMode] = useState(false);
   const [focusMessage, setFocusMessage] = useState('');
   const [lastQuickReply, setLastQuickReply] = useState('');
@@ -702,50 +668,69 @@ export default function PlayScreenClean() {
   ];
   const [swingThought, setSwingThought] = useState(FOCUS_MESSAGES[0]);
   const QUICK_REPLIES = [
-    'In a round — will respond after',
+    'In a round ? will respond after',
     "Can't talk right now, call if urgent",
     'Give me 30 min',
-    'On the course — text if urgent',
+    'On the course ? text if urgent',
   ];
   const [players, setPlayers] = useState(() => [registeredName || 'You', 'Player 2', 'Player 3', 'Player 4']);
   const [activePlayerCount, setActivePlayerCount] = useState(1);
   const [multiRound, setMultiRound] = useState<Array<{ hole: number; par: number; scores: number[] }>>([]);
   const [skins, setSkins] = useState<number[]>([0, 0, 0, 0]);
   const [caddieMode, setCaddieMode] = useState(0);
+  // SmartPlay dual-mode: 'manual' = standard UI, 'auto' = GPS-driven minimal UI
+  const [smartMode, setSmartMode] = useState<'manual' | 'auto'>('manual');
+  // Auto-shot confirmation: holds a pending auto-detected shot for user confirmation
+  const [pendingAutoShot, setPendingAutoShot] = useState<{ club: string; yards: number } | null>(null);
   const [strategyMode, setStrategyMode] = useState<'safe' | 'neutral' | 'attack'>('neutral');
   const [goalMode, setGoalMode] = useState<'beginner' | 'break90' | 'break80'>('beginner');
   const goalColor = goalMode === 'beginner' ? '#66bb6a' : goalMode === 'break90' ? '#2196f3' : '#f59e0b';
 
   /**
-   * PLAYER_MODE_CONFIG — per-mode defaults for aggressiveness and messaging prefix.
+   * PLAYER_MODE_CONFIG ? per-mode defaults for aggressiveness and messaging prefix.
    * aggressiveness: how willingly the strategy engine recommends attacking.
    * label: display name for UI.
    * riskBias: feeds getStrategy() risk engine.
    */
   const PLAYER_MODE_CONFIG = {
-    beginner:  { label: 'Beginner',  riskBias: 'safe',    color: '#66bb6a', emoji: '🌱' },
-    break90:   { label: 'Break 90',  riskBias: 'neutral', color: '#2196f3', emoji: '🎯' },
-    break80:   { label: 'Break 80',  riskBias: 'attack',  color: '#f59e0b', emoji: '🔥' },
+    beginner:  { label: 'Beginner',  riskBias: 'safe',    color: '#66bb6a', emoji: '??' },
+    break90:   { label: 'Break 90',  riskBias: 'neutral', color: '#2196f3', emoji: '??' },
+    break80:   { label: 'Break 80',  riskBias: 'attack',  color: '#f59e0b', emoji: '??' },
   } as const;
   const [quickCommand, setQuickCommand] = useState('');
   const [commandInput, setCommandInput] = useState('');
   const [commandResponse, setCommandResponse] = useState('');
-  const [selectedCourseIdx, setSelectedCourseIdx] = useState(0);
-  // Calibrated green positions — user walks to each green and presses "Set Green".
+  // Course selection persists across tabs via roundStore
+  const selectedCourseIdx    = useRoundStore((s) => s.selectedCourseIdx);
+  const setSelectedCourseIdx = useRoundStore((s) => s.setSelectedCourseIdx);
+  // Calibrated green positions ? user walks to each green and presses "Set Green".
   // Persisted to AsyncStorage so calibrations survive app restarts.
   const [calibratedGreens, setCalibratedGreens] = useState<Record<string, { lat: number; lng: number }>>({});
   const [showCourseSelect, setShowCourseSelect] = useState(false);
   const [showQuickCommands, setShowQuickCommands] = useState(false);
+  const [showDispersionMap, setShowDispersionMap] = useState(false);
+  const [showHoleMap, setShowHoleMap] = useState(false);
+  const [showConvoModal, setShowConvoModal] = useState(false);
+  const [showWarmupModal, setShowWarmupModal] = useState(false);
   const [showClubStrip, setShowClubStrip] = useState(false);
   const activeCourse = COURSE_DB[selectedCourseIdx] ?? COURSE_DB[0];
+  // Guard: if COURSE_DB is empty or holes array is missing, show loading state
+  if (!activeCourse || !activeCourse.holes || activeCourse.holes.length === 0) {
+    const { Text: RNText, View: RNView } = require('react-native');
+    return (
+      <RNView style={{ flex: 1, backgroundColor: '#0B3D2E', justifyContent: 'center', alignItems: 'center' }}>
+        <RNText style={{ color: '#A7F3D0', fontSize: 16 }}>Loading course…</RNText>
+      </RNView>
+    );
+  }
   const currentHoleData = activeCourse.holes[Math.min(hole - 1, activeCourse.holes.length - 1)];
   const courseSlope = activeCourse.slope;
   const courseRating = activeCourse.rating;
-  // Safe aliases — guards against undefined Zustand slices during first render
+  // Safe aliases ? guards against undefined Zustand slices during first render
   const safeShots = shots ?? [];
   const safeMultiRound = multiRound ?? [];
 
-  /** Persisted setMultiRound — writes through to AsyncStorage so scores survive crashes. */
+  /** Persisted setMultiRound ? writes through to AsyncStorage so scores survive crashes. */
   const setMultiRoundPersisted = (
     updater: Array<{ hole: number; par: number; scores: number[] }> |
              ((prev: Array<{ hole: number; par: number; scores: number[] }>) => Array<{ hole: number; par: number; scores: number[] }>)
@@ -769,6 +754,24 @@ export default function PlayScreenClean() {
   const videoRef = useRef<InstanceType<typeof Video>>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
+  /** Structured output from the hole-strategy engine. */
+  type HoleStrategyData = {
+    headline:     string;
+    parLabel:     'Par 3' | 'Par 4' | 'Par 5';
+    /** Recommended tee club (null for par 3 — same as approach club) */
+    teeClub:      string | null;
+    /** Where to aim / land the ball off the tee */
+    targetZone:   string;
+    /** Best miss direction, or null if no strong preference */
+    safeMiss:     'left' | 'right' | null;
+    /** Second-shot / layup note */
+    approach:     string;
+    /** Single sentence for voice playback on the tee */
+    voiceLine:    string;
+    /** Which user tendency is driving the advice */
+    adjustedFor:  'miss_right' | 'miss_left' | 'aggressive' | null;
+  };
+
   type SwingAnalysis = {
     path: 'inside-out' | 'outside-in' | 'on-plane';
     face: 'open' | 'square' | 'closed';
@@ -783,7 +786,7 @@ export default function PlayScreenClean() {
     // IMU rotation metrics (gyroscope)
     wristRotation: 'early' | 'normal' | 'late';
     bodyRotation: 'restricted' | 'good' | 'over';
-    rotScore: number;  // 0—100, higher = better rotation sequence
+    rotScore: number;  // 0?100, higher = better rotation sequence
     summary: string;
     cues: string[];
   };
@@ -833,39 +836,39 @@ export default function PlayScreenClean() {
 
     // -- Gyroscope-derived metrics ------------------------------------------
     // peakRotY (forearm roll): high = fast release / flip, low = lag preserved
-    //   > 4.0 rad/s = early flip,  1.5—4.0 = normal release,  < 1.5 = late/held
+    //   > 4.0 rad/s = early flip,  1.5?4.0 = normal release,  < 1.5 = late/held
     const wristRotation: SwingAnalysis['wristRotation'] =
       Math.abs(peakRotY) > 4.0 ? 'early' :
       Math.abs(peakRotY) > 1.5 ? 'normal' : 'late';
 
     // peakRotZ (body yaw): higher = more hip/shoulder turn
-    //   > 3.5 rad/s = over-rotation,  1.5—3.5 = good turn,  < 1.5 = restricted
+    //   > 3.5 rad/s = over-rotation,  1.5?3.5 = good turn,  < 1.5 = restricted
     const bodyRotation: SwingAnalysis['bodyRotation'] =
       Math.abs(peakRotZ) > 3.5 ? 'over' :
       Math.abs(peakRotZ) > 1.5 ? 'good' : 'restricted';
 
-    // Rotation score: rewards good body turn + normal wrist release (0—100)
+    // Rotation score: rewards good body turn + normal wrist release (0?100)
     const bodyScore  = bodyRotation === 'good' ? 40 : bodyRotation === 'over' ? 20 : 10;
     const wristScore = wristRotation === 'normal' ? 35 : wristRotation === 'late' ? 20 : 15;
     const tempoScore = tempoLabel === 'smooth' ? 25 : 10;
     const rotScore   = Math.min(100, bodyScore + wristScore + tempoScore);
 
-    // Cues — accelerometer-based
+    // Cues ? accelerometer-based
     const cues: string[] = [];
-    if (path === 'outside-in') cues.push('Swing from the inside — feel the club drop into the slot at the top');
-    else if (path === 'inside-out') cues.push('Quiet your hands — prevent the face from rolling over');
-    else cues.push('Path is on plane — focus on a consistent tempo');
+    if (path === 'outside-in') cues.push('Swing from the inside ? feel the club drop into the slot at the top');
+    else if (path === 'inside-out') cues.push('Quiet your hands ? prevent the face from rolling over');
+    else cues.push('Path is on plane ? focus on a consistent tempo');
     if (face === 'open') cues.push('Rotate the forearm through impact to square the face');
-    else if (face === 'closed') cues.push('Hold off the release slightly — delay the forearm rotation');
-    if (plane === 'steep') cues.push('Shallow the club on the downswing — feel a flatter elbow plane');
-    else if (plane === 'flat') cues.push('Get more shoulder tilt — avoid a too-flat swing plane');
-    if (tempoLabel === 'fast') cues.push('Slow your transition — pause at the top for one beat');
-    else if (tempoLabel === 'slow') cues.push('Commit through the ball — stay fluid, not tentative');
+    else if (face === 'closed') cues.push('Hold off the release slightly ? delay the forearm rotation');
+    if (plane === 'steep') cues.push('Shallow the club on the downswing ? feel a flatter elbow plane');
+    else if (plane === 'flat') cues.push('Get more shoulder tilt ? avoid a too-flat swing plane');
+    if (tempoLabel === 'fast') cues.push('Slow your transition ? pause at the top for one beat');
+    else if (tempoLabel === 'slow') cues.push('Commit through the ball ? stay fluid, not tentative');
     // Gyro-based cues
-    if (wristRotation === 'early') cues.push('Forearms are firing too early — hold lag longer into the hitting zone');
-    else if (wristRotation === 'late') cues.push('Release is a bit passive — let the forearms roll through more freely');
-    if (bodyRotation === 'restricted') cues.push('Hips and shoulders are restricting — feel a full pivot through the ball');
-    else if (bodyRotation === 'over') cues.push('Body is spinning out — let the arms catch up before firing the hips');
+    if (wristRotation === 'early') cues.push('Forearms are firing too early ? hold lag longer into the hitting zone');
+    else if (wristRotation === 'late') cues.push('Release is a bit passive ? let the forearms roll through more freely');
+    if (bodyRotation === 'restricted') cues.push('Hips and shoulders are restricting ? feel a full pivot through the ball');
+    else if (bodyRotation === 'over') cues.push('Body is spinning out ? let the arms catch up before firing the hips');
 
     // Summary
     const pathLabel = path === 'outside-in' ? 'outside-in' : path === 'inside-out' ? 'inside-out' : 'on-plane';
@@ -877,13 +880,13 @@ export default function PlayScreenClean() {
 
   // Conversational single-line feedback spoken after each recording
   const buildFeedbackLine = (a: SwingAnalysis): string => {
-    if (a.tempo === 'fast') return "Tempo was a bit quick — let's smooth that out.";
-    if (a.tempo === 'slow') return 'Tempo was a touch slow — stay committed through the ball.';
-    if (a.peakG > 3.0) return 'Balance got a little unstable — try to stay centered through impact.';
-    if (a.path === 'outside-in') return "Swing path came a little outside-in — let's shallow it on the way down.";
+    if (a.tempo === 'fast') return "Tempo was a bit quick ? let's smooth that out.";
+    if (a.tempo === 'slow') return 'Tempo was a touch slow ? stay committed through the ball.';
+    if (a.peakG > 3.0) return 'Balance got a little unstable ? try to stay centered through impact.';
+    if (a.path === 'outside-in') return "Swing path came a little outside-in ? let's shallow it on the way down.";
     if (a.path === 'inside-out') return 'Nice in-to-out path. Keep that forearm rotation through impact.';
-    if (a.plane === 'steep') return 'Swing got a little steep — focus on a flatter elbow slot.';
-    if (a.plane === 'flat') return 'Swing plane ran a touch flat — get some more shoulder tilt at address.';
+    if (a.plane === 'steep') return 'Swing got a little steep ? focus on a flatter elbow slot.';
+    if (a.plane === 'flat') return 'Swing plane ran a touch flat ? get some more shoulder tilt at address.';
     return 'Smooth swing. Tempo and path look solid.';
   };
 
@@ -916,7 +919,7 @@ export default function PlayScreenClean() {
     });
   }, []);
 
-  // Network status — instant via NetInfo subscription (replaces 10s poll)
+  // Network status ? instant via NetInfo subscription (replaces 10s poll)
   useEffect(() => {
     const unsub = NetInfo.addEventListener((state) => {
       setIsOnline(!!(state.isConnected && state.isInternetReachable));
@@ -942,7 +945,7 @@ export default function PlayScreenClean() {
             if (typeof data.handicap === 'number') setHandicap(data.handicap);
           }
         },
-        () => { /* snapshot error — profile stays as-is */ }
+        () => { /* snapshot error ? profile stays as-is */ }
       );
     }
     // Restore draft shots saved from a previous session
@@ -952,7 +955,7 @@ export default function PlayScreenClean() {
           const draft: Shot[] = JSON.parse(stored);
           draft.forEach((s) => addShot(s));
         } catch {
-          // corrupted draft — ignore
+          // corrupted draft ? ignore
         }
       }
     });
@@ -963,7 +966,7 @@ export default function PlayScreenClean() {
           const draft: Array<{ hole: number; par: number; scores: number[] }> = JSON.parse(stored);
           if (draft.length > 0) setMultiRound(draft);
         } catch {
-          // corrupted draft — ignore
+          // corrupted draft ? ignore
         }
       }
     }).finally(() => setLoading(false));
@@ -985,19 +988,18 @@ export default function PlayScreenClean() {
   }, [hole]);
   useEffect(() => { selectedCourseIdxRef.current = selectedCourseIdx; }, [selectedCourseIdx]);
 
-  // Milestone triggers — fire exactly once at 5 shots and 10 shots
+  // Milestone triggers ? fire exactly once at 5 shots and 10 shots
   useEffect(() => {
     const n = shots.length;
     if (n < 5 || n === milestoneShotRef.current) return;
     if (n === 5) {
       const mb = getMissBias();
-      const biasLine = mb && mb.bias !== 'straight'
-        ? ` You're trending ${mb.bias} — caddie is adjusting.`
+      const biasLine = mb && mb.bias !== 'center'
+        ? ` You're trending ${mb.bias} ? caddie is adjusting.`
         : ' Ball flight looks neutral so far.';
       const msg = `First insight unlocked!${biasLine}`;
       setMilestoneMessage(msg);
       milestoneShotRef.current = n;
-      if (isRoundActive) { void speak(msg); }
     } else if (n === 10) {
       const mb = getMissBias();
       const patternLine = mb
@@ -1006,11 +1008,10 @@ export default function PlayScreenClean() {
             : mb.bias === 'left'
             ? `Strong left miss pattern (${mb.confidence}% confidence). Aim well right.`
             : `Consistent straight ball flight (${mb.confidence}% confidence). Trust it.`)
-        : 'Pattern building — keep swinging.';
+        : 'Pattern building ? keep swinging.';
       const msg = `10 shots in. ${patternLine}`;
       setMilestoneMessage(msg);
       milestoneShotRef.current = n;
-      if (isRoundActive) { void speak(msg); }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shots.length]);
@@ -1033,7 +1034,7 @@ export default function PlayScreenClean() {
     const text = [
       `Hole ${hole}.`,
       yards ? `${yards} yards.` : '',
-      d.club === '—' ? 'Select a club.' : `${d.club}.`,
+      d.club === '?' ? 'Select a club.' : `${d.club}.`,
       `Aim ${d.aimLabel}.`,
       d.miss,
       cmTip,
@@ -1042,12 +1043,12 @@ export default function PlayScreenClean() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hole]);
 
-  // Post-shot decision refresh — fires after the coaching chain settles (~5.5 s).
+  // Post-shot decision refresh ? fires after the coaching chain settles (~5.5 s).
   // UI already updates immediately (getCaddieDecision re-runs on every render via
   // reactive Zustand shots state). This effect adds:
   //   1. Voice: speaks the updated aim/club for the NEXT shot.
   //   2. Subtle insight: if bias is directional, updates caddieMessage with new aim.
-  // React 18 batches addShot + setLastShotEpoch → closure captures updated shots.
+  // React 18 batches addShot + setLastShotEpoch ? closure captures updated shots.
   useEffect(() => {
     if (lastShotEpoch === 0) return; // skip mount
     const delay = activityLevelRef.current === 'active'
@@ -1059,7 +1060,7 @@ export default function PlayScreenClean() {
       if (d.aim !== 'center') {
         setCaddieMessage(`Next shot: ${d.aimLabel}. ${d.miss}`);
       }
-      // speak() internally guards voiceEnabled + quietMode — always safe to call
+      // speak() internally guards voiceEnabled + quietMode ? always safe to call
       speakDecision();
     }, 5500);
     return () => clearTimeout(t);
@@ -1089,7 +1090,7 @@ export default function PlayScreenClean() {
   // Load user-calibrated green coordinates from persistent storage on mount.
   useEffect(() => {
     AsyncStorage.getItem('calibratedGreens').then((v) => {
-      if (v) try { setCalibratedGreens(JSON.parse(v)); } catch { /* corrupt data — ignore */ }
+      if (v) try { setCalibratedGreens(JSON.parse(v)); } catch { /* corrupt data ? ignore */ }
     }).catch(() => {});
   }, []);
 
@@ -1102,7 +1103,7 @@ export default function PlayScreenClean() {
 
   // Re-compute displayed yardages when the hole changes (watcher is already running).
   // Uses calibrated green coords when available; falls back to COURSE_DB coords with
-  // a sanity check — distances > 3× course yardage indicate bad/placeholder coords
+  // a sanity check ? distances > 3? course yardage indicate bad/placeholder coords
   // and are suppressed (shown as null / '--') rather than displayed as garbage values.
   useEffect(() => {
     const c = gpsCoordsRef.current;
@@ -1113,7 +1114,7 @@ export default function PlayScreenClean() {
     const calKey = `${courseIdx}_${holeNum}`;
     const cal = calibratedGreens[calKey];
     if (cal) {
-      // User has calibrated this green — compute accurate distance to the flagstick.
+      // User has calibrated this green ? compute accurate distance to the flagstick.
       const midYards = haversineYards(c.latitude, c.longitude, cal.lat, cal.lng);
       const depth = Math.max(12, Math.round((hd?.distance ?? 360) * 0.04));
       setGpsYards({
@@ -1122,7 +1123,7 @@ export default function PlayScreenClean() {
         back:   midYards + depth,
       });
     } else {
-      // No calibration — use COURSE_DB coords but suppress implausible results.
+      // No calibration ? use COURSE_DB coords but suppress implausible results.
       const maxYards = Math.max((hd?.distance ?? 500) * 3, 900);
       const safe = (y: number) => (y > 0 && y <= maxYards ? y : null);
       setGpsYards({
@@ -1193,21 +1194,23 @@ export default function PlayScreenClean() {
   const [playerModel, setPlayerModel] = useState<{
     clubs: Record<string, { samples: number[]; avg: number | null }>;
   }>({ clubs: {} });
-  // GPS — coords stored in ref to avoid re-render on every update;
+  // GPS ? coords stored in ref to avoid re-render on every update;
   // gpsYards state is debounced (750ms active / 5s low-power) to prevent rapid re-renders
   const gpsCoordsRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const gpsWatchRef  = useRef<Location.LocationSubscription | null>(null);
-  // Refs that always hold the current hole / courseIdx — used inside the watcher
+  // Refs that always hold the current hole / courseIdx ? used inside the watcher
   // callback to avoid the stale-closure bug (the callback captures values at
   // startGpsWatch call time; reading from refs gives the live value instead).
   const holeRef = useRef(hole);
   const selectedCourseIdxRef = useRef(selectedCourseIdx);
   const [gpsYards, setGpsYards] = useState<{ front: number | null; middle: number | null; back: number | null } | null>(null);
-  // GPS shot tracking refs — snapshot yardsBefore at shot mark, compute real carry once player walks to ball
+  // GPS shot tracking refs ? snapshot yardsBefore at shot mark, compute real carry once player walks to ball
   const gpsYardsRef = useRef<{ front: number | null; middle: number | null; back: number | null } | null>(null);
   const prevShotYardsRef = useRef<number | null>(null);
   const prevShotClubRef = useRef<string | null>(null);
   const [lastShotBadge, setLastShotBadge] = useState<{ yardsCarried: number; yardsRemaining: number; club: string } | null>(null);
+  const [shotOverlay, setShotOverlay] = useState<{ direction: 'left' | 'straight' | 'right'; message: string } | null>(null);
+  const [patternExpanded, setPatternExpanded] = useState(false);
   const [lastShotTrace, setLastShotTrace] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
   const [earbudMode, setEarbudMode] = useState(false);
   const [highContrast, setHighContrast] = useState(false);
@@ -1218,51 +1221,61 @@ export default function PlayScreenClean() {
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const traceOpacity = useRef(new Animated.Value(1)).current;
 
-  // ── Biometric settings (surface-level; actual lock lives in _layout.tsx) ──────
+  // -- Biometric settings (surface-level; actual lock lives in _layout.tsx) ------
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   useEffect(() => {
     // Reflect current hardware capability on mount so the toggle starts correct
     checkBiometricSupport().then((supported) => setBiometricEnabled(supported));
   }, []);
 
-  const handleBiometricToggle = async () => {
+  const handleBiometricToggle = useCallback(async () => {
     if (biometricEnabled) {
-      // Disable — propagate to layout
+      // Disable ? propagate to layout
       setBiometricEnabled(false);
       BiometricLayoutControls._setBiometricEnabled?.(false);
     } else {
       const supported = await checkBiometricSupport();
       if (!supported) {
-        // Use caddieMessage as a lightweight toast — no extra Alert dependency
+        // Use caddieMessage as a lightweight toast ? no extra Alert dependency
         setCaddieMessage('Biometric authentication is not available on this device.');
         return;
       }
       setBiometricEnabled(true);
       BiometricLayoutControls._setBiometricEnabled?.(true);
     }
-  };
+  }, [biometricEnabled]);
 
-  // ── Round Summary Share ───────────────────────────────────────────────────
+  // -- Round Summary Share ---------------------------------------------------
   const handleShareRoundSummary = useCallback(async (summary: typeof roundSummary) => {
     if (!summary) return;
+    const scoreLabel = summary.scoreToPar === null ? '' :
+      summary.scoreToPar === 0 ? 'Even par' :
+      summary.scoreToPar < 0   ? `${Math.abs(summary.scoreToPar)} under par` :
+      `${summary.scoreToPar} over par`;
     const lines: string[] = [
       '🏌️ SmartPlay Caddie — Round Summary',
       '',
-      `Shots tracked: ${summary.totalShots ?? 'N/A'}`,
-      summary.bias ? `Miss bias: ${summary.bias} (confidence: ${summary.biasConfidence ?? '--'}%)` : '',
+      `Shots tracked: ${summary.totalShots}   Holes: ${summary.totalHoles}`,
+      scoreLabel ? `Score: ${scoreLabel}` : '',
       '',
-      summary.keyMessage ?? '',
+      `🎯 Key Insight: ${summary.keyInsight}`,
+      summary.strengthClub ? `💪 Strength: ${summary.strengthClub} — ${summary.strengthPct}% on target` : '',
+      `📍 Focus Area: ${summary.focusArea}`,
       '',
-      '⛳ Powered by SmartPlay Caddie — smartplaycaddie.com',
+      `✅ Straight: ${summary.straightPct}%   ←Left: ${summary.leftPct}%   Right→: ${summary.rightPct}%`,
+      '',
+      '📱 Powered by SmartPlay Caddie — smartplaycaddie.com',
     ];
     try {
       await Share.share({ message: lines.filter(Boolean).join('\n') });
     } catch { /* share cancelled */ }
   }, []);
 
-  // ── Low Power Mode ────────────────────────────────────────────────────────
-  const [lowPowerMode, setLowPowerMode] = useState(false);
-  // Ref mirror of lowPowerMode — safe to read inside useCallback / GPS callbacks
+  // -- Low Power Mode --------------------------------------------------------
+  // Persisted in settingsStore so it survives app restarts
+  const lowPowerMode    = useSettingsStore((s) => s.lowPowerMode);
+  const setLowPowerMode = useSettingsStore((s) => s.setLowPowerMode);
+  // Ref mirror of lowPowerMode ? safe to read inside useCallback / GPS callbacks
   // without stale closure issues.
   const lowPowerModeRef = useRef(false);
   useEffect(() => { lowPowerModeRef.current = lowPowerMode; }, [lowPowerMode]);
@@ -1276,7 +1289,7 @@ export default function PlayScreenClean() {
   const shakeSubRef = useRef<ReturnType<typeof Accelerometer.addListener> | null>(null);
   const SHAKE_G_THRESHOLD = 2.8; // G-force required to trigger wake (avoids pocket bumps)
   // Idle-auto-dim: restarted on every user interaction; fires after 90 s of inactivity.
-  // 10 s was too aggressive for golf — a player may stand at the tee for 30-60 s
+  // 10 s was too aggressive for golf ? a player may stand at the tee for 30-60 s
   // between shots without touching the screen.
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const IDLE_TIMEOUT_MS = 90_000;
@@ -1294,7 +1307,7 @@ export default function PlayScreenClean() {
     activityLevelRef.current = 'active';
     // Burst vision frames for the active window
     vpSetBurstMode(true, ACTIVE_WINDOW_MS);
-    // Reset the active→idle countdown
+    // Reset the active?idle countdown
     if (activityTimerRef.current) clearTimeout(activityTimerRef.current);
     activityTimerRef.current = setTimeout(() => {
       activityLevelRef.current = 'idle';
@@ -1309,20 +1322,21 @@ export default function PlayScreenClean() {
     // Any interaction that resets the idle timer counts as user activity
     markUserActive();
     idleTimerRef.current = setTimeout(() => {
-      // Only auto-dim during an active round — not on menus / loading screens
+      // Only auto-dim during an active round ? not on menus / loading screens
       if (!lowPowerMode) toggleLowPowerMode(true);
     }, IDLE_TIMEOUT_MS);
   };
 
-  const applyDim = (dimmed: boolean) => {
+  const applyDim = (_dimmed: boolean) => {
+    // Opacity dimming disabled ? low power black overlay handles the visual instead
     Animated.timing(dimAnim, {
-      toValue: dimmed ? 0.25 : 1,
-      duration: 600,
+      toValue: 1,
+      duration: 0,
       useNativeDriver: true,
     }).start();
   };
 
-  const handleTapToWake = () => {
+  const handleTapToWake = useCallback(() => {
     if (!lowPowerMode) return;
     // Clear any existing dim timer
     if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current);
@@ -1335,26 +1349,27 @@ export default function PlayScreenClean() {
       setIsWoken(false);
       applyDim(true);
     }, 8000);
-  };
+  }, [lowPowerMode, applyDim, resetIdleTimer]);
 
-  const toggleLowPowerMode = (next: boolean) => {
+  const toggleLowPowerMode = useCallback((next: boolean) => {
     setLowPowerMode(next);
     applyDim(next);
     // Propagate to VisionProcessor so frame stride / idle timeout adjust
     vpSetLowPowerMode(next);
     if (!next) {
-      // Exiting low power — resume vision, cancel redim, restart idle countdown
+      // Exiting low power ? resume vision, cancel redim, restart idle countdown
       vpResumeProcessing();
       if (wakeTimerRef.current) { clearTimeout(wakeTimerRef.current); wakeTimerRef.current = null; }
       setIsWoken(false);
       resetIdleTimer();
     } else {
-      // Entering low power — pause vision processing; voice-first mode; cancel idle timer
+      // Entering low power ? pause vision processing; voice-first mode; cancel idle timer
       vpPauseProcessing();
       setVoiceEnabled(true);
       if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null; }
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyDim, resetIdleTimer]);
 
   // Cleanup wake timer on unmount
   useEffect(() => () => {
@@ -1419,7 +1434,7 @@ export default function PlayScreenClean() {
     return Math.round(legacy.total / legacy.count);
   };
 
-  // Build a live yardage map: prefer playerModel sampled avg (≥2 shots), fall back to defaults
+  // Build a live yardage map: prefer playerModel sampled avg (=2 shots), fall back to defaults
   const getClubYardageMap = (): [string, number][] =>
     DEFAULT_CLUB_YARDS.map(([name, defaultYds]) => {
       const model = playerModel?.clubs?.[name] ?? null;
@@ -1428,9 +1443,9 @@ export default function PlayScreenClean() {
       return [name, avg !== null && (clubDistances[name]?.count ?? 0) >= 2 ? avg : defaultYds] as [string, number];
     });
 
-  // Find closest club to a given yardage (pure — no side effects)
-  // Priority: 1) playerModel learned avg (≥1 sample)  2) DEFAULT_CLUB_YARDS  3) '7i' fallback
-  // If any clubs have learned data, search learned-only map first — closest wins.
+  // Find closest club to a given yardage (pure ? no side effects)
+  // Priority: 1) playerModel learned avg (=1 sample)  2) DEFAULT_CLUB_YARDS  3) '7i' fallback
+  // If any clubs have learned data, search learned-only map first ? closest wins.
   // Unlearned clubs fill in from defaults so a recommendation is always returned.
   const recommendClubForDistance = (yards: number): string => {
     const FALLBACK = '7i';
@@ -1452,7 +1467,7 @@ export default function PlayScreenClean() {
       // Use learned-only map when we have data; otherwise fall back to defaults
       const base = learned.length >= 2 ? learned : withDefaults;
 
-      // Exclude Putter for shots ≥ 30 yds
+      // Exclude Putter for shots = 30 yds
       const candidates = yards >= 30 ? base.filter(([c]) => c !== 'Putter') : base;
       if (candidates.length === 0) return FALLBACK;
 
@@ -1471,15 +1486,87 @@ export default function PlayScreenClean() {
   // Track last auto-recommended club so we only call setClub when it changes
   const lastAutoClubRef = useRef<string | null>(null);
 
-  // Auto club recommendation — fires when GPS yardage updates (every 25 s) or
+  // ── SmartPlay auto-mode helpers ────────────────────────────────────────────
+
+  /**
+   * predictClub — predict club for a raw metric distance.
+   * Converts metres to yards then delegates to the existing learned model.
+   */
+  const predictClub = (distanceMeters: number): string => {
+    const yards = Math.round(distanceMeters * 1.09361);
+    return recommendClubForDistance(yards);
+  };
+
+  /** Last GPS position snapshot at the moment a shot was auto-detected. */
+  const autoShotPositionRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  /** Distance-to-pin (yards) at the last auto-detected shot. */
+  const autoShotYardsRef = useRef<number | null>(null);
+
+  /**
+   * handleAutoShot — called when GPS detects the player has moved ≥10 yards
+   * from the last recorded auto-shot position.  Builds a pending confirmation
+   * that the user can accept/dismiss via the SmartPlay UI.
+   *
+   * This is DORMANT until GPS auto-detection is connected below.
+   */
+  const handleAutoShot = () => {
+    const pos = gpsCoordsRef.current;
+    const yards = gpsYards?.middle;
+    if (!pos || !yards) return;
+    const suggestedClub = recommendClubForDistance(yards);
+    setPendingAutoShot({ club: suggestedClub, yards });
+    autoShotPositionRef.current = pos;
+    autoShotYardsRef.current = yards;
+  };
+
+  /** Confirm the pending auto-shot with user-supplied direction. */
+  const confirmAutoShot = (result: 'left' | 'center' | 'right') => {
+    if (!pendingAutoShot) return;
+    handleShot(result);
+    // Mark the shot as auto-sourced (stored via addShot with source flag)
+    void speak(`${result === 'center' ? 'Straight' : result === 'left' ? 'Left' : 'Right'} — logged.`);
+    setPendingAutoShot(null);
+  };
+
+  // ── GPS auto-shot detection (dormant — gated by smartMode === 'auto') ──────
+  // Watches the last GPS position where a shot was observed; when the player
+  // has moved >10 yards from that position, we surface the auto-shot confirmation.
+  const lastAutoShotPositionRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  useEffect(() => {
+    if (smartMode !== 'auto') return;
+    const currentPos = gpsCoordsRef.current;
+    if (!currentPos) return;
+    const lastPos = lastAutoShotPositionRef.current;
+    if (!lastPos) {
+      // First GPS tick in auto mode — seed the baseline position
+      lastAutoShotPositionRef.current = currentPos;
+      return;
+    }
+    // Compute movement distance (metres, approximate)
+    const R = 6371000;
+    const dLat = (currentPos.latitude  - lastPos.latitude)  * Math.PI / 180;
+    const dLon = (currentPos.longitude - lastPos.longitude) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lastPos.latitude * Math.PI / 180) *
+      Math.cos(currentPos.latitude * Math.PI / 180) *
+      Math.sin(dLon / 2) ** 2;
+    const metres = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    if (metres >= 10) {
+      lastAutoShotPositionRef.current = currentPos;
+      handleAutoShot();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gpsYards, smartMode]);
+
+  // Auto club recommendation ? fires when GPS yardage updates (every 25 s) or
   // when the player's learned distances change. Only calls setClub when the
-  // recommendation actually changes — no flicker, no re-render churn.
+  // recommendation actually changes ? no flicker, no re-render churn.
   // Does NOT override a manual club selection mid-hole (strokes > 0).
   useEffect(() => {
     const yards = gpsYards?.middle;
     if (!yards || yards < 1 || yards > 700) return;
-    // After tee shot (strokes > 0), let GPS guide club — recommends approach iron
-    // On the tee (strokes === 0) GPS distance >= 200 yds → always Driver
+    // After tee shot (strokes > 0), let GPS guide club ? recommends approach iron
+    // On the tee (strokes === 0) GPS distance >= 200 yds ? always Driver
     const recommended = (strokes === 0 && yards >= 200) ? 'Driver' : recommendClubForDistance(yards);
     if (recommended !== lastAutoClubRef.current) {
       lastAutoClubRef.current = recommended;
@@ -1489,8 +1576,8 @@ export default function PlayScreenClean() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gpsYards, clubDistances]);
 
-  // GPS carry computation — fires each time GPS updates (player walked to ball)
-  // Computes yardsCarried = yardsBefore - yardsAfter → feeds real club distance into learning engine
+  // GPS carry computation ? fires each time GPS updates (player walked to ball)
+  // Computes yardsCarried = yardsBefore - yardsAfter ? feeds real club distance into learning engine
   useEffect(() => {
     const after = gpsYards?.middle;
     if (after == null || !prevShotYardsRef.current || !prevShotClubRef.current) return;
@@ -1505,23 +1592,23 @@ export default function PlayScreenClean() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gpsYards]);
 
-  // GPS voice trigger — speaks only when GPS distance changes by > 10 yards.
-  // Prevents voice spam from minor positioning jitter (1–5 yd GPS drift).
+  // GPS voice trigger ? speaks only when GPS distance changes by > 10 yards.
+  // Prevents voice spam from minor positioning jitter (1?5 yd GPS drift).
   // Debounced 750 ms to absorb rapid successive ticks before comparing.
   // Cross-cancels the manual-distance timer so the two never double-speak.
   const gpsVoiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Debounce timer for GPS state updates — prevents rapid re-renders from GPS ticks.
+  // Debounce timer for GPS state updates ? prevents rapid re-renders from GPS ticks.
   // The ref (gpsYardsRef) is always updated immediately so shot-carry detection stays accurate;
   // only the React state that drives UI is debounced.
   const gpsStateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const GPS_STATE_DEBOUNCE_MS = 750; // 750 ms — matches existing voice debounce window
-  // ── GPS signal health ────────────────────────────────────────────────────
+  const GPS_STATE_DEBOUNCE_MS = 750; // 750 ms ? matches existing voice debounce window
+  // -- GPS signal health ----------------------------------------------------
   // gpsWeak becomes true when no GPS tick arrives within GPS_WEAK_TIMEOUT_MS.
   // Last-known gpsYards is always retained so the display never goes blank;
   // only the label changes to warn the player the distance may be stale.
   const [gpsWeak, setGpsWeak] = useState(false);
   const gpsWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const GPS_WEAK_TIMEOUT_MS = 30000; // 30 s — 3× the nominal 10 s watcher interval
+  const GPS_WEAK_TIMEOUT_MS = 30000; // 30 s ? 3? the nominal 10 s watcher interval
   const rescheduleGpsWatchdog = () => {
     if (gpsWatchdogRef.current) clearTimeout(gpsWatchdogRef.current);
     gpsWatchdogRef.current = setTimeout(() => {
@@ -1534,11 +1621,11 @@ export default function PlayScreenClean() {
     if (!isRoundActive) return;
     const yards = gpsYards?.middle;
     if (!yards || yards < 10 || yards > 700) return;
-    // Significant-change gate: ignore updates ≤ 10 yards from the last spoken value.
+    // Significant-change gate: ignore updates <= 5 yards from the last spoken value.
     // This filters walk-to-ball micro-drift while still reacting when the player
     // actually moves (approaching the green, advancing after a big drive, etc.).
     const last = lastSpokenYardsRef.current;
-    if (last !== null && Math.abs(yards - last) <= 10) return;
+    if (last !== null && Math.abs(yards - last) <= 5) return;
     // Cancel any pending manual-distance voice so we don't double-speak
     if (autoVoiceTimerRef.current) { clearTimeout(autoVoiceTimerRef.current); autoVoiceTimerRef.current = null; }
     if (gpsVoiceTimerRef.current) clearTimeout(gpsVoiceTimerRef.current);
@@ -1571,13 +1658,24 @@ export default function PlayScreenClean() {
     const newClub = dist >= 200 ? 'Driver' : recommendClubForDistance(dist);
     lastAutoClubRef.current = newClub;
     setClub(newClub);
-    maybeSpeakPreShot();
+    // caddieVoice.onHoleLoad — structured hole announcement with mode-aware phrasing
+    if (voiceEnabled && !quietMode) {
+      const ctxMode = getContextAdjustment();
+      void caddieVoice.onHoleLoad(
+        hole,
+        currentHoleData.par,
+        { distance: dist, club: newClub, mode: ctxMode as any },
+        (text: string) => voiceSpeak(text, 'calm'),
+      );
+    } else {
+      maybeSpeakPreShot();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hole]);
 
   // --- Controlled pre-shot trigger: club change only -------------------------
   // prevClubRef starts null so we don't speak on mount. Only speaks when the
-  // player deliberately changes club — auto-GPS recommendations are silent.
+  // player deliberately changes club ? auto-GPS recommendations are silent.
   const prevClubRef = useRef<string | null>(null);
   useEffect(() => {
     if (prevClubRef.current === null) { prevClubRef.current = club; return; }
@@ -1589,7 +1687,7 @@ export default function PlayScreenClean() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [club]);
 
-  // Battery-safe GPS watcher — Balanced accuracy, updates every 25 s, no re-render on every tick
+  // Battery-safe GPS watcher ? Balanced accuracy, updates every 25 s, no re-render on every tick
   const startGpsWatch = async () => {
     if (gpsWatchRef.current) return; // already watching
     try {
@@ -1629,11 +1727,11 @@ export default function PlayScreenClean() {
       gpsYardsRef.current = seeds;  // sync ref immediately so handleShot reads latest value
       setGpsYards(seeds);
       setGpsWeak(false);
-      rescheduleGpsWatchdog(); // start watchdog — will fire if ticks stop arriving
+      rescheduleGpsWatchdog(); // start watchdog ? will fire if ticks stop arriving
       if (earbudMode && seeds.middle && seeds.middle > 0 && seeds.middle < 700) {
         void voiceSpeak(`${seeds.middle} yards to the middle`, 'calm');
       }
-      // ACTIVE_PLAY: VoiceIntelligence pre-shot — fires at most once per 8s, no repeats
+      // ACTIVE_PLAY: VoiceIntelligence pre-shot ? fires at most once per 8s, no repeats
       if (seeds.middle && seeds.middle > 0 && seeds.middle < 700) {
         void viSpeakPreShot({ distance: seeds.middle });
       }
@@ -1641,34 +1739,40 @@ export default function PlayScreenClean() {
       gpsWatchRef.current = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.Balanced,
-          timeInterval: 10000,   // 10 seconds between updates (was 25 s — too slow for play)
-          distanceInterval: 5,   // or 5 m movement — whichever comes first
+          timeInterval: 10000,   // 10 seconds between updates (was 25 s ? too slow for play)
+          distanceInterval: 5,   // or 5 m movement ? whichever comes first
         },
         (loc) => {
-          // Store in ref — zero re-render cost
+          // Store in ref ? zero re-render cost
           gpsCoordsRef.current = loc.coords;
-          // computeYards reads holeRef/selectedCourseIdxRef — always current hole
+          // computeYards reads holeRef/selectedCourseIdxRef ? always current hole
           const yards = computeYards(loc.coords.latitude, loc.coords.longitude);
 
-          // ── GPS smoothing ────────────────────────────────────────────────
-          // 1. Noise gate: ignore sub-3-yard changes — GPS drift on a stationary
-          //    device can move 1–5 yards between ticks with no real movement.
+          // -- GPS smoothing ------------------------------------------------
+          // 1. Noise gate: ignore sub-3-yard changes ? GPS drift on a stationary
+          //    device can move 1?5 yards between ticks with no real movement.
           // 2. Jump clamp: reject jumps > 50 yards between ticks unless the hole
           //    has changed (hole change resets the baseline, so the first reading
           //    on a new hole always passes through regardless of magnitude).
           const prev = gpsYardsRef.current;
           if (prev?.middle != null && yards.middle != null) {
             const delta = Math.abs(yards.middle - prev.middle);
-            // Noise gate — discard micro-jitter
-            if (delta < 3) return;
-            // Jump clamp — treat large leaps as GPS anomalies and silently drop
+            // Noise gate ? discard micro-jitter
+            if (delta < 3) { rescheduleGpsWatchdog(); return; }
+            // Jump clamp ? treat large leaps as GPS anomalies and silently drop
             // them unless the hole just changed (holeRef tracks the current hole).
-            if (delta > 50) return;
+            if (delta > 50) { rescheduleGpsWatchdog(); return; }
           }
-          // ────────────────────────────────────────────────────────────────
+          // ----------------------------------------------------------------
 
-          // Signal is alive — clear any weak-GPS flag and restart watchdog.
-          setGpsWeak(false);
+          // Accuracy-based weak signal: hardware reports > 20 m error radius.
+          const coordAccuracy = loc.coords.accuracy ?? null;
+          if (isWeakAccuracy(coordAccuracy)) {
+            setGpsWeak(true);
+          } else {
+            // Signal is alive and accurate ? clear any weak-GPS flag.
+            setGpsWeak(false);
+          }
           rescheduleGpsWatchdog();
 
           // Update ref immediately so handleShot always reads the latest GPS value
@@ -1686,7 +1790,7 @@ export default function PlayScreenClean() {
         }
       );
     } catch {
-      // GPS unavailable — mark as weak so UI shows the indicator.
+      // GPS unavailable ? mark as weak so UI shows the indicator.
       // Last-known gpsYards (if any) is retained for display.
       setGpsWeak(true);
     }
@@ -1698,7 +1802,7 @@ export default function PlayScreenClean() {
       clearTimeout(gpsStateDebounceRef.current);
       gpsStateDebounceRef.current = null;
     }
-    // Cancel the watchdog — GPS is intentionally stopped, not weak.
+    // Cancel the watchdog ? GPS is intentionally stopped, not weak.
     if (gpsWatchdogRef.current) {
       clearTimeout(gpsWatchdogRef.current);
       gpsWatchdogRef.current = null;
@@ -1724,16 +1828,15 @@ export default function PlayScreenClean() {
     await AsyncStorage.setItem('calibratedGreens', JSON.stringify(updated)).catch(() => {});
     // Immediately recompute now that calibration is saved
     const hd = activeCourse.holes[Math.min(hole - 1, activeCourse.holes.length - 1)];
-    const midYards = haversineYards(c.latitude, c.longitude, newCal.lat, newCal.lng); // 0 — player is AT the green
+    const midYards = haversineYards(c.latitude, c.longitude, newCal.lat, newCal.lng); // 0 ? player is AT the green
     const depth = Math.max(12, Math.round((hd?.distance ?? 360) * 0.04));
     setGpsYards({ front: Math.max(1, midYards - depth), middle: midYards, back: midYards + depth });
-    void voiceSpeak(`Green saved for hole ${hole}.`, 'calm');
   };
 
   // Alias kept so existing earbudMode / other call-sites still work
   const getLocation = startGpsWatch;
 
-  // Accurate Haversine formula — matches Garmin to ±1 yard at golf distances
+  // Accurate Haversine formula ? matches Garmin to ?1 yard at golf distances
   const haversineYards = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
     const R = 6371000;
     const f1 = lat1 * Math.PI / 180;
@@ -1751,7 +1854,7 @@ export default function PlayScreenClean() {
     return haversineYards(c.latitude, c.longitude, target.lat, target.lng);
   };
 
-  // Reads the pre-computed gpsYards state (updated every 25 s) — no live calc in render
+  // Reads the pre-computed gpsYards state (updated every 25 s) ? no live calc in render
   const getYardages = () => gpsYards ?? { front: null, middle: null, back: null };
 
   const getGpsDistance = (): number | null => gpsYards?.middle ?? null;
@@ -1806,10 +1909,10 @@ export default function PlayScreenClean() {
 
     // Auto-detect swing direction from peak lateral acceleration (x-axis)
     const peakX = recordingPeakXRef.current;
-    const autoResult = peakX > 1.5 ? 'right' : peakX < -1.5 ? 'left' : 'straight';
-    if (autoResult !== 'straight') handleShot(autoResult);
+    const autoResult: ShotResult = peakX > 1.5 ? 'right' : peakX < -1.5 ? 'left' : 'center';
+    if (autoResult !== 'center') handleShot(autoResult);
 
-    // Instant analysis — tempo inferred from recording duration
+    // Instant analysis ? tempo inferred from recording duration
     const dur = recordingDurationRef.current;
     const autoTempo = dur > 0 && dur < 1800 ? 'fast' : dur > 2800 ? 'slow' : 'smooth';
     const analysis = generateSwingAnalysis(autoResult, autoTempo);
@@ -1826,12 +1929,12 @@ export default function PlayScreenClean() {
     if (shots.length < 3) return "Let's see a few more swings first.";
 
     let strategy = '';
-    if (par === 5) strategy = "Par 5 — no need to force it. Stay in control.";
-    else if (par === 3) strategy = "Par 3 — commit to your line.";
+    if (par === 5) strategy = "Par 5 ? no need to force it. Stay in control.";
+    else if (par === 3) strategy = "Par 3 ? commit to your line.";
     else strategy = "Stay patient and pick your target.";
 
     let pressure = '';
-    if (hole >= 16) pressure = ' Stay calm — this is where rounds are saved.';
+    if (hole >= 16) pressure = ' Stay calm ? this is where rounds are saved.';
 
     const dist = parseInt(distance, 10) || 150;
     let clubAdvice = '';
@@ -1860,9 +1963,9 @@ export default function PlayScreenClean() {
 
     let aimFeedback = '';
     if (clubBias === 'right') {
-      aimFeedback = aim.includes('left') ? 'Good adjustment — aim left center.' : 'Favor left center on this one.';
+      aimFeedback = aim.includes('left') ? 'Good adjustment ? aim left center.' : 'Favor left center on this one.';
     } else if (clubBias === 'left') {
-      aimFeedback = aim.includes('right') ? 'Good adjustment — aim right center.' : 'Shade it right center on this one.';
+      aimFeedback = aim.includes('right') ? 'Good adjustment ? aim right center.' : 'Shade it right center on this one.';
     } else {
       aimFeedback = 'Stay on your center line.';
     }
@@ -1876,7 +1979,7 @@ export default function PlayScreenClean() {
     shots.forEach((s) => {
       if (s.result === 'right') right++;
       if (s.result === 'left') left++;
-      if (s.result === 'straight') straight++;
+      if (s.result === 'center') straight++;
     });
     const total = shots.length;
     return {
@@ -1901,10 +2004,10 @@ export default function PlayScreenClean() {
 
   /**
    * analyzeShotPattern
-   * O(SHOT_WINDOW) — no heavy loops, no full-list scans.
+   * O(SHOT_WINDOW) ? no heavy loops, no full-list scans.
    * Returns:
-   *   bias       — detected direction bias or 'neutral'
-   *   confidence — 0-100, how strong the current pattern is
+   *   bias       ? detected direction bias or 'neutral'
+   *   confidence ? 0-100, how strong the current pattern is
    */
   const analyzeShotPattern = (
     shotList: Shot[]
@@ -1921,7 +2024,7 @@ export default function PlayScreenClean() {
       else straight++;
     }
 
-    // Bias detection — only fires if one direction meets the threshold
+    // Bias detection ? only fires if one direction meets the threshold
     let bias: 'right' | 'left' | 'neutral' = 'neutral';
     if (right / n >= BIAS_THRESHOLD) bias = 'right';
     else if (left / n >= BIAS_THRESHOLD) bias = 'left';
@@ -1966,7 +2069,7 @@ export default function PlayScreenClean() {
     return null;
   };
 
-  // Keep backward compat — existing call-sites that only need a number still work
+  // Keep backward compat ? existing call-sites that only need a number still work
   const calculateConfidence = (shotList: Shot[]): number =>
     analyzeShotPattern(shotList).confidence;
 
@@ -1994,7 +2097,7 @@ export default function PlayScreenClean() {
   };
 
   /**
-   * applyVoiceStyle — transforms caddie text based on the active voice style.
+   * applyVoiceStyle ? transforms caddie text based on the active voice style.
    * calm  : no change (measured, trust-based phrasing).
    * aggressive : strips hedging words, prepends a power cue, uppercases the key verb.
    */
@@ -2005,7 +2108,7 @@ export default function PlayScreenClean() {
       .replace(/\b(smooth(ly)?|easy|just|maybe|try to|let it|trust it)\b/gi, '')
       .replace(/\s{2,}/g, ' ')
       .trim();
-    // Prepend a fire cue (deterministic — rotates by text length so it varies)
+    // Prepend a fire cue (deterministic ? rotates by text length so it varies)
     const cues = ['Commit.', 'Fire at it.', 'Attack.', 'Lock in.'];
     const cue = cues[t.length % cues.length];
     return `${cue} ${t}`;
@@ -2019,7 +2122,7 @@ export default function PlayScreenClean() {
    *   - Never overlaps while audio is active
    *   - Always awaits ElevenLabs playback completion
    */
-  const VOICE_RATE_LIMIT_MS = 4000; // 4 s cooldown — prevents speech spam between calls
+  const VOICE_RATE_LIMIT_MS = 4000; // 4 s cooldown ? prevents speech spam between calls
 
   const speak = useCallback(async (text: string): Promise<void> => {
     const message = text?.trim();
@@ -2028,11 +2131,11 @@ export default function PlayScreenClean() {
     if (!message || quietMode || !voiceEnabled) return;
     if (now - lastSpokenRef.current < VOICE_RATE_LIMIT_MS) return;
 
-    // Preempt any in-progress audio — the cooldown gate above already prevents
+    // Preempt any in-progress audio ? the cooldown gate above already prevents
     // rapid-fire spam; if we're past it and audio is still playing (long phrase),
     // stop it so the latest advice is never silently dropped.
     if (isSpeakingRef.current) {
-      await stopSpeaking(); // clears voiceService._isSpeaking + unloads current sound
+      await engineForceStop(); // cancel via VoiceEngine so lock is released cleanly
       isSpeakingRef.current = false;
       setIsSpeaking(false);
     }
@@ -2040,6 +2143,7 @@ export default function PlayScreenClean() {
     try {
       isSpeakingRef.current = true;
       setIsSpeaking(true);
+      setCaddieState?.('speaking');
       lastSpokenRef.current = now;
       setLastSpokenTime(now);
       // Start pulsing logo while caddie speaks
@@ -2052,7 +2156,7 @@ export default function PlayScreenClean() {
         });
       }, 60);
       try {
-        await playElevenLabsAudio(applyVoiceStyle(message), localGender);
+        await speakJob(applyVoiceStyle(message), ENGINE_PRIORITY.SHOT, localGender);
       } finally {
         clearInterval(speakPulseInterval);
         setPulse(1);
@@ -2062,14 +2166,15 @@ export default function PlayScreenClean() {
     } finally {
       isSpeakingRef.current = false;
       setIsSpeaking(false);
+      setTimeout(() => setCaddieState?.('idle'), 800);
     }
-  }, [localGender, quietMode, voiceEnabled, voiceStyle, applyVoiceStyle]);
+  }, [localGender, quietMode, voiceEnabled, voiceStyle, applyVoiceStyle, setCaddieState]);
 
   const voiceSpeak = useCallback((message: string, _style?: string | null): void => {
-    void speak(message);
-  }, [speak]);
+    void speakJob(message, ENGINE_PRIORITY.AMBIENT, localGender);
+  }, [localGender]);
 
-  // Backward-compat alias — existing callers of speakMessage keep working
+  // Backward-compat alias ? existing callers of speakMessage keep working
   const speakMessage = (message: string, style?: string | null): void => {
     void voiceSpeak(message, style);
   };
@@ -2094,7 +2199,7 @@ export default function PlayScreenClean() {
     return `${ack} Smooth swing.`;
   };
 
-  // Returns 'pressure' when the round is deep (6+ shots logged) — simulates end-of-round tension
+  // Returns 'pressure' when the round is deep (6+ shots logged) ? simulates end-of-round tension
   const getShotSituation = (currentCount: number): 'pressure' | 'normal' =>
     currentCount >= 5 ? 'pressure' : 'normal';
 
@@ -2109,7 +2214,7 @@ export default function PlayScreenClean() {
     return 'neutral';
   };
 
-  // Groups shots by mental state — returns dominant tendency per state
+  // Groups shots by mental state ? returns dominant tendency per state
   const getMentalPatterns = (shotList: Shot[]): Record<string, 'right' | 'left' | 'straight'> => {
     const groups: Record<string, { left: number; right: number; straight: number }> = {};
     shotList.forEach((s) => {
@@ -2133,8 +2238,8 @@ export default function PlayScreenClean() {
   const getTrend = (shotList: Shot[]): 'improving' | 'struggling' | 'neutral' => {
     if (shotList.length < 3) return 'neutral';
     const last3 = shotList.slice(-3).map((s) => s.result);
-    const straights = last3.filter((r) => r === 'straight').length;
-    const misses = last3.filter((r) => r !== 'straight').length;
+    const straights = last3.filter((r) => r === 'center').length;
+    const misses = last3.filter((r) => r !== 'center').length;
     if (straights >= 2) return 'improving';
     if (misses >= 2) return 'struggling';
     return 'neutral';
@@ -2236,7 +2341,7 @@ export default function PlayScreenClean() {
     }
   }, [getPreShotMessage, quietMode, speak, voiceEnabled]);
 
-  // Fired when player talks to the caddie — concise, context-aware response
+  // Fired when player talks to the caddie ? concise, context-aware response
   const runConversation = (userInput: string): void => {
     if (!voiceEnabled || quietMode) return;
     const context = buildContext({
@@ -2276,17 +2381,17 @@ export default function PlayScreenClean() {
     lastPreShotRef.current = '';
     setCurrentRound([]);
     setIsRoundActive(true);
+    setProactiveShownIds(new Set()); // reset proactive deduplication for new round
     // Reset scoring analytics
     setPuttsThisHole(0);
     setFirThisHole(par === 3 ? null : null);
     setGirThisHole(null);
     setHoleStatsLog([]);
     setAiRoundInsights(null);
-    // Hole 1 is always a tee shot — start on Driver
+    // Hole 1 is always a tee shot ? start on Driver
     lastAutoClubRef.current = 'Driver';
     setClub('Driver');
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    void playSound(SWING_SWOOSH_SFX);
     setCaddieMessage('Round started. Stay smooth.');
     // If CaddieMemory has a strong practice bias, speak it as the opening tip
     const cmOpeningTip = (() => {
@@ -2295,9 +2400,8 @@ export default function PlayScreenClean() {
         ? " You've been missing right. Let's aim slightly left today."
         : " You've been missing left. Let's aim slightly right today.";
     })();
-    // Use VoiceIntelligence INTRO state — fires once per round, obeys all speech rules
+    // Use VoiceIntelligence INTRO state ? fires once per round, obeys all speech rules
     void speakIntro('round');
-    if (cmOpeningTip) void voiceSpeak(cmOpeningTip, 'calm');
   };
 
   const endRound = async () => {
@@ -2318,6 +2422,17 @@ export default function PlayScreenClean() {
       setCaddieMessage('Round saved.');
       setSavedRounds(updatedRounds);
 
+      // Compute AI Coach round analysis immediately (no network required)
+      const analysis = computeRoundAnalysis(shots, round, roundPars);
+      setRoundSummary(analysis);
+
+      // Speak the voice summary after a short delay so it doesn't overlap the save feedback
+      setTimeout(() => {
+        if (voiceEnabled && !quietMode) {
+          void voiceSpeak(analysis.voiceSummary, 'calm');
+        }
+      }, 1400);
+
       // Generate AI round insights in the background (non-blocking)
       getRoundInsights(holeStatsLog, shots).then((insights) => {
         if (insights) setAiRoundInsights(insights);
@@ -2332,7 +2447,7 @@ export default function PlayScreenClean() {
     const recent = shotList.slice(-5);
     const rRight    = recent.filter((s) => s.result === 'right').length;
     const rLeft     = recent.filter((s) => s.result === 'left').length;
-    const rStraight = recent.filter((s) => s.result === 'straight').length;
+    const rStraight = recent.filter((s) => s.result === 'center').length;
 
     const allHistoryShots = history.flatMap((r) => r.shots);
     const ltRight = allHistoryShots.filter((s) => s.result === 'right').length;
@@ -2347,7 +2462,7 @@ export default function PlayScreenClean() {
     );
   };
 
-  // Route through aiService — centralised AI gateway, no direct OpenAI fetches in UI
+  // Route through aiService ? centralised AI gateway, no direct OpenAI fetches in UI
   const callOpenAI = async (prompt: string, context?: { hole?: number; par?: number; yardage?: number; club?: string; pattern?: string }): Promise<string | null> => {
     const ctx = context ?? {};
     try {
@@ -2393,8 +2508,8 @@ export default function PlayScreenClean() {
     if (shots.length < 5) return null;
     const pattern = getSwingPattern();
     if (!pattern) return null;
-    if (pattern.right > 60) return "You're starting to leak right — something to note.";
-    if (pattern.left > 60) return "You've been pulling it left — let's work on that.";
+    if (pattern.right > 60) return "You're starting to leak right ? something to note.";
+    if (pattern.left > 60) return "You've been pulling it left ? let's work on that.";
     if (pattern.straight > 60) return "You're absolutely flushing it. Keep that up.";
     return null;
   };
@@ -2402,14 +2517,14 @@ export default function PlayScreenClean() {
   const getCoachingTip = (pattern: string): string | null => {
     if (pattern.includes('right')) return 'Favor the left side a touch.';
     if (pattern.includes('left')) return 'Keep the face square through impact.';
-    if (pattern.includes('straight')) return "Keep that tempo — you're dialed in.";
+    if (pattern.includes('straight')) return "Keep that tempo ? you're dialed in.";
     return null;
   };
 
   const detectMentalPattern = (shotList: Shot[]): string | null => {
     if (shotList.length < 5) return null;
     const filtered = shotList.filter((s) => s.mental && s.result === 'right');
-    if (filtered.length >= 3) return "You tend to leak right when you're not fully committed — back yourself and trust it.";
+    if (filtered.length >= 3) return "You tend to leak right when you're not fully committed ? back yourself and trust it.";
     return null;
   };
 
@@ -2456,13 +2571,13 @@ export default function PlayScreenClean() {
 
   const getSwingInsight = () => {
     const miss = getPrimaryMiss();
-    if (miss === 'right') return "You're leaking right — open face or outside path. Release through from the inside.";
-    if (miss === 'left') return "You're pulling left — probably early release. Slow the tempo and stay connected.";
+    if (miss === 'right') return "You're leaking right ? open face or outside path. Release through from the inside.";
+    if (miss === 'left') return "You're pulling left ? probably early release. Slow the tempo and stay connected.";
     if (miss === 'balanced') return "Ball striking is solid. Focus on distance control and you'll be in great shape.";
     return "Hit a few more and I'll have a read on you.";
   };
 
-  // Raw left/right/straight counts — available from shot 1+
+  // Raw left/right/straight counts ? available from shot 1+
   const getDispersionCounts = () => {
     const n = safeShots.length;
     if (n === 0) return null;
@@ -2475,7 +2590,7 @@ export default function PlayScreenClean() {
     return { left, right, straight, total: n };
   };
 
-  // Derived analytics — percentages + threshold-based insight text.
+  // Derived analytics ? percentages + threshold-based insight text.
   // Recomputes on every render; no extra state needed.
   const getLiveAnalytics = () => {
     const dc = getDispersionCounts();
@@ -2487,7 +2602,7 @@ export default function PlayScreenClean() {
     let insight: string | null = null;
     if (rightPct > 60)       insight = 'You are consistently missing right';
     else if (leftPct > 60)  insight = 'You are consistently missing left';
-    else if (strPct  > 60)  insight = 'Solid — over 60% straight';
+    else if (strPct  > 60)  insight = 'Solid ? over 60% straight';
     return { left, right, straight, total, leftPct, rightPct, strPct, insight };
   };
 
@@ -2507,7 +2622,7 @@ export default function PlayScreenClean() {
         pattern: 'push' as const,
         pct: pushPct,
         label: 'Push bias detected',
-        coaching: 'Push bias — likely open face',
+        coaching: 'Push bias ? likely open face',
       };
     }
     if (pullPct > 50) {
@@ -2515,7 +2630,7 @@ export default function PlayScreenClean() {
         pattern: 'pull' as const,
         pct: pullPct,
         label: 'Pull bias detected',
-        coaching: 'Pull bias — likely closed face',
+        coaching: 'Pull bias ? likely closed face',
       };
     }
     return null;
@@ -2535,11 +2650,11 @@ export default function PlayScreenClean() {
   const getAimAdjustment = () => {
     const dispersion = getDispersion();
     if (dispersion === null) return '';
-    if (dispersion >= 3) return "Starting to leak right — aim well left of center.";
-    if (dispersion === 2) return 'Slight right lean — favor left center.';
-    if (dispersion <= -3) return "You're pulling left — aim right of center.";
-    if (dispersion === -2) return 'Slight left lean — favor right center.';
-    return "Balanced — stay on your center line.";
+    if (dispersion >= 3) return "Starting to leak right ? aim well left of center.";
+    if (dispersion === 2) return 'Slight right lean ? favor left center.';
+    if (dispersion <= -3) return "You're pulling left ? aim right of center.";
+    if (dispersion === -2) return 'Slight left lean ? favor right center.';
+    return "Balanced ? stay on your center line.";
   };
 
   const getTargetRecommendation = () => {
@@ -2552,25 +2667,25 @@ export default function PlayScreenClean() {
     return 'Stay on your center line';
   };
 
-  // Bias-driven strategy — uses full-session getMissBias() so output
+  // Bias-driven strategy ? uses full-session getMissBias() so output
   // updates the moment the dominant direction shifts.
   const getBiasStrategy = (): { label: string; color: string } => {
     const bias = getMissBias();
     if (!bias) return { label: 'Attack the target', color: '#6ee7b7' };
-    if (bias.bias === 'right') return { label: `Aim left — correcting ${bias.confidence}% right bias`, color: '#93c5fd' };
-    if (bias.bias === 'left')  return { label: `Aim right — correcting ${bias.confidence}% left bias`,  color: '#fcd34d' };
-    return { label: 'Attack — straight ball striking', color: '#6ee7b7' };
+    if (bias.bias === 'right') return { label: `Aim left ? correcting ${bias.confidence}% right bias`, color: '#93c5fd' };
+    if (bias.bias === 'left')  return { label: `Aim right ? correcting ${bias.confidence}% left bias`,  color: '#fcd34d' };
+    return { label: 'Attack ? straight ball striking', color: '#6ee7b7' };
   };
 
-  // Aim offset: right miss → play 5 yds shorter (aim left of flag),
-  // left miss → play 5 yds longer (aim right of flag).
+  // Aim offset: right miss ? play 5 yds shorter (aim left of flag),
+  // left miss ? play 5 yds longer (aim right of flag).
   // First-round magic: when fewer than 5 shots have been logged, falls back to
   // the persisted player profile miss tendency (ppMiss) so the caddie gives
-  // directional guidance from hole 1, shot 1 — not just after 5 shots.
+  // directional guidance from hole 1, shot 1 ? not just after 5 shots.
   // Returns: target (aim direction), miss (danger warning), yards (offset), label, color.
   const getAimOffset = (): { yards: number; label: string; color: string; target: string; miss: string } | null => {
     // Priority 1: live in-round shot pattern
-    // Priority 2: CaddieMemory (practice-derived tendencies, requires confidence ≥ 30)
+    // Priority 2: CaddieMemory (practice-derived tendencies, requires confidence = 30)
     // Priority 3: persisted player profile miss
     const liveBias = getMissBias();
     const cmBias =
@@ -2595,36 +2710,36 @@ export default function PlayScreenClean() {
 
 
 
-    return { yards: 0, label: '±0 yds (on target)', color: '#6ee7b7', target: 'center', miss: 'Ball flight is neutral — trust the center line.' };
+    return { yards: 0, label: '?0 yds (on target)', color: '#6ee7b7', target: 'center', miss: 'Ball flight is neutral ? trust the center line.' };
   };
 
   /**
-   * getContextAdjustment — In-Round Adaptation engine.
+   * getContextAdjustment ? In-Round Adaptation engine.
    * Synthesises four live signals into a real-time strategy override:
-   *   1. Recent shot quality   — 2+ misses in last 3 → pull back
-   *   2. Score vs par          — bleeding strokes → protect; under par → press
-   *   3. Late-hole pressure    — holes 15+ tighten risk tolerance
-   *   4. Mental state          — frustrated/pressure → safe; confident → attack
-   * Priority (highest → lowest): shot pattern, score vs par, mental state, hole.
+   *   1. Recent shot quality   ? 2+ misses in last 3 ? pull back
+   *   2. Score vs par          ? bleeding strokes ? protect; under par ? press
+   *   3. Late-hole pressure    ? holes 15+ tighten risk tolerance
+   *   4. Mental state          ? frustrated/pressure ? safe; confident ? attack
+   * Priority (highest ? lowest): shot pattern, score vs par, mental state, hole.
    */
   const getContextAdjustment = (): 'safe' | 'neutral' | 'attack' => {
-    // 1. Recent shot quality — immediate concern overrides everything else
+    // 1. Recent shot quality ? immediate concern overrides everything else
     const recent = shots.slice(-3);
-    if (recent.length >= 3 && recent.filter((s) => s.result !== 'straight').length >= 2) {
+    if (recent.length >= 3 && recent.filter((s) => s.result !== 'center').length >= 2) {
       return 'safe';
     }
 
-    // 2. Score vs par — only meaningful once ≥3 holes are scored
+    // 2. Score vs par ? only meaningful once =3 holes are scored
     const scoredHoles = round.filter((s) => s > 0).length;
     if (scoredHoles >= 3 && roundPars.length >= scoredHoles) {
       const totalStrokes = round.slice(0, scoredHoles).reduce((a, b) => a + b, 0);
       const totalPar    = roundPars.slice(0, scoredHoles).reduce((a, b) => a + b, 0);
       const diff = totalStrokes - totalPar;
-      // 5+ over par through played holes → protect score
+      // 5+ over par through played holes ? protect score
       if (diff >= 5) return 'safe';
-      // 2+ under par → player is in form, press the advantage
+      // 2+ under par ? player is in form, press the advantage
       if (diff <= -2) return 'attack';
-      // 3–4 over with only a few holes left → don't gamble
+      // 3?4 over with only a few holes left ? don't gamble
       if (diff >= 3 && hole >= 14) return 'safe';
     }
 
@@ -2632,7 +2747,7 @@ export default function PlayScreenClean() {
     if (mentalState === 'confident') return 'attack';
     if (mentalState === 'frustrated' || mentalState === 'pressure') return 'safe';
 
-    // 4. Late-hole pressure — tighten to neutral if no other signal says attack
+    // 4. Late-hole pressure ? tighten to neutral if no other signal says attack
     if (hole >= 16) return 'neutral';
 
     return 'neutral';
@@ -2642,18 +2757,18 @@ export default function PlayScreenClean() {
    * getConfidence
    * Returns a 0-100 confidence score for the current recommendation.
    * Baseline from shot count; bonus from consistent bias pattern.
-   * Early-round (< 5 shots): intentionally lower — prevents overconfident
+   * Early-round (< 5 shots): intentionally lower ? prevents overconfident
    * directional calls before an in-round pattern has established.
    */
   const getConfidence = (): number => {
     const hasProfileMiss = ppMiss && ppMiss !== 'straight';
-    // < 5 shots: cap at 42 (no profile) or 50 (known profile miss) — "warming up" tier
+    // < 5 shots: cap at 42 (no profile) or 50 (known profile miss) ? "warming up" tier
     let base = shots.length < 5
       ? (hasProfileMiss ? 50 : 42)
       : shots.length < 10 ? 75 : 90;
     const mb = getMissBias();
     // Consistent bias pattern adds up to 8 pts
-    if (mb && mb.bias !== 'straight' && mb.confidence >= 70) base = Math.min(98, base + 8);
+    if (mb && mb.bias !== 'center' && mb.confidence >= 70) base = Math.min(98, base + 8);
     else if (mb && mb.confidence >= 55) base = Math.min(98, base + 4);
     // Struggling recent form reduces confidence slightly
     const ctx = getContextAdjustment();
@@ -2669,12 +2784,12 @@ export default function PlayScreenClean() {
    * adjustments when confidence is sufficient.
    *
    * Shot-shape strategy:
-   *   Slice (start right, curve right) → avoid right hazards, aim left side
-   *   Fade  (neutral start, curve right) → slight left aim, normal club
-   *   Draw  (start left, curve right)   → aggressive lines, right-side aim ok
-   *   Hook  (start left, curve left)    → aim right to offset, consider less club
-   *   Push  (start right, stay right)   → aim left center
-   *   Pull  (start left, stay left)     → aim right center
+   *   Slice (start right, curve right) ? avoid right hazards, aim left side
+   *   Fade  (neutral start, curve right) ? slight left aim, normal club
+   *   Draw  (start left, curve right)   ? aggressive lines, right-side aim ok
+   *   Hook  (start left, curve left)    ? aim right to offset, consider less club
+   *   Push  (start right, stay right)   ? aim left center
+   *   Pull  (start left, stay left)     ? aim right center
    *
    * Returns null when there is not enough data to make a swing-informed suggestion.
    */
@@ -2684,8 +2799,8 @@ export default function PlayScreenClean() {
     label:              string;
     detail:             string;
     avoidFade:          boolean;
-    aggressiveLine:     boolean;   // true for draw players → use full attack line
-    avoidRightHazard:   boolean;   // true for slice/push → steer away from right
+    aggressiveLine:     boolean;   // true for draw players ? use full attack line
+    avoidRightHazard:   boolean;   // true for slice/push ? steer away from right
     strategyAdjusted:   boolean;   // drives "Strategy adjusted for shot shape" badge
   } | null => {
     if (cmConfidence < 30 || cmUpdated === 0) return null;
@@ -2702,63 +2817,63 @@ export default function PlayScreenClean() {
     let avoidRightHazard   = false;
     let hasAdjustment      = false;
 
-    // ── Shot-shape rules (highest specificity — use tracking data) ────────────
+    // -- Shot-shape rules (highest specificity ? use tracking data) ------------
     if (shape === 'slice') {
       aimOverride      = 'left center';
       avoidRightHazard = true;
-      clubNote         = 'Aim well left — your slice will bring it back';
-      detail           = 'Slice tendency — aim left side, avoid right hazards';
+      clubNote         = 'Aim well left ? your slice will bring it back';
+      detail           = 'Slice tendency ? aim left side, avoid right hazards';
       hasAdjustment    = true;
     } else if (shape === 'fade') {
       aimOverride   = 'left center';
-      clubNote      = 'Slight fade player — aim a fraction left';
-      detail        = 'Fade tendency — aim left center';
+      clubNote      = 'Slight fade player ? aim a fraction left';
+      detail        = 'Fade tendency ? aim left center';
       hasAdjustment = true;
     } else if (shape === 'draw') {
       aimOverride     = 'right center';
       aggressiveLine  = true;
-      clubNote        = 'Draw player — use aggressive lines';
-      detail          = 'Draw tendency — aim right, trust the curve';
+      clubNote        = 'Draw player ? use aggressive lines';
+      detail          = 'Draw tendency ? aim right, trust the curve';
       hasAdjustment   = true;
     } else if (shape === 'hook') {
       aimOverride   = 'right center';
-      clubNote      = 'Strong hook — aim right and consider one less club';
-      detail        = 'Hook tendency — aim right, reduce club to control shape';
+      clubNote      = 'Strong hook ? aim right and consider one less club';
+      detail        = 'Hook tendency ? aim right, reduce club to control shape';
       hasAdjustment = true;
     } else if (shape === 'push') {
       aimOverride      = 'left center';
       avoidRightHazard = true;
-      detail           = 'Push tendency — aim left center to compensate';
+      detail           = 'Push tendency ? aim left center to compensate';
       hasAdjustment    = true;
     } else if (shape === 'pull') {
       aimOverride   = 'right center';
-      detail        = 'Pull tendency — aim right center to compensate';
+      detail        = 'Pull tendency ? aim right center to compensate';
       hasAdjustment = true;
     } else {
-      // ── Fallback: face/path rules (no tracking data or straight player) ─────
+      // -- Fallback: face/path rules (no tracking data or straight player) -----
       if (face === 'open') {
         aimOverride = 'left center';
         clubNote    = 'Consider one club less to stay within your natural shape';
-        detail      = 'Open face — aim left, reduce club if needed';
+        detail      = 'Open face ? aim left, reduce club if needed';
         hasAdjustment = true;
       } else if (face === 'closed') {
         aimOverride = 'right center';
-        detail      = 'Closed face — aim right to offset draw';
+        detail      = 'Closed face ? aim right to offset draw';
         hasAdjustment = true;
       }
       if (path === 'out-to-in') {
         avoidFade   = true;
         if (!aimOverride) aimOverride = 'left center';
         detail      = detail
-          ? `${detail}; out-to-in path — avoid fade shots`
-          : 'Out-to-in path — avoid fade shots, aim left';
+          ? `${detail}; out-to-in path ? avoid fade shots`
+          : 'Out-to-in path ? avoid fade shots, aim left';
         hasAdjustment = true;
       } else if (path === 'in-to-out') {
         aggressiveLine = true;
         if (!aimOverride) aimOverride = 'right center';
         detail = detail
-          ? `${detail}; in-to-out path — play for a draw`
-          : 'In-to-out path — play for a draw, aim right';
+          ? `${detail}; in-to-out path ? play for a draw`
+          : 'In-to-out path ? play for a draw, aim right';
         hasAdjustment = true;
       }
     }
@@ -2778,23 +2893,23 @@ export default function PlayScreenClean() {
   };
 
   /**
-   * getCaddieDecision — single source of truth for ALL caddie output.
+   * getCaddieDecision ? single source of truth for ALL caddie output.
    * UI, voice, and AI all consume this object. No duplicate logic anywhere.
    *
    * Returns:
-   *   club       — recommended club name
-   *   aim        — 'center' | 'left center' | 'right center'
-   *   aimLabel   — display label ("Aim Left Center" etc.)
-   *   miss       — danger-side sentence ("Right miss is danger — aim left.")
-   *   missColor  — hex colour matching the miss severity
-   *   confidence — 0-100 integer
-   *   distance   — numeric distance in play (GPS > target > hole default)
-   *   mode       — current strategyMode
-   *   context    — 'safe' | 'neutral' | 'attack' from in-round adaptation
-   *   message    — full strategy sentence for card / voice
-   *   voicePhrase — pre-built, ready-to-speak string
-   *   aimOffset  — raw getAimOffset() result (for aim-diagram consumers)
-   *   bias       — raw getMissBias() result (for dispersion-diagram consumers)
+   *   club       ? recommended club name
+   *   aim        ? 'center' | 'left center' | 'right center'
+   *   aimLabel   ? display label ("Aim Left Center" etc.)
+   *   miss       ? danger-side sentence ("Right miss is danger ? aim left.")
+   *   missColor  ? hex colour matching the miss severity
+   *   confidence ? 0-100 integer
+   *   distance   ? numeric distance in play (GPS > target > hole default)
+   *   mode       ? current strategyMode
+   *   context    ? 'safe' | 'neutral' | 'attack' from in-round adaptation
+   *   message    ? full strategy sentence for card / voice
+   *   voicePhrase ? pre-built, ready-to-speak string
+   *   aimOffset  ? raw getAimOffset() result (for aim-diagram consumers)
+   *   bias       ? raw getMissBias() result (for dispersion-diagram consumers)
    */
   const getCaddieDecision = () => {
     const bias    = getMissBias();
@@ -2805,52 +2920,52 @@ export default function PlayScreenClean() {
     const sta     = getSwingTendencyAdjustment(); // swing-tendency overrides
     const dist    = targetDistance ?? gpsYards?.middle ?? currentHoleData?.distance ?? 150;
 
-    // ── Early-round guard ──────────────────────────────────────────────────────
+    // -- Early-round guard ------------------------------------------------------
     // Fewer than 5 in-round shots: pattern hasn't established. Force neutral aim,
     // safe strategy, and capped confidence to prevent bad early calls.
-    // Profile miss (ppMiss) is still used for club selection upstream — only the
+    // Profile miss (ppMiss) is still used for club selection upstream ? only the
     // directional aim / danger warning is neutralised here.
     if (shots.length < 5) {
       const earlyConf = Math.min(conf, 50);
       const distPart  = dist ? `${dist} yards.` : '';
-      const clubPart  = recClub === '—' || !recClub ? 'Select a club.' : `${recClub}.`;
-      const earlyPhrase = [distPart, clubPart, 'Aim Center.', 'Play neutral — building your pattern.'].filter(Boolean).join(' ');
+      const clubPart  = recClub === '?' || !recClub ? 'Select a club.' : `${recClub}.`;
+      const earlyPhrase = [distPart, clubPart, 'Aim Center.', 'Play neutral ? building your pattern.'].filter(Boolean).join(' ');
       return {
-        club:        recClub || '—',
+        club:        recClub || '?',
         aim:         'center' as const,
         aimLabel:    'Play Center',
-        miss:        'Play neutral — building your pattern.',
+        miss:        'Play neutral ? building your pattern.',
         missColor:   '#6ee7b7',
         confidence:  earlyConf,
         distance:    dist ?? null,
         mode:        strategyMode,
         context:     'safe' as const,
-        message:     'Hit a few shots — your caddie is calibrating.',
+        message:     'Hit a few shots ? your caddie is calibrating.',
         voicePhrase: earlyPhrase,
         aimOffset:   null,
         bias:        null,
       };
     }
-    // ──────────────────────────────────────────────────────────────────────────
+    // --------------------------------------------------------------------------
 
     // Derive aim + miss from bias
     let aimKey: 'center' | 'left center' | 'right center' = 'center';
-    let missText  = 'Ball flight is neutral — trust the center line.';
+    let missText  = 'Ball flight is neutral ? trust the center line.';
     let missColor = '#6ee7b7';
     if (bias?.bias === 'right') {
       aimKey    = 'left center';
-      missText  = 'Right miss is danger — aim left.';
+      missText  = 'Right miss is danger ? aim left.';
       missColor = '#93c5fd';
     } else if (bias?.bias === 'left') {
       aimKey    = 'right center';
-      missText  = 'Left miss is danger — aim right.';
+      missText  = 'Left miss is danger ? aim right.';
       missColor = '#fcd34d';
     }
 
     // Use richer aim offset miss text when available (getAimOffset may have exact yards)
     if (ao && ao.miss) { missText = ao.miss; missColor = ao.color; }
 
-    // ── Swing-tendency override ───────────────────────────────────────────────────
+    // -- Swing-tendency override ---------------------------------------------------
     // Applied when confidence is high enough and no strong live-round bias exists
     // (live in-round data always takes priority over practice tendencies).
     if (sta && !bias) {
@@ -2861,8 +2976,8 @@ export default function PlayScreenClean() {
 
     // Aggressive line: draw players with no hazard override get an attack message
     const isAggressiveLine = !!(sta?.aggressiveLine && !bias);
-    if (isAggressiveLine && missText === 'Ball flight is neutral — trust the center line.') {
-      missText = 'Draw player — use an aggressive line.';
+    if (isAggressiveLine && missText === 'Ball flight is neutral ? trust the center line.') {
+      missText = 'Draw player ? use an aggressive line.';
       missColor = '#86efac';
     }
 
@@ -2874,12 +2989,12 @@ export default function PlayScreenClean() {
 
     // Canonical voice phrase: "{dist} yards. {club}. Aim {aim}. {miss}"
     const distPart = dist  ? `${dist} yards.` : '';
-    const clubPart = recClub === '—' || !recClub ? 'Select a club.' : `${recClub}.`;
+    const clubPart = recClub === '?' || !recClub ? 'Select a club.' : `${recClub}.`;
     const aimPart  = `Aim ${aimLabel}.`;
     const voicePhrase = [distPart, clubPart, aimPart, missText].filter(Boolean).join(' ');
 
     return {
-      club:       recClub || '—',
+      club:       recClub || '?',
       aim:        aimKey,
       aimLabel,
       miss:       missText,
@@ -2899,7 +3014,7 @@ export default function PlayScreenClean() {
   };
 
   /**
-   * buildVoicePhrase — thin wrapper around getCaddieDecision().
+   * buildVoicePhrase ? thin wrapper around getCaddieDecision().
    * Kept for backward-compatibility with existing call-sites.
    * Optionally accepts an explicit distance override.
    * Canonical format: "{distance} yards. {club}. Aim {aim}. {miss}"
@@ -2908,7 +3023,7 @@ export default function PlayScreenClean() {
     const d = getCaddieDecision();
     const yards = dist ?? d.distance;
     const distPart  = yards ? `${yards} yards.` : '';
-    const clubPart  = d.club === '—' ? 'Select a club.' : `${d.club}.`;
+    const clubPart  = d.club === '?' ? 'Select a club.' : `${d.club}.`;
     const aimPart   = `Aim ${d.aimLabel}.`;
     const missPart  = d.miss;
     return [distPart, clubPart, aimPart, missPart].filter(Boolean).join(' ');
@@ -2931,10 +3046,10 @@ export default function PlayScreenClean() {
     const conf     = cmConfidence;
     const hasSwing = conf >= 30 && cmUpdated !== 0;
 
-    // Live in-round shots give richer context — use them when available
+    // Live in-round shots give richer context ? use them when available
     const liveBias = d.bias?.bias ?? null;  // 'right' | 'left' | null
 
-    // ── Scenario 1: swing data + shot history both point the same way ──────
+    // -- Scenario 1: swing data + shot history both point the same way ------
     if (hasSwing && (liveBias || bias !== 'neutral')) {
       const effectiveBias = liveBias ?? (bias !== 'neutral' ? bias : null);
 
@@ -2943,24 +3058,24 @@ export default function PlayScreenClean() {
         return `You've got an open face and a right miss tendency. Let's aim ${aimLine} and commit.`;
       }
       if (effectiveBias === 'right' && path === 'out-to-in') {
-        return `Your path is out-to-in and you're missing right — classic fade spin. Aim left center and swing easy through it.`;
+        return `Your path is out-to-in and you're missing right ? classic fade spin. Aim left center and swing easy through it.`;
       }
       if (effectiveBias === 'right' && face === 'open' && path === 'out-to-in') {
-        return `Open face, out-to-in path, missing right — that's a slice pattern. Aim well left and feel the face close through impact.`;
+        return `Open face, out-to-in path, missing right ? that's a slice pattern. Aim well left and feel the face close through impact.`;
       }
       if (effectiveBias === 'left' && face === 'closed') {
         const aimLine = d.aim === 'right center' ? 'right center' : 'right side';
         return `Closed face and left miss tendency showing. Aim ${aimLine} and hold your finish high.`;
       }
       if (effectiveBias === 'left' && path === 'in-to-out') {
-        return `In-to-out path with a left bias — you're releasing too early. Aim right center and hold the lag a beat longer.`;
+        return `In-to-out path with a left bias ? you're releasing too early. Aim right center and hold the lag a beat longer.`;
       }
     }
 
-    // ── Scenario 2: swing data only (no strong live in-round pattern yet) ──
+    // -- Scenario 2: swing data only (no strong live in-round pattern yet) --
     if (hasSwing && face !== 'square') {
       if (face === 'open' && path === 'out-to-in') {
-        return `Practice data shows an open face and out-to-in swing. Let's play left edge — stay committed.`;
+        return `Practice data shows an open face and out-to-in swing. Let's play left edge ? stay committed.`;
       }
       if (face === 'open') {
         return `Your swing data shows an open face pattern. Aim just left of the flag and trust the adjustment.`;
@@ -2970,20 +3085,20 @@ export default function PlayScreenClean() {
       }
     }
 
-    // ── Scenario 3: shot history only (no swing analysis available) ────────
+    // -- Scenario 3: shot history only (no swing analysis available) --------
     if (liveBias === 'right') {
-      return `You're trending right today. Aim left center — pick a spot and fire at it.`;
+      return `You're trending right today. Aim left center ? pick a spot and fire at it.`;
     }
     if (liveBias === 'left') {
       return `Left miss pattern building. Aim right center and stay balanced through the ball.`;
     }
 
-    // ── Not enough data ─────────────────────────────────────────────────────
+    // -- Not enough data -----------------------------------------------------
     return null;
   };
 
   /**
-   * speakDecision — canonical voice trigger.
+   * speakDecision ? canonical voice trigger.
    * Reads getCaddieDecision() and produces the standardised phrase:
    *   "{distance} yards. {club}. Aim {aim}. {miss}"
    * When advanced coaching data is available (swing + shot history), prepends
@@ -2997,7 +3112,7 @@ export default function PlayScreenClean() {
     // Standard decision phrase: "{dist} yards. {club}. Aim {aim}. {miss}"
     const standardPhrase = [
       yards ? `${yards} yards.` : '',
-      d.club === '—' ? 'Select a club.' : `${d.club}.`,
+      d.club === '?' ? 'Select a club.' : `${d.club}.`,
       `Aim ${d.aimLabel}.`,
       d.miss,
     ].filter(Boolean).join(' ');
@@ -3016,27 +3131,27 @@ export default function PlayScreenClean() {
     void speak(fullText);
   };
 
-  // Legacy alias — keep getDecision() pointing to getCaddieDecision() so any
+  // Legacy alias ? keep getDecision() pointing to getCaddieDecision() so any
   // remaining call-sites still compile without change.
   const getDecision = () => {
     const d = getCaddieDecision();
     return { club: d.club, aim: d.aimLabel, confidence: d.confidence, message: d.message };
   };
 
-  const coachPhrases = ["Alright —", "Here's the play —", "Stay with me —"];
+  const coachPhrases = ["Alright ?", "Here's the play ?", "Stay with me ?"];
   const coachTone = (message: string) => `${coachPhrases[Math.floor(Math.random() * coachPhrases.length)]} ${message}`;
-  const addEncouragement = (message: string) => Math.random() > 0.5 ? message + " You're close — trust it." : message;
+  const addEncouragement = (message: string) => Math.random() > 0.5 ? message + " You're close ? trust it." : message;
 
   const coachingMessages: Record<string, string[]> = {
     right: [
       'Starting to leak right. Keep the face square.',
-      'Right again — check your alignment.',
-      "You're drifting right — stay connected through it.",
+      'Right again ? check your alignment.',
+      "You're drifting right ? stay connected through it.",
       'That slipped right. Square the face at impact.',
     ],
     left: [
       'Pulled that one. Ease your tempo.',
-      'Left miss — stay balanced through the ball.',
+      'Left miss ? stay balanced through the ball.',
       'Coming over the top. Trust the inside path.',
       'Pulled left. Let the club release naturally.',
     ],
@@ -3056,19 +3171,19 @@ export default function PlayScreenClean() {
   // Pattern escalation: if the same miss occurs 3+ times in a row, acknowledge it
   const patternMessages: Record<string, string[]> = {
     right: [
-      "You're consistently missing right — stay patient through it.",
-      "Three right in a row — back off the pace and let it release.",
-      "That's a pattern right now — trust the inside path and commit.",
+      "You're consistently missing right ? stay patient through it.",
+      "Three right in a row ? back off the pace and let it release.",
+      "That's a pattern right now ? trust the inside path and commit.",
     ],
     left: [
-      "You're consistently pulling left — ease the tempo and trust it.",
-      "Three left misses — slow down and stay on plane.",
-      "That's a pattern pulling left — breathe and let the club do the work.",
+      "You're consistently pulling left ? ease the tempo and trust it.",
+      "Three left misses ? slow down and stay on plane.",
+      "That's a pattern pulling left ? breathe and let the club do the work.",
     ],
     straight: [
-      "Three straight — you're locked in, keep trusting it.",
-      "Consistent contact — don't change a thing.",
-      "You're repeating it perfectly — stay in this zone.",
+      "Three straight ? you're locked in, keep trusting it.",
+      "Consistent contact ? don't change a thing.",
+      "You're repeating it perfectly ? stay in this zone.",
     ],
   };
 
@@ -3082,33 +3197,149 @@ export default function PlayScreenClean() {
     return getCoaching(result);
   };
 
-  const getHoleStrategy = () => {
+  /**
+   * getHoleStrategy — returns a typed strategy breakdown for the current hole.
+   *
+   * Returns a HoleStrategyData object with:
+   *   headline     — short 1-line tee-box briefing
+   *   teeClub      — recommended tee club (string)
+   *   targetZone   — where to aim / land the ball
+   *   safeMiss     — which side to miss on (or null)
+   *   approach     — second-shot / layup note
+   *   voiceLine    — single sentence spoken on tee (caddie voice)
+   *   adjustedFor  — 'miss_right' | 'miss_left' | 'aggressive' | null
+   *   parLabel     — 'Par 3' | 'Par 4' | 'Par 5'
+   */
+  const getHoleStrategy = (): HoleStrategyData => {
+    const dist  = currentHoleData.distance;
+    const note  = (currentHoleData.note ?? '').toLowerCase();
+    const miss  = (ppMiss ?? playerProfile.commonMiss ?? null) as 'left' | 'right' | null;
     const completedStrokes = round.reduce((sum, s) => sum + (s || 0), 0);
-    const completedPar = roundPars.reduce((sum, p) => sum + (p || 0), 0);
-    const scoreDiff = completedStrokes - completedPar;
+    const completedPar     = roundPars.reduce((sum, p) => sum + (p || 0), 0);
+    const scoreDiff        = completedStrokes - completedPar;
 
+    // Hazard detection from hole note text
+    const hasWaterRight  = note.includes('water right') || note.includes('lake right') || note.includes('pond right');
+    const hasWaterLeft   = note.includes('water left')  || note.includes('lake left')  || note.includes('pond left');
+    const hasBunkerRight = note.includes('bunker right') || note.includes('trap right');
+    const hasBunkerLeft  = note.includes('bunker left')  || note.includes('trap left');
+    const hasWater       = note.includes('water') || note.includes('lake') || note.includes('pond');
+    const hasBunker      = note.includes('bunker') || note.includes('trap');
+    const isDogleLeft    = note.includes('dogleg left')  || note.includes('dog leg left');
+    const isDogleRight   = note.includes('dogleg right') || note.includes('dog leg right');
+
+    // Derive the "danger side" (worst place to miss)
+    const dangerRight = hasWaterRight || hasBunkerRight || isDogleLeft;
+    const dangerLeft  = hasWaterLeft  || hasBunkerLeft  || isDogleRight;
+
+    // Safe-miss direction — opposite of danger, or based on miss tendency
+    let safeMiss: 'left' | 'right' | null = null;
+    if (dangerRight && !dangerLeft)      safeMiss = 'left';
+    else if (dangerLeft && !dangerRight) safeMiss = 'right';
+    else if (miss === 'right')           safeMiss = 'left';   // keep miss in play
+    else if (miss === 'left')            safeMiss = 'right';
+
+    // Build strategy by par
     if (par === 3) {
-      return 'Par 3 — take dead aim and trust it.';
+      const isShort  = dist <= 150;
+      const isMedium = dist > 150 && dist <= 200;
+      const firePinIfMissRight = miss === 'right' && !dangerRight;
+      const targetZone = (firePinIfMissRight || (!dangerLeft && !miss))
+        ? 'Center of the green'
+        : dangerLeft ? 'Right-center of the green' : dangerRight ? 'Left-center of the green' : 'Middle of the green';
+      const headline = `Par 3 · ${dist} yards`;
+      const approach = isShort
+        ? 'Short iron — control over power. Commit to the full swing.'
+        : isMedium ? 'Mid iron — smooth tempo, land front of green.' : 'Long par 3 — take one more club, hit center.';
+      const voiceLine = miss
+        ? `Par 3, ${dist} yards. ${miss === 'right' ? 'You tend right — hit it left-center. ' : 'You tend left — hit it right-center. '}${approach}`
+        : `Par 3, ${dist} yards. ${targetZone}. ${approach}`;
+      return {
+        headline, parLabel: 'Par 3',
+        teeClub: null,  // par 3 uses same club as approach
+        targetZone, safeMiss,
+        approach,
+        voiceLine,
+        adjustedFor: miss ? (miss === 'right' ? 'miss_right' : 'miss_left') : null,
+      };
     }
+
     if (par === 5) {
-      if (scoreDiff <= 0) return "Par 5 — opportunity here, let's go after it.";
-      return 'Par 5 — play in segments and stay out of trouble.';
+      const isLong   = dist >= 540;
+      const canGoFor = scoreDiff <= 0 && strategyMode !== 'safe' && dist <= 570;
+      const teeClub  = 'Driver';
+      // Layup target (2nd shot)
+      const layupYards = dist >= 520 ? 100 : 80;  // leave this many yards in for 3rd
+      const layupZone  = isDogleLeft  ? 'Right side of the fairway' :
+                         isDogleRight ? 'Left side of the fairway' :
+                         'Center of the fairway';
+      const targetZone = isDogleLeft  ? 'Right side — sets up the turn'
+                       : isDogleRight ? 'Left side — sets up the turn'
+                       : 'Center of the fairway';
+      const approach = canGoFor
+        ? 'You\'re swinging well — play aggressive and go for the green in two.'
+        : `Lay up to ~${layupYards} yards. ${layupZone} off the tee.`;
+      const headline = `Par 5 · ${dist} yards${canGoFor ? ' · Go for it' : ' · Layup'}`;
+      const voiceLine = canGoFor
+        ? `Par 5, ${dist} yards. You\'re in form — go for the green in two. ${targetZone} off the tee.`
+        : `Par 5, ${dist} yards. Play it in segments. ${targetZone} off the tee, lay up to ${layupYards} yards. Keep it smart.`;
+      return {
+        headline, parLabel: 'Par 5',
+        teeClub,
+        targetZone, safeMiss,
+        approach,
+        voiceLine,
+        adjustedFor: canGoFor ? 'aggressive' : null,
+      };
     }
-    if (par === 4) {
-      if (scoreDiff >= 3) return 'Par 4 — fairway first, keep it smart.';
-      return 'Par 4 — pick a smart target and commit.';
-    }
-    return '';
+
+    // Par 4
+    const isShortPar4  = dist <= 350;
+    const isMedPar4    = dist > 350 && dist <= 420;
+    // Tee club
+    const teeClub: string = isShortPar4 && strategyMode === 'safe'
+      ? '3W / 5W'
+      : isShortPar4 || (strategyMode === 'safe' && hasWater)
+      ? '3 Wood'
+      : 'Driver';
+    // Landing zone — work backwards from the green
+    const fairwayTarget = isDogleLeft  ? 'Right side — don\'t cut the corner'
+                        : isDogleRight ? 'Left side — position for the turn'
+                        : miss === 'right' ? 'Left-center of the fairway'
+                        : miss === 'left'  ? 'Right-center of the fairway'
+                        : 'Center of the fairway';
+    const approachYards = dist <= 350 ? '100–120' : dist <= 390 ? '130–160' : dist <= 430 ? '160–190' : '180+';
+    const approach = `Leaves ~${approachYards} yards in. ${
+      dangerRight ? 'Avoid right miss off tee. ' :
+      dangerLeft  ? 'Avoid left miss off tee. ' : ''
+    }${hasBunker ? 'Fairway bunkers — stay short of them.' : ''}`.trim();
+    const safeMissNote = safeMiss ? `Miss ${safeMiss}.` : '';
+    const headline = `Par 4 · ${dist} yards`;
+    const voiceLine = [
+      `Par 4, ${dist} yards.`,
+      miss === 'right' ? 'You tend right — favor the left side.' : miss === 'left' ? 'You tend left — shade it right.' : '',
+      `${teeClub} off the tee. ${fairwayTarget}.`,
+      safeMissNote,
+    ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+
+    return {
+      headline, parLabel: 'Par 4',
+      teeClub,
+      targetZone: fairwayTarget, safeMiss,
+      approach,
+      voiceLine,
+      adjustedFor: miss ? (miss === 'right' ? 'miss_right' : 'miss_left') : null,
+    };
   };
 
   const getStrategy = () => {
     const dist = parseInt(distance, 10) || 150;
     const miss = playerProfile.commonMiss;
 
-    // Early-round guard — fewer than 5 shots, no reliable pattern yet.
+    // Early-round guard ? fewer than 5 shots, no reliable pattern yet.
     // Force safe/neutral strategy regardless of strategyMode or context.
     if (shots.length < 5) {
-      return 'Play safe — build your pattern first. Centre green.';
+      return 'Play safe ? build your pattern first. Centre green.';
     }
 
     // Manual override always wins
@@ -3119,39 +3350,39 @@ export default function PlayScreenClean() {
     if (strategyMode === 'attack') {
       if (dist < 130) return 'Fire at the flag. Commit fully.';
       if (dist < 180) return 'Attack the pin. Aggressive line.';
-      return 'Go for it — pick your line and trust it.';
+      return 'Go for it ? pick your line and trust it.';
     }
 
-    // neutral — let context adjustment narrow it further
+    // neutral ? let context adjustment narrow it further
     const ctx = getContextAdjustment();
     if (ctx === 'safe') {
-      if (dist > 180) return 'Shots are off — lay up and reset.';
+      if (dist > 180) return 'Shots are off ? lay up and reset.';
       return 'Keep it simple. Center green, take your medicine.';
     }
     if (ctx === 'attack') {
       if (dist < 150) return 'You\'re locked in. Attack this pin.';
-      return 'Feeling good — pick an aggressive line and commit.';
+      return 'Feeling good ? pick an aggressive line and commit.';
     }
     if (handicapIndex > 20) {
       if (dist > 150) return 'Focus on contact. Lay up and keep it safe.';
-      return 'Focus on contact. No big numbers — stay safe.';
+      return 'Focus on contact. No big numbers ? stay safe.';
     }
     if (handicapIndex < 10) {
       if (dist < 160) return 'You can attack this pin. Trust your swing.';
       return 'You have the game for this. Pick your line and commit.';
     }
     if (goalMode === 'beginner') {
-      if (dist > 150) return 'No big numbers. Centre green — safe side always.';
+      if (dist > 150) return 'No big numbers. Centre green ? safe side always.';
       if (dist > 100) return 'Pick the middle of the green and make contact.';
-      return 'Short shot — smooth swing, no hero attempt.';
+      return 'Short shot ? smooth swing, no hero attempt.';
     }
     if (goalMode === 'break90') {
       if (dist < 150) return 'Attack the pin if the approach is clear.';
-      return 'Aggressive but controlled — pick your line.';
+      return 'Aggressive but controlled ? pick your line.';
     }
     if (goalMode === 'break80') {
       if (dist < 130) return 'Fire at the flag. Own this shot.';
-      if (dist < 180) return 'Attack the pin — you have the game for this.';
+      if (dist < 180) return 'Attack the pin ? you have the game for this.';
       return 'Commit to an aggressive line and trust your swing.';
     }
     if (miss === 'right') return 'Favor the left side a touch.';
@@ -3172,18 +3403,18 @@ export default function PlayScreenClean() {
     const confidence = getConfidenceLevel();
     let autoStrategy = '';
     if (confidence === 'wide' && strategyMode === 'attack') {
-      autoStrategy = "We can still go for it — but let's be smart about it.";
+      autoStrategy = "We can still go for it ? but let's be smart about it.";
     } else if (confidence === 'wide') {
-      autoStrategy = "Things are a bit loose — let's play this safe.";
+      autoStrategy = "Things are a bit loose ? let's play this safe.";
     } else if (confidence === 'tight' && strategyMode === 'safe') {
-      autoStrategy = "You're dialed in — we could be a bit more aggressive here.";
+      autoStrategy = "You're dialed in ? we could be a bit more aggressive here.";
     } else if (confidence === 'tight') {
-      autoStrategy = "You're dialed in — let's be aggressive.";
+      autoStrategy = "You're dialed in ? let's be aggressive.";
     }
     if (autoStrategy) parts.push(autoStrategy);
 
-    const holeStrategy = getHoleStrategy();
-    if (holeStrategy) parts.push(holeStrategy);
+    const holeStrategyData = getHoleStrategy();
+    if (holeStrategyData) parts.push(holeStrategyData.voiceLine);
 
     const strategyTone = strategyMode === 'attack'
       ? "Trust your swing and commit to it."
@@ -3194,30 +3425,30 @@ export default function PlayScreenClean() {
     // Prefer live GPS distance over the typed distance string for accuracy.
     const liveDist = targetDistance ?? gpsYards?.middle ?? (parseInt(distance, 10) || null);
     if (liveDist && bestClub) {
-      parts.push(`${liveDist} out — I like ${bestClub} here.`);
+      parts.push(`${liveDist} out ? I like ${bestClub} here.`);
     }
 
     // Yardage remaining after current club
     const yardageLeft = getYardageLeft();
     if (yardageLeft !== null && yardageLeft > 30) {
       const nextSuggestion = recommendClubForDistance(yardageLeft);
-      parts.push(`Your ${club} gets you ~${Object.fromEntries(getClubYardageMap())[club] ?? '?'} yards, leaving ~${yardageLeft} yards — setting up a ${nextSuggestion} for your next shot.`);
+      parts.push(`Your ${club} gets you ~${Object.fromEntries(getClubYardageMap())[club] ?? '?'} yards, leaving ~${yardageLeft} yards ? setting up a ${nextSuggestion} for your next shot.`);
     } else if (yardageLeft !== null && yardageLeft <= 30) {
       parts.push(`Your ${club} should get you to the green from here.`);
     }
 
     if (lastClub !== bestClub && bestClub) {
       if (strategyMode === 'safe') {
-        parts.push(`${lastClub} hasn't been great today — go with the ${bestClub}.`);
+        parts.push(`${lastClub} hasn't been great today ? go with the ${bestClub}.`);
       } else {
-        parts.push(`${lastClub} is workable — commit and make a good swing.`);
+        parts.push(`${lastClub} is workable ? commit and make a good swing.`);
       }
     }
 
     if (dispersion !== null && dispersion >= 3) {
-      parts.push("You're leaking right — favor the left side.");
+      parts.push("You're leaking right ? favor the left side.");
     } else if (dispersion !== null && dispersion <= -3) {
-      parts.push("You've been pulling left — shade it right.");
+      parts.push("You've been pulling left ? shade it right.");
     }
 
     if (dispersion !== null && dispersion >= 2 && !aim.includes('left')) {
@@ -3226,12 +3457,12 @@ export default function PlayScreenClean() {
       parts.push(`Aim ${aim === 'center' ? 'right center' : 'right edge'} and commit.`);
     } else {
       const target = getTargetRecommendation();
-      if (target) parts.push(`${target} — ${strategyMode === 'attack' ? 'fire at the flag.' : 'stay committed.'}`);
+      if (target) parts.push(`${target} ? ${strategyMode === 'attack' ? 'fire at the flag.' : 'stay committed.'}`);
     }
 
     // Pressure: late holes
     if (hole >= 16) {
-      parts.push("This is a key stretch — stay composed.");
+      parts.push("This is a key stretch ? stay composed.");
     }
 
     // Score vs par status
@@ -3240,9 +3471,9 @@ export default function PlayScreenClean() {
       const totalPar = roundPars.reduce((sum, p) => sum + (p || 0), 0);
       const scoreDiff = totalStrokes - totalPar;
       if (scoreDiff >= 3) {
-        parts.push("You're over par — play smart and go center.");
+        parts.push("You're over par ? play smart and go center.");
       } else if (scoreDiff <= -1) {
-        parts.push("You're under par — back yourself a bit.");
+        parts.push("You're under par ? back yourself a bit.");
       }
     }
 
@@ -3250,25 +3481,25 @@ export default function PlayScreenClean() {
     const memory = getPlayerMemory();
     if (memory !== 'Building player profile...') parts.push(memory);
 
-    // Hole-specific conditions from course data — use computed hazard distances when available
+    // Hole-specific conditions from course data ? use computed hazard distances when available
     const haz = getHazardDistances();
     const note = currentHoleData.note.toLowerCase();
     if (haz.water !== null) {
       if (note.includes('short') || note.includes('carry') || note.includes('over'))
-        parts.push(`Carry the water at ${haz.water} yards — take enough club.`);
+        parts.push(`Carry the water at ${haz.water} yards ? take enough club.`);
       else
-        parts.push(`Water hazard ~${haz.water} yards out — play for the safe side.`);
+        parts.push(`Water hazard ~${haz.water} yards out ? play for the safe side.`);
     } else if (note.includes('water')) {
-      parts.push('Water in play — take the safe side.');
+      parts.push('Water in play ? take the safe side.');
     }
     if (haz.bunker !== null)
-      parts.push(`Bunker at ~${haz.bunker} yards — take one more club to clear it.`);
+      parts.push(`Bunker at ~${haz.bunker} yards ? take one more club to clear it.`);
     else if (note.includes('bunker'))
-      parts.push('Bunker in play — go one more club to clear it.');
-    if (note.includes('tight')) parts.push('Tight fairway — grip down and stay in play.');
+      parts.push('Bunker in play ? go one more club to clear it.');
+    if (note.includes('tight')) parts.push('Tight fairway ? grip down and stay in play.');
     if (note.includes('dogleg')) parts.push('Play to the corner of the dogleg.');
-    if (note.includes('layup')) parts.push('This is a layup hole — pick your landing zone.');
-    if (currentHoleData.distance > 500) parts.push('Long hole — think in segments.');
+    if (note.includes('layup')) parts.push('This is a layup hole ? pick your landing zone.');
+    if (currentHoleData.distance > 500) parts.push('Long hole ? think in segments.');
 
     // Swing fix
     const fix = getSwingFix();
@@ -3276,18 +3507,18 @@ export default function PlayScreenClean() {
 
     // Club-specific miss pattern
     const clubMiss = getClubMiss(club);
-    if (clubMiss === 'right') parts.push(`You tend to miss right with the ${club} — favor the left side.`);
-    else if (clubMiss === 'left') parts.push(`You tend to miss left with the ${club} — favor the right side.`);
+    if (clubMiss === 'right') parts.push(`You tend to miss right with the ${club} ? favor the left side.`);
+    else if (clubMiss === 'left') parts.push(`You tend to miss left with the ${club} ? favor the right side.`);
 
-    // Global profile — miss tendency
+    // Global profile ? miss tendency
     playerProfile.preferredStrategy = strategyMode === 'attack' ? 'aggressive' : strategyMode === 'neutral' ? 'safe' : strategyMode;
-    if (playerProfile.commonMiss === 'right') parts.push("Your miss is right — favor the left side.");
-    else if (playerProfile.commonMiss === 'left') parts.push("Your miss is left — shade it right.");
+    if (playerProfile.commonMiss === 'right') parts.push("Your miss is right ? favor the left side.");
+    else if (playerProfile.commonMiss === 'left') parts.push("Your miss is left ? shade it right.");
 
     return addEncouragement(coachTone(parts.join(' ')));
   };
 
-  // Caddie says — ≤12 words, direct and clear
+  // Caddie says ? =12 words, direct and clear
   const getShortCaddieDecision = (): string => {
     if (shots.length < 5) return coachTone("let's get more swings in first.");
     const full = getFullCaddieDecision();
@@ -3357,7 +3588,7 @@ export default function PlayScreenClean() {
 
   // -- Smart GPS trigger: auto-call caddie when player moves 10+ yards ----------
   // Fires on every GPS update but only escalates to the OpenAI / ElevenLabs
-  // pipeline when the distance to the pin has changed by ≥10 yards since the
+  // pipeline when the distance to the pin has changed by =10 yards since the
   // last caddie call. Prevents spam while still keeping advice current.
   const lastCaddieDistanceRef = useRef<number | null>(null);
   useEffect(() => {
@@ -3391,7 +3622,7 @@ export default function PlayScreenClean() {
   // speakCaddie -- routes through voiceSpeak for unified rate-limiting + stop behaviour
   const speakCaddie = (text: string): void => voiceSpeak(text, 'calm');
 
-  const { respond, getTempoCue, checkMissPattern, getFrustrationReply, proactiveCoach, setVoiceGender, setMuted, getSpeakOpts, handleSpeech, startMaxWindow, cancelSilence, speakIntro, speakPreShot: viSpeakPreShot, speakShotFeedback, VoiceIntelligence } = useVoiceCaddie();
+  const { respond, getTempoCue, checkMissPattern, getFrustrationReply, proactiveCoach, setVoiceGender, setMuted, getSpeakOpts, handleSpeech, startMaxWindow, cancelSilence, speakIntro, speakPreShot: viSpeakPreShot, speakShotFeedback, VoiceIntelligence, triggerVoice, voiceState } = useVoiceCaddie();
 
   // Keep the hook's mute gate in sync whenever quietMode or voiceEnabled changes
   useEffect(() => { setMuted(quietMode, voiceEnabled); }, [quietMode, voiceEnabled, setMuted]);
@@ -3401,6 +3632,14 @@ export default function PlayScreenClean() {
   const [swingToast, setSwingToast] = useState<string | null>(null);
   const [swingTempoLabel, setSwingTempoLabel] = useState<string | null>(null);
   const swingToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Auto Shot Detection confirmation state ─────────────────────────────────
+  // When a swing is detected, we hold it in `swingPending` and give the user
+  // 2 seconds to pick a direction or cancel.  Auto-confirms as 'straight'.
+  const [swingPending, setSwingPending]           = useState<SwingResult | null>(null);
+  const autoConfirmRef                            = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoConfirmProgress                       = useRef(new Animated.Value(0)).current;
+  const autoConfirmAnimRef                        = useRef<Animated.CompositeAnimation | null>(null);
   // Keep getSpeakOpts in a ref so the stable onSwing closure always calls the latest version
   const getSpeakOptsRef = useRef(getSpeakOpts);
   getSpeakOptsRef.current = getSpeakOpts;
@@ -3416,17 +3655,65 @@ export default function PlayScreenClean() {
   };
 
   const swingDetector = useSwingDetector({
-    onSwing: ({ tempo, tempoMs }) => {
-      const feedback = getSwingFeedback(tempo);
-      playSound(SWING_SWOOSH_SFX);
-      void voiceSpeak(feedback, 'calm');
-      setLastSwing(tempo, tempoMs);
-      setSwingToast(feedback);
-      setSwingTempoLabel(tempo);
-      if (swingToastTimerRef.current) clearTimeout(swingToastTimerRef.current);
-      swingToastTimerRef.current = setTimeout(() => setSwingToast(null), 2500);
+    onSwing: (result) => {
+      // Cancel any in-flight confirmation before starting a new one
+      if (autoConfirmRef.current) clearTimeout(autoConfirmRef.current);
+      autoConfirmAnimRef.current?.stop();
+      autoConfirmProgress.setValue(0);
+
+      // Update tempo badge (non-blocking, for the UI tile)
+      setSwingTempoLabel(result.tempo);
+      setLastSwing(result.tempo, result.tempoMs);
+
+      // Haptic feedback so the player knows detection fired
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+
+      // Show confirmation overlay
+      setSwingPending(result);
+
+      // Animate the 2-second countdown progress bar (0 → 1)
+      const anim = Animated.timing(autoConfirmProgress, {
+        toValue: 1,
+        duration: 2000,
+        useNativeDriver: false,
+      });
+      autoConfirmAnimRef.current = anim;
+      anim.start();
+
+      // Auto-confirm as 'straight' after 2 seconds if user hasn't tapped
+      autoConfirmRef.current = setTimeout(() => {
+        setSwingPending(null);
+        autoConfirmProgress.setValue(0);
+        void handleSwingConfirm('center');
+      }, 2000);
     },
   });
+
+  /**
+   * handleSwingConfirm — user confirmed (or timer auto-confirmed) a detected swing.
+   * Records the shot with the chosen direction then speaks "Shot recorded."
+   *
+   * Uses a ref so it can be called from the onSwing timer closure (which is
+   * created before handleShot is declared).
+   */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleSwingConfirmRef = useRef<(direction: 'left' | 'center' | 'right') => Promise<void>>(
+    async (_dir: 'left' | 'center' | 'right') => { /* stub — replaced after handleShot is declared */ }
+  );
+
+  const handleSwingConfirm = useCallback(async (direction: 'left' | 'center' | 'right') => {
+    return handleSwingConfirmRef.current(direction);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** handleSwingCancel — player dismissed the confirmation overlay. */
+  const handleSwingCancel = useCallback(() => {
+    if (autoConfirmRef.current) clearTimeout(autoConfirmRef.current);
+    autoConfirmAnimRef.current?.stop();
+    autoConfirmProgress.setValue(0);
+    setSwingPending(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-start swing detection when the Play screen mounts; stop on unmount
   useEffect(() => {
@@ -3434,11 +3721,13 @@ export default function PlayScreenClean() {
     return () => {
       swingDetector.stop();
       if (swingToastTimerRef.current) clearTimeout(swingToastTimerRef.current);
+      if (autoConfirmRef.current) clearTimeout(autoConfirmRef.current);
+      autoConfirmAnimRef.current?.stop();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Round-start greeting — fires once on mount, after a short delay so the UI is settled
+  // Round-start greeting ? fires once on mount, after a short delay so the UI is settled
   const hasGreetedRef = useRef(false);
   useEffect(() => {
     if (hasGreetedRef.current) return;
@@ -3452,22 +3741,18 @@ export default function PlayScreenClean() {
       playerProfile.strength = 'straight';
     }
     const openings = [
-      "Let's go. Smooth tempo — trust your swing.",
+      "Let's go. Smooth tempo ? trust your swing.",
       "Ready to play. Pick your target and commit.",
-      "Good. One shot at a time — keep it simple.",
+      "Good. One shot at a time ? keep it simple.",
       "Let's do this. Stay present and stay patient.",
     ];
-    const msg = openings[Math.floor(Math.random() * openings.length)];
-    setTimeout(() => {
-      void voiceSpeak(msg, 'calm');
-    }, 1200);
-  }, [ppMiss, ppStrength, voiceSpeak]);
+  }, [ppMiss, ppStrength]);
 
   const getYardage = () => {
     return `${currentHoleData.distance} yards to the hole.`;
   };
 
-  // Helper — cap any caddie reply at 12 words (single sentence / display line)
+  // Helper ? cap any caddie reply at 12 words (single sentence / display line)
   const trimTo12 = (msg: string): string => {
     const w = msg.trim().split(/\s+/);
     return w.length <= 12 ? msg : w.slice(0, 12).join(' ') + '.';
@@ -3477,14 +3762,14 @@ export default function PlayScreenClean() {
   const getHazardDistances = (): { hole: number; bunker: number | null; water: number | null } => {
     const dist = targetDistance ?? gpsYards?.middle ?? currentHoleData?.distance ?? 150;
     const note = currentHoleData.note.toLowerCase();
-    // Bunker yardage — typically 30-40 yds short of the green for fairway bunkers
+    // Bunker yardage ? typically 30-40 yds short of the green for fairway bunkers
     let bunker: number | null = null;
     if (note.includes('bunker')) {
       bunker = note.includes('bunker right') || note.includes('bunker left')
         ? Math.round(dist * 0.78)   // fairway bunker ~78% of hole distance
         : Math.round(dist * 0.60);  // front bunker closer in
     }
-    // Water yardage — typically carries across the hazard from current position
+    // Water yardage ? typically carries across the hazard from current position
     let water: number | null = null;
     if (note.includes('water') || note.includes('lake') || note.includes('creek') || note.includes('hazard')) {
       if (note.includes('short') || note.includes('front'))  water = Math.round(dist * 0.55);
@@ -3495,7 +3780,7 @@ export default function PlayScreenClean() {
     return { hole: dist, bunker, water };
   };
 
-  // ── Yardage remaining after current club selection ────────────────────
+  // -- Yardage remaining after current club selection --------------------
   // Returns the # of yards still left to the pin after the selected club's
   // expected carry. Returns null when either piece of data is missing.
   const getYardageLeft = (): number | null => {
@@ -3520,8 +3805,8 @@ export default function PlayScreenClean() {
     const activeMiss = playerProfile.miss ?? (ppMiss !== 'straight' ? ppMiss : null);
     const activeStrength = playerProfile.strength ?? (ppStrength === 'accuracy' || ppStrength === 'consistency' ? 'straight' : null);
     if (activeMiss === 'right') return `Start it just left of the flag and let the ${getRecommendedClub()} work.`;
-    if (activeMiss === 'left') return `Favor the right side — go with the ${getRecommendedClub()} and make a smooth pass.`;
-    if (activeStrength === 'straight') return `You're dialed in — go right at it with the ${getRecommendedClub()}.`;
+    if (activeMiss === 'left') return `Favor the right side ? go with the ${getRecommendedClub()} and make a smooth pass.`;
+    if (activeStrength === 'straight') return `You're dialed in ? go right at it with the ${getRecommendedClub()}.`;
     return `Go with a smooth ${getRecommendedClub()}.`;
   };
 
@@ -3537,7 +3822,7 @@ export default function PlayScreenClean() {
     if (activeMiss === 'right' && strokes >= 2) return "You've been leaking right this hole. Pick a stronger line and commit.";
     if (activeMiss === 'left' && strokes >= 2) return "You're pulling it left. Stay through the ball and let the club do the work.";
     if (activeStrength === 'straight') return "You're hitting it pure. Stay aggressive.";
-    if (ppStruggle === 'driver' && strokes === 0) return "Driver day — commit to the line, smooth and through.";
+    if (ppStruggle === 'driver' && strokes === 0) return "Driver day ? commit to the line, smooth and through.";
     if (ppStruggle === 'mental') return "Pick your target, trust it, commit. One shot at a time.";
     return null;
   };
@@ -3546,14 +3831,14 @@ export default function PlayScreenClean() {
     let msg = "Here's what I'm seeing. ";
     let offTee = 0; let approach = 0;
     shots.forEach((shot, i) => {
-      if (shot.result !== 'straight') { if (i === 0) offTee++; else if (i === 1) approach++; }
+      if (shot.result !== 'center') { if (i === 0) offTee++; else if (i === 1) approach++; }
     });
     if (offTee > 0) msg += `Tee shots are costing you ${offTee} shot${offTee > 1 ? 's' : ''}. `;
     if (approach > 0) msg += `Approach shots costing you ${approach}. `;
     let right = 0; let left = 0;
     shots.forEach((s) => { if (s.result === 'right') right++; if (s.result === 'left') left++; });
-    if (right > left) msg += "Miss is right — check your face angle and swing path. ";
-    else if (left > right) msg += "Miss is left — slow the release and stay connected. ";
+    if (right > left) msg += "Miss is right ? check your face angle and swing path. ";
+    else if (left > right) msg += "Miss is left ? slow the release and stay connected. ";
     msg += "Work on that in your next range session.";
     return msg;
   };
@@ -3568,9 +3853,10 @@ export default function PlayScreenClean() {
   };
 
   const handleVoiceCommand = async (transcript: string) => {
+    try {
     const lower = transcript.toLowerCase();
 
-    // Show "Thinking—" state immediately
+    // Show "Thinking?" state immediately
     setIsThinking(true);
     setCommandResponse('');
 
@@ -3579,7 +3865,7 @@ export default function PlayScreenClean() {
       setCommandResponse(msg);
     };
 
-    // Emotional awareness — catch frustration before anything else
+    // Emotional awareness ? catch frustration before anything else
     const calmReply = getFrustrationReply(lower);
     if (calmReply) {
       reply(calmReply);
@@ -3590,7 +3876,7 @@ export default function PlayScreenClean() {
     let detectedClub = club;
     let detectedResult: string | null = null;
 
-    // Rules questions — try local first, fall back to OpenAI for anything unrecognized
+    // Rules questions ? try local first, fall back to OpenAI for anything unrecognized
     if (
       lower.includes('rule') || lower.includes('penalty') ||
       lower.includes('free relief') || lower.includes('drop') ||
@@ -3601,7 +3887,7 @@ export default function PlayScreenClean() {
     ) {
       let rulesMsg = '';
       if (lower.includes('free relief') || lower.includes('relief')) {
-        rulesMsg = 'Free relief here — drop within one club of the nearest point, no closer to the hole.';
+        rulesMsg = 'Free relief here ? drop within one club of the nearest point, no closer to the hole.';
       } else if (lower.includes('out of bounds') || lower.includes('ob')) {
         rulesMsg = "Stroke and distance. Play a provisional if there's any doubt. Rule 18.";
       } else if (lower.includes('unplayable')) {
@@ -3611,7 +3897,7 @@ export default function PlayScreenClean() {
       } else if (lower.includes('mark') || lower.includes('lift')) {
         rulesMsg = 'Place a marker directly behind the ball before lifting. You may clean it on the green. Rule 14.1.';
       } else {
-        // Unknown rule — ask OpenAI
+        // Unknown rule ? ask OpenAI
         const aiRules = await callOpenAI(transcript, getAIContext());
         if (aiRules) {
           reply(aiRules);
@@ -3636,7 +3922,7 @@ export default function PlayScreenClean() {
         setShowCoachingVideo(true);
         respond(getSwingInsight());
       } else {
-        respond("Nothing saved yet — let's get one on video.");
+        respond("Nothing saved yet ? let's get one on video.");
       }
       return;
     }
@@ -3649,7 +3935,7 @@ export default function PlayScreenClean() {
       return;
     }
 
-    // Club recommendation — responds with standardised decision phrase (distance. club. aim. miss)
+    // Club recommendation ? responds with standardised decision phrase (distance. club. aim. miss)
     if (lower.includes('what should i hit') || lower.includes('what club') || lower.includes('which club')) {
       const d = getCaddieDecision();
       const dist = targetDistance ?? gpsYards?.middle ?? currentHoleData?.distance ?? 150;
@@ -3667,7 +3953,7 @@ export default function PlayScreenClean() {
         reply(msg);
         respond(msg);
       } else {
-        const msg = "Hit a few more — read coming soon.";
+        const msg = "Hit a few more ? read coming soon.";
         reply(msg);
         respond(msg);
       }
@@ -3682,7 +3968,7 @@ export default function PlayScreenClean() {
       return;
     }
 
-    // Strategy mode commands — "play safe", "go for it", "play normal"
+    // Strategy mode commands ? "play safe", "go for it", "play normal"
     if (lower.includes('play safe') || lower.includes('go safe') || lower.includes('lay up')) {
       setStrategyMode('safe');
       const msg = 'Playing safe. Center green target.';
@@ -3754,7 +4040,7 @@ export default function PlayScreenClean() {
       return;
     }
 
-    // Hazard distance queries — bunker / water / pin
+    // Hazard distance queries ? bunker / water / pin
     if (
       lower.includes('bunker') ||
       lower.includes('water') || lower.includes('lake') || lower.includes('creek') ||
@@ -3794,7 +4080,7 @@ export default function PlayScreenClean() {
       return;
     }
 
-    // Shot logging — explicit "log <direction>" commands
+    // Shot logging ? explicit "log <direction>" commands
     if (lower.includes('log left')) {
       handleShot('left');
       reply('Left logged.');
@@ -3808,7 +4094,7 @@ export default function PlayScreenClean() {
       return;
     }
     if (lower.includes('log straight') || lower.includes('log center')) {
-      handleShot('straight');
+      handleShot('center');
       reply('Straight logged.');
       respond('Straight logged.');
       return;
@@ -3833,9 +4119,9 @@ export default function PlayScreenClean() {
     // Result detection
     if (lower.includes('left')) detectedResult = 'left';
     else if (lower.includes('right')) detectedResult = 'right';
-    else if (lower.includes('straight') || lower.includes('center')) detectedResult = 'straight';
+    else if (lower.includes('straight') || lower.includes('center')) detectedResult = 'center';
 
-    // Aim command detection — "aim left", "aim center", "aim right edge", etc.
+    // Aim command detection ? "aim left", "aim center", "aim right edge", etc.
     if (
       lower.includes('aim left edge') || lower.includes('left edge')
     ) {
@@ -3871,23 +4157,21 @@ export default function PlayScreenClean() {
 
     if (detectedResult) {
       const confirmMsg = detectedClub !== club
-        ? `Got it — ${detectedClub}, ${detectedResult}. Logged.`
+        ? `Got it ? ${detectedClub}, ${detectedResult}. Logged.`
         : `${detectedResult} logged.`;
       reply(confirmMsg);
       setClub(detectedClub);
-      handleShot(detectedResult);
+      handleShot(detectedResult as ShotResult);
       return;
     }
 
     // Video / recording commands
     if (lower.includes('record') || lower.includes('start recording') || lower.includes('record swing')) {
       if (cameraPermission?.granted && !recording && !autoRecording) {
-        reply('On it — recording your swing.');
-        void voiceSpeak('Recording swing now.', 'calm');
+        reply('On it ? recording your swing.');
         startRecording();
       } else if (!cameraPermission?.granted) {
         reply('Camera permission needed to record.');
-        void voiceSpeak('Camera permission required', 'calm');
       } else {
         reply('Already recording.');
       }
@@ -3897,7 +4181,6 @@ export default function PlayScreenClean() {
       if (recording) {
         stopRecording();
         reply('Recording stopped.');
-        void voiceSpeak('Recording stopped', 'calm');
       } else {
         reply('Nothing is recording right now.');
       }
@@ -3907,7 +4190,6 @@ export default function PlayScreenClean() {
       if (videoUri) {
         setVideoUri(null);
         reply('Video deleted.');
-        void voiceSpeak('Video deleted', 'calm');
       } else {
         reply('No video to delete.');
       }
@@ -3916,7 +4198,6 @@ export default function PlayScreenClean() {
     if (lower.includes('reset video') || lower.includes('clear video') || lower.includes('new video')) {
       setVideoUri(null);
       reply('Video cleared. Ready to record again.');
-      void voiceSpeak('Ready to record a new swing', 'calm');
       return;
     }
 
@@ -4004,24 +4285,38 @@ export default function PlayScreenClean() {
       const idx = Math.floor(Math.random() * FOCUS_MESSAGES.length);
       const newThought = FOCUS_MESSAGES[idx];
       setSwingThought(newThought);
-      const confirm = `${newThought}. Solid — Let's Go.`;
+      const confirm = `${newThought}. Solid ? Let's Go.`;
       reply(confirm);
       void speak(confirm);
       return;
     }
 
-    // Caddie advice — try OpenAI first for open-ended questions, fall back to local engine
-    setTimeout(async () => {
-      const aiAnswer = await callOpenAI(transcript, getAIContext());
-      if (aiAnswer) {
-        reply(aiAnswer);
-        respond(aiAnswer);
+    // Focus Mode — unified intent router (golf / utility / service / knowledge)
+    {
+      const focusCtx = buildFocusContext({
+        hole,
+        distance: gpsYards?.middle ?? currentHoleData?.distance ?? null,
+        shots,
+        holeNote: currentHoleData?.note ?? null,
+        memory:     memory     ?? null,
+        roundState: roundState ?? null,
+      });
+      const aiCaller = (q: string) => callOpenAI(q, getAIContext());
+      const focusReply = await handleFocusInput(transcript, focusCtx, aiCaller);
+      if (focusReply) {
+        reply(focusReply);
+        respond(focusReply);
       } else {
         const advice = getShortCaddieDecision();
         reply(advice);
         respond(advice);
       }
-    }, 300);
+    }
+    } catch (err) {
+      if (__DEV__) console.warn('[handleVoiceCommand] error:', err);
+      setIsThinking(false);
+      setCommandResponse('Something went wrong. Please try again.');
+    }
   };
 
   const saveRound = async () => {
@@ -4044,7 +4339,7 @@ export default function PlayScreenClean() {
 
     const userId = auth.currentUser?.uid;
     if (isOnline && userId) {
-      // Online — save to Firestore
+      // Online ? save to Firestore
       try {
         await addDoc(collection(db, 'users', userId, 'rounds'), roundData);
         await AsyncStorage.removeItem('draftShots');
@@ -4053,7 +4348,7 @@ export default function PlayScreenClean() {
         // save will retry on next session
       }
     } else {
-      // Offline — queue locally
+      // Offline ? queue locally
       try {
         const stored = await AsyncStorage.getItem('offlineRounds');
         const queue: any[] = stored ? JSON.parse(stored) : [];
@@ -4081,7 +4376,7 @@ export default function PlayScreenClean() {
     if (clubAvg) {
       parts.push(`Your ${club} typically goes ${clubAvg} yards.`);
       if (yardage > clubAvg + 20) parts.push('You\'ll need more club to reach that target.');
-      else if (yardage < clubAvg - 20) parts.push('That\'s too much club — consider something shorter.');
+      else if (yardage < clubAvg - 20) parts.push('That\'s too much club ? consider something shorter.');
       else parts.push('That\'s a good number for this club.');
     }
 
@@ -4089,53 +4384,53 @@ export default function PlayScreenClean() {
     const ydsLeft = getYardageLeft();
     if (ydsLeft !== null && ydsLeft > 30) {
       const nextClub = recommendClubForDistance(ydsLeft);
-      parts.push(`After this shot you'll have ~${ydsLeft} yards left — lining up a ${nextClub}.`);
+      parts.push(`After this shot you'll have ~${ydsLeft} yards left ? lining up a ${nextClub}.`);
     } else if (ydsLeft !== null && ydsLeft <= 30) {
       parts.push(`This ${club} should put you on the green.`);
     }
 
     // Primary miss direction
     const miss = getPrimaryMiss();
-    if (miss === 'right') parts.push('You\'ve been missing right — favor the left side.');
-    else if (miss === 'left') parts.push('You\'ve been pulling it left — favor the right.');
+    if (miss === 'right') parts.push('You\'ve been missing right ? favor the left side.');
+    else if (miss === 'left') parts.push('You\'ve been pulling it left ? favor the right.');
 
     // Dispersion refinement
     const dispersion = getDispersion();
-    if (dispersion !== null && Math.abs(dispersion) >= 2 && miss === 'right') parts.push('Strong right bias confirmed — aim well left of target.');
-    else if (dispersion !== null && Math.abs(dispersion) >= 2 && miss === 'left') parts.push('Strong left bias confirmed — aim right of target.');
+    if (dispersion !== null && Math.abs(dispersion) >= 2 && miss === 'right') parts.push('Strong right bias confirmed ? aim well left of target.');
+    else if (dispersion !== null && Math.abs(dispersion) >= 2 && miss === 'left') parts.push('Strong left bias confirmed ? aim right of target.');
 
     // Club-specific miss
     const clubMiss = getClubMiss(club);
-    if (clubMiss === 'right' && miss !== 'right') parts.push(`Your ${club} has been going right — aim left.`);
-    else if (clubMiss === 'left' && miss !== 'left') parts.push(`Your ${club} has been going left — aim slightly right.`);
+    if (clubMiss === 'right' && miss !== 'right') parts.push(`Your ${club} has been going right ? aim left.`);
+    else if (clubMiss === 'left' && miss !== 'left') parts.push(`Your ${club} has been going left ? aim slightly right.`);
 
     // Score vs par
     if (round.length > 0 && roundPars.length > 0) {
       const scoreDiff = round.reduce((s, v) => s + v, 0) - roundPars.reduce((s, v) => s + v, 0);
-      if (scoreDiff >= 3) parts.push('Play smart here — avoid unnecessary risk.');
-      else if (scoreDiff <= -1) parts.push("You're in a good position — you can be slightly aggressive.");
+      if (scoreDiff >= 3) parts.push('Play smart here ? avoid unnecessary risk.');
+      else if (scoreDiff <= -1) parts.push("You're in a good position ? you can be slightly aggressive.");
     }
 
-    // Hole note hazards — inject specific yardages when available
+    // Hole note hazards ? inject specific yardages when available
     const haz = getHazardDistances();
     const note = currentHoleData.note.toLowerCase();
     if (haz.water !== null) {
       if (note.includes('short') || note.includes('carry') || note.includes('over'))
-        parts.push(`Carry the water at ${haz.water} yards — take enough club.`);
+        parts.push(`Carry the water at ${haz.water} yards ? take enough club.`);
       else
-        parts.push(`Water hazard is ~${haz.water} yards out — be aware.`);
+        parts.push(`Water hazard is ~${haz.water} yards out ? be aware.`);
     } else if (note.includes('water') || note.includes('lake') || note.includes('creek')) {
-      parts.push('Water in play — stay safe.');
+      parts.push('Water in play ? stay safe.');
     }
     if (haz.bunker !== null)
-      parts.push(`Bunker at ~${haz.bunker} yards — avoid or clear it cleanly.`);
+      parts.push(`Bunker at ~${haz.bunker} yards ? avoid or clear it cleanly.`);
     else if (note.includes('bunker'))
-      parts.push('Bunker in play — take enough club to clear it.');
-    if (note.includes('tight')) parts.push('Tight fairway — pick your line carefully.');
+      parts.push('Bunker in play ? take enough club to clear it.');
+    if (note.includes('tight')) parts.push('Tight fairway ? pick your line carefully.');
 
     // Hole strategy
     const strategy = getHoleStrategy();
-    if (strategy) parts.push(strategy);
+    if (strategy) parts.push(strategy.voiceLine);
 
     // Closing commitment cue
     parts.push('Commit to your swing.');
@@ -4166,7 +4461,7 @@ export default function PlayScreenClean() {
   const startListening = () => {
     if (listening) return;
     // Interruption: cancel any ongoing AI speech the moment user starts speaking
-    void stopSpeaking();
+    void engineCancelAll(); // mic supremacy: cancel any ongoing speech via VoiceEngine
     setListeningPhase('listening');
     setListening(true);
     setPulse(1);
@@ -4178,7 +4473,7 @@ export default function PlayScreenClean() {
         return growing ? prev + 0.025 : prev - 0.025;
       });
     }, 50);
-    // Maximum window: 4000 ms — silence debounce can fire earlier via handleSpeechInput
+    // Maximum window: 4000 ms ? silence debounce can fire earlier via handleSpeechInput
     startMaxWindow(() => processListeningResult());
   };
 
@@ -4189,7 +4484,7 @@ export default function PlayScreenClean() {
     setPulse(1);
   };
 
-  const handleToggleEarbudMode = () => {
+  const handleToggleEarbudMode = useCallback(() => {
     const next = !earbudMode;
     setEarbudMode(next);
     setQuietMode(false);
@@ -4200,10 +4495,10 @@ export default function PlayScreenClean() {
       stopListening();
       void speak('Quiet.');
     }
-  };
+  }, [earbudMode, startListening, stopListening, speak]);
 
-  // Remote-control friendly toggle — call from hardware media button handler or logo press
-  const handleListeningVoiceToggle = () => {
+  // Remote-control friendly toggle ? call from hardware media button handler or logo press
+  const handleListeningVoiceToggle = useCallback(() => {
     if (listening) {
       stopListening();
       void speak('Quiet.');
@@ -4211,29 +4506,29 @@ export default function PlayScreenClean() {
       startListening();
       void speak('Listening.');
     }
-  };
+  }, [listening, startListening, stopListening, speak]);
 
-  const handleListeningToggle = () => {
+  const handleListeningToggle = useCallback(() => {
     if (listening) stopListening();
     else startListening();
-  };
+  }, [listening, startListening, stopListening]);
 
-  const handleOpenProfile = () => {
+  const handleOpenProfile = useCallback(() => {
     setShowToolsMenu(false);
     router.push('/profile-setup');
-  };
+  }, [router]);
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     setShowToolsMenu(false);
     try {
       await signOut(auth);
     } catch {}
     setIsGuest(false);
     router.replace('/auth');
-  };
+  }, [router]);
 
   const getAimInsights = () => {
-    if (shots.length < 5) return "Not enough data yet — hit a few more.";
+    if (shots.length < 5) return "Not enough data yet ? hit a few more.";
     let mismatchRight = 0;
     let mismatchLeft = 0;
     const lastFive = shots.slice(-5);
@@ -4241,13 +4536,13 @@ export default function PlayScreenClean() {
       if (shot.aim === 'left' && shot.result === 'right') mismatchRight++;
       if (shot.aim === 'right' && shot.result === 'left') mismatchLeft++;
     });
-    if (mismatchRight >= 2) return "Even aiming left — you're still leaking right. Check the face.";
-    if (mismatchLeft >= 2) return "Even aiming right — you're still pulling it. Hold through impact.";
+    if (mismatchRight >= 2) return "Even aiming left ? you're still leaking right. Check the face.";
+    if (mismatchLeft >= 2) return "Even aiming right ? you're still pulling it. Hold through impact.";
     return 'Aim and ball flight are lining up well.';
   };
 
   const getSwingFix = () => {
-    if (shots.length < 5) return "Hit a few shots — I'll read your pattern soon.";
+    if (shots.length < 5) return "Hit a few shots ? I'll read your pattern soon.";
     let rightMiss = 0;
     let leftMiss = 0;
     shots.slice(-10).forEach((shot) => {
@@ -4256,29 +4551,29 @@ export default function PlayScreenClean() {
     });
     if (rightMiss > leftMiss && rightMiss >= 3) {
       playerProfile.commonMiss = 'right';
-      return "You're leaking right — close the face and swing from the inside.";
+      return "You're leaking right ? close the face and swing from the inside.";
     }
     if (leftMiss > rightMiss && leftMiss >= 3) {
       playerProfile.commonMiss = 'left';
-      return "Pulling left — smooth the release and hold the face through impact.";
+      return "Pulling left ? smooth the release and hold the face through impact.";
     }
     playerProfile.commonMiss = null;
-    return 'Ball flight is balanced — keep it up.';
+    return 'Ball flight is balanced ? keep it up.';
   };
 
   const getSwingFixData = () => {
     const miss = getPrimaryMiss();
     if (!miss || miss === 'balanced') return null;
-    return SWING_FIXES[miss] ?? null;
+    return SWING_FEEDBACK[miss] ?? null;
   };
 
   const getClubPatterns = () => {
-    const clubData: Record<string, { left: number; right: number; straight: number }> = {};
+    const clubData: Record<string, { left: number; right: number; center: number }> = {};
     shots.forEach((shot) => {
       if (!shot?.club) return;
-      if (!clubData[shot.club]) clubData[shot.club] = { left: 0, right: 0, straight: 0 };
-      const r = shot.result as 'left' | 'right' | 'straight';
-      if (r === 'left' || r === 'right' || r === 'straight') clubData[shot.club][r]++;
+      if (!clubData[shot.club]) clubData[shot.club] = { left: 0, right: 0, center: 0 };
+      const r = shot.result;
+      if (r === 'left' || r === 'right' || r === 'center') clubData[shot.club][r]++
     });
     return clubData;
   };
@@ -4286,20 +4581,20 @@ export default function PlayScreenClean() {
   const getClubMiss = (selectedClub: string): 'right' | 'left' | 'straight' | null => {
     const data = getClubPatterns()[selectedClub];
     if (!data) return null;
-    const total = data.left + data.right + data.straight;
+    const total = data.left + data.right + data.center;
     if (total < 3) return null;
-    if (data.right > data.left && data.right > data.straight) return 'right';
-    if (data.left > data.right && data.left > data.straight) return 'left';
+    if (data.right > data.left && data.right > data.center) return 'right';
+    if (data.left > data.right && data.left > data.center) return 'left';
     return 'straight';
   };
 
   const getClubStats = () => {
-    const stats: Record<string, { total: number; straight: number; left: number; right: number }> = {};
+    const stats: Record<string, { total: number; center: number; left: number; right: number }> = {};
     shots.forEach((shot) => {
       if (!shot?.club) return;
-      if (!stats[shot.club]) stats[shot.club] = { total: 0, straight: 0, left: 0, right: 0 };
+      if (!stats[shot.club]) stats[shot.club] = { total: 0, center: 0, left: 0, right: 0 };
       stats[shot.club].total++;
-      if (shot.result === 'straight') stats[shot.club].straight++;
+      if (shot.result === 'center') stats[shot.club].center++;
       if (shot.result === 'left') stats[shot.club].left++;
       if (shot.result === 'right') stats[shot.club].right++;
     });
@@ -4309,15 +4604,15 @@ export default function PlayScreenClean() {
   const getClubInsights = () => {
     if (shots.length < 5) return 'Not enough data';
 
-    const clubStats: Record<string, { left: number; right: number; straight: number; total: number }> = {};
+    const clubStats: Record<string, { left: number; right: number; center: number; total: number }> = {};
 
     shots.forEach((shot) => {
       if (!shot?.club) return;
       if (!clubStats[shot.club]) {
-        clubStats[shot.club] = { left: 0, right: 0, straight: 0, total: 0 };
+        clubStats[shot.club] = { left: 0, right: 0, center: 0, total: 0 };
       }
-      const r = shot.result as 'left' | 'right' | 'straight';
-      if (r === 'left' || r === 'right' || r === 'straight') clubStats[shot.club][r]++;
+      const r = shot.result;
+      if (r === 'left' || r === 'right' || r === 'center') clubStats[shot.club][r]++;
       clubStats[shot.club].total++;
     });
 
@@ -4326,11 +4621,11 @@ export default function PlayScreenClean() {
     Object.keys(clubStats).forEach((club) => {
       const stats = clubStats[club];
       if (stats.total < 3) return;
-      if (stats.right > stats.left && stats.right > stats.straight) {
+      if (stats.right > stats.left && stats.right > stats.center) {
         insight += `${club}: miss right\n`;
-      } else if (stats.left > stats.right && stats.left > stats.straight) {
+      } else if (stats.left > stats.right && stats.left > stats.center) {
         insight += `${club}: miss left\n`;
-      } else if (stats.straight >= stats.left && stats.straight >= stats.right) {
+      } else if (stats.center >= stats.left && stats.center >= stats.right) {
         insight += `${club}: reliable\n`;
       }
     });
@@ -4364,7 +4659,7 @@ export default function PlayScreenClean() {
       if (!shot?.club) return;
       if (!clubStats[shot.club]) clubStats[shot.club] = { total: 0, straight: 0, left: 0, right: 0 };
       clubStats[shot.club].total++;
-      if (shot.result === 'straight') clubStats[shot.club].straight++;
+      if (shot.result === 'center') clubStats[shot.club].straight++;
       if (shot.result === 'left') clubStats[shot.club].left++;
       if (shot.result === 'right') clubStats[shot.club].right++;
     });
@@ -4388,7 +4683,7 @@ export default function PlayScreenClean() {
       if (!shot?.club) return;
       if (!clubStats[shot.club]) clubStats[shot.club] = { total: 0, straight: 0, left: 0, right: 0 };
       clubStats[shot.club].total++;
-      if (shot.result === 'straight') clubStats[shot.club].straight++;
+      if (shot.result === 'center') clubStats[shot.club].straight++;
       if (shot.result === 'left') clubStats[shot.club].left++;
       if (shot.result === 'right') clubStats[shot.club].right++;
     });
@@ -4410,7 +4705,7 @@ export default function PlayScreenClean() {
       if (!shot?.club) return;
       if (!clubStats[shot.club]) clubStats[shot.club] = { total: 0, straight: 0 };
       clubStats[shot.club].total++;
-      if (shot.result === 'straight') clubStats[shot.club].straight++;
+      if (shot.result === 'center') clubStats[shot.club].straight++;
     });
     let bestClub: string | null = null;
     let bestAccuracy = 0;
@@ -4425,13 +4720,13 @@ export default function PlayScreenClean() {
     if (!distance) return '';
     const bestClub = getBestClub();
     if (!bestClub) return '';
-    return `${distance} yards — go with the ${bestClub}, your most reliable.`;
+    return `${distance} yards ? go with the ${bestClub}, your most reliable.`;
   };
 
   const getDispersionSpread = () => {
     if (shots.length < 5) return null;
     const positions = shots.slice(-10).map((shot) =>
-      shot.result === 'left' ? 0 : shot.result === 'straight' ? 1 : 2
+      shot.result === 'left' ? 0 : shot.result === 'center' ? 1 : 2
     );
     return Math.max(...positions) - Math.min(...positions);
   };
@@ -4451,11 +4746,11 @@ export default function PlayScreenClean() {
     let tightCount = 0;
     recent.forEach((shot) => {
       if (shot.result === 'left' || shot.result === 'right') wideCount++;
-      if (shot.result === 'straight') tightCount++;
+      if (shot.result === 'center') tightCount++;
     });
-    if (wideCount > tightCount) return "You tend to spray it when things get loose — play it safer.";
-    if (tightCount > wideCount) return "You're at your best when dialed in — trust the swing.";
-    return "Balanced pattern today — nice work.";
+    if (wideCount > tightCount) return "You tend to spray it when things get loose ? play it safer.";
+    if (tightCount > wideCount) return "You're at your best when dialed in ? trust the swing.";
+    return "Balanced pattern today ? nice work.";
   };
 
   const getRoundSummary = () => {
@@ -4468,7 +4763,7 @@ export default function PlayScreenClean() {
       if (!shot?.club) return;
       if (!clubStats[shot.club]) clubStats[shot.club] = { total: 0, straight: 0 };
       clubStats[shot.club].total++;
-      if (shot.result === 'straight') clubStats[shot.club].straight++;
+      if (shot.result === 'center') clubStats[shot.club].straight++;
     });
 
     let bestClub: string | null = null;
@@ -4499,10 +4794,126 @@ export default function PlayScreenClean() {
     return [roundLabel, base, missLabel, trendLabel].filter(Boolean).join(' ');
   };
 
+  /**
+   * computeRoundAnalysis — produces a full typed RoundAnalysis from the
+   * shot list collected during this round.  Pure function, no side-effects.
+   */
+  const computeRoundAnalysis = (shotList: Shot[], holeScores: number[], holePars: number[]): RoundAnalysis => {
+    const total = shotList.length;
+
+    // ── Direction totals ───────────────────────────────────────────────────
+    let rightCount = 0; let leftCount = 0; let straightCount = 0;
+    shotList.forEach((s) => {
+      if (s.result === 'right')    rightCount++;
+      else if (s.result === 'left') leftCount++;
+      else                          straightCount++;
+    });
+    const rightPct    = total > 0 ? Math.round((rightCount / total) * 100) : 0;
+    const leftPct     = total > 0 ? Math.round((leftCount  / total) * 100) : 0;
+    const straightPct = total > 0 ? Math.round((straightCount / total) * 100) : 0;
+
+    // ── Per-club stats ─────────────────────────────────────────────────────
+    const clubMap: Record<string, { total: number; center: number }> = {};
+    shotList.forEach((s) => {
+      if (!s?.club) return;
+      if (!clubMap[s.club]) clubMap[s.club] = { total: 0, center: 0 };
+      clubMap[s.club].total++;
+      if (s.result === 'center') clubMap[s.club].center++;
+    });
+
+    let bestClub: string | null = null;  let bestAcc = 0;
+    let worstClub: string | null = null; let worstAcc = 1;
+    Object.entries(clubMap).forEach(([c, stat]) => {
+      if (stat.total < 2) return; // ignore clubs with only 1 use
+      const acc = stat.center / stat.total;
+      if (acc > bestAcc)  { bestAcc  = acc; bestClub  = c; }
+      if (acc < worstAcc && stat.total >= 3) { worstAcc = acc; worstClub = c; }
+    });
+    const strengthPct = bestClub  ? Math.round(bestAcc  * 100) : null;
+    const weakestPct  = worstClub ? Math.round(worstAcc * 100) : null;
+
+    // ── Score to par ──────────────────────────────────────────────────────
+    const completedHoles = holeScores.filter((s) => s > 0).length;
+    const totalScore = holeScores.slice(0, completedHoles).reduce((a, b) => a + b, 0);
+    const totalPar   = holePars.slice(0, completedHoles).reduce((a, b) => a + b, 0);
+    const scoreToPar = completedHoles >= 3 ? totalScore - totalPar : null;
+
+    // ── Dominant miss direction ───────────────────────────────────────────
+    const dominantMiss: 'right' | 'left' | 'straight' =
+      rightCount > leftCount && rightCount > straightCount ? 'right' :
+      leftCount  > rightCount && leftCount  > straightCount ? 'left'  : 'straight';
+    const dominantMissPct = dominantMiss === 'right' ? rightPct : dominantMiss === 'left' ? leftPct : straightPct;
+
+    // ── Situational insight ───────────────────────────────────────────────
+    let keyInsight = '';
+    if (dominantMiss === 'right' && rightPct >= 50) {
+      keyInsight = `You missed right ${rightPct}% of the time. Focus on alignment and face angle at impact.`;
+    } else if (dominantMiss === 'left' && leftPct >= 50) {
+      keyInsight = `You missed left ${leftPct}% of the time. Slow down your release and stay connected.`;
+    } else if (straightPct >= 60) {
+      keyInsight = `Excellent ball-striking today — ${straightPct}% of shots on target. Keep that routine.`;
+    } else if (rightPct > 35 && leftPct > 25) {
+      keyInsight = `Inconsistent pattern today — both sides. Check your setup and ball position between rounds.`;
+    } else {
+      keyInsight = `Solid effort. ${straightPct}% of shots were on the intended line.`;
+    }
+
+    // ── Strength description ─────────────────────────────────────────────
+    const strengthClub = bestClub;
+    const strengthDesc = bestClub
+      ? `${bestClub} — ${strengthPct}% on target today.`
+      : null;
+
+    // ── Focus area ───────────────────────────────────────────────────────
+    let focusArea = '';
+    if (dominantMiss === 'right' && rightPct > 45) {
+      focusArea = `Right miss — ${rightPct}%. Work on your face-to-path alignment.`;
+    } else if (dominantMiss === 'left' && leftPct > 45) {
+      focusArea = `Left miss — ${leftPct}%. Focus on a later, slower release.`;
+    } else if (worstClub) {
+      focusArea = `${worstClub} accuracy — only ${weakestPct}% on target. Focus range time here.`;
+    } else {
+      focusArea = `Mental execution — stay committed to your pre-shot routine every shot.`;
+    }
+
+    // ── Practice tip ─────────────────────────────────────────────────────
+    let practiceTip = '';
+    if (dominantMiss === 'right' && rightPct > 45) {
+      practiceTip = 'Drill: Place an alignment stick 2 inches outside the ball. Focus on closing the face slightly through impact.';
+    } else if (dominantMiss === 'left' && leftPct > 45) {
+      practiceTip = 'Drill: Hit half-speed shots focusing on holding the face open longer through the hitting zone.';
+    } else if (worstClub) {
+      practiceTip = `Spend 20 balls on your ${worstClub} at 70% effort. Accuracy before power.`;
+    } else {
+      practiceTip = 'Spend 10 minutes on your pre-shot routine with every club. Consistency is the goal.';
+    }
+
+    // ── Voice summary (≤ 20 words, conversational) ────────────────────────
+    const scoreLabel = scoreToPar === null ? '' :
+      scoreToPar === 0 ? 'Even par. ' :
+      scoreToPar < 0   ? `${Math.abs(scoreToPar)} under par. ` :
+      `${scoreToPar} over par. `;
+    const strengthVoice = bestClub ? `Your ${bestClub} was the standout. ` : '';
+    const missVoice = dominantMiss !== 'straight'
+      ? `Watch the ${dominantMiss} miss.`
+      : 'Solid ball-striking overall.';
+    const voiceSummary = `${scoreLabel}${strengthVoice}${missVoice}`.trim();
+
+    return {
+      keyInsight, strengthClub, strengthPct,
+      focusArea, focusPct: dominantMissPct,
+      weakestClub: worstClub, weakestPct,
+      voiceSummary, practiceTip,
+      totalShots: total, totalHoles: completedHoles,
+      rightPct, leftPct, straightPct,
+      scoreToPar,
+    };
+  };
+
   const getShotColor = (result: string) => {
     if (result === 'left') return '#e53935';
     if (result === 'right') return '#1e88e5';
-    if (result === 'straight') return '#43a047';
+    if (result === 'center') return '#43a047';
     return '#999';
   };
 
@@ -4520,33 +4931,33 @@ export default function PlayScreenClean() {
   // -- Confidence boost moments ----------------------------------------------
   // Fires at most once every 3 shots to avoid over-praising
   const getConfidenceBoost = (result: string, allShots: Shot[]): string | null => {
-    if (result !== 'straight') return null;
+    if (result !== 'center') return null;
 
     const now = allShots.length;
     // Enforce sparing use: at least 3 shots between boosts
     if (now - lastConfidenceBoostRef.current < 3) return null;
 
-    const straightShots = allShots.filter((s) => s.result === 'straight');
+    const straightShots = allShots.filter((s) => s.result === 'center');
     const prevShots = allShots.slice(0, -1);
-    const prevStraight = prevShots.filter((s) => s.result === 'straight').length;
+    const prevStraight = prevShots.filter((s) => s.result === 'center').length;
 
-    // Trigger 1 — best shot of round: first straight after 3+ misses in a row
-    const recentMisses = prevShots.slice(-3).filter((s) => s.result !== 'straight').length;
+    // Trigger 1 ? best shot of round: first straight after 3+ misses in a row
+    const recentMisses = prevShots.slice(-3).filter((s) => s.result !== 'center').length;
     if (recentMisses === 3) {
       lastConfidenceBoostRef.current = now;
       return "That's your best one today.";
     }
 
-    // Trigger 2 — great strike: 2+ straights in a row and total improves
+    // Trigger 2 ? great strike: 2+ straights in a row and total improves
     const lastTwo = allShots.slice(-2);
-    if (lastTwo.length === 2 && lastTwo.every((s) => s.result === 'straight') && straightShots.length > prevStraight) {
+    if (lastTwo.length === 2 && lastTwo.every((s) => s.result === 'center') && straightShots.length > prevStraight) {
       lastConfidenceBoostRef.current = now;
       return "That's exactly it.";
     }
 
-    // Trigger 3 — consistent improvement: 3 straights in a row
+    // Trigger 3 ? consistent improvement: 3 straights in a row
     const lastThree = allShots.slice(-3);
-    if (lastThree.length === 3 && lastThree.every((s) => s.result === 'straight')) {
+    if (lastThree.length === 3 && lastThree.every((s) => s.result === 'center')) {
       lastConfidenceBoostRef.current = now;
       return "That's the swing right there.";
     }
@@ -4570,7 +4981,7 @@ export default function PlayScreenClean() {
     "Let's slow that down.",
   ];
 
-  // Rare personality phrases — fire ~1-in-5 straight shots to feel human without overdoing it
+  // Rare personality phrases ? fire ~1-in-5 straight shots to feel human without overdoing it
   const personalityPool = [
     "We'll take that all day.",
     'That plays.',
@@ -4580,7 +4991,7 @@ export default function PlayScreenClean() {
   const pickRandom = (pool: string[]) => pool[Math.floor(Math.random() * pool.length)];
 
   // --- Pre-shot caddie cue (confidence-gated, <10 words) --------------------
-  // Only fires if confidence >= 65 — low confidence = player is struggling, stay quiet
+  // Only fires if confidence >= 65 ? low confidence = player is struggling, stay quiet
   const getPreShotCue = (): string | null => {
     if (confidence < 65) return null;
     const { bias } = analyzeShotPattern(shots);
@@ -4599,41 +5010,41 @@ export default function PlayScreenClean() {
       return 'Reset. Back in play.';
     }
 
-    if (result === 'straight') {
-      return pickRandom(['Pure.', 'That’s a golf shot.', 'Love that.']);
+    if (result === 'center') {
+      return pickRandom(['Pure.', 'That?s a golf shot.', 'Love that.']);
     }
 
-    return pickRandom(['That’s fine.', 'We’re good.', 'Playable.']);
+    return pickRandom(['That?s fine.', 'We?re good.', 'Playable.']);
   };
 
-  const getShotSeverity = (result: string, shotList: Shot[]): 'small' | 'big' => {
-    if (result === 'straight') return 'small';
+  const getShotSeverity = (result: ShotResult, shotList: Shot[]): 'small' | 'big' => {
+    if (result === 'center') return 'small';
     const recent = shotList.slice(-3);
     const sameMisses = recent.filter((s) => s.result === result).length;
     return sameMisses >= 2 ? 'big' : 'small';
   };
 
-  const getPostShotCue = (result: string, shotList: Shot[]): string => {
+  const getPostShotCue = (result: ShotResult, shotList: Shot[]): string => {
     const severity = getShotSeverity(result, shotList);
     return getPostShotMessage(result, severity);
   };
 
-  const giveFeedback = (result: string) => {
+  const giveFeedback = (result: ShotResult) => {
     // On straight shots, ~20% chance to swap in a personality phrase instead
-    if (result === 'straight' && Math.random() < 0.2) {
+    if (result === 'center' && Math.random() < 0.2) {
       void voiceSpeak(pickRandom(personalityPool), 'calm');
       return;
     }
     const byResult: Record<string, string[]> = {
-      straight: [getTempoCue(), ...positivePool],
-      left:  ['Just a little left.', 'Came off a touch left.', 'Slight pull — no big deal.', pickRandom(correctionPool)],
-      right: ['Just a little right.', 'Came off a touch right.', 'Slight push — shake it off.', pickRandom(correctionPool)],
+      center: [getTempoCue(), ...positivePool],
+      left:  ['Just a little left.', 'Came off a touch left.', 'Slight pull ? no big deal.', pickRandom(correctionPool)],
+      right: ['Just a little right.', 'Came off a touch right.', 'Slight push ? shake it off.', pickRandom(correctionPool)],
     };
-    const pool = byResult[result] ?? byResult.straight;
+    const pool = byResult[result] ?? byResult.center;
     void voiceSpeak(pickRandom(pool), 'calm');
   };
 
-  const handleShot = useCallback(async (result: string) => {
+  const handleShot = useCallback(async (result: ShotResult) => {
     const now = Date.now();
     if (now - lastShotTime < 1500) return;
 
@@ -4664,6 +5075,10 @@ export default function PlayScreenClean() {
     addShot(newShot);
     updatePlayerModel(newShot);
     updateCourseMemory(currentHoleData.hole, result);
+
+    // ── Focus Engine memory + round intelligence ─────────────────────────────
+    addShotToMemory?.({ result: result as 'left' | 'right' | 'straight', club, distance: estimatedDistance ?? undefined, hole: currentHoleData.hole });
+    addShotToRound?.({ result: result as 'left' | 'right' | 'straight', club, hole: currentHoleData.hole }, { hole: currentHoleData.hole, distance: yardsBefore });
     // Wake the screen if dimmed so the player sees shot feedback, then restart
     // the idle countdown. toggleLowPowerMode(false) already calls resetIdleTimer
     // internally, so only call resetIdleTimer when the screen is already active.
@@ -4692,6 +5107,36 @@ export default function PlayScreenClean() {
     const post = getPostShotMessage(result, severity);
     setCaddieMessage(post);
 
+    // ── Insight engine — synchronous pattern detection, no API calls ─────────
+    // Runs on every shot; overwrites post message only when a strong trend exists.
+    const insight = generateInsight(updatedShots);
+    if (insight?.message) {
+      setCaddieMessage(insight.message);
+    }
+
+    // ── Proactive engine — Focus Mode proactive triggers ──────────────────────
+    if (roundState && memory) {
+      const proactiveCtx = buildFocusContext({
+        hole,
+        distance: yardsBefore,
+        shots: updatedShots,
+        holeNote: currentHoleData?.note ?? null,
+        memory,
+        roundState,
+      });
+      const proactiveTriggers = checkProactiveTriggers(proactiveCtx, proactiveShownIds);
+      if (proactiveTriggers.length > 0) {
+        const top = proactiveTriggers[0];
+        setCaddieMessage(top.message);
+        setProactiveShownIds((prev) => new Set([...prev, top.id]));
+        markRoundInsightShown?.();
+      }
+    }
+
+    // Brief post-shot overlay � auto-dismisses after 1.7 s
+    setShotOverlay({ direction: result as 'left' | 'straight' | 'right', message: post });
+    setTimeout(() => setShotOverlay(null), 1700);
+
     if (voiceEnabled && !quietMode) {
       // Route through VoiceIntelligence REACTIVE state:
       // - picks varied phrasing, detects miss patterns, respects 8s cooldown
@@ -4701,6 +5146,14 @@ export default function PlayScreenClean() {
         result as 'left' | 'right' | 'straight',
         recentResults
       );
+      // caddieVoice.onShotRecorded enhances with bounce-back / hot-streak suffix
+      const ctxMode = getContextAdjustment();
+      void caddieVoice.onShotRecorded(
+        result,
+        recentResults,
+        { playMode: ctxMode === 'attack' ? 'aggressive' : ctxMode as any, trigger: ctxMode === 'safe' ? 'bounce_back' : ctxMode === 'attack' ? 'hot_streak' : 'default' },
+        (text: string) => voiceSpeak(text, 'calm'),
+      );
       if (!viSpoken) void speak(post);
     }
 
@@ -4708,7 +5161,7 @@ export default function PlayScreenClean() {
     setConfidence(newConfidence);
 
     // Signal post-shot decision refresh (useEffect below re-runs getCaddieDecision
-    // after the coaching chain settles — React 18 batches this with the other
+    // after the coaching chain settles ? React 18 batches this with the other
     // state updates so the effect closure sees the updated shots array).
     setLastShotEpoch((e) => e + 1);
 
@@ -4737,7 +5190,7 @@ export default function PlayScreenClean() {
         setCaddieMessage(getPatternCoaching('left', updatedShots));
       } else if (result === 'right') {
         setCaddieMessage(getPatternCoaching('right', updatedShots));
-      } else if (result === 'straight') {
+      } else if (result === 'center') {
         const base = getPatternCoaching('straight', updatedShots);
         setCaddieMessage(`${pickRandom(positivePool)} ${base}`);
       }
@@ -4805,10 +5258,28 @@ export default function PlayScreenClean() {
   ]);
 
   const onShotLeftPress = useCallback(() => { void handleShot('left'); }, [handleShot]);
-  const onShotStraightPress = useCallback(() => { void handleShot('straight'); }, [handleShot]);
+  const onShotStraightPress = useCallback(() => { void handleShot('center'); }, [handleShot]);
   const onShotRightPress = useCallback(() => { void handleShot('right'); }, [handleShot]);
 
-  // 📍 Mark Ball — player has walked to their ball; snapshot current GPS to force carry compute
+  // ── Wire the real handleSwingConfirm implementation now that handleShot exists ──
+  // We assign it here so the ref used by the auto-confirm timer (declared before
+  // handleShot) always calls the fully-initialised version.
+  handleSwingConfirmRef.current = useCallback(async (direction: 'left' | 'center' | 'right') => {
+    if (autoConfirmRef.current) clearTimeout(autoConfirmRef.current);
+    autoConfirmAnimRef.current?.stop();
+    autoConfirmProgress.setValue(0);
+    setSwingPending(null);
+
+    await handleShot(direction);
+
+    const feedback = getSwingFeedback(swingDetector.lastTempo ?? 'smooth');
+    setSwingToast(feedback);
+    if (swingToastTimerRef.current) clearTimeout(swingToastTimerRef.current);
+    swingToastTimerRef.current = setTimeout(() => setSwingToast(null), 2500);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleShot, voiceEnabled, quietMode, voiceSpeak, swingDetector.lastTempo]);
+
+  // ?? Mark Ball ? player has walked to their ball; snapshot current GPS to force carry compute
   const handleMarkBall = useCallback(async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -4842,7 +5313,7 @@ export default function PlayScreenClean() {
           updateClubDistance(shotClub, yardsCarried);   // feeds playerModel samples + legacy clubDistances
           markUserActive(); // GPS mark = shot confirmed; burst vision + fast analytics
           setLastShotBadge({ yardsCarried, yardsRemaining: Math.round(currentYards), club: shotClub });
-          setCaddieMessage(`📍 ${yardsCarried} yds with ${shotClub}. ${Math.round(currentYards)} yds to pin.`);
+          setCaddieMessage(`?? ${yardsCarried} yds with ${shotClub}. ${Math.round(currentYards)} yds to pin.`);
           prevShotYardsRef.current = null;
           prevShotClubRef.current = null;
           if (voiceEnabled && !quietMode) void respond(`Marked. ${yardsCarried} yards with ${shotClub}. ${Math.round(currentYards)} to the pin.`);
@@ -4850,8 +5321,8 @@ export default function PlayScreenClean() {
           setCaddieMessage('GPS location updated.');
         }
       } else if (currentYards !== null) {
-        // No pending shot — just update yardage display
-        setCaddieMessage(`📍 ${Math.round(currentYards)} yds to pin.`);
+        // No pending shot ? just update yardage display
+        setCaddieMessage(`?? ${Math.round(currentYards)} yds to pin.`);
         if (voiceEnabled && !quietMode) void respond(`${Math.round(currentYards)} yards to the pin.`);
       }
     } catch (e) {
@@ -4882,15 +5353,7 @@ export default function PlayScreenClean() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRoundActive]);
 
-  if (loading) {
-    return (
-      <View style={styles.loadingCenter}>
-        <Text style={{ color: '#A7F3D0', fontSize: 16, fontWeight: '600' }}>Loading...</Text>
-      </View>
-    );
-  }
-
-  // Pre-compute heavy values once per render — keep JSX lightweight
+  // Pre-compute heavy values once per render ? keep JSX lightweight
   // useMemo ensures these only recalculate when their inputs actually change,
   // preventing lag spikes on every keystroke / tap / scroll.
   const decision = useMemo(
@@ -4899,6 +5362,48 @@ export default function PlayScreenClean() {
     // gpsYards included: getCaddieDecision reads gpsYards?.middle as primary dist source.
     [shots, distance, strategyMode, mentalState, targetDistance, hole, par, gpsYards]
   );
+
+  // engineDecision — output from the standalone caddieEngine.
+  // Adds lie adjustment + mental state club upgrade on top of existing GPS data.
+  const engineDecision = useMemo(() => {
+    const clubDistancesMap = Object.fromEntries(getClubYardageMap());
+    const rawMiddle = gpsYards?.middle ?? targetDistance ?? currentHoleData?.distance ?? null;
+    // Compute plays-like from the raw middle yardage
+    const playsLike = rawMiddle != null
+      ? computePlaysLike({ rawYardage: rawMiddle, windSpeed, windDirection: windDir, elevationChange: elevChange, lie: lieType })
+      : null;
+    const playsLikeMiddle = playsLike?.playsLikeYardage ?? rawMiddle;
+
+    // Situational awareness — pressure, play mode, messaging
+    const scoredHoles = round.filter((s) => s > 0).length;
+    const totalStrokes = round.slice(0, scoredHoles).reduce((a: number, b: number) => a + b, 0);
+    const totalPar    = roundPars.slice(0, scoredHoles).reduce((a: number, b: number) => a + b, 0);
+    const scoreToPar  = scoredHoles >= 1 ? totalStrokes - totalPar : 0;
+    const holesRemaining = Math.max(0, (roundLength as number) - hole);
+    const situation = getSituationDecision({
+      shots: shots.map((s) => ({ result: s.result, hole: s.hole })),
+      hole,
+      scoreToPar,
+      mentalState,
+      holesRemaining,
+    });
+
+    return {
+      ...getCaddieRecommendation({
+        front:        gpsYards?.front  ?? null,
+        middle:       playsLikeMiddle,
+        back:         gpsYards?.back   ?? null,
+        lie:          lieType,
+        mentalState:  mentalState as any,
+        shots:        shots.map((s) => ({ result: s.result })),
+        clubDistances: clubDistancesMap,
+      }),
+      playsLike,  // attach breakdown for UI display
+      rawMiddle,  // original GPS/hole distance before plays-like
+      situation,  // situational awareness decision
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gpsYards, targetDistance, hole, lieType, mentalState, shots, windSpeed, windDir, elevChange, round, roundPars]);
   const caddieAdvice = useMemo(
     () => getShortCaddieDecision(),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4907,14 +5412,102 @@ export default function PlayScreenClean() {
   const holeStrategy = useMemo(
     () => getHoleStrategy(),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [round, roundPars, par]
+    [round, roundPars, par, ppMiss, strategyMode, currentHoleData.distance, currentHoleData.note]
   );
   const recommendedClub = decision.club || safeClub;   // sourced from single engine, fallback 7i
+
+  // Memoize per-club accuracy stats — loops over all shots, expensive at 100+ shots
+  const clubStatsMap = useMemo(() => getClubStats(), [shots]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Memoize the shot-pattern profile for the sim engine — re-runs only when shots change
+  const simProfile = useMemo(() => buildSimProfile(shots), [shots]);
+
   const voiceOverlayActive = useVoiceStore((s) => s.voiceState !== 'IDLE');
   const tabBarHeight = useBottomTabBarHeight();
 
+  if (loading) {
+    return (
+      <View style={styles.loadingCenter}>
+        <Text style={{ color: '#A7F3D0', fontSize: 16, fontWeight: '600' }}>Loading...</Text>
+      </View>
+    );
+  }
+
   return (
     <>
+    {/* ── SmartPlay Dual-Mode UI ─────────────────────────────────────────── */}
+    {smartMode === 'auto' && (
+      <View style={{ flex: 1, backgroundColor: '#071E17', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
+        {/* Mode toggle */}
+        <Pressable
+          onPress={() => { setSmartMode('manual'); setPendingAutoShot(null); }}
+          style={{ position: 'absolute', top: 52, right: 20, backgroundColor: '#0E2A22', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 }}
+        >
+          <Text style={{ color: '#A7B3AF', fontSize: 12, fontWeight: '600' }}>⬅ Manual</Text>
+        </Pressable>
+
+        {/* GPS distance */}
+        <Text style={{ color: '#A7B3AF', fontSize: 14, marginBottom: 4 }}>Distance to pin</Text>
+        <Text style={{ color: '#FFFFFF', fontSize: 48, fontWeight: '800', marginBottom: 2 }}>
+          {gpsYards?.middle != null ? `${gpsYards.middle}` : '--'}
+        </Text>
+        <Text style={{ color: '#A7B3AF', fontSize: 13, marginBottom: 24 }}>yards {gpsWeak ? '· weak GPS' : ''}</Text>
+
+        {/* Recommended club */}
+        <Text style={{ color: '#2ECC71', fontSize: 26, fontWeight: '700', marginBottom: 24 }}>
+          {gpsYards?.middle != null ? recommendClubForDistance(gpsYards.middle) : '--'}
+        </Text>
+
+        {/* Auto-shot confirmation card */}
+        {pendingAutoShot && (
+          <View style={{ width: '100%', backgroundColor: '#0E2A22', borderRadius: 14, borderWidth: 1, borderColor: '#2ECC71', padding: 18, marginBottom: 20, alignItems: 'center' }}>
+            <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700', marginBottom: 4 }}>Shot detected</Text>
+            <Text style={{ color: '#A7B3AF', fontSize: 13, marginBottom: 14 }}>
+              {pendingAutoShot.club} · {pendingAutoShot.yards} yds — How did it go?
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Pressable
+                onPress={() => confirmAutoShot('left')}
+                style={{ flex: 1, backgroundColor: '#1a3a5c', borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}
+              >
+                <Text style={{ color: '#93c5fd', fontWeight: '700' }}>← Left</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => confirmAutoShot('center')}
+                style={{ flex: 1, backgroundColor: '#0d3a1a', borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}
+              >
+                <Text style={{ color: '#6ee7b7', fontWeight: '700' }}>● Straight</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => confirmAutoShot('right')}
+                style={{ flex: 1, backgroundColor: '#3a1a1a', borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}
+              >
+                <Text style={{ color: '#fcd34d', fontWeight: '700' }}>Right →</Text>
+              </Pressable>
+            </View>
+            <Pressable onPress={() => setPendingAutoShot(null)} style={{ marginTop: 10 }}>
+              <Text style={{ color: '#A7B3AF', fontSize: 12 }}>Dismiss</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Caddie message */}
+        {caddieMessage !== '' && (
+          <Text style={{ color: '#FFFFFF', fontSize: 14, textAlign: 'center', opacity: 0.85, paddingHorizontal: 8 }}>
+            {caddieMessage}
+          </Text>
+        )}
+      </View>
+    )}
+    {/* Mode toggle button (visible in manual mode) */}
+    {smartMode === 'manual' && (
+      <Pressable
+        onPress={() => setSmartMode('auto')}
+        style={{ position: 'absolute', top: 52, right: 20, zIndex: 999, backgroundColor: '#0E2A22', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: '#2ECC71' }}
+      >
+        <Text style={{ color: '#2ECC71', fontSize: 12, fontWeight: '600' }}>⚡ SmartPlay</Text>
+      </Pressable>
+    )}
+    {smartMode === 'manual' && (<>
     <Animated.View
       style={[{ flex: 1, opacity: dimAnim }, debugStyle]}
       onStartShouldSetResponder={() => { resetIdleTimer(); return false; }}
@@ -4933,7 +5526,7 @@ export default function PlayScreenClean() {
         {!pocketMode && shots.length >= 3 && (
           <Text style={{ color: '#6ee7b7', fontSize: 13, marginBottom: 24 }}>Confidence: {confidence}%</Text>
         )}
-        {/* Target selector — Quick Mode */}
+        {/* Target selector ? Quick Mode */}
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
           {(['left', 'center', 'right'] as const).map((t) => (
             <Pressable key={t} onPress={() => setShotTarget(t)}
@@ -4942,7 +5535,7 @@ export default function PlayScreenClean() {
                 borderColor: shotTarget === t ? '#6ee7b7' : '#374151',
                 backgroundColor: shotTarget === t ? 'rgba(110,231,183,0.12)' : 'transparent' }}>
               <Text style={{ color: shotTarget === t ? '#6ee7b7' : '#6b7280', fontSize: 11, fontWeight: shotTarget === t ? '800' : '400' }}>
-                {t === 'left' ? '← Left' : t === 'center' ? '● Center' : 'Right →'}
+                {t === 'left' ? '? Left' : t === 'center' ? '? Center' : 'Right ?'}
               </Text>
             </Pressable>
           ))}
@@ -4950,22 +5543,22 @@ export default function PlayScreenClean() {
 
         <View style={{ flexDirection: 'row', gap: 20, marginBottom: 32 }}>
           <Pressable onPress={onShotLeftPress} style={{ width: qBtnSize, height: qBtnSize, backgroundColor: '#1a1a1a', borderRadius: qBtnSize / 2, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#ef4444' }}>
-            <Text style={{ fontSize: 22, lineHeight: 24 }}>↙️</Text>
+            <Text style={{ fontSize: 22, lineHeight: 24 }}>??</Text>
             <Text style={{ color: '#ef4444', fontSize: 11, fontWeight: '800', marginTop: 1 }}>LEFT</Text>
           </Pressable>
           <Pressable onPress={onShotStraightPress} style={{ width: qBtnSize, height: qBtnSize, backgroundColor: '#1a1a1a', borderRadius: qBtnSize / 2, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#6ee7b7' }}>
-            <Text style={{ fontSize: 22, lineHeight: 24 }}>⬆️</Text>
+            <Text style={{ fontSize: 22, lineHeight: 24 }}>??</Text>
             <Text style={{ color: '#6ee7b7', fontSize: 11, fontWeight: '800', marginTop: 1 }}>STR</Text>
           </Pressable>
           <Pressable onPress={onShotRightPress} style={{ width: qBtnSize, height: qBtnSize, backgroundColor: '#1a1a1a', borderRadius: qBtnSize / 2, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#f59e0b' }}>
-            <Text style={{ fontSize: 22, lineHeight: 24 }}>↘️</Text>
+            <Text style={{ fontSize: 22, lineHeight: 24 }}>??</Text>
             <Text style={{ color: '#f59e0b', fontSize: 11, fontWeight: '800', marginTop: 1 }}>RIGHT</Text>
           </Pressable>
         </View>
         {lastShotBadge && (
           <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center', marginBottom: 16 }}>
             <View style={{ backgroundColor: '#064e3b', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5 }}>
-              <Text style={{ color: '#6ee7b7', fontSize: 12, fontWeight: '700' }}>~{lastShotBadge.yardsCarried} yd · {lastShotBadge.club}</Text>
+              <Text style={{ color: '#6ee7b7', fontSize: 12, fontWeight: '700' }}>~{lastShotBadge.yardsCarried} yd ? {lastShotBadge.club}</Text>
             </View>
             <View style={{ backgroundColor: '#1a2a1a', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5 }}>
               <Text style={{ color: '#a7f3d0', fontSize: 12 }}>{lastShotBadge.yardsRemaining} yd to pin</Text>
@@ -4979,13 +5572,13 @@ export default function PlayScreenClean() {
             <View style={{ alignItems: 'center', marginBottom: 12 }}>
               <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
                 <View style={{ backgroundColor: '#1e3a5f', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
-                  <Text style={{ color: '#93c5fd', fontSize: 11, fontWeight: '700' }}>← {la.left} ({la.leftPct}%)</Text>
+                  <Text style={{ color: '#93c5fd', fontSize: 11, fontWeight: '700' }}>? {la.left} ({la.leftPct}%)</Text>
                 </View>
                 <View style={{ backgroundColor: '#14532d', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
-                  <Text style={{ color: '#86efac', fontSize: 11, fontWeight: '700' }}>● {la.straight} ({la.strPct}%)</Text>
+                  <Text style={{ color: '#86efac', fontSize: 11, fontWeight: '700' }}>? {la.straight} ({la.strPct}%)</Text>
                 </View>
                 <View style={{ backgroundColor: '#7c2d12', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
-                  <Text style={{ color: '#fca5a5', fontSize: 11, fontWeight: '700' }}>{la.right} ({la.rightPct}%) →</Text>
+                  <Text style={{ color: '#fca5a5', fontSize: 11, fontWeight: '700' }}>{la.right} ({la.rightPct}%) ?</Text>
                 </View>
               </View>
               {la.insight && (
@@ -5003,13 +5596,13 @@ export default function PlayScreenClean() {
         })()}
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <Pressable onPress={speakPreShot} style={{ backgroundColor: '#1f2937', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 18, borderWidth: 1, borderColor: '#374151' }}>
-            <Text style={{ color: '#A7F3D0', fontSize: 13 }}>🎙 Cue</Text>
+            <Text style={{ color: '#A7F3D0', fontSize: 13 }}>?? Cue</Text>
           </Pressable>
           <Pressable onPress={() => setQuietMode((q) => !q)} style={{ backgroundColor: '#1f2937', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 18, borderWidth: 1, borderColor: quietMode ? '#6ee7b7' : '#374151' }}>
-            <Text style={{ color: quietMode ? '#6ee7b7' : '#9CA3AF', fontSize: 13 }}>{quietMode ? '🔕 Quiet' : '🔊 Sound'}</Text>
+            <Text style={{ color: quietMode ? '#6ee7b7' : '#9CA3AF', fontSize: 13 }}>{quietMode ? '?? Quiet' : '?? Sound'}</Text>
           </Pressable>
           <Pressable onPress={() => setPocketMode((p) => !p)} style={{ backgroundColor: '#1f2937', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 18, borderWidth: 1, borderColor: pocketMode ? '#6ee7b7' : '#374151' }}>
-            <Text style={{ color: pocketMode ? '#6ee7b7' : '#9CA3AF', fontSize: 13 }}>{pocketMode ? '📱 Pocket' : '👁 Visible'}</Text>
+            <Text style={{ color: pocketMode ? '#6ee7b7' : '#9CA3AF', fontSize: 13 }}>{pocketMode ? '?? Pocket' : '?? Visible'}</Text>
           </Pressable>
           <Pressable onPress={() => setQuickMode(false)} style={{ backgroundColor: '#1f2937', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 18, borderWidth: 1, borderColor: '#374151' }}>
             <Text style={{ color: '#9CA3AF', fontSize: 13 }}>Full View</Text>
@@ -5025,11 +5618,11 @@ export default function PlayScreenClean() {
         {!isOnline
           ? <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
               {pendingSyncCount > 0
-                ? `📡 Offline · ${pendingSyncCount} round${pendingSyncCount > 1 ? 's' : ''} queued`
-                : '📡 Offline Mode · round will sync when connected'}
+                ? `?? Offline ? ${pendingSyncCount} round${pendingSyncCount > 1 ? 's' : ''} queued`
+                : '?? Offline Mode ? round will sync when connected'}
             </Text>
           : <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
-              ? 🔄 Syncing {pendingSyncCount} round{pendingSyncCount > 1 ? 's' : ''}
+              ? ?? Syncing {pendingSyncCount} round{pendingSyncCount > 1 ? 's' : ''}
             </Text>
         }
       </View>
@@ -5038,84 +5631,200 @@ export default function PlayScreenClean() {
       <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
         {!isRoundActive ? (
           // Course mode Start Round gate
-          <View style={{ alignItems: 'center', paddingHorizontal: 32 }}>
-            {/* ── Round Summary (shown after finishing a round) ── */}
+          <View style={{ alignItems: 'center', paddingHorizontal: 20 }}>
+            {/* ── AI COACH ROUND SUMMARY ─────────────────────────────────────
+                 Shown after the player taps End Round.  Sections:
+                   • Score bar + shot distribution
+                   • Key Insight (what happened)
+                   • Strength (most reliable club)
+                   • Focus Area (what to improve)
+                   • Practice Tip
+                   • Voice playback + Share                                 */}
             {roundSummary && (
-              <View style={{ width: '100%', backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 18,
-                borderWidth: 1.5, borderColor: '#10B981', paddingHorizontal: 20, paddingVertical: 18,
-                marginBottom: 28, alignItems: 'center' }}>
-                <Text style={{ color: '#6ee7b7', fontSize: 11, fontWeight: '800', letterSpacing: 1.4, marginBottom: 10 }}>ROUND SUMMARY</Text>
-                {/* Total shots */}
-                <View style={{ flexDirection: 'row', gap: 24, marginBottom: 12 }}>
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={{ color: '#fff', fontSize: 32, fontWeight: '900' }}>{roundSummary.totalShots}</Text>
-                    <Text style={{ color: '#6b7280', fontSize: 11, fontWeight: '700', letterSpacing: 0.8 }}>SHOTS</Text>
+              <View style={{ width: '100%', marginBottom: 28 }}>
+                {/* ── HEADER ── */}
+                <View style={{ backgroundColor: '#0d2215', borderRadius: 18, borderWidth: 1.5, borderColor: '#16a34a', overflow: 'hidden', marginBottom: 0 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' }}>
+                    <Text style={{ color: '#4ade80', fontSize: 11, fontWeight: '800', letterSpacing: 1.4, flex: 1 }}>🏆 SmartPlay AI — ROUND SUMMARY</Text>
+                    {/* Voice replay */}
+                    <Pressable
+                      onPress={() => void voiceSpeak(roundSummary.voiceSummary, 'calm')}
+                      style={({ pressed }) => ({ padding: 7, borderRadius: 8, backgroundColor: pressed ? 'rgba(74,222,128,0.15)' : 'transparent' })}>
+                      <Text style={{ fontSize: 18 }}>🔊</Text>
+                    </Pressable>
                   </View>
-                  {roundSummary.bias && (
-                    <View style={{ alignItems: 'center' }}>
-                      <Text style={{
-                        color: roundSummary.bias === 'right' ? '#fca5a5' : roundSummary.bias === 'left' ? '#93c5fd' : '#6ee7b7',
-                        fontSize: 32, fontWeight: '900', textTransform: 'uppercase',
-                      }}>{roundSummary.bias}</Text>
-                      <Text style={{ color: '#6b7280', fontSize: 11, fontWeight: '700', letterSpacing: 0.8 }}>MISS TREND</Text>
+
+                  {/* ── SCORE BAR ── */}
+                  <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 14, gap: 0, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' }}>
+                    {/* Total shots */}
+                    <View style={{ flex: 1, alignItems: 'center' }}>
+                      <Text style={{ color: '#fff', fontSize: 30, fontWeight: '900' }}>{roundSummary.totalShots}</Text>
+                      <Text style={{ color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 0.8 }}>SHOTS</Text>
                     </View>
-                  )}
-                  {roundSummary.biasConfidence != null && (
-                    <View style={{ alignItems: 'center' }}>
-                      <Text style={{ color: '#facc15', fontSize: 32, fontWeight: '900' }}>{roundSummary.biasConfidence}%</Text>
-                      <Text style={{ color: '#6b7280', fontSize: 11, fontWeight: '700', letterSpacing: 0.8 }}>CONFIDENCE</Text>
+                    {/* Holes */}
+                    <View style={{ flex: 1, alignItems: 'center' }}>
+                      <Text style={{ color: '#fff', fontSize: 30, fontWeight: '900' }}>{roundSummary.totalHoles}</Text>
+                      <Text style={{ color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 0.8 }}>HOLES</Text>
                     </View>
-                  )}
+                    {/* Score vs par */}
+                    {roundSummary.scoreToPar !== null && (
+                      <View style={{ flex: 1, alignItems: 'center' }}>
+                        <Text style={{
+                          color: roundSummary.scoreToPar < 0 ? '#4ade80' : roundSummary.scoreToPar === 0 ? '#fff' : '#f87171',
+                          fontSize: 30, fontWeight: '900',
+                        }}>
+                          {roundSummary.scoreToPar === 0 ? 'E' : roundSummary.scoreToPar > 0 ? `+${roundSummary.scoreToPar}` : roundSummary.scoreToPar}
+                        </Text>
+                        <Text style={{ color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 0.8 }}>vs PAR</Text>
+                      </View>
+                    )}
+                    {/* Straight % */}
+                    <View style={{ flex: 1, alignItems: 'center' }}>
+                      <Text style={{ color: '#4ade80', fontSize: 30, fontWeight: '900' }}>{roundSummary.straightPct}%</Text>
+                      <Text style={{ color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 0.8 }}>ON TARGET</Text>
+                    </View>
+                  </View>
+
+                  {/* ── DIRECTION BAR ── */}
+                  <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14, gap: 4 }}>
+                    <View style={{ flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', gap: 2 }}>
+                      <View style={{ flex: roundSummary.leftPct,     backgroundColor: '#3b82f6' }} />
+                      <View style={{ flex: roundSummary.straightPct, backgroundColor: '#4ade80' }} />
+                      <View style={{ flex: roundSummary.rightPct,    backgroundColor: '#f59e0b' }} />
+                    </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 3 }}>
+                      <Text style={{ color: '#3b82f6', fontSize: 10, fontWeight: '700' }}>← Left {roundSummary.leftPct}%</Text>
+                      <Text style={{ color: '#4ade80', fontSize: 10, fontWeight: '700' }}>↑ Straight {roundSummary.straightPct}%</Text>
+                      <Text style={{ color: '#f59e0b', fontSize: 10, fontWeight: '700' }}>Right → {roundSummary.rightPct}%</Text>
+                    </View>
+                  </View>
                 </View>
-                {/* Key message */}
-                <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(110,231,183,0.2)', paddingTop: 10, width: '100%' }}>
-                  <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '700', textAlign: 'center', lineHeight: 20 }}>
-                    {roundSummary.keyMessage}
+
+                {/* ── KEY INSIGHT ── */}
+                <View style={{ backgroundColor: '#0a1e12', borderRadius: 14, borderWidth: 1, borderColor: '#1a4a2e', marginTop: 10, padding: 14 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <Text style={{ fontSize: 18 }}>💡</Text>
+                    <Text style={{ color: '#6ee7b7', fontSize: 10, fontWeight: '800', letterSpacing: 1.2 }}>KEY INSIGHT</Text>
+                  </View>
+                  <Text style={{ color: '#d1fae5', fontSize: 14, fontWeight: '700', lineHeight: 20 }}>
+                    {roundSummary.keyInsight}
                   </Text>
                 </View>
-                {/* Share text */}
-                <View style={{ marginTop: 12, backgroundColor: 'rgba(16,185,129,0.10)', borderRadius: 10,
-                  paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(110,231,183,0.25)',
-                  width: '100%', alignItems: 'center' }}>
-                  <Text style={{ color: '#6ee7b7', fontSize: 13, fontWeight: '700', textAlign: 'center' }}>
-                    🏌️ You saved strokes today with AI Caddie
-                  </Text>
-                  <Text style={{ color: 'rgba(110,231,183,0.45)', fontSize: 10, marginTop: 2, letterSpacing: 0.5 }}>
-                    SmartPlay Caddie · smartplaycaddie.com
-                  </Text>
+
+                {/* ── STRENGTH + FOCUS (side by side) ── */}
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                  {/* Strength */}
+                  <View style={{ flex: 1, backgroundColor: '#0a1e12', borderRadius: 14, borderWidth: 1, borderColor: '#166534', padding: 12 }}>
+                    <Text style={{ fontSize: 16, marginBottom: 4 }}>💪</Text>
+                    <Text style={{ color: '#4ade80', fontSize: 10, fontWeight: '800', letterSpacing: 1 }}>STRENGTH</Text>
+                    {roundSummary.strengthClub ? (
+                      <>
+                        <Text style={{ color: '#A7F3D0', fontSize: 15, fontWeight: '800', marginTop: 4 }}>
+                          {roundSummary.strengthClub}
+                        </Text>
+                        <Text style={{ color: '#6ee7b7', fontSize: 12, fontWeight: '700', marginTop: 2 }}>
+                          {roundSummary.strengthPct}% on target
+                        </Text>
+                      </>
+                    ) : (
+                      <Text style={{ color: '#4a7c5e', fontSize: 12, marginTop: 4 }}>Keep building data</Text>
+                    )}
+                  </View>
+                  {/* Focus area */}
+                  <View style={{ flex: 1, backgroundColor: '#1a0a0a', borderRadius: 14, borderWidth: 1, borderColor: '#7f1d1d', padding: 12 }}>
+                    <Text style={{ fontSize: 16, marginBottom: 4 }}>📍</Text>
+                    <Text style={{ color: '#f87171', fontSize: 10, fontWeight: '800', letterSpacing: 1 }}>FOCUS AREA</Text>
+                    <Text style={{ color: '#fca5a5', fontSize: 13, fontWeight: '700', marginTop: 4, lineHeight: 17 }}>
+                      {roundSummary.focusArea}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* ── PRACTICE TIP ── */}
+                <View style={{ backgroundColor: '#10182a', borderRadius: 14, borderWidth: 1, borderColor: '#1e3a5f', marginTop: 8, padding: 14, flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+                  <Text style={{ fontSize: 18, marginTop: 2 }}>📋</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: '#93c5fd', fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 4 }}>PRACTICE TIP</Text>
+                    <Text style={{ color: '#dbeafe', fontSize: 13, fontWeight: '600', lineHeight: 18 }}>
+                      {roundSummary.practiceTip}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* ── WEAKEST CLUB (if data) ── */}
+                {roundSummary.weakestClub && (
+                  <View style={{ backgroundColor: '#131004', borderRadius: 14, borderWidth: 1, borderColor: '#3d2f00', marginTop: 8, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Text style={{ fontSize: 16 }}>⚠️</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: '#fcd34d', fontSize: 10, fontWeight: '800', letterSpacing: 1 }}>NEEDS WORK</Text>
+                      <Text style={{ color: '#fef9c3', fontSize: 13, fontWeight: '700', marginTop: 2 }}>
+                        {roundSummary.weakestClub} — {roundSummary.weakestPct}% on target
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* ── ACTIONS ── */}
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
                   <Pressable
                     onPress={() => handleShareRoundSummary(roundSummary)}
                     style={({ pressed }) => ({
-                      marginTop: 10, backgroundColor: pressed ? '#14532d' : '#16a34a',
-                      borderRadius: 8, paddingVertical: 6, paddingHorizontal: 18,
-                    })}
-                  >
-                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Share Round Summary</Text>
+                      flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center',
+                      backgroundColor: pressed ? '#14532d' : '#16a34a',
+                      borderWidth: 1.5, borderColor: '#4ade80',
+                    })}>
+                    <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>📤 Share Summary</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => void voiceSpeak(roundSummary.voiceSummary, 'calm')}
+                    style={({ pressed }) => ({
+                      paddingVertical: 12, paddingHorizontal: 18, borderRadius: 12, alignItems: 'center',
+                      backgroundColor: pressed ? '#0d2b1e' : '#0a1e12',
+                      borderWidth: 1.5, borderColor: '#4a7c5e',
+                    })}>
+                    <Text style={{ color: '#6ee7b7', fontSize: 13, fontWeight: '800' }}>🔊 Replay</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setRoundSummary(null)}
+                    style={({ pressed }) => ({
+                      paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center',
+                      backgroundColor: pressed ? '#1a1a1a' : 'transparent',
+                      borderWidth: 1, borderColor: '#374151',
+                    })}>
+                    <Text style={{ color: '#6b7280', fontSize: 13, fontWeight: '700' }}>✕</Text>
                   </Pressable>
                 </View>
-                <Pressable onPress={() => setRoundSummary(null)}
-                  style={{ marginTop: 10 }}>
-                  <Text style={{ color: 'rgba(110,231,183,0.4)', fontSize: 11 }}>Dismiss</Text>
-                </Pressable>
               </View>
             )}
             <Image source={LOGO} style={{ width: 80, height: 80, borderRadius: 999, marginBottom: 20 }} resizeMode="cover" />
             <Text style={{ color: '#A7F3D0', fontSize: 22, fontWeight: '800', marginBottom: 8, textAlign: 'center' }}>Course Mode</Text>
-            <Text style={{ color: '#6ee7b7', fontSize: 13, textAlign: 'center', marginBottom: 28, lineHeight: 20 }}>Tap Start Round to activate live GPS distances, club recommendations, and swing coaching.</Text>
+            <Text style={{ color: '#6ee7b7', fontSize: 13, textAlign: 'center', marginBottom: 16, lineHeight: 20 }}>Tap Start Round to activate live GPS distances, club recommendations, and swing coaching.</Text>
+            {/* 9 / 18 hole selector */}
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+              {([9, 18] as const).map((n) => (
+                <Pressable key={n} onPress={() => setRoundLength(n)}
+                  style={{ flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center',
+                    backgroundColor: roundLength === n ? '#1a3a2a' : '#1a1a1a',
+                    borderWidth: 2, borderColor: roundLength === n ? '#4ade80' : '#333' }}>
+                  <Text style={{ color: roundLength === n ? '#A7F3D0' : '#666', fontSize: 16, fontWeight: '800' }}>{n}</Text>
+                  <Text style={{ color: roundLength === n ? '#6ee7b7' : '#555', fontSize: 10, fontWeight: '600', marginTop: 2 }}>HOLES</Text>
+                </Pressable>
+              ))}
+            </View>
             <Pressable
               onPress={startRound}
               style={({ pressed }) => ({ backgroundColor: pressed ? '#14532d' : '#16a34a', borderRadius: 16, paddingVertical: 15, paddingHorizontal: 36, borderWidth: 2, borderColor: '#4ade80' })}>
-              <Text style={{ color: '#fff', fontSize: 17, fontWeight: '800' }}>⛳ Start Round</Text>
+              <Text style={{ color: '#fff', fontSize: 17, fontWeight: '800' }}>? Start Round</Text>
             </Pressable>
           </View>
         ) : (
           <View style={{ backgroundColor: '#111', borderRadius: 28, padding: 24, alignItems: 'center', borderWidth: 2, borderColor: '#2e7d32', width: watchCardW, shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 8 }}>
-            <Text style={{ color: '#ccc', fontSize: 13, fontWeight: '700', letterSpacing: 1.5, marginBottom: 4 }}>HOLE {currentHoleData.hole} — PAR {currentHoleData.par}</Text>
+            <Text style={{ color: '#ccc', fontSize: 13, fontWeight: '700', letterSpacing: 1.5, marginBottom: 4 }}>HOLE {currentHoleData.hole} ? PAR {currentHoleData.par}</Text>
             <Text style={{ color: '#fff', fontSize: watchCardFontSz, fontWeight: '800', lineHeight: watchCardFontSz + 6 }}>
               {targetDistance ?? currentHoleData.distance}
             </Text>
             <Text style={{ color: '#ccc', fontSize: 13, marginBottom: 12 }}>yds to middle</Text>
-            {/* Caddie Adjusted indicator — visible when swing-tendency strategy is active */}
+            {/* Caddie Adjusted indicator ? visible when swing-tendency strategy is active */}
             {getCaddieDecision().strategyAdjusted && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4,
                 backgroundColor: 'rgba(134,239,172,0.12)', borderRadius: 8,
@@ -5129,7 +5838,7 @@ export default function PlayScreenClean() {
               <Text style={{ color: '#A7F3D0', fontSize: 18, fontWeight: '700' }}>{recommendedClub}</Text>
             </View>
             <Text style={{ color: '#ccc', fontSize: 13, textAlign: 'center', marginBottom: 16 }}>Strokes: {strokes}</Text>
-            {/* Swing tempo readout — updates live on detected swings */}
+            {/* Swing tempo readout ? updates live on detected swings */}
             {swingTempoLabel && (
               <View style={{
                 backgroundColor:
@@ -5138,18 +5847,18 @@ export default function PlayScreenClean() {
                 borderRadius: 10, paddingHorizontal: 14, paddingVertical: 5, marginBottom: 8,
               }}>
                 <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>
-                  {swingTempoLabel === 'smooth' ? '✅ Good tempo' :
-                   swingTempoLabel === 'fast'   ? '⚡ Quick' : '🐢 Slow'}
+                  {swingTempoLabel === 'smooth' ? '? Good tempo' :
+                   swingTempoLabel === 'fast'   ? '? Quick' : '?? Slow'}
                 </Text>
               </View>
             )}
-            {/* Gyro rotation readout — wrist + body from last swing */}
+            {/* Gyro rotation readout ? wrist + body from last swing */}
             {lastSwingAnalysis && (
               <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
                 <View style={{ backgroundColor: '#1a2e1a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, alignItems: 'center' }}>
                   <Text style={{ color: '#aaa', fontSize: 9, textTransform: 'uppercase' }}>Body</Text>
                   <Text style={{ color: lastSwingAnalysis.bodyRotation === 'good' ? '#66bb6a' : '#f9a825', fontSize: 11, fontWeight: '700' }}>
-                    {lastSwingAnalysis.bodyRotation === 'good' ? '✅ Good' : lastSwingAnalysis.bodyRotation === 'over' ? '⚠️ Over' : '↓ Low'}
+                    {lastSwingAnalysis.bodyRotation === 'good' ? '? Good' : lastSwingAnalysis.bodyRotation === 'over' ? '?? Over' : '? Low'}
                   </Text>
                 </View>
                 <View style={{ backgroundColor: '#1a2e1a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, alignItems: 'center' }}>
@@ -5167,7 +5876,7 @@ export default function PlayScreenClean() {
               </View>
             )}
             <Text style={{ color: swingDetector.isActive ? '#4caf50' : '#aaa', fontSize: 11, marginBottom: 10 }}>
-              {swingDetector.isActive ? `📡 Motion + Gyro · ${swingDetector.swingCount} swing${swingDetector.swingCount !== 1 ? 's' : ''}` : '📡 Motion off'}
+              {swingDetector.isActive ? `?? Motion + Gyro ? ${swingDetector.swingCount} swing${swingDetector.swingCount !== 1 ? 's' : ''}` : '?? Motion off'}
             </Text>
             <Pressable
               onPress={() => setWatchMode(false)}
@@ -5180,7 +5889,7 @@ export default function PlayScreenClean() {
       </View>
     )}
 
-    {/* ── Mode toggle: absolute, always visible, upper-left ─────────────── */}
+    {/* -- Mode toggle: absolute, always visible, upper-left --------------- */}
     {!watchMode && (
       <View style={{
         position: 'absolute', top: 10, left: 12, zIndex: 100,
@@ -5215,7 +5924,7 @@ export default function PlayScreenClean() {
       </View>
     )}
 
-    {/* ── Clean play screen (no scroll) ────────────────────────────────────── */}
+    {/* -- Clean play screen (no scroll) -------------------------------------- */}
     {!watchMode && !showDetails && !isRoundActive && (
       <View style={{ flex: 1, backgroundColor: highContrast ? '#000' : '#0B3D2E', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28, paddingBottom: Math.max(tabBarHeight, 16) }}>
         <Image source={LOGO} style={{ width: 90, height: 90, borderRadius: 999, marginBottom: 24 }} resizeMode="cover" />
@@ -5225,11 +5934,11 @@ export default function PlayScreenClean() {
           onPress={startRound}
           style={({ pressed }) => ({ backgroundColor: pressed ? '#14532d' : '#16a34a', borderRadius: 16, paddingVertical: 16, paddingHorizontal: 40, borderWidth: 2, borderColor: '#4ade80',
             shadowColor: '#4ade80', shadowOpacity: 0.5, shadowRadius: 12, elevation: 8 })}>
-          <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: 0.8 }}>⛳ Start Round</Text>
+          <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: 0.8 }}>? Start Round</Text>
         </Pressable>
-        <Text style={{ color: '#2d6a4f', fontSize: 12, marginTop: 20 }}>Hole {hole} · {activeCourse.name}</Text>
+        <Text style={{ color: '#2d6a4f', fontSize: 12, marginTop: 20 }}>Hole {hole} ? {activeCourse.name}</Text>
 
-        {/* Post-round insights — shown after a round completes */}
+        {/* Post-round insights ? shown after a round completes */}
         {(aiRoundInsights || holeStatsLog.length > 0) && (() => {
           const sg = calculateStrokesGained(shots);
           return (
@@ -5259,722 +5968,728 @@ export default function PlayScreenClean() {
       </View>
     )}
     {!watchMode && !showDetails && isRoundActive && (
-      <View
-        style={[{ flex: 1, backgroundColor: highContrast ? '#000' : '#0B3D2E' }, debugStyle]}
-      >
+      <View style={{ flex: 1, backgroundColor: highContrast ? '#000' : '#0B3D2E' }}>
 
-        {/* Swing toast (absolute so it floats over all sections) */}
-        {swingToast && (
+
+        {/* Post-shot overlay � direction + micro insight, auto-dismisses */}
+        {shotOverlay && (() => {
+          const dir = shotOverlay.direction;
+          const arrowColor = dir === 'left' ? '#ef4444' : dir === 'right' ? '#f59e0b' : '#6ee7b7';
+          const arrow = dir === 'left' ? '? LEFT' : dir === 'right' ? 'RIGHT ?' : '? STRAIGHT';
+          const bg = dir === 'left' ? 'rgba(127,29,29,0.97)' : dir === 'right' ? 'rgba(120,53,15,0.97)' : 'rgba(6,78,59,0.97)';
+          return (
+            <View style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000,
+              justifyContent: 'center', alignItems: 'center',
+              backgroundColor: 'rgba(0,0,0,0.52)',
+            }}>
+              <View style={{ backgroundColor: bg, borderRadius: 20, paddingHorizontal: 32, paddingVertical: 28, alignItems: 'center', minWidth: 220, gap: 10,
+                borderWidth: 2, borderColor: arrowColor,
+                shadowColor: arrowColor, shadowOpacity: 0.6, shadowRadius: 28, elevation: 20 }}>
+                <Text style={{ color: arrowColor, fontSize: 34, fontWeight: '900', letterSpacing: 1 }}>{arrow}</Text>
+                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', textAlign: 'center', opacity: 0.9 }}>{shotOverlay.message}</Text>
+              </View>
+            </View>
+          );
+        })()}
+        {/* ── Auto Shot Detection — Confirmation Overlay ─────────────────────
+             Appears as a floating panel above all content with a 2-second
+             countdown.  User can pick direction or cancel.
+             Auto-confirms as 'straight' when the countdown expires.        */}
+        {swingPending && (
+          <View style={{
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            zIndex: 1200,
+            backgroundColor: 'rgba(0,0,0,0.72)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 24,
+          }}>
+            <View style={{
+              backgroundColor: '#0f2d1f',
+              borderRadius: 20,
+              borderWidth: 1.5,
+              borderColor: '#16a34a',
+              padding: 24,
+              width: '100%',
+              maxWidth: 360,
+              shadowColor: '#4ade80',
+              shadowOpacity: 0.35,
+              shadowRadius: 20,
+              elevation: 12,
+            }}>
+              {/* Header */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 10 }}>
+                <Text style={{ fontSize: 28 }}>🏌️</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: '#4ade80', fontSize: 17, fontWeight: '800', letterSpacing: 0.3 }}>
+                    Shot Detected
+                  </Text>
+                  <Text style={{ color: '#86efac', fontSize: 12, marginTop: 1 }}>
+                    Auto-confirming in 2 seconds — or pick direction
+                  </Text>
+                </View>
+              </View>
+
+              {/* Countdown progress bar */}
+              <View style={{ height: 4, backgroundColor: '#1a3d2a', borderRadius: 2, marginBottom: 20, overflow: 'hidden' }}>
+                <Animated.View style={{
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: '#4ade80',
+                  width: autoConfirmProgress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0%', '100%'],
+                  }),
+                }} />
+              </View>
+
+              {/* Swing info chips */}
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+                <View style={{ backgroundColor: '#162d1e', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#2d6a4f' }}>
+                  <Text style={{ color: '#86efac', fontSize: 11, fontWeight: '700' }}>
+                    {swingPending.tempo === 'smooth' ? '✅ Smooth' : swingPending.tempo === 'fast' ? '⚡ Fast' : '🐢 Slow'} tempo
+                  </Text>
+                </View>
+                <View style={{ backgroundColor: '#162d1e', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#2d6a4f' }}>
+                  <Text style={{ color: '#86efac', fontSize: 11, fontWeight: '700' }}>
+                    {Math.round(swingPending.tempoMs)}ms
+                  </Text>
+                </View>
+                {club ? (
+                  <View style={{ backgroundColor: '#162d1e', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#2d6a4f' }}>
+                    <Text style={{ color: '#86efac', fontSize: 11, fontWeight: '700' }}>{club}</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Direction buttons */}
+              <Text style={{ color: '#6ee7b7', fontSize: 12, fontWeight: '700', letterSpacing: 1, marginBottom: 10 }}>
+                WHERE DID IT GO?
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+                <Pressable
+                  onPress={() => void handleSwingConfirm('left')}
+                  style={({ pressed }) => ({
+                    flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14,
+                    backgroundColor: pressed ? '#1e3a5f' : '#0d2340',
+                    borderWidth: 1.5, borderColor: '#3b82f6',
+                  })}>
+                  <Text style={{ fontSize: 20 }}>←</Text>
+                  <Text style={{ color: '#93c5fd', fontSize: 11, fontWeight: '700', marginTop: 4 }}>LEFT</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => void handleSwingConfirm('center')}
+                  style={({ pressed }) => ({
+                    flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14,
+                    backgroundColor: pressed ? '#14532d' : '#0d2b19',
+                    borderWidth: 1.5, borderColor: '#4ade80',
+                  })}>
+                  <Text style={{ fontSize: 20 }}>↑</Text>
+                  <Text style={{ color: '#4ade80', fontSize: 11, fontWeight: '700', marginTop: 4 }}>STRAIGHT</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => void handleSwingConfirm('right')}
+                  style={({ pressed }) => ({
+                    flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14,
+                    backgroundColor: pressed ? '#1e3a5f' : '#0d2340',
+                    borderWidth: 1.5, borderColor: '#3b82f6',
+                  })}>
+                  <Text style={{ fontSize: 20 }}>→</Text>
+                  <Text style={{ color: '#93c5fd', fontSize: 11, fontWeight: '700', marginTop: 4 }}>RIGHT</Text>
+                </Pressable>
+              </View>
+
+              {/* Cancel */}
+              <Pressable
+                onPress={handleSwingCancel}
+                style={({ pressed }) => ({
+                  alignItems: 'center', paddingVertical: 10, borderRadius: 10,
+                  backgroundColor: pressed ? '#2d1b1b' : 'transparent',
+                  borderWidth: 1, borderColor: '#374151',
+                })}>
+                <Text style={{ color: '#9ca3af', fontSize: 13, fontWeight: '700' }}>✕  Not a shot — cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {/* Swing toast ? floats above everything */}
+        {swingToast && !swingPending && (
           <View style={{
             position: 'absolute', top: 58, left: 14, right: 14, zIndex: 999,
             backgroundColor: swingTempoLabel === 'smooth' ? 'rgba(27,94,32,0.97)' : swingTempoLabel === 'fast' ? 'rgba(127,62,0,0.97)' : 'rgba(26,58,92,0.97)',
             paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12,
             flexDirection: 'row', alignItems: 'center', gap: 8,
           }}>
-            <Text style={{ fontSize: 18 }}>{swingTempoLabel === 'smooth' ? '✅' : swingTempoLabel === 'fast' ? '⚡' : '🔷'}</Text>
+            <Text style={{ fontSize: 18 }}>{swingTempoLabel === 'smooth' ? '?' : swingTempoLabel === 'fast' ? '?' : '??'}</Text>
             <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', flex: 1 }}>{swingToast}</Text>
           </View>
         )}
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: 48, paddingBottom: tabBarHeight + 60 }} keyboardShouldPersistTaps="handled">
-        {/* ── HEADER: Logo mic · Hole · Strategy ─────────────────────────────── */}
-        <View style={[{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 6 }, debugGreen]}>
-          <CaddieMicButton
-            size={52}
-            showLabel={false}
-            context={{ hole: currentHoleData.hole, par: currentHoleData.par, distance: currentHoleData.distance }}
-          />
-          <View style={{ flex: 1, alignItems: 'center' }}>
-            <Pressable onPress={() => setShowCourseSelect((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-              <Text style={{ color: '#6ee7b7', fontSize: 12, fontWeight: '700' }} numberOfLines={1}>{activeCourse.name}</Text>
-              <Text style={{ color: '#4ade80', fontSize: 14 }}>{showCourseSelect ? '▴' : '▾'}</Text>
-            </Pressable>
-            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>
-              H{currentHoleData.hole} · Par {currentHoleData.par}{currentHoleData.note ? <Text style={{ color: '#6ee7b7', fontSize: 12, fontWeight: '400' }}>  {currentHoleData.note}</Text> : null}
+        {/* -- HEADER ROW --------------------------------------------------- */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 48, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#1a5e30' }}>
+          <CaddieMicButton size={40} showLabel={false} context={{ hole: currentHoleData.hole, par: currentHoleData.par, distance: currentHoleData.distance }} />
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <Text style={{ color: '#A7F3D0', fontSize: 15, fontWeight: '800' }}>
+              Hole {currentHoleData.hole} ? Par {currentHoleData.par}
             </Text>
+            <Text style={{ color: '#4a7c5e', fontSize: 11 }} numberOfLines={1}>{activeCourse.name}</Text>
           </View>
+          {/* Strategy toggle pill */}
           <Pressable
             onPress={() => setStrategyMode((s) => s === 'safe' ? 'neutral' : s === 'neutral' ? 'attack' : 'safe')}
-            style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignItems: 'center',
+            style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10,
               backgroundColor: strategyMode === 'attack' ? '#7f1d1d' : strategyMode === 'safe' ? '#1a3a2a' : '#1a1a1a',
               borderWidth: 1, borderColor: strategyMode === 'attack' ? '#f87171' : strategyMode === 'safe' ? '#4ade80' : '#6b7280' }}>
             <Text style={{ color: strategyMode === 'attack' ? '#f87171' : strategyMode === 'safe' ? '#4ade80' : '#d1d5db', fontSize: 12, fontWeight: '800' }}>
-              {strategyMode === 'attack' ? '🔥 ATK' : strategyMode === 'safe' ? '🛡 SAFE' : '⚖️ NEU'}
+              {strategyMode === 'attack' ? '?? ATK' : strategyMode === 'safe' ? '?? SAFE' : '?? NEU'}
             </Text>
           </Pressable>
         </View>
 
-        {/* Inline course selector — expands when course name tapped */}
-        {showCourseSelect && (
-          <View style={{ marginHorizontal: 16, marginBottom: 6, backgroundColor: '#0d1f14', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', padding: 8 }}>
-            {COURSE_DB.map((course, idx) => (
-              <Pressable
-                key={idx}
-                onPress={() => {
-                  const h1 = COURSE_DB[idx].holes[0];
-                  setSelectedCourseIdx(idx);
-                  setActiveCourse(COURSE_DB[idx].name);
-                  setHole(1);
-                  setStrokes(h1.par);
-                  setPar(h1.par);
-                  setDistance(String(h1.distance));
-                  setLastShotBadge(null);
-                  setShowCourseSelect(false);
-                  void voiceSpeak(`${course.name} selected.`, 'calm');
-                }}
-                style={({ pressed }) => ({
-                  flexDirection: 'row', alignItems: 'center',
-                  backgroundColor: idx === selectedCourseIdx ? '#1b5e20' : pressed ? '#222' : 'transparent',
-                  borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 2,
-                  borderWidth: 1, borderColor: idx === selectedCourseIdx ? '#66bb6a' : 'transparent',
-                })}
-              >
-                <Text style={{ color: idx === selectedCourseIdx ? '#fff' : '#A7F3D0', fontWeight: idx === selectedCourseIdx ? '700' : '400', fontSize: 13, flex: 1 }}>{course.name}</Text>
-                {idx === selectedCourseIdx && <Text style={{ color: '#66bb6a' }}>✓</Text>}
-              </Pressable>
-            ))}
-          </View>
-        )}
+        {/* -- BODY: fixed layout, no scroll -------------------------------- */}
+        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12, paddingBottom: tabBarHeight + 12, justifyContent: 'space-between' }}>
 
-        {/* ── SECTION 1: DISTANCE BLOCK ─────────────────────────────────────── */}
-        <View style={[{ alignItems: 'center', paddingHorizontal: 16, marginBottom: 6 }, debugBlue]}>
-
-          {/* BIG: distance */}
-          <Text style={{ color: '#ffffff', fontSize: distFontSz, fontWeight: '900', lineHeight: distLineH, letterSpacing: -3 }}>
-            {targetDistance ?? gpsYards?.middle ?? currentHoleData.distance}
-          </Text>
-
-          {/* Source label */}
-          <Text style={{ color: gpsWeak ? '#f59e0b' : gpsYards ? '#4ade80' : '#6ee7b7', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: -2, marginBottom: 4 }}>
-            {gpsWeak ? '⚠️ GPS WEAK' : gpsYards ? '📡 GPS · MID' : 'YDS TO PIN'}
-          </Text>
-
-          {/* SMALL: front / back — only when GPS active */}
-          {gpsYards && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18, marginBottom: 8 }}>
-              <View style={{ alignItems: 'center' }}>
-                <Text style={{ color: '#94a3b8', fontSize: 20, fontWeight: '700' }}>{gpsYards.front ?? '--'}</Text>
-                <Text style={{ color: '#64748b', fontSize: 9, fontWeight: '800', letterSpacing: 1 }}>FRONT</Text>
-              </View>
-              <View style={{ width: 1, height: 28, backgroundColor: 'rgba(255,255,255,0.1)' }} />
-              <View style={{ alignItems: 'center' }}>
-                <Text style={{ color: '#94a3b8', fontSize: 20, fontWeight: '700' }}>{gpsYards.back ?? '--'}</Text>
-                <Text style={{ color: '#64748b', fontSize: 9, fontWeight: '800', letterSpacing: 1 }}>BACK</Text>
-              </View>
-            </View>
-          )}
-
-          {/* No GPS — start button */}
-          {!gpsYards && (
-            <Pressable onPress={startGpsWatch} style={{ marginBottom: 8, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 6 }}>
-              <Text style={{ color: '#4caf50', fontSize: 12, fontWeight: '700' }}>📍 Start GPS</Text>
+          {/* 1. DISTANCE */}
+          <View style={{ alignItems: 'center' }}>
+            <YardageDisplay
+              front={gpsYards?.front ?? null}
+              middle={targetDistance ?? gpsYards?.middle ?? currentHoleData.distance ?? null}
+              back={gpsYards?.back ?? null}
+              size="large"
+              weak={gpsWeak}
+            />
+            {/* Score vs par badge */}
+            {(() => {
+              const roundSoFar = round.slice(0, hole - 1);
+              const parsSoFar  = roundPars.slice(0, hole - 1);
+              if (roundSoFar.length === 0) return null;
+              const scoredStrokes = roundSoFar.reduce((a, b) => a + b, 0);
+              const scoredPar    = parsSoFar.reduce((a, b) => a + b, 0);
+              const diff = scoredStrokes - scoredPar;
+              const label = diff === 0 ? 'E' : diff > 0 ? `+${diff}` : `${diff}`;
+              const col   = diff < 0 ? '#4ade80' : diff === 0 ? '#A7F3D0' : '#f87171';
+              return (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <Text style={{ color: '#9CA3AF', fontSize: 11 }}>Hole {hole}</Text>
+                  <Text style={{ color: col, fontSize: 12, fontWeight: '800' }}>{label}</Text>
+                </View>
+              );
+            })()}
+            {/* Recommended club */}
+            <Pressable
+              onPress={() => setShowClubStrip((v) => !v)}
+              style={{ marginTop: 6, backgroundColor: '#1b5e20', borderRadius: 20, paddingHorizontal: 20, paddingVertical: 5, borderWidth: 1, borderColor: '#4caf50' }}>
+              <Text style={{ color: '#A7F3D0', fontSize: 15, fontWeight: '800' }}>{recommendedClub} {showClubStrip ? '?' : '?'}</Text>
             </Pressable>
-          )}
+            {showClubStrip && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6, maxHeight: 52 }}>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  {(() => {
+                    const yardMap = Object.fromEntries(getClubYardageMap());
+                    return ['Driver','3 Wood','5 Wood','4 Iron','5 Iron','6 Iron','7 Iron','8 Iron','9 Iron','PW','GW','SW','LW','Putter'].map((c) => (
+                      <Pressable key={c} onPress={() => { setClub(c); setShowClubStrip(false); }}
+                        style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, alignItems: 'center',
+                          backgroundColor: club === c ? '#2e7d32' : '#1a1a1a',
+                          borderWidth: 1, borderColor: club === c ? '#4caf50' : '#2a2a2a' }}>
+                        <Text style={{ color: club === c ? '#fff' : '#A7F3D0', fontSize: 12, fontWeight: '700' }}>{c.replace(' Wood','W').replace(' Iron','i')}</Text>
+                        <Text style={{ color: club === c ? '#86efac' : '#4a7c5e', fontSize: 10 }}>{yardMap[c] ?? '?'}</Text>
+                      </Pressable>
+                    ));
+                  })()}
+                </View>
+              </ScrollView>
+            )}
+          </View>
 
-          {/* Recommended club pill — tap to open club strip */}
-          <Pressable
-            onPress={() => setShowClubStrip((v) => !v)}
-            style={{ backgroundColor: '#1b5e20', borderRadius: 20, paddingHorizontal: 20, paddingVertical: 6, marginBottom: 8, borderWidth: 1, borderColor: '#4caf50' }}>
-            <Text style={{ color: '#A7F3D0', fontSize: 16, fontWeight: '800' }}>{recommendedClub} {showClubStrip ? '▴' : '▾'}</Text>
-          </Pressable>
-          {/* Club chip strip — shown on demand */}
-          {showClubStrip && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8, maxHeight: 56 }}>
-              <View style={{ flexDirection: 'row', gap: 6, paddingVertical: 2 }}>
-                {(() => {
-                  const yardMap = Object.fromEntries(getClubYardageMap());
-                  return ['Driver','3 Wood','5 Wood','4 Iron','5 Iron','6 Iron','7 Iron','8 Iron','9 Iron','PW','GW','SW','LW','Putter'].map((c) => (
-                    <Pressable key={c} onPress={() => { setClub(c); setShowClubStrip(false); }}
-                      style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignItems: 'center',
-                        backgroundColor: club === c ? '#2e7d32' : '#1a1a1a',
-                        borderWidth: 1, borderColor: club === c ? '#4caf50' : '#2a2a2a' }}>
-                      <Text style={{ color: club === c ? '#fff' : '#A7F3D0', fontSize: 13, fontWeight: '700' }}>
-                        {c.replace(' Wood','W').replace(' Iron','i')}
+          {/* 2. ONE-LINE STRATEGY */}
+          <View style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: '#1a5e30' }}>
+            <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '700', textAlign: 'center' }} numberOfLines={1}>
+              {decision.aimLabel ? `${decision.club} ? ${decision.aimLabel}` : caddieMessage || 'Commit to your target.'}
+            </Text>
+            {decision.miss ? (
+              <Text style={{ color: decision.missColor, fontSize: 11, textAlign: 'center', marginTop: 2 }}>{decision.miss}</Text>
+            ) : null}
+          </View>
+
+          {/* ── HOLE STRATEGY ──────────────────────────────────────────── */}
+          {(() => {
+            const hs = holeStrategy;
+            if (!hs) return null;
+            const isAggressive = hs.adjustedFor === 'aggressive';
+            const isMissAdjusted = hs.adjustedFor === 'miss_right' || hs.adjustedFor === 'miss_left';
+            const safeMissArrow  = hs.safeMiss === 'left' ? '←' : hs.safeMiss === 'right' ? '→' : null;
+            const safeMissColor  = hs.safeMiss === 'left' ? '#93c5fd' : hs.safeMiss === 'right' ? '#f59e0b' : '#6ee7b7';
+            return (
+              <View style={{ backgroundColor: 'rgba(10,26,18,0.90)', borderRadius: 14, borderWidth: 1, borderColor: '#1a4a2e', overflow: 'hidden', marginBottom: 0 }}>
+                {/* Header row */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' }}>
+                  <Text style={{ color: '#6ee7b7', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, flex: 1 }}>🗺️ HOLE STRATEGY</Text>
+                  {/* Adjusted-for badge */}
+                  {isMissAdjusted && (
+                    <View style={{ backgroundColor: 'rgba(245,158,11,0.15)', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, marginRight: 6, borderWidth: 1, borderColor: 'rgba(245,158,11,0.35)' }}>
+                      <Text style={{ color: '#fcd34d', fontSize: 9, fontWeight: '800' }}>
+                        👁️ adapted for your tendency
                       </Text>
-                      <Text style={{ color: club === c ? '#86efac' : '#6ee7b7', fontSize: 10, marginTop: 1 }}>
-                        {yardMap[c] ?? '—'}
+                    </View>
+                  )}
+                  {isAggressive && (
+                    <View style={{ backgroundColor: 'rgba(74,222,128,0.12)', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, marginRight: 6, borderWidth: 1, borderColor: 'rgba(74,222,128,0.3)' }}>
+                      <Text style={{ color: '#4ade80', fontSize: 9, fontWeight: '800' }}>🎯 aggressive</Text>
+                    </View>
+                  )}
+                  {/* Voice replay button */}
+                  <Pressable
+                    onPress={() => void voiceSpeak(hs.voiceLine, 'calm')}
+                    style={({ pressed }) => ({
+                      padding: 6, borderRadius: 8,
+                      backgroundColor: pressed ? 'rgba(110,231,183,0.15)' : 'transparent',
+                    })}>
+                    <Text style={{ fontSize: 16 }}>🔊</Text>
+                  </Pressable>
+                </View>
+
+                <View style={{ padding: 14, gap: 10 }}>
+                  {/* Headline */}
+                  <Text style={{ color: '#A7F3D0', fontSize: 15, fontWeight: '800', letterSpacing: 0.2 }}>
+                    {hs.headline}
+                  </Text>
+
+                  {/* Stat chips row */}
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+                    {/* Tee club */}
+                    {hs.teeClub && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(74,222,128,0.10)', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(74,222,128,0.25)', gap: 4 }}>
+                        <Text style={{ fontSize: 12 }}>🏌️</Text>
+                        <Text style={{ color: '#86efac', fontSize: 11, fontWeight: '700' }}>{hs.teeClub}</Text>
+                      </View>
+                    )}
+                    {/* Target zone */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)', gap: 4 }}>
+                      <Text style={{ fontSize: 12 }}>🎯</Text>
+                      <Text style={{ color: '#d1fae5', fontSize: 11, fontWeight: '600' }}>{hs.targetZone}</Text>
+                    </View>
+                    {/* Safe-miss direction */}
+                    {safeMissArrow && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: `${safeMissColor}44`, gap: 4 }}>
+                        <Text style={{ color: safeMissColor, fontSize: 14 }}>{safeMissArrow}</Text>
+                        <Text style={{ color: safeMissColor, fontSize: 11, fontWeight: '700' }}>Miss {hs.safeMiss}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Approach / layup note */}
+                  {hs.approach.length > 0 && (
+                    <View style={{ backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 9, padding: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' }}>
+                      <Text style={{ color: '#9ca3af', fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginBottom: 3 }}>
+                        {hs.parLabel === 'Par 3' ? 'SHOT NOTE' : hs.parLabel === 'Par 5' ? 'LAYUP / 2ND SHOT' : 'APPROACH TARGET'}
+                      </Text>
+                      <Text style={{ color: '#d1fae5', fontSize: 12, fontWeight: '600', lineHeight: 17 }}>{hs.approach}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            );
+          })()}
+
+          {/* ── CADDIE RECOMMENDATION ───────────────────────────────────── */}
+          <View style={{ backgroundColor: 'rgba(11,61,46,0.85)', borderRadius: 14, borderWidth: 1, borderColor: '#1e5e38', overflow: 'hidden' }}>
+            {/* Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 10, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' }}>
+              <Text style={{ color: '#4ade80', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, flex: 1 }}>⛳ CADDIE RECOMMENDATION</Text>
+              {/* Mode badge — always shown */}
+              {(() => {
+                const m = getPlayModeDisplay(engineDecision.situation?.playMode ?? 'neutral');
+                return (
+                  <View style={{ backgroundColor: m.bg, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, marginRight: 5 }}>
+                    <Text style={{ color: m.color, fontSize: 9, fontWeight: '800' }}>{m.icon} {m.label}</Text>
+                  </View>
+                );
+              })()}
+              {engineDecision.lieAdjustment > 0 && (
+                <View style={{ backgroundColor: 'rgba(245,158,11,0.18)', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+                  <Text style={{ color: '#fcd34d', fontSize: 9, fontWeight: '700' }}>+{engineDecision.lieAdjustment} YDS ({lieType.toUpperCase()})</Text>
+                </View>
+              )}
+            </View>
+            {/* Body */}
+            <View style={{ paddingHorizontal: 14, paddingVertical: 10, gap: 6 }}>
+              {/* Lie selector */}
+              <View style={{ flexDirection: 'row', gap: 6, marginBottom: 4 }}>
+                {(['tee', 'fairway', 'rough', 'bunker'] as const).map((l) => (
+                  <Pressable key={l} onPress={() => setLieType(l)}
+                    style={{ flex: 1, paddingVertical: 5, borderRadius: 8, alignItems: 'center',
+                      backgroundColor: lieType === l ? '#166534' : 'rgba(255,255,255,0.05)',
+                      borderWidth: 1, borderColor: lieType === l ? '#4ade80' : 'rgba(255,255,255,0.1)' }}>
+                    <Text style={{ color: lieType === l ? '#A7F3D0' : '#6b7280', fontSize: 10, fontWeight: '700' }}>
+                      {l === 'tee' ? '🏌️' : l === 'fairway' ? '🌿' : l === 'rough' ? '🌾' : '🏖️'} {l[0].toUpperCase() + l.slice(1)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {/* ── PLAYS LIKE ─────────────────────────────────────────── */}
+              {engineDecision.playsLike != null && (
+                <View style={{ backgroundColor: 'rgba(6,78,59,0.5)', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: 'rgba(74,222,128,0.2)' }}>
+                  {/* Raw → Plays Like */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={{ color: '#6b7280', fontSize: 11, fontWeight: '700' }}>Raw</Text>
+                    <Text style={{ color: '#9ca3af', fontSize: 16, fontWeight: '800' }}>{engineDecision.rawMiddle ?? '--'}</Text>
+                    <Text style={{ color: '#4a7c5e', fontSize: 13 }}>→</Text>
+                    <Text style={{ color: '#4ade80', fontSize: 11, fontWeight: '700' }}>PLAYS LIKE</Text>
+                    <Text style={{ color: '#ffffff', fontSize: 20, fontWeight: '900', flex: 1 }}>{engineDecision.playsLike.playsLikeYardage}</Text>
+                    {engineDecision.playsLike.playsLikeYardage !== engineDecision.rawMiddle && (
+                      <View style={{ backgroundColor: engineDecision.playsLike.playsLikeYardage > (engineDecision.rawMiddle ?? 0) ? 'rgba(239,68,68,0.15)' : 'rgba(74,222,128,0.15)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                        <Text style={{ color: engineDecision.playsLike.playsLikeYardage > (engineDecision.rawMiddle ?? 0) ? '#fca5a5' : '#86efac', fontSize: 10, fontWeight: '800' }}>
+                          {engineDecision.playsLike.playsLikeYardage > (engineDecision.rawMiddle ?? 0) ? '+' : ''}{engineDecision.playsLike.playsLikeYardage - (engineDecision.rawMiddle ?? 0)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  {/* Factor badges */}
+                  <View style={{ flexDirection: 'row', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
+                    {engineDecision.playsLike.windAdjustment !== 0 && (
+                      <View style={{ backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 }}>
+                        <Text style={{ color: '#fcd34d', fontSize: 9, fontWeight: '700' }}>
+                          💨 Wind {engineDecision.playsLike.windAdjustment > 0 ? '+' : ''}{engineDecision.playsLike.windAdjustment} yds
+                        </Text>
+                      </View>
+                    )}
+                    {engineDecision.playsLike.elevationAdjustment !== 0 && (
+                      <View style={{ backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 }}>
+                        <Text style={{ color: '#93c5fd', fontSize: 9, fontWeight: '700' }}>
+                          ⛰️ Elev {engineDecision.playsLike.elevationAdjustment > 0 ? '+' : ''}{engineDecision.playsLike.elevationAdjustment} yds
+                        </Text>
+                      </View>
+                    )}
+                    {engineDecision.playsLike.lieAdjustment !== 0 && (
+                      <View style={{ backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 }}>
+                        <Text style={{ color: '#fca5a5', fontSize: 9, fontWeight: '700' }}>
+                          🌾 Lie +{engineDecision.playsLike.lieAdjustment} yds
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              )}
+
+              {/* ── WIND CONTROLS ──────────────────────────────────────── */}
+              <View style={{ gap: 4 }}>
+                <Text style={{ color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 0.8 }}>💨 WIND</Text>
+                {/* Direction */}
+                <View style={{ flexDirection: 'row', gap: 5 }}>
+                  {(['head', 'cross', 'tail'] as const).map((d) => (
+                    <Pressable key={d} onPress={() => setWindDir(d)}
+                      style={{ flex: 1, paddingVertical: 4, borderRadius: 7, alignItems: 'center',
+                        backgroundColor: windDir === d ? 'rgba(252,211,77,0.18)' : 'rgba(255,255,255,0.04)',
+                        borderWidth: 1, borderColor: windDir === d ? '#fcd34d' : 'rgba(255,255,255,0.08)' }}>
+                      <Text style={{ color: windDir === d ? '#fcd34d' : '#6b7280', fontSize: 10, fontWeight: '700' }}>
+                        {d === 'head' ? '⬆️ Into' : d === 'tail' ? '⬇️ Down' : '↔️ Cross'}
                       </Text>
                     </Pressable>
-                  ));
-                })()}
-              </View>
-            </ScrollView>
-          )}
-          {/* ±10 nudge */}
-          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 6 }}>
-            <Pressable
-              onPress={() => { const cur = parseInt(distance, 10) || (targetDistance ?? currentHoleData?.distance ?? 150); const next = Math.max(10, cur - 10); setDistance(String(next)); setTargetDistance(next); }}
-              style={{ backgroundColor: '#1f2937', borderRadius: 8, paddingHorizontal: 18, paddingVertical: 7, borderWidth: 1, borderColor: '#374151' }}>
-              <Text style={{ color: '#A7F3D0', fontSize: 15, fontWeight: '700' }}>−10</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => { const cur = parseInt(distance, 10) || (targetDistance ?? currentHoleData?.distance ?? 150); const next = Math.min(700, cur + 10); setDistance(String(next)); setTargetDistance(next); }}
-              style={{ backgroundColor: '#1f2937', borderRadius: 8, paddingHorizontal: 18, paddingVertical: 7, borderWidth: 1, borderColor: '#374151' }}>
-              <Text style={{ color: '#A7F3D0', fontSize: 15, fontWeight: '700' }}>+10</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* ── Milestone Banner ───────────────────────────────────────────── */}
-        {milestoneMessage && (
-          <Pressable onPress={() => setMilestoneMessage(null)}
-            style={{ marginHorizontal: 16, marginBottom: 6, borderRadius: 14,
-              backgroundColor: 'rgba(16,185,129,0.15)', borderWidth: 1.5, borderColor: '#10B981',
-              paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Text style={{ fontSize: 20 }}>{shots.length >= 10 ? '🔥' : '⚡'}</Text>
-            <Text style={{ flex: 1, color: '#6ee7b7', fontSize: 13, fontWeight: '700', lineHeight: 18 }}>
-              {milestoneMessage}
-            </Text>
-            <Text style={{ color: 'rgba(110,231,183,0.5)', fontSize: 11 }}>✕</Text>
-          </Pressable>
-        )}
-
-        {/* ── DECISION CARD: Club + Strategy ───────────────────────────────── */}
-        {(() => {
-          // All output comes from the single decision engine
-          const d = decision;
-          const confColor = d.confidence >= 85 ? '#4ade80' : d.confidence >= 70 ? '#facc15' : '#f97316';
-          const confBg = d.confidence >= 85 ? 'rgba(74,222,128,0.15)' : d.confidence >= 70 ? 'rgba(250,204,21,0.15)' : 'rgba(249,115,22,0.15)';
-          const rb = shots.length >= 5 ? getRecentBias() : null;
-          const biasKey = rb ?? d.bias?.bias ?? null;
-          const insightText = biasKey === 'right'
-            ? (rb ? 'Adjust left today — last 5 shots trending right.' : "You're missing right today — aim slightly left.")
-            : biasKey === 'left'
-            ? (rb ? 'Adjust right today — last 5 shots trending left.' : "You're missing left today — aim slightly right.")
-            : biasKey === 'straight' ? 'Straight ball flight — stay the course.'
-            : null;
-          const insightColor = biasKey === 'right' ? '#fca5a5' : biasKey === 'left' ? '#93c5fd' : '#6ee7b7';
-          return (
-            <View style={{ marginHorizontal: 16, marginBottom: 6, backgroundColor: 'rgba(0,0,0,0.45)',
-              borderRadius: 18, paddingHorizontal: 16, paddingVertical: 13, alignItems: 'center',
-              borderWidth: 1.5, borderColor: '#10B981' }}>
-
-              {/* BIG: Club — Aim */}
-              <Text style={{ color: '#ffffff', fontSize: 26, fontWeight: '900', letterSpacing: 0.3, textAlign: 'center', lineHeight: 31 }}>
-                {d.club}{' — '}{d.aimLabel}
-              </Text>
-
-              {/* SMALL: Miss danger */}
-              <Text style={{ color: d.missColor, fontSize: 11, fontWeight: '700', marginTop: 4, textAlign: 'center', letterSpacing: 0.2 }}>
-                {d.miss}
-              </Text>
-
-              {/* Confidence badge */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                <View style={{ backgroundColor: confBg, borderRadius: 20, borderWidth: 1.5, borderColor: confColor,
-                  paddingHorizontal: 14, paddingVertical: 4 }}>
-                  <Text style={{ color: confColor, fontSize: 13, fontWeight: '800', letterSpacing: 0.3 }}>
-                    {d.confidence}% Confidence
-                  </Text>
+                  ))}
+                </View>
+                {/* Speed */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ color: '#6b7280', fontSize: 10, width: 30 }}>{windSpeed} mph</Text>
+                  {([0, 5, 10, 15, 20, 25] as const).map((spd) => (
+                    <Pressable key={spd} onPress={() => setWindSpeed(spd)}
+                      style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+                        backgroundColor: windSpeed === spd ? 'rgba(252,211,77,0.2)' : 'rgba(255,255,255,0.04)',
+                        borderWidth: 1, borderColor: windSpeed === spd ? '#fcd34d' : 'rgba(255,255,255,0.08)' }}>
+                      <Text style={{ color: windSpeed === spd ? '#fcd34d' : '#6b7280', fontSize: 10, fontWeight: '700' }}>{spd}</Text>
+                    </Pressable>
+                  ))}
                 </View>
               </View>
 
-              {/* Insight text — shown once 5 shots logged */}
-              {insightText && (
-                <Text style={{ color: insightColor, fontSize: 13, fontWeight: '600', marginTop: 8, textAlign: 'center', fontStyle: 'italic' }}>
-                  {insightText}
-                </Text>
-              )}
+              {/* ── ELEVATION CONTROLS ─────────────────────────────────── */}
+              <View style={{ gap: 4 }}>
+                <Text style={{ color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 0.8 }}>⛰️ ELEVATION (ft)</Text>
+                <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap' }}>
+                  {([-30, -20, -10, 0, 10, 20, 30] as const).map((ft) => (
+                    <Pressable key={ft} onPress={() => setElevChange(ft)}
+                      style={{ paddingHorizontal: 9, paddingVertical: 4, borderRadius: 7, alignItems: 'center',
+                        backgroundColor: elevChange === ft ? 'rgba(147,197,253,0.18)' : 'rgba(255,255,255,0.04)',
+                        borderWidth: 1, borderColor: elevChange === ft ? '#93c5fd' : 'rgba(255,255,255,0.08)' }}>
+                      <Text style={{ color: elevChange === ft ? '#93c5fd' : '#6b7280', fontSize: 10, fontWeight: '700' }}>
+                        {ft > 0 ? `+${ft}` : ft === 0 ? '0' : `${ft}`}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
 
-              {/* Shot-shape strategy badge */}
-              {d.swingTendency && (
-                <View style={{ marginTop: 8, gap: 4 }}>
-                  {/* "Strategy adjusted for shot shape" pill */}
-                  <View style={{
-                    backgroundColor: d.aggressiveLine
-                      ? 'rgba(134,239,172,0.15)'   // green tint for draw/aggressive
-                      : d.swingTendency.avoidRightHazard
-                        ? 'rgba(251,191,36,0.12)'   // amber for slice/push hazard avoid
-                        : 'rgba(167,243,208,0.10)',
-                    borderRadius: 10,
-                    paddingHorizontal: 12, paddingVertical: 7,
-                    borderWidth: 1,
-                    borderColor: d.aggressiveLine
-                      ? 'rgba(134,239,172,0.40)'
-                      : d.swingTendency.avoidRightHazard
-                        ? 'rgba(251,191,36,0.35)'
-                        : 'rgba(167,243,208,0.28)',
-                    alignItems: 'center', gap: 2,
+              {/* Club */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={{ color: '#6b7280', fontSize: 11, fontWeight: '700', width: 44 }}>Club</Text>
+                <Text style={{ color: '#A7F3D0', fontSize: 20, fontWeight: '900', flex: 1 }}>{engineDecision.recommendedClub ?? decision.club ?? '--'}</Text>
+                {engineDecision.targetYards != null && (
+                  <Text style={{ color: '#4a7c5e', fontSize: 11 }}>{engineDecision.targetYards} yds</Text>
+                )}
+              </View>
+              {/* Aim */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={{ color: '#6b7280', fontSize: 11, fontWeight: '700', width: 44 }}>Aim</Text>
+                <Text style={{ color: engineDecision.aimAdjustment === 'center' ? '#6ee7b7' : '#fcd34d', fontSize: 14, fontWeight: '800', flex: 1 }}>
+                  {engineDecision.aimAdjustment === 'slight left'  ? '↙ ' : engineDecision.aimAdjustment === 'slight right' ? '↘ ' : '↑ '}
+                  {engineDecision.aimLabel}
+                </Text>
+              </View>
+              {/* Note */}
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                <Text style={{ color: '#6b7280', fontSize: 11, fontWeight: '700', width: 44 }}>Note</Text>
+                <Text style={{ color: '#d1fae5', fontSize: 12, fontWeight: '600', flex: 1, lineHeight: 17 }}>
+                  {engineDecision.shotSuggestion}
+                </Text>
+              </View>
+              {/* Mental adjustment badge (only when nervous) */}
+              {engineDecision.mentalAdjustment && (
+                <View style={{ backgroundColor: 'rgba(99,102,241,0.15)', borderRadius: 8, padding: 8, borderWidth: 1, borderColor: 'rgba(99,102,241,0.3)' }}>
+                  <Text style={{ color: '#c7d2fe', fontSize: 11, fontWeight: '600' }}>🧠 {engineDecision.mentalAdjustment}</Text>
+                </View>
+              )}
+              {/* Situational message — changes based on pressure / momentum */}
+              {engineDecision.situation != null && (
+                <View style={{
+                  backgroundColor: engineDecision.situation.playMode === 'safe'
+                    ? 'rgba(59,130,246,0.08)'
+                    : engineDecision.situation.playMode === 'aggressive'
+                      ? 'rgba(74,222,128,0.08)'
+                      : 'transparent',
+                  borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5, borderWidth: engineDecision.situation.playMode !== 'neutral' ? 1 : 0,
+                  borderColor: engineDecision.situation.playMode === 'safe' ? 'rgba(59,130,246,0.2)' : 'rgba(74,222,128,0.2)',
+                }}>
+                  <Text style={{
+                    color: engineDecision.situation.playMode === 'safe'
+                      ? '#93c5fd'
+                      : engineDecision.situation.playMode === 'aggressive'
+                        ? '#86efac'
+                        : '#4a7c5e',
+                    fontSize: 11, textAlign: 'center', fontWeight: '600',
                   }}>
-                    <Text style={{
-                      color: d.aggressiveLine ? '#86efac'
-                           : d.swingTendency.avoidRightHazard ? '#fbbf24'
-                           : '#6ee7b7',
-                      fontSize: 11, fontWeight: '800', letterSpacing: 0.5,
-                    }}>
-                      {d.aggressiveLine ? '🏹 Strategy adjusted for shot shape'
-                       : d.swingTendency.avoidRightHazard ? '⚠️ Strategy adjusted for shot shape'
-                       : '🎯 Strategy adjusted for shot shape'}
-                    </Text>
-                    <Text style={{
-                      color: d.aggressiveLine ? '#bbf7d0'
-                           : d.swingTendency.avoidRightHazard ? '#fde68a'
-                           : '#a7f3d0',
-                      fontSize: 11, textAlign: 'center', lineHeight: 16,
-                    }}>
-                      {d.swingTendency.detail}
-                      {d.swingTendency.clubNote ? `\n${d.swingTendency.clubNote}` : ''}
-                    </Text>
-                  </View>
+                    {engineDecision.situation.situationMessage}
+                  </Text>
                 </View>
               )}
-
-              {/* Strategy message */}
-              <Text style={{ color: 'rgba(167,243,208,0.75)', fontSize: 11, marginTop: 5, textAlign: 'center', fontStyle: 'italic' }}>
-                {d.message}
-              </Text>
-
-              {/* Action buttons row */}
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
-                {/* Hear Advice */}
-                <Pressable
-                  onPress={() => {
-                    stopSpeaking();
-                    speakDecision();
-                  }}
-                  style={({ pressed }) => ({
-                    flexDirection: 'row', alignItems: 'center', gap: 6,
-                    paddingHorizontal: 14, paddingVertical: 6,
-                    borderRadius: 20, borderWidth: 1.5, borderColor: '#10B981',
-                    backgroundColor: pressed ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.08)' })}>
-                  <Text style={{ fontSize: 13 }}>🔊</Text>
-                  <Text style={{ color: '#6ee7b7', fontSize: 11, fontWeight: '700', letterSpacing: 0.4 }}>Hear Advice</Text>
-                </Pressable>
-
-                {/* Aim Assist */}
-                <Pressable
-                  onPress={async () => {
-                    if (!cameraPermission?.granted) {
-                      await requestCameraPermission();
-                    }
-                    setAimMode(true);
-                  }}
-                  style={({ pressed }) => ({
-                    flexDirection: 'row', alignItems: 'center', gap: 6,
-                    paddingHorizontal: 14, paddingVertical: 6,
-                    borderRadius: 20, borderWidth: 1.5, borderColor: '#60a5fa',
-                    backgroundColor: pressed ? 'rgba(96,165,250,0.18)' : 'rgba(96,165,250,0.08)' })}>
-                  <Text style={{ fontSize: 13 }}>🎯</Text>
-                  <Text style={{ color: '#93c5fd', fontSize: 11, fontWeight: '700', letterSpacing: 0.4 }}>Aim Assist</Text>
-                </Pressable>
-              </View>
             </View>
-          );
-        })()}
-
-        {/* ── SECTION 2: CADDIE CALL ────────────────────────────────────────── */}
-        <Pressable
-          onPress={() => setSwingThought(FOCUS_MESSAGES[Math.floor(Math.random() * FOCUS_MESSAGES.length)])}
-          style={[{ marginHorizontal: 16, backgroundColor: 'rgba(0,0,0,0.28)', borderRadius: 16,
-            paddingHorizontal: 14, paddingVertical: 10, marginBottom: 6, alignItems: 'center' }, debugGreen]}>
-          {aiThinking ? (
-            <Text style={{ color: '#6ee7b7', fontSize: 13, fontStyle: 'italic' }}>Thinking...</Text>
-          ) : (
-            <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '700', textAlign: 'center', lineHeight: 21 }} numberOfLines={3}>
-              {caddieMessage || caddieAdvice || 'Commit to your target.'}
-            </Text>
-          )}
-          {shots.length >= 3 && (
-            <Text style={{ color: '#4ade80', fontSize: 11, marginTop: 4 }}>Confidence {decision.confidence}%</Text>
-          )}
-          <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(110,231,183,0.2)', marginTop: 8, paddingTop: 6, alignItems: 'center', width: '100%' }}>
-            <Text style={{ color: '#6ee7b7', fontSize: 8, fontWeight: '700', letterSpacing: 1.1, marginBottom: 2 }}>SWING THOUGHT · TAP TO REFRESH</Text>
-            <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '600', textAlign: 'center', fontStyle: 'italic' }}>{swingThought}</Text>
           </View>
-        </Pressable>
 
-        {/* ── SECTION 3: VISUAL AIM AREA ───────────────────────────────────────── */}
-        <View style={{ marginHorizontal: 16, marginBottom: 6, alignItems: 'center' }}>
-
-          {/* ── Visual Aim Diagram ── */}
+          {/* 2b. PATTERN PREVIEW */}
           {(() => {
-            const mb = decision.bias;
-            const dangerRight = mb?.bias === 'right';
-            const dangerLeft  = mb?.bias === 'left';
-            const noBias      = !mb;
-            const aimRotate   = aim === 'left center' ? '-18deg' : aim === 'right center' ? '18deg' : '0deg';
-            const circlePct   = aim === 'left center' ? 33 : aim === 'right center' ? 57 : 45;
+            const mb = getMissBias();
+            const rb = getRecentBias();
+            if (!mb && !rb) return null;
+            const bias = rb ?? mb!.bias;
+            const arrow = bias === 'left' ? '↙' : bias === 'right' ? '↘' : '↓';
+            const color = bias === 'left' ? '#ef4444' : bias === 'right' ? '#f59e0b' : '#6ee7b7';
+            const label = bias === 'center' ? 'Straight' : bias === 'left' ? 'Left' : 'Right';
+            const recentShotsStr = shots.slice(-5).map((s) => s.result === 'left' ? '←' : s.result === 'right' ? '→' : '↑').join('  ');
+            const conf = mb?.confidence ?? null;
             return (
-              <View style={{ width: '100%', maxWidth: 320, height: 120, marginBottom: 10, borderRadius: 16,
-                backgroundColor: '#071f13', overflow: 'hidden',
-                borderWidth: 1, borderColor: 'rgba(16,185,129,0.25)' }}>
-
-                {/* Left danger zone */}
-                <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: '28%',
-                  backgroundColor: (dangerLeft ? 'rgba(239,68,68,0.25)' : noBias ? 'rgba(239,68,68,0.07)' : 'transparent') }}>
-                  {dangerLeft && (
-                    <Text style={{ color: '#ef4444', fontSize: 8, fontWeight: '800',
-                      position: 'absolute', top: 8, width: '100%', textAlign: 'center', letterSpacing: 0.6 }}>
-                      DANGER
-                    </Text>
-                  )}
-                </View>
-
-                {/* Fairway strip */}
-                <View style={{ position: 'absolute', top: 0, bottom: 0, left: '28%', right: '28%',
-                  backgroundColor: 'rgba(16,185,129,0.12)',
-                  borderLeftWidth: 1, borderRightWidth: 1, borderColor: 'rgba(16,185,129,0.28)' }} />
-
-                {/* Right danger zone */}
-                <View style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '28%',
-                  backgroundColor: (dangerRight ? 'rgba(239,68,68,0.25)' : noBias ? 'rgba(239,68,68,0.07)' : 'transparent') }}>
-                  {dangerRight && (
-                    <Text style={{ color: '#ef4444', fontSize: 8, fontWeight: '800',
-                      position: 'absolute', top: 8, width: '100%', textAlign: 'center', letterSpacing: 0.6 }}>
-                      DANGER
-                    </Text>
-                  )}
-                </View>
-
-                {/* Blue aim line — rotates around its bottom via translate trick */}
-                <View style={{ position: 'absolute', bottom: 26, left: '50%', marginLeft: -1.5,
-                  width: 3, height: 72, backgroundColor: '#3b82f6', borderRadius: 2,
-                  transform: [{ rotate: aimRotate }] }} />
-
-                {/* Landing circle at player end */}
-                <View style={{ position: 'absolute', bottom: 18, left: `${circlePct}%`, marginLeft: -8,
-                  width: 16, height: 16, borderRadius: 8,
-                  backgroundColor: '#0f172a', borderWidth: 2.5, borderColor: '#ffffff' }} />
-
-                {/* Hole flag */}
-                <Text style={{ position: 'absolute', top: 6, left: '50%', marginLeft: -9, fontSize: 18 }}>⛳</Text>
-
-                {/* Aim label */}
-                <Text style={{ position: 'absolute', bottom: 4, width: '100%', textAlign: 'center',
-                  color: 'rgba(255,255,255,0.35)', fontSize: 8, fontWeight: '800', letterSpacing: 1.2 }}>
-                  {aim === 'left center' ? '← AIMING LEFT' : aim === 'right center' ? 'AIMING RIGHT →' : '● CENTER LINE'}
-                </Text>
-              </View>
-            );
-          })()}
-
-          {/* Aim buttons — centered, max width matches diagram */}
-          <View style={{ flexDirection: 'row', gap: 6, marginBottom: 5, width: '100%', maxWidth: 320 }}>
-            {(['left center','center','right center'] as const).map((a) => (
-              <Pressable key={a} onPress={() => storeSetAim(a)}
-                style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center',
-                  backgroundColor: aim === a ? '#10B981' : '#1a1a1a',
-                  borderWidth: 1, borderColor: aim === a ? '#fff' : '#2a2a2a' }}>
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
-                  {a === 'left center' ? '← L' : a === 'center' ? '● CTR' : 'R →'}
-                </Text>
+              <Pressable
+                onPress={() => setPatternExpanded((v) => !v)}
+                style={{ backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 7,
+                  borderWidth: 1, borderColor: color + '55', flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              >
+                <Text style={{ color, fontSize: 15 }}>{arrow}</Text>
+                <Text style={{ color, fontSize: 12, fontWeight: '800', flex: 1 }}>Pattern: {label} {arrow}</Text>
+                {conf !== null && (
+                  <Text style={{ color: '#4a7c5e', fontSize: 11 }}>{conf}%</Text>
+                )}
+                <Text style={{ color: '#4a7c5e', fontSize: 11 }}>{patternExpanded ? '▴' : '▾'}</Text>
               </Pressable>
-            ))}
-          </View>
-          {/* Bias strategy */}
-          {(() => { const bs = getBiasStrategy(); return (
-            <Text style={{ color: bs.color, fontSize: 12, fontWeight: '700', textAlign: 'center', marginBottom: 2 }}>⚡ {bs.label}</Text>
-          ); })()}
-          {/* Aim offset pill */}
-          {(() => { const ao = decision.aimOffset; return ao ? (
-            <View style={{ alignItems: 'center', marginBottom: 3 }}>
-              <View style={{ backgroundColor: '#1a1a2a', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 3, borderWidth: 1, borderColor: ao.color }}>
-                <Text style={{ color: ao.color, fontSize: 11, fontWeight: '700' }}>🎯 {ao.target === 'center' ? 'Center line' : ao.target === 'left center' ? 'Aim Left' : 'Aim Right'} · {ao.label}</Text>
-              </View>
-              <Text style={{ color: ao.color, fontSize: 10, fontWeight: '600', marginTop: 3, fontStyle: 'italic', opacity: 0.85 }}>{ao.miss}</Text>
-            </View>
-          ) : null; })()}
-          {/* Caddie Tip — practice memory */}
-          {(() => {
-            if (cmMissBias === 'neutral' || cmConfidence < 30 || cmUpdated === 0) return null;
-            // Only show when live round hasn't yet generated its own bias signal
-            if (getMissBias() !== null) return null;
-            const color   = cmMissBias === 'right' ? '#93c5fd' : '#fcd34d';
-            const aimText = cmMissBias === 'right' ? 'Aim slightly left' : 'Aim slightly right';
-            const noteText = cmMissBias === 'right'
-              ? 'You tend to miss right — adjust aim'
-              : 'You tend to miss left — adjust aim';
+            );
+          })()}
+          {patternExpanded && (() => {
+            const mb = getMissBias();
+            const rb = getRecentBias();
+            if (!mb && !rb) return null;
+            const bias = rb ?? mb!.bias;
+            const color = bias === 'left' ? '#ef4444' : bias === 'right' ? '#f59e0b' : '#6ee7b7';
+            const shotCounts = shots.reduce<Record<string,number>>((acc, s) => { acc[s.result] = (acc[s.result] ?? 0) + 1; return acc; }, {});
+            const recentArrows = shots.slice(-5).map((s) => s.result === 'left' ? '←' : s.result === 'right' ? '→' : '↑').join('  ');
+            const tip = bias === 'left' ? 'Aim right of target to compensate.' : bias === 'right' ? 'Aim left of target to compensate.' : 'Ball flight is straight — trust your aim.';
             return (
-              <View style={{ alignItems: 'center', marginTop: 4, marginBottom: 2 }}>
-                <View style={{ backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 10, borderWidth: 1, borderColor: color, paddingHorizontal: 12, paddingVertical: 6, alignItems: 'center', gap: 2 }}>
-                  <Text style={{ color, fontSize: 12, fontWeight: '800' }}>🧠 {aimText}</Text>
-                  <Text style={{ color: '#9ca3af', fontSize: 10, fontStyle: 'italic' }}>{noteText} ({cmConfidence}% confidence)</Text>
+              <View style={{ backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 10, padding: 12, gap: 6,
+                borderWidth: 1, borderColor: color + '44' }}>
+                <Text style={{ color: '#6ee7b7', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 }}>Last 5 shots</Text>
+                <Text style={{ color: '#fff', fontSize: 20, letterSpacing: 6 }}>{recentArrows}</Text>
+                <View style={{ flexDirection: 'row', gap: 16, marginTop: 2 }}>
+                  <Text style={{ color: '#ef4444', fontSize: 11 }}>L: {shotCounts.left ?? 0}</Text>
+                  <Text style={{ color: '#6ee7b7', fontSize: 11 }}>STR: {shotCounts.straight ?? 0}</Text>
+                  <Text style={{ color: '#f59e0b', fontSize: 11 }}>R: {shotCounts.right ?? 0}</Text>
                 </View>
+                <Text style={{ color: color, fontSize: 12, fontWeight: '600', marginTop: 2 }}>{tip}</Text>
               </View>
             );
           })()}
-          {/* Dispersion counts */}
-          {(() => {
-            const la = getLiveAnalytics();
-            const pd = getPatternDetection();
-            return la ? (
-              <View style={{ alignItems: 'center' }}>
-                <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
-                  <View style={{ backgroundColor: '#1e3a5f', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3 }}>
-                    <Text style={{ color: '#93c5fd', fontSize: 11, fontWeight: '700' }}>← {la.left} ({la.leftPct}%)</Text>
-                  </View>
-                  <View style={{ backgroundColor: '#14532d', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3 }}>
-                    <Text style={{ color: '#86efac', fontSize: 11, fontWeight: '700' }}>● {la.straight} ({la.strPct}%)</Text>
-                  </View>
-                  <View style={{ backgroundColor: '#7c2d12', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3 }}>
-                    <Text style={{ color: '#fca5a5', fontSize: 11, fontWeight: '700' }}>{la.right} ({la.rightPct}%) →</Text>
-                  </View>
-                </View>
-                {la.insight && (
-                  <Text style={{ color: '#fbbf24', fontSize: 11, fontWeight: '700', marginTop: 4, fontStyle: 'italic' }}>
-                    {la.insight}
-                  </Text>
-                )}
-                {pd && (
-                  <Text style={{ color: pd.pattern === 'push' ? '#fca5a5' : '#93c5fd', fontSize: 11, fontWeight: '700', marginTop: 3, fontStyle: 'italic' }}>
-                    {pd.coaching} ({pd.pct}%)
-                  </Text>
-                )}
-              </View>
-            ) : null;
-          })()}
-        </View>
 
-        {/* ── SECTION 4: ACTION BUTTONS ────────────────────────────────────── */}
-        {/* Target selector */}
-        <View style={[{ flexDirection: 'row', gap: 8, marginHorizontal: 16, marginBottom: 6 }, debugYellow]}>
-          {(['left', 'center', 'right'] as const).map((t) => (
-            <Pressable key={t} onPress={() => setShotTarget(t)}
-              style={{ flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center',
-                borderWidth: shotTarget === t ? 2 : 1,
-                borderColor: shotTarget === t ? '#6ee7b7' : '#374151',
-                backgroundColor: shotTarget === t ? 'rgba(110,231,183,0.12)' : 'transparent' }}>
-              <Text style={{ color: shotTarget === t ? '#6ee7b7' : '#6b7280', fontSize: 11, fontWeight: shotTarget === t ? '800' : '400' }}>
-                {t === 'left' ? '← Left' : t === 'center' ? '● Center' : 'Right →'}
+          {/* 3. AIM */}
+          <View>
+            <Text style={{ color: '#4a7c5e', fontSize: 10, fontWeight: '800', letterSpacing: 1.2, textAlign: 'center', marginBottom: 6 }}>AIM</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {(['left center','center','right center'] as const).map((a) => (
+                <Pressable key={a} onPress={() => storeSetAim(a)}
+                  style={{ flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center',
+                    backgroundColor: aim === a ? '#10B981' : '#0f2d1f',
+                    borderWidth: 1.5, borderColor: aim === a ? '#fff' : '#1a5e30' }}>
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>
+                    {a === 'left center' ? '? L' : a === 'center' ? '? CTR' : 'R ?'}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          {/* 4. SHOT INPUT */}
+          <View>
+            <Text style={{ color: '#4a7c5e', fontSize: 10, fontWeight: '800', letterSpacing: 1.2, textAlign: 'center', marginBottom: 6 }}>SHOT</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Pressable onPress={onShotLeftPress}
+                style={({ pressed }) => ({ flex: 1, height: shotBtnH, borderRadius: shotBtnR, justifyContent: 'center', alignItems: 'center',
+                  backgroundColor: pressed ? '#7f1d1d' : '#1c0f0f',
+                  borderWidth: 2.5, borderColor: '#ef4444',
+                  shadowColor: '#ef4444', shadowOpacity: pressed ? 0.55 : 0.25, shadowRadius: 10, elevation: 5 })}>
+                <Text style={{ color: '#ef4444', fontSize: 15, fontWeight: '900', letterSpacing: 0.5 }}>? LEFT</Text>
+              </Pressable>
+              <Pressable onPress={onShotStraightPress}
+                style={({ pressed }) => ({ flex: 1, height: shotBtnH, borderRadius: shotBtnR, justifyContent: 'center', alignItems: 'center',
+                  backgroundColor: pressed ? '#064e3b' : '#0c1f18',
+                  borderWidth: 2.5, borderColor: '#6ee7b7',
+                  shadowColor: '#6ee7b7', shadowOpacity: pressed ? 0.65 : 0.35, shadowRadius: 12, elevation: 7 })}>
+                <Text style={{ color: '#6ee7b7', fontSize: 15, fontWeight: '900', letterSpacing: 0.5 }}>? STRAIGHT</Text>
+              </Pressable>
+              <Pressable onPress={onShotRightPress}
+                style={({ pressed }) => ({ flex: 1, height: shotBtnH, borderRadius: shotBtnR, justifyContent: 'center', alignItems: 'center',
+                  backgroundColor: pressed ? '#78350f' : '#1c1508',
+                  borderWidth: 2.5, borderColor: '#f59e0b',
+                  shadowColor: '#f59e0b', shadowOpacity: pressed ? 0.55 : 0.25, shadowRadius: 10, elevation: 5 })}>
+                <Text style={{ color: '#f59e0b', fontSize: 15, fontWeight: '900', letterSpacing: 0.5 }}>RIGHT ?</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* 5. LAST SHOT INDICATOR */}
+          {lastShotBadge ? (
+            <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
+              <View style={{ backgroundColor: '#064e3b', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 }}>
+                <Text style={{ color: '#6ee7b7', fontSize: 13, fontWeight: '700' }}>~{lastShotBadge.yardsCarried} yd ? {lastShotBadge.club}</Text>
+              </View>
+              <View style={{ backgroundColor: '#1a2a1a', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 }}>
+                <Text style={{ color: '#a7f3d0', fontSize: 13 }}>{lastShotBadge.yardsRemaining} yd to pin</Text>
+              </View>
+            </View>
+          ) : (
+            <View style={{ height: 34 }} />
+          )}
+
+          {/* 6. SCORE STRIP */}
+          <View style={{ backgroundColor: '#0f2d1f', borderRadius: 14, borderWidth: 1, borderColor: '#1a5e30', paddingHorizontal: 12, paddingVertical: 10, gap: 8 }}>
+            {/* Player score rows */}
+            {Array.from({ length: activePlayerCount }).map((_, i) => {
+              const isMainPlayer = i === 0;
+              const otherScore = (() => {
+                const entry = multiRound.find((h) => h.hole === hole);
+                return entry ? (entry.scores[i] ?? 0) : 0;
+              })();
+              const displayScore = isMainPlayer ? strokes : otherScore;
+              return (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ color: i === 0 ? '#A7F3D0' : '#9CA3AF', fontSize: 12, fontWeight: '700', flex: 1 }} numberOfLines={1}>{players[i]}</Text>
+                  <Pressable
+                    onPress={() => {
+                      if (isMainPlayer) setStrokes((s) => Math.max(0, s - 1));
+                      else setMultiRoundPersisted((prev) => {
+                        const idx = prev.findIndex((h) => h.hole === hole);
+                        if (idx === -1) return [...prev, { hole, par, scores: [strokes,0,0,0].map((s,si)=>si===i?0:s) }];
+                        return prev.map((h,hi)=>hi===idx?{...h,scores:h.scores.map((s,si)=>si===i?Math.max(0,s-1):s)}:h);
+                      });
+                    }}
+                    style={{ width: 32, height: 32, backgroundColor: '#1a1a1a', borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}>
+                    <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700' }}>-</Text>
+                  </Pressable>
+                  <Text style={{ color: '#fff', fontSize: 22, fontWeight: '900', minWidth: 28, textAlign: 'center' }}>{displayScore}</Text>
+                  <Pressable
+                    onPress={() => {
+                      if (isMainPlayer) setStrokes((s) => s + 1);
+                      else setMultiRoundPersisted((prev) => {
+                        const idx = prev.findIndex((h) => h.hole === hole);
+                        if (idx === -1) return [...prev, { hole, par, scores: [strokes,0,0,0].map((s,si)=>si===i?1:s) }];
+                        return prev.map((h,hi)=>hi===idx?{...h,scores:h.scores.map((s,si)=>si===i?s+1:s)}:h);
+                      });
+                    }}
+                    style={{ width: 32, height: 32, backgroundColor: '#2e7d32', borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}>
+                    <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700' }}>+</Text>
+                  </Pressable>
+                  {/* vs par label */}
+                  {(() => {
+                    const diff = displayScore - par;
+                    const label = diff <= -2 ? '??' : diff === -1 ? '??' : diff === 0 ? '?' : diff === 1 ? '+1' : diff === 2 ? '+2' : `+${diff}`;
+                    const col = diff < 0 ? '#4ade80' : diff === 0 ? '#A7F3D0' : diff === 1 ? '#f59e0b' : '#f87171';
+                    return <Text style={{ color: col, fontSize: 13, fontWeight: '800', minWidth: 24, textAlign: 'center' }}>{displayScore > 0 ? label : '?'}</Text>;
+                  })()}
+                </View>
+              );
+            })}
+            {/* Next hole */}
+            <Pressable
+              onPress={() => {
+                const s = strokes;
+                if (s < par) respond("Let's go! Birdie.");
+                else if (s === par) respond('Solid par. Keep it going.');
+                else if (s >= par + 2) respond('Shake it off. Next one.');
+                setHoleStatsLog((prev) => [...prev, { hole, strokes: s, putts: puttsThisHole, fairwayHit: par === 3 ? null : firThisHole, gir: girThisHole }]);
+                setRound((prev) => { const u = [...prev]; u[hole - 1] = s; return u; });
+                setRoundPars((prev) => { const u = [...prev]; u[hole - 1] = par; return u; });
+                // ── Sync to unified scoring grid (visible in Scorecard tab) ──
+                setCourseHoleScore(0, hole - 1, s, storeActiveCourse);
+                setMultiRoundPersisted((prev) => {
+                  const idx = prev.findIndex((h) => h.hole === hole);
+                  const updated = idx === -1
+                    ? [...prev, { hole, par, scores: [s,0,0,0] }]
+                    : prev.map((h,hi)=>hi===idx?{...h,scores:h.scores.map((sc,si)=>si===0?s:sc)}:h);
+                  // Sync other players to unified grid
+                  const entry = updated.find((h) => h.hole === hole);
+                  if (entry) {
+                    entry.scores.forEach((sc, pi) => {
+                      if (pi > 0 && sc > 0) setCourseHoleScore(pi, hole - 1, sc, storeActiveCourse);
+                    });
+                  }
+                  return updated;
+                });
+                updateScore(par, s);
+                setPuttsThisHole(0); setFirThisHole(null); setGirThisHole(null);
+                if (hole < roundLength) {
+                  const nextH = hole + 1;
+                  setHole(nextH);
+                  const hd = activeCourse.holes[Math.min(nextH - 1, activeCourse.holes.length - 1)];
+                  setPar(hd.par); setDistance(String(hd.distance)); setStrokes(hd.par);
+                } else {
+                  const mb = getMissBias(); const rb = getRecentBias();
+                  const finalBias = rb ?? mb?.bias ?? null;
+                  const keyMsg = finalBias === 'right' ? 'You pushed right all round ? aim left next time.'
+                    : finalBias === 'left' ? 'You pulled left all round ? aim right next time.'
+                    : shots.length >= 5 ? 'Straight ball flight ? great consistency!'
+                    : 'Not enough shots for a pattern. Keep tracking!';
+                  void endRound(); setStrokes(0);
+                }
+                setLastShotBadge(null);
+              }}
+              style={({ pressed }) => ({ backgroundColor: pressed ? '#0d4a1a' : '#1b5e20', borderRadius: 10, paddingVertical: 11, alignItems: 'center', borderWidth: 1, borderColor: '#4caf50' })}
+            >
+              <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '800' }}>
+                {hole < roundLength ? `Next Hole ? ${hole + 1}` : '?? Finish Round'}
               </Text>
             </Pressable>
-          ))}
-        </View>
-        {/* Large 3-up shot result row */}
-        <View style={[{ flexDirection: 'row', gap: 8, marginHorizontal: 16, marginBottom: 6 }, debugYellow]}>
-          <Pressable onPress={onShotLeftPress}
-            style={({ pressed }) => ({ flex: 1, height: shotBtnH, borderRadius: shotBtnR, justifyContent: 'center', alignItems: 'center',
-              backgroundColor: pressed ? '#7f1d1d' : '#1c0f0f',
-              borderWidth: 2.5, borderColor: '#ef4444',
-              shadowColor: '#ef4444', shadowOpacity: pressed ? 0.55 : 0.25, shadowRadius: 10, elevation: 5 })}>
-            <Text style={{ fontSize: shotBtnEmoji }}>↙️</Text>
-            <Text style={{ color: '#ef4444', fontSize: 15, fontWeight: '900', marginTop: 3, letterSpacing: 0.5 }}>LEFT</Text>
-          </Pressable>
-          <Pressable onPress={onShotStraightPress}
-            style={({ pressed }) => ({ flex: 1, height: shotBtnH, borderRadius: shotBtnR, justifyContent: 'center', alignItems: 'center',
-              backgroundColor: pressed ? '#064e3b' : '#0c1f18',
-              borderWidth: 2.5, borderColor: '#6ee7b7',
-              shadowColor: '#6ee7b7', shadowOpacity: pressed ? 0.65 : 0.35, shadowRadius: 12, elevation: 7 })}>
-            <Text style={{ fontSize: shotBtnEmoji + 2 }}>⬆️</Text>
-            <Text style={{ color: '#6ee7b7', fontSize: 15, fontWeight: '900', marginTop: 3, letterSpacing: 0.5 }}>STRAIGHT</Text>
-          </Pressable>
-          <Pressable onPress={onShotRightPress}
-            style={({ pressed }) => ({ flex: 1, height: shotBtnH, borderRadius: shotBtnR, justifyContent: 'center', alignItems: 'center',
-              backgroundColor: pressed ? '#78350f' : '#1c1508',
-              borderWidth: 2.5, borderColor: '#f59e0b',
-              shadowColor: '#f59e0b', shadowOpacity: pressed ? 0.55 : 0.25, shadowRadius: 10, elevation: 5 })}>
-            <Text style={{ fontSize: shotBtnEmoji }}>↘️</Text>
-            <Text style={{ color: '#f59e0b', fontSize: 15, fontWeight: '900', marginTop: 3, letterSpacing: 0.5 }}>RIGHT</Text>
-          </Pressable>
-        </View>
-        {/* GPS Mark row */}
-        <View style={[{ marginHorizontal: 16, marginBottom: 6, alignItems: 'center' }, debugBlue]}>
-          <Pressable onPress={() => { void handleMarkBall(); }}
-            style={({ pressed }) => ({ flexDirection: 'row', gap: 8, alignItems: 'center',
-              paddingHorizontal: 24, paddingVertical: 10, borderRadius: 12,
-              backgroundColor: pressed ? '#1a2e1a' : prevShotYardsRef.current ? '#132b13' : '#141a14',
-              borderWidth: prevShotYardsRef.current ? 2 : 1.5,
-              borderColor: prevShotYardsRef.current ? '#4ade80' : '#2a4a2a',
-              shadowColor: '#4ade80', shadowOpacity: prevShotYardsRef.current ? 0.45 : 0.08, shadowRadius: 8, elevation: 3 })}>
-            <Text style={{ fontSize: 16 }}>📍</Text>
-            <Text style={{ color: prevShotYardsRef.current ? '#4ade80' : '#6ee7b7', fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>MARK GPS</Text>
-          </Pressable>
-        </View>
-        {lastShotBadge && (
-          <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center', marginBottom: 4 }}>
-            <View style={{ backgroundColor: '#064e3b', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 }}>
-              <Text style={{ color: '#6ee7b7', fontSize: 12, fontWeight: '700' }}>~{lastShotBadge.yardsCarried} yd · {lastShotBadge.club}</Text>
-            </View>
-            <View style={{ backgroundColor: '#1a2a1a', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 }}>
-              <Text style={{ color: '#a7f3d0', fontSize: 12 }}>{lastShotBadge.yardsRemaining} yd to pin</Text>
-            </View>
-          </View>
-        )}
-
-        {/* ── MENTAL STATE ─────────────────────────────────────────────────── */}
-        <View style={{ flexDirection: 'row', gap: 6, marginHorizontal: 16, marginBottom: 6 }}>
-          {(['confident', 'neutral', 'pressure', 'frustrated'] as const).map((state) => {
-            const active = mentalState === state;
-            const cfg = {
-              confident:  { emoji: '💪', label: 'Confident',  border: '#4ade80', bg: 'rgba(74,222,128,0.15)'  },
-              neutral:    { emoji: '😐', label: 'Neutral',    border: '#6b7280', bg: 'rgba(107,114,128,0.12)' },
-              pressure:   { emoji: '😬', label: 'Pressure',   border: '#f59e0b', bg: 'rgba(245,158,11,0.15)'  },
-              frustrated: { emoji: '😤', label: 'Frustrated', border: '#ef4444', bg: 'rgba(239,68,68,0.15)'   },
-            }[state];
-            return (
-              <Pressable key={state} onPress={() => setMentalState(state)}
-                style={{ flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center',
-                  borderWidth: active ? 2 : 1,
-                  borderColor: active ? cfg.border : 'rgba(255,255,255,0.10)',
-                  backgroundColor: active ? cfg.bg : 'transparent' }}>
-                <Text style={{ fontSize: 14 }}>{cfg.emoji}</Text>
-                <Text style={{ color: active ? cfg.border : '#6b7280', fontSize: 9, fontWeight: '700',
-                  marginTop: 2, letterSpacing: 0.3 }}>{cfg.label.toUpperCase()}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {/* ── SECTION 5: SHOT INPUT (SCORING) ──────────────────────────────── */}
-        <View style={[{ marginHorizontal: 16, gap: 5 }, debugPurple]}>
-          {/* Player score rows — one row per active player */}
-          {Array.from({ length: activePlayerCount }).map((_, i) => {
-            // Player 0 uses the main `strokes` state (drives shot tracking).
-            // Other players read/write multiRound[hole].scores[i] directly.
-            const isMainPlayer = i === 0;
-            const otherScore = (() => {
-              const entry = multiRound.find((h) => h.hole === hole);
-              return entry ? (entry.scores[i] ?? 0) : 0;
-            })();
-            const displayScore = isMainPlayer ? strokes : otherScore;
-            return (
-              <View key={i} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: i === 0 ? '#2e7d32' : '#2a2a2a', gap: 6 }}>
-                <Text style={{ color: i === 0 ? '#A7F3D0' : '#9CA3AF', fontSize: 13, fontWeight: '700', flex: 1 }} numberOfLines={1}>{players[i]}</Text>
-                <Pressable
-                  onPress={() => {
-                    if (isMainPlayer) {
-                      setStrokes((s) => Math.max(0, s - 1));
-                    } else {
-                      setMultiRoundPersisted((prev) => {
-                        const idx = prev.findIndex((h) => h.hole === hole);
-                        if (idx === -1) return [...prev, { hole, par, scores: [strokes, 0, 0, 0].map((s, si) => si === i ? 0 : s) }];
-                        return prev.map((h, hi) => hi === idx ? { ...h, scores: h.scores.map((s, si) => si === i ? Math.max(0, s - 1) : s) } : h);
-                      });
-                    }
-                  }}
-                  style={{ width: 34, height: 34, backgroundColor: '#2a2a2a', borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}
-                >
-                  <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700', lineHeight: 22 }}>−</Text>
-                </Pressable>
-                <Text style={{ color: '#fff', fontSize: 20, fontWeight: '800', minWidth: 28, textAlign: 'center' }}>{displayScore}</Text>
-                <Pressable
-                  onPress={() => {
-                    if (isMainPlayer) {
-                      setStrokes((s) => s + 1);
-                    } else {
-                      setMultiRoundPersisted((prev) => {
-                        const idx = prev.findIndex((h) => h.hole === hole);
-                        if (idx === -1) return [...prev, { hole, par, scores: [strokes, 0, 0, 0].map((s, si) => si === i ? 1 : s) }];
-                        return prev.map((h, hi) => hi === idx ? { ...h, scores: h.scores.map((s, si) => si === i ? s + 1 : s) } : h);
-                      });
-                    }
-                  }}
-                  style={{ width: 34, height: 34, backgroundColor: '#2e7d32', borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}
-                >
-                  <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700', lineHeight: 22 }}>+</Text>
-                </Pressable>
-              </View>
-            );
-          })}
-
-          {/* Stats row: Putts + FIR + GIR */}
-          <View style={{ flexDirection: 'row', gap: 6, marginBottom: 2 }}>
-            {/* Putts */}
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', borderRadius: 10, borderWidth: 1, borderColor: '#2a2a2a', paddingHorizontal: 8, paddingVertical: 4, gap: 4 }}>
-              <Pressable onPress={() => setPuttsThisHole((p) => Math.max(0, p - 1))} style={{ width: 26, height: 26, justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ color: '#aaa', fontSize: 16, fontWeight: '700' }}>−</Text>
-              </Pressable>
-              <View style={{ flex: 1, alignItems: 'center' }}>
-                <Text style={{ color: '#aaa', fontSize: 8, fontWeight: '700', letterSpacing: 1 }}>PUTTS</Text>
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>{puttsThisHole}</Text>
-              </View>
-              <Pressable onPress={() => setPuttsThisHole((p) => p + 1)} style={{ width: 26, height: 26, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2e7d32', borderRadius: 6 }}>
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>+</Text>
-              </Pressable>
-            </View>
-            {/* FIR — not shown for par 3 */}
-            {par !== 3 && (
-              <View style={{ flex: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1a1a', borderRadius: 10, borderWidth: 1, borderColor: '#2a2a2a', paddingVertical: 4 }}>
-                <Text style={{ color: '#aaa', fontSize: 8, fontWeight: '700', letterSpacing: 1, marginBottom: 4 }}>FIR</Text>
-                <View style={{ flexDirection: 'row', gap: 6 }}>
-                  <Pressable onPress={() => setFirThisHole(true)} style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: firThisHole === true ? '#16a34a' : '#2a2a2a' }}>
-                    <Text style={{ color: firThisHole === true ? '#fff' : '#aaa', fontSize: 11, fontWeight: '700' }}>✓</Text>
-                  </Pressable>
-                  <Pressable onPress={() => setFirThisHole(false)} style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: firThisHole === false ? '#991b1b' : '#2a2a2a' }}>
-                    <Text style={{ color: firThisHole === false ? '#fff' : '#aaa', fontSize: 11, fontWeight: '700' }}>✗</Text>
-                  </Pressable>
-                </View>
-              </View>
-            )}
-            {/* GIR */}
-            <View style={{ flex: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1a1a', borderRadius: 10, borderWidth: 1, borderColor: '#2a2a2a', paddingVertical: 4 }}>
-              <Text style={{ color: '#aaa', fontSize: 8, fontWeight: '700', letterSpacing: 1, marginBottom: 4 }}>GIR</Text>
-              <View style={{ flexDirection: 'row', gap: 6 }}>
-                <Pressable onPress={() => setGirThisHole(true)} style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: girThisHole === true ? '#16a34a' : '#2a2a2a' }}>
-                  <Text style={{ color: girThisHole === true ? '#fff' : '#aaa', fontSize: 11, fontWeight: '700' }}>✓</Text>
-                </Pressable>
-                <Pressable onPress={() => setGirThisHole(false)} style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: girThisHole === false ? '#991b1b' : '#2a2a2a' }}>
-                  <Text style={{ color: girThisHole === false ? '#fff' : '#aaa', fontSize: 11, fontWeight: '700' }}>✗</Text>
-                </Pressable>
-              </View>
-            </View>
           </View>
 
-          {/* Next hole / Finish */}
-          <Pressable
-            onPress={() => {
-              const s = strokes;
-              if (s < par) respond("Let's go! Birdie.");
-              else if (s === par) respond('Solid par. Keep it going.');
-              else if (s >= par + 2) respond('Shake it off. Next one.');
-              // Capture hole stats before advancing
-              setHoleStatsLog((prev) => [...prev, { hole, strokes: s, putts: puttsThisHole, fairwayHit: par === 3 ? null : firThisHole, gir: girThisHole }]);
-              setRound((prev) => { const u = [...prev]; u[hole - 1] = s; return u; });
-              setRoundPars((prev) => { const u = [...prev]; u[hole - 1] = par; return u; });
-              // Persist player 0's strokes into multiRound so scorecard is complete
-              setMultiRoundPersisted((prev) => {
-                const idx = prev.findIndex((h) => h.hole === hole);
-                if (idx === -1) return [...prev, { hole, par, scores: [s, 0, 0, 0] }];
-                return prev.map((h, hi) => hi === idx ? { ...h, scores: h.scores.map((sc, si) => si === 0 ? s : sc) } : h);
-              });
-              updateScore(par, s);
-              // Reset per-hole stats for next hole
-              setPuttsThisHole(0);
-              setFirThisHole(null);
-              setGirThisHole(null);
-              if (hole < roundLength) {
-                const nextH = hole + 1;
-                setHole(nextH);
-                const hd = activeCourse.holes[Math.min(nextH - 1, activeCourse.holes.length - 1)];
-                setPar(hd.par);
-                setDistance(String(hd.distance));
-                setStrokes(hd.par);  // default to par so +/- reflects over/under immediately
-              } else {
-                // Capture round summary before ending
-                const mb = getMissBias();
-                const rb = getRecentBias();
-                const finalBias = rb ?? mb?.bias ?? null;
-                const keyMsg = finalBias === 'right'
-                  ? 'You pushed right all round — aim left next time.'
-                  : finalBias === 'left'
-                  ? 'You pulled left all round — aim right next time.'
-                  : shots.length >= 5
-                  ? 'Straight ball flight — great consistency!'
-                  : 'Not enough shots for a pattern. Keep tracking!';
-                setRoundSummary({
-                  totalShots: shots.length,
-                  bias: finalBias,
-                  biasConfidence: mb?.confidence ?? null,
-                  keyMessage: keyMsg,
-                });
-                void endRound();
-                setStrokes(0);
-              }
-              setLastShotBadge(null);
-            }}
-            style={({ pressed }) => ({ backgroundColor: pressed ? '#0d4a1a' : '#1b5e20', borderRadius: 12, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: '#4caf50' })}
-          >
-            <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '800' }}>
-              {hole < roundLength ? `Next Hole → ${hole + 1}` : '🏁 Finish Round'}
-            </Text>
-          </Pressable>
         </View>
-        </ScrollView>
-
       </View>
     )}
 
-    {/* ── Full details (original ScrollView, shown on demand) ─────────────── */}
+    {/* -- Full details (original ScrollView, shown on demand) --------------- */}
     {!watchMode && showDetails && <ScrollView style={[styles.scroll, { backgroundColor: highContrast ? '#000' : '#0B3D2E' }]} contentContainerStyle={[styles.container, { paddingTop: 48, paddingBottom: tabBarHeight + 16 }]} scrollEnabled={!voiceOverlayActive}>
       {/* -- Swing Toast Overlay ---------------------------------------------- */}
       {swingToast && (
@@ -5999,7 +6714,7 @@ export default function PlayScreenClean() {
           elevation: 6,
         }}>
           <Text style={{ fontSize: 18 }}>
-            {swingTempoLabel === 'smooth' ? '✅' : swingTempoLabel === 'fast' ? '⚡' : '🔵'}
+            {swingTempoLabel === 'smooth' ? '?' : swingTempoLabel === 'fast' ? '?' : '??'}
           </Text>
           <View style={{ flex: 1 }}>
             <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{swingToast}</Text>
@@ -6018,7 +6733,7 @@ export default function PlayScreenClean() {
         context={{ hole: currentHoleData.hole, par: currentHoleData.par, distance: currentHoleData.distance }}
       />
 
-      {/* Voice Response Card — shows last caddie response after listening */}
+      {/* Voice Response Card ? shows last caddie response after listening */}
       {commandResponse.length > 0 && !isThinking && !listening && (
         <View style={{
           marginHorizontal: 0,
@@ -6045,39 +6760,57 @@ export default function PlayScreenClean() {
         const insight = pd?.coaching
           ?? dominantPattern
           ?? (miss === 'right'
-            ? 'Today: aim slightly left — you tend to miss right'
+            ? 'Today: aim slightly left ? you tend to miss right'
             : miss === 'left'
-            ? 'Today: aim slightly right — you tend to miss left'
-            : 'Play your stock shot — pattern looks balanced');
+            ? 'Today: aim slightly right ? you tend to miss left'
+            : 'Play your stock shot ? pattern looks balanced');
         return (
           <Text style={styles.insightBanner}>{insight}</Text>
         );
       })()}
 
-      {/* ── IN PLAY Card ──────────────────────────────────────────────────── */}
+      {/* -- IN PLAY Card ---------------------------------------------------- */}
       <View style={styles.card}>
 
-        {/* ROW 1: Thumbnail · course/hole info · action icons */}
+        {/* ROW 1: Thumbnail ? course/hole info ? action icons */}
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-          <Image
-            source={HOLE_IMAGES[Math.min(currentHoleData.hole, 9)] ?? HOLE_IMAGES[1]}
-            style={{ width: 72, height: 52, borderRadius: 8, marginRight: 12 }}
-            resizeMode="cover"
-          />
+          {/* Hole thumbnail + course badge overlay */}
+          <View style={{ width: 72, height: 52, marginRight: 12 }}>
+            <Image
+              source={HOLE_IMAGES[Math.min(currentHoleData.hole, 9)] ?? HOLE_IMAGES[1]}
+              style={{ width: 72, height: 52, borderRadius: 8 }}
+              resizeMode="cover"
+            />
+            {/* Course thumbnail badge — bottom-left of the hole image */}
+            <View style={{
+              position: 'absolute', bottom: -6, left: -6,
+              width: 28, height: 28, borderRadius: 8,
+              backgroundColor: '#0d2018',
+              borderWidth: 1.5, borderColor: '#22c55e',
+              overflow: 'hidden',
+              justifyContent: 'center', alignItems: 'center',
+            }}>
+              <Image
+                source={activeCourse.thumbnail}
+                style={{ width: 22, height: 22 }}
+                resizeMode="contain"
+              />
+            </View>
+          </View>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-              <Text style={[styles.courseName, { flex: 1 }]} numberOfLines={1} adjustsFontSizeToFit>{activeCourse.name} — Hole {currentHoleData.hole}</Text>
+              <Text style={[styles.courseName, { flex: 1 }]} numberOfLines={1} adjustsFontSizeToFit>{activeCourse.name} ? Hole {currentHoleData.hole}</Text>
               <Pressable
                 onPress={() => setShowCourseSelect((v) => !v)}
                 style={({ pressed }) => ({ width: 32, height: 32, borderRadius: 16, backgroundColor: pressed ? '#1b5e20' : '#143d22', borderWidth: 1, borderColor: '#2e7d32', justifyContent: 'center', alignItems: 'center' })}
               >
-                <Text style={{ fontSize: 16 }}>⛳</Text>
+                <Text style={{ fontSize: 16 }}>?</Text>
               </Pressable>
               <Pressable
                 onPress={() => setShowQuickCommands((v) => !v)}
                 style={({ pressed }) => ({ width: 32, height: 32, borderRadius: 16, backgroundColor: pressed ? '#1b5e20' : '#143d22', borderWidth: 1, borderColor: showQuickCommands ? '#4caf50' : '#2e7d32', justifyContent: 'center', alignItems: 'center', marginLeft: 4 })}
               >
-                <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '800' }}>⚡</Text>
+                <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '800' }}>?</Text>
               </Pressable>
               <CaddieMicButton
                 size={44}
@@ -6086,7 +6819,16 @@ export default function PlayScreenClean() {
                 context={{ hole: currentHoleData.hole, par: currentHoleData.par, distance: currentHoleData.distance }}
               />
             </View>
-            <Text style={styles.holeInfo}>Par {currentHoleData.par} · {currentHoleData.distance} yds · Strokes {strokes}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+              <Text style={{ color: '#A7F3D0', fontSize: 12, fontWeight: '700' }}>Par {currentHoleData.par}</Text>
+              <Text style={{ color: '#4a7c5e', fontSize: 12 }}>·</Text>
+              <YardageDisplay
+                front={currentHoleData.distance - 15}
+                middle={currentHoleData.distance}
+                back={currentHoleData.distance + 15}
+                size="small"
+              />
+            </View>
             {currentHoleData.note ? <Text style={{ color: '#ccc', fontSize: 12, marginTop: 1 }}>{currentHoleData.note}</Text> : null}
             <Text style={{ color: '#aaa', fontSize: 10, marginTop: 2 }}>Rating {courseRating} · Slope {courseSlope} · Course Hcp {Math.round(handicapIndex * (courseSlope / 113))}</Text>
           </View>
@@ -6114,23 +6856,23 @@ export default function PlayScreenClean() {
                     'driver-straight': { club: 'Driver', result: 'straight' },
                     '7iron-right': { club: '7 Iron', result: 'right' },
                     '7iron-left': { club: '7 Iron', result: 'left' },
-                    '7iron-straight': { club: '7 Iron', result: 'straight' },
+                    '7iron-straight': { club: '7 Iron', result: 'center' as ShotResult },
                   };
                   const cmd = commands[val];
-                  if (cmd) { setClub(cmd.club); handleShot(cmd.result); }
+                  if (cmd) { setClub(cmd.club); handleShot(cmd.result as ShotResult); }
                   setQuickCommand('');
                   setShowQuickCommands(false);
                 }}
                 style={{ height: 50, width: '100%' }}
               >
                 <Picker.Item label="Select a command..." value="" style={{ fontSize: 14 }} />
-                <Picker.Item label="📍 Distance to Hole" value="dist-hole" style={{ fontSize: 14 }} />
-                <Picker.Item label="⛳ Distance to Bunker" value="dist-bunker" style={{ fontSize: 14 }} />
-                <Picker.Item label="💧 Distance to Water" value="dist-water" style={{ fontSize: 14 }} />
-                <Picker.Item label="🏌️ What Club Should I Hit?" value="what-club" style={{ fontSize: 14 }} />
-                <Picker.Item label="🎬 Record Swing" value="record-swing" style={{ fontSize: 14 }} />
-                <Picker.Item label="⏹ Stop Recording" value="stop-recording" style={{ fontSize: 14 }} />
-                <Picker.Item label="🗑 Delete Video" value="delete-video" style={{ fontSize: 14 }} />
+                <Picker.Item label="?? Distance to Hole" value="dist-hole" style={{ fontSize: 14 }} />
+                <Picker.Item label="? Distance to Bunker" value="dist-bunker" style={{ fontSize: 14 }} />
+                <Picker.Item label="?? Distance to Water" value="dist-water" style={{ fontSize: 14 }} />
+                <Picker.Item label="??? What Club Should I Hit?" value="what-club" style={{ fontSize: 14 }} />
+                <Picker.Item label="?? Record Swing" value="record-swing" style={{ fontSize: 14 }} />
+                <Picker.Item label="? Stop Recording" value="stop-recording" style={{ fontSize: 14 }} />
+                <Picker.Item label="?? Delete Video" value="delete-video" style={{ fontSize: 14 }} />
                 <Picker.Item label="Driver - Right" value="driver-right" style={{ fontSize: 14 }} />
                 <Picker.Item label="Driver - Left" value="driver-left" style={{ fontSize: 14 }} />
                 <Picker.Item label="Driver - Straight" value="driver-straight" style={{ fontSize: 14 }} />
@@ -6159,7 +6901,6 @@ export default function PlayScreenClean() {
                   setDistance(String(h1.distance));
                   setLastShotBadge(null);
                   setShowCourseSelect(false);
-                  void voiceSpeak(`${course.name} selected.`, 'calm');
                 }}
                 style={({ pressed }) => ({
                   flexDirection: 'row', alignItems: 'center',
@@ -6168,12 +6909,26 @@ export default function PlayScreenClean() {
                   borderWidth: 1, borderColor: idx === selectedCourseIdx ? '#66bb6a' : 'rgba(255,255,255,0.07)',
                 })}
               >
-                <Text style={{ fontSize: 14, marginRight: 8 }}>⛳</Text>
+                {/* Course thumbnail */}
+                <View style={{
+                  width: 48, height: 48, borderRadius: 10,
+                  backgroundColor: '#0d2018',
+                  borderWidth: 1.5, borderColor: idx === selectedCourseIdx ? '#4ade80' : '#1a4a2e',
+                  marginRight: 10,
+                  justifyContent: 'center', alignItems: 'center',
+                  overflow: 'hidden',
+                }}>
+                  <Image
+                    source={course.thumbnail}
+                    style={{ width: 40, height: 40 }}
+                    resizeMode="contain"
+                  />
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: idx === selectedCourseIdx ? '#fff' : '#ccc', fontWeight: idx === selectedCourseIdx ? '700' : '400', fontSize: 14 }}>{course.name}</Text>
-                  <Text style={{ color: '#aaa', fontSize: 11, marginTop: 1 }}>Rating {course.rating} — Slope {course.slope}</Text>
+                  <Text style={{ color: '#aaa', fontSize: 11, marginTop: 1 }}>Rating {course.rating} ? Slope {course.slope}</Text>
                 </View>
-                {idx === selectedCourseIdx && <Text style={{ color: '#66bb6a', fontSize: 12 }}>✓</Text>}
+                {idx === selectedCourseIdx && <Text style={{ color: '#66bb6a', fontSize: 12 }}>?</Text>}
               </Pressable>
             ))}
           </View>
@@ -6202,7 +6957,7 @@ export default function PlayScreenClean() {
             </View>
           </View>
 
-          {/* ROW 3: Club dropdown — caddie-suggested default */}
+          {/* ROW 3: Club dropdown ? caddie-suggested default */}
           <View style={{ marginBottom: 10 }}>
             <Text style={{ color: '#aaa', fontSize: 10, fontWeight: '700', letterSpacing: 1.2, marginBottom: 4 }}>CLUB</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -6222,7 +6977,7 @@ export default function PlayScreenClean() {
                   {(() => {
                     const yardMap = Object.fromEntries(getClubYardageMap());
                     return ['Driver','3 Wood','5 Wood','3 Iron','4 Iron','5 Iron','6 Iron','7 Iron','8 Iron','9 Iron','PW','GW','SW','LW','Putter'].map((c) => (
-                      <Picker.Item key={c} label={`${c}  —  ${yardMap[c] ?? '--'} yds`} value={c} style={{ fontSize: 14 }} />
+                      <Picker.Item key={c} label={`${c}  ?  ${yardMap[c] ?? '--'} yds`} value={c} style={{ fontSize: 14 }} />
                     ));
                   })()}
                 </Picker>
@@ -6271,7 +7026,7 @@ export default function PlayScreenClean() {
                     }}
                     style={{ backgroundColor: '#333', width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginRight: 8 }}
                   >
-                    <Text style={{ color: '#fff', fontSize: 18, lineHeight: 22 }}>−</Text>
+                    <Text style={{ color: '#fff', fontSize: 18, lineHeight: 22 }}>-</Text>
                   </Pressable>
                   <Text style={{ color: '#A7F3D0', fontSize: 18, fontWeight: '700', minWidth: 28, textAlign: 'center' }}>{currentScore}</Text>
                   <Pressable
@@ -6330,7 +7085,7 @@ export default function PlayScreenClean() {
                 );
               })();
               setMultiRoundPersisted(nextMultiRound);
-              // Recalculate skins from the same nextMultiRound — no stale closure
+              // Recalculate skins from the same nextMultiRound ? no stale closure
               setSkins(() => {
                 let carry = 1;
                 const results = [0, 0, 0, 0];
@@ -6354,6 +7109,7 @@ export default function PlayScreenClean() {
               if (hole < 18) {
                 const nextHole = hole + 1;
                 setHole(nextHole);
+                setLieType('tee'); // reset lie to tee box on new hole
                 proactiveCoach(nextHole);
                 const nextData = activeCourse.holes[Math.min(nextHole - 1, activeCourse.holes.length - 1)];
                 setPar(nextData.par);
@@ -6361,7 +7117,7 @@ export default function PlayScreenClean() {
                 setStrokes(nextData.par);  // default to par so +/- is relative from the start
                 setLastShotBadge(null);
               } else {
-                // Round complete — auto-save to cloud
+                // Round complete ? auto-save to cloud
                 saveRound();
               }
             }}
@@ -6373,23 +7129,23 @@ export default function PlayScreenClean() {
             })}
           >
             <Text style={{ color: '#A7F3D0', fontWeight: '700', fontSize: 15, letterSpacing: 0.3 }}>
-              {hole < 18 ? `Next Hole → ${hole + 1}` : 'Round Complete'}
+              {hole < 18 ? `Next Hole ? ${hole + 1}` : 'Round Complete'}
             </Text>
           </Pressable>
 
         </View>{/* end divider section */}
       </View>{/* end combined card */}
 
-      {/* ── STRATEGY Card ── */}
+      {/* -- STRATEGY Card -- */}
       <View style={styles.card}>
-        {/* ── STRATEGY collapse header ── */}
+        {/* -- STRATEGY collapse header -- */}
         <Pressable onPress={() => setStrategyCollapsed(v => !v)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4, marginBottom: strategyCollapsed ? 0 : 10 }}>
           <Text style={{ color: '#A7F3D0', fontWeight: '800', fontSize: 13, letterSpacing: 1.2, textTransform: 'uppercase' }}>STRATEGY</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {strategyCollapsed && (
-              <Text style={{ color: '#aaa', fontSize: 12 }}>{PLAYER_MODE_CONFIG[goalMode].label} · {strategyMode === 'attack' ? '🔥 ATK' : strategyMode === 'safe' ? '🛡 SAFE' : '⚖️ NEU'}</Text>
+              <Text style={{ color: '#aaa', fontSize: 12 }}>{PLAYER_MODE_CONFIG[goalMode].label} ? {strategyMode === 'attack' ? '?? ATK' : strategyMode === 'safe' ? '?? SAFE' : '?? NEU'}</Text>
             )}
-            <Text style={{ color: '#4ade80', fontSize: 22, fontWeight: '700' }}>{strategyCollapsed ? '▸' : '▾'}</Text>
+            <Text style={{ color: '#4ade80', fontSize: 22, fontWeight: '700' }}>{strategyCollapsed ? '?' : '?'}</Text>
           </View>
         </Pressable>
         {!strategyCollapsed && (<>
@@ -6425,7 +7181,7 @@ export default function PlayScreenClean() {
                 }}
               >
                 <Text style={{ color: strategyMode === mode ? (mode === 'attack' ? '#f87171' : mode === 'safe' ? '#A7F3D0' : '#d1d5db') : '#888', fontSize: 12, fontWeight: '700' }}>
-                  {mode === 'safe' ? '🛡 SAFE' : mode === 'attack' ? '🔥 ATK' : '⚖️ NEU'}
+                  {mode === 'safe' ? '?? SAFE' : mode === 'attack' ? '?? ATK' : '?? NEU'}
                 </Text>
               </Pressable>
             ))}
@@ -6454,11 +7210,15 @@ export default function PlayScreenClean() {
         >
           <Text style={{ color: '#A7F3D0', fontSize: 11, fontWeight: '700', letterSpacing: 1.4, marginBottom: 6 }}>DISTANCE</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-            {/* Big yardage number + ±10 nudge buttons */}
+            {/* Big yardage number + ?10 nudge buttons */}
             <View style={{ alignItems: 'center', gap: 4 }}>
-              <Text style={{ color: '#fff', fontSize: 52, fontWeight: '800', lineHeight: 56 }}>
-                {gpsYards?.middle ?? targetDistance ?? currentHoleData?.distance ?? '--'}
-              </Text>
+              <YardageDisplay
+                front={gpsYards?.front ?? null}
+                middle={gpsYards?.middle ?? targetDistance ?? currentHoleData?.distance ?? null}
+                back={gpsYards?.back ?? null}
+                size="large"
+                weak={gpsWeak}
+              />
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <Pressable
                   onPress={() => {
@@ -6468,7 +7228,7 @@ export default function PlayScreenClean() {
                     setTargetDistance(next);
                   }}
                   style={{ backgroundColor: '#1f2937', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6, borderWidth: 1, borderColor: '#374151' }}>
-                  <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '700' }}>−10</Text>
+                  <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '700' }}>-10</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => {
@@ -6484,7 +7244,7 @@ export default function PlayScreenClean() {
             </View>
             <View style={{ flex: 1 }}>
               {gpsYards ? (
-                // GPS data available (live or last-known) — show Front/Mid/Back trio.
+                // GPS data available (live or last-known) ? show Front/Mid/Back trio.
                 // gpsWeak controls whether values are shown in green (live) or amber (stale).
                 <>
                   <View style={{
@@ -6507,23 +7267,23 @@ export default function PlayScreenClean() {
                     </View>
                   </View>
                   {gpsWeak ? (
-                    <Text style={{ color: '#f59e0b', fontSize: 9, textAlign: 'center' }}>⚠️ GPS WEAK · last known</Text>
+                    <Text style={{ color: '#f59e0b', fontSize: 9, textAlign: 'center' }}>?? GPS WEAK ? last known</Text>
                   ) : calibratedGreens[`${selectedCourseIdx}_${hole}`] ? (
-                    <Text style={{ color: '#4caf50', fontSize: 9, textAlign: 'center' }}>🎯 Calibrated</Text>
+                    <Text style={{ color: '#4caf50', fontSize: 9, textAlign: 'center' }}>?? Calibrated</Text>
                   ) : (
                     <Pressable onPress={saveGreenLocation} style={{ alignItems: 'center' }}>
-                      <Text style={{ color: '#f59e0b', fontSize: 9, fontWeight: '700' }}>📍 Tap to set green</Text>
+                      <Text style={{ color: '#f59e0b', fontSize: 9, fontWeight: '700' }}>?? Tap to set green</Text>
                     </Pressable>
                   )}
                 </>
               ) : (
                 <Pressable onPress={startGpsWatch} style={{ alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 8, paddingVertical: 10 }}>
-                  <Text style={{ color: '#4caf50', fontSize: 13, fontWeight: '700' }}>📍 Start GPS</Text>
+                  <Text style={{ color: '#4caf50', fontSize: 13, fontWeight: '700' }}>?? Start GPS</Text>
                   <Text style={{ color: '#777', fontSize: 10, marginTop: 2 }}>F / M / B</Text>
                 </Pressable>
               )}
             </View>
-            {/* ── Mini Shot Map ─────────────────────────────────── */}
+            {/* -- Mini Shot Map ----------------------------------- */}
             {(() => {
               const MAPW = 143, MAPH = 90;
               const lastResult = shots.length > 0 ? shots[shots.length - 1]?.result : null;
@@ -6555,9 +7315,9 @@ export default function PlayScreenClean() {
                   <View style={{ position: 'absolute', left: 39, right: 39, top: 10, bottom: 14, backgroundColor: '#0f3d1e', borderRadius: 4 }} />
                   {/* Pin */}
                   <View style={{ position: 'absolute', top: 12, left: 66, width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFE600', opacity: 0.9 }} />
-                  {/* Last shot trace — blue */}
+                  {/* Last shot trace ? blue */}
                   {lastEndX !== null && renderLine(sx, sy, lastEndX, ey, '#60a5fa')}
-                  {/* Desired aim line — green */}
+                  {/* Desired aim line ? green */}
                   {renderLine(sx, sy, aimEndX, ey, '#4ade80')}
                   {/* Ball position */}
                   <View style={{ position: 'absolute', left: sx - 4, top: sy - 4, width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff', opacity: 0.85 }} />
@@ -6584,9 +7344,9 @@ export default function PlayScreenClean() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
             <Image source={ICON_RANGEFINDER} style={{ width: 13, height: 13, tintColor: '#FFE600' }} resizeMode="contain" />
-            <Text style={{ color: '#ccc', fontSize: 11 }}>yds  —  tap for rangefinder</Text>
+            <Text style={{ color: '#ccc', fontSize: 11 }}>yds  ?  tap for rangefinder</Text>
           </View>
-          {/* Hazard chips — shown when hole note contains bunker / water data */}
+          {/* Hazard chips ? shown when hole note contains bunker / water data */}
           {(() => {
             const haz = getHazardDistances();
             if (!haz.bunker && !haz.water) return null;
@@ -6594,13 +7354,13 @@ export default function PlayScreenClean() {
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                 {haz.water !== null && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#0c2a4a', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 4, borderWidth: 1, borderColor: '#1e4d7b' }}>
-                    <Text style={{ fontSize: 13 }}>💧</Text>
+                    <Text style={{ fontSize: 13 }}>??</Text>
                     <Text style={{ color: '#90caf9', fontSize: 12, fontWeight: '700' }}>Water ~{haz.water} yd</Text>
                   </View>
                 )}
                 {haz.bunker !== null && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#2a2010', borderRadius: 8, paddingHorizontal: 9, paddingVertical: 4, borderWidth: 1, borderColor: '#6b5a30' }}>
-                    <Text style={{ fontSize: 13 }}>⛳</Text>
+                    <Text style={{ fontSize: 13 }}>?</Text>
                     <Text style={{ color: '#fde68a', fontSize: 12, fontWeight: '700' }}>Bunker ~{haz.bunker} yd</Text>
                   </View>
                 )}
@@ -6635,7 +7395,7 @@ export default function PlayScreenClean() {
           })()}
         </Pressable>
 
-        {/* ── CADDIE STRATEGY: 4 tiles in one row ── */}
+        {/* -- CADDIE STRATEGY: 4 tiles in one row -- */}
         <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10 }}>
           {/* CLUB tile */}
           <View style={{ flex: 1, backgroundColor: '#0d2b14', borderRadius: 10, borderWidth: 1, borderColor: aiClubHint && aiClubHint !== club ? '#f59e0b' : '#2e7d32', paddingVertical: 8, alignItems: 'center' }}>
@@ -6643,7 +7403,7 @@ export default function PlayScreenClean() {
             <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }} numberOfLines={1} adjustsFontSizeToFit>{club.replace(' Wood','W').replace(' Iron','i')}</Text>
             {aiClubHint
               ? <Text style={{ color: aiClubHint !== club ? '#fbbf24' : '#6ee7b7', fontSize: 9, marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit>
-                  {aiClubHint !== club ? `AI: ${aiClubHint.replace(' Wood','W').replace(' Iron','i')}` : '✓ match'}
+                  {aiClubHint !== club ? `AI: ${aiClubHint.replace(' Wood','W').replace(' Iron','i')}` : '? match'}
                 </Text>
               : (() => { const y = Object.fromEntries(getClubYardageMap())[club]; return y ? <Text style={{ color: '#6ee7b7', fontSize: 9, marginTop: 1 }}>{y}y</Text> : null; })()}
           </View>
@@ -6652,7 +7412,7 @@ export default function PlayScreenClean() {
           <View style={{ flex: 1, backgroundColor: '#0d2b14', borderRadius: 10, borderWidth: 1, borderColor: '#2e7d32', paddingVertical: 8, alignItems: 'center' }}>
             <Text style={{ color: '#4ade80', fontSize: 8, fontWeight: '800', letterSpacing: 1, marginBottom: 2 }}>AIM</Text>
             <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800', textAlign: 'center' }} numberOfLines={1} adjustsFontSizeToFit>
-              {aim === 'left center' ? '← L CTR' : aim === 'right center' ? 'R CTR →' : aim === 'left edge' ? '← L EDG' : aim === 'right edge' ? 'R EDG →' : '↑ CTR'}
+              {aim === 'left center' ? '? L CTR' : aim === 'right center' ? 'R CTR ?' : aim === 'left edge' ? '? L EDG' : aim === 'right edge' ? 'R EDG ?' : '? CTR'}
             </Text>
           </View>
 
@@ -6664,11 +7424,11 @@ export default function PlayScreenClean() {
               borderColor: strategyMode === 'attack' ? '#f87171' : strategyMode === 'safe' ? '#2e7d32' : '#6b7280' }}>
             <Text style={{ fontSize: 8, fontWeight: '800', letterSpacing: 1, marginBottom: 2, color: strategyMode === 'attack' ? '#f87171' : strategyMode === 'safe' ? '#4ade80' : '#d1d5db' }}>MODE</Text>
             <Text style={{ fontSize: 11, fontWeight: '800', color: strategyMode === 'attack' ? '#fca5a5' : '#fff' }}>
-              {strategyMode === 'attack' ? '🔥 ATK' : strategyMode === 'safe' ? '🛡 SAFE' : '⚖️ NEU'}
+              {strategyMode === 'attack' ? '?? ATK' : strategyMode === 'safe' ? '?? SAFE' : '?? NEU'}
             </Text>
           </Pressable>
 
-          {/* LEFT yds tile — shows yardage remaining after this club, or FEEL state */}
+          {/* LEFT yds tile ? shows yardage remaining after this club, or FEEL state */}
           <View style={{ flex: 1, borderRadius: 10, borderWidth: 1, paddingVertical: 8, alignItems: 'center',
             backgroundColor: '#0d2b14', borderColor: getYardageLeft() !== null ? '#f59e0b' : '#2e7d32' }}>
             <Text style={{ color: getYardageLeft() !== null ? '#fbbf24' : '#4ade80', fontSize: 8, fontWeight: '800', letterSpacing: 1, marginBottom: 2 }}>
@@ -6680,57 +7440,64 @@ export default function PlayScreenClean() {
           </View>
         </View>
 
-        {/* Recommendation note — shown when caddie has a specific insight */}
+        {/* Recommendation note ? shown when caddie has a specific insight */}
         {getTargetRecommendation() !== '' && (
-          <Text style={{ color: '#66bb6a', fontSize: 12, marginBottom: 4, fontStyle: 'italic' }}>🎯 {getTargetRecommendation()}</Text>
+          <Text style={{ color: '#66bb6a', fontSize: 12, marginBottom: 4, fontStyle: 'italic' }}>?? {getTargetRecommendation()}</Text>
         )}
-        {/* Bias strategy — updates as soon as 5 shots logged or bias shifts */}
+        {/* Bias strategy ? updates as soon as 5 shots logged or bias shifts */}
         {(() => { const bs = getBiasStrategy(); return (
-          <Text style={{ color: bs.color, fontSize: 12, marginBottom: 4, fontWeight: '700' }}>⚡ {bs.label}</Text>
+          <Text style={{ color: bs.color, fontSize: 12, marginBottom: 4, fontWeight: '700' }}>? {bs.label}</Text>
         ); })()}
         {/* Aim offset pill */}
         {(() => { const ao = getAimOffset(); return ao ? (
           <View style={{ marginBottom: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
               <View style={{ backgroundColor: '#1a1a2a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: ao.color }}>
-                <Text style={{ color: ao.color, fontSize: 12, fontWeight: '700' }}>🎯 {ao.target === 'center' ? 'Center line' : ao.target === 'left center' ? 'Aim Left' : 'Aim Right'} · {ao.label}</Text>
+                <Text style={{ color: ao.color, fontSize: 12, fontWeight: '700' }}>?? {ao.target === 'center' ? 'Center line' : ao.target === 'left center' ? 'Aim Left' : 'Aim Right'} ? {ao.label}</Text>
               </View>
             </View>
             <Text style={{ color: ao.color, fontSize: 11, fontWeight: '600', fontStyle: 'italic', opacity: 0.85 }}>{ao.miss}</Text>
           </View>
         ) : null; })()}
-        {/* Caddie Tip — practice memory */}
+        {/* Caddie Tip ? practice memory */}
         {(() => {
           if (cmMissBias === 'neutral' || cmConfidence < 30 || cmUpdated === 0) return null;
           if (getMissBias() !== null) return null;
           const color   = cmMissBias === 'right' ? '#93c5fd' : '#fcd34d';
           const aimText = cmMissBias === 'right' ? 'Aim slightly left' : 'Aim slightly right';
           const noteText = cmMissBias === 'right'
-            ? 'You tend to miss right — adjust aim'
-            : 'You tend to miss left — adjust aim';
+            ? 'You tend to miss right ? adjust aim'
+            : 'You tend to miss left ? adjust aim';
           return (
             <View style={{ marginBottom: 10, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 10, borderWidth: 1, borderColor: color, paddingHorizontal: 14, paddingVertical: 8, gap: 2 }}>
-              <Text style={{ color, fontSize: 13, fontWeight: '800' }}>🧠 {aimText}</Text>
+              <Text style={{ color, fontSize: 13, fontWeight: '800' }}>?? {aimText}</Text>
               <Text style={{ color: '#9ca3af', fontSize: 11, fontStyle: 'italic' }}>{noteText} ({cmConfidence}% confidence)</Text>
             </View>
           );
         })()}
 
-        {/* FEEL — mental state buttons, influence caddie data and AI recommendations */}
+        {/* FEEL ? mental state, drives caddie AI logic and recommendations */}
         <View style={{ marginTop: 4, marginBottom: 8 }}>
           <Text style={{ color: '#aaa', fontSize: 9, fontWeight: '700', letterSpacing: 1.2, marginBottom: 5 }}>FEEL</Text>
-          <View style={{ flexDirection: 'row', gap: 6 }}>
-            {(['confident', 'nervous', 'aggressive'] as const).map((val) => (
-              <Pressable
-                key={val}
-                onPress={() => setMentalState(val)}
-                style={[styles.option, mentalState === val && styles.selected, { flex: 1, padding: 7, marginRight: 0 }]}
-              >
-                <Text style={[styles.optionText, { textAlign: 'center' }]} numberOfLines={1} adjustsFontSizeToFit>
-                  {val.charAt(0).toUpperCase() + val.slice(1)}
-                </Text>
-              </Pressable>
-            ))}
+          <View style={{ flexDirection: 'row', gap: 5 }}>
+            {([
+              ['confident',  'Confident',  '#4ade80', 'rgba(74,222,128,0.15)' ],
+              ['neutral',    'Neutral',    '#6b7280', 'rgba(107,114,128,0.12)'],
+              ['nervous',    'Nervous',    '#f59e0b', 'rgba(245,158,11,0.15)' ],
+              ['pressure',   'Pressure',   '#ef4444', 'rgba(239,68,68,0.15)'  ],
+            ] as const).map(([val, label, color, bg]) => {
+              const active = mentalState === val;
+              return (
+                <Pressable key={val} onPress={() => setMentalState(val)}
+                  style={{ flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center',
+                    borderWidth: active ? 2 : 1,
+                    borderColor: active ? color : 'rgba(255,255,255,0.10)',
+                    backgroundColor: active ? bg : 'transparent' }}>
+                  <Text style={{ color: active ? color : '#6b7280', fontSize: 9, fontWeight: '700',
+                    letterSpacing: 0.2 }} numberOfLines={1} adjustsFontSizeToFit>{label.toUpperCase()}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
@@ -6772,130 +7539,46 @@ export default function PlayScreenClean() {
 
       {/* Insight */}
       <View style={styles.card}>
-        {/* ── Caddie collapse header ── */}
+        {/* -- Caddie collapse header -- */}
         <Pressable onPress={() => setCaddieCollapsed(v => !v)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6, marginBottom: caddieCollapsed ? 0 : 10 }}>
           <Text style={styles.sectionTitle}>Caddie</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {caddieCollapsed && (
-              <Text style={{ color: '#aaa', fontSize: 12 }} numberOfLines={1}>{caddieAdvice.split(' ').slice(0, 6).join(' ')}…</Text>
+              <Text style={{ color: '#aaa', fontSize: 12 }} numberOfLines={1}>{caddieAdvice.split(' ').slice(0, 6).join(' ')}?</Text>
             )}
-            {/* Camera quick-access icon */}
-            <Pressable onPress={(e) => { e.stopPropagation(); setCameraCollapsed(false); }}
-              style={{ backgroundColor: '#132b13', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: '#2e7d32' }}>
-              <Text style={{ fontSize: 14 }}>🎥</Text>
+            {/* Swing Lab quick-access */}
+            <Pressable onPress={(e) => { e.stopPropagation(); router.push('/(tabs)/practice'); }}
+              style={{ backgroundColor: '#132b13', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: '#2e7d32', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <View style={{ width: 13, height: 13, alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ position: 'absolute', width: 13, height: 13, borderRadius: 6.5, borderWidth: 1.5, borderColor: '#4ade80' }} />
+                <View style={{ position: 'absolute', width: 7, height: 7, borderRadius: 3.5, borderWidth: 1.5, borderColor: '#4ade80' }} />
+                <View style={{ position: 'absolute', width: 2, height: 2, borderRadius: 1, backgroundColor: '#4ade80' }} />
+              </View>
+              <Text style={{ color: '#A7F3D0', fontSize: 10, fontWeight: '700' }}>Lab</Text>
             </Pressable>
-            <Text style={{ color: '#4ade80', fontSize: 22, fontWeight: '700' }}>{caddieCollapsed ? '▸' : '▾'}</Text>
+            <Text style={{ color: '#4ade80', fontSize: 22, fontWeight: '700' }}>{caddieCollapsed ? '?' : '?'}</Text>
           </View>
         </Pressable>
         {!caddieCollapsed && (<>
-        {shots.length > 0 && (
-          <View style={{ flexDirection: 'row', gap: 16, marginBottom: 10 }}>
-            <Text style={{ color: '#9CA3AF', fontSize: 12 }}>Shots: <Text style={{ color: '#fff', fontWeight: '700' }}>{shots.length}</Text></Text>
-            <Text style={{ color: '#9CA3AF', fontSize: 12 }}>Last: <Text style={{ color: '#A7F3D0', fontWeight: '700' }}>{shots[shots.length - 1]?.result ?? '—'}</Text></Text>
-          </View>
-        )}
-
-        {/* ── Shot pattern bar — always visible once shots are logged ── */}
-        {shots.length >= 1 && (() => {
-          const pattern = getSwingPattern();
-          if (!pattern) return null;
-          return (
-            <View style={{ marginBottom: 14 }}>
-              {/* Colored distribution bar */}
-              <View style={{ flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', marginBottom: 4 }}>
-                <View style={{ flex: Math.max(pattern.left, 0.5), backgroundColor: '#60a5fa' }} />
-                <View style={{ flex: Math.max(pattern.straight, 0.5), backgroundColor: '#A7F3D0' }} />
-                <View style={{ flex: Math.max(pattern.right, 0.5), backgroundColor: '#f87171' }} />
-              </View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={{ color: '#60a5fa', fontSize: 11, fontWeight: '600' }}>← {pattern.left}%</Text>
-                <Text style={{ color: '#A7F3D0', fontSize: 11, fontWeight: '600' }}>↑ {pattern.straight}%</Text>
-                <Text style={{ color: '#f87171', fontSize: 11, fontWeight: '600' }}>{pattern.right}% →</Text>
-              </View>
-              {/* Caddie pattern insight — replaces the old Swing Analysis card message */}
-              {shots.length >= 3 && (
-                <Text style={{ color: '#ddd', fontSize: 12, lineHeight: 18, marginTop: 6, fontStyle: 'italic' }}>
-                  {getSwingInsight()}
-                </Text>
-              )}
-            </View>
-          );
-        })()}
-
-        {/* Context state pills — caddie perspective on current mode/feel */}
-        {(strategyMode === 'attack' || mentalState === 'nervous' || mentalState === 'confident') && (
-          <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-            {strategyMode === 'attack' && (
-              <View style={{ backgroundColor: '#7f1d1d', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 }}>
-                <Text style={{ color: '#fca5a5', fontSize: 11, fontWeight: '600' }}>ATTACK</Text>
-              </View>
-            )}
-            {strategyMode === 'safe' && (
-              <View style={{ backgroundColor: '#14532d', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 }}>
-                <Text style={{ color: '#86efac', fontSize: 11, fontWeight: '600' }}>SAFE</Text>
-              </View>
-            )}
-            {mentalState === 'nervous' && (
-              <View style={{ backgroundColor: '#1e3a5f', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 }}>
-                <Text style={{ color: '#93c5fd', fontSize: 11, fontWeight: '600' }}>NERVOUS</Text>
-              </View>
-            )}
-            {mentalState === 'confident' && (
-              <View style={{ backgroundColor: '#14532d', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 }}>
-                <Text style={{ color: '#86efac', fontSize: 11, fontWeight: '600' }}>CONFIDENT</Text>
-              </View>
-            )}
-          </View>
-        )}
-        <Text style={styles.caddie}>{caddieAdvice}</Text>
-        {aiThinking && (
-          <Text style={{ marginTop: 12, fontSize: 13, color: '#6ee7b7', fontStyle: 'italic' }}>Thinking...</Text>
-        )}
-        {caddieMessage !== '' && (
-          <Text style={{ marginTop: 20, fontSize: 16, color: '#A7F3D0' }}>{caddieMessage}</Text>
-        )}
-        {shots.length >= 3 && (
-          <Text style={{ marginTop: 10, fontSize: 14, color: '#6ee7b7' }}>Confidence: {confidence}%</Text>
-        )}
-        <Text style={{ marginTop: 10, fontSize: 13, color: '#9CA3AF' }}>Style: {ppCoachingStyle}</Text>
-        {shots.length >= (roundLength === 9 ? 3 : 6) && (() => {
-          const pp = getPressurePattern(shots);
-          if (pp === 'neutral') return null;
-          return (
-            <Text style={{ marginTop: 5, fontSize: 11, color: '#6b7280' }}>
-              {pp === 'right' ? '⚠️ Tends right under pressure' : '⚠️ Tends left under pressure'}
-            </Text>
-          );
-        })()}
-        {shots.length >= (roundLength === 9 ? 3 : 6) && (() => {
-          const trend = getTrend(shots);
-          const mentalMap = getMentalPatterns(shots);
-          const lines: string[] = [];
-          if (trend === 'improving') lines.push('📈 Trending better');
-          else if (trend === 'struggling') lines.push('📉 Last 3 off target');
-          if (mentalMap['rushed'] && mentalMap['rushed'] !== 'straight') {
-            lines.push(`When rushed: miss ${mentalMap['rushed']}`);
+        {/* -- Caddie advice box -- */}
+        <View style={{ backgroundColor: 'rgba(10,40,20,0.6)', borderRadius: 10, borderWidth: 1, borderColor: '#2e7d32', padding: 12, marginBottom: 10 }}>
+          {aiThinking
+            ? <Text style={{ color: '#6ee7b7', fontSize: 13, fontStyle: 'italic' }}>Thinking?</Text>
+            : <Text style={styles.caddie}>{[caddieAdvice, caddieMessage !== '' ? caddieMessage : null, holeStrategy ? `Strategy: ${holeStrategy.voiceLine}` : null].filter(Boolean).join('\n\n')}</Text>
           }
-          if (mentalMap['smooth'] === 'straight') lines.push('When smooth: consistent');
-          if (lines.length === 0) return null;
-          return (
-            <Text style={{ marginTop: 5, fontSize: 11, color: '#6b7280', lineHeight: 17 }}>
-              {lines.join('  —  ')}
-            </Text>
-          );
-        })()}
+        </View>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
           <Pressable
             onPress={() => setQuietMode((q) => !q)}
             style={{ flex: 1, backgroundColor: quietMode ? '#374151' : '#1f2937', borderRadius: 8, paddingVertical: 8, alignItems: 'center', borderWidth: 1, borderColor: quietMode ? '#6ee7b7' : '#374151' }}
           >
-            <Text style={{ color: quietMode ? '#6ee7b7' : '#9CA3AF', fontSize: 13 }}>{quietMode ? '🔕 Quiet' : '🔊 Sound'}</Text>
+            <Text style={{ color: quietMode ? '#6ee7b7' : '#9CA3AF', fontSize: 13 }}>{quietMode ? '?? Quiet' : '?? Sound'}</Text>
           </Pressable>
           <Pressable
             onPress={speakPreShot}
             style={{ flex: 1, backgroundColor: '#1f2937', borderRadius: 8, paddingVertical: 8, alignItems: 'center', borderWidth: 1, borderColor: '#374151' }}
           >
-            <Text style={{ color: '#A7F3D0', fontSize: 13 }}>🎙 Pre-Shot</Text>
+            <Text style={{ color: '#A7F3D0', fontSize: 13 }}>?? Pre-Shot</Text>
           </Pressable>
           <Pressable
             onPress={() => {
@@ -6908,13 +7591,10 @@ export default function PlayScreenClean() {
             }}
             style={{ flex: 1, backgroundColor: recording ? '#3d1a00' : '#1f2937', borderRadius: 8, paddingVertical: 8, alignItems: 'center', borderWidth: 1, borderColor: recording ? '#f97316' : '#374151' }}
           >
-            <Text style={{ color: recording ? '#f97316' : '#A7F3D0', fontSize: 13 }}>{recording ? '⏹ Stop' : '🎥 Swing'}</Text>
+            <Text style={{ color: recording ? '#f97316' : '#A7F3D0', fontSize: 13 }}>{recording ? '? Stop' : '?? Swing'}</Text>
           </Pressable>
         </View>
-        {holeStrategy !== '' && (
-          <Text style={{ color: '#ccc', fontSize: 13, marginTop: 8 }}>Strategy: {holeStrategy}</Text>
-        )}
-        {/* Ask Caddie — AI Brain with voice */}
+        {/* Ask Caddie ? AI Brain with voice */}
         <Pressable
           onPress={() => void handleCaddie()}
           disabled={aiThinking}
@@ -6930,14 +7610,14 @@ export default function PlayScreenClean() {
           }}
         >
           <Text style={{ color: '#A7F3D0', fontSize: 15, fontWeight: '700' }}>
-            {aiThinking ? '🤔 Thinking...' : '🎙 Ask Caddie'}
+            {aiThinking ? '?? Thinking...' : '?? Ask Caddie'}
           </Text>
         </Pressable>
         {/* Edit Profile */}
         {!ppComplete && (
           <Pressable onPress={() => router.push('/profile-setup')}
             style={{ marginTop: 10, backgroundColor: '#1a2e1a', borderRadius: 8, paddingVertical: 8, alignItems: 'center', borderWidth: 1, borderColor: '#2e7d32' }}>
-            <Text style={{ color: '#A7F3D0', fontSize: 12 }}>⚡ Set Up Player Profile — improve AI accuracy</Text>
+            <Text style={{ color: '#A7F3D0', fontSize: 12 }}>? Set Up Player Profile ? improve AI accuracy</Text>
           </Pressable>
         )}
         {ppComplete && (
@@ -6946,92 +7626,19 @@ export default function PlayScreenClean() {
             <Text style={{ color: '#374151', fontSize: 11 }}>Edit Profile</Text>
           </Pressable>
         )}
-        {/* Sim My Game */}
-        {/* Round length + course selector */}
-        <View style={{ flexDirection: 'row', gap: 6, marginTop: 12 }}>
-          {([9, 18] as const).map((n) => (
-            <Pressable key={n} onPress={() => setRoundLength(n)}
-              style={{ flex: 1, paddingVertical: 6, borderRadius: 7, alignItems: 'center',
-                backgroundColor: roundLength === n ? '#1a3a2a' : '#111',
-                borderWidth: 1, borderColor: roundLength === n ? '#2e7d32' : '#333' }}>
-              <Text style={{ color: roundLength === n ? '#A7F3D0' : '#888', fontSize: 11, fontWeight: '600' }}>{n} Holes</Text>
-            </Pressable>
-          ))}
-        </View>
-        <View style={{ flexDirection: 'row', gap: 6, marginTop: 12 }}>
-          {(Object.keys(SIM_COURSES) as Array<keyof typeof SIM_COURSES>).map((key) => (
-            <Pressable
-              key={key}
-              onPress={() => setSimCourse(key)}
-              style={{ flex: 1, paddingVertical: 6, borderRadius: 7, alignItems: 'center',
-                backgroundColor: simCourse === key ? '#1a3a2a' : '#111',
-                borderWidth: 1, borderColor: simCourse === key ? '#2e7d32' : '#333' }}
-            >
-              <Text style={{ color: simCourse === key ? '#A7F3D0' : '#888', fontSize: 11, fontWeight: '600' }}>
-                {key === 'easy' ? 'Easy' : key === 'standard' ? 'Standard' : 'Hard'}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        {/* Swing Lab shortcut */}
         <Pressable
-          onPress={() => {
-            const profile = buildSimProfile(shots);
-            const course = SIM_COURSES[simCourse];
-            const result = runSimRounds(profile, shots.length < 5 ? 10 : 20, course, roundLength);
-            setSimResult(result);
-            const plan = generateGamePlan(profile, result);
-            setGamePlan(plan);
-            if (voiceEnabled) speakAICaddie(`Play smart today. ${plan.warning}.`);
-          }}
-          style={{ marginTop: 8, backgroundColor: '#1a3a2a', borderRadius: 8, paddingVertical: 9, alignItems: 'center', borderWidth: 1, borderColor: '#2e7d32' }}
+          onPress={() => router.push('/(tabs)/practice')}
+          style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#0d2b14', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, borderWidth: 1, borderColor: '#2e7d32' }}
         >
-          <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '700' }}>🎮 Sim My Game</Text>
+          <View style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ position: 'absolute', width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: '#4ade80', opacity: 0.4 }} />
+            <View style={{ position: 'absolute', width: 12, height: 12, borderRadius: 6, borderWidth: 1.5, borderColor: '#4ade80', opacity: 0.7 }} />
+            <View style={{ position: 'absolute', width: 4, height: 4, borderRadius: 2, backgroundColor: '#4ade80' }} />
+          </View>
+          <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '700', flex: 1 }}>Open Swing Lab</Text>
+          <Text style={{ color: '#4ade80', fontSize: 16 }}>?</Text>
         </Pressable>
-        {simResult && (
-          <View style={{ marginTop: 8, gap: 2 }}>
-            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>
-              Expected Score ({simResult.holeCount}): {simResult.averageScore} ({simResult.toPar >= 0 ? '+' : ''}{simResult.toPar})
-            </Text>
-            {simResult.holeCount === 9 && (
-              <Text style={{ color: '#9CA3AF', fontSize: 12 }}>Projected 18: {simResult.averageScore * 2}</Text>
-            )}
-            <Text style={{ color: '#9CA3AF', fontSize: 12 }}>Best: {simResult.bestScore}  |  Worst: {simResult.worstScore}</Text>
-            <Text style={{ color: '#9CA3AF', fontSize: 12 }}>Course: {simResult.courseName}</Text>
-            <Text style={{ color: '#9CA3AF', fontSize: 12 }}>Miss: {simResult.missLabel}</Text>
-            {simResult.sampleHoles.length > 0 && (
-              <Text style={{ color: '#6b7280', fontSize: 11, marginTop: 3 }}>
-                {simResult.sampleHoles.map((h) => {
-                  const rel = h.score - h.par;
-                  const label = rel === 0 ? 'Par' : rel === 1 ? 'Bogey' : rel === -1 ? 'Birdie' : rel >= 2 ? `+${rel}` : `${rel}`;
-                  return `Par ${h.par} (${h.difficulty}) ? ${label}`;
-                }).join('  —  ')}
-              </Text>
-            )}
-          </View>
-        )}
-        {/* Today's Game Plan */}
-        {gamePlan && (
-          <View style={{ marginTop: 12, backgroundColor: 'rgba(16,185,129,0.07)', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: 'rgba(167,243,208,0.15)' }}>
-            <Text style={{ color: '#A7F3D0', fontSize: 12, fontWeight: '700', letterSpacing: 1, marginBottom: 6 }}>TODAY’S PLAN</Text>
-            <Text style={{ color: '#fff', fontSize: 13, marginBottom: 3 }}>📋 {gamePlan.strategy}</Text>
-            <Text style={{ color: '#d1fae5', fontSize: 12, marginBottom: 3 }}>🎯 {gamePlan.focus}</Text>
-            <Text style={{ color: '#fca5a5', fontSize: 12 }}>⚠️ {gamePlan.warning}</Text>
-          </View>
-        )}
-        {/* Live Round Intelligence */}
-        {shots.length >= (roundLength === 9 ? 2 : 3) && (() => {
-          const li = getLiveInsights(shots, roundLength);
-          const lines: string[] = [];
-          if (li.trend === 'improving') lines.push('📈 Trending better');
-          else if (li.trend === 'struggling') lines.push('📉 Last few off target');
-          if (li.streak === 'right') lines.push('Two right in a row');
-          else if (li.streak === 'left') lines.push('Two left in a row');
-          if (li.pressure) lines.push('Pressure zone');
-          if (lines.length === 0) return null;
-          return (
-            <Text style={{ color: '#6b7280', fontSize: 11, marginTop: 6 }}>{lines.join('  —  ')}</Text>
-          );
-        })()}
         </>)}
       </View>
 
@@ -7041,7 +7648,7 @@ export default function PlayScreenClean() {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <Text style={{ color: '#A7F3D0', fontWeight: '600', fontSize: 14 }}>Coaching Swing</Text>
             <Pressable onPress={() => setShowCoachingVideo(false)}>
-              <Text style={{ color: '#aaa', fontSize: 13 }}>✕ Dismiss</Text>
+              <Text style={{ color: '#aaa', fontSize: 13 }}>? Dismiss</Text>
             </Pressable>
           </View>
           <View style={{ position: 'relative' }}>
@@ -7065,21 +7672,21 @@ export default function PlayScreenClean() {
             </View>
           </View>
           <Text style={{ color: '#ccc', fontSize: 12, marginTop: 6 }}>
-            {coachingSwing.result === 'right' ? 'Right miss swing' : coachingSwing.result === 'left' ? 'Left miss swing' : 'Reference swing'} — {coachingSwing.time}
+            {coachingSwing.result === 'right' ? 'Right miss swing' : coachingSwing.result === 'left' ? 'Left miss swing' : 'Reference swing'} ? {coachingSwing.time}
           </Text>
         </View>
       )}
 
-      {/* Swing Camera — inline panel, collapsible */}
+      {/* Swing Camera ? inline panel, collapsible */}
       <View style={[styles.card, { paddingTop: 10 }]}>
-        {/* ── Swing Camera collapse header ── */}
+        {/* -- Swing Camera collapse header -- */}
         <Pressable onPress={() => setCameraCollapsed(v => !v)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6, marginBottom: cameraCollapsed ? 0 : 8 }}>
-          <Text style={styles.sectionTitle}>🎥 Swing Camera</Text>
+          <Text style={styles.sectionTitle}>?? Swing Camera</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {cameraCollapsed && (
-              <Text style={{ color: '#aaa', fontSize: 12 }}>{recording ? '● Recording' : savedSwings.length > 0 ? `${savedSwings.length} saved` : 'Tap to open'}</Text>
+              <Text style={{ color: '#aaa', fontSize: 12 }}>{recording ? '? Recording' : savedSwings.length > 0 ? `${savedSwings.length} saved` : 'Tap to open'}</Text>
             )}
-            <Text style={{ color: '#4ade80', fontSize: 22, fontWeight: '700' }}>{cameraCollapsed ? '▸' : '▾'}</Text>
+            <Text style={{ color: '#4ade80', fontSize: 22, fontWeight: '700' }}>{cameraCollapsed ? '?' : '?'}</Text>
           </View>
         </Pressable>
         {!cameraCollapsed && (<>
@@ -7109,24 +7716,24 @@ export default function PlayScreenClean() {
           {/* Recording indicator */}
           {(recording || autoRecording) && (
             <Text style={{ color: '#ff5252', marginTop: 6, fontWeight: '600' }}>
-              {autoRecording ? '🎥 Recording swing...' : '🎥 Recording...'}
+              {autoRecording ? '?? Recording swing...' : '?? Recording...'}
             </Text>
           )}
 
           {/* Instant analysis */}
           {lastSwingAnalysis && !recording && !autoRecording && (
             <View style={{ backgroundColor: '#0d2b0d', borderRadius: 12, padding: 14, marginTop: 10, borderWidth: 1, borderColor: '#2e7d32' }}>
-              <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '700', marginBottom: 6 }}>⚡ Instant Analysis</Text>
+              <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '700', marginBottom: 6 }}>? Instant Analysis</Text>
               <Text style={{ color: '#e0e0e0', fontSize: 14, lineHeight: 21, marginBottom: 10 }}>{buildFeedbackLine(lastSwingAnalysis)}</Text>
               <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                 <View style={{ backgroundColor: '#0a1a0a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#1e4620' }}>
                   <Text style={{ color: lastSwingAnalysis.tempo === 'smooth' ? '#66bb6a' : '#f9a825', fontSize: 12, fontWeight: '700' }}>
-                    {lastSwingAnalysis.tempo === 'smooth' ? '✅' : lastSwingAnalysis.tempo === 'fast' ? '⚡' : '🐢'} {lastSwingAnalysis.tempo} tempo
+                    {lastSwingAnalysis.tempo === 'smooth' ? '?' : lastSwingAnalysis.tempo === 'fast' ? '?' : '??'} {lastSwingAnalysis.tempo} tempo
                   </Text>
                 </View>
                 <View style={{ backgroundColor: '#0a1a0a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#1e4620' }}>
                   <Text style={{ color: lastSwingAnalysis.peakG > 3.0 ? '#f9a825' : '#66bb6a', fontSize: 12, fontWeight: '700' }}>
-                    {lastSwingAnalysis.peakG > 3.0 ? '⚠️ unstable' : '✅ stable'} balance
+                    {lastSwingAnalysis.peakG > 3.0 ? '?? unstable' : '? stable'} balance
                   </Text>
                 </View>
                 <View style={{ backgroundColor: '#0a1a0a', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: '#1e4620' }}>
@@ -7167,14 +7774,14 @@ export default function PlayScreenClean() {
                     onPress={startRecording}
                     style={({ pressed }) => ({ backgroundColor: pressed ? '#1b5e20' : '#2e7d32', padding: 12, borderRadius: 10, marginRight: 8 })}
                   >
-                    <Text style={{ color: '#fff', fontWeight: '600' }}>🎥 Start Recording</Text>
+                    <Text style={{ color: '#fff', fontWeight: '600' }}>?? Start Recording</Text>
                   </Pressable>
                 ) : (
                   <Pressable
                     onPress={stopRecording}
                     style={({ pressed }) => ({ backgroundColor: pressed ? '#b71c1c' : '#c62828', padding: 12, borderRadius: 10 })}
                   >
-                    <Text style={{ color: '#fff', fontWeight: '600' }}>⏹ Stop Recording</Text>
+                    <Text style={{ color: '#fff', fontWeight: '600' }}>? Stop Recording</Text>
                   </Pressable>
                 )
               ) : (
@@ -7184,7 +7791,7 @@ export default function PlayScreenClean() {
                       onPress={() => { if (isPlaying) videoRef.current?.pauseAsync(); else videoRef.current?.playAsync(); }}
                       style={({ pressed }) => ({ backgroundColor: pressed ? '#1b5e20' : '#2e7d32', width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' })}
                     >
-                      <Text style={{ fontSize: 20 }}>{isPlaying ? '⏸' : '▶'}</Text>
+                      <Text style={{ fontSize: 20 }}>{isPlaying ? '?' : '?'}</Text>
                     </Pressable>
                     <Pressable
                       onPress={() => {
@@ -7195,19 +7802,19 @@ export default function PlayScreenClean() {
                       }}
                       style={({ pressed }) => ({ backgroundColor: pressed ? '#1a237e' : '#283593', width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' })}
                     >
-                      <Text style={{ fontSize: 20 }}>💾</Text>
+                      <Text style={{ fontSize: 20 }}>??</Text>
                     </Pressable>
                     <Pressable
                       onPress={() => { setVideoUri(null); setIsPlaying(false); }}
                       style={({ pressed }) => ({ backgroundColor: pressed ? '#b71c1c' : '#c62828', width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' })}
                     >
-                      <Text style={{ fontSize: 20 }}>🗑</Text>
+                      <Text style={{ fontSize: 20 }}>??</Text>
                     </Pressable>
                     <Pressable
                       onPress={() => { setVideoUri(null); setIsPlaying(false); }}
                       style={({ pressed }) => ({ backgroundColor: pressed ? '#444' : '#555', width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' })}
                     >
-                      <Text style={{ fontSize: 20 }}>↩</Text>
+                      <Text style={{ fontSize: 20 }}>?</Text>
                     </Pressable>
                   </View>
                   <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 4 }}>
@@ -7225,17 +7832,17 @@ export default function PlayScreenClean() {
           </>)}
         </View>
 
-      {/* Saved Swings — AI Analysis Gallery */}
+      {/* Saved Swings ? AI Analysis Gallery */}
       {savedSwings.length > 0 && (
         <View style={styles.card}>
-          {/* ── AI Swing Gallery collapse header ── */}
+          {/* -- AI Swing Gallery collapse header -- */}
           <Pressable onPress={() => setSwingGalleryCollapsed(v => !v)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6, marginBottom: swingGalleryCollapsed ? 0 : 10 }}>
             <Text style={styles.sectionTitle}>AI Swing Analysis</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               {swingGalleryCollapsed && (
                 <Text style={{ color: '#aaa', fontSize: 12 }}>{savedSwings.length} swing{savedSwings.length !== 1 ? 's' : ''}</Text>
               )}
-              <Text style={{ color: '#4ade80', fontSize: 22, fontWeight: '700' }}>{swingGalleryCollapsed ? '▸' : '▾'}</Text>
+              <Text style={{ color: '#4ade80', fontSize: 22, fontWeight: '700' }}>{swingGalleryCollapsed ? '?' : '?'}</Text>
             </View>
           </Pressable>
           {!swingGalleryCollapsed && (<>
@@ -7263,7 +7870,7 @@ export default function PlayScreenClean() {
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Text style={{ color: missColor, fontSize: 12, fontWeight: '600', textTransform: 'uppercase' }}>{swing.result}</Text>
-                    <Text style={{ color: '#aaa', fontSize: 14 }}>{isOpen ? '▲' : '▼'}</Text>
+                    <Text style={{ color: '#aaa', fontSize: 14 }}>{isOpen ? '?' : '?'}</Text>
                   </View>
                 </Pressable>
 
@@ -7295,7 +7902,7 @@ export default function PlayScreenClean() {
                         <Text style={{ color: a.path === 'outside-in' ? '#ff5252' : a.path === 'inside-out' ? '#448aff' : '#66bb6a', fontSize: 11, fontWeight: '700', marginTop: 4 }}>
                           {a.path === 'outside-in' ? 'Out?In' : a.path === 'inside-out' ? 'In?Out' : 'On Plane'}
                         </Text>
-                        {a.pathDeg !== 0 && <Text style={{ color: '#aaa', fontSize: 10 }}>{a.pathDeg > 0 ? '+' : ''}{a.pathDeg}—</Text>}
+                        {a.pathDeg !== 0 && <Text style={{ color: '#aaa', fontSize: 10 }}>{a.pathDeg > 0 ? '+' : ''}{a.pathDeg}?</Text>}
                       </View>
 
                       {/* Face angle diagram */}
@@ -7312,14 +7919,14 @@ export default function PlayScreenClean() {
                           }} />
                         </View>
                         <Text style={{ color: a.face === 'open' ? '#ff5252' : a.face === 'closed' ? '#448aff' : '#66bb6a', fontSize: 11, fontWeight: '700', marginTop: 4, textTransform: 'capitalize' }}>{a.face}</Text>
-                        {a.faceDeg !== 0 && <Text style={{ color: '#aaa', fontSize: 10 }}>{a.faceDeg > 0 ? '+' : ''}{a.faceDeg}—</Text>}
+                        {a.faceDeg !== 0 && <Text style={{ color: '#aaa', fontSize: 10 }}>{a.faceDeg > 0 ? '+' : ''}{a.faceDeg}?</Text>}
                       </View>
 
                       {/* Tempo + Speed */}
                       <View style={{ flex: 1, backgroundColor: '#0a0a0a', borderRadius: 10, padding: 10, alignItems: 'center' }}>
                         <Text style={{ color: '#ccc', fontSize: 10, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.8 }}>Tempo</Text>
                         <Text style={{ color: a.tempo === 'smooth' ? '#66bb6a' : '#f9a825', fontSize: 22, fontWeight: '800' }}>
-                          {a.tempo === 'smooth' ? '✅' : a.tempo === 'fast' ? '⚡' : '🐢'}
+                          {a.tempo === 'smooth' ? '?' : a.tempo === 'fast' ? '?' : '??'}
                         </Text>
                         <Text style={{ color: a.tempo === 'smooth' ? '#66bb6a' : '#f9a825', fontSize: 11, fontWeight: '700', marginTop: 2, textTransform: 'capitalize' }}>{a.tempo}</Text>
                         <Text style={{ color: '#aaa', fontSize: 10 }}>{a.speedEst} speed</Text>
@@ -7365,7 +7972,7 @@ export default function PlayScreenClean() {
                     <View style={{ backgroundColor: '#0d2b0d', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#2e7d32' }}>
                       <Text style={{ color: '#A7F3D0', fontWeight: '700', fontSize: 12, marginBottom: 6 }}>Coaching Cues</Text>
                       {a.cues.map((cue, ci) => (
-                        <Text key={ci} style={{ color: '#ccc', fontSize: 12, lineHeight: 18, marginBottom: 2 }}>— {cue}</Text>
+                        <Text key={ci} style={{ color: '#ccc', fontSize: 12, lineHeight: 18, marginBottom: 2 }}>? {cue}</Text>
                       ))}
                     </View>
 
@@ -7374,18 +7981,18 @@ export default function PlayScreenClean() {
                       onPress={() => { void voiceSpeak(`${a.summary} ${a.cues.join('. ')}`, 'calm'); }}
                       style={({ pressed }) => ({ backgroundColor: pressed ? '#1b5e20' : '#1e1e1e', borderRadius: 8, padding: 8, alignItems: 'center', marginTop: 10, borderWidth: 1, borderColor: '#333' })}
                     >
-                      <Text style={{ color: '#A7F3D0', fontSize: 12 }}>🎙 Speak Analysis</Text>
+                      <Text style={{ color: '#A7F3D0', fontSize: 12 }}>?? Speak Analysis</Text>
                     </Pressable>
                   </View>
                 )}
 
                 {isOpen && !a && (
                   <View style={{ padding: 12 }}>
-                    <Text style={{ color: '#aaa', fontSize: 13 }}>No sensor data captured — record a new swing for AI analysis.</Text>
+                    <Text style={{ color: '#aaa', fontSize: 13 }}>No sensor data captured ? record a new swing for AI analysis.</Text>
                   </View>
                 )}
 
-                {/* Video thumbnail strip — with shot tracer + logo watermark */}
+                {/* Video thumbnail strip ? with shot tracer + logo watermark */}
                 <View style={{ position: 'relative' }}>
                   <Video
                     source={{ uri: swing.uri }}
@@ -7393,7 +8000,7 @@ export default function PlayScreenClean() {
                     resizeMode={ResizeMode.CONTAIN}
                     useNativeControls={isOpen}
                   />
-                  {/* Shot tracer overlay — red arc showing ball flight based on analysis */}
+                  {/* Shot tracer overlay ? red arc showing ball flight based on analysis */}
                   {isOpen && a && (() => {
                     // x offset: outside-in curves right, inside-out curves left, on-plane straight
                     const missDir = a.missDir ?? a.path;
@@ -7403,7 +8010,7 @@ export default function PlayScreenClean() {
                     const traceColor = a.path === 'on-plane' ? '#66bb6a' : '#ef4444';
                     return (
                       <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 200 }}>
-                        {/* Ball flight arc — 3 line segments approximating a quadratic curve */}
+                        {/* Ball flight arc ? 3 line segments approximating a quadratic curve */}
                         {[0,1,2,3,4,5,6,7].map((i) => {
                           const t0 = i / 8;
                           const t1 = (i + 1) / 8;
@@ -7438,7 +8045,7 @@ export default function PlayScreenClean() {
                         {/* Tracer label */}
                         <View style={{ position: 'absolute', top: 6, left: 8, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 }}>
                           <Text style={{ color: traceColor, fontSize: 10, fontWeight: '700' }}>
-                            {a.path === 'outside-in' ? '↙ Out-In' : a.path === 'inside-out' ? '↗ In-Out' : '✔ On-Plane'}
+                            {a.path === 'outside-in' ? '? Out-In' : a.path === 'inside-out' ? '? In-Out' : '? On-Plane'}
                           </Text>
                         </View>
                       </View>
@@ -7465,8 +8072,8 @@ export default function PlayScreenClean() {
           {/* Performance Trends */}
           <View style={{ backgroundColor: '#121212', padding: 16, borderRadius: 14, marginBottom: 12 }}>
             <Text style={{ color: '#A7F3D0', fontWeight: '600', marginBottom: 8 }}>Performance Trends</Text>
-            <Text style={{ color: '#ccc', fontSize: 13 }}>Avg Score: {roundHistory.length ? Math.round(roundHistory.reduce((sum, r) => sum + (r.scores[0] ?? 0), 0) / roundHistory.length) : '—'}</Text>
-            <Text style={{ color: '#ccc', fontSize: 13 }}>Best Score: {roundHistory.length ? Math.min(...roundHistory.map((r) => r.scores[0] ?? 999)) : '—'}</Text>
+            <Text style={{ color: '#ccc', fontSize: 13 }}>Avg Score: {roundHistory.length ? Math.round(roundHistory.reduce((sum, r) => sum + (r.scores[0] ?? 0), 0) / roundHistory.length) : '?'}</Text>
+            <Text style={{ color: '#ccc', fontSize: 13 }}>Best Score: {roundHistory.length ? Math.min(...roundHistory.map((r) => r.scores[0] ?? 999)) : '?'}</Text>
             {roundHistory.length >= 2 && (() => {
               const trend = (roundHistory[1].scores[0] ?? 0) - (roundHistory[0].scores[0] ?? 0);
               return (
@@ -7485,7 +8092,7 @@ export default function PlayScreenClean() {
                 );
               })}
             </View>
-            <Text style={{ color: '#aaa', fontSize: 10, marginTop: 4 }}>◄ older    newer ►</Text>
+            <Text style={{ color: '#aaa', fontSize: 10, marginTop: 4 }}>? older    newer ?</Text>
           </View>
 
           {/* History list */}
@@ -7499,7 +8106,7 @@ export default function PlayScreenClean() {
         </View>
       )}
 
-      {/* Focus tools panel — shown when Focus Mode is ON (toggled from tools menu) */}
+      {/* Focus tools panel ? shown when Focus Mode is ON (toggled from tools menu) */}
       {focusMode && (
           <View style={{ marginTop: 14 }}>
             <Text style={{ color: '#6b7280', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 10 }}>FOCUS TOOLS</Text>
@@ -7518,11 +8125,11 @@ export default function PlayScreenClean() {
               }}
               style={{ backgroundColor: '#0f2d1f', borderRadius: 10, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: '#2e7d32' }}
             >
-              <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '600' }}>🔄 Reset Focus</Text>
+              <Text style={{ color: '#A7F3D0', fontSize: 14, fontWeight: '600' }}>?? Reset Focus</Text>
             </Pressable>
             {focusMessage !== '' && (
               <Text style={{ color: '#e0ffe8', fontSize: 15, fontStyle: 'italic', textAlign: 'center', marginTop: 8, paddingHorizontal: 8 }}>
-                {'“'}{focusMessage}{'”'}
+                {'?'}{focusMessage}{'?'}
               </Text>
             )}
 
@@ -7555,7 +8162,7 @@ export default function PlayScreenClean() {
               </Pressable>
             ))}
             {lastQuickReply !== '' && (
-              <Text style={{ color: '#4ade80', fontSize: 12, marginTop: 4 }}>✓ Copied: {'“'}{lastQuickReply}{'”'}</Text>
+              <Text style={{ color: '#4ade80', fontSize: 12, marginTop: 4 }}>? Copied: {'?'}{lastQuickReply}{'?'}</Text>
             )}
 
             {/* Priority flag */}
@@ -7582,7 +8189,7 @@ export default function PlayScreenClean() {
                       : '#555',
                     fontSize: 12, fontWeight: '700',
                   }}>
-                    {flag === null ? 'Clear' : flag === 'urgent' ? '🚨 Urgent' : '🟢 Low'}
+                    {flag === null ? 'Clear' : flag === 'urgent' ? '?? Urgent' : '?? Low'}
                   </Text>
                 </Pressable>
               ))}
@@ -7632,10 +8239,10 @@ export default function PlayScreenClean() {
 
 
 
-    {/* ── Tools dropdown ─────────────────────────────────────────────── */}
+    {/* -- Tools dropdown ----------------------------------------------- */}
     {!watchMode && (
       <>
-        {/* Transparent backdrop — closes dropdown when user taps anywhere else */}
+        {/* Transparent backdrop ? closes dropdown when user taps anywhere else */}
         {showToolsMenu && (
           <Pressable
             onPress={() => setShowToolsMenu(false)}
@@ -7643,19 +8250,19 @@ export default function PlayScreenClean() {
           />
         )}
 
-        {/* ⚙️ Gear button — upper-right */}
+        {/* ??? 3-dot tools button ? upper-right */}
         <Pressable
           onPress={() => setShowToolsMenu((v) => !v)}
           style={{
             position: 'absolute', top: 52, right: 14, zIndex: 51,
-            width: 40, height: 40, borderRadius: 20,
+            height: 32, paddingHorizontal: 12, borderRadius: 16,
             backgroundColor: showToolsMenu ? '#143d22' : '#111',
             borderWidth: 1.5, borderColor: showToolsMenu ? '#4caf50' : '#2a2a2a',
-            justifyContent: 'center', alignItems: 'center',
+            justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 3,
             shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 6, elevation: 6,
           }}
         >
-          <Text style={{ fontSize: 20 }}>⚙️</Text>
+          {[0,1,2].map((i) => <View key={i} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: showToolsMenu ? '#4ade80' : '#aaa' }} />)}
         </Pressable>
 
         {/* Dropdown panel */}
@@ -7684,7 +8291,7 @@ export default function PlayScreenClean() {
                 borderWidth: 1, borderColor: gpsWatchRef.current ? '#4caf50' : '#2a2a2a',
               }}
             >
-              <Text style={{ fontSize: 18 }}>📡</Text>
+              <Text style={{ fontSize: 18 }}>??</Text>
               <Text style={{ color: gpsWatchRef.current ? '#A7F3D0' : '#aaa', fontSize: 13, fontWeight: '600' }}>GPS {gpsWatchRef.current ? 'On' : 'Off'}</Text>
             </Pressable>
 
@@ -7698,11 +8305,11 @@ export default function PlayScreenClean() {
                 borderWidth: 1, borderColor: quietMode ? '#4caf50' : '#2a2a2a',
               }}
             >
-              <Text style={{ fontSize: 18 }}>{quietMode ? '🔕' : '🔊'}</Text>
+              <Text style={{ fontSize: 18 }}>{quietMode ? '??' : '??'}</Text>
               <Text style={{ color: quietMode ? '#A7F3D0' : '#aaa', fontSize: 13, fontWeight: '600' }}>{quietMode ? 'Voice Off' : 'Voice On'}</Text>
             </Pressable>
 
-            {/* Voice style — calm / aggressive */}
+            {/* Voice style ? calm / aggressive */}
             <Pressable
               onPress={() => setVoiceStyle((s) => s === 'calm' ? 'aggressive' : 'calm')}
               style={{
@@ -7712,7 +8319,7 @@ export default function PlayScreenClean() {
                 borderWidth: 1, borderColor: voiceStyle === 'aggressive' ? '#ef4444' : '#2a2a2a',
               }}
             >
-              <Text style={{ fontSize: 18 }}>{voiceStyle === 'aggressive' ? '🔥' : '🧘'}</Text>
+              <Text style={{ fontSize: 18 }}>{voiceStyle === 'aggressive' ? '??' : '??'}</Text>
               <Text style={{ color: voiceStyle === 'aggressive' ? '#fca5a5' : '#aaa', fontSize: 13, fontWeight: '600' }}>
                 {voiceStyle === 'aggressive' ? 'Aggressive' : 'Calm'} Voice
               </Text>
@@ -7746,7 +8353,7 @@ export default function PlayScreenClean() {
                 borderWidth: 1, borderColor: earbudMode ? '#4caf50' : '#2a2a2a',
               }}
             >
-              <Text style={{ fontSize: 18 }}>🎧</Text>
+              <Text style={{ fontSize: 18 }}>??</Text>
               <Text style={{ color: earbudMode ? '#A7F3D0' : '#aaa', fontSize: 13, fontWeight: '600' }}>Earbuds {earbudMode ? 'On' : 'Off'}</Text>
             </Pressable>
 
@@ -7759,7 +8366,7 @@ export default function PlayScreenClean() {
                 borderWidth: 1, borderColor: listening ? '#4caf50' : '#2a2a2a',
               }}
             >
-              <Text style={{ fontSize: 18 }}>{listening ? '🛑' : '🎙️'}</Text>
+              <Text style={{ fontSize: 18 }}>{listening ? '??' : '???'}</Text>
               <Text style={{ color: listening ? '#A7F3D0' : '#aaa', fontSize: 13, fontWeight: '600' }}>{listening ? 'Stop Listening' : 'Start Listening'}</Text>
             </Pressable>
 
@@ -7773,7 +8380,7 @@ export default function PlayScreenClean() {
                 borderWidth: 1, borderColor: highContrast ? '#FFD700' : '#2a2a2a',
               }}
             >
-              <Text style={{ fontSize: 18 }}>{highContrast ? '☀️' : '🌙'}</Text>
+              <Text style={{ fontSize: 18 }}>{highContrast ? '??' : '??'}</Text>
               <Text style={{ color: highContrast ? '#FFE600' : '#aaa', fontSize: 13, fontWeight: '600' }}>{highContrast ? 'High Contrast' : 'Low Contrast'}</Text>
             </Pressable>
 
@@ -7793,7 +8400,7 @@ export default function PlayScreenClean() {
                 borderWidth: 1, borderColor: focusMode ? '#4ade80' : '#2a2a2a',
               }}
             >
-              <Text style={{ fontSize: 18 }}>🎯</Text>
+              <Text style={{ fontSize: 18 }}>??</Text>
               <Text style={{ color: focusMode ? '#A7F3D0' : '#aaa', fontSize: 13, fontWeight: '600' }}>Focus Mode {focusMode ? 'On' : 'Off'}</Text>
             </Pressable>
 
@@ -7807,7 +8414,7 @@ export default function PlayScreenClean() {
                 borderWidth: 1.5, borderColor: isRoundActive ? '#ef4444' : '#4ade80',
               }}
             >
-              <Text style={{ fontSize: 18 }}>{isRoundActive ? '🏁' : '⛳'}</Text>
+              <Text style={{ fontSize: 18 }}>{isRoundActive ? '??' : '?'}</Text>
               <Text style={{ color: isRoundActive ? '#fca5a5' : '#A7F3D0', fontSize: 13, fontWeight: '700' }}>{isRoundActive ? 'End Round' : 'Start Round'}</Text>
             </Pressable>
 
@@ -7821,7 +8428,7 @@ export default function PlayScreenClean() {
                 borderWidth: 1, borderColor: watchMode ? '#4caf50' : '#2a2a2a',
               }}
             >
-              <Text style={{ fontSize: 18 }}>⌚</Text>
+              <Text style={{ fontSize: 18 }}>?</Text>
               <Text style={{ color: watchMode ? '#A7F3D0' : '#aaa', fontSize: 13, fontWeight: '600' }}>Watch Mode {watchMode ? 'On' : 'Off'}</Text>
             </Pressable>
 
@@ -7835,11 +8442,11 @@ export default function PlayScreenClean() {
                 borderWidth: 1, borderColor: lowPowerMode ? '#84cc16' : '#2a2a2a',
               }}
             >
-              <Text style={{ fontSize: 18 }}>🔋</Text>
+              <Text style={{ fontSize: 18 }}>??</Text>
               <Text style={{ color: lowPowerMode ? '#bef264' : '#aaa', fontSize: 13, fontWeight: '600' }}>Low Power {lowPowerMode ? 'On' : 'Off'}</Text>
             </Pressable>
 
-            {/* Shake-to-wake — only relevant when Low Power is on */}
+            {/* Shake-to-wake ? only relevant when Low Power is on */}
             <Pressable
               onPress={() => { setShakeWakeEnabled((v) => !v); setShowToolsMenu(false); }}
               style={{
@@ -7850,7 +8457,7 @@ export default function PlayScreenClean() {
                 opacity: lowPowerMode ? 1 : 0.45,
               }}
             >
-              <Text style={{ fontSize: 18 }}>📳</Text>
+              <Text style={{ fontSize: 18 }}>??</Text>
               <Text style={{ color: shakeWakeEnabled ? '#bef264' : '#aaa', fontSize: 13, fontWeight: '600' }}>Shake to Wake {shakeWakeEnabled ? 'On' : 'Off'}</Text>
             </Pressable>
 
@@ -7862,7 +8469,7 @@ export default function PlayScreenClean() {
                 backgroundColor: '#143d22', borderWidth: 1, borderColor: '#4caf50',
               }}
             >
-              <Text style={{ fontSize: 18 }}>👤</Text>
+              <Text style={{ fontSize: 18 }}>??</Text>
               <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '600' }}>Profile</Text>
             </Pressable>
 
@@ -7874,8 +8481,65 @@ export default function PlayScreenClean() {
                 backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#6366f1',
               }}
             >
-              <Text style={{ fontSize: 18 }}>⚙️</Text>
+              <Text style={{ fontSize: 18 }}>??</Text>
               <Text style={{ color: '#a5b4fc', fontSize: 13, fontWeight: '600' }}>Settings</Text>
+            </Pressable>
+
+            {/* Shot Dispersion Map */}
+            <Pressable
+              onPress={() => { setShowDispersionMap(true); setShowToolsMenu(false); }}
+              style={{
+                flexDirection: 'row', alignItems: 'center', gap: 10,
+                paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10,
+                backgroundColor: '#0f1f2e', borderWidth: 1, borderColor: '#3b82f6',
+              }}
+            >
+              <Text style={{ fontSize: 18 }}>🎯</Text>
+              <Text style={{ color: '#93c5fd', fontSize: 13, fontWeight: '600' }}>View Dispersion Map</Text>
+              {safeShots.length > 0 && (
+                <View style={{ marginLeft: 'auto', backgroundColor: '#3b82f6', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 }}>
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{safeShots.length}</Text>
+                </View>
+              )}
+            </Pressable>
+
+            {/* Hole Map View */}
+            <Pressable
+              onPress={() => { setShowHoleMap(true); setShowToolsMenu(false); }}
+              style={{
+                flexDirection: 'row', alignItems: 'center', gap: 10,
+                paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10,
+                backgroundColor: '#0a1e10', borderWidth: 1, borderColor: '#22c55e',
+              }}
+            >
+              <Text style={{ fontSize: 18 }}>🗺️</Text>
+              <Text style={{ color: '#86efac', fontSize: 13, fontWeight: '600' }}>Map View</Text>
+            </Pressable>
+
+            {/* Conversational Caddie */}
+            <Pressable
+              onPress={() => { setShowConvoModal(true); setShowToolsMenu(false); }}
+              style={{
+                flexDirection: 'row', alignItems: 'center', gap: 10,
+                paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10,
+                backgroundColor: '#111827', borderWidth: 1, borderColor: '#6366f1',
+              }}
+            >
+              <Text style={{ fontSize: 18 }}>🗣️</Text>
+              <Text style={{ color: '#a5b4fc', fontSize: 13, fontWeight: '600' }}>Ask Your Caddie</Text>
+            </Pressable>
+
+            {/* Pre-Round Warmup */}
+            <Pressable
+              onPress={() => { setShowWarmupModal(true); setShowToolsMenu(false); }}
+              style={{
+                flexDirection: 'row', alignItems: 'center', gap: 10,
+                paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10,
+                backgroundColor: '#1a1200', borderWidth: 1, borderColor: '#f59e0b',
+              }}
+            >
+              <Text style={{ fontSize: 18 }}>🏋️</Text>
+              <Text style={{ color: '#fcd34d', fontSize: 13, fontWeight: '600' }}>Pre-Round Warmup</Text>
             </Pressable>
 
             <Pressable
@@ -7886,7 +8550,7 @@ export default function PlayScreenClean() {
                 backgroundColor: '#2a1111', borderWidth: 1, borderColor: '#ef4444',
               }}
             >
-              <Text style={{ fontSize: 18 }}>↩️</Text>
+              <Text style={{ fontSize: 18 }}>??</Text>
               <Text style={{ color: '#fca5a5', fontSize: 13, fontWeight: '600' }}>Log Out</Text>
             </Pressable>
 
@@ -7900,7 +8564,7 @@ export default function PlayScreenClean() {
                 borderWidth: 1, borderColor: biometricEnabled ? '#818cf8' : '#2a2a2a',
               }}
             >
-              <Text style={{ fontSize: 18 }}>🔒</Text>
+              <Text style={{ fontSize: 18 }}>??</Text>
               <Text style={{ color: biometricEnabled ? '#a5b4fc' : '#aaa', fontSize: 13, fontWeight: '600' }}>
                 Face ID / Fingerprint {biometricEnabled ? 'On' : 'Off'}
               </Text>
@@ -7916,13 +8580,13 @@ export default function PlayScreenClean() {
                 opacity: biometricEnabled ? 1 : 0.4,
               }}
             >
-              <Text style={{ fontSize: 18 }}>🔐</Text>
+              <Text style={{ fontSize: 18 }}>??</Text>
               <Text style={{ color: '#9ca3af', fontSize: 13, fontWeight: '600' }}>Lock App</Text>
             </Pressable>
           </View>
         )}
 
-        {/* 📍 Rangefinder FAB — bottom-right */}
+        {/* ?? Rangefinder FAB ? bottom-right */}
         <Pressable
           onPress={() => {
             const y = getYardages();
@@ -7956,7 +8620,7 @@ export default function PlayScreenClean() {
     </>
     )} {/* end quickMode ternary */}
 
-    {/* ── Low Power tap-to-wake overlay ────────────────────────────────────── */}
+    {/* -- Low Power tap-to-wake overlay -------------------------------------- */}
     {lowPowerMode && !isWoken && (
       <Pressable
         onPress={handleTapToWake}
@@ -7981,7 +8645,7 @@ export default function PlayScreenClean() {
           justifyContent: 'center', alignItems: 'center',
           marginBottom: 28,
         }}>
-          <Text style={{ fontSize: 30 }}>🎤</Text>
+          <Text style={{ fontSize: 30 }}>??</Text>
         </View>
 
         {/* Wake hint */}
@@ -7993,10 +8657,10 @@ export default function PlayScreenClean() {
 
     </Animated.View>
 
-    {/* ── AIM MODE: fullscreen camera + overlay ──────────────────────────── */}
+    {/* -- AIM MODE: fullscreen camera + overlay ---------------------------- */}
     {aimMode && (() => {
       // Pixel offset applied to aim line based on CaddieMemory miss bias
-      // right-bias → shift left (negative), left-bias → shift right (positive)
+      // right-bias ? shift left (negative), left-bias ? shift right (positive)
       const aimOffset =
         cmMissBias === 'right' && cmConfidence >= 30 ? -28 :
         cmMissBias === 'left'  && cmConfidence >= 30 ?  28 : 0;
@@ -8013,7 +8677,7 @@ export default function PlayScreenClean() {
           <View style={{ flex: 1, backgroundColor: '#000' }}>
             {cameraPermission?.granted ? (
               <CameraView style={{ flex: 1 }} facing="back">
-                {/* ── Tap-to-lock layer (must be first / lowest for touch) ── */}
+                {/* -- Tap-to-lock layer (must be first / lowest for touch) -- */}
                 <Pressable
                   style={StyleSheet.absoluteFillObject}
                   onPress={(e) => {
@@ -8022,7 +8686,7 @@ export default function PlayScreenClean() {
                   }}
                 />
 
-                {/* ── Visual overlay (pointer-transparent so tap passes through) ── */}
+                {/* -- Visual overlay (pointer-transparent so tap passes through) -- */}
                 <View
                   style={{ ...StyleSheet.absoluteFillObject, justifyContent: 'space-between', paddingBottom: 48 }}
                   pointerEvents="box-none"
@@ -8036,14 +8700,14 @@ export default function PlayScreenClean() {
                       backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 12,
                       paddingHorizontal: 14, paddingVertical: 6, gap: 2,
                     }}>
-                      <Text style={{ color: '#6ee7b7', fontSize: 13, fontWeight: '700' }}>🎯 Aim Assist</Text>
+                      <Text style={{ color: '#6ee7b7', fontSize: 13, fontWeight: '700' }}>?? Aim Assist</Text>
                       {aimAdjusted && (
                         <Text style={{ color: aimColor, fontSize: 10, fontWeight: '600' }}>
                           Aim adjusted for your tendency
                         </Text>
                       )}
                       {aimTarget && (
-                        <Text style={{ color: '#a7f3d0', fontSize: 10 }}>🔒 Target locked</Text>
+                        <Text style={{ color: '#a7f3d0', fontSize: 10 }}>?? Target locked</Text>
                       )}
                     </View>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -8065,18 +8729,18 @@ export default function PlayScreenClean() {
                           borderRadius: 20, paddingHorizontal: 16, paddingVertical: 7,
                           borderWidth: 1, borderColor: 'rgba(239,68,68,0.5)',
                         })}>
-                        <Text style={{ color: '#fca5a5', fontSize: 13, fontWeight: '700' }}>✕ Close</Text>
+                        <Text style={{ color: '#fca5a5', fontSize: 13, fontWeight: '700' }}>? Close</Text>
                       </Pressable>
                     </View>
                   </View>
 
-                  {/* ── Aim lines ── */}
+                  {/* -- Aim lines -- */}
                   <View style={{ ...StyleSheet.absoluteFillObject }} pointerEvents="none">
-                    {/* Vertical aim line — bottom center upward, offset by bias */}
-                    <AimLine screenOffset={aimOffset} lineColor={aimColor} target={aimTarget} />
+                    {/* Vertical aim line ? bottom center upward, offset by bias */}
+                    <AimLineMemo screenOffset={aimOffset} lineColor={aimColor} target={aimTarget} />
                   </View>
 
-                  {/* ── Tap hint when no target yet ── */}
+                  {/* -- Tap hint when no target yet -- */}
                   {!aimTarget && (
                     <View style={{ alignItems: 'center', marginBottom: 120 }} pointerEvents="none">
                       <View style={{
@@ -8103,7 +8767,7 @@ export default function PlayScreenClean() {
                           {d.aimLabel.toUpperCase()}
                         </Text>
                         <Text style={{ color: '#a7f3d0', fontSize: 13, fontWeight: '600', textAlign: 'center' }}>
-                          {d.club !== '—' ? `${d.club}  ·  ` : ''}{d.distance ? `${d.distance} yds` : ''}
+                          {d.club !== '?' ? `${d.club}  ?  ` : ''}{d.distance ? `${d.distance} yds` : ''}
                         </Text>
                         {d.swingTendency && (
                           <Text style={{ color: '#fbbf24', fontSize: 11, textAlign: 'center', fontStyle: 'italic' }}>
@@ -8134,6 +8798,303 @@ export default function PlayScreenClean() {
         </Modal>
       );
     })()}
+
+    {/* ── Shot Dispersion Map Modal ──────────────────────────────────── */}
+    <Modal
+      visible={showDispersionMap}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => setShowDispersionMap(false)}
+    >
+      <View style={{ flex: 1, backgroundColor: '#081410' }}>
+        {/* Header */}
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16,
+          paddingTop: 56, paddingBottom: 14, borderBottomWidth: 1,
+          borderBottomColor: '#1a4a2e',
+        }}>
+          <Text style={{ flex: 1, color: '#4ade80', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 }}>
+            🎯 Shot Dispersion
+          </Text>
+          <Text style={{ color: '#4a7c5e', fontSize: 12, marginRight: 12 }}>
+            {safeShots.length} shot{safeShots.length !== 1 ? 's' : ''}
+          </Text>
+          <Pressable
+            onPress={() => setShowDispersionMap(false)}
+            style={({ pressed }) => ({
+              paddingVertical: 6, paddingHorizontal: 14, borderRadius: 10,
+              backgroundColor: pressed ? '#1a1a1a' : '#111',
+              borderWidth: 1, borderColor: '#374151',
+            })}>
+            <Text style={{ color: '#9ca3af', fontSize: 14, fontWeight: '700' }}>✕ Close</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView
+          contentContainerStyle={{ padding: 16, paddingBottom: 40, alignItems: 'center' }}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Description */}
+          <Text style={{ color: '#4a7c5e', fontSize: 12, textAlign: 'center', marginBottom: 14, lineHeight: 17 }}>
+            Tap any dot to see shot detail · Centre line = target · Dots spread by actual miss direction
+          </Text>
+
+          <ShotDispersionMap shots={safeShots} />
+
+          {/* Per-club breakdown header */}
+          {safeShots.length >= 5 && (() => {
+            const clubs = [...new Set(safeShots.map((s) => s.club).filter(Boolean))];
+            if (clubs.length < 2) return null;
+            return (
+              <View style={{ width: '100%', marginTop: 24 }}>
+                <Text style={{ color: '#6ee7b7', fontSize: 12, fontWeight: '800', letterSpacing: 1.2, marginBottom: 10 }}>
+                  BY CLUB
+                </Text>
+                {clubs.map((club) => {
+                  const clubShots = safeShots.filter((s) => s.club === club);
+                  if (clubShots.length < 2) return null;
+                  const l = clubShots.filter((s) => s.result === 'left').length;
+                  const r = clubShots.filter((s) => s.result === 'right').length;
+                  const st = clubShots.filter((s) => s.result === 'center').length;
+                  const t = clubShots.length;
+                  return (
+                    <View key={club} style={{
+                      backgroundColor: '#0d2518', borderRadius: 12, borderWidth: 1,
+                      borderColor: '#1a4a2e', padding: 12, marginBottom: 8,
+                    }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                        <Text style={{ color: '#A7F3D0', fontSize: 13, fontWeight: '800', flex: 1 }}>{club}</Text>
+                        <Text style={{ color: '#4a7c5e', fontSize: 11 }}>{t} shots</Text>
+                      </View>
+                      {/* Mini bar */}
+                      <View style={{ flexDirection: 'row', height: 5, borderRadius: 3, overflow: 'hidden', gap: 1 }}>
+                        <View style={{ flex: l || 0.1, backgroundColor: '#ef4444' }} />
+                        <View style={{ flex: st || 0.1, backgroundColor: '#4ade80' }} />
+                        <View style={{ flex: r || 0.1, backgroundColor: '#3b82f6' }} />
+                      </View>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                        <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '700' }}>← {Math.round((l / t) * 100)}%</Text>
+                        <Text style={{ color: '#4ade80', fontSize: 10, fontWeight: '700' }}>↑ {Math.round((st / t) * 100)}%</Text>
+                        <Text style={{ color: '#3b82f6', fontSize: 10, fontWeight: '700' }}>{Math.round((r / t) * 100)}% →</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            );
+          })()}
+        </ScrollView>
+      </View>
+    </Modal>
+
+    {/* ── Hole Map View Modal ───────────────────────────────────────── */}
+    <Modal
+      visible={showHoleMap}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => setShowHoleMap(false)}
+    >
+      <View style={{ flex: 1, backgroundColor: '#081410' }}>
+        {/* Header */}
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16,
+          paddingTop: 56, paddingBottom: 14, borderBottomWidth: 1,
+          borderBottomColor: '#1a4a2e',
+        }}>
+          <Text style={{ flex: 1, color: '#4ade80', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 }}>
+            🗺️ Hole Map
+          </Text>
+          <Pressable
+            onPress={() => setShowHoleMap(false)}
+            style={({ pressed }) => ({
+              paddingVertical: 6, paddingHorizontal: 14, borderRadius: 10,
+              backgroundColor: pressed ? '#1a1a1a' : '#111',
+              borderWidth: 1, borderColor: '#374151',
+            })}>
+            <Text style={{ color: '#9ca3af', fontSize: 14, fontWeight: '700' }}>✕ Close</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView
+          contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Hole selector strip */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ marginBottom: 14 }}
+            contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}
+          >
+            {activeCourse.holes.map((h) => (
+              <Pressable
+                key={h.hole}
+                onPress={() => { setHole(h.hole); setPar(h.par); }}
+                style={({ pressed }) => ({
+                  paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10,
+                  backgroundColor: h.hole === hole
+                    ? '#14532d'
+                    : pressed ? '#1a2a1e' : '#0d2015',
+                  borderWidth: 1.5,
+                  borderColor: h.hole === hole ? '#4ade80' : '#1a4a2e',
+                  alignItems: 'center', minWidth: 44,
+                })}
+              >
+                <Text style={{
+                  color: h.hole === hole ? '#4ade80' : '#4a7c5e',
+                  fontSize: 14, fontWeight: '800',
+                }}>{h.hole}</Text>
+                <Text style={{
+                  color: h.hole === hole ? '#86efac' : '#2d5a3e',
+                  fontSize: 9, fontWeight: '700',
+                }}>P{h.par}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          {/* The map */}
+          <HoleMapView
+            key={`map-hole-${hole}-${selectedCourseIdx}`}
+            holeLabel={`${activeCourse.name} · Hole ${currentHoleData.hole}`}
+            par={currentHoleData.par}
+            green={{
+              front:  currentHoleData.front,
+              middle: currentHoleData.middle,
+              back:   currentHoleData.back,
+            }}
+            tee={null}
+            userLocation={
+              gpsCoordsRef.current
+                ? { lat: gpsCoordsRef.current.latitude, lng: gpsCoordsRef.current.longitude }
+                : null
+            }
+            gpsAccuracy={null}
+            yards={gpsYards ?? {
+              front:  currentHoleData.distance - 15,
+              middle: currentHoleData.distance,
+              back:   currentHoleData.distance + 15,
+            }}
+          />
+
+          {/* Hole note */}
+          {currentHoleData.note ? (
+            <View style={{
+              marginTop: 16, backgroundColor: '#0d2015', borderRadius: 12,
+              borderWidth: 1, borderColor: '#1a4a2e', padding: 12,
+              flexDirection: 'row', gap: 8, alignItems: 'flex-start',
+            }}>
+              <Text style={{ fontSize: 16 }}>📍</Text>
+              <Text style={{ color: '#6ee7b7', fontSize: 13, lineHeight: 18, flex: 1 }}>
+                {currentHoleData.note}
+              </Text>
+            </View>
+          ) : null}
+        </ScrollView>
+      </View>
+    </Modal>
+
+    {/* ── Conversational Caddie Modal ───────────────────────────────── */}
+    <Modal
+      visible={showConvoModal}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => setShowConvoModal(false)}
+    >
+      <View style={{ flex: 1, backgroundColor: '#091410' }}>
+        {/* Header */}
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16,
+          paddingTop: 56, paddingBottom: 14, borderBottomWidth: 1,
+          borderBottomColor: '#1a3020',
+        }}>
+          <Text style={{ flex: 1, color: '#a5b4fc', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 }}>
+            🗣️ Ask Your Caddie
+          </Text>
+          <Pressable
+            onPress={() => setShowConvoModal(false)}
+            style={({ pressed }) => ({
+              paddingVertical: 6, paddingHorizontal: 14, borderRadius: 10,
+              backgroundColor: pressed ? '#1a1a1a' : '#111',
+              borderWidth: 1, borderColor: '#374151',
+            })}>
+            <Text style={{ color: '#9ca3af', fontSize: 14, fontWeight: '700' }}>✕ Close</Text>
+          </Pressable>
+        </View>
+
+        {/* Caddie chat */}
+        <ConversationalCaddie
+          context={{
+            hole:        hole,
+            distance:    gpsYards?.middle ?? currentHoleData.distance,
+            club:        club ?? undefined,
+            missPattern: (ppMiss === 'right' ? 'right' : ppMiss === 'left' ? 'left' : 'neutral') as 'left' | 'right' | 'neutral',
+            par:         par,
+            courseName:  activeCourse.name,
+          }}
+          onSpeak={(text) => voiceSpeak(text, 'calm')}
+          onMicPress={() => {
+            setShowConvoModal(false);
+            void triggerVoice({
+              hole,
+              distance: gpsYards?.middle ?? currentHoleData.distance,
+              club:     club,
+              par,
+              missPattern: ppMiss,
+            });
+          }}
+          voiceActive={voiceState === 'LISTENING' || voiceState === 'PROCESSING' || voiceState === 'SPEAKING'}
+          externalResponse={null}
+        />
+      </View>
+    </Modal>
+
+    {/* ── Pre-Round Warmup Modal ────────────────────────────────────── */}
+    <Modal
+      visible={showWarmupModal}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => setShowWarmupModal(false)}
+    >
+      <View style={{ flex: 1, backgroundColor: '#091410' }}>
+        {/* Header */}
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16,
+          paddingTop: 56, paddingBottom: 14, borderBottomWidth: 1,
+          borderBottomColor: '#1a2a0a',
+        }}>
+          <Text style={{ flex: 1, color: '#fcd34d', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 }}>
+            🏋️ Pre-Round Warmup
+          </Text>
+          <Pressable
+            onPress={() => setShowWarmupModal(false)}
+            style={({ pressed }) => ({
+              paddingVertical: 6, paddingHorizontal: 14, borderRadius: 10,
+              backgroundColor: pressed ? '#1a1a1a' : '#111',
+              borderWidth: 1, borderColor: '#374151',
+            })}>
+            <Text style={{ color: '#9ca3af', fontSize: 14, fontWeight: '700' }}>✕ Close</Text>
+          </Pressable>
+        </View>
+
+        {/* Warmup wizard */}
+        <WarmupCalibration
+          clubList={DEFAULT_CLUB_YARDS.map(([name]) => ({
+            name,
+            priorAvg: getClubAverage(name),
+          }))}
+          onCalibrate={(clubName, samples) => {
+            samples.forEach((dist) => updateClubDistance(clubName, dist));
+          }}
+          onSpeak={(text) => voiceSpeak(text, 'calm')}
+          onComplete={() => {
+            setShowWarmupModal(false);
+            setTimeout(() => voiceSpeak("You're dialled in. Let's go play.", 'calm'), 400);
+          }}
+        />
+      </View>
+    </Modal>
+    {/* End of manual mode wrapper */}
+    </>)}
     </>
   );
 }  // end PlayScreenClean

@@ -8,16 +8,19 @@
  * All state mutations go through the callback so the UI stays reactive.
  */
 
-import * as FileSystem from 'expo-file-system';
 import { Audio } from 'expo-av';
 
 const OPENAI_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY ?? '';
 const WHISPER_URL = 'https://api.openai.com/v1/audio/transcriptions';
-const MAX_DURATION_MS = 5000;
+const MAX_DURATION_MS     = 4000;  // absolute cap — stops after 4s regardless
+const SILENCE_WINDOW_MS   = 800;   // stop early if audio power stays below threshold
+const SILENCE_THRESHOLD_DB = -45;  // dBFS level considered silence
 
-let _timeoutRef = null;
-let _resolveRef = null;
-let _recording  = null;  // expo-av Audio.Recording instance
+let _timeoutRef        = null;
+let _resolveRef        = null;
+let _recording         = null;  // expo-av Audio.Recording instance
+let _silenceTimerRef   = null;  // early-stop on sustained silence
+let _lastLoudTimestamp = null;  // tracks when audio last exceeded threshold
 
 /**
  * startSTT(setTranscript, audioRecordingRef?)
@@ -49,9 +52,16 @@ export async function startSTT(setTranscript, audioRecordingRef = null) {
           await Audio.setAudioModeAsync({
             allowsRecordingIOS: true,
             playsInSilentModeIOS: true,
+            staysActiveInBackground: false,
+            shouldDuckAndroid: true,
+            // false = route to BT headset or loudspeaker, not the phone earpiece
+            playThroughEarpieceAndroid: false,
           });
           const { recording } = await Audio.Recording.createAsync(
-            Audio.RecordingOptionsPresets.HIGH_QUALITY,
+            {
+              ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+              isMeteringEnabled: true,
+            },
           );
           _recording = recording;
           console.log('[sttService] Recording started');
@@ -63,15 +73,58 @@ export async function startSTT(setTranscript, audioRecordingRef = null) {
       }
     }
 
-    // Safety timeout — always resolves after MAX_DURATION_MS even with no audio
+    // Safety timeout — absolute failsafe, stops after MAX_DURATION_MS
     _timeoutRef = setTimeout(async () => {
+      _clearSilenceTimer();
       const text = await _finalizeRecording(audioRecordingRef);
       setTranscript(text);
-      console.log(`[sttService] STT RESULT: "${text || '(empty)'}"`);
+      console.log(`[sttService] STT RESULT (timeout): "${text || '(empty)'}"`);
       _resolveRef?.(text);
       _resolveRef = null;
     }, MAX_DURATION_MS);
+
+    // Silence detection — poll recording metering; stop early if quiet for SILENCE_WINDOW_MS
+    _lastLoudTimestamp = Date.now();
+    if (_recording) {
+      try {
+        await _recording.setProgressUpdateIntervalAsync(100);
+        _recording.setOnRecordingStatusUpdate((status) => {
+          if (!_resolveRef) return;
+          const db = status?.metering ?? -160;
+          if (db > SILENCE_THRESHOLD_DB) {
+            _lastLoudTimestamp = Date.now();
+          } else if (_lastLoudTimestamp && Date.now() - _lastLoudTimestamp >= SILENCE_WINDOW_MS) {
+            // Silence detected for long enough — stop early
+            console.log('[sttService] Silence detected — stopping early');
+            _clearSilenceTimer();
+            _earlyStop(setTranscript, audioRecordingRef);
+          }
+        });
+      } catch {
+        // metering not supported on this device — fall through to timeout only
+      }
+    }
   });
+}
+
+function _clearSilenceTimer() {
+  if (_silenceTimerRef) {
+    clearTimeout(_silenceTimerRef);
+    _silenceTimerRef = null;
+  }
+}
+
+async function _earlyStop(setTranscript, audioRecordingRef) {
+  if (!_resolveRef) return;
+  if (_timeoutRef) {
+    clearTimeout(_timeoutRef);
+    _timeoutRef = null;
+  }
+  const text = await _finalizeRecording(audioRecordingRef);
+  if (setTranscript) setTranscript(text);
+  console.log(`[sttService] STT RESULT (silence): "${text || '(empty)'}"`);
+  _resolveRef?.(text);
+  _resolveRef = null;
 }
 
 /**
@@ -82,6 +135,7 @@ export async function startSTT(setTranscript, audioRecordingRef = null) {
  */
 export async function stopSTT(setTranscript, audioRecordingRef = null) {
   console.log('[sttService] STT STOP');
+  _clearSilenceTimer();
   if (_timeoutRef) {
     clearTimeout(_timeoutRef);
     _timeoutRef = null;
@@ -110,6 +164,22 @@ async function _finalizeRecording(audioRecordingRef) {
 
   try {
     await rec.stopAndUnloadAsync();
+
+    // Reset audio mode back to playback — critical for Bluetooth earbuds.
+    // When recording, iOS routes audio through the built-in mic and can lock
+    // the BT session to SCO (low-quality). Resetting here restores the A2DP
+    // (high-quality) route so the caddie response plays through earbuds.
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+        // Restore A2DP profile so BT earbuds receive the caddie response at full quality
+        playThroughEarpieceAndroid: false,
+      });
+    } catch {}
+
     const uri = rec.getURI();
     if (!uri) return '';
 
@@ -133,12 +203,9 @@ async function _finalizeRecording(audioRecordingRef) {
   } catch {
     return '';
   } finally {
-    // Clean up temp audio file
+    // Temp recording URI is managed by expo-av and cleaned up automatically
     if (rec) {
-      try {
-        const uri = rec.getURI?.();
-        if (uri) await FileSystem.deleteAsync(uri, { idempotent: true });
-      } catch {}
+      try { rec.getURI?.(); } catch {} // no-op, just ensure no crash
     }
   }
 }

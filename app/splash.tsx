@@ -1,6 +1,5 @@
 import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Audio } from 'expo-av';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect } from 'react';
@@ -9,21 +8,6 @@ export default function LandingScreen() {
   const router = useRouter();
   const profileComplete = usePlayerProfileStore((s) => s.profileComplete);
   const [hasDraft, setHasDraft] = useState(false);
-
-  const playStartRoundSound = async () => {
-    try {
-      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-      const { sound } = await Audio.Sound.createAsync(require('../assets/sounds/swing-swoosh.mp3'), {
-        shouldPlay: true,
-        volume: 0.85,
-      });
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) void sound.unloadAsync();
-      });
-    } catch {
-      // no-op
-    }
-  };
 
   // Only show "Resume Round" if there's an actual draft in storage
   useEffect(() => {
@@ -38,8 +22,11 @@ export default function LandingScreen() {
       {/* Branding */}
       <View style={styles.top}>
         <Image source={require('../assets/images/logo.png')} style={{ width: 80, height: 80, marginBottom: 10, borderRadius: 999, overflow: 'hidden' }} resizeMode="cover" />
-        <Text style={styles.logo}>SmartPlay Caddie</Text>
-        <Text style={styles.tagline}>The intelligent approach to better golf.</Text>
+        <Text style={styles.logo}>
+          <Text style={{ color: '#A7F3D0' }}>SmartPlay</Text>
+          <Text style={{ color: '#fff' }}> Caddie</Text>
+        </Text>
+        <Text style={styles.tagline}>REAL-TIME CADDIE INTELLIGENCE</Text>
       </View>
 
       {/* Value prop */}
@@ -60,9 +47,17 @@ export default function LandingScreen() {
           </Pressable>
         )}
 
+        {/* Open Caddie — main AI caddie screen */}
+        <Pressable
+          onPress={() => { router.push('/(tabs)/caddie'); }}
+          style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && { opacity: 0.85 }]}
+        >
+          <Text style={styles.btnText}>Open Caddie</Text>
+        </Pressable>
+
         {/* Start new round */}
         <Pressable
-          onPress={() => { void playStartRoundSound(); router.push('/(tabs)/play'); }}
+          onPress={() => { router.push('/(tabs)/play'); }}
           style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && { opacity: 0.85 }]}
         >
           <Text style={styles.btnText}>Start Round</Text>
@@ -104,16 +99,19 @@ const styles = StyleSheet.create({
   },
   logo: {
     color: '#fff',
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '700',
-    letterSpacing: 0.5,
+    letterSpacing: 3,
     textAlign: 'center',
+    textTransform: 'uppercase',
   },
   tagline: {
     color: '#A7F3D0',
-    fontSize: 15,
-    marginTop: 8,
+    fontSize: 13,
+    marginTop: 6,
     textAlign: 'center',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
   middle: {
     alignItems: 'center',
