@@ -12,6 +12,7 @@ import {
   Easing,
   AppState,
   AppStateStatus,
+  useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
@@ -40,6 +41,16 @@ export default function CaddieTab() {
   useKeepAwake();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
+  // ── Avatar sizing — explicit 9:16 frame, fits any screen ────────────────
+  const TOP_PADDING = insets.top + 16;
+  const BOTTOM_UI_RESERVED = 220;
+  const availableH = screenHeight - TOP_PADDING - BOTTOM_UI_RESERVED;
+  const rawW = availableH * (9 / 16);
+  const avatarWidth  = Math.round(Math.min(rawW, screenWidth));
+  const avatarHeight = Math.round(avatarWidth * (16 / 9));
+  const avatarLeft   = Math.round((screenWidth - avatarWidth) / 2);
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
@@ -548,6 +559,7 @@ export default function CaddieTab() {
       caddieResponse=""
       onTap={handleMicPress}
       emotion={kevinEmotion}
+      fillMode="cover"
     />
   );
 
@@ -834,20 +846,21 @@ export default function CaddieTab() {
   return (
     <View style={styles.container}>
 
-      {/* KEVIN — centered, letterboxed into available space */}
-      <View style={styles.avatarContainer}>
+      {/* KEVIN — explicit 9:16 frame, centered horizontally, pinned below safe area
+          TOP-LEFT CORNER RESERVED for future badge-morph dismissal. */}
+      <View style={{
+        position: 'absolute',
+        top: TOP_PADDING,
+        left: avatarLeft,
+        width: avatarWidth,
+        height: avatarHeight,
+        overflow: 'hidden',
+      }}>
         {kevinAvatar}
       </View>
 
-      {/* TOP NAV */}
+      {/* TOP NAV — ••• only; top-left corner intentionally empty */}
       <View style={[styles.topNav, { top: insets.top + 8 }]}>
-        <TouchableOpacity
-          style={styles.navBtn}
-          onPress={() => router.replace('/(tabs)/scorecard' as never)}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Ionicons name="chevron-back" size={24} color="#6b7d72" />
-        </TouchableOpacity>
         <TouchableOpacity
           style={styles.navBtn}
           onPress={() => setShowMoreMenu(true)}
@@ -860,7 +873,7 @@ export default function CaddieTab() {
       {/* GREETING BUBBLE — pre-round only, floats above Start Round CTA */}
       {!isRoundActive && shownText ? (
         <Animated.View
-          style={[styles.bubble, { bottom: 116 + insets.bottom, opacity: responseFade }]}
+          style={[styles.bubble, { bottom: 110 + insets.bottom, opacity: responseFade }]}
         >
           <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
           <View style={[StyleSheet.absoluteFill, styles.bubbleTint]} />
@@ -891,7 +904,7 @@ export default function CaddieTab() {
         pointerEvents={isRoundActive ? 'none' : 'box-none'}
       >
         <TouchableOpacity
-          style={[styles.startRoundBtn, { bottom: 40 + insets.bottom }]}
+          style={[styles.startRoundBtn, { bottom: 24 + insets.bottom }]}
           onPress={() => setShowRoundSetup(true)}
           activeOpacity={0.88}
         >
@@ -911,20 +924,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#060f09',
   },
-  avatarContainer: {
-    flex: 1,
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#060f09',
-    overflow: 'hidden',
-  },
   topNav: {
     position: 'absolute',
-    left: 20,
     right: 20,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     zIndex: 20,
   },
@@ -961,8 +965,8 @@ const styles = StyleSheet.create({
   },
   startRoundBtn: {
     position: 'absolute',
-    left: 40,
-    right: 40,
+    left: 24,
+    right: 24,
     height: 60,
     borderRadius: 30,
     backgroundColor: 'transparent',
