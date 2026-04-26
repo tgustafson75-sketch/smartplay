@@ -22,14 +22,6 @@ export default function RootLayout() {
           options={{ animation: 'slide_from_bottom' }}
         />
         <Stack.Screen
-          name="cage"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="arena"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
           name="settings"
           options={{ animation: 'slide_from_right' }}
         />

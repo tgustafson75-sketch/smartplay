@@ -25,13 +25,6 @@ const AVATARS: Record<string, ImageSourcePropType> = {
   serena_nod:     require('../assets/avatars/serena_nod.jpg'),
 };
 
-const BACKGROUNDS: Record<string, ImageSourcePropType> = {
-  morning:   require('../assets/avatars/kevin_nod.jpg'),
-  afternoon: require('../assets/avatars/kevin_nod.jpg'),
-  evening:   require('../assets/avatars/kevin_dark.jpg'),
-  indoor:    require('../assets/avatars/kevin_dark.jpg'),
-};
-
 // ─── HELPERS ──────────────────────────────
 
 const getAvatarKey = (
@@ -44,17 +37,6 @@ const getAvatarKey = (
   if (isNodding) return prefix + '_nod';
   const suffix = isCageMode || !isOnCourse ? '_dark' : '_course';
   return prefix + suffix;
-};
-
-const getBackgroundKey = (
-  isOnCourse: boolean,
-  isCageMode: boolean,
-): string => {
-  if (isCageMode || !isOnCourse) return 'indoor';
-  const hour = new Date().getHours();
-  if (hour < 10) return 'morning';
-  if (hour >= 18) return 'evening';
-  return 'afternoon';
 };
 
 // ─── TYPES ────────────────────────────────

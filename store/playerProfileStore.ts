@@ -57,7 +57,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       completeSetup: () => set({ isSetupComplete: true }),
     }),
     {
-      name: 'player-profile-v1',
+      name: 'player-profile-v2',
       storage: createJSONStorage(() => AsyncStorage),
     },
   ),

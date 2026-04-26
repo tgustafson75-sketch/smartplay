@@ -9,7 +9,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoundStore } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
-import { usePlayerProfileStore } from '../../store/playerProfileStore';
 
 // ─── SCORE COLOR ──────────────────────────
 
@@ -43,7 +42,6 @@ export default function Scorecard() {
   } = useRoundStore();
 
   const { heroMoments } = useRelationshipStore();
-  const { firstName } = usePlayerProfileStore();
 
   const [showNine, setShowNine] = useState<'front' | 'back'>('front');
 

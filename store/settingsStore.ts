@@ -72,7 +72,7 @@ export const useSettingsStore = create<SettingsState>()(
       resetTutorials: () => set({ tutorialsSeen: {} }),
     }),
     {
-      name: 'settings-store-v1',
+      name: 'settings-store-v2',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({
         voiceEnabled: s.voiceEnabled,
