@@ -97,7 +97,7 @@ export default function CaddieAvatar({
   const { width: W, height: H } = useWindowDimensions();
   const AVATAR_HEIGHT = Math.min(
     Math.round(W * (16 / 9) * 0.62),
-    Math.round(H * 0.72),
+    Math.round(H * 0.60),
   );
 
   const breatheAnim = useRef(new Animated.Value(1)).current;

@@ -16,6 +16,7 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { getCourseList, getCourse } from '../../data/courses';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
+import { speak } from '../../services/voiceService';
 
 export default function CaddieTab() {
   useKeepAwake();
@@ -28,6 +29,7 @@ export default function CaddieTab() {
     currentYardage,
     club,
     activeCourse,
+    courseHoles,
     scores,
     startRound,
     endRound,
@@ -43,13 +45,14 @@ export default function CaddieTab() {
     voiceEnabled,
     discreteMode,
     castMode,
+    language,
     setVoiceEnabled,
     setCastMode,
   } = useSettingsStore();
 
   const { firstName } = usePlayerProfileStore();
 
-  const { roundsTogether } = useRelationshipStore();
+  const { roundsTogether, incrementRounds } = useRelationshipStore();
 
   // ── Local state ─────────────────────────
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
@@ -131,6 +134,7 @@ export default function CaddieTab() {
       notes: roundNotes,
       goal: null,
     });
+    incrementRounds();
     setShowRoundSetup(false);
     setCaddieResponse("Let's go. One shot at a time.");
   };
@@ -140,11 +144,40 @@ export default function CaddieTab() {
     if (holeScore === 0) return;
     logScore(currentHole, holeScore);
     logPutts(currentHole, holePutts);
-    setCurrentHole(currentHole + 1);
+
+    const nextHole = currentHole + 1;
+    setCurrentHole(nextHole);
     setHoleScore(0);
     setHolePutts(0);
     setShowShotCard(false);
-    setCaddieResponse('Good. Next hole.');
+
+    // Build hole transition message
+    const par = getCurrentPar();
+    const diff = par ? holeScore - par : null;
+    const scoreWord =
+      diff === null  ? '' :
+      diff <= -2     ? 'Eagle! ' :
+      diff === -1    ? 'Birdie! ' :
+      diff === 0     ? 'Par. ' :
+      diff === 1     ? 'Bogey. ' :
+      diff === 2     ? 'Double. ' :
+                       'Moving on. ';
+
+    const nextHoleData = courseHoles.find(h => h.hole === nextHole);
+    const nextPar = nextHoleData?.par;
+    const nextYards = nextHoleData?.distance;
+
+    const nextInfo = nextHoleData
+      ? `Hole ${nextHole}, par ${nextPar}${nextYards ? ', ' + nextYards + ' yards' : ''}.`
+      : `Hole ${nextHole}.`;
+
+    const message = scoreWord + nextInfo;
+    setCaddieResponse(message);
+
+    if (voiceEnabled && !discreteMode) {
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+      speak(message, voiceGender, language, apiUrl).catch(() => {});
+    }
   };
 
   // ── HUD data ─────────────────────────────
@@ -372,9 +405,17 @@ export default function CaddieTab() {
               <TouchableOpacity
                 style={styles.endRoundBtn}
                 onPress={() => {
+                  const isFirstRound = roundsTogether === 1;
                   endRound();
                   setShowShotCard(false);
-                  setCaddieResponse("Good round. Let's review.");
+                  const msg = isFirstRound
+                    ? "First round together. I'll remember this one."
+                    : "Good round. Let's review.";
+                  setCaddieResponse(msg);
+                  if (voiceEnabled && !discreteMode) {
+                    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+                    speak(msg, voiceGender, language, apiUrl).catch(() => {});
+                  }
                 }}
               >
                 <Text style={styles.endRoundText}>End Round</Text>

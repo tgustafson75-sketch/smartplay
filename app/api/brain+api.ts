@@ -30,6 +30,7 @@ export async function POST(request: Request) {
       physicalLimitation = null,
       club = null,
       scores = {},
+      courseHoles = [],
       responseMode = 'neutral',
     } = body as {
       message?: string;
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
       physicalLimitation?: string | null;
       club?: string | null;
       scores?: Record<string, number>;
+      courseHoles?: Array<{ hole: number; par: number }>;
       responseMode?: string;
     };
 
@@ -60,6 +62,14 @@ export async function POST(request: Request) {
       (a: number, b: number) => a + b, 0
     );
     const holesPlayed = Object.keys(scores).length;
+
+    const scoreVsPar = courseHoles.length > 0
+      ? Object.entries(scores).reduce((acc, [holeStr, score]) => {
+          const holeNum = parseInt(holeStr, 10);
+          const holeData = courseHoles.find(h => h.hole === holeNum);
+          return holeData ? acc + (score - holeData.par) : acc;
+        }, 0)
+      : 0;
 
     // ── KEVIN'S SYSTEM PROMPT ─────────────────
 
@@ -101,7 +111,19 @@ Hole: ${currentHole} | Par: ${currentPar} | Yards: ${currentYardage}
 Club in hand: ${club || 'not selected'}
 Score: ${totalScore > 0 ? totalScore : 'no holes logged yet'}
 Holes played: ${holesPlayed}
-Competition: ${isCompetition ? 'yes — be conservative' : 'no'}`
+Competition: ${isCompetition ? 'yes — be conservative' : 'no'}
+${holesPlayed > 0
+  ? `SCORING CONTEXT:
+${(() => {
+  const vsParDisplay = scoreVsPar === 0 ? 'even par' : scoreVsPar > 0 ? `+${scoreVsPar}` : `${scoreVsPar}`;
+  if (scoreVsPar <= -3) return `Player is ${vsParDisplay} — playing exceptional golf. Match their momentum. Don't overthink it.`;
+  if (scoreVsPar === -2 || scoreVsPar === -1) return `Player is ${vsParDisplay} — playing well. Keep the round simple and let them stay in the zone.`;
+  if (scoreVsPar === 0) return `Player is even par — solid round. Keep them process-focused, not score-focused.`;
+  if (scoreVsPar <= 5) return `Player is ${vsParDisplay} — manageable. Redirect attention to this hole, not the total.`;
+  if (scoreVsPar <= 10) return `Player is ${vsParDisplay} — tough round. No pressure. This hole is all that matters. Help them find something to enjoy.`;
+  return `Player is ${vsParDisplay} — difficult day. Your job is to save the experience, not the score. One pure shot to end on.`;
+})()}`
+  : ''}`
   : 'No active round.'}
 
 ${dominantMiss

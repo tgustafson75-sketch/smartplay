@@ -190,6 +190,7 @@ export const useVoiceCaddie = ({
           physicalLimitation,
           club,
           scores,
+          courseHoles: useRoundStore.getState().courseHoles,
           responseMode,
         }),
       });
