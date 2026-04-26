@@ -1,18 +1,22 @@
 import { useEffect } from 'react';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 
 export default function RootLayout() {
   const router = useRouter();
+  const navigationState = useRootNavigationState();
   const { isSetupComplete } = usePlayerProfileStore();
 
   useEffect(() => {
+    // navigationState.key is undefined until the navigator has fully mounted.
+    // Calling router.replace before this point crashes on Android (java.io).
+    if (!navigationState?.key) return;
     if (!isSetupComplete) {
       router.replace('/intro');
     }
-  }, [isSetupComplete]);
+  }, [navigationState?.key, isSetupComplete]);
 
   return (
     <SafeAreaProvider>
