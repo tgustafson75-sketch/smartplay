@@ -10,7 +10,6 @@ import {
   ImageSourcePropType,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LivingKevin from './LivingKevin';
 
 // ─── AVATAR MAP ───────────────────────────
@@ -233,21 +232,8 @@ export default function CaddieAvatar({
   fillMode,
 }: CaddieAvatarProps) {
   const fill = fillMode ?? 'contain';
-  const { width: W, height: H } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-
-  const aspectRatio = H / W;
-  const isFolded = aspectRatio > 1.6;
-
-  const controlsHeight = 180;
-  const availableHeight = H - insets.top - insets.bottom - controlsHeight;
-
-  const AVATAR_HEIGHT = Math.min(
-    availableHeight,
-    isFolded
-      ? Math.round(W * 1.1)
-      : Math.round(H * 0.52),
-  );
+  const { height: H } = useWindowDimensions();
+  const FRAME_HEIGHT = Math.round(H * 0.55);
 
   // ── Derived emotion ─────────────────────
   const effectiveEmotion = emotion ?? VOICE_EMOTION[voiceState] ?? null;
@@ -496,7 +482,7 @@ export default function CaddieAvatar({
 
       {/* ── AVATAR FRAME ──────────────── */}
       <TouchableOpacity
-        style={fill === 'cover' ? styles.frameFull : [styles.frame, { height: AVATAR_HEIGHT }]}
+        style={fill === 'cover' ? styles.frameFull : [styles.frame, { height: FRAME_HEIGHT }]}
         onPress={onTap}
         activeOpacity={0.97}
       >
@@ -527,7 +513,7 @@ export default function CaddieAvatar({
               transform: [{
                 translateY: scanAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [-AVATAR_HEIGHT, AVATAR_HEIGHT],
+                  outputRange: [-2000, 2000],
                 }),
               }],
               opacity: scanAnim.interpolate({
@@ -620,6 +606,8 @@ const styles = StyleSheet.create({
   },
   wrapperFull: {
     flex: 1,
+    width: '100%',
+    height: '100%',
     backgroundColor: '#060f09',
   },
   frame: {
@@ -630,6 +618,8 @@ const styles = StyleSheet.create({
   },
   frameFull: {
     flex: 1,
+    width: '100%',
+    height: '100%',
     overflow: 'hidden',
     backgroundColor: '#060f09',
   },

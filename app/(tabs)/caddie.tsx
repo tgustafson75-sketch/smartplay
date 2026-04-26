@@ -12,7 +12,6 @@ import {
   Easing,
   AppState,
   AppStateStatus,
-  useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
@@ -41,17 +40,6 @@ export default function CaddieTab() {
   useKeepAwake();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-
-  // ── Avatar sizing — explicit 9:16 frame, fits any screen ────────────────
-  const TOP_PADDING = insets.top + 16;
-  const BOTTOM_UI_RESERVED = 220;
-  const availableH = screenHeight - TOP_PADDING - BOTTOM_UI_RESERVED;
-  const rawW = availableH * (9 / 16);
-  const avatarWidth  = Math.round(Math.min(rawW, screenWidth));
-  const avatarHeight = Math.round(avatarWidth * (16 / 9));
-  const avatarLeft   = Math.round((screenWidth - avatarWidth) / 2);
-
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
   // ── Stores ──────────────────────────────
@@ -846,16 +834,8 @@ export default function CaddieTab() {
   return (
     <View style={styles.container}>
 
-      {/* KEVIN — explicit 9:16 frame, centered horizontally, pinned below safe area
-          TOP-LEFT CORNER RESERVED for future badge-morph dismissal. */}
-      <View style={{
-        position: 'absolute',
-        top: TOP_PADDING,
-        left: avatarLeft,
-        width: avatarWidth,
-        height: avatarHeight,
-        overflow: 'hidden',
-      }}>
+      {/* KEVIN — flex child, fills space between nav and bottom UI */}
+      <View style={[styles.avatarLayer, { paddingTop: insets.top + 16 }]}>
         {kevinAvatar}
       </View>
 
@@ -923,6 +903,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#060f09',
+  },
+  avatarLayer: {
+    flex: 1,
+    paddingBottom: 220,
   },
   topNav: {
     position: 'absolute',
