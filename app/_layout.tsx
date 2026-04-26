@@ -25,6 +25,14 @@ export default function RootLayout() {
           name="settings"
           options={{ animation: 'slide_from_right' }}
         />
+        <Stack.Screen
+          name="cage"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="arena"
+          options={{ animation: 'slide_from_right' }}
+        />
       </Stack>
     </SafeAreaProvider>
   );

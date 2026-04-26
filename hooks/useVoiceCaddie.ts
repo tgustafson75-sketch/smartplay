@@ -5,6 +5,7 @@ import {
   configureAudioForRecording,
   speak,
   stopSpeaking,
+  isSpeaking,
 } from '../services/voiceService';
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -219,6 +220,12 @@ export const useVoiceCaddie = ({
   // ── MAIN MIC HANDLER ─────────────────────
 
   const handleMicPress = useCallback(async () => {
+    if (isSpeaking()) {
+      await stopSpeaking();
+      onVoiceStateChange('idle');
+      return;
+    }
+
     if (isProcessingRef.current) return;
 
     // If already recording — stop and process

@@ -34,9 +34,14 @@ const getAvatarKey = (
   isNodding: boolean,
 ): string => {
   const prefix = gender === 'female' ? 'serena' : 'kevin';
-  if (isNodding) return prefix + '_nod';
-  const suffix = isCageMode || !isOnCourse ? '_dark' : '_course';
-  return prefix + suffix;
+
+  if (isNodding) {
+    return prefix + '_nod';
+  }
+
+  const isDark = isCageMode || !isOnCourse;
+
+  return isDark ? prefix + '_dark' : prefix + '_course';
 };
 
 // ─── TYPES ────────────────────────────────

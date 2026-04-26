@@ -15,7 +15,7 @@ import { useRelationshipStore } from '../../store/relationshipStore';
 const getScoreColor = (score: number, par: number): string => {
   if (score === 0) return '#6b7280';
   const diff = score - par;
-  if (diff <= -2) return '#F5A623';
+  if (diff <= -2) return '#3b82f6';
   if (diff === -1) return '#00C896';
   if (diff === 0) return '#ffffff';
   if (diff === 1) return '#fbbf24';
