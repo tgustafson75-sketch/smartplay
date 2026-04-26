@@ -10,7 +10,7 @@ import {
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 
-interface CaddieDataStripProps {
+export interface CaddieDataStripProps {
   yardage: number | null;
   playsLike: number | null;
   hole: { current: number; total: number };

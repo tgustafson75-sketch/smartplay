@@ -532,6 +532,28 @@ export default function CaddieTab() {
   const targetDirection = 'CENTER';
   const currentStroke = (penalties[currentHole] ?? 0) + 1;
 
+  // ── Cross-transition: strip ↔ start-round CTA ───
+  const stripOpacity = useRef(new Animated.Value(isRoundActive ? 1 : 0)).current;
+  const ctaOpacity   = useRef(new Animated.Value(isRoundActive ? 0 : 1)).current;
+
+  useEffect(() => {
+    if (isRoundActive) {
+      // Round started: fade out CTA → 80ms gap → fade in strip
+      Animated.sequence([
+        Animated.timing(ctaOpacity,   { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.delay(80),
+        Animated.timing(stripOpacity, { toValue: 1, duration: 280, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]).start();
+    } else {
+      // Round ended: fade out strip → 80ms gap → fade in CTA
+      Animated.sequence([
+        Animated.timing(stripOpacity, { toValue: 0, duration: 240, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.delay(80),
+        Animated.timing(ctaOpacity,   { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [isRoundActive]);
+
   // ── Positioning helpers ──────────────────
   // Strip: bottom 32, height 76 → top at 108px from screen bottom
   // Mic: 24px above strip top → bottom = 108 + 24 = 132
@@ -631,19 +653,27 @@ export default function CaddieTab() {
         )}
       </View>
 
-      {/* DATA STRIP — visible when round is active */}
-      <CaddieDataStrip
-        yardage={currentYardage}
-        playsLike={currentYardage}
-        hole={{ current: currentHole, total: totalHoles }}
-        targetDirection={targetDirection}
-        stroke={currentStroke}
-        visible={isRoundActive}
-        onPress={() => setShowShotCard(true)}
-      />
+      {/* DATA STRIP — cross-fades in when round starts */}
+      <Animated.View
+        style={[StyleSheet.absoluteFill, { opacity: stripOpacity }]}
+        pointerEvents={isRoundActive ? 'box-none' : 'none'}
+      >
+        <CaddieDataStrip
+          yardage={currentYardage}
+          playsLike={currentYardage}
+          hole={{ current: currentHole, total: totalHoles }}
+          targetDirection={targetDirection}
+          stroke={currentStroke}
+          visible={true}
+          onPress={() => setShowShotCard(true)}
+        />
+      </Animated.View>
 
-      {/* START ROUND — visible when no round is active */}
-      {!isRoundActive && (
+      {/* START ROUND CTA — cross-fades out when round starts */}
+      <Animated.View
+        style={[StyleSheet.absoluteFill, { opacity: ctaOpacity }]}
+        pointerEvents={isRoundActive ? 'none' : 'box-none'}
+      >
         <TouchableOpacity
           style={[styles.startRoundBtn, { bottom: 32 + insets.bottom }]}
           onPress={() => setShowRoundSetup(true)}
@@ -651,7 +681,7 @@ export default function CaddieTab() {
         >
           <Text style={styles.startRoundText}>Start Round</Text>
         </TouchableOpacity>
-      )}
+      </Animated.View>
 
       {/* ── PRE-ROUND BRIEF MODAL ──────────── */}
       <Modal
@@ -897,6 +927,15 @@ export default function CaddieTab() {
                 action: () => {
                   setShowMoreMenu(false);
                   router.push('/(tabs)/swinglab' as never);
+                },
+              },
+              {
+                icon: '⛳',
+                label: 'Cage Mode',
+                sub: 'Range session',
+                action: () => {
+                  setShowMoreMenu(false);
+                  router.push('/cage' as never);
                 },
               },
               {
