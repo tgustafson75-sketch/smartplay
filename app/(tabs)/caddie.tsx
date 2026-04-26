@@ -11,7 +11,9 @@ import {
   Easing,
   AppState,
   AppStateStatus,
+  useWindowDimensions,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -38,6 +40,9 @@ export default function CaddieTab() {
   useKeepAwake();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: W } = useWindowDimensions();
+  // Natural 9:16 frame height — shows Kevin's full portrait without over-zoom
+  const avatarFrameHeight = Math.round(W * 16 / 9);
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
@@ -555,17 +560,16 @@ export default function CaddieTab() {
   }, [isRoundActive]);
 
   // ── Positioning helpers ──────────────────
-  // Strip: bottom 32, height 76 → top at 108px from screen bottom
-  // Mic: 24px above strip top → bottom = 108 + 24 = 132
-  const micBottom = insets.bottom + 132;
-  const responseBottom = micBottom + 72 + 20;
+  // Pre-round: [Start Round 40] → [Bubble 144] → [Mic 244] → Kevin
+  // On-round:  [Data strip 32+insets] → [Mic 132+insets] → Kevin
+  const micBottom = isRoundActive ? insets.bottom + 132 : insets.bottom + 244;
 
   // ── RENDER ───────────────────────────────
   return (
     <View style={styles.container}>
 
-      {/* KEVIN — full bleed */}
-      <View style={StyleSheet.absoluteFill}>
+      {/* KEVIN — 9:16 frame anchored at top; no over-zoom on any screen */}
+      <View style={{ position: 'absolute', top: 0, left: 0, width: W, height: avatarFrameHeight }}>
         <CaddieAvatar
           gender={voiceGender === 'female' ? 'female' : 'male'}
           isOnCourse={isRoundActive}
@@ -598,22 +602,25 @@ export default function CaddieTab() {
         </TouchableOpacity>
       </View>
 
-      {/* KEVIN RESPONSE TEXT */}
-      <Animated.View style={[styles.responseOverlay, { bottom: responseBottom, opacity: responseFade }]}>
-        <Text
-          style={caddieResponse ? styles.responseText : styles.openingText}
-          numberOfLines={4}
+      {/* GREETING BUBBLE — pre-round only, sits in negative space above Start Round */}
+      {!isRoundActive && shownText ? (
+        <Animated.View
+          style={[styles.bubble, { bottom: 144 + insets.bottom, opacity: responseFade }]}
         >
-          {shownText}
-        </Text>
-      </Animated.View>
+          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, styles.bubbleTint]} />
+          <Text style={styles.bubbleText} numberOfLines={3}>
+            {shownText}
+          </Text>
+        </Animated.View>
+      ) : null}
 
       {/* MIC BUTTON */}
       <View style={[styles.micZone, { bottom: micBottom }]}>
         {vadEnabled && voiceState === 'idle' ? (
           <Animated.View style={{ alignItems: 'center', transform: [{ scale: autoListenPulse }] }}>
             <View style={[styles.micCircle, { opacity: 0.5 }]}>
-              <Ionicons name="mic" size={32} color="#ffffff" />
+              <Ionicons name="mic" size={32} color="#00C896" />
             </View>
             <Text style={styles.micStatusLabel}>LISTENING</Text>
           </Animated.View>
@@ -640,13 +647,13 @@ export default function CaddieTab() {
               activeOpacity={0.85}
             >
               {voiceState === 'listening' ? (
-                <Ionicons name="stop" size={28} color="#ffffff" />
+                <Ionicons name="stop" size={28} color="#00C896" />
               ) : voiceState === 'thinking' ? (
-                <Ionicons name="ellipsis-horizontal" size={24} color="#ffffff" />
+                <Ionicons name="ellipsis-horizontal" size={24} color="rgba(0,200,150,0.5)" />
               ) : voiceState === 'speaking' ? (
-                <Ionicons name="volume-high" size={28} color="#ffffff" />
+                <Ionicons name="volume-high" size={28} color="#00C896" />
               ) : (
-                <Ionicons name="mic" size={32} color="#ffffff" />
+                <Ionicons name="mic" size={32} color="#00C896" />
               )}
             </TouchableOpacity>
           </View>
@@ -665,6 +672,7 @@ export default function CaddieTab() {
           targetDirection={targetDirection}
           stroke={currentStroke}
           visible={true}
+          bottomOffset={insets.bottom}
           onPress={() => setShowShotCard(true)}
         />
       </Animated.View>
@@ -675,7 +683,7 @@ export default function CaddieTab() {
         pointerEvents={isRoundActive ? 'none' : 'box-none'}
       >
         <TouchableOpacity
-          style={[styles.startRoundBtn, { bottom: 32 + insets.bottom }]}
+          style={[styles.startRoundBtn, { bottom: 40 + insets.bottom }]}
           onPress={() => setShowRoundSetup(true)}
           activeOpacity={0.88}
         >
@@ -1044,29 +1052,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  responseOverlay: {
+  bubble: {
     position: 'absolute',
-    left: 20,
-    right: 20,
-    zIndex: 8,
-    backgroundColor: 'rgba(6, 15, 9, 0.65)',
-    borderRadius: 14,
-    paddingHorizontal: 16,
+    left: 24,
+    right: 24,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(30, 58, 40, 0.5)',
     paddingVertical: 12,
+    paddingHorizontal: 20,
+    overflow: 'hidden',
+    zIndex: 6,
+    alignItems: 'center',
   },
-  responseText: {
-    color: '#ffffff',
-    fontSize: 16,
-    lineHeight: 24,
+  bubbleTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(13, 26, 13, 0.72)',
+  },
+  bubbleText: {
+    fontSize: 17,
     fontWeight: '500',
-    textAlign: 'center',
-  },
-  openingText: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
     fontStyle: 'italic',
+    color: '#ffffff',
+    textAlign: 'center',
+    lineHeight: 24,
   },
   micZone: {
     position: 'absolute',
@@ -1079,17 +1088,20 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#00C896',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: 'rgba(0, 200, 150, 0.8)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   micCircleActive: {
-    backgroundColor: '#009e78',
+    backgroundColor: 'rgba(0, 200, 150, 0.12)',
+    borderColor: '#00C896',
   },
   micCircleBusy: {
-    backgroundColor: '#0d2418',
+    backgroundColor: 'transparent',
     borderWidth: 2,
-    borderColor: '#00C896',
+    borderColor: 'rgba(0, 200, 150, 0.4)',
   },
   micRing: {
     position: 'absolute',
@@ -1115,18 +1127,15 @@ const styles = StyleSheet.create({
     right: 40,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#00C896',
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: '#00C896',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 5,
-    shadowColor: '#00C896',
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
   },
   startRoundText: {
-    color: '#ffffff',
+    color: '#00C896',
     fontSize: 17,
     fontWeight: '600',
     letterSpacing: -0.2,

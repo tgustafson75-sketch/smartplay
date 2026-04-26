@@ -17,6 +17,7 @@ export interface CaddieDataStripProps {
   targetDirection: string;
   stroke: number;
   visible: boolean;
+  bottomOffset?: number;
   onPress: () => void;
 }
 
@@ -27,6 +28,7 @@ export default function CaddieDataStrip({
   targetDirection,
   stroke,
   visible,
+  bottomOffset = 0,
   onPress,
 }: CaddieDataStripProps) {
   const mountedOpacity = useRef(new Animated.Value(visible ? 1 : 0)).current;
@@ -146,7 +148,7 @@ export default function CaddieDataStrip({
     <Animated.View
       style={[
         styles.wrapper,
-        { opacity: mountedOpacity, transform: [{ scale: pressScale }] },
+        { bottom: 32 + bottomOffset, opacity: mountedOpacity, transform: [{ scale: pressScale }] },
       ]}
     >
       <Pressable
