@@ -214,11 +214,11 @@ export default function CaddieDataStrip({
 
   // ── HORIZONTAL LAYOUT (portrait, default) ─
   const cells = [
-    { label: 'HOLE',   value: `${hole.current}/${hole.total}`,      fontSize: 17 },
-    { label: 'YARDS',  value: yardage   != null ? String(yardage)   : '—', fontSize: 17 },
-    { label: 'PLAYS',  value: playsLike != null ? String(playsLike) : '—', fontSize: 17 },
-    { label: 'TARGET', value: targetDirection,                        fontSize: 13 },
-    { label: 'STROKE', value: String(stroke),                         fontSize: 17 },
+    { label: 'HOLE',   value: `${hole.current}/${hole.total}`,      fontSize: 15 },
+    { label: 'YARDS',  value: yardage   != null ? String(yardage)   : '—', fontSize: 15 },
+    { label: 'PLAYS',  value: playsLike != null ? String(playsLike) : '—', fontSize: 15 },
+    { label: 'TARGET', value: targetDirection,                        fontSize: 11 },
+    { label: 'STROKE', value: String(stroke),                         fontSize: 15 },
   ];
 
   return (
@@ -269,10 +269,10 @@ const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
     bottom: 32,
-    left: 16,
-    right: 16,
-    height: 76,
-    borderRadius: 38,
+    left: 8,
+    right: 8,
+    height: 84,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(30, 58, 40, 0.5)',
     overflow: 'hidden',
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
   },
   tintOverlay: {
     backgroundColor: 'rgba(13, 26, 13, 0.5)',
-    borderRadius: 38,
+    borderRadius: 16,
   },
   // ── Horizontal row ───────────────────────
   row: {
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
   },
   cell: {
     flex: 1,
