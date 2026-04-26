@@ -1,8 +1,19 @@
-import { Stack } from 'expo-router';
+import { useEffect } from 'react';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { usePlayerProfileStore } from '../store/playerProfileStore';
 
 export default function RootLayout() {
+  const router = useRouter();
+  const { isSetupComplete } = usePlayerProfileStore();
+
+  useEffect(() => {
+    if (!isSetupComplete) {
+      router.replace('/intro');
+    }
+  }, [isSetupComplete]);
+
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
