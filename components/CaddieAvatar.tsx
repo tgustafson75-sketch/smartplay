@@ -2,7 +2,6 @@ import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
-  Image,
   TouchableOpacity,
   Animated,
   Easing,
@@ -13,44 +12,90 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// ─── IMAGE MAPS ───────────────────────────
+// ─── AVATAR MAP ───────────────────────────
 
-const BACKGROUNDS: Record<string, ImageSourcePropType> = {
-  morning:   require('../assets/avatars/kevin_portrait.jpg'),
-  afternoon: require('../assets/avatars/kevin_portrait.jpg'),
-  evening:   require('../assets/avatars/kevin_dark.jpg'),
-  indoor:    require('../assets/avatars/kevin_dark.jpg'),
+const AVATARS = {
+  kevin_course:       require('../assets/avatars/kevin_portrait.jpg'),
+  kevin_dark:         require('../assets/avatars/kevin_dark.jpg'),
+  kevin_nod:          require('../assets/avatars/kevin-idle-001.png'),
+  kevin_idle:         require('../assets/avatars/kevin-idle-001.png'),
+  kevin_listening:    require('../assets/avatars/kevin-listening-001.png'),
+  kevin_explaining:   require('../assets/avatars/kevin-explaining-001.png'),
+  kevin_focused:      require('../assets/avatars/kevin-focused-portrait-001.png'),
+  kevin_determined:   require('../assets/avatars/kevin-determined-portrait-001.png'),
+  kevin_pensive:      require('../assets/avatars/kevin-pensive-portrait-001.png'),
+  kevin_inquisitive:  require('../assets/avatars/kevin-inquisitive-portrait-001.png'),
+  kevin_mentorship:   require('../assets/avatars/kevin-mentorship-001.png'),
+  kevin_humble:       require('../assets/avatars/kevin-humble-portrait-001.png'),
+  kevin_supportive:   require('../assets/avatars/kevin-supportive-portrait-001.png'),
+  kevin_happy:        require('../assets/avatars/kevin-happy-portrait-001.png'),
+  kevin_enthusiastic: require('../assets/avatars/kevin-enthusiastic-portrait-001.png'),
+  kevin_surprised:    require('../assets/avatars/kevin-surprised-portrait-001.png'),
+} as const;
+
+type AvatarKey = keyof typeof AVATARS;
+
+const SERENA = {
+  course: require('../assets/avatars/serena_portrait.jpg') as ImageSourcePropType,
+  dark:   require('../assets/avatars/serena_dark.jpg')    as ImageSourcePropType,
 };
 
-const SERENA: Record<string, ImageSourcePropType> = {
-  course: require('../assets/avatars/serena_portrait.jpg'),
-  dark:   require('../assets/avatars/serena_dark.jpg'),
+// ─── EMOTION → KEY MAP ────────────────────
+
+const EMOTION_KEY_MAP: Record<string, AvatarKey> = {
+  focused:      'kevin_focused',
+  determined:   'kevin_determined',
+  thinking:     'kevin_pensive',
+  pensive:      'kevin_pensive',
+  listening:    'kevin_listening',
+  speaking:     'kevin_explaining',
+  explaining:   'kevin_explaining',
+  asking:       'kevin_inquisitive',
+  inquisitive:  'kevin_inquisitive',
+  encouraging:  'kevin_supportive',
+  supportive:   'kevin_supportive',
+  reset:        'kevin_supportive',
+  happy:        'kevin_happy',
+  celebrating:  'kevin_enthusiastic',
+  enthusiastic: 'kevin_enthusiastic',
+  surprised:    'kevin_surprised',
+  humble:       'kevin_humble',
+  teaching:     'kevin_mentorship',
+  mentorship:   'kevin_mentorship',
+  idle:         'kevin_idle',
 };
 
-// ─── HELPERS ──────────────────────────────
-
-const getBackground = (
+function getAvatarKey(
+  emotion: string | null | undefined,
   isOnCourse: boolean,
   isCageMode: boolean,
-): ImageSourcePropType => {
-  if (isCageMode || !isOnCourse) {
-    return BACKGROUNDS.indoor;
+): AvatarKey {
+  if (isOnCourse && !isCageMode && !emotion) return 'kevin_course';
+  if (emotion) {
+    const mapped = EMOTION_KEY_MAP[emotion];
+    if (mapped) return mapped;
   }
-  const hour = new Date().getHours();
-  if (hour < 10) return BACKGROUNDS.morning;
-  if (hour >= 18) return BACKGROUNDS.evening;
-  return BACKGROUNDS.afternoon;
-};
+  return isOnCourse && !isCageMode ? 'kevin_course' : 'kevin_dark';
+}
 
-const getAvatarSource = (
+function computeSource(
   gender: 'male' | 'female',
+  emotion: string | null | undefined,
   isOnCourse: boolean,
   isCageMode: boolean,
-): ImageSourcePropType => {
+): ImageSourcePropType {
   if (gender === 'female') {
     return (isCageMode || !isOnCourse) ? SERENA.dark : SERENA.course;
   }
-  return getBackground(isOnCourse, isCageMode);
+  return AVATARS[getAvatarKey(emotion, isOnCourse, isCageMode)];
+}
+
+// voiceState → emotion used when no explicit emotion prop is passed
+const VOICE_EMOTION: Record<string, string> = {
+  idle:      'idle',
+  listening: 'listening',
+  thinking:  'thinking',
+  speaking:  'speaking',
 };
 
 // ─── TYPES ────────────────────────────────
@@ -78,6 +123,7 @@ interface CaddieAvatarProps {
   openingPrompt: string;
   caddieResponse: string;
   onTap: () => void;
+  emotion?: string | null;
 }
 
 // ─── COMPONENT ────────────────────────────
@@ -91,6 +137,7 @@ export default function CaddieAvatar({
   openingPrompt,
   caddieResponse,
   onTap,
+  emotion,
 }: CaddieAvatarProps) {
   const { width: W, height: H } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -108,6 +155,11 @@ export default function CaddieAvatar({
       : Math.round(H * 0.52),
   );
 
+  // ── Derived emotion ─────────────────────
+  const effectiveEmotion = emotion ?? VOICE_EMOTION[voiceState] ?? null;
+  const targetSource = computeSource(gender, effectiveEmotion, isOnCourse, isCageMode);
+
+  // ── Animation refs ──────────────────────
   const breatheAnim  = useRef(new Animated.Value(1)).current;
   const glowAnim     = useRef(new Animated.Value(0)).current;
   const nodAnim      = useRef(new Animated.Value(0)).current;
@@ -115,6 +167,28 @@ export default function CaddieAvatar({
   const hudFlash     = useRef(new Animated.Value(1)).current;
   const responseFade = useRef(new Animated.Value(1)).current;
   const idleHintAnim = useRef(new Animated.Value(0)).current;
+
+  // ── Crossfade state ─────────────────────
+  const [backSource,  setBackSource]  = useState<ImageSourcePropType>(targetSource);
+  const [frontSource, setFrontSource] = useState<ImageSourcePropType>(targetSource);
+  const fadeAnim         = useRef(new Animated.Value(1)).current; // 1 = front fully visible
+  const currentSourceRef = useRef<ImageSourcePropType>(targetSource);
+  const backOpacity = fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+
+  useEffect(() => {
+    if (targetSource === currentSourceRef.current) return;
+    const prev = currentSourceRef.current;
+    currentSourceRef.current = targetSource;
+    setBackSource(prev);
+    setFrontSource(targetSource);
+    fadeAnim.setValue(0);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 280,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [targetSource]);
 
   const prevVoiceState = useRef<VoiceState>('idle');
 
@@ -127,14 +201,14 @@ export default function CaddieAvatar({
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(breatheAnim, {
-          toValue: 1.012,
-          duration: 4000,
+          toValue: 1.015,
+          duration: 3200,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(breatheAnim, {
           toValue: 1.0,
-          duration: 4000,
+          duration: 3200,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
@@ -159,20 +233,14 @@ export default function CaddieAvatar({
   const triggerNod = () => {
     Animated.sequence([
       Animated.timing(nodAnim, {
-        toValue: 6,
-        duration: 220,
-        easing: Easing.inOut(Easing.ease),
-        useNativeDriver: true,
-      }),
-      Animated.timing(nodAnim, {
-        toValue: -2,
-        duration: 180,
+        toValue: 4,
+        duration: 300,
         easing: Easing.inOut(Easing.ease),
         useNativeDriver: true,
       }),
       Animated.timing(nodAnim, {
         toValue: 0,
-        duration: 160,
+        duration: 300,
         easing: Easing.inOut(Easing.ease),
         useNativeDriver: true,
       }),
@@ -185,7 +253,7 @@ export default function CaddieAvatar({
     return () => clearTimeout(timer);
   }, []);
 
-  // ── Nod only when speaking → idle ──────
+  // ── Nod when speaking → idle ────────────
   useEffect(() => {
     if (prevVoiceState.current === 'speaking' && voiceState === 'idle') {
       const timer = setTimeout(() => triggerNod(), 300);
@@ -264,15 +332,7 @@ export default function CaddieAvatar({
     });
   }, [displayText]);
 
-  const ringColor =
-    voiceState === 'thinking' ? '#F5A623' : '#00C896';
-
-  const stateText =
-    voiceState === 'listening' ? '● Listening' :
-    voiceState === 'thinking'  ? '◌ Thinking'  :
-    voiceState === 'speaking'  ? '▶ Speaking'  : '';
-
-  // ── Idle hint pulse ─────────────────────
+  // ── Idle tap hint ───────────────────────
   useEffect(() => {
     if (voiceState !== 'idle') {
       idleHintAnim.setValue(0);
@@ -298,14 +358,25 @@ export default function CaddieAvatar({
     return () => loop.stop();
   }, [voiceState]);
 
-  const avatarSource = getAvatarSource(gender, isOnCourse, isCageMode);
+  const ringColor =
+    voiceState === 'thinking' ? '#F5A623' : '#00C896';
+
+  const stateText =
+    voiceState === 'listening' ? '● Listening' :
+    voiceState === 'thinking'  ? '◌ Thinking'  :
+    voiceState === 'speaking'  ? '▶ Speaking'  : '';
 
   const hudItems = [
-    { label: 'HOLE',  value: hud.hole     !== null ? String(hud.hole)     : '—' },
-    { label: 'PAR',   value: hud.par      !== null ? String(hud.par)      : '—' },
-    { label: 'YARDS', value: hud.yards    !== null ? String(hud.yards)    : '—' },
-    { label: 'WIND',  value: hud.wind     ?? '—' },
+    { label: 'HOLE',  value: hud.hole      !== null ? String(hud.hole)      : '—' },
+    { label: 'PAR',   value: hud.par       !== null ? String(hud.par)       : '—' },
+    { label: 'YARDS', value: hud.yards     !== null ? String(hud.yards)     : '—' },
+    { label: 'WIND',  value: hud.wind      ?? '—' },
     { label: 'PLAYS', value: hud.playsLike !== null ? String(hud.playsLike) : '—' },
+  ];
+
+  const avatarTransform = [
+    { scale: breatheAnim },
+    { translateY: nodAnim },
   ];
 
   return (
@@ -317,22 +388,21 @@ export default function CaddieAvatar({
         onPress={onTap}
         activeOpacity={0.97}
       >
-        {/* Layer 1 — Kevin/Serena avatar (fills frame) */}
+        {/* Layer 1a — Back (fading out) */}
         <Animated.Image
-          source={avatarSource}
-          style={[
-            styles.avatarImage,
-            {
-              transform: [
-                { scale: breatheAnim },
-                { translateY: nodAnim },
-              ],
-            },
-          ]}
+          source={backSource}
+          style={[styles.avatarImage, { transform: avatarTransform, opacity: backOpacity }]}
           resizeMode="contain"
         />
 
-        {/* Layer 3 — Bottom gradient */}
+        {/* Layer 1b — Front (fading in) */}
+        <Animated.Image
+          source={frontSource}
+          style={[styles.avatarImage, { transform: avatarTransform, opacity: fadeAnim }]}
+          resizeMode="contain"
+        />
+
+        {/* Layer 2 — Bottom gradient */}
         <LinearGradient
           colors={['transparent', 'transparent', 'rgba(6,15,9,0.3)', 'rgba(6,15,9,0.75)']}
           locations={[0, 0.45, 0.75, 1]}
@@ -340,7 +410,7 @@ export default function CaddieAvatar({
           pointerEvents="none"
         />
 
-        {/* Layer 4 — Scan line boot */}
+        {/* Layer 3 — Scan line boot */}
         <Animated.View
           pointerEvents="none"
           style={[
@@ -360,7 +430,7 @@ export default function CaddieAvatar({
           ]}
         />
 
-        {/* Layer 5 — Floating HUD */}
+        {/* Layer 4 — Floating HUD */}
         {hud.hole !== null && (
           <Animated.View style={[styles.hud, { opacity: hudFlash }]}>
             {hudItems.map((item, i) => (
@@ -377,7 +447,7 @@ export default function CaddieAvatar({
           </Animated.View>
         )}
 
-        {/* Layer 6 — Voice ring */}
+        {/* Layer 5 — Voice ring */}
         {voiceState !== 'idle' && (
           <Animated.View
             pointerEvents="none"
@@ -392,7 +462,7 @@ export default function CaddieAvatar({
           />
         )}
 
-        {/* Layer 6b — Idle tap hint */}
+        {/* Layer 5b — Idle tap hint */}
         <Animated.View
           pointerEvents="none"
           style={[
@@ -405,7 +475,7 @@ export default function CaddieAvatar({
           ]}
         />
 
-        {/* Layer 7 — State label */}
+        {/* Layer 6 — State label */}
         {voiceState !== 'idle' && (
           <View style={styles.stateTag}>
             <Text style={[styles.stateTagText, { color: ringColor }]}>
