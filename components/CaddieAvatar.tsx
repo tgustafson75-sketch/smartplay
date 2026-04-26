@@ -22,15 +22,9 @@ const BACKGROUNDS: Record<string, ImageSourcePropType> = {
   indoor:    require('../assets/avatars/kevin_dark.jpg'),
 };
 
-const NODS: Record<string, ImageSourcePropType> = {
-  kevin:  require('../assets/avatars/kevin_nod.jpg'),
-  serena: require('../assets/avatars/serena_nod.jpg'),
-};
-
 const SERENA: Record<string, ImageSourcePropType> = {
   course: require('../assets/avatars/serena_portrait.jpg'),
   dark:   require('../assets/avatars/serena_dark.jpg'),
-  nod:    require('../assets/avatars/serena_nod.jpg'),
 };
 
 // ─── HELPERS ──────────────────────────────
@@ -52,13 +46,10 @@ const getAvatarSource = (
   gender: 'male' | 'female',
   isOnCourse: boolean,
   isCageMode: boolean,
-  isNodding: boolean,
 ): ImageSourcePropType => {
   if (gender === 'female') {
-    if (isNodding) return SERENA.nod;
     return (isCageMode || !isOnCourse) ? SERENA.dark : SERENA.course;
   }
-  if (isNodding) return NODS.kevin;
   return getBackground(isOnCourse, isCageMode);
 };
 
@@ -123,6 +114,7 @@ export default function CaddieAvatar({
   const scanAnim     = useRef(new Animated.Value(0)).current;
   const hudFlash     = useRef(new Animated.Value(1)).current;
   const responseFade = useRef(new Animated.Value(1)).current;
+  const idleHintAnim = useRef(new Animated.Value(0)).current;
 
   const prevVoiceState = useRef<VoiceState>('idle');
 
@@ -163,11 +155,8 @@ export default function CaddieAvatar({
     }).start();
   }, []);
 
-  const [isNodding, setIsNodding] = useState(false);
-
   // ── Nod animation ──────────────────────
   const triggerNod = () => {
-    setIsNodding(true);
     Animated.sequence([
       Animated.timing(nodAnim, {
         toValue: 6,
@@ -187,9 +176,7 @@ export default function CaddieAvatar({
         easing: Easing.inOut(Easing.ease),
         useNativeDriver: true,
       }),
-    ]).start(() => {
-      setIsNodding(false);
-    });
+    ]).start();
   };
 
   // ── Nod on open ────────────────────────
@@ -285,7 +272,33 @@ export default function CaddieAvatar({
     voiceState === 'thinking'  ? '◌ Thinking'  :
     voiceState === 'speaking'  ? '▶ Speaking'  : '';
 
-  const avatarSource = getAvatarSource(gender, isOnCourse, isCageMode, isNodding);
+  // ── Idle hint pulse ─────────────────────
+  useEffect(() => {
+    if (voiceState !== 'idle') {
+      idleHintAnim.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(idleHintAnim, {
+          toValue: 0.3,
+          duration: 2000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(idleHintAnim, {
+          toValue: 0,
+          duration: 2000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [voiceState]);
+
+  const avatarSource = getAvatarSource(gender, isOnCourse, isCageMode);
 
   const hudItems = [
     { label: 'HOLE',  value: hud.hole     !== null ? String(hud.hole)     : '—' },
@@ -378,6 +391,19 @@ export default function CaddieAvatar({
             ]}
           />
         )}
+
+        {/* Layer 6b — Idle tap hint */}
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              borderWidth: 1,
+              borderColor: '#00C896',
+              opacity: idleHintAnim,
+            },
+          ]}
+        />
 
         {/* Layer 7 — State label */}
         {voiceState !== 'idle' && (
