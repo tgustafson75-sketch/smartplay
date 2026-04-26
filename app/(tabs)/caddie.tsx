@@ -750,6 +750,12 @@ export default function CaddieTab() {
             <Text style={styles.moreTitle}>Tools</Text>
             {([
               {
+                icon: '📊',
+                label: 'Dashboard',
+                sub: 'Stats & progress',
+                action: () => { setShowMoreMenu(false); router.push('/(tabs)/dashboard' as never); },
+              },
+              {
                 icon: '🏌️',
                 label: 'Practice',
                 sub: 'Cage & swing lab',

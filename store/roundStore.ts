@@ -41,6 +41,21 @@ export interface HoleStats {
   girHit: boolean | null;
 }
 
+export interface RoundRecord {
+  id: string;
+  roundNumber: number;
+  courseName: string | null;
+  startedAt: number;
+  endedAt: number;
+  holesPlayed: number;
+  totalScore: number;
+  scoreVsPar: number;
+  isCompetition: boolean;
+  nineHoleMode: boolean;
+  scores: Record<number, number>;
+  putts: Record<number, number>;
+}
+
 // ─── STATE ────────────────────────────────
 
 interface RoundState {
@@ -66,6 +81,7 @@ interface RoundState {
 
   roundStartTime: number | null;
   roundNumber: number;
+  roundHistory: RoundRecord[];
 
   // ─── ACTIONS ────────────────────────────
 
@@ -125,6 +141,7 @@ export const useRoundStore = create<RoundState>()(
       holeStats: [],
       roundStartTime: null,
       roundNumber: 0,
+      roundHistory: [],
 
       startRound: (course, holes, options) =>
         set({
@@ -146,7 +163,32 @@ export const useRoundStore = create<RoundState>()(
           roundNumber: get().roundNumber + 1,
         }),
 
-      endRound: () => set({ isRoundActive: false }),
+      endRound: () => {
+        const s = get();
+        let scoreVsPar = 0;
+        for (const [holeNum, score] of Object.entries(s.scores)) {
+          const par = s.courseHoles.find(h => h.hole === Number(holeNum))?.par ?? 0;
+          scoreVsPar += score - par;
+        }
+        const record: RoundRecord = {
+          id: Date.now().toString(),
+          roundNumber: s.roundNumber,
+          courseName: s.activeCourse,
+          startedAt: s.roundStartTime ?? Date.now(),
+          endedAt: Date.now(),
+          holesPlayed: Object.keys(s.scores).length,
+          totalScore: Object.values(s.scores).reduce((a, b) => a + b, 0),
+          scoreVsPar,
+          isCompetition: s.isCompetition,
+          nineHoleMode: s.nineHoleMode,
+          scores: { ...s.scores },
+          putts: { ...s.putts },
+        };
+        set(state => ({
+          isRoundActive: false,
+          roundHistory: [...state.roundHistory, record],
+        }));
+      },
 
       setCurrentHole: (hole) => {
         const holeData = get().courseHoles.find(h => h.hole === hole);
@@ -225,6 +267,7 @@ export const useRoundStore = create<RoundState>()(
         shots: s.shots,
         holeStats: s.holeStats,
         roundNumber: s.roundNumber,
+        roundHistory: s.roundHistory,
       }),
     },
   ),
