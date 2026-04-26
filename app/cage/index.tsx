@@ -144,6 +144,16 @@ export default function CageIndex() {
           </View>
         )}
 
+        {/* HISTORY LINK */}
+        {sessionHistory.length > 0 && (
+          <TouchableOpacity
+            style={styles.historyBtn}
+            onPress={() => router.push('/cage/history' as never)}
+          >
+            <Text style={styles.historyBtnText}>View Session History →</Text>
+          </TouchableOpacity>
+        )}
+
         {/* START */}
         <TouchableOpacity style={styles.startBtn} onPress={handleStart} activeOpacity={0.85}>
           <Text style={styles.startBtnText}>Start Session</Text>
@@ -303,6 +313,16 @@ const styles = StyleSheet.create({
   lastSessionText: {
     color: '#9ca3af',
     fontSize: 13,
+  },
+  historyBtn: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  historyBtnText: {
+    color: '#6b7280',
+    fontSize: 14,
+    fontWeight: '600',
   },
   startBtn: {
     backgroundColor: '#00C896',

@@ -12,6 +12,7 @@ import { useCageStore } from '../../store/cageStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePointsStore } from '../../store/pointsStore';
+import { analyzeSession } from '../../services/patternEngine';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 
 export default function CageSummary() {
@@ -26,6 +27,9 @@ export default function CageSummary() {
 
   const session =
     sessionHistory.length > 0 ? sessionHistory[sessionHistory.length - 1] : null;
+
+  const shots = session?.shots ?? [];
+  const pattern = analyzeSession(shots, session?.club ?? '');
 
   useEffect(() => {
     if (!session) {
@@ -42,18 +46,26 @@ export default function CageSummary() {
         await speak(session.summary ?? '', voiceGender, language, apiUrl);
       }, 800);
     }
+
+    if (pattern.improvement) {
+      setTimeout(async () => {
+        const improveMsg =
+          "You got better as the session went on. That's how it works.";
+        if (voiceEnabled) {
+          await configureAudioForSpeech();
+          await speak(improveMsg, voiceGender, language, apiUrl);
+        }
+      }, 3000);
+    }
   }, []);
 
   if (!session) return null;
 
-  const shots = session.shots;
   const total = shots.length;
-
   const flushCount = shots.filter(s => s.feel === 'flush' || s.feel === 'solid').length;
-  const fatCount = shots.filter(s => s.feel === 'fat').length;
-  const thinCount = shots.filter(s => s.feel === 'thin').length;
-
-  const flushRate = total > 0 ? Math.round((flushCount / total) * 100) : 0;
+  const fatCount   = shots.filter(s => s.feel === 'fat').length;
+  const thinCount  = shots.filter(s => s.feel === 'thin').length;
+  const flushRate  = total > 0 ? Math.round((flushCount / total) * 100) : 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -104,13 +116,39 @@ export default function CageSummary() {
           ))}
         </View>
 
+        {/* TREND */}
+        {pattern.trend !== 'insufficient' && (
+          <View style={styles.trendCard}>
+            <Text style={styles.trendLabel}>TREND THIS SESSION</Text>
+            <Text style={[
+              styles.trendValue,
+              {
+                color:
+                  pattern.trend === 'improving' ? '#00C896' :
+                  pattern.trend === 'declining' ? '#ef4444' : '#6b7280',
+              },
+            ]}>
+              {pattern.trend === 'improving' ? '↑ Improving' :
+               pattern.trend === 'declining' ? '↓ Declining' : '→ Consistent'}
+            </Text>
+          </View>
+        )}
+
+        {/* NEXT DRILL */}
+        {pattern.kevinNextDrill && (
+          <View style={styles.drillCard}>
+            <Text style={styles.drillLabel}>WORK ON THIS NEXT</Text>
+            <Text style={styles.drillText}>{pattern.kevinNextDrill}</Text>
+          </View>
+        )}
+
         {/* DOMINANT MISS */}
         {Boolean(session.dominantMiss) && (
           <View style={styles.missCard}>
             <Text style={styles.missLabel}>DOMINANT MISS</Text>
             <Text style={styles.missValue}>
               {(session.dominantMiss ?? '').charAt(0).toUpperCase() +
-                (session.dominantMiss ?? '').slice(1)}
+               (session.dominantMiss ?? '').slice(1)}
             </Text>
           </View>
         )}
@@ -122,8 +160,8 @@ export default function CageSummary() {
             {shots.map((shot, i) => {
               const color =
                 shot.feel === 'flush' || shot.feel === 'solid' ? '#00C896' :
-                shot.feel === 'fat'   ? '#f97316' :
-                shot.feel === 'thin'  ? '#fbbf24' : '#ef4444';
+                shot.feel === 'fat'  ? '#f97316' :
+                shot.feel === 'thin' ? '#fbbf24' : '#ef4444';
               return (
                 <View key={i} style={[styles.dot, { backgroundColor: color }]} />
               );
@@ -137,6 +175,13 @@ export default function CageSummary() {
           onPress={() => router.replace('/cage' as never)}
         >
           <Text style={styles.goAgainText}>Go Again</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.historyBtn}
+          onPress={() => router.replace('/cage/history' as never)}
+        >
+          <Text style={styles.historyBtnText}>View All Sessions</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -234,6 +279,47 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 3,
   },
+  trendCard: {
+    backgroundColor: '#0d1a0d',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    padding: 14,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  trendLabel: {
+    color: '#6b7280',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
+  trendValue: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  drillCard: {
+    backgroundColor: '#1a0800',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F5A623',
+    padding: 14,
+    marginBottom: 12,
+  },
+  drillLabel: {
+    color: '#F5A623',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 6,
+  },
+  drillText: {
+    color: '#ffffff',
+    fontSize: 14,
+    lineHeight: 20,
+  },
   missCard: {
     backgroundColor: '#0d1a0d',
     borderRadius: 12,
@@ -291,6 +377,14 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '800',
+  },
+  historyBtn: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  historyBtnText: {
+    color: '#6b7280',
+    fontSize: 14,
   },
   doneBtn: {
     paddingVertical: 14,
