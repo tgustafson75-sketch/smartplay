@@ -13,6 +13,8 @@ import {
   AppStateStatus,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -82,8 +84,6 @@ export default function CaddieTab() {
 
   // ── Local state ─────────────────────────
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
-  const [listenCountdown, setListenCountdown] = useState(4);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [appActive, setAppActive] = useState(true);
   const [kevinEmotion, setKevinEmotion] = useState<string | null>(null);
   const [openingPrompt, setOpeningPrompt] = useState('');
@@ -108,44 +108,52 @@ export default function CaddieTab() {
   const scoreVsPar  = useMemo(() => getScoreVsPar(),  [scores, courseHoles]);
   const holesPlayed = useMemo(() => getHolesPlayed(), [scores]);
 
-  // ── Mic pulse animation ──────────────────
-  const micPulse = useRef(new Animated.Value(1)).current;
+  // Derived early so animation effects can reference it
+  const vadEnabled = autoListenEnabled && isRoundActive && appActive;
+
+  // ── Mic animations ───────────────────────
+  const micPulse      = useRef(new Animated.Value(1)).current;
+  const ringScale     = useRef(new Animated.Value(1)).current;
+  const ringOpacity   = useRef(new Animated.Value(0)).current;
+  const autoListenPulse = useRef(new Animated.Value(1)).current;
+
   useEffect(() => {
-    if (voiceState === 'speaking') {
+    if (voiceState === 'listening') {
+      // Expand ring outward and fade out
       const loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(micPulse, { toValue: 1.06, duration: 300, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(micPulse, { toValue: 1.0,  duration: 300, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.parallel([
+          Animated.sequence([
+            Animated.timing(ringScale,   { toValue: 1.4, duration: 1200, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+            Animated.timing(ringScale,   { toValue: 1.0, duration: 0,    useNativeDriver: true }),
+          ]),
+          Animated.sequence([
+            Animated.timing(ringOpacity, { toValue: 0.6, duration: 0,    useNativeDriver: true }),
+            Animated.timing(ringOpacity, { toValue: 0,   duration: 1200, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+          ]),
         ])
       );
       loop.start();
       return () => loop.stop();
     } else {
-      Animated.timing(micPulse, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+      ringOpacity.setValue(0);
+      ringScale.setValue(1);
     }
   }, [voiceState]);
 
-  // ── Listen countdown ────────────────────
   useEffect(() => {
-    if (voiceState === 'listening') {
-      setListenCountdown(4);
-      countdownRef.current = setInterval(() => {
-        setListenCountdown(prev => {
-          if (prev <= 1) {
-            if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    if (vadEnabled && voiceState === 'idle') {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(autoListenPulse, { toValue: 1.05, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(autoListenPulse, { toValue: 1.0,  duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      );
+      loop.start();
+      return () => loop.stop();
     } else {
-      if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
-      setListenCountdown(4);
+      autoListenPulse.setValue(1);
     }
-    return () => {
-      if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
-    };
-  }, [voiceState]);
+  }, [vadEnabled, voiceState]);
 
   // ── Keep Vercel warm ────────────────────
   useEffect(() => {
@@ -269,7 +277,6 @@ export default function CaddieTab() {
   };
 
   // ── VAD — continuous listening ───────────
-  const vadEnabled = autoListenEnabled && isRoundActive && appActive;
   const { isListening: vadListening } = useVoiceActivityDetection({
     enabled: vadEnabled,
     onSpeechStart: () => {
@@ -520,99 +527,112 @@ export default function CaddieTab() {
           onTap={handleMicPress}
           emotion={kevinEmotion}
         />
+
+        {/* Vignette overlays */}
+        <LinearGradient
+          colors={['transparent', 'rgba(6,15,9,0.35)']}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <LinearGradient
+          colors={['rgba(6,15,9,0.15)', 'transparent']}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+
+        {/* Score badge */}
         {isRoundActive && holesPlayed > 0 && (
           <View style={styles.scoreBadge}>
-            <Text style={styles.scoreBadgeNum}>
-              {totalScore > 0 ? totalScore : '—'}
-            </Text>
             <Text style={[
-              styles.scoreBadgePar,
-              scoreVsPar < 0 && { color: '#4ade80' },
-              scoreVsPar > 0 && { color: '#f87171' },
+              styles.scoreBadgeDelta,
+              scoreVsPar < 0 && { color: '#00C896' },
+              scoreVsPar > 0 && { color: '#F5A623' },
             ]}>
               {scoreVsPar === 0 ? 'E' : (scoreVsPar > 0 ? '+' : '') + scoreVsPar}
+            </Text>
+            <Text style={styles.scoreBadgeThru}>
+              {'THRU ' + holesPlayed}
             </Text>
           </View>
         )}
       </View>
 
       {/* MIC BUTTON */}
-      {vadEnabled && voiceState === 'idle' ? (
-        /* Auto-listen status indicator — not a button */
-        <Animated.View style={[styles.micBtn, styles.micBtnAutoListen, { transform: [{ scale: micPulse }], opacity: 0.6 }]}>
-          <Text style={styles.micIcon}>👂</Text>
-          <Text style={styles.micLabel}>Listening</Text>
-        </Animated.View>
-      ) : (
-        <Animated.View style={{ transform: [{ scale: micPulse }] }}>
-          <TouchableOpacity
-            style={[
-              styles.micBtn,
-              (voiceState === 'listening' || (vadEnabled && vadListening)) && styles.micBtnActive,
-            ]}
-            onPress={handleMicPress}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.micIcon}>
-              {voiceState === 'listening' ? '⏹' : '🎙'}
-            </Text>
-            <Text style={styles.micLabel}>
-              {voiceState === 'idle'      ? 'Tap to talk to Kevin' :
-               voiceState === 'listening' ? 'Listening... ' + listenCountdown + 's' :
-               voiceState === 'thinking'  ? 'Kevin is thinking...' :
-                                            'Kevin is speaking...'}
-            </Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
+      <View style={styles.micZone}>
+        {vadEnabled && voiceState === 'idle' ? (
+          /* Auto-listen status indicator */
+          <Animated.View style={{ alignItems: 'center', transform: [{ scale: autoListenPulse }] }}>
+            <View style={[styles.micCircle, { opacity: 0.5 }]}>
+              <Ionicons name="mic" size={32} color="#ffffff" />
+            </View>
+            <Text style={styles.micStatusLabel}>LISTENING</Text>
+          </Animated.View>
+        ) : (
+          /* Manual mic button */
+          <View style={{ alignItems: 'center' }}>
+            {/* Pulsing ring */}
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.micRing,
+                {
+                  transform: [{ scale: ringScale }],
+                  opacity: ringOpacity,
+                },
+              ]}
+            />
+            <TouchableOpacity
+              style={[
+                styles.micCircle,
+                voiceState === 'listening' && styles.micCircleActive,
+                (voiceState === 'thinking' || voiceState === 'speaking') && styles.micCircleBusy,
+              ]}
+              onPress={handleMicPress}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              activeOpacity={0.85}
+            >
+              {voiceState === 'listening' ? (
+                <Ionicons name="stop" size={28} color="#ffffff" />
+              ) : voiceState === 'thinking' ? (
+                <Ionicons name="ellipsis-horizontal" size={24} color="#ffffff" />
+              ) : voiceState === 'speaking' ? (
+                <Ionicons name="volume-high" size={28} color="#ffffff" />
+              ) : (
+                <Ionicons name="mic" size={32} color="#ffffff" />
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
 
-      {/* QUICK ACTIONS — only when no active round */}
-      {!isRoundActive && (
-        <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.quickBtn} onPress={() => setShowRoundSetup(true)}>
-            <Text style={styles.quickBtnIcon}>⛳</Text>
-            <Text style={styles.quickBtnLabel}>Start Round</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push('/cage' as never)}>
-            <Text style={styles.quickBtnIcon}>🏌️</Text>
-            <Text style={styles.quickBtnLabel}>Hit the Cage</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push('/arena' as never)}>
-            <Text style={styles.quickBtnIcon}>🏆</Text>
-            <Text style={styles.quickBtnLabel}>Arena</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* THREE NAV ICONS */}
-      <View style={styles.navRow}>
+      {/* PRIMARY ACTION + SECONDARY PILLS */}
+      <View style={styles.actionZone}>
         <TouchableOpacity
-          style={styles.navBtn}
-          onPress={() =>
-            isRoundActive ? setShowShotCard(true) : setShowRoundSetup(true)
-          }
+          style={styles.primaryActionBtn}
+          onPress={() => isRoundActive ? setShowShotCard(true) : setShowRoundSetup(true)}
+          activeOpacity={0.85}
         >
-          <Text style={styles.navIcon}>⛳</Text>
-          <Text style={styles.navLabel}>
-            {isRoundActive ? 'Round' : 'Start'}
+          <Text style={styles.primaryActionText}>
+            {isRoundActive ? 'Log Score' : 'Start Round'}
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.navBtn}
-          onPress={() => router.push('/(tabs)/swinglab' as never)}
-        >
-          <Text style={styles.navIcon}>🏌️</Text>
-          <Text style={styles.navLabel}>Practice</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navBtn}
-          onPress={() => setShowMoreMenu(true)}
-        >
-          <Text style={styles.navIcon}>···</Text>
-          <Text style={styles.navLabel}>More</Text>
-        </TouchableOpacity>
+        <View style={styles.secondaryPills}>
+          <TouchableOpacity
+            style={styles.secondaryPill}
+            onPress={() => router.push('/(tabs)/swinglab' as never)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.secondaryPillText}>Practice</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.secondaryPill}
+            onPress={() => setShowMoreMenu(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.secondaryPillText}>More</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ── PRE-ROUND BRIEF MODAL ──────────── */}
@@ -938,108 +958,105 @@ const styles = StyleSheet.create({
   },
   scoreBadge: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: 'rgba(6,15,9,0.82)',
-    borderWidth: 1.5,
-    borderColor: '#00C896',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    alignItems: 'center',
-    minWidth: 52,
-  },
-  scoreBadgeNum: {
-    color: '#ffffff',
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: -0.5,
-  },
-  scoreBadgePar: {
-    color: '#6b7280',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  quickActions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 2,
-  },
-  quickBtn: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: '#0d2418',
+    top: 12,
+    right: 12,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#0d1a0d',
     borderWidth: 1,
     borderColor: '#1e3a28',
-    borderRadius: 14,
-    paddingVertical: 10,
-    gap: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  quickBtnIcon: {
+  scoreBadgeDelta: {
+    color: '#ffffff',
     fontSize: 18,
-  },
-  quickBtnLabel: {
-    color: '#6b7280',
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
-  micBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#0d2418',
-    borderWidth: 1.5,
-    borderColor: '#00C896',
-    borderRadius: 30,
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    alignSelf: 'center',
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  micBtnActive: {
-    backgroundColor: '#003d20',
-    borderColor: '#4ade80',
-  },
-  micBtnAutoListen: {
-    borderStyle: 'dashed',
-  },
-  micIcon: {
-    fontSize: 20,
-  },
-  micLabel: {
-    color: '#00C896',
-    fontSize: 15,
     fontWeight: '700',
+    letterSpacing: -0.5,
+    lineHeight: 20,
   },
-  navRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 24,
-    paddingBottom: 8,
-    paddingTop: 4,
-    backgroundColor: '#060f09',
-    flexShrink: 0,
-  },
-  navBtn: {
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-  },
-  navIcon: {
-    fontSize: 22,
-  },
-  navLabel: {
-    color: '#6b7280',
-    fontSize: 11,
-    fontWeight: '600',
+  scoreBadgeThru: {
+    color: '#6b7d72',
+    fontSize: 9,
+    fontWeight: '500',
     letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    lineHeight: 12,
+  },
+  micZone: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  micCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#00C896',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micCircleActive: {
+    backgroundColor: '#009e78',
+  },
+  micCircleBusy: {
+    backgroundColor: '#0d2418',
+    borderWidth: 2,
+    borderColor: '#00C896',
+  },
+  micRing: {
+    position: 'absolute',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 2,
+    borderColor: '#00C896',
+    backgroundColor: 'transparent',
+  },
+  micStatusLabel: {
+    color: '#6b7d72',
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginTop: 8,
+  },
+  actionZone: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 10,
+  },
+  primaryActionBtn: {
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#00C896',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryActionText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: -0.3,
+  },
+  secondaryPills: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  secondaryPill: {
+    height: 36,
+    paddingHorizontal: 20,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryPillText: {
+    color: '#00C896',
+    fontSize: 13,
+    fontWeight: '500',
   },
   preRoundOverlay: {
     flex: 1,
