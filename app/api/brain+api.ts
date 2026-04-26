@@ -29,6 +29,9 @@ export async function POST(request: Request) {
       recentHeroMoments = [],
       dominantMiss = null,
       physicalLimitation = null,
+      goal = null,
+      personalBest = null,
+      recentCageSessions = [],
       club = null,
       scores = {},
       courseHoles = [],
@@ -54,6 +57,16 @@ export async function POST(request: Request) {
       recentHeroMoments?: Array<{ hole: number; club: string; courseName: string; kevinSaid: string }>;
       dominantMiss?: string | null;
       physicalLimitation?: string | null;
+      goal?: string | null;
+      personalBest?: number | null;
+      recentCageSessions?: Array<{
+        club: string;
+        shots: number;
+        dominantMiss: string | null;
+        rootCause: string | null;
+        summary: string | null;
+        date: string;
+      }>;
       club?: string | null;
       scores?: Record<string, number>;
       courseHoles?: Array<{ hole: number; par: number }>;
@@ -106,16 +119,38 @@ ${topObservations.length > 0
 ${topObservations.map(o => '- ' + o.content).join('\n')}`
   : ''}
 
+${roundsTogether === 0
+  ? `This is the first time you are working with ${firstName || 'this player'}. Introduce yourself naturally. Ask one question to understand what they want to work on today. Do not overwhelm them with information on the first meeting.`
+  : roundsTogether < 5
+  ? `You are still getting to know ${firstName || 'this player'}. You have ${roundsTogether} rounds together. Reference specific things you have noticed when relevant. Build the relationship gradually.`
+  : `You know ${firstName || 'this player'} well after ${roundsTogether} rounds and ${sessionsTogether} practice sessions together. Speak to them like someone you have worked with for a while. You have context. Use it naturally without listing it.`
+}
+
+${goal
+  ? `${firstName || 'The player'}'s goal is: ${goal}. Reference this when relevant — especially after good holes or when they are close to achieving it. Never mention it constantly. Just let it inform your perspective on the round.`
+  : ''}
+
 ${recentHeroMoments.length > 0
   ? `HERO MOMENTS YOU SAVED TOGETHER:
 ${recentHeroMoments.map((m: { hole: number; club: string; courseName: string; kevinSaid: string }) =>
-  '- Hole ' + m.hole +
-  ' with ' + m.club +
-  (m.courseName ? ' at ' + m.courseName : '') +
-  '. You said: "' + m.kevinSaid + '"'
+  '- Hole ' + m.hole + ' with ' + m.club + (m.courseName ? ' at ' + m.courseName : '')
 ).join('\n')}
+Reference one of these if ${firstName || 'the player'} needs a confidence boost. Use sparingly — once per round maximum. Never list them all. Pick one if it fits the moment.`
+  : ''}
 
-Reference these naturally when relevant — not every time. If ${firstName || 'the player'} asks about a past shot or seems to need confidence, you can reference a specific hero moment briefly. Never list them all. Pick one if it fits the moment.`
+${personalBest
+  ? `Personal best round: ${personalBest}. When the score is tracking toward a personal best acknowledge it briefly at the right moment — not constantly. One sentence. Then move on.`
+  : ''}
+
+${recentCageSessions.length > 0
+  ? `RECENT PRACTICE SESSIONS:
+${recentCageSessions.map((s: { club: string; shots: number; dominantMiss: string | null; rootCause: string | null; summary: string | null; date: string }) =>
+  s.date + ' — ' + s.club + ' (' + s.shots + ' shots)' +
+  (s.dominantMiss ? ', tending to ' + s.dominantMiss : '') +
+  (s.rootCause ? '. Root cause: ' + s.rootCause : '') +
+  (s.summary ? '. ' + s.summary : '')
+).join('\n')}
+Use this context silently. If ${firstName || 'the player'} is hitting the same club they practiced with, reference what you noticed in practice naturally — not as a report card. If they ask about a specific club you can reference the session briefly.`
   : ''}
 
 ${isRoundActive
@@ -140,12 +175,14 @@ ${(() => {
   : ''}`
   : 'No active round.'}
 
-${dominantMiss
-  ? `DOMINANT MISS: ${dominantMiss} — factor this into club and target advice silently`
+${dominantMiss && isRoundActive
+  ? `COURSE MANAGEMENT NOTE: ${firstName || 'This player'} tends to miss ${dominantMiss}. Factor this into every target and club recommendation silently. Aim them away from the miss side. Never say "you tend to miss right" — just give them the right target.`
+  : dominantMiss
+  ? `DOMINANT MISS: ${dominantMiss} — factor into advice silently`
   : ''}
 
 ${physicalLimitation
-  ? `PHYSICAL NOTE: ${physicalLimitation} — never suggest full effort swings or movements that could aggravate this`
+  ? `IMPORTANT PHYSICAL NOTE: ${physicalLimitation}. Never suggest anything that could aggravate this. Adjust every swing recommendation to account for this limitation. This is non-negotiable.`
   : ''}
 
 ${isSpiralRisk || consecutiveBadHoles >= 3

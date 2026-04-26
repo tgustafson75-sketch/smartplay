@@ -49,10 +49,6 @@ export default function Dashboard() {
     .sort(([, a], [, b]) => b - a)
     .slice(0, 3);
 
-  const recentHero = [...heroMoments]
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 3);
-
   const scoreVsParDisplay =
     scoreVsPar === 0 ? 'E'
     : scoreVsPar > 0 ? '+' + scoreVsPar
@@ -223,19 +219,34 @@ export default function Dashboard() {
           )}
         </View>
 
-        {/* HERO REEL PREVIEW */}
-        {recentHero.length > 0 && (
-          <View style={styles.card}>
+        {/* HERO REEL */}
+        <View style={styles.card}>
+          <View style={styles.heroHeader}>
             <Text style={styles.cardTitle}>Hero Reel</Text>
-            {recentHero.map(moment => (
+            {heroMoments.length > 0 && (
+              <Text style={styles.heroCount}>
+                {'★ ' + heroMoments.length + ' moments saved'}
+              </Text>
+            )}
+          </View>
+
+          {[...heroMoments]
+            .sort((a, b) => b.timestamp - a.timestamp)
+            .slice(0, 5)
+            .map(moment => (
               <View key={moment.id} style={styles.heroItem}>
-                <Text style={styles.heroStar}>★</Text>
+                <View style={styles.heroStarBadge}>
+                  <Text style={styles.heroStarText}>★</Text>
+                </View>
                 <View style={styles.heroInfo}>
                   <Text style={styles.heroHole}>
                     {'Hole ' + moment.hole + ' · ' + moment.club}
                   </Text>
                   <Text style={styles.heroCourse}>
-                    {moment.courseName || moment.kevinSaid}
+                    {moment.courseName || 'Practice'}
+                  </Text>
+                  <Text style={styles.heroKevin}>
+                    {'"' + moment.kevinSaid + '"'}
                   </Text>
                 </View>
                 <Text style={styles.heroDate}>
@@ -246,8 +257,13 @@ export default function Dashboard() {
                 </Text>
               </View>
             ))}
-          </View>
-        )}
+
+          {heroMoments.length === 0 && (
+            <Text style={styles.heroEmpty}>
+              {'Say "Kevin did you get that?" after a pure shot to save it to your hero reel.'}
+            </Text>
+          )}
+        </View>
 
         {/* BREAKTHROUGHS */}
         {breakthroughs.length > 0 && (
@@ -459,17 +475,38 @@ const styles = StyleSheet.create({
     color: '#00C896',
     fontSize: 11,
   },
+  heroHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  heroCount: {
+    color: '#F5A623',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   heroItem: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 10,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#1e3a28',
   },
-  heroStar: {
+  heroStarBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1a1000',
+    borderWidth: 1,
+    borderColor: '#F5A623',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroStarText: {
     color: '#F5A623',
-    fontSize: 18,
+    fontSize: 14,
   },
   heroInfo: {
     flex: 1,
@@ -484,9 +521,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 1,
   },
+  heroKevin: {
+    color: '#6b7280',
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 3,
+  },
   heroDate: {
     color: '#6b7280',
     fontSize: 12,
+  },
+  heroEmpty: {
+    color: '#374151',
+    fontSize: 13,
+    textAlign: 'center',
+    paddingVertical: 16,
+    lineHeight: 18,
   },
   btItem: {
     flexDirection: 'row',

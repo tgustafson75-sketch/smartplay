@@ -15,33 +15,51 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ─── IMAGE MAPS ───────────────────────────
 
-const AVATARS: Record<string, ImageSourcePropType> = {
-  kevin_course:   require('../assets/avatars/kevin_portrait.jpg'),
-  kevin_dark:     require('../assets/avatars/kevin_dark.jpg'),
-  kevin_nod:      require('../assets/avatars/kevin_nod.jpg'),
-  kevin_walking:  require('../assets/avatars/kevin_walking.jpg'),
-  serena_course:  require('../assets/avatars/serena_portrait.jpg'),
-  serena_dark:    require('../assets/avatars/serena_dark.jpg'),
-  serena_nod:     require('../assets/avatars/serena_nod.jpg'),
+const BACKGROUNDS: Record<string, ImageSourcePropType> = {
+  morning:   require('../assets/avatars/kevin_portrait.jpg'),
+  afternoon: require('../assets/avatars/kevin_portrait.jpg'),
+  evening:   require('../assets/avatars/kevin_dark.jpg'),
+  indoor:    require('../assets/avatars/kevin_dark.jpg'),
+};
+
+const NODS: Record<string, ImageSourcePropType> = {
+  kevin:  require('../assets/avatars/kevin_nod.jpg'),
+  serena: require('../assets/avatars/serena_nod.jpg'),
+};
+
+const SERENA: Record<string, ImageSourcePropType> = {
+  course: require('../assets/avatars/serena_portrait.jpg'),
+  dark:   require('../assets/avatars/serena_dark.jpg'),
+  nod:    require('../assets/avatars/serena_nod.jpg'),
 };
 
 // ─── HELPERS ──────────────────────────────
 
-const getAvatarKey = (
+const getBackground = (
+  isOnCourse: boolean,
+  isCageMode: boolean,
+): ImageSourcePropType => {
+  if (isCageMode || !isOnCourse) {
+    return BACKGROUNDS.indoor;
+  }
+  const hour = new Date().getHours();
+  if (hour < 10) return BACKGROUNDS.morning;
+  if (hour >= 18) return BACKGROUNDS.evening;
+  return BACKGROUNDS.afternoon;
+};
+
+const getAvatarSource = (
   gender: 'male' | 'female',
   isOnCourse: boolean,
   isCageMode: boolean,
   isNodding: boolean,
-): string => {
-  const prefix = gender === 'female' ? 'serena' : 'kevin';
-
-  if (isNodding) {
-    return prefix + '_nod';
+): ImageSourcePropType => {
+  if (gender === 'female') {
+    if (isNodding) return SERENA.nod;
+    return (isCageMode || !isOnCourse) ? SERENA.dark : SERENA.course;
   }
-
-  const isDark = isCageMode || !isOnCourse;
-
-  return isDark ? prefix + '_dark' : prefix + '_course';
+  if (isNodding) return NODS.kevin;
+  return getBackground(isOnCourse, isCageMode);
 };
 
 // ─── TYPES ────────────────────────────────
@@ -219,7 +237,7 @@ export default function CaddieAvatar({
     voiceState === 'thinking'  ? '◌ Thinking'  :
     voiceState === 'speaking'  ? '▶ Speaking'  : '';
 
-  const avatarSource = AVATARS[getAvatarKey(gender, isOnCourse, isCageMode, isNodding)];
+  const avatarSource = getAvatarSource(gender, isOnCourse, isCageMode, isNodding);
 
   const hudItems = [
     { label: 'HOLE',  value: hud.hole     !== null ? String(hud.hole)     : '—' },

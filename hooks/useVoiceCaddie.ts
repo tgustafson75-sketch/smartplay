@@ -11,6 +11,7 @@ import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRelationshipStore } from '../store/relationshipStore';
+import { useCageStore } from '../store/cageStore';
 import { VoiceState } from '../components/CaddieAvatar';
 
 // ─── BYPASS PHRASES ───────────────────────
@@ -38,6 +39,16 @@ const HERO_PHRASES = [
   "save it",
 ];
 
+const HERO_VIEW_PHRASES = [
+  'show me my hero reel',
+  'show my best shots',
+  'show me my best',
+  'hero reel',
+  'my best shots',
+  'show me my drives',
+  'show me my irons',
+];
+
 const MUTE_PHRASES = [
   "mute",
   "be quiet",
@@ -63,6 +74,7 @@ interface UseVoiceCaddieOptions {
   onResponseReceived: (text: string) => void;
   onHeroMoment?: () => void;
   onVisionTrigger?: () => void;
+  onHeroReelView?: () => void;
 }
 
 export const useVoiceCaddie = ({
@@ -70,6 +82,7 @@ export const useVoiceCaddie = ({
   onResponseReceived,
   onHeroMoment,
   onVisionTrigger,
+  onHeroReelView,
 }: UseVoiceCaddieOptions) => {
 
   const recordingRef = useRef<Audio.Recording | null>(null);
@@ -100,6 +113,8 @@ export const useVoiceCaddie = ({
     handicap,
     dominantMiss,
     physicalLimitation,
+    goal,
+    personalBest,
   } = usePlayerProfileStore();
 
   const {
@@ -123,6 +138,7 @@ export const useVoiceCaddie = ({
     response?: string;
     triggerHero?: boolean;
     triggerVision?: boolean;
+    triggerHeroReelView?: boolean;
     triggerMute?: boolean;
   } => {
     const t = transcript.toLowerCase();
@@ -151,6 +167,10 @@ export const useVoiceCaddie = ({
       return { handled: true, triggerVision: true, response: 'Taking a look at the hole.' };
     }
 
+    if (HERO_VIEW_PHRASES.some(p => t.includes(p))) {
+      return { handled: true, triggerHeroReelView: true, response: 'Here are your best moments.' };
+    }
+
     if (MUTE_PHRASES.some(p => t.includes(p))) {
       return { handled: true, triggerMute: true, response: '' };
     }
@@ -164,6 +184,21 @@ export const useVoiceCaddie = ({
     try {
       const topObs = getTopObservations();
       const heroMoments = getRecentHeroMoments(2);
+
+      const recentCageSessions = useCageStore.getState()
+        .sessionHistory
+        .slice(-3)
+        .reverse()
+        .map(s => ({
+          club: s.club,
+          shots: s.shots.length,
+          dominantMiss: s.dominantMiss,
+          rootCause: s.rootCause,
+          summary: s.summary,
+          date: new Date(s.date).toLocaleDateString('en-US', {
+            weekday: 'short', month: 'short', day: 'numeric',
+          }),
+        }));
 
       const res = await fetch(apiUrl + '/api/brain', {
         method: 'POST',
@@ -189,6 +224,9 @@ export const useVoiceCaddie = ({
           recentHeroMoments: heroMoments,
           dominantMiss,
           physicalLimitation,
+          goal,
+          personalBest,
+          recentCageSessions,
           club,
           scores,
           courseHoles: useRoundStore.getState().courseHoles,
@@ -222,6 +260,7 @@ export const useVoiceCaddie = ({
   const handleMicPress = useCallback(async () => {
     if (isSpeaking()) {
       await stopSpeaking();
+      isProcessingRef.current = false;
       onVoiceStateChange('idle');
       return;
     }
@@ -271,6 +310,7 @@ export const useVoiceCaddie = ({
         if (bypass.handled) {
           if (bypass.triggerVision) onVisionTrigger?.();
           if (bypass.triggerHero) onHeroMoment?.();
+          if (bypass.triggerHeroReelView) onHeroReelView?.();
 
           if (bypass.triggerMute) {
             await stopSpeaking();

@@ -21,12 +21,7 @@ import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { useKeepAwake } from 'expo-keep-awake';
 import Svg, { Line, Circle, Text as SvgText } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  cacheDirectory,
-  downloadAsync,
-  readAsStringAsync,
-  EncodingType,
-} from 'expo-file-system/legacy';
+import { File, Paths } from 'expo-file-system';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
@@ -246,24 +241,30 @@ export default function HoleView() {
 
       if (!base64) {
         console.log('[SmartVision] downloading...');
-        const cacheFile = (cacheDirectory ?? '') + 'sv_' + cacheKey + '.jpg';
-
-        const dl = await downloadAsync(satelliteUrl, cacheFile);
-        console.log('[SmartVision] downloaded:', dl.status);
-
-        if (dl.status !== 200) {
-          throw new Error('Download failed: ' + dl.status);
+        const dlRes = await fetch(satelliteUrl);
+        if (!dlRes.ok) {
+          throw new Error('Download failed: ' + dlRes.status);
         }
+        const arrayBuffer = await dlRes.arrayBuffer();
+        const uint8 = new Uint8Array(arrayBuffer);
+        const CHUNK = 8192;
+        let dlBinary = '';
+        for (let offset = 0; offset < uint8.byteLength; offset += CHUNK) {
+          const slice = uint8.subarray(offset, offset + CHUNK);
+          dlBinary += String.fromCharCode(...(slice as unknown as number[]));
+        }
+        const dlBase64 = btoa(dlBinary);
+        const cacheFile = new File(Paths.cache, 'sv_' + cacheKey + '.jpg');
+        cacheFile.write(dlBase64, { encoding: 'base64' });
+        console.log('[SmartVision] downloaded');
 
         const compressed = await manipulateAsync(
-          dl.uri,
+          cacheFile.uri,
           [{ resize: { width: 400 } }],
           { compress: 0.7, format: SaveFormat.JPEG },
         );
 
-        base64 = await readAsStringAsync(compressed.uri, {
-          encoding: EncodingType.Base64,
-        });
+        base64 = new File(compressed.uri).base64Sync();
 
         SATELLITE_CACHE[cacheKey] = base64;
         console.log('[SmartVision] base64 length:', base64.length);
