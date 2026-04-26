@@ -206,10 +206,23 @@ export const useRelationshipStore = create<RelationshipState>()(
           },
         })),
 
-      getTopObservations: () =>
-        [...get().observations]
-          .sort((a, b) => b.usedInAdvice - a.usedInAdvice)
-          .slice(0, 3),
+      getTopObservations: () => {
+        const top = [...get().observations]
+          .sort((a, b) => b.timestamp - a.timestamp)
+          .slice(0, 3);
+
+        if (top.length > 0) {
+          set(s => ({
+            observations: s.observations.map(o =>
+              top.find(t => t.id === o.id)
+                ? { ...o, usedInAdvice: o.usedInAdvice + 1 }
+                : o
+            ),
+          }));
+        }
+
+        return top;
+      },
 
       getRecentHeroMoments: (count) =>
         [...get().heroMoments]

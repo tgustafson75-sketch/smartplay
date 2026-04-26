@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -112,14 +112,6 @@ export default function CaddieAvatar({
       : Math.round(H * 0.52),
   );
 
-  console.log('[avatar]', {
-    W, H,
-    aspectRatio: aspectRatio.toFixed(2),
-    isFolded,
-    AVATAR_HEIGHT,
-    availableHeight,
-  });
-
   const breatheAnim = useRef(new Animated.Value(1)).current;
   const glowAnim   = useRef(new Animated.Value(0)).current;
   const nodAnim    = useRef(new Animated.Value(0)).current;
@@ -158,8 +150,11 @@ export default function CaddieAvatar({
     }).start();
   }, []);
 
+  const [isNodding, setIsNodding] = useState(false);
+
   // ── Nod animation ──────────────────────
   const triggerNod = () => {
+    setIsNodding(true);
     Animated.sequence([
       Animated.timing(nodAnim, {
         toValue: 6,
@@ -179,7 +174,9 @@ export default function CaddieAvatar({
         easing: Easing.inOut(Easing.ease),
         useNativeDriver: true,
       }),
-    ]).start();
+    ]).start(() => {
+      setIsNodding(false);
+    });
   };
 
   // ── Nod on open ────────────────────────
@@ -235,7 +232,6 @@ export default function CaddieAvatar({
     voiceState === 'thinking'  ? '◌ Thinking'  :
     voiceState === 'speaking'  ? '▶ Speaking'  : '';
 
-  const isNodding = false;
   const avatarSource = AVATARS[getAvatarKey(gender, isOnCourse, isCageMode, isNodding)];
 
   const hudItems = [

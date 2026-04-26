@@ -211,7 +211,6 @@ export default function HoleView() {
       (heading > 0 ? '&heading=' + heading : '') +
       '&key=' + mapsKey;
 
-    console.log('[hole-view] sat URL:', url);
     return url;
   }, [mapsKey, middleLat, middleLng, teeLat, teeLng, distance, par]);
 

@@ -26,6 +26,7 @@ export async function POST(request: Request) {
       consecutiveBadHoles = 0,
       isSpiralRisk = false,
       topObservations = [],
+      recentHeroMoments = [],
       dominantMiss = null,
       physicalLimitation = null,
       club = null,
@@ -50,6 +51,7 @@ export async function POST(request: Request) {
       consecutiveBadHoles?: number;
       isSpiralRisk?: boolean;
       topObservations?: Array<{ content: string }>;
+      recentHeroMoments?: Array<{ hole: number; club: string; courseName: string; kevinSaid: string }>;
       dominantMiss?: string | null;
       physicalLimitation?: string | null;
       club?: string | null;
@@ -102,6 +104,18 @@ HOW YOU SPEAK:
 ${topObservations.length > 0
   ? `WHAT YOU KNOW PRIVATELY ABOUT THIS PLAYER (never reference directly — just let it inform your advice):
 ${topObservations.map(o => '- ' + o.content).join('\n')}`
+  : ''}
+
+${recentHeroMoments.length > 0
+  ? `HERO MOMENTS YOU SAVED TOGETHER:
+${recentHeroMoments.map((m: { hole: number; club: string; courseName: string; kevinSaid: string }) =>
+  '- Hole ' + m.hole +
+  ' with ' + m.club +
+  (m.courseName ? ' at ' + m.courseName : '') +
+  '. You said: "' + m.kevinSaid + '"'
+).join('\n')}
+
+Reference these naturally when relevant — not every time. If ${firstName || 'the player'} asks about a past shot or seems to need confidence, you can reference a specific hero moment briefly. Never list them all. Pick one if it fits the moment.`
   : ''}
 
 ${isRoundActive

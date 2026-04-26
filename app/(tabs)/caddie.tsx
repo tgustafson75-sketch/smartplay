@@ -31,6 +31,7 @@ export default function CaddieTab() {
     activeCourse,
     courseHoles,
     scores,
+    nineHoleMode,
     startRound,
     endRound,
     setCurrentHole,
@@ -147,7 +148,23 @@ export default function CaddieTab() {
 
     // Capture par before setCurrentHole updates the store
     const par = getCurrentPar();
+
+    const maxHole = nineHoleMode ? 9 : 18;
     const nextHole = currentHole + 1;
+
+    if (nextHole > maxHole) {
+      endRound();
+      setShowShotCard(false);
+      const finalMsg = "That's the round. Good work out there.";
+      setCaddieResponse(finalMsg);
+      if (voiceEnabled) {
+        const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+        speak(finalMsg, voiceGender, language, apiUrl).catch(() => {});
+      }
+      useRelationshipStore.getState().updateMentalState(holeScore, par ?? 4);
+      return;
+    }
+
     setCurrentHole(nextHole);
     setHoleScore(0);
     setHolePutts(0);
@@ -179,6 +196,8 @@ export default function CaddieTab() {
       const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
       speak(message, voiceGender, language, apiUrl).catch(() => {});
     }
+
+    useRelationshipStore.getState().updateMentalState(holeScore, par ?? 4);
   };
 
   // ── HUD data ─────────────────────────────
