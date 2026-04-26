@@ -1,5 +1,16 @@
 {
-  "buildCommand": "npx expo export --platform web",
-  "outputDirectory": "dist",
-  "framework": null
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/*.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    { "src": "/api/brain",      "dest": "/api/brain.ts" },
+    { "src": "/api/voice",      "dest": "/api/voice.ts" },
+    { "src": "/api/transcribe", "dest": "/api/transcribe.ts" },
+    { "src": "/api/vision",     "dest": "/api/vision.ts" },
+    { "src": "/api/preround",   "dest": "/api/preround.ts" }
+  ]
 }
