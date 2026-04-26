@@ -79,14 +79,27 @@ export default function CageIndex() {
             <Text style={styles.cameraIcon}>📹</Text>
             <View style={styles.cameraText}>
               <Text style={styles.cameraTitle}>
-                {cameraAlignment?.locked ? 'Camera Aligned ✓' : 'Camera Not Aligned'}
+                {cameraAlignment?.locked ? 'Camera Ready ✓' : 'Camera Not Set'}
               </Text>
               <Text style={styles.cameraSub}>
                 {cameraAlignment?.locked
-                  ? 'Position confirmed'
-                  : 'Place phone on tripod 6-8 feet away facing you'}
+                  ? 'SmartMotion active'
+                  : 'Optional — tap to set up'}
               </Text>
             </View>
+            <TouchableOpacity
+              style={styles.cameraSetBtn}
+              onPress={() =>
+                router.push({
+                  pathname: '/smartmotion',
+                  params: { club: selectedClub },
+                } as never)
+              }
+            >
+              <Text style={styles.cameraSetText}>
+                {cameraAlignment?.locked ? 'Adjust' : 'Set Up'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -209,6 +222,19 @@ const styles = StyleSheet.create({
   },
   cameraIcon: { fontSize: 24 },
   cameraText: { flex: 1 },
+  cameraSetBtn: {
+    backgroundColor: '#003d20',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#00C896',
+  },
+  cameraSetText: {
+    color: '#00C896',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   cameraTitle: {
     color: '#ffffff',
     fontSize: 15,

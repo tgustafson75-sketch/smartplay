@@ -817,7 +817,13 @@ export default function CaddieTab() {
                 icon: '🏌️',
                 label: 'SmartMotion',
                 sub: 'In-round swing analysis',
-                action: () => setShowMoreMenu(false),
+                action: () => {
+                  setShowMoreMenu(false);
+                  router.push({
+                    pathname: '/smartmotion',
+                    params: { club: club ?? '7 iron', feel: '', shape: '' },
+                  } as never);
+                },
               },
               {
                 icon: '⚠️',

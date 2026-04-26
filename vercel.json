@@ -11,6 +11,7 @@
     { "src": "/api/voice",      "dest": "/api/voice.ts" },
     { "src": "/api/transcribe", "dest": "/api/transcribe.ts" },
     { "src": "/api/vision",     "dest": "/api/vision.ts" },
-    { "src": "/api/preround",   "dest": "/api/preround.ts" }
+    { "src": "/api/preround",     "dest": "/api/preround.ts" },
+    { "src": "/api/smartmotion",  "dest": "/api/smartmotion.ts" }
   ]
 }

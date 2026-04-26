@@ -8,7 +8,7 @@ import {
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -47,6 +47,7 @@ const SHAPE_OPTIONS = [
 export default function CageSession() {
   useKeepAwake();
   const router = useRouter();
+  const params = useLocalSearchParams();
 
   const { activeSession, addShot, endSession } = useCageStore();
   const { voiceGender, voiceEnabled, language } = useSettingsStore();
@@ -363,6 +364,24 @@ export default function CageSession() {
           <Text style={styles.logBtnText}>Log Shot</Text>
         </TouchableOpacity>
 
+        {/* SMART MOTION */}
+        <TouchableOpacity
+          style={styles.smartMotionBtn}
+          onPress={() =>
+            router.push({
+              pathname: '/smartmotion',
+              params: {
+                club,
+                feel: selectedFeel ?? '',
+                shape: selectedShape ?? '',
+              },
+            } as never)
+          }
+        >
+          <Text style={styles.smartMotionIcon}>🎥</Text>
+          <Text style={styles.smartMotionLabel}>SmartMotion</Text>
+        </TouchableOpacity>
+
         {/* SHOT HISTORY DOTS */}
         {shots.length > 0 && (
           <View style={styles.history}>
@@ -595,6 +614,26 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 17,
     fontWeight: '800',
+  },
+  smartMotionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    backgroundColor: '#0d1a0d',
+    marginBottom: 8,
+  },
+  smartMotionIcon: {
+    fontSize: 18,
+  },
+  smartMotionLabel: {
+    color: '#6b7280',
+    fontSize: 14,
+    fontWeight: '600',
   },
   history: {
     backgroundColor: '#0d1a0d',
