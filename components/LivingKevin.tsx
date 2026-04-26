@@ -127,7 +127,7 @@ export default function LivingKevin({
       <Image
         source={source}
         style={StyleSheet.absoluteFillObject}
-        resizeMode="contain"
+        resizeMode={resizeMode}
       />
     </Animated.View>
   );

@@ -12,6 +12,7 @@ import {
   Easing,
   AppState,
   AppStateStatus,
+  useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
@@ -40,6 +41,9 @@ export default function CaddieTab() {
   useKeepAwake();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: W } = useWindowDimensions();
+  const avatarFrameHeight = Math.round(W * 16 / 9);
+
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
   // ── Stores ──────────────────────────────
@@ -834,8 +838,8 @@ export default function CaddieTab() {
   return (
     <View style={styles.container}>
 
-      {/* KEVIN — flex child, fills space between nav and bottom UI */}
-      <View style={[styles.avatarLayer, { paddingTop: insets.top + 16 }]}>
+      {/* KEVIN — 9:16 frame anchored at top; cover fills without over-zoom */}
+      <View style={{ position: 'absolute', top: 0, left: 0, width: W, height: avatarFrameHeight }}>
         {kevinAvatar}
       </View>
 
@@ -903,10 +907,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#060f09',
-  },
-  avatarLayer: {
-    flex: 1,
-    paddingBottom: 220,
   },
   topNav: {
     position: 'absolute',
