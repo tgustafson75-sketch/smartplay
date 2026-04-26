@@ -142,49 +142,6 @@ export default function CaddieTab() {
   // Derived early so animation effects can reference it
   const vadEnabled = autoListenEnabled && isRoundActive && appActive;
 
-  // ── Mic animations ───────────────────────
-  const micPulse      = useRef(new Animated.Value(1)).current;
-  const ringScale     = useRef(new Animated.Value(1)).current;
-  const ringOpacity   = useRef(new Animated.Value(0)).current;
-  const autoListenPulse = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (voiceState === 'listening') {
-      const loop = Animated.loop(
-        Animated.parallel([
-          Animated.sequence([
-            Animated.timing(ringScale,   { toValue: 1.4, duration: 1200, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-            Animated.timing(ringScale,   { toValue: 1.0, duration: 0,    useNativeDriver: true }),
-          ]),
-          Animated.sequence([
-            Animated.timing(ringOpacity, { toValue: 0.6, duration: 0,    useNativeDriver: true }),
-            Animated.timing(ringOpacity, { toValue: 0,   duration: 1200, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-          ]),
-        ])
-      );
-      loop.start();
-      return () => loop.stop();
-    } else {
-      ringOpacity.setValue(0);
-      ringScale.setValue(1);
-    }
-  }, [voiceState]);
-
-  useEffect(() => {
-    if (vadEnabled && voiceState === 'idle') {
-      const loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(autoListenPulse, { toValue: 1.05, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(autoListenPulse, { toValue: 1.0,  duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ])
-      );
-      loop.start();
-      return () => loop.stop();
-    } else {
-      autoListenPulse.setValue(1);
-    }
-  }, [vadEnabled, voiceState]);
-
   // ── Keep Vercel warm ────────────────────
   useEffect(() => {
     const keepWarm = async () => {
@@ -307,7 +264,7 @@ export default function CaddieTab() {
   };
 
   // ── VAD — continuous listening ───────────
-  const { isListening: vadListening } = useVoiceActivityDetection({
+  const { isListening: _vadListening } = useVoiceActivityDetection({
     enabled: vadEnabled,
     onSpeechStart: () => {
       setKevinEmotion('listening');
@@ -559,11 +516,6 @@ export default function CaddieTab() {
     }
   }, [isRoundActive]);
 
-  // ── Positioning helpers ──────────────────
-  // Pre-round: [Start Round 40] → [Bubble 144] → [Mic 244] → Kevin
-  // On-round:  [Data strip 32+insets] → [Mic 132+insets] → Kevin
-  const micBottom = isRoundActive ? insets.bottom + 132 : insets.bottom + 244;
-
   // ── RENDER ───────────────────────────────
 
   const kevinAvatar = (
@@ -579,42 +531,6 @@ export default function CaddieTab() {
       emotion={kevinEmotion}
       fillMode="cover"
     />
-  );
-
-  const micInner = vadEnabled && voiceState === 'idle' ? (
-    <Animated.View style={{ alignItems: 'center', transform: [{ scale: autoListenPulse }] }}>
-      <View style={[styles.micCircle, { opacity: 0.5 }]}>
-        <Ionicons name="mic" size={32} color="#00C896" />
-      </View>
-      <Text style={styles.micStatusLabel}>LISTENING</Text>
-    </Animated.View>
-  ) : (
-    <View style={{ alignItems: 'center' }}>
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.micRing, { transform: [{ scale: ringScale }], opacity: ringOpacity }]}
-      />
-      <TouchableOpacity
-        style={[
-          styles.micCircle,
-          voiceState === 'listening' && styles.micCircleActive,
-          (voiceState === 'thinking' || voiceState === 'speaking') && styles.micCircleBusy,
-        ]}
-        onPress={handleMicPress}
-        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        activeOpacity={0.85}
-      >
-        {voiceState === 'listening' ? (
-          <Ionicons name="stop" size={28} color="#00C896" />
-        ) : voiceState === 'thinking' ? (
-          <Ionicons name="ellipsis-horizontal" size={24} color="rgba(0,200,150,0.5)" />
-        ) : voiceState === 'speaking' ? (
-          <Ionicons name="volume-high" size={28} color="#00C896" />
-        ) : (
-          <Ionicons name="mic" size={32} color="#00C896" />
-        )}
-      </TouchableOpacity>
-    </View>
   );
 
   const sharedModals = (
@@ -941,11 +857,6 @@ export default function CaddieTab() {
             </Animated.View>
           ) : null}
 
-          {/* Mic */}
-          <View style={styles.wideMicZone}>
-            {micInner}
-          </View>
-
           {/* Bottom: strip or CTA (cross-fade) */}
           <View style={styles.wideBottomZone}>
             <Animated.View
@@ -1016,21 +927,16 @@ export default function CaddieTab() {
         </TouchableOpacity>
       </View>
 
-      {/* GREETING BUBBLE — pre-round only */}
+      {/* GREETING BUBBLE — pre-round only, floats above Start Round CTA */}
       {!isRoundActive && shownText ? (
         <Animated.View
-          style={[styles.bubble, { bottom: 144 + insets.bottom, opacity: responseFade }]}
+          style={[styles.bubble, { bottom: 116 + insets.bottom, opacity: responseFade }]}
         >
           <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
           <View style={[StyleSheet.absoluteFill, styles.bubbleTint]} />
           <Text style={styles.bubbleText} numberOfLines={3}>{shownText}</Text>
         </Animated.View>
       ) : null}
-
-      {/* MIC BUTTON */}
-      <View style={[styles.micZone, { bottom: micBottom }]}>
-        {micInner}
-      </View>
 
       {/* DATA STRIP — cross-fades in when round starts */}
       <Animated.View
@@ -1115,52 +1021,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
   },
-  micZone: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  micCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: 'rgba(0, 200, 150, 0.8)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  micCircleActive: {
-    backgroundColor: 'rgba(0, 200, 150, 0.12)',
-    borderColor: '#00C896',
-  },
-  micCircleBusy: {
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: 'rgba(0, 200, 150, 0.4)',
-  },
-  micRing: {
-    position: 'absolute',
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 2,
-    borderColor: '#00C896',
-    backgroundColor: 'transparent',
-  },
-  micStatusLabel: {
-    color: '#6b7d72',
-    fontSize: 11,
-    fontWeight: '500',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginTop: 8,
-  },
   startRoundBtn: {
     position: 'absolute',
-    alignSelf: 'center',
     left: 40,
     right: 40,
     height: 60,
@@ -1435,10 +1297,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     overflow: 'hidden',
     alignItems: 'center',
-  },
-  wideMicZone: {
-    alignItems: 'center',
-    paddingVertical: 16,
   },
   wideBottomZone: {
     height: 130,
