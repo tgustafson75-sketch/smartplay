@@ -18,6 +18,7 @@ interface SettingsState {
 
   watchConnected: boolean;
   glassesConnected: boolean;
+  autoListenEnabled: boolean;
 
   tutorialsSeen: Record<string, boolean>;
 
@@ -34,6 +35,7 @@ interface SettingsState {
   setCastMode: (v: boolean) => void;
   setWatchConnected: (v: boolean) => void;
   setGlassesConnected: (v: boolean) => void;
+  setAutoListenEnabled: (v: boolean) => void;
   markTutorialSeen: (key: string) => void;
   resetTutorials: () => void;
 }
@@ -54,6 +56,7 @@ export const useSettingsStore = create<SettingsState>()(
       castMode: false,
       watchConnected: false,
       glassesConnected: false,
+      autoListenEnabled: false,
       tutorialsSeen: {},
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
@@ -67,6 +70,7 @@ export const useSettingsStore = create<SettingsState>()(
       setCastMode: (v) => set({ castMode: v }),
       setWatchConnected: (v) => set({ watchConnected: v }),
       setGlassesConnected: (v) => set({ glassesConnected: v }),
+      setAutoListenEnabled: (v) => set({ autoListenEnabled: v }),
       markTutorialSeen: (key) =>
         set(s => ({ tutorialsSeen: { ...s.tutorialsSeen, [key]: true } })),
       resetTutorials: () => set({ tutorialsSeen: {} }),
@@ -84,6 +88,7 @@ export const useSettingsStore = create<SettingsState>()(
         highContrast: s.highContrast,
         brightMode: s.brightMode,
         castMode: s.castMode,
+        autoListenEnabled: s.autoListenEnabled,
         tutorialsSeen: s.tutorialsSeen,
         // watchConnected / glassesConnected not persisted — rechecked on mount
       }),

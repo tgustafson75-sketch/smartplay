@@ -313,6 +313,77 @@ export const useVoiceCaddie = ({
     await speak(text, voiceGender, language, apiUrl);
   };
 
+  // ── PROCESS AUDIO URI (shared by manual + VAD) ────
+
+  const processAudioUri = useCallback(async (uri: string): Promise<void> => {
+    if (isProcessingRef.current) return;
+    try {
+      isProcessingRef.current = true;
+      onVoiceStateChange('thinking');
+
+      const formData = new FormData();
+      formData.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
+      formData.append('language', language);
+
+      const transcribeController = new AbortController();
+      const transcribeTimeout = setTimeout(() => transcribeController.abort(), 10000);
+
+      const transcribeRes = await fetch(apiUrl + '/api/transcribe', {
+        method: 'POST',
+        body: formData,
+        signal: transcribeController.signal,
+      }).finally(() => clearTimeout(transcribeTimeout));
+
+      const transcribeData = await transcribeRes.json() as { text?: string };
+      const transcript = transcribeData.text ?? '';
+
+      console.log('[voice] transcript:', transcript);
+
+      if (!transcript.trim()) {
+        onVoiceStateChange('idle');
+        isProcessingRef.current = false;
+        return;
+      }
+
+      const bypass = checkBypasses(transcript);
+
+      if (bypass.handled) {
+        if (bypass.triggerVision) onVisionTrigger?.();
+        if (bypass.triggerHero) onHeroMoment?.();
+        if (bypass.triggerHeroReelView) onHeroReelView?.();
+
+        if (bypass.triggerMute) {
+          await stopSpeaking();
+          onVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
+        }
+
+        if (bypass.response) {
+          onResponseReceived(bypass.response);
+          onVoiceStateChange('speaking');
+          await speakResponse(bypass.response);
+          onVoiceStateChange('idle');
+        }
+
+        isProcessingRef.current = false;
+        return;
+      }
+
+      const response = await sendToBrain(transcript);
+      onResponseReceived(response);
+      onVoiceStateChange('speaking');
+      await speakResponse(response);
+      onVoiceStateChange('idle');
+
+    } catch (err) {
+      console.log('[voice] process error:', err);
+      onVoiceStateChange('idle');
+    } finally {
+      isProcessingRef.current = false;
+    }
+  }, [language, voiceEnabled, discreteMode, voiceGender, currentYardage, currentHole, club, isRoundActive]);
+
   // ── MAIN MIC HANDLER ─────────────────────
 
   const handleMicPress = useCallback(async () => {
@@ -330,82 +401,20 @@ export const useVoiceCaddie = ({
       clearAutoStop();
 
       try {
-        isProcessingRef.current = true;
-        onVoiceStateChange('thinking');
-
         await recordingRef.current.stopAndUnloadAsync();
         const uri = recordingRef.current.getURI();
         recordingRef.current = null;
 
         if (!uri) {
           onVoiceStateChange('idle');
-          isProcessingRef.current = false;
           return;
         }
 
-        // Send to Whisper with 10s timeout
-        const formData = new FormData();
-        formData.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
-        formData.append('language', language);
-
-        const transcribeController = new AbortController();
-        const transcribeTimeout = setTimeout(() => transcribeController.abort(), 10000);
-
-        const transcribeRes = await fetch(apiUrl + '/api/transcribe', {
-          method: 'POST',
-          body: formData,
-          signal: transcribeController.signal,
-        }).finally(() => clearTimeout(transcribeTimeout));
-
-        const transcribeData = await transcribeRes.json() as { text?: string };
-        const transcript = transcribeData.text ?? '';
-
-        console.log('[voice] transcript:', transcript);
-
-        if (!transcript.trim()) {
-          onVoiceStateChange('idle');
-          isProcessingRef.current = false;
-          return;
-        }
-
-        // Check bypass phrases first
-        const bypass = checkBypasses(transcript);
-
-        if (bypass.handled) {
-          if (bypass.triggerVision) onVisionTrigger?.();
-          if (bypass.triggerHero) onHeroMoment?.();
-          if (bypass.triggerHeroReelView) onHeroReelView?.();
-
-          if (bypass.triggerMute) {
-            await stopSpeaking();
-            onVoiceStateChange('idle');
-            isProcessingRef.current = false;
-            return;
-          }
-
-          if (bypass.response) {
-            onResponseReceived(bypass.response);
-            onVoiceStateChange('speaking');
-            await speakResponse(bypass.response);
-            onVoiceStateChange('idle');
-          }
-
-          isProcessingRef.current = false;
-          return;
-        }
-
-        // Send to Kevin's brain
-        const response = await sendToBrain(transcript);
-        onResponseReceived(response);
-        onVoiceStateChange('speaking');
-        await speakResponse(response);
-        onVoiceStateChange('idle');
+        await processAudioUri(uri);
 
       } catch (err) {
-        console.log('[voice] process error:', err);
+        console.log('[voice] stop error:', err);
         onVoiceStateChange('idle');
-      } finally {
-        isProcessingRef.current = false;
       }
       return;
     }
@@ -449,5 +458,5 @@ export const useVoiceCaddie = ({
     isRoundActive,
   ]);
 
-  return { handleMicPress };
+  return { handleMicPress, processAudioUri };
 };

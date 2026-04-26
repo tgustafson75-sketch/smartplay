@@ -26,6 +26,7 @@ export default function Settings() {
     castMode,
     highContrast,
     watchConnected,
+    autoListenEnabled,
     setVoiceEnabled,
     setVoiceGender,
     setLanguage,
@@ -34,6 +35,7 @@ export default function Settings() {
     setCastMode,
     setHighContrast,
     setWatchConnected,
+    setAutoListenEnabled,
   } = useSettingsStore();
 
   const {
@@ -286,6 +288,12 @@ export default function Settings() {
             sub="Haptic only — no audio"
             value={discreteMode}
             onValueChange={setDiscreteMode}
+          />
+          <ToggleRow
+            label="Auto-Listen During Round"
+            sub="Kevin listens automatically. Just talk."
+            value={autoListenEnabled}
+            onValueChange={setAutoListenEnabled}
           />
         </View>
 

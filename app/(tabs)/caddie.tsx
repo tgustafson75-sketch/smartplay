@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +25,8 @@ import { useCageStore } from '../../store/cageStore';
 import { usePointsStore } from '../../store/pointsStore';
 import { getCourseList, getCourse } from '../../data/courses';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
+import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
+import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 
 export default function CaddieTab() {
@@ -59,8 +63,10 @@ export default function CaddieTab() {
     discreteMode,
     castMode,
     language,
+    autoListenEnabled,
     setVoiceEnabled,
     setCastMode,
+    setAutoListenEnabled,
   } = useSettingsStore();
 
   const { firstName, goal } = usePlayerProfileStore();
@@ -78,6 +84,8 @@ export default function CaddieTab() {
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [listenCountdown, setListenCountdown] = useState(4);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [appActive, setAppActive] = useState(true);
+  const [kevinEmotion, setKevinEmotion] = useState<string | null>(null);
   const [openingPrompt, setOpeningPrompt] = useState('');
   const [caddieResponse, setCaddieResponse] = useState('');
   const [showShotCard, setShowShotCard] = useState(false);
@@ -155,6 +163,14 @@ export default function CaddieTab() {
     return () => clearInterval(interval);
   }, []);
 
+  // ── AppState guard (battery) ─────────────
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      setAppActive(nextState === 'active');
+    });
+    return () => sub.remove();
+  }, []);
+
   // ── Opening prompt ───────────────────────
   useEffect(() => {
     const hour = new Date().getHours();
@@ -228,8 +244,11 @@ export default function CaddieTab() {
   };
 
   // ── Voice hook ───────────────────────────
-  const { handleMicPress: _handleMicPress } = useVoiceCaddie({
-    onVoiceStateChange: (state) => setVoiceState(state),
+  const { handleMicPress: _handleMicPress, processAudioUri } = useVoiceCaddie({
+    onVoiceStateChange: (state) => {
+      setVoiceState(state);
+      if (state !== 'listening') setKevinEmotion(null);
+    },
     onResponseReceived: (text) => {
       setCaddieResponse(text);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -248,6 +267,26 @@ export default function CaddieTab() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     _handleMicPress();
   };
+
+  // ── VAD — continuous listening ───────────
+  const vadEnabled = autoListenEnabled && isRoundActive && appActive;
+  const { isListening: vadListening } = useVoiceActivityDetection({
+    enabled: vadEnabled,
+    onSpeechStart: () => {
+      setKevinEmotion('listening');
+      setVoiceState('listening');
+    },
+    onSpeechEnd: (uri) => {
+      setKevinEmotion(null);
+      processAudioUri(uri);
+    },
+  });
+
+  // ── Volume button trigger ────────────────
+  useVolumeButtonTrigger({
+    enabled: isRoundActive,
+    onTrigger: handleMicPress,
+  });
 
   // ── Pre-round brief ──────────────────────
   const generatePreRoundBrief = async (
@@ -479,6 +518,7 @@ export default function CaddieTab() {
           openingPrompt={openingPrompt}
           caddieResponse={caddieResponse}
           onTap={handleMicPress}
+          emotion={kevinEmotion}
         />
         {isRoundActive && holesPlayed > 0 && (
           <View style={styles.scoreBadge}>
@@ -497,26 +537,34 @@ export default function CaddieTab() {
       </View>
 
       {/* MIC BUTTON */}
-      <Animated.View style={{ transform: [{ scale: micPulse }] }}>
-        <TouchableOpacity
-          style={[
-            styles.micBtn,
-            voiceState === 'listening' && styles.micBtnActive,
-          ]}
-          onPress={handleMicPress}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.micIcon}>
-            {voiceState === 'listening' ? '⏹' : '🎙'}
-          </Text>
-          <Text style={styles.micLabel}>
-            {voiceState === 'idle'      ? 'Tap to talk to Kevin' :
-             voiceState === 'listening' ? 'Listening... ' + listenCountdown + 's' :
-             voiceState === 'thinking'  ? 'Kevin is thinking...' :
-                                          'Kevin is speaking...'}
-          </Text>
-        </TouchableOpacity>
-      </Animated.View>
+      {vadEnabled && voiceState === 'idle' ? (
+        /* Auto-listen status indicator — not a button */
+        <Animated.View style={[styles.micBtn, styles.micBtnAutoListen, { transform: [{ scale: micPulse }], opacity: 0.6 }]}>
+          <Text style={styles.micIcon}>👂</Text>
+          <Text style={styles.micLabel}>Listening</Text>
+        </Animated.View>
+      ) : (
+        <Animated.View style={{ transform: [{ scale: micPulse }] }}>
+          <TouchableOpacity
+            style={[
+              styles.micBtn,
+              (voiceState === 'listening' || (vadEnabled && vadListening)) && styles.micBtnActive,
+            ]}
+            onPress={handleMicPress}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.micIcon}>
+              {voiceState === 'listening' ? '⏹' : '🎙'}
+            </Text>
+            <Text style={styles.micLabel}>
+              {voiceState === 'idle'      ? 'Tap to talk to Kevin' :
+               voiceState === 'listening' ? 'Listening... ' + listenCountdown + 's' :
+               voiceState === 'thinking'  ? 'Kevin is thinking...' :
+                                            'Kevin is speaking...'}
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
 
       {/* QUICK ACTIONS — only when no active round */}
       {!isRoundActive && (
@@ -957,6 +1005,9 @@ const styles = StyleSheet.create({
   micBtnActive: {
     backgroundColor: '#003d20',
     borderColor: '#4ade80',
+  },
+  micBtnAutoListen: {
+    borderStyle: 'dashed',
   },
   micIcon: {
     fontSize: 20,
