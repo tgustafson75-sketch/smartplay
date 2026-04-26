@@ -145,6 +145,8 @@ export default function CaddieTab() {
     logScore(currentHole, holeScore);
     logPutts(currentHole, holePutts);
 
+    // Capture par before setCurrentHole updates the store
+    const par = getCurrentPar();
     const nextHole = currentHole + 1;
     setCurrentHole(nextHole);
     setHoleScore(0);
@@ -152,7 +154,6 @@ export default function CaddieTab() {
     setShowShotCard(false);
 
     // Build hole transition message
-    const par = getCurrentPar();
     const diff = par ? holeScore - par : null;
     const scoreWord =
       diff === null  ? '' :
@@ -527,7 +528,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 28,
     alignSelf: 'center',
-    marginVertical: 10,
+    marginTop: 8,
+    marginBottom: 4,
   },
   micBtnActive: {
     backgroundColor: '#003d20',
@@ -548,6 +550,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     paddingTop: 4,
     backgroundColor: '#060f09',
+    flexShrink: 0,
   },
   navBtn: {
     alignItems: 'center',

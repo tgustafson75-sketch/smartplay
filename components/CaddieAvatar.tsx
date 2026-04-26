@@ -11,16 +11,18 @@ import {
   ImageSourcePropType,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ─── IMAGE MAPS ───────────────────────────
 
 const AVATARS: Record<string, ImageSourcePropType> = {
-  kevin_course:  require('../assets/avatars/kevin_nod.jpg'),
-  kevin_dark:    require('../assets/avatars/kevin_dark.jpg'),
-  kevin_nod:     require('../assets/avatars/kevin_nod.jpg'),
-  serena_course: require('../assets/avatars/serena_portrait.jpg'),
-  serena_dark:   require('../assets/avatars/serena_dark.jpg'),
-  serena_nod:    require('../assets/avatars/serena_nod.jpg'),
+  kevin_course:   require('../assets/avatars/kevin_portrait.jpg'),
+  kevin_dark:     require('../assets/avatars/kevin_dark.jpg'),
+  kevin_nod:      require('../assets/avatars/kevin_nod.jpg'),
+  kevin_walking:  require('../assets/avatars/kevin_walking.jpg'),
+  serena_course:  require('../assets/avatars/serena_portrait.jpg'),
+  serena_dark:    require('../assets/avatars/serena_dark.jpg'),
+  serena_nod:     require('../assets/avatars/serena_nod.jpg'),
 };
 
 const BACKGROUNDS: Record<string, ImageSourcePropType> = {
@@ -95,10 +97,28 @@ export default function CaddieAvatar({
   onTap,
 }: CaddieAvatarProps) {
   const { width: W, height: H } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
+  const aspectRatio = H / W;
+  const isFolded = aspectRatio > 1.6;
+
+  const controlsHeight = 180;
+  const availableHeight = H - insets.top - insets.bottom - controlsHeight;
+
   const AVATAR_HEIGHT = Math.min(
-    Math.round(W * (16 / 9) * 0.62),
-    Math.round(H * 0.60),
+    availableHeight,
+    isFolded
+      ? Math.round(W * 1.1)
+      : Math.round(H * 0.52),
   );
+
+  console.log('[avatar]', {
+    W, H,
+    aspectRatio: aspectRatio.toFixed(2),
+    isFolded,
+    AVATAR_HEIGHT,
+    availableHeight,
+  });
 
   const breatheAnim = useRef(new Animated.Value(1)).current;
   const glowAnim   = useRef(new Animated.Value(0)).current;
@@ -342,6 +362,7 @@ export default function CaddieAvatar({
 const styles = StyleSheet.create({
   wrapper: {
     width: '100%',
+    flexShrink: 0,
     backgroundColor: '#060f09',
   },
   frame: {
