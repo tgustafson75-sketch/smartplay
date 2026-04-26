@@ -552,7 +552,6 @@ export default function CaddieTab() {
       caddieResponse=""
       onTap={handleMicPress}
       emotion={kevinEmotion}
-      fillMode="cover"
     />
   );
 
@@ -760,8 +759,8 @@ export default function CaddieTab() {
               },
               {
                 icon: '🏌️',
-                label: 'Practice',
-                sub: 'Cage & swing lab',
+                label: 'SwingLab',
+                sub: 'Swing analysis & cage',
                 action: () => { setShowMoreMenu(false); router.push('/(tabs)/swinglab' as never); },
               },
               {
@@ -848,15 +847,11 @@ export default function CaddieTab() {
         {kevinAvatar}
       </View>
 
-      {/* TOP NAV */}
+      {/* TOP NAV
+          TOP-LEFT CORNER RESERVED for future badge-morph dismissal.
+          Do not place any UI element here. See: design notes in chat
+          — top-left = "close tool / return Kevin", top-right = "open menu" */}
       <View style={[styles.topNav, { top: insets.top + 8 }]}>
-        <TouchableOpacity
-          style={styles.navBtn}
-          onPress={() => router.replace('/(tabs)/scorecard' as never)}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Ionicons name="chevron-back" size={24} color="#6b7d72" />
-        </TouchableOpacity>
         <TouchableOpacity
           style={styles.navBtn}
           onPress={() => setShowMoreMenu(true)}
@@ -922,10 +917,9 @@ const styles = StyleSheet.create({
   },
   topNav: {
     position: 'absolute',
-    left: 20,
     right: 20,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     zIndex: 20,
   },

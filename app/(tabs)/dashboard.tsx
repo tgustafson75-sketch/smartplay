@@ -243,7 +243,7 @@ export default function Dashboard() {
                     {'Hole ' + moment.hole + ' · ' + moment.club}
                   </Text>
                   <Text style={styles.heroCourse}>
-                    {moment.courseName || 'Practice'}
+                    {moment.courseName || 'SwingLab'}
                   </Text>
                   <Text style={styles.heroKevin}>
                     {'"' + moment.kevinSaid + '"'}
