@@ -139,6 +139,22 @@ export default function CaddieTab() {
     };
   }, [voiceState]);
 
+  // ── Keep Vercel warm ────────────────────
+  useEffect(() => {
+    const keepWarm = async () => {
+      try {
+        await fetch(apiUrl + '/api/brain', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: '__ping__', language: 'en' }),
+        });
+      } catch {}
+    };
+    keepWarm();
+    const interval = setInterval(keepWarm, 4 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // ── Opening prompt ───────────────────────
   useEffect(() => {
     const hour = new Date().getHours();

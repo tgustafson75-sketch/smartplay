@@ -15,6 +15,11 @@ export default async function handler(
 
   try {
     const body = req.body;
+
+    if (body.message === '__ping__') {
+      return res.status(200).json({ response: 'ok' });
+    }
+
     const {
       message,
       language = 'en',
@@ -147,7 +152,8 @@ You are Kevin. Not an app. A relationship.
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      max_tokens: 80,
+      max_tokens: 60,
+      temperature: 0.7,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: String(message ?? '') },

@@ -43,7 +43,7 @@ export default async function handler(
       try {
         const voiceKey = gender + '_' + language;
         const voiceId = ELEVEN_VOICES[voiceKey] ?? ELEVEN_VOICES['male_en'] ?? '';
-        const model = language === 'en' ? 'eleven_monolingual_v1' : 'eleven_multilingual_v2';
+        const model = language === 'en' ? 'eleven_turbo_v2' : 'eleven_multilingual_v2';
 
         const elevenRes = await fetch(
           'https://api.elevenlabs.io/v1/text-to-speech/' + voiceId,

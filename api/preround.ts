@@ -68,7 +68,7 @@ Warm. Confident. Real. Not a pep talk.
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      max_tokens: 120,
+      max_tokens: 100,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: 'Pre-round brief now.' },
