@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoundStore } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
+import { dataValue, dataLabel } from '../../styles/typography';
 
 // ─── SCORE COLOR ──────────────────────────
 
@@ -92,6 +94,21 @@ export default function Scorecard() {
   ).length;
 
   const currentHolePar = courseHoles.find(h => h.hole === currentHole)?.par ?? 4;
+
+  // Animate active hole border color
+  const activeBorderAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(activeBorderAnim, {
+      toValue: 1,
+      duration: 150,
+      useNativeDriver: false,
+    }).start();
+    return () => { activeBorderAnim.setValue(0); };
+  }, [currentHole]);
+  const activeBorderColor = activeBorderAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#1e3a28', '#00C896'],
+  });
 
   const handleQuickScore = (score: number) => {
     logScore(currentHole, score);
@@ -205,22 +222,57 @@ export default function Scorecard() {
               const hasScore = score > 0;
               const scoreColor = getScoreColor(score, h.par);
 
+              if (isCurrent) {
+                return (
+                  <Animated.View
+                    key={h.hole}
+                    style={[
+                      styles.gridRow,
+                      styles.gridRowCurrent,
+                      { borderLeftWidth: 2, borderLeftColor: activeBorderColor },
+                    ]}
+                  >
+                    <TouchableOpacity
+                      style={styles.gridRowInner}
+                      onPress={() => setCurrentHole(h.hole)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.gridCell, styles.gridHoleCol, { color: '#00C896', fontWeight: '700' }]}>
+                        {h.hole}
+                      </Text>
+                      <Text style={[styles.gridCell, styles.gridParCol]}>{h.par}</Text>
+                      <Text style={[styles.gridCell, styles.gridYardCol, styles.yardCell]}>
+                        {h.distance}
+                      </Text>
+                      <View style={[styles.gridScoreCol, styles.scoreCellWrapper]}>
+                        {hasScore ? (
+                          <View style={[styles.scoreCircle, { borderColor: scoreColor }]}>
+                            <Text style={[styles.scoreCircleText, { color: scoreColor }]}>
+                              {score}
+                            </Text>
+                          </View>
+                        ) : (
+                          <Text style={styles.noScoreText}>·</Text>
+                        )}
+                      </View>
+                      <Text style={[styles.gridCell, styles.gridPuttCol, styles.puttCell]}>
+                        {holePutts > 0 ? holePutts : '—'}
+                      </Text>
+                    </TouchableOpacity>
+                  </Animated.View>
+                );
+              }
+
               return (
                 <TouchableOpacity
                   key={h.hole}
-                  style={[styles.gridRow, isCurrent && styles.gridRowCurrent]}
+                  style={styles.gridRow}
                   onPress={() => setCurrentHole(h.hole)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[
-                    styles.gridCell,
-                    styles.gridHoleCol,
-                    isCurrent && { color: '#00C896', fontWeight: '800' },
-                  ]}>
-                    {isCurrent ? '▶ ' + h.hole : h.hole}
-                  </Text>
+                  <Text style={[styles.gridCell, styles.gridHoleCol]}>{h.hole}</Text>
                   <Text style={[styles.gridCell, styles.gridParCol]}>{h.par}</Text>
-                  <Text style={[styles.gridCell, styles.gridYardCol, { fontSize: 12 }]}>
+                  <Text style={[styles.gridCell, styles.gridYardCol, styles.yardCell]}>
                     {h.distance}
                   </Text>
                   <View style={[styles.gridScoreCol, styles.scoreCellWrapper]}>
@@ -231,10 +283,10 @@ export default function Scorecard() {
                         </Text>
                       </View>
                     ) : (
-                      <Text style={styles.noScoreText}>{isCurrent ? '·' : '—'}</Text>
+                      <Text style={styles.noScoreText}>—</Text>
                     )}
                   </View>
-                  <Text style={[styles.gridCell, styles.gridPuttCol, { color: '#6b7280' }]}>
+                  <Text style={[styles.gridCell, styles.gridPuttCol, styles.puttCell]}>
                     {holePutts > 0 ? holePutts : '—'}
                   </Text>
                 </TouchableOpacity>
@@ -395,16 +447,15 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   summaryLabel: {
-    color: '#6b7280',
+    ...dataLabel,
     fontSize: 9,
-    fontWeight: '700',
     letterSpacing: 1.5,
     marginBottom: 4,
   },
   summaryValue: {
-    color: '#ffffff',
+    ...dataValue,
     fontSize: 28,
-    fontWeight: '900',
+    fontWeight: '900' as const,
   },
   noRound: {
     alignItems: 'center',
@@ -458,26 +509,38 @@ const styles = StyleSheet.create({
   gridRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 9,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#1e3a28',
+    backgroundColor: '#0d1a0d',
+  },
+  gridRowInner: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   gridRowCurrent: {
     backgroundColor: '#0d2418',
   },
   gridHeader: {
-    color: '#6b7280',
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1.2,
+    ...dataLabel,
     textAlign: 'center',
+    fontSize: 9,
   },
   gridCell: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
+    ...dataValue,
+    fontSize: 15,
     textAlign: 'center',
+  },
+  yardCell: {
+    fontSize: 12,
+    color: '#9ca3af',
+    letterSpacing: 0,
+  },
+  puttCell: {
+    color: '#6b7280',
+    fontSize: 13,
   },
   gridHoleCol:  { flex: 1.2 },
   gridParCol:   { flex: 0.8 },
@@ -531,16 +594,15 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   totalCardLabel: {
-    color: '#6b7280',
+    ...dataLabel,
     fontSize: 9,
-    fontWeight: '700',
     letterSpacing: 1.5,
     marginBottom: 4,
   },
   totalCardValue: {
-    color: '#ffffff',
+    ...dataValue,
     fontSize: 32,
-    fontWeight: '900',
+    fontWeight: '900' as const,
   },
   quickChipsSection: {
     marginHorizontal: 16,

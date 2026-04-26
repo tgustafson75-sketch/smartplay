@@ -1,26 +1,32 @@
 import { Tabs } from 'expo-router';
-import { Text, View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoundStore } from '../../store/roundStore';
 
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
 interface TabIconProps {
-  emoji: string;
+  iconName: IoniconName;
   label: string;
   focused: boolean;
   showDot?: boolean;
 }
 
-function TabIcon({ emoji, label, focused, showDot }: TabIconProps) {
-  const dotVisible = focused || showDot;
+function TabIcon({ iconName, label, focused, showDot }: TabIconProps) {
   return (
     <View style={styles.tabItem}>
-      <Text style={[styles.tabEmoji, focused && styles.tabEmojiActive]}>
-        {emoji}
-      </Text>
+      <Ionicons
+        name={iconName}
+        size={22}
+        color={focused ? '#00C896' : '#6b7d72'}
+      />
       <Text style={[styles.tabLabel, focused && styles.tabLabelFocused]}>
         {label}
       </Text>
-      <View style={[styles.tabDot, dotVisible && styles.tabDotVisible, showDot && !focused && styles.tabDotLive]} />
+      {showDot && (
+        <View style={[styles.tabDot, focused ? styles.tabDotFocused : styles.tabDotLive]} />
+      )}
     </View>
   );
 }
@@ -34,7 +40,7 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#060f09',
+          backgroundColor: '#0d1a0d',
           borderTopColor: '#1e3a28',
           borderTopWidth: 1,
           height: 60 + insets.bottom,
@@ -48,7 +54,7 @@ export default function TabLayout() {
         name="caddie"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="🎙" label="Caddie" focused={focused} />
+            <TabIcon iconName="mic" label="Caddie" focused={focused} />
           ),
         }}
       />
@@ -56,7 +62,12 @@ export default function TabLayout() {
         name="scorecard"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="📋" label="Score" focused={focused} showDot={isRoundActive} />
+            <TabIcon
+              iconName="flag"
+              label="Score"
+              focused={focused}
+              showDot={isRoundActive}
+            />
           ),
         }}
       />
@@ -64,7 +75,7 @@ export default function TabLayout() {
         name="swinglab"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="🏌️" label="SwingLab" focused={focused} />
+            <TabIcon iconName="golf" label="SwingLab" focused={focused} />
           ),
         }}
       />
@@ -72,7 +83,7 @@ export default function TabLayout() {
         name="dashboard"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="📊" label="Stats" focused={focused} />
+            <TabIcon iconName="stats-chart" label="Stats" focused={focused} />
           ),
         }}
       />
@@ -83,20 +94,14 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   tabItem: {
     alignItems: 'center',
-    gap: 2,
-    paddingTop: 4,
+    gap: 3,
+    paddingTop: 2,
     minWidth: 60,
   },
-  tabEmoji: {
-    fontSize: 22,
-  },
-  tabEmojiActive: {
-    transform: [{ scale: 1.1 }],
-  },
   tabLabel: {
-    color: '#6b7280',
-    fontSize: 10,
-    fontWeight: '600',
+    color: '#6b7d72',
+    fontSize: 11,
+    fontWeight: '500',
     letterSpacing: 0.3,
   },
   tabLabelFocused: {
@@ -106,10 +111,9 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'transparent',
     marginTop: 1,
   },
-  tabDotVisible: {
+  tabDotFocused: {
     backgroundColor: '#00C896',
   },
   tabDotLive: {

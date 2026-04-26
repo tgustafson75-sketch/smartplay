@@ -30,6 +30,7 @@ import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
 import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { kevinText as kevinTextStyle } from '../../styles/typography';
 
 export default function CaddieTab() {
   useKeepAwake();
@@ -1100,11 +1101,8 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   preRoundBrief: {
-    color: '#ffffff',
-    fontSize: 17,
-    lineHeight: 26,
+    ...kevinTextStyle,
     textAlign: 'center',
-    fontWeight: '400',
   },
   preRoundBtn: {
     backgroundColor: '#00C896',

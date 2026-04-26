@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import { kevinText as kevinTextStyle } from '../../styles/typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useCageStore } from '../../store/cageStore';
@@ -288,9 +289,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   debriefText: {
-    color: '#ffffff',
-    fontSize: 16,
-    lineHeight: 24,
+    ...kevinTextStyle,
   },
   rootCause: {
     marginTop: 12,
