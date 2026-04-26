@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import LivingKevin from './LivingKevin';
 
 // ─── AVATAR MAP ───────────────────────────
 
@@ -256,15 +257,11 @@ export default function CaddieAvatar({
     : getAvatarKey(effectiveEmotion, isOnCourse, isCageMode);
 
   // ── Animation refs ──────────────────────
-  const breatheAnim  = useRef(new Animated.Value(1)).current;
   const glowAnim     = useRef(new Animated.Value(0)).current;
-  const nodAnim      = useRef(new Animated.Value(0)).current;
   const scanAnim     = useRef(new Animated.Value(0)).current;
   const hudFlash     = useRef(new Animated.Value(1)).current;
   const responseFade = useRef(new Animated.Value(1)).current;
   const idleHintAnim = useRef(new Animated.Value(0)).current;
-  const driftX       = useRef(new Animated.Value(0)).current;
-  const driftY       = useRef(new Animated.Value(0)).current;
 
   // ── Crossfade state ─────────────────────
   const [backSource,  setBackSource]  = useState<ImageSourcePropType>(targetSource);
@@ -368,56 +365,9 @@ export default function CaddieAvatar({
     }
   }, [targetSource]);
 
-  const prevVoiceState = useRef<VoiceState>('idle');
-
   const displayText = caddieResponse || openingPrompt;
   const [displayedText, setDisplayedText] = useState(displayText);
   const isFirstRender = useRef(true);
-
-  // ── Breathing — always runs ─────────────
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(breatheAnim, {
-          toValue: 1.015,
-          duration: 3200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(breatheAnim, {
-          toValue: 1.0,
-          duration: 3200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, []);
-
-  // ── Micro-drift on front layer ──────────
-  useEffect(() => {
-    // X: 0→0.4→-0.3→0 over 7000ms
-    const loopX = Animated.loop(
-      Animated.sequence([
-        Animated.timing(driftX, { toValue:  0.4, duration: 2333, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(driftX, { toValue: -0.3, duration: 2333, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(driftX, { toValue:  0,   duration: 2334, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])
-    );
-    // Y: 0→-0.3→0.4→0 over 5500ms (different period keeps drift non-repeating)
-    const loopY = Animated.loop(
-      Animated.sequence([
-        Animated.timing(driftY, { toValue: -0.3, duration: 1833, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(driftY, { toValue:  0.4, duration: 1833, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(driftY, { toValue:  0,   duration: 1834, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])
-    );
-    loopX.start();
-    loopY.start();
-    return () => { loopX.stop(); loopY.stop(); };
-  }, []);
 
   // ── Scan line on mount ──────────────────
   useEffect(() => {
@@ -429,40 +379,6 @@ export default function CaddieAvatar({
       useNativeDriver: true,
     }).start();
   }, []);
-
-  // ── Nod animation ──────────────────────
-  const triggerNod = () => {
-    Animated.sequence([
-      Animated.timing(nodAnim, {
-        toValue: 4,
-        duration: 300,
-        easing: Easing.inOut(Easing.ease),
-        useNativeDriver: true,
-      }),
-      Animated.timing(nodAnim, {
-        toValue: 0,
-        duration: 300,
-        easing: Easing.inOut(Easing.ease),
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  // ── Nod on open ────────────────────────
-  useEffect(() => {
-    const timer = setTimeout(() => triggerNod(), 1800);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // ── Nod when speaking → idle ────────────
-  useEffect(() => {
-    if (prevVoiceState.current === 'speaking' && voiceState === 'idle') {
-      const timer = setTimeout(() => triggerNod(), 300);
-      prevVoiceState.current = voiceState;
-      return () => clearTimeout(timer);
-    }
-    prevVoiceState.current = voiceState;
-  }, [voiceState]);
 
   // ── Glow — voice state ─────────────────
   useEffect(() => {
@@ -575,20 +491,6 @@ export default function CaddieAvatar({
     { label: 'PLAYS', value: hud.playsLike !== null ? String(hud.playsLike) : '—' },
   ];
 
-  // Back layer: breathing + nod only
-  const backTransform = [
-    { scale: breatheAnim },
-    { translateY: nodAnim },
-  ];
-
-  // Front layer: breathing + nod + micro-drift
-  const frontTransform = [
-    { scale: breatheAnim },
-    { translateY: nodAnim },
-    { translateX: driftX },
-    { translateY: driftY },
-  ];
-
   return (
     <View style={fill === 'cover' ? styles.wrapperFull : styles.wrapper}>
 
@@ -599,18 +501,14 @@ export default function CaddieAvatar({
         activeOpacity={0.97}
       >
         {/* Layer 1a — Back (fading out) */}
-        <Animated.Image
-          source={backSource}
-          style={[styles.avatarImage, { transform: backTransform, opacity: backOpacity }]}
-          resizeMode={fill}
-        />
+        <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: backOpacity }]}>
+          <LivingKevin source={backSource} resizeMode={fill} voiceState={voiceState} />
+        </Animated.View>
 
-        {/* Layer 1b — Front (fading in), with micro-drift */}
-        <Animated.Image
-          source={frontSource}
-          style={[styles.avatarImage, { transform: frontTransform, opacity: fadeAnim }]}
-          resizeMode={fill}
-        />
+        {/* Layer 1b — Front (fading in), living animations on UI thread */}
+        <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: fadeAnim }]}>
+          <LivingKevin source={frontSource} resizeMode={fill} voiceState={voiceState} />
+        </Animated.View>
 
         {/* Layer 2 — Bottom gradient */}
         <LinearGradient
@@ -734,13 +632,6 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
     backgroundColor: '#060f09',
-  },
-  avatarImage: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-    top: 0,
-    left: 0,
   },
   scanLine: {
     position: 'absolute',
