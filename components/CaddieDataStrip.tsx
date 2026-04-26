@@ -18,6 +18,7 @@ export interface CaddieDataStripProps {
   stroke: number;
   visible: boolean;
   bottomOffset?: number;
+  stripLayout?: 'horizontal' | 'grid';
   onPress: () => void;
 }
 
@@ -29,13 +30,14 @@ export default function CaddieDataStrip({
   stroke,
   visible,
   bottomOffset = 0,
+  stripLayout = 'horizontal',
   onPress,
 }: CaddieDataStripProps) {
   const mountedOpacity = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const [isMounted, setIsMounted] = useState(visible);
   const pressScale = useRef(new Animated.Value(1)).current;
 
-  // Dot pulse anims — one per separator (4 dots)
+  // Dot pulse anims — one per separator (4 dots for horizontal, 2 for grid)
   const dotAnims = useRef([
     new Animated.Value(0.7),
     new Animated.Value(0.7),
@@ -136,6 +138,81 @@ export default function CaddieDataStrip({
 
   if (!isMounted) return null;
 
+  // ── GRID LAYOUT (WIDE mode) ──────────────
+  if (stripLayout === 'grid') {
+    const row1 = [
+      { label: 'HOLE',  value: `${hole.current}/${hole.total}`, dotIdx: 0 },
+      { label: 'YARDS', value: yardage   != null ? String(yardage)   : '—', dotIdx: 1 },
+      { label: 'PLAYS', value: playsLike != null ? String(playsLike) : '—', dotIdx: null },
+    ];
+    const row2 = [
+      { label: 'TARGET', value: targetDirection, dotIdx: 2 },
+      { label: 'STROKE', value: String(stroke),  dotIdx: null },
+      null,
+    ];
+
+    return (
+      <Animated.View
+        style={[
+          styles.wrapperGrid,
+          { opacity: mountedOpacity, transform: [{ scale: pressScale }] },
+        ]}
+      >
+        <Pressable
+          onPress={onPress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          style={styles.pressable}
+        >
+          <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, styles.tintOverlay]} />
+
+          <View style={styles.gridRow}>
+            {row1.map((c, i) => (
+              <React.Fragment key={c.label}>
+                <View style={styles.gridCell}>
+                  <Text style={styles.cellLabel}>{c.label}</Text>
+                  <Text style={[styles.cellValue, { fontSize: 16 }]}>{c.value}</Text>
+                </View>
+                {c.dotIdx !== null && (
+                  <Animated.View style={[styles.dot, { opacity: dotAnims[c.dotIdx] }]} />
+                )}
+              </React.Fragment>
+            ))}
+          </View>
+
+          <View style={[styles.gridRow, styles.gridRowBorder]}>
+            {row2.map((c, i) =>
+              c === null ? (
+                <View key={i} style={styles.gridCell} />
+              ) : (
+                <React.Fragment key={c.label}>
+                  <View style={styles.gridCell}>
+                    <Text style={styles.cellLabel}>{c.label}</Text>
+                    <Text style={[styles.cellValue, { fontSize: c.label === 'TARGET' ? 12 : 16 }]}>
+                      {c.value}
+                    </Text>
+                  </View>
+                  {c.dotIdx !== null && (
+                    <Animated.View style={[styles.dot, { opacity: dotAnims[c.dotIdx] }]} />
+                  )}
+                </React.Fragment>
+              )
+            )}
+          </View>
+
+          <Ionicons
+            name="chevron-up"
+            size={11}
+            color="rgba(107, 125, 114, 0.5)"
+            style={styles.chevronHintGrid}
+          />
+        </Pressable>
+      </Animated.View>
+    );
+  }
+
+  // ── HORIZONTAL LAYOUT (portrait, default) ─
   const cells = [
     { label: 'HOLE',   value: `${hole.current}/${hole.total}`,      fontSize: 17 },
     { label: 'YARDS',  value: yardage   != null ? String(yardage)   : '—', fontSize: 17 },
@@ -157,13 +234,9 @@ export default function CaddieDataStrip({
         onPressOut={handlePressOut}
         style={styles.pressable}
       >
-        {/* Blur layer */}
         <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
-
-        {/* Green-tint overlay */}
         <View style={[StyleSheet.absoluteFill, styles.tintOverlay]} />
 
-        {/* Content row */}
         <View style={styles.row}>
           {cells.map((cell, i) => (
             <React.Fragment key={cell.label}>
@@ -174,14 +247,11 @@ export default function CaddieDataStrip({
                 </Text>
               </View>
               {i < cells.length - 1 && (
-                <Animated.View
-                  style={[styles.dot, { opacity: dotAnims[i] }]}
-                />
+                <Animated.View style={[styles.dot, { opacity: dotAnims[i] }]} />
               )}
             </React.Fragment>
           ))}
 
-          {/* Tap affordance */}
           <Ionicons
             name="chevron-up"
             size={12}
@@ -195,6 +265,7 @@ export default function CaddieDataStrip({
 }
 
 const styles = StyleSheet.create({
+  // ── Horizontal (portrait) wrapper ────────
   wrapper: {
     position: 'absolute',
     bottom: 32,
@@ -207,6 +278,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     zIndex: 5,
   },
+  // ── Grid (wide) wrapper ──────────────────
+  wrapperGrid: {
+    width: '100%',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(30, 58, 40, 0.5)',
+    overflow: 'hidden',
+  },
   pressable: {
     flex: 1,
   },
@@ -214,6 +293,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(13, 26, 13, 0.5)',
     borderRadius: 38,
   },
+  // ── Horizontal row ───────────────────────
   row: {
     flex: 1,
     flexDirection: 'row',
@@ -226,6 +306,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // ── Grid rows ────────────────────────────
+  gridRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  gridRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(30, 58, 40, 0.4)',
+  },
+  gridCell: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // ── Shared cell text ─────────────────────
   cellLabel: {
     fontSize: 9,
     fontWeight: '600',
@@ -250,5 +348,10 @@ const styles = StyleSheet.create({
     right: 16,
     top: '50%',
     marginTop: -6,
+  },
+  chevronHintGrid: {
+    position: 'absolute',
+    right: 12,
+    top: 10,
   },
 });
