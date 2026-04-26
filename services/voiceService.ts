@@ -54,11 +54,15 @@ export const speak = async (
 
     await configureAudioForSpeech();
 
+    const voiceController = new AbortController();
+    const voiceTimeout = setTimeout(() => voiceController.abort(), 12000);
+
     const response = await fetch(apiUrl + '/api/voice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, gender, language }),
-    });
+      signal: voiceController.signal,
+    }).finally(() => clearTimeout(voiceTimeout));
 
     if (!response.ok) {
       console.log('[voice] speak API error:', response.status);

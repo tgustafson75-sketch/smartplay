@@ -147,7 +147,7 @@ You are Kevin. Not an app. A relationship.
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      max_tokens: 150,
+      max_tokens: 80,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: String(message ?? '') },

@@ -14,6 +14,37 @@ import { useRelationshipStore } from '../store/relationshipStore';
 import { useCageStore } from '../store/cageStore';
 import { VoiceState } from '../components/CaddieAvatar';
 
+// ─── CONSTANTS ────────────────────────────
+
+const AUTO_STOP_MS = 4000;
+
+// 16kHz mono 32kbps — 4x smaller than HIGH_QUALITY, same Whisper accuracy
+const RECORDING_OPTIONS: Audio.RecordingOptions = {
+  android: {
+    extension: '.m4a',
+    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+    audioEncoder: Audio.AndroidAudioEncoder.AAC,
+    sampleRate: 16000,
+    numberOfChannels: 1,
+    bitRate: 32000,
+  },
+  ios: {
+    extension: '.m4a',
+    outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+    audioQuality: Audio.IOSAudioQuality.LOW,
+    sampleRate: 16000,
+    numberOfChannels: 1,
+    bitRate: 32000,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: {
+    mimeType: 'audio/webm',
+    bitsPerSecond: 32000,
+  },
+};
+
 // ─── BYPASS PHRASES ───────────────────────
 
 const YARDAGE_PHRASES = [
@@ -85,8 +116,9 @@ export const useVoiceCaddie = ({
   onHeroReelView,
 }: UseVoiceCaddieOptions) => {
 
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingRef    = useRef<Audio.Recording | null>(null);
   const isProcessingRef = useRef(false);
+  const autoStopTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     isRoundActive,
@@ -130,6 +162,15 @@ export const useVoiceCaddie = ({
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
   const currentPar = getCurrentPar();
+
+  // ── CLEAR AUTO STOP ───────────────────────
+
+  const clearAutoStop = () => {
+    if (autoStopTimer.current) {
+      clearTimeout(autoStopTimer.current);
+      autoStopTimer.current = null;
+    }
+  };
 
   // ── CHECK BYPASS PHRASES ──────────────────
 
@@ -200,9 +241,13 @@ export const useVoiceCaddie = ({
           }),
         }));
 
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+
       const res = await fetch(apiUrl + '/api/brain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           message,
           language,
@@ -232,7 +277,7 @@ export const useVoiceCaddie = ({
           courseHoles: useRoundStore.getState().courseHoles,
           responseMode,
         }),
-      });
+      }).finally(() => clearTimeout(timeout));
 
       if (!res.ok) return 'One shot at a time.';
       const data = await res.json() as { response?: string };
@@ -267,8 +312,10 @@ export const useVoiceCaddie = ({
 
     if (isProcessingRef.current) return;
 
-    // If already recording — stop and process
+    // ── STOP and process ──────────────────
     if (recordingRef.current) {
+      clearAutoStop();
+
       try {
         isProcessingRef.current = true;
         onVoiceStateChange('thinking');
@@ -283,15 +330,19 @@ export const useVoiceCaddie = ({
           return;
         }
 
-        // Send to Whisper
+        // Send to Whisper with 10s timeout
         const formData = new FormData();
         formData.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
         formData.append('language', language);
 
+        const transcribeController = new AbortController();
+        const transcribeTimeout = setTimeout(() => transcribeController.abort(), 10000);
+
         const transcribeRes = await fetch(apiUrl + '/api/transcribe', {
           method: 'POST',
           body: formData,
-        });
+          signal: transcribeController.signal,
+        }).finally(() => clearTimeout(transcribeTimeout));
 
         const transcribeData = await transcribeRes.json() as { text?: string };
         const transcript = transcribeData.text ?? '';
@@ -346,7 +397,7 @@ export const useVoiceCaddie = ({
       return;
     }
 
-    // Start recording
+    // ── START recording ───────────────────
     try {
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
@@ -356,13 +407,18 @@ export const useVoiceCaddie = ({
 
       await configureAudioForRecording();
 
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY,
-      );
+      const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
 
       recordingRef.current = recording;
       onVoiceStateChange('listening');
       console.log('[voice] recording started');
+
+      // Auto-stop after AUTO_STOP_MS
+      autoStopTimer.current = setTimeout(() => {
+        if (recordingRef.current) {
+          handleMicPress();
+        }
+      }, AUTO_STOP_MS);
 
     } catch (err) {
       console.log('[voice] record error:', err);

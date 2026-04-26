@@ -80,7 +80,7 @@ export default async function handler(
     const voice = gender === 'female' ? OPENAI_VOICES.female : OPENAI_VOICES.male;
 
     const mp3 = await openai.audio.speech.create({
-      model: 'tts-1-hd',
+      model: 'tts-1',
       voice,
       input: String(text),
       speed: 1.0,

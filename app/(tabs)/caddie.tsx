@@ -76,6 +76,8 @@ export default function CaddieTab() {
 
   // ── Local state ─────────────────────────
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
+  const [listenCountdown, setListenCountdown] = useState(4);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [openingPrompt, setOpeningPrompt] = useState('');
   const [caddieResponse, setCaddieResponse] = useState('');
   const [showShotCard, setShowShotCard] = useState(false);
@@ -113,6 +115,28 @@ export default function CaddieTab() {
     } else {
       Animated.timing(micPulse, { toValue: 1, duration: 200, useNativeDriver: true }).start();
     }
+  }, [voiceState]);
+
+  // ── Listen countdown ────────────────────
+  useEffect(() => {
+    if (voiceState === 'listening') {
+      setListenCountdown(4);
+      countdownRef.current = setInterval(() => {
+        setListenCountdown(prev => {
+          if (prev <= 1) {
+            if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+      setListenCountdown(4);
+    }
+    return () => {
+      if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+    };
   }, [voiceState]);
 
   // ── Opening prompt ───────────────────────
@@ -471,7 +495,7 @@ export default function CaddieTab() {
           </Text>
           <Text style={styles.micLabel}>
             {voiceState === 'idle'      ? 'Tap to talk to Kevin' :
-             voiceState === 'listening' ? 'Listening...' :
+             voiceState === 'listening' ? 'Listening... ' + listenCountdown + 's' :
              voiceState === 'thinking'  ? 'Kevin is thinking...' :
                                           'Kevin is speaking...'}
           </Text>
