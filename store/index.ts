@@ -12,3 +12,6 @@ export { useCageStore } from './cageStore';
 export type { CageShot, CageSession, AcousticContact, CameraAlignment } from './cageStore';
 
 export { usePointsStore } from './pointsStore';
+
+export { useWatchStore } from './watchStore';
+export type { SwingMetrics, WatchSession } from './watchStore';

@@ -19,6 +19,8 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 import { compressFrame, analyzeSwingFrame } from '../services/swingCapture';
 import type { SwingView } from '../services/swingCapture';
+import { useWatchStore } from '../store/watchStore';
+import { simulateSwing, getKevinTempoLine } from '../services/watchService';
 
 export default function SmartMotion() {
   useKeepAwake();
@@ -45,6 +47,11 @@ export default function SmartMotion() {
   const { voiceGender, voiceEnabled, language } = useSettingsStore();
   const { dominantMiss, physicalLimitation } = usePlayerProfileStore();
   const { addObservation } = useRelationshipStore();
+  const {
+    isConnected: watchConnected,
+    lastSwing,
+    recordSwing,
+  } = useWatchStore();
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
   const [sessionFaults, setSessionFaults] = useState<string[]>([]);
@@ -141,7 +148,8 @@ export default function SmartMotion() {
         apiUrl,
       );
 
-      setFix(result.fix);
+      // Show video fix immediately
+      let displayFix = result.fix;
 
       if (result.fault) {
         setSessionFaults(prev => [...prev, result.fault!]);
@@ -154,9 +162,26 @@ export default function SmartMotion() {
         });
       }
 
+      // Add watch tempo data if watch is connected
+      let tempoLine: string | null = null;
+      if (watchConnected) {
+        const watchMetrics = simulateSwing(club, feel);
+        recordSwing(watchMetrics);
+        tempoLine = getKevinTempoLine(watchMetrics, club);
+        displayFix = result.fix + ' ' + tempoLine;
+      }
+
+      setFix(displayFix);
+
       if (voiceEnabled && result.fix) {
         await configureAudioForSpeech();
         await speak(result.fix, voiceGender, language, apiUrl);
+        if (tempoLine) {
+          setTimeout(async () => {
+            await configureAudioForSpeech();
+            await speak(tempoLine!, voiceGender, language, apiUrl);
+          }, 500);
+        }
       }
     } catch (err) {
       console.log('[smartmotion] analyze error:', err);
@@ -216,6 +241,13 @@ export default function SmartMotion() {
           </TouchableOpacity>
         </View>
 
+        {/* WATCH BADGE */}
+        {watchConnected && (
+          <View style={styles.watchBadge}>
+            <Text style={styles.watchBadgeText}>⌚ Watch</Text>
+          </View>
+        )}
+
         {/* VIEW SELECTOR */}
         <View style={styles.viewSelector}>
           {(['face-on', 'down-the-line'] as SwingView[]).map(v => (
@@ -251,6 +283,36 @@ export default function SmartMotion() {
           <View style={styles.fixCard}>
             <Text style={styles.fixLabel}>KEVIN</Text>
             <Text style={styles.fixText}>{fix}</Text>
+
+            {watchConnected && lastSwing && (
+              <View style={styles.tempoRow}>
+                <View style={styles.tempoItem}>
+                  <Text style={styles.tempoValue}>
+                    {lastSwing.tempoRatio.toFixed(1) + ':1'}
+                  </Text>
+                  <Text style={styles.tempoLabel}>Tempo</Text>
+                </View>
+                <View style={styles.tempoItem}>
+                  <Text style={[
+                    styles.tempoValue,
+                    { color: lastSwing.tempoGood ? '#00C896' : '#fbbf24' },
+                  ]}>
+                    {lastSwing.clubHeadSpeedEst + ' mph'}
+                  </Text>
+                  <Text style={styles.tempoLabel}>Est Speed</Text>
+                </View>
+                <View style={styles.tempoItem}>
+                  <Text style={[
+                    styles.tempoValue,
+                    { color: lastSwing.earlyTransition ? '#f97316' : '#00C896' },
+                  ]}>
+                    {lastSwing.earlyTransition ? 'Early' : 'Good'}
+                  </Text>
+                  <Text style={styles.tempoLabel}>Transition</Text>
+                </View>
+              </View>
+            )}
+
             <TouchableOpacity onPress={() => setFix(null)} style={styles.fixDismiss}>
               <Text style={styles.fixDismissText}>Tap to dismiss</Text>
             </TouchableOpacity>
@@ -537,5 +599,43 @@ const styles = StyleSheet.create({
   backText: {
     color: '#6b7280',
     fontSize: 14,
+  },
+  watchBadge: {
+    backgroundColor: '#0d1a2a',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#60a5fa',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignSelf: 'center',
+    marginTop: 4,
+  },
+  watchBadgeText: {
+    color: '#60a5fa',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  tempoRow: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#1e3a28',
+    marginTop: 10,
+    paddingTop: 10,
+    gap: 8,
+  },
+  tempoItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  tempoValue: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  tempoLabel: {
+    color: '#6b7280',
+    fontSize: 10,
+    marginTop: 2,
+    fontWeight: '600',
   },
 });

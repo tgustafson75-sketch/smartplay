@@ -25,6 +25,7 @@ export default function Settings() {
     responseMode,
     castMode,
     highContrast,
+    watchConnected,
     setVoiceEnabled,
     setVoiceGender,
     setLanguage,
@@ -32,6 +33,7 @@ export default function Settings() {
     setResponseMode,
     setCastMode,
     setHighContrast,
+    setWatchConnected,
   } = useSettingsStore();
 
   const {
@@ -304,6 +306,39 @@ export default function Settings() {
           />
         </View>
 
+        {/* GALAXY WATCH */}
+        <SectionHeader title="Galaxy Watch" />
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Watch Connected</Text>
+              <Text style={styles.rowSub}>
+                {watchConnected
+                  ? 'Tempo + transition tracking active'
+                  : 'Connect for swing tempo analysis'}
+              </Text>
+            </View>
+            <Switch
+              value={watchConnected}
+              onValueChange={setWatchConnected}
+              trackColor={{ false: '#1e3a28', true: '#60a5fa' }}
+              thumbColor="#ffffff"
+            />
+          </View>
+
+          {watchConnected && (
+            <View style={styles.watchInfo}>
+              <Text style={styles.watchInfoTitle}>What Watch Tracking Adds</Text>
+              <Text style={styles.watchInfoBody}>Tempo ratio — backswing to downswing timing.</Text>
+              <Text style={styles.watchInfoBody}>Transition detection — early or on time.</Text>
+              <Text style={styles.watchInfoBody}>Estimated club head speed.</Text>
+              <Text style={[styles.watchInfoBody, { color: '#6b7280', marginTop: 8, fontStyle: 'italic' }]}>
+                Samsung Health SDK integration coming soon. Currently runs in simulation mode for testing.
+              </Text>
+            </View>
+          )}
+        </View>
+
         {/* ABOUT */}
         <SectionHeader title="About" />
         <View style={styles.card}>
@@ -482,5 +517,23 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  watchInfo: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#1e3a28',
+    gap: 4,
+  },
+  watchInfoTitle: {
+    color: '#60a5fa',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  watchInfoBody: {
+    color: '#9ca3af',
+    fontSize: 12,
+    lineHeight: 18,
   },
 });

@@ -24,6 +24,8 @@ import {
   isSpeaking,
   stopSpeaking,
 } from '../../services/voiceService';
+import { useWatchStore } from '../../store/watchStore';
+import { simulateSwing, getKevinTempoLine } from '../../services/watchService';
 
 const FEEL_OPTIONS = [
   { label: 'Flush',  value: 'flush', color: '#00C896', emoji: '🎯' },
@@ -51,6 +53,7 @@ export default function CageSession() {
 
   const { activeSession, addShot, endSession } = useCageStore();
   const { voiceGender, voiceEnabled, language } = useSettingsStore();
+  const { isConnected: watchConnected, recordSwing: recordWatchSwing } = useWatchStore();
   const { addObservation, updateClubConfidence } = useRelationshipStore();
   const { dominantMiss } = usePlayerProfileStore();
 
@@ -180,6 +183,21 @@ export default function CageSession() {
       setIsKevinSpeaking(false);
     }
 
+    // Watch tempo comment every 3 shots
+    if (watchConnected) {
+      const watchMetrics = simulateSwing(club, selectedFeel);
+      recordWatchSwing(watchMetrics);
+      if (newCount % 3 === 0) {
+        const tempoLine = getKevinTempoLine(watchMetrics, club);
+        setTimeout(async () => {
+          if (voiceEnabled) {
+            await configureAudioForSpeech();
+            await speak(tempoLine, voiceGender, language, apiUrl);
+          }
+        }, 2000);
+      }
+    }
+
     setSelectedFeel(null);
     setSelectedShape(null);
   };
@@ -228,9 +246,14 @@ export default function CageSession() {
             <Text style={styles.shotCount}>{shots.length + ' shots'}</Text>
           </View>
 
-          <Text style={[styles.trendIcon, { color: trendColor }]}>
-            {trendIcon}
-          </Text>
+          <View style={styles.headerRight}>
+            <Text style={[styles.trendIcon, { color: trendColor }]}>
+              {trendIcon}
+            </Text>
+            {watchConnected && (
+              <Text style={styles.watchDot}>⌚</Text>
+            )}
+          </View>
         </View>
 
         {/* PATTERN BAR */}
@@ -470,11 +493,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 1,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    width: 40,
+    justifyContent: 'flex-end',
+  },
   trendIcon: {
     fontSize: 24,
     fontWeight: '900',
-    width: 40,
     textAlign: 'right',
+  },
+  watchDot: {
+    fontSize: 14,
+    opacity: 0.7,
   },
   patternWrap: {
     marginBottom: 12,

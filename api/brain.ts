@@ -48,6 +48,7 @@ export default async function handler(
       scores = {},
       courseHoles = [],
       responseMode = 'neutral',
+      watchData = null,
     } = body;
 
     const totalScore = Object.values(
@@ -123,6 +124,19 @@ ${physicalLimitation ? `PHYSICAL NOTE: ${physicalLimitation} — never suggest m
 ${goal ? `GOAL: ${goal} — reference when relevant` : ''}
 ${personalBest ? `PERSONAL BEST: ${personalBest} — mention briefly if tracking toward it` : ''}
 
+${wd
+  ? `\nGALAXY WATCH DATA THIS SESSION:
+Swings tracked: ${wd.swingCount}
+Average tempo: ${wd.averageTempo}:1 (ideal is 3:1 backswing to downswing)
+Dominant fault: ${wd.dominantFault}
+Early transition rate: ${wd.earlyTransitionRate}%
+Estimated club speed: ${wd.averageClubSpeed} mph
+
+Use this data silently to inform tempo and transition advice.
+If player asks about their swing or tempo reference this naturally.
+Do not read out the numbers as a list. Kevin absorbs the data and speaks to the player not at them.`
+  : ''}
+
 ${isSpiralRisk || consecutiveBadHoles >= 3
   ? `IMPORTANT: ${consecutiveBadHoles} difficult holes. ONE calm sentence to reset focus. Nothing else.`
   : ''}
@@ -147,6 +161,15 @@ ${responseMode === 'short' ? 'Maximum 15 words.' : responseMode === 'detailed' ?
 
 You are Kevin. Not an app. A relationship.
 `.trim();
+
+    type WatchData = {
+      swingCount: number;
+      averageTempo: string;
+      dominantFault: string | null;
+      earlyTransitionRate: number;
+      averageClubSpeed: number;
+    };
+    const wd = watchData as WatchData | null;
 
     console.log('[brain] processing:', String(message ?? '').slice(0, 50));
 

@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useCageStore } from '../../store/cageStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
+import { useWatchStore } from '../../store/watchStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePointsStore } from '../../store/pointsStore';
 import { analyzeSession } from '../../services/patternEngine';
@@ -22,6 +23,12 @@ export default function CageSummary() {
   const { addPoints } = usePointsStore();
   const { voiceGender, voiceEnabled, language } = useSettingsStore();
   const { incrementSessions } = useRelationshipStore();
+  const {
+    isConnected: watchConnected,
+    getSessionSummary,
+    clearSession: clearWatchSession,
+  } = useWatchStore();
+  const watchSummary = getSessionSummary();
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
@@ -37,6 +44,7 @@ export default function CageSummary() {
       return;
     }
     incrementSessions();
+    clearWatchSession();
     const pts = Math.min(session.shots.length * 2, 50);
     addPoints(pts, 'Cage session');
 
@@ -131,6 +139,51 @@ export default function CageSummary() {
               {pattern.trend === 'improving' ? '↑ Improving' :
                pattern.trend === 'declining' ? '↓ Declining' : '→ Consistent'}
             </Text>
+          </View>
+        )}
+
+        {/* WATCH DATA CARD */}
+        {watchConnected && watchSummary && watchSummary.swings.length > 0 && (
+          <View style={styles.watchCard}>
+            <Text style={styles.watchLabel}>⌚ WATCH DATA</Text>
+
+            <View style={styles.watchStats}>
+              <View style={styles.watchStat}>
+                <Text style={[
+                  styles.watchStatValue,
+                  { color: watchSummary.dominantTempoFault === 'good' ? '#00C896' : '#fbbf24' },
+                ]}>
+                  {watchSummary.averageTempo.toFixed(1) + ':1'}
+                </Text>
+                <Text style={styles.watchStatLabel}>Avg Tempo</Text>
+                <Text style={styles.watchStatSub}>Ideal: 3:1</Text>
+              </View>
+
+              <View style={styles.watchStat}>
+                <Text style={[
+                  styles.watchStatValue,
+                  { color: watchSummary.earlyTransitionRate < 0.3 ? '#00C896' : '#f97316' },
+                ]}>
+                  {Math.round(watchSummary.earlyTransitionRate * 100) + '%'}
+                </Text>
+                <Text style={styles.watchStatLabel}>Early Trans.</Text>
+                <Text style={styles.watchStatSub}>Under 30% good</Text>
+              </View>
+
+              <View style={styles.watchStat}>
+                <Text style={styles.watchStatValue}>
+                  {Math.round(watchSummary.averageClubSpeed) + ' mph'}
+                </Text>
+                <Text style={styles.watchStatLabel}>Est Speed</Text>
+                <Text style={styles.watchStatSub}>Estimated</Text>
+              </View>
+            </View>
+
+            {watchSummary.dominantTempoFault && watchSummary.dominantTempoFault !== 'good' && (
+              <Text style={styles.watchFault}>
+                {'Tempo trend: ' + watchSummary.dominantTempoFault}
+              </Text>
+            )}
           </View>
         )}
 
@@ -299,6 +352,53 @@ const styles = StyleSheet.create({
   trendValue: {
     fontSize: 16,
     fontWeight: '900',
+  },
+  watchCard: {
+    backgroundColor: '#0d1a2a',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#60a5fa',
+    padding: 14,
+    marginBottom: 12,
+  },
+  watchLabel: {
+    color: '#60a5fa',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 2,
+    marginBottom: 12,
+  },
+  watchStats: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  watchStat: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: '#060f09',
+    borderRadius: 8,
+    paddingVertical: 10,
+  },
+  watchStatValue: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  watchStatLabel: {
+    color: '#6b7280',
+    fontSize: 10,
+    marginTop: 2,
+  },
+  watchStatSub: {
+    color: '#374151',
+    fontSize: 9,
+    marginTop: 1,
+  },
+  watchFault: {
+    color: '#fbbf24',
+    fontSize: 12,
+    marginTop: 10,
+    textAlign: 'center',
   },
   drillCard: {
     backgroundColor: '#1a0800',

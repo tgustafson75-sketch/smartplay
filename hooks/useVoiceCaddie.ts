@@ -12,6 +12,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 import { useCageStore } from '../store/cageStore';
+import { useWatchStore } from '../store/watchStore';
 import { VoiceState } from '../components/CaddieAvatar';
 
 // ─── CONSTANTS ────────────────────────────
@@ -226,6 +227,9 @@ export const useVoiceCaddie = ({
       const topObs = getTopObservations();
       const heroMoments = getRecentHeroMoments(2);
 
+      const watchState = useWatchStore.getState();
+      const watchSummary = watchState.getSessionSummary();
+
       const recentCageSessions = useCageStore.getState()
         .sessionHistory
         .slice(-3)
@@ -276,6 +280,15 @@ export const useVoiceCaddie = ({
           scores,
           courseHoles: useRoundStore.getState().courseHoles,
           responseMode,
+          watchData: watchState.isConnected && watchSummary
+            ? {
+                averageTempo: watchSummary.averageTempo.toFixed(1),
+                dominantFault: watchSummary.dominantTempoFault,
+                earlyTransitionRate: Math.round(watchSummary.earlyTransitionRate * 100),
+                averageClubSpeed: Math.round(watchSummary.averageClubSpeed),
+                swingCount: watchSummary.swings.length,
+              }
+            : null,
         }),
       }).finally(() => clearTimeout(timeout));
 
