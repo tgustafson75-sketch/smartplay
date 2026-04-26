@@ -18,7 +18,6 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useLayoutMode } from '../../hooks/useLayoutMode';
 import { useKeepAwake } from 'expo-keep-awake';
 import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
 import { useRoundStore } from '../../store/roundStore';
@@ -41,9 +40,6 @@ export default function CaddieTab() {
   useKeepAwake();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { mode, width: W } = useLayoutMode();
-  // Natural 9:16 frame height for PORTRAIT_TALL mode
-  const avatarFrameHeight = Math.round(W * 16 / 9);
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
@@ -552,7 +548,6 @@ export default function CaddieTab() {
       caddieResponse=""
       onTap={handleMicPress}
       emotion={kevinEmotion}
-      fillMode="cover"
     />
   );
 
@@ -839,12 +834,8 @@ export default function CaddieTab() {
   return (
     <View style={styles.container}>
 
-      {/* KEVIN — 9:16 frame for PORTRAIT_TALL, absoluteFill for PORTRAIT_STD */}
-      <View style={
-        mode === 'PORTRAIT_TALL'
-          ? { position: 'absolute' as const, top: 0, left: 0, width: W, height: avatarFrameHeight }
-          : StyleSheet.absoluteFillObject
-      }>
+      {/* KEVIN — centered, letterboxed into available space */}
+      <View style={styles.avatarContainer}>
         {kevinAvatar}
       </View>
 
@@ -919,6 +910,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#060f09',
+  },
+  avatarContainer: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#060f09',
+    overflow: 'hidden',
   },
   topNav: {
     position: 'absolute',

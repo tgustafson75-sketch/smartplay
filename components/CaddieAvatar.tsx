@@ -595,7 +595,7 @@ export default function CaddieAvatar({
       </TouchableOpacity>
 
       {/* ── RESPONSE TEXT ─────────────── */}
-      {fill === 'contain' && (
+      {fill === 'contain' && !!displayedText && (
         <Animated.View style={[styles.responseArea, { opacity: responseFade }]}>
           <Text
             style={caddieResponse ? styles.responseText : styles.openingText}
