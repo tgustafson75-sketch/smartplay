@@ -31,7 +31,7 @@ import { getCourseList, getCourse } from '../../data/courses';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
 import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
-import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { speak, configureAudioForSpeech, stopSpeaking } from '../../services/voiceService';
 import { kevinText as kevinTextStyle } from '../../styles/typography';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
 
@@ -260,6 +260,7 @@ export default function CaddieTab() {
   });
 
   const handleMicPress = () => {
+    stopSpeaking().catch(() => {});
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     _handleMicPress();
   };
@@ -421,6 +422,7 @@ export default function CaddieTab() {
 
   // ── End round (with confirmation) ───────
   const handleEndRound = async () => {
+    await stopSpeaking();
     setShowMoreMenu(false);
     setShowShotCard(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -583,6 +585,7 @@ export default function CaddieTab() {
               <TouchableOpacity
                 style={styles.preRoundBtn}
                 onPress={() => {
+                  stopSpeaking().catch(() => {});
                   setShowPreRound(false);
                   const hole1 = courseHoles.find(h => h.hole === 1);
                   if (hole1) {
@@ -816,7 +819,7 @@ export default function CaddieTab() {
               <TouchableOpacity
                 key={item.label}
                 style={styles.moreItem}
-                onPress={item.action}
+                onPress={() => { stopSpeaking().catch(() => {}); item.action(); }}
                 activeOpacity={0.8}
               >
                 <Text style={styles.moreIcon}>{item.icon}</Text>
