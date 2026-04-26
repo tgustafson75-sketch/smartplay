@@ -1,0 +1,303 @@
+import React, { useEffect } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { useCageStore } from '../../store/cageStore';
+import { useRelationshipStore } from '../../store/relationshipStore';
+import { useSettingsStore } from '../../store/settingsStore';
+import { usePointsStore } from '../../store/pointsStore';
+import { speak, configureAudioForSpeech } from '../../services/voiceService';
+
+export default function CageSummary() {
+  const router = useRouter();
+
+  const { sessionHistory } = useCageStore();
+  const { addPoints } = usePointsStore();
+  const { voiceGender, voiceEnabled, language } = useSettingsStore();
+  const { incrementSessions } = useRelationshipStore();
+
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+
+  const session =
+    sessionHistory.length > 0 ? sessionHistory[sessionHistory.length - 1] : null;
+
+  useEffect(() => {
+    if (!session) {
+      router.replace('/cage' as never);
+      return;
+    }
+    incrementSessions();
+    const pts = Math.min(session.shots.length * 2, 50);
+    addPoints(pts, 'Cage session');
+
+    if (voiceEnabled && session.summary) {
+      setTimeout(async () => {
+        await configureAudioForSpeech();
+        await speak(session.summary ?? '', voiceGender, language, apiUrl);
+      }, 800);
+    }
+  }, []);
+
+  if (!session) return null;
+
+  const shots = session.shots;
+  const total = shots.length;
+
+  const flushCount = shots.filter(s => s.feel === 'flush' || s.feel === 'solid').length;
+  const fatCount = shots.filter(s => s.feel === 'fat').length;
+  const thinCount = shots.filter(s => s.feel === 'thin').length;
+
+  const flushRate = total > 0 ? Math.round((flushCount / total) * 100) : 0;
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
+      >
+        {/* HEADER */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Session Complete</Text>
+          <Text style={styles.subtitle}>{session.club + ' · ' + total + ' shots'}</Text>
+        </View>
+
+        {/* KEVIN DEBRIEF */}
+        <View style={styles.debriefCard}>
+          <Text style={styles.debriefLabel}>KEVIN</Text>
+          <Text style={styles.debriefText}>
+            {session.summary ?? 'Good session. Keep building.'}
+          </Text>
+          {session.rootCause && (
+            <View style={styles.rootCause}>
+              <Text style={styles.rootCauseLabel}>FOCUS AREA</Text>
+              <Text style={styles.rootCauseText}>{session.rootCause}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* STATS */}
+        <View style={styles.statsRow}>
+          {[
+            { value: flushRate + '%', label: 'Solid', color: '#00C896' },
+            {
+              value: total > 0 ? Math.round((fatCount / total) * 100) + '%' : '0%',
+              label: 'Fat',
+              color: '#f97316',
+            },
+            {
+              value: total > 0 ? Math.round((thinCount / total) * 100) + '%' : '0%',
+              label: 'Thin',
+              color: '#fbbf24',
+            },
+            { value: String(total), label: 'Shots', color: '#ffffff' },
+          ].map(stat => (
+            <View key={stat.label} style={styles.statCard}>
+              <Text style={[styles.statValue, { color: stat.color }]}>{stat.value}</Text>
+              <Text style={styles.statLabel}>{stat.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* DOMINANT MISS */}
+        {Boolean(session.dominantMiss) && (
+          <View style={styles.missCard}>
+            <Text style={styles.missLabel}>DOMINANT MISS</Text>
+            <Text style={styles.missValue}>
+              {(session.dominantMiss ?? '').charAt(0).toUpperCase() +
+                (session.dominantMiss ?? '').slice(1)}
+            </Text>
+          </View>
+        )}
+
+        {/* SHOT DOTS */}
+        <View style={styles.dotsCard}>
+          <Text style={styles.dotsLabel}>SHOT BY SHOT</Text>
+          <View style={styles.dotsRow}>
+            {shots.map((shot, i) => {
+              const color =
+                shot.feel === 'flush' || shot.feel === 'solid' ? '#00C896' :
+                shot.feel === 'fat'   ? '#f97316' :
+                shot.feel === 'thin'  ? '#fbbf24' : '#ef4444';
+              return (
+                <View key={i} style={[styles.dot, { backgroundColor: color }]} />
+              );
+            })}
+          </View>
+        </View>
+
+        {/* ACTIONS */}
+        <TouchableOpacity
+          style={styles.goAgainBtn}
+          onPress={() => router.replace('/cage' as never)}
+        >
+          <Text style={styles.goAgainText}>Go Again</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.doneBtn}
+          onPress={() => router.replace('/(tabs)/caddie' as never)}
+        >
+          <Text style={styles.doneBtnText}>Back to Kevin</Text>
+        </TouchableOpacity>
+
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#060f09',
+  },
+  scroll: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  header: {
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  title: {
+    color: '#ffffff',
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  subtitle: {
+    color: '#6b7280',
+    fontSize: 14,
+    marginTop: 4,
+  },
+  debriefCard: {
+    backgroundColor: '#0d2418',
+    borderLeftWidth: 3,
+    borderLeftColor: '#00C896',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  debriefLabel: {
+    color: '#00C896',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 2,
+    marginBottom: 8,
+  },
+  debriefText: {
+    color: '#ffffff',
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  rootCause: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#1e3a28',
+  },
+  rootCauseLabel: {
+    color: '#6b7280',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  rootCauseText: {
+    color: '#fbbf24',
+    fontSize: 14,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#0d1a0d',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  statLabel: {
+    color: '#6b7280',
+    fontSize: 11,
+    marginTop: 3,
+  },
+  missCard: {
+    backgroundColor: '#0d1a0d',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    padding: 14,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  missLabel: {
+    color: '#6b7280',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 6,
+  },
+  missValue: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  dotsCard: {
+    backgroundColor: '#0d1a0d',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    padding: 14,
+    marginBottom: 16,
+  },
+  dotsLabel: {
+    color: '#6b7280',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 10,
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  dot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+  },
+  goAgainBtn: {
+    backgroundColor: '#00C896',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  goAgainText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  doneBtn: {
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  doneBtnText: {
+    color: '#6b7280',
+    fontSize: 15,
+  },
+});
