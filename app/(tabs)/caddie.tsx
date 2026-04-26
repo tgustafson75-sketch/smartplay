@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
+  Alert,
   ActivityIndicator,
   Animated,
   Easing,
@@ -418,6 +419,26 @@ export default function CaddieTab() {
     await generatePreRoundBrief(selectedCourse, isCompetition);
   };
 
+  // ── End round (with confirmation) ───────
+  const handleEndRound = async () => {
+    setShowMoreMenu(false);
+    setShowShotCard(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    endRound();
+    await generateRoundSummary();
+  };
+
+  const confirmEndRound = () => {
+    Alert.alert(
+      'End round?',
+      'Your round will be saved to history. You can review it anytime.',
+      [
+        { text: 'Keep playing', style: 'cancel' },
+        { text: 'End round', style: 'destructive', onPress: handleEndRound },
+      ],
+    );
+  };
+
   // ── Log hole score ───────────────────────
   const handleLogHole = async () => {
     if (holeScore === 0) return;
@@ -703,12 +724,7 @@ export default function CaddieTab() {
             {isRoundActive && (
               <TouchableOpacity
                 style={styles.endRoundBtn}
-                onPress={async () => {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-                  endRound();
-                  setShowShotCard(false);
-                  await generateRoundSummary();
-                }}
+                onPress={confirmEndRound}
               >
                 <Text style={styles.endRoundText}>End Round</Text>
               </TouchableOpacity>
@@ -770,12 +786,7 @@ export default function CaddieTab() {
                 icon: '🏁',
                 label: 'End Round',
                 sub: 'Finish and get summary',
-                action: async () => {
-                  setShowMoreMenu(false);
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-                  endRound();
-                  await generateRoundSummary();
-                },
+                action: () => { setShowMoreMenu(false); confirmEndRound(); },
               }] : []),
               {
                 icon: '📺',
