@@ -30,6 +30,7 @@ import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection
 import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { kevinText as kevinTextStyle } from '../../styles/typography';
+import CaddieDataStrip from '../../components/CaddieDataStrip';
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
@@ -49,6 +50,7 @@ export default function CaddieTab() {
     activeCourse,
     courseHoles,
     scores,
+    penalties,
     nineHoleMode,
     startRound,
     endRound,
@@ -524,10 +526,17 @@ export default function CaddieTab() {
 
   const courses = getCourseList();
 
+  // ── Strip / start-round data ─────────────
+  const totalHoles = nineHoleMode ? 9 : (courseHoles.length || 18);
+  // targetDirection: not yet in aim engine — show CENTER until wired
+  const targetDirection = 'CENTER';
+  const currentStroke = (penalties[currentHole] ?? 0) + 1;
+
   // ── Positioning helpers ──────────────────
-  const actionZoneContentHeight = 64 + 10 + 36 + 8; // primary + gap + secondary + padding
-  const micBottom = insets.bottom + actionZoneContentHeight + 16;
-  const responseBottom = micBottom + 72 + 16;
+  // Strip: bottom 32, height 76 → top at 108px from screen bottom
+  // Mic: 24px above strip top → bottom = 108 + 24 = 132
+  const micBottom = insets.bottom + 132;
+  const responseBottom = micBottom + 72 + 20;
 
   // ── RENDER ───────────────────────────────
   return (
@@ -622,35 +631,27 @@ export default function CaddieTab() {
         )}
       </View>
 
-      {/* ACTION ZONE — overlays Kevin's lower section */}
-      <View style={[styles.actionZone, { paddingBottom: insets.bottom + 8 }]}>
-        <TouchableOpacity
-          style={styles.primaryActionBtn}
-          onPress={() => isRoundActive ? setShowShotCard(true) : setShowRoundSetup(true)}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.primaryActionText}>
-            {isRoundActive ? 'Log Score' : 'Start Round'}
-          </Text>
-        </TouchableOpacity>
+      {/* DATA STRIP — visible when round is active */}
+      <CaddieDataStrip
+        yardage={currentYardage}
+        playsLike={currentYardage}
+        hole={{ current: currentHole, total: totalHoles }}
+        targetDirection={targetDirection}
+        stroke={currentStroke}
+        visible={isRoundActive}
+        onPress={() => setShowShotCard(true)}
+      />
 
-        <View style={styles.secondaryPills}>
-          <TouchableOpacity
-            style={styles.secondaryPill}
-            onPress={() => router.push('/(tabs)/swinglab' as never)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.secondaryPillText}>Practice</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.secondaryPill}
-            onPress={() => setShowMoreMenu(true)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.secondaryPillText}>More</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      {/* START ROUND — visible when no round is active */}
+      {!isRoundActive && (
+        <TouchableOpacity
+          style={[styles.startRoundBtn, { bottom: 32 + insets.bottom }]}
+          onPress={() => setShowRoundSetup(true)}
+          activeOpacity={0.88}
+        >
+          <Text style={styles.startRoundText}>Start Round</Text>
+        </TouchableOpacity>
+      )}
 
       {/* ── PRE-ROUND BRIEF MODAL ──────────── */}
       <Modal
@@ -1068,48 +1069,28 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: 8,
   },
-  actionZone: {
+  startRoundBtn: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 16,
-    gap: 10,
-    backgroundColor: 'rgba(6, 15, 9, 0.88)',
-    paddingTop: 12,
-    zIndex: 5,
-  },
-  primaryActionBtn: {
-    height: 64,
-    borderRadius: 32,
+    alignSelf: 'center',
+    left: 40,
+    right: 40,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#00C896',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 5,
+    shadowColor: '#00C896',
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
   },
-  primaryActionText: {
+  startRoundText: {
     color: '#ffffff',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '600',
-    letterSpacing: -0.3,
-  },
-  secondaryPills: {
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'center',
-  },
-  secondaryPill: {
-    height: 36,
-    paddingHorizontal: 20,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#1e3a28',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryPillText: {
-    color: '#00C896',
-    fontSize: 13,
-    fontWeight: '500',
+    letterSpacing: -0.2,
   },
   preRoundOverlay: {
     flex: 1,
