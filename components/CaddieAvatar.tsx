@@ -15,27 +15,28 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // ─── AVATAR MAP ───────────────────────────
 
 const AVATARS = {
-  kevin_course:       require('../assets/avatars/kevin_portrait.jpg'),
-  kevin_dark:         require('../assets/avatars/kevin_dark.jpg'),
-  kevin_nod:          require('../assets/avatars/kevin-idle-001.png'),
-  kevin_idle:         require('../assets/avatars/kevin-idle-001.png'),
-  kevin_listening:    require('../assets/avatars/kevin-listening-001.png'),
-  kevin_explaining:   require('../assets/avatars/kevin-explaining-001.png'),
-  kevin_focused:      require('../assets/avatars/kevin-focused-portrait-001.png'),
-  kevin_determined:   require('../assets/avatars/kevin-determined-portrait-001.png'),
-  kevin_pensive:      require('../assets/avatars/kevin-pensive-portrait-001.png'),
-  kevin_inquisitive:  require('../assets/avatars/kevin-inquisitive-portrait-001.png'),
-  kevin_mentorship:   require('../assets/avatars/kevin-mentorship-001.png'),
-  kevin_humble:       require('../assets/avatars/kevin-humble-portrait-001.png'),
-  kevin_supportive:   require('../assets/avatars/kevin-supportive-portrait-001.png'),
-  kevin_happy:        require('../assets/avatars/kevin-happy-portrait-001.png'),
-  kevin_enthusiastic: require('../assets/avatars/kevin-enthusiastic-portrait-001.png'),
-  kevin_surprised:    require('../assets/avatars/kevin-surprised-portrait-001.png'),
-  kevin_celebrating:  require('../assets/avatars/kevin-celebrating-001.png'),
-  kevin_confident:    require('../assets/avatars/kevin-confident-001.png'),
-  kevin_gameface:     require('../assets/avatars/kevin-gameface-001.png'),
-  kevin_curious:      require('../assets/avatars/kevin-curious-001.png'),
-  kevin_wincing:      require('../assets/avatars/kevin-wincing-001.png'),
+  kevin_course:        require('../assets/avatars/kevin_portrait.jpg'),
+  kevin_dark:          require('../assets/avatars/kevin_dark.jpg'),
+  kevin_nod:           require('../assets/avatars/kevin-idle-001.png'),
+  kevin_idle:          require('../assets/avatars/kevin-idle-001.png'),
+  kevin_listening:     require('../assets/avatars/kevin-listening-001.png'),
+  kevin_explaining:    require('../assets/avatars/kevin-explaining-001.png'),
+  kevin_focused:       require('../assets/avatars/kevin-focused-portrait-001.png'),
+  kevin_determined:    require('../assets/avatars/kevin-determined-portrait-001.png'),
+  kevin_pensive:       require('../assets/avatars/kevin-pensive-portrait-001.png'),
+  kevin_inquisitive:   require('../assets/avatars/kevin-inquisitive-portrait-001.png'),
+  kevin_mentorship:    require('../assets/avatars/kevin-mentorship-001.png'),
+  kevin_humble:        require('../assets/avatars/kevin-humble-portrait-001.png'),
+  kevin_supportive:    require('../assets/avatars/kevin-supportive-portrait-001.png'),
+  kevin_happy:         require('../assets/avatars/kevin-happy-portrait-001.png'),
+  kevin_enthusiastic:  require('../assets/avatars/kevin-enthusiastic-portrait-001.png'),
+  kevin_surprised:     require('../assets/avatars/kevin-surprised-portrait-001.png'),
+  kevin_celebrating:   require('../assets/avatars/kevin-celebrating-001.png'),
+  kevin_confident:     require('../assets/avatars/kevin-confident-001.png'),
+  kevin_gameface:      require('../assets/avatars/kevin-gameface-001.png'),
+  kevin_curious:       require('../assets/avatars/kevin-curious-001.png'),
+  kevin_wincing:       require('../assets/avatars/kevin-wincing-001.png'),
+  kevin_self_critical: require('../assets/avatars/kevin-humble-portrait-001.png'),
 } as const;
 
 type AvatarKey = keyof typeof AVATARS;
@@ -48,35 +49,111 @@ const SERENA = {
 // ─── EMOTION → KEY MAP ────────────────────
 
 const EMOTION_KEY_MAP: Record<string, AvatarKey> = {
-  focused:       'kevin_focused',
-  determined:    'kevin_determined',
-  thinking:      'kevin_pensive',
-  pensive:       'kevin_pensive',
-  listening:     'kevin_listening',
-  speaking:      'kevin_explaining',
-  explaining:    'kevin_explaining',
-  asking:        'kevin_inquisitive',
-  inquisitive:   'kevin_inquisitive',
-  encouraging:   'kevin_supportive',
-  supportive:    'kevin_supportive',
-  reset:         'kevin_supportive',
-  happy:         'kevin_happy',
-  enthusiastic:  'kevin_enthusiastic',
-  surprised:     'kevin_surprised',
-  humble:        'kevin_humble',
-  teaching:      'kevin_mentorship',
-  mentorship:    'kevin_mentorship',
-  idle:          'kevin_idle',
-  celebrating:   'kevin_celebrating',
-  confident:     'kevin_confident',
-  gameface:      'kevin_gameface',
-  intense:       'kevin_gameface',
-  curious:       'kevin_curious',
-  wincing:       'kevin_wincing',
-  oops:          'kevin_wincing',
-  self_critical: 'kevin_humble',
-  accountable:   'kevin_humble',
+  focused:          'kevin_focused',
+  determined:       'kevin_determined',
+  thinking:         'kevin_pensive',
+  pensive:          'kevin_pensive',
+  listening:        'kevin_listening',
+  speaking:         'kevin_explaining',
+  explaining:       'kevin_explaining',
+  asking:           'kevin_inquisitive',
+  inquisitive:      'kevin_inquisitive',
+  encouraging:      'kevin_supportive',
+  supportive:       'kevin_supportive',
+  reset:            'kevin_supportive',
+  happy:            'kevin_happy',
+  enthusiastic:     'kevin_enthusiastic',
+  surprised:        'kevin_surprised',
+  humble:           'kevin_humble',
+  teaching:         'kevin_mentorship',
+  mentorship:       'kevin_mentorship',
+  idle:             'kevin_idle',
+  celebrating:      'kevin_celebrating',
+  'celebrating-loud': 'kevin_celebrating',
+  'celebrating-big':  'kevin_celebrating',
+  confident:        'kevin_confident',
+  gameface:         'kevin_gameface',
+  intense:          'kevin_gameface',
+  'locked-in':      'kevin_gameface',
+  curious:          'kevin_curious',
+  wincing:          'kevin_wincing',
+  oops:             'kevin_wincing',
+  ouch:             'kevin_wincing',
+  self_critical:    'kevin_self_critical',
+  'self-critical':  'kevin_self_critical',
+  accountable:      'kevin_self_critical',
+  'owning-mistake': 'kevin_self_critical',
 };
+
+// ─── EMOTION CLASSIFICATION ───────────────
+
+type EmotionCategory = 'CALM' | 'POSITIVE' | 'REACTIVE' | 'INTENSE';
+
+const EMOTION_CATEGORY: Record<AvatarKey, EmotionCategory> = {
+  kevin_course:        'CALM',
+  kevin_dark:          'CALM',
+  kevin_nod:           'CALM',
+  kevin_idle:          'CALM',
+  kevin_listening:     'CALM',
+  kevin_mentorship:    'CALM',
+  kevin_humble:        'CALM',
+  kevin_supportive:    'CALM',
+  kevin_pensive:       'CALM',
+  kevin_self_critical: 'CALM',
+  kevin_explaining:    'INTENSE',
+  kevin_focused:       'INTENSE',
+  kevin_determined:    'INTENSE',
+  kevin_inquisitive:   'INTENSE',
+  kevin_curious:       'INTENSE',
+  kevin_gameface:      'INTENSE',
+  kevin_happy:         'POSITIVE',
+  kevin_enthusiastic:  'POSITIVE',
+  kevin_confident:     'POSITIVE',
+  kevin_celebrating:   'POSITIVE',
+  kevin_surprised:     'REACTIVE',
+  kevin_wincing:       'REACTIVE',
+};
+
+function getEmotionCategory(key: AvatarKey): EmotionCategory {
+  return EMOTION_CATEGORY[key];
+}
+
+// ─── TRANSITION CONFIG ────────────────────
+
+interface TransitionConfig {
+  duration: number;
+  easing: (t: number) => number;
+  useBreath: boolean;
+}
+
+function getTransitionConfig(from: AvatarKey, to: AvatarKey): TransitionConfig {
+  const catFrom = getEmotionCategory(from);
+  const catTo   = getEmotionCategory(to);
+
+  const isStrongPositive = to === 'kevin_celebrating' || to === 'kevin_enthusiastic';
+
+  const useBreath =
+    (catFrom === 'CALM' && catTo === 'REACTIVE') ||
+    (catFrom === 'CALM' && isStrongPositive) ||
+    (catFrom === 'REACTIVE' && catTo === 'POSITIVE') ||
+    (catFrom === 'INTENSE' && catTo === 'POSITIVE');
+
+  if (catFrom === 'REACTIVE' || catTo === 'REACTIVE') {
+    return { duration: 180, easing: Easing.out(Easing.quad), useBreath };
+  }
+  if (catFrom === 'CALM' && catTo === 'CALM') {
+    return { duration: 600, easing: Easing.inOut(Easing.cubic), useBreath };
+  }
+  if (catFrom === 'INTENSE' || catTo === 'INTENSE') {
+    return { duration: 320, easing: Easing.inOut(Easing.quad), useBreath };
+  }
+  if (catFrom === 'POSITIVE' || catTo === 'POSITIVE') {
+    return { duration: 380, easing: Easing.out(Easing.cubic), useBreath };
+  }
+  return { duration: 280, easing: Easing.inOut(Easing.quad), useBreath };
+}
+
+// ─── AVATAR KEY + SOURCE ──────────────────
 
 function getAvatarKey(
   emotion: string | null | undefined,
@@ -174,6 +251,9 @@ export default function CaddieAvatar({
   // ── Derived emotion ─────────────────────
   const effectiveEmotion = emotion ?? VOICE_EMOTION[voiceState] ?? null;
   const targetSource = computeSource(gender, effectiveEmotion, isOnCourse, isCageMode);
+  const effectiveKey: AvatarKey = gender === 'female'
+    ? 'kevin_idle'
+    : getAvatarKey(effectiveEmotion, isOnCourse, isCageMode);
 
   // ── Animation refs ──────────────────────
   const breatheAnim  = useRef(new Animated.Value(1)).current;
@@ -183,27 +263,109 @@ export default function CaddieAvatar({
   const hudFlash     = useRef(new Animated.Value(1)).current;
   const responseFade = useRef(new Animated.Value(1)).current;
   const idleHintAnim = useRef(new Animated.Value(0)).current;
+  const driftX       = useRef(new Animated.Value(0)).current;
+  const driftY       = useRef(new Animated.Value(0)).current;
 
   // ── Crossfade state ─────────────────────
   const [backSource,  setBackSource]  = useState<ImageSourcePropType>(targetSource);
   const [frontSource, setFrontSource] = useState<ImageSourcePropType>(targetSource);
-  const fadeAnim         = useRef(new Animated.Value(1)).current; // 1 = front fully visible
-  const currentSourceRef = useRef<ImageSourcePropType>(targetSource);
+  const fadeAnim          = useRef(new Animated.Value(1)).current;
+  const currentSourceRef  = useRef<ImageSourcePropType>(targetSource);
+  const currentKeyRef     = useRef<AvatarKey>(effectiveKey);
+  const frontSourceRef    = useRef<ImageSourcePropType>(targetSource);
+  const backSourceRef     = useRef<ImageSourcePropType>(targetSource);
+  const currentAnimRef    = useRef<Animated.CompositeAnimation | null>(null);
+  const breathTimeoutRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backOpacity = fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
 
   useEffect(() => {
     if (targetSource === currentSourceRef.current) return;
-    const prev = currentSourceRef.current;
+
+    // ── Interruption: cancel any in-flight animation ──
+    if (currentAnimRef.current) {
+      currentAnimRef.current.stop();
+      currentAnimRef.current = null;
+    }
+    if (breathTimeoutRef.current) {
+      clearTimeout(breathTimeoutRef.current);
+      breathTimeoutRef.current = null;
+    }
+
+    // Read current opacity to determine which layer is more visible
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const frozenFade = (fadeAnim as any).__getValue() as number;
+    const currentVisible =
+      frozenFade >= 0.5 ? frontSourceRef.current : backSourceRef.current;
+
+    // Compute config using the key BEFORE this update
+    const config: TransitionConfig = gender === 'female'
+      ? { duration: 280, easing: Easing.inOut(Easing.quad), useBreath: false }
+      : getTransitionConfig(currentKeyRef.current, effectiveKey);
+
+    // Advance tracking
     currentSourceRef.current = targetSource;
-    setBackSource(prev);
-    setFrontSource(targetSource);
-    fadeAnim.setValue(0);
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 280,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start();
+    currentKeyRef.current = effectiveKey;
+
+    if (config.useBreath) {
+      // ── 3-stage breath sequence ────────────
+      const breathSrc: ImageSourcePropType = AVATARS['kevin_idle'];
+
+      // Stage 1: currentVisible → idle
+      backSourceRef.current  = currentVisible;
+      frontSourceRef.current = breathSrc;
+      setBackSource(currentVisible);
+      setFrontSource(breathSrc);
+      fadeAnim.setValue(0);
+
+      const stage1 = Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 200,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      });
+      currentAnimRef.current = stage1;
+
+      stage1.start(({ finished }) => {
+        if (!finished) return;
+        currentAnimRef.current = null;
+
+        // Stage 2: 80ms settle, then Stage 3: idle → target
+        breathTimeoutRef.current = setTimeout(() => {
+          breathTimeoutRef.current = null;
+          backSourceRef.current  = breathSrc;
+          frontSourceRef.current = targetSource;
+          setBackSource(breathSrc);
+          setFrontSource(targetSource);
+          fadeAnim.setValue(0);
+
+          const stage3 = Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: config.duration,
+            easing: config.easing,
+            useNativeDriver: true,
+          });
+          currentAnimRef.current = stage3;
+          stage3.start(() => { currentAnimRef.current = null; });
+        }, 80);
+      });
+
+    } else {
+      // ── Direct crossfade ───────────────────
+      backSourceRef.current  = currentVisible;
+      frontSourceRef.current = targetSource;
+      setBackSource(currentVisible);
+      setFrontSource(targetSource);
+      fadeAnim.setValue(0);
+
+      const anim = Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: config.duration,
+        easing: config.easing,
+        useNativeDriver: true,
+      });
+      currentAnimRef.current = anim;
+      anim.start(() => { currentAnimRef.current = null; });
+    }
   }, [targetSource]);
 
   const prevVoiceState = useRef<VoiceState>('idle');
@@ -232,6 +394,29 @@ export default function CaddieAvatar({
     );
     loop.start();
     return () => loop.stop();
+  }, []);
+
+  // ── Micro-drift on front layer ──────────
+  useEffect(() => {
+    // X: 0→0.4→-0.3→0 over 7000ms
+    const loopX = Animated.loop(
+      Animated.sequence([
+        Animated.timing(driftX, { toValue:  0.4, duration: 2333, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(driftX, { toValue: -0.3, duration: 2333, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(driftX, { toValue:  0,   duration: 2334, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    );
+    // Y: 0→-0.3→0.4→0 over 5500ms (different period keeps drift non-repeating)
+    const loopY = Animated.loop(
+      Animated.sequence([
+        Animated.timing(driftY, { toValue: -0.3, duration: 1833, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(driftY, { toValue:  0.4, duration: 1833, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(driftY, { toValue:  0,   duration: 1834, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    );
+    loopX.start();
+    loopY.start();
+    return () => { loopX.stop(); loopY.stop(); };
   }, []);
 
   // ── Scan line on mount ──────────────────
@@ -390,9 +575,18 @@ export default function CaddieAvatar({
     { label: 'PLAYS', value: hud.playsLike !== null ? String(hud.playsLike) : '—' },
   ];
 
-  const avatarTransform = [
+  // Back layer: breathing + nod only
+  const backTransform = [
     { scale: breatheAnim },
     { translateY: nodAnim },
+  ];
+
+  // Front layer: breathing + nod + micro-drift
+  const frontTransform = [
+    { scale: breatheAnim },
+    { translateY: nodAnim },
+    { translateX: driftX },
+    { translateY: driftY },
   ];
 
   return (
@@ -407,14 +601,14 @@ export default function CaddieAvatar({
         {/* Layer 1a — Back (fading out) */}
         <Animated.Image
           source={backSource}
-          style={[styles.avatarImage, { transform: avatarTransform, opacity: backOpacity }]}
+          style={[styles.avatarImage, { transform: backTransform, opacity: backOpacity }]}
           resizeMode={fill}
         />
 
-        {/* Layer 1b — Front (fading in) */}
+        {/* Layer 1b — Front (fading in), with micro-drift */}
         <Animated.Image
           source={frontSource}
-          style={[styles.avatarImage, { transform: avatarTransform, opacity: fadeAnim }]}
+          style={[styles.avatarImage, { transform: frontTransform, opacity: fadeAnim }]}
           resizeMode={fill}
         />
 
