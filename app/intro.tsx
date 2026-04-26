@@ -23,6 +23,7 @@ export default function Intro() {
   const [step, setStep] = useState(0);
   const [playerName, setPlayerName] = useState('');
   const [selectedGender, setSelectedGender] = useState<'male' | 'female'>('male');
+  const [selectedCaddie, setSelectedCaddie] = useState<'male' | 'female' | null>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -34,16 +35,26 @@ export default function Intro() {
     }).start();
   }, [step]);
 
+  const goToStep = (n: number) => {
+    Animated.timing(fadeAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setStep(n);
+    });
+  };
+
   const handleNameSubmit = () => {
     if (!playerName.trim()) return;
     setName(playerName.trim());
-    setStep(1);
+    goToStep(1);
   };
 
   const handleCaddieSelect = (gender: 'male' | 'female') => {
     setSelectedGender(gender);
     setVoiceGender(gender);
-    setStep(2);
+    goToStep(2);
   };
 
   const handleFinish = () => {
@@ -106,8 +117,15 @@ export default function Intro() {
             <Text style={styles.kevinSub}>Your caddie — Kevin or Serena?</Text>
             <View style={styles.caddieRow}>
               <TouchableOpacity
-                style={styles.caddieCard}
-                onPress={() => handleCaddieSelect('male')}
+                style={[
+                  styles.caddieCard,
+                  selectedCaddie === 'male' && styles.caddieCardSelected,
+                ]}
+                onPress={() => {
+                  setSelectedCaddie('male');
+                  setTimeout(() => handleCaddieSelect('male'), 300);
+                }}
+                activeOpacity={0.85}
               >
                 <Image
                   source={require('../assets/avatars/kevin_portrait.jpg')}
@@ -118,8 +136,15 @@ export default function Intro() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.caddieCard}
-                onPress={() => handleCaddieSelect('female')}
+                style={[
+                  styles.caddieCard,
+                  selectedCaddie === 'female' && styles.caddieCardSelected,
+                ]}
+                onPress={() => {
+                  setSelectedCaddie('female');
+                  setTimeout(() => handleCaddieSelect('female'), 300);
+                }}
+                activeOpacity={0.85}
               >
                 <Image
                   source={require('../assets/avatars/serena_portrait.jpg')}
@@ -166,10 +191,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   avatarFrame: {
-    width: 220,
-    height: 280,
+    width: 240,
+    height: 300,
     marginBottom: 24,
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
     backgroundColor: '#060f09',
   },
@@ -183,8 +208,9 @@ const styles = StyleSheet.create({
   },
   kevinSays: {
     color: '#ffffff',
-    fontSize: 24,
-    fontWeight: '800',
+    fontSize: 28,
+    fontWeight: '900',
+    lineHeight: 34,
     textAlign: 'center',
     marginBottom: 8,
   },
@@ -193,7 +219,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 32,
-    lineHeight: 22,
+    lineHeight: 24,
   },
   nameInput: {
     width: '100%',
@@ -233,16 +259,20 @@ const styles = StyleSheet.create({
   caddieCard: {
     flex: 1,
     backgroundColor: '#0d2418',
-    borderRadius: 14,
-    borderWidth: 1.5,
+    borderRadius: 16,
+    borderWidth: 2,
     borderColor: '#1e3a28',
     overflow: 'hidden',
     alignItems: 'center',
     paddingBottom: 12,
   },
+  caddieCardSelected: {
+    borderColor: '#00C896',
+    backgroundColor: '#0d3020',
+  },
   caddieThumb: {
     width: '100%',
-    height: 160,
+    height: 180,
     marginBottom: 8,
   },
   caddieName: {

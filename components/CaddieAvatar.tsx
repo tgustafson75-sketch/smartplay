@@ -117,25 +117,33 @@ export default function CaddieAvatar({
       : Math.round(H * 0.52),
   );
 
-  const breatheAnim = useRef(new Animated.Value(1)).current;
-  const glowAnim   = useRef(new Animated.Value(0)).current;
-  const nodAnim    = useRef(new Animated.Value(0)).current;
-  const scanAnim   = useRef(new Animated.Value(0)).current;
+  const breatheAnim  = useRef(new Animated.Value(1)).current;
+  const glowAnim     = useRef(new Animated.Value(0)).current;
+  const nodAnim      = useRef(new Animated.Value(0)).current;
+  const scanAnim     = useRef(new Animated.Value(0)).current;
+  const hudFlash     = useRef(new Animated.Value(1)).current;
+  const responseFade = useRef(new Animated.Value(1)).current;
+
+  const prevVoiceState = useRef<VoiceState>('idle');
+
+  const displayText = caddieResponse || openingPrompt;
+  const [displayedText, setDisplayedText] = useState(displayText);
+  const isFirstRender = useRef(true);
 
   // ── Breathing — always runs ─────────────
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(breatheAnim, {
-          toValue: 1.008,
-          duration: 3500,
-          easing: Easing.inOut(Easing.ease),
+          toValue: 1.012,
+          duration: 4000,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(breatheAnim, {
           toValue: 1.0,
-          duration: 3500,
-          easing: Easing.inOut(Easing.ease),
+          duration: 4000,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
       ])
@@ -190,12 +198,14 @@ export default function CaddieAvatar({
     return () => clearTimeout(timer);
   }, []);
 
-  // ── Nod after speaking ─────────────────
+  // ── Nod only when speaking → idle ──────
   useEffect(() => {
-    if (voiceState === 'idle') {
-      const timer = setTimeout(() => triggerNod(), 400);
+    if (prevVoiceState.current === 'speaking' && voiceState === 'idle') {
+      const timer = setTimeout(() => triggerNod(), 300);
+      prevVoiceState.current = voiceState;
       return () => clearTimeout(timer);
     }
+    prevVoiceState.current = voiceState;
   }, [voiceState]);
 
   // ── Glow — voice state ─────────────────
@@ -209,8 +219,8 @@ export default function CaddieAvatar({
       return;
     }
     const speed =
-      voiceState === 'speaking'   ? 350 :
-      voiceState === 'listening'  ? 500 : 900;
+      voiceState === 'speaking'  ? 300 :
+      voiceState === 'listening' ? 600 : 1200;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(glowAnim, {
@@ -229,6 +239,44 @@ export default function CaddieAvatar({
     return () => loop.stop();
   }, [voiceState]);
 
+  // ── HUD flash on data change ────────────
+  useEffect(() => {
+    if (hud.hole === null) return;
+    Animated.sequence([
+      Animated.timing(hudFlash, {
+        toValue: 0.3,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(hudFlash, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [hud.hole, hud.yards]);
+
+  // ── Response text fade on change ────────
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      setDisplayedText(displayText);
+      return;
+    }
+    Animated.timing(responseFade, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: true,
+    }).start(() => {
+      setDisplayedText(displayText);
+      Animated.timing(responseFade, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }).start();
+    });
+  }, [displayText]);
+
   const ringColor =
     voiceState === 'thinking' ? '#F5A623' : '#00C896';
 
@@ -246,8 +294,6 @@ export default function CaddieAvatar({
     { label: 'WIND',  value: hud.wind     ?? '—' },
     { label: 'PLAYS', value: hud.playsLike !== null ? String(hud.playsLike) : '—' },
   ];
-
-  const displayText = caddieResponse || openingPrompt;
 
   return (
     <View style={styles.wrapper}>
@@ -303,7 +349,7 @@ export default function CaddieAvatar({
 
         {/* Layer 5 — Floating HUD */}
         {hud.hole !== null && (
-          <View style={styles.hud}>
+          <Animated.View style={[styles.hud, { opacity: hudFlash }]}>
             {hudItems.map((item, i) => (
               <React.Fragment key={item.label}>
                 <View style={styles.hudItem}>
@@ -315,7 +361,7 @@ export default function CaddieAvatar({
                 )}
               </React.Fragment>
             ))}
-          </View>
+          </Animated.View>
         )}
 
         {/* Layer 6 — Voice ring */}
@@ -345,14 +391,14 @@ export default function CaddieAvatar({
       </TouchableOpacity>
 
       {/* ── RESPONSE TEXT ─────────────── */}
-      <View style={styles.responseArea}>
+      <Animated.View style={[styles.responseArea, { opacity: responseFade }]}>
         <Text
           style={caddieResponse ? styles.responseText : styles.openingText}
           numberOfLines={3}
         >
-          {displayText}
+          {displayedText}
         </Text>
-      </View>
+      </Animated.View>
 
     </View>
   );

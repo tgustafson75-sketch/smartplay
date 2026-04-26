@@ -26,6 +26,10 @@ export default function RootLayout() {
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
+          name="hole-view-3d"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
           name="cage"
           options={{ animation: 'slide_from_right' }}
         />

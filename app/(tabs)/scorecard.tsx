@@ -36,6 +36,8 @@ export default function Scorecard() {
     nineHoleMode,
     isCompetition,
     setCurrentHole,
+    logScore,
+    logPutts,
     getTotalScore,
     getScoreVsPar,
     getHolesPlayed,
@@ -88,6 +90,17 @@ export default function Scorecard() {
   const roundHeroMoments = heroMoments.filter(
     m => m.courseName === activeCourse
   ).length;
+
+  const currentHolePar = courseHoles.find(h => h.hole === currentHole)?.par ?? 4;
+
+  const handleQuickScore = (score: number) => {
+    logScore(currentHole, score);
+    logPutts(currentHole, 2);
+    const maxHole = nineHoleMode ? 9 : 18;
+    if (currentHole < maxHole) {
+      setCurrentHole(currentHole + 1);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -269,6 +282,45 @@ export default function Scorecard() {
                 {scoreVsParDisplay}
               </Text>
             </View>
+          </View>
+        )}
+
+        {/* QUICK SCORE CHIPS */}
+        {isRoundActive && !scores[currentHole] && (
+          <View style={styles.quickChipsSection}>
+            <Text style={styles.quickChipsLabel}>
+              {'Hole ' + currentHole + ' · Quick Score'}
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipsRow}
+            >
+              {([-2, -1, 0, 1, 2, 3, 4] as const).map(diff => {
+                const score = currentHolePar + diff;
+                if (score < 1) return null;
+                const color = getScoreColor(score, currentHolePar);
+                const label =
+                  diff <= -2 ? 'Eagle' :
+                  diff === -1 ? 'Birdie' :
+                  diff === 0 ? 'Par' :
+                  diff === 1 ? 'Bogey' :
+                  diff === 2 ? 'Double' :
+                  diff === 3 ? 'Triple' :
+                  ('+' + diff);
+                return (
+                  <TouchableOpacity
+                    key={diff}
+                    style={[styles.chip, { borderColor: color }]}
+                    onPress={() => handleQuickScore(score)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.chipScore, { color }]}>{score}</Text>
+                    <Text style={[styles.chipLabel, { color }]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         )}
 
@@ -489,6 +541,43 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 32,
     fontWeight: '900',
+  },
+  quickChipsSection: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  quickChipsLabel: {
+    color: '#6b7280',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingRight: 8,
+  },
+  chip: {
+    alignItems: 'center',
+    backgroundColor: '#0d2418',
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    minWidth: 58,
+  },
+  chipScore: {
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  chipLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginTop: 2,
   },
   compBadge: {
     marginHorizontal: 16,

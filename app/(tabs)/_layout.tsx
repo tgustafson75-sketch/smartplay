@@ -1,26 +1,33 @@
 import { Tabs } from 'expo-router';
 import { Text, View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRoundStore } from '../../store/roundStore';
 
 interface TabIconProps {
   emoji: string;
   label: string;
   focused: boolean;
+  showDot?: boolean;
 }
 
-function TabIcon({ emoji, label, focused }: TabIconProps) {
+function TabIcon({ emoji, label, focused, showDot }: TabIconProps) {
+  const dotVisible = focused || showDot;
   return (
     <View style={styles.tabItem}>
-      <Text style={styles.tabEmoji}>{emoji}</Text>
+      <Text style={[styles.tabEmoji, focused && styles.tabEmojiActive]}>
+        {emoji}
+      </Text>
       <Text style={[styles.tabLabel, focused && styles.tabLabelFocused]}>
         {label}
       </Text>
+      <View style={[styles.tabDot, dotVisible && styles.tabDotVisible, showDot && !focused && styles.tabDotLive]} />
     </View>
   );
 }
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+  const isRoundActive = useRoundStore(s => s.isRoundActive);
 
   return (
     <Tabs
@@ -49,7 +56,7 @@ export default function TabLayout() {
         name="scorecard"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="📋" label="Score" focused={focused} />
+            <TabIcon emoji="📋" label="Score" focused={focused} showDot={isRoundActive} />
           ),
         }}
       />
@@ -83,6 +90,9 @@ const styles = StyleSheet.create({
   tabEmoji: {
     fontSize: 22,
   },
+  tabEmojiActive: {
+    transform: [{ scale: 1.1 }],
+  },
   tabLabel: {
     color: '#6b7280',
     fontSize: 10,
@@ -91,5 +101,18 @@ const styles = StyleSheet.create({
   },
   tabLabelFocused: {
     color: '#00C896',
+  },
+  tabDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'transparent',
+    marginTop: 1,
+  },
+  tabDotVisible: {
+    backgroundColor: '#00C896',
+  },
+  tabDotLive: {
+    backgroundColor: '#4ade80',
   },
 });

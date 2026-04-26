@@ -5,15 +5,12 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import AddressSilhouette from '../../components/AddressSilhouette';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // ─── DRILL DATA ────────────────────────────
 

@@ -1,11 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   StyleSheet,
   Modal,
+  ActivityIndicator,
+  Animated,
+  Easing,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -14,13 +19,17 @@ import { useRoundStore } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
+import { useCageStore } from '../../store/cageStore';
+import { usePointsStore } from '../../store/pointsStore';
 import { getCourseList, getCourse } from '../../data/courses';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
-import { speak } from '../../services/voiceService';
+import { speak, configureAudioForSpeech } from '../../services/voiceService';
 
 export default function CaddieTab() {
   useKeepAwake();
   const router = useRouter();
+
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
   // ── Stores ──────────────────────────────
   const {
@@ -39,6 +48,9 @@ export default function CaddieTab() {
     logPutts,
     addPenalty,
     getCurrentPar,
+    getTotalScore,
+    getHolesPlayed,
+    getScoreVsPar,
   } = useRoundStore();
 
   const {
@@ -59,6 +71,7 @@ export default function CaddieTab() {
     currentMentalState,
     heroMoments,
     incrementRounds,
+    isSpiralRisk,
   } = useRelationshipStore();
 
   // ── Local state ─────────────────────────
@@ -75,7 +88,32 @@ export default function CaddieTab() {
   const [holeScore, setHoleScore] = useState(0);
   const [holePutts, setHolePutts] = useState(0);
 
+  const [showPreRound, setShowPreRound] = useState(false);
+  const [preRoundBrief, setPreRoundBrief] = useState('');
+  const [preRoundLoading, setPreRoundLoading] = useState(false);
+
   const currentPar = getCurrentPar();
+
+  const totalScore  = useMemo(() => getTotalScore(),  [scores]);
+  const scoreVsPar  = useMemo(() => getScoreVsPar(),  [scores, courseHoles]);
+  const holesPlayed = useMemo(() => getHolesPlayed(), [scores]);
+
+  // ── Mic pulse animation ──────────────────
+  const micPulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (voiceState === 'speaking') {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(micPulse, { toValue: 1.06, duration: 300, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(micPulse, { toValue: 1.0,  duration: 300, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ])
+      );
+      loop.start();
+      return () => loop.stop();
+    } else {
+      Animated.timing(micPulse, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+    }
+  }, [voiceState]);
 
   // ── Opening prompt ───────────────────────
   useEffect(() => {
@@ -150,10 +188,15 @@ export default function CaddieTab() {
   };
 
   // ── Voice hook ───────────────────────────
-  const { handleMicPress } = useVoiceCaddie({
+  const { handleMicPress: _handleMicPress } = useVoiceCaddie({
     onVoiceStateChange: (state) => setVoiceState(state),
-    onResponseReceived: (text) => setCaddieResponse(text),
-    onHeroMoment: () => {},
+    onResponseReceived: (text) => {
+      setCaddieResponse(text);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    },
+    onHeroMoment: () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+    },
     onVisionTrigger: openSmartVision,
     onHeroReelView: () => {
       setCaddieResponse('Here are your best moments.');
@@ -161,10 +204,136 @@ export default function CaddieTab() {
     },
   });
 
+  const handleMicPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    _handleMicPress();
+  };
+
+  // ── Pre-round brief ──────────────────────
+  const generatePreRoundBrief = async (
+    selectedCourseId: string,
+    isComp: boolean,
+  ) => {
+    setPreRoundLoading(true);
+    setShowPreRound(true);
+
+    try {
+      const cageState = useCageStore.getState();
+      const relState = useRelationshipStore.getState();
+      const profileState = usePlayerProfileStore.getState();
+
+      const recentSessions = cageState.sessionHistory
+        .slice(-3)
+        .reverse()
+        .map(s => ({
+          club: s.club,
+          dominantMiss: s.dominantMiss,
+          rootCause: s.rootCause,
+          summary: s.summary,
+        }));
+
+      const course = getCourse(selectedCourseId);
+
+      const res = await fetch(apiUrl + '/api/preround', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: profileState.firstName,
+          courseName: course?.name ?? '',
+          courseRating: course?.rating ?? '',
+          courseSlope: course?.slope ?? '',
+          totalPar: course?.par ?? 72,
+          roundsTogether: relState.roundsTogether,
+          sessionsTogether: relState.sessionsTogether,
+          handicap: profileState.handicap,
+          goal: profileState.goal,
+          dominantMiss: profileState.dominantMiss,
+          physicalLimitation: profileState.physicalLimitation,
+          personalBest: profileState.personalBest,
+          recentCageSessions: recentSessions,
+          heroMoments: relState.heroMoments.slice(-3),
+          currentMentalState: relState.currentMentalState,
+          isCompetition: isComp,
+          weather: null,
+          language,
+        }),
+      });
+
+      const data = await res.json() as { brief?: string };
+      const brief = data.brief ?? "Let's go play some golf.";
+
+      setPreRoundBrief(brief);
+      setPreRoundLoading(false);
+
+      if (voiceEnabled) {
+        await configureAudioForSpeech();
+        await speak(brief, voiceGender, language, apiUrl);
+      }
+    } catch (err) {
+      const fallback = 'Course is set up. You know what to do. One shot at a time.';
+      setPreRoundBrief(fallback);
+      setPreRoundLoading(false);
+      if (voiceEnabled) {
+        await configureAudioForSpeech();
+        await speak(fallback, voiceGender, language, apiUrl);
+      }
+    }
+  };
+
+  // ── Round summary ────────────────────────
+  const generateRoundSummary = async () => {
+    const total = getTotalScore();
+    const vspar = getScoreVsPar();
+    const played = getHolesPlayed();
+    const relState = useRelationshipStore.getState();
+
+    let summary = '';
+
+    if (played < 9) {
+      summary = 'Short round. What you can control — you controlled.';
+    } else if (vspar <= -3) {
+      summary =
+        "That's a strong round. " + Math.abs(vspar) + ' under is real golf.';
+    } else if (vspar === 0) {
+      summary = 'Even par. That takes real discipline. Well done.';
+    } else if (vspar <= 3) {
+      summary =
+        total + " on the card. Solid effort today. Let's review what worked.";
+    } else if (vspar <= 7) {
+      summary =
+        'Tough one. The game does that sometimes. We know what to work on.';
+    } else {
+      summary =
+        'Hard day out there. Every round teaches you something. We\'ll build on it.';
+    }
+
+    const best = usePlayerProfileStore.getState().personalBest;
+    if (best && total > 0 && total < best) {
+      summary = 'New personal best — ' + total + ". That's what we came for.";
+      relState.recordBreakthrough(
+        'New personal best: ' + total,
+        relState.roundsTogether,
+      );
+    }
+
+    setCaddieResponse(summary);
+
+    if (voiceEnabled) {
+      await configureAudioForSpeech();
+      await speak(summary, voiceGender, language, apiUrl);
+    }
+
+    usePointsStore.getState().addPoints(
+      Math.max(10, 50 - Math.max(0, vspar * 2)),
+      'Round completed',
+    );
+  };
+
   // ── Start round ──────────────────────────
-  const handleStartRound = () => {
+  const handleStartRound = async () => {
     const course = getCourse(selectedCourse);
     if (!course) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     startRound(course.name, course.holes, {
       nineHole,
       isCompetition,
@@ -173,31 +342,25 @@ export default function CaddieTab() {
     });
     incrementRounds();
     setShowRoundSetup(false);
-    setCaddieResponse("Let's go. One shot at a time.");
+    await generatePreRoundBrief(selectedCourse, isCompetition);
   };
 
   // ── Log hole score ───────────────────────
-  const handleLogHole = () => {
+  const handleLogHole = async () => {
     if (holeScore === 0) return;
     logScore(currentHole, holeScore);
     logPutts(currentHole, holePutts);
 
-    // Capture par before setCurrentHole updates the store
     const par = getCurrentPar();
-
     const maxHole = nineHoleMode ? 9 : 18;
     const nextHole = currentHole + 1;
+
+    useRelationshipStore.getState().updateMentalState(holeScore, par ?? 4);
 
     if (nextHole > maxHole) {
       endRound();
       setShowShotCard(false);
-      const finalMsg = "That's the round. Good work out there.";
-      setCaddieResponse(finalMsg);
-      if (voiceEnabled) {
-        const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
-        speak(finalMsg, voiceGender, language, apiUrl).catch(() => {});
-      }
-      useRelationshipStore.getState().updateMentalState(holeScore, par ?? 4);
+      await generateRoundSummary();
       return;
     }
 
@@ -206,44 +369,58 @@ export default function CaddieTab() {
     setHolePutts(0);
     setShowShotCard(false);
 
-    // Build hole transition message
-    const diff = par ? holeScore - par : null;
-    const scoreWord =
-      diff === null  ? '' :
-      diff <= -2     ? 'Eagle! ' :
-      diff === -1    ? 'Birdie! ' :
-      diff === 0     ? 'Par. ' :
-      diff === 1     ? 'Bogey. ' :
-      diff === 2     ? 'Double. ' :
-                       'Moving on. ';
-
+    const holePar = par ?? 4;
+    const diff = holeScore - holePar;
     const nextHoleData = courseHoles.find(h => h.hole === nextHole);
-    const nextPar = nextHoleData?.par;
-    const nextYards = nextHoleData?.distance;
+    const scoreVsParSoFar = getScoreVsPar();
 
-    const nextInfo = nextHoleData
-      ? `Hole ${nextHole}, par ${nextPar}${nextYards ? ', ' + nextYards + ' yards' : ''}.`
-      : `Hole ${nextHole}.`;
+    let scoreWord = '';
+    if (diff <= -2)    scoreWord = 'Eagle.';
+    else if (diff === -1) scoreWord = 'Birdie.';
+    else if (diff === 0)  scoreWord = 'Par.';
+    else if (diff === 1)  scoreWord = 'Bogey.';
+    else if (diff === 2)  scoreWord = 'Double.';
+    else                   scoreWord = 'Leave it there.';
 
-    const message = scoreWord + nextInfo;
-    setCaddieResponse(message);
-
-    if (voiceEnabled && !discreteMode) {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
-      speak(message, voiceGender, language, apiUrl).catch(() => {});
+    let nextInfo = '';
+    if (nextHoleData) {
+      nextInfo =
+        'Hole ' + nextHole +
+        '. Par ' + nextHoleData.par +
+        '. ' + nextHoleData.distance + ' yards.';
     }
 
-    useRelationshipStore.getState().updateMentalState(holeScore, par ?? 4);
+    let contextLine = '';
+    if (diff <= -1) {
+      contextLine = diff === -1 ? ' Keep that going.' : " That's yours.";
+    } else if (diff >= 2 && isSpiralRisk()) {
+      contextLine = ' Reset now. Next hole is a fresh start.';
+    } else if (diff === 1) {
+      contextLine = ' Move on.';
+    }
+
+    let scoreContext = '';
+    if (scoreVsParSoFar <= -3) {
+      scoreContext =
+        " You're " + Math.abs(scoreVsParSoFar) + ' under through ' + currentHole + '.';
+    }
+
+    const transition = scoreWord + contextLine + (nextInfo ? ' ' + nextInfo : '') + scoreContext;
+    setCaddieResponse(transition);
+
+    if (voiceEnabled && !discreteMode) {
+      speak(transition, voiceGender, language, apiUrl).catch(() => {});
+    }
   };
 
   // ── HUD data ─────────────────────────────
-  const hudData = {
+  const hudData = useMemo(() => ({
     hole: isRoundActive ? currentHole : null,
     par: isRoundActive ? currentPar : null,
     yards: currentYardage,
     wind: null,
     playsLike: currentYardage,
-  };
+  }), [isRoundActive, currentHole, currentPar, currentYardage]);
 
   const courses = getCourseList();
 
@@ -252,36 +429,72 @@ export default function CaddieTab() {
     <SafeAreaView style={styles.container} edges={['top']}>
 
       {/* KEVIN */}
-      <CaddieAvatar
-        gender={voiceGender === 'female' ? 'female' : 'male'}
-        isOnCourse={isRoundActive}
-        isCageMode={false}
-        voiceState={voiceState}
-        hud={hudData}
-        openingPrompt={openingPrompt}
-        caddieResponse={caddieResponse}
-        onTap={handleMicPress}
-      />
+      <View style={styles.avatarWrapper}>
+        <CaddieAvatar
+          gender={voiceGender === 'female' ? 'female' : 'male'}
+          isOnCourse={isRoundActive}
+          isCageMode={false}
+          voiceState={voiceState}
+          hud={hudData}
+          openingPrompt={openingPrompt}
+          caddieResponse={caddieResponse}
+          onTap={handleMicPress}
+        />
+        {isRoundActive && holesPlayed > 0 && (
+          <View style={styles.scoreBadge}>
+            <Text style={styles.scoreBadgeNum}>
+              {totalScore > 0 ? totalScore : '—'}
+            </Text>
+            <Text style={[
+              styles.scoreBadgePar,
+              scoreVsPar < 0 && { color: '#4ade80' },
+              scoreVsPar > 0 && { color: '#f87171' },
+            ]}>
+              {scoreVsPar === 0 ? 'E' : (scoreVsPar > 0 ? '+' : '') + scoreVsPar}
+            </Text>
+          </View>
+        )}
+      </View>
 
       {/* MIC BUTTON */}
-      <TouchableOpacity
-        style={[
-          styles.micBtn,
-          voiceState === 'listening' && styles.micBtnActive,
-        ]}
-        onPress={handleMicPress}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.micIcon}>
-          {voiceState === 'listening' ? '⏹' : '🎙'}
-        </Text>
-        <Text style={styles.micLabel}>
-          {voiceState === 'idle'      ? 'Tap to talk to Kevin' :
-           voiceState === 'listening' ? 'Listening...' :
-           voiceState === 'thinking'  ? 'Kevin is thinking...' :
-                                        'Kevin is speaking...'}
-        </Text>
-      </TouchableOpacity>
+      <Animated.View style={{ transform: [{ scale: micPulse }] }}>
+        <TouchableOpacity
+          style={[
+            styles.micBtn,
+            voiceState === 'listening' && styles.micBtnActive,
+          ]}
+          onPress={handleMicPress}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.micIcon}>
+            {voiceState === 'listening' ? '⏹' : '🎙'}
+          </Text>
+          <Text style={styles.micLabel}>
+            {voiceState === 'idle'      ? 'Tap to talk to Kevin' :
+             voiceState === 'listening' ? 'Listening...' :
+             voiceState === 'thinking'  ? 'Kevin is thinking...' :
+                                          'Kevin is speaking...'}
+          </Text>
+        </TouchableOpacity>
+      </Animated.View>
+
+      {/* QUICK ACTIONS — only when no active round */}
+      {!isRoundActive && (
+        <View style={styles.quickActions}>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => setShowRoundSetup(true)}>
+            <Text style={styles.quickBtnIcon}>⛳</Text>
+            <Text style={styles.quickBtnLabel}>Start Round</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push('/cage' as never)}>
+            <Text style={styles.quickBtnIcon}>🏌️</Text>
+            <Text style={styles.quickBtnLabel}>Hit the Cage</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => router.push('/arena' as never)}>
+            <Text style={styles.quickBtnIcon}>🏆</Text>
+            <Text style={styles.quickBtnLabel}>Arena</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* THREE NAV ICONS */}
       <View style={styles.navRow}>
@@ -313,6 +526,66 @@ export default function CaddieTab() {
           <Text style={styles.navLabel}>More</Text>
         </TouchableOpacity>
       </View>
+
+      {/* ── PRE-ROUND BRIEF MODAL ──────────── */}
+      <Modal
+        visible={showPreRound}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPreRound(false)}
+      >
+        <View style={styles.preRoundOverlay}>
+          <View style={styles.preRoundCard}>
+
+            <Image
+              source={require('../../assets/avatars/kevin_portrait.jpg')}
+              style={styles.preRoundAvatar}
+              resizeMode="cover"
+            />
+
+            <Text style={styles.preRoundCourse}>
+              {activeCourse ?? ''}
+            </Text>
+
+            {preRoundLoading ? (
+              <View style={styles.preRoundLoading}>
+                <ActivityIndicator color="#00C896" size="small" />
+                <Text style={styles.preRoundLoadingText}>
+                  Kevin is reading the course...
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.preRoundBrief}>{preRoundBrief}</Text>
+            )}
+
+            {!preRoundLoading && (
+              <TouchableOpacity
+                style={styles.preRoundBtn}
+                onPress={() => {
+                  setShowPreRound(false);
+                  const hole1 = courseHoles.find(h => h.hole === 1);
+                  if (hole1) {
+                    const h1msg =
+                      'Hole 1. Par ' + hole1.par + '. ' + hole1.distance + ' yards. ' +
+                      (hole1.par === 3
+                        ? 'Take your time.'
+                        : hole1.par === 5
+                        ? 'Good driving hole.'
+                        : 'Pick your target.');
+                    setCaddieResponse(h1msg);
+                    if (voiceEnabled) {
+                      speak(h1msg, voiceGender, language, apiUrl).catch(() => {});
+                    }
+                  }
+                }}
+              >
+                <Text style={styles.preRoundBtnText}>Let's Go</Text>
+              </TouchableOpacity>
+            )}
+
+          </View>
+        </View>
+      </Modal>
 
       {/* ── ROUND SETUP SHEET ──────────────── */}
       <Modal
@@ -460,18 +733,11 @@ export default function CaddieTab() {
             {isRoundActive && (
               <TouchableOpacity
                 style={styles.endRoundBtn}
-                onPress={() => {
-                  const isFirstRound = roundsTogether === 1;
+                onPress={async () => {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
                   endRound();
                   setShowShotCard(false);
-                  const msg = isFirstRound
-                    ? "First round together. I'll remember this one."
-                    : "Good round. Let's review.";
-                  setCaddieResponse(msg);
-                  if (voiceEnabled && !discreteMode) {
-                    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
-                    speak(msg, voiceGender, language, apiUrl).catch(() => {});
-                  }
+                  await generateRoundSummary();
                 }}
               >
                 <Text style={styles.endRoundText}>End Round</Text>
@@ -572,6 +838,62 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#060f09',
   },
+  avatarWrapper: {
+    position: 'relative',
+    width: '100%',
+  },
+  scoreBadge: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    backgroundColor: 'rgba(6,15,9,0.82)',
+    borderWidth: 1.5,
+    borderColor: '#00C896',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignItems: 'center',
+    minWidth: 52,
+  },
+  scoreBadgeNum: {
+    color: '#ffffff',
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  scoreBadgePar: {
+    color: '#6b7280',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 2,
+  },
+  quickBtn: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: '#0d2418',
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    borderRadius: 14,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  quickBtnIcon: {
+    fontSize: 18,
+  },
+  quickBtnLabel: {
+    color: '#6b7280',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
   micBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -621,6 +943,67 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
+  },
+  preRoundOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  preRoundCard: {
+    backgroundColor: '#0d2418',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#00C896',
+    padding: 24,
+    width: '100%',
+    alignItems: 'center',
+    gap: 16,
+  },
+  preRoundAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
+    borderColor: '#00C896',
+  },
+  preRoundCourse: {
+    color: '#6b7280',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  preRoundLoading: {
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 16,
+  },
+  preRoundLoadingText: {
+    color: '#6b7280',
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
+  preRoundBrief: {
+    color: '#ffffff',
+    fontSize: 17,
+    lineHeight: 26,
+    textAlign: 'center',
+    fontWeight: '400',
+  },
+  preRoundBtn: {
+    backgroundColor: '#00C896',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    alignItems: 'center',
+    width: '100%',
+  },
+  preRoundBtnText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
   },
   backdrop: {
     flex: 1,
