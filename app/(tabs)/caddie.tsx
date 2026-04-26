@@ -13,9 +13,8 @@ import {
   AppStateStatus,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
@@ -32,9 +31,12 @@ import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { kevinText as kevinTextStyle } from '../../styles/typography';
 
+const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
+
 export default function CaddieTab() {
   useKeepAwake();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
@@ -103,6 +105,27 @@ export default function CaddieTab() {
   const [preRoundBrief, setPreRoundBrief] = useState('');
   const [preRoundLoading, setPreRoundLoading] = useState(false);
 
+  // ── Floating response text ───────────────
+  const displayText = caddieResponse || openingPrompt;
+  const [shownText, setShownText] = useState(displayText);
+  const responseFade = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (shownText === displayText) return;
+    Animated.timing(responseFade, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: true,
+    }).start(() => {
+      setShownText(displayText);
+      Animated.timing(responseFade, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }).start();
+    });
+  }, [displayText]);
+
   const currentPar = getCurrentPar();
 
   const totalScore  = useMemo(() => getTotalScore(),  [scores]);
@@ -120,7 +143,6 @@ export default function CaddieTab() {
 
   useEffect(() => {
     if (voiceState === 'listening') {
-      // Expand ring outward and fade out
       const loop = Animated.loop(
         Animated.parallel([
           Animated.sequence([
@@ -462,7 +484,7 @@ export default function CaddieTab() {
     const scoreVsParSoFar = getScoreVsPar();
 
     let scoreWord = '';
-    if (diff <= -2)    scoreWord = 'Eagle.';
+    if (diff <= -2)       scoreWord = 'Eagle.';
     else if (diff === -1) scoreWord = 'Birdie.';
     else if (diff === 0)  scoreWord = 'Par.';
     else if (diff === 1)  scoreWord = 'Bogey.';
@@ -500,68 +522,64 @@ export default function CaddieTab() {
     }
   };
 
-  // ── HUD data ─────────────────────────────
-  const hudData = useMemo(() => ({
-    hole: isRoundActive ? currentHole : null,
-    par: isRoundActive ? currentPar : null,
-    yards: currentYardage,
-    wind: null,
-    playsLike: currentYardage,
-  }), [isRoundActive, currentHole, currentPar, currentYardage]);
-
   const courses = getCourseList();
+
+  // ── Positioning helpers ──────────────────
+  const actionZoneContentHeight = 64 + 10 + 36 + 8; // primary + gap + secondary + padding
+  const micBottom = insets.bottom + actionZoneContentHeight + 16;
+  const responseBottom = micBottom + 72 + 16;
 
   // ── RENDER ───────────────────────────────
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
 
-      {/* KEVIN */}
-      <View style={styles.avatarWrapper}>
+      {/* KEVIN — full bleed */}
+      <View style={StyleSheet.absoluteFill}>
         <CaddieAvatar
           gender={voiceGender === 'female' ? 'female' : 'male'}
           isOnCourse={isRoundActive}
           isCageMode={false}
           voiceState={voiceState}
-          hud={hudData}
-          openingPrompt={openingPrompt}
-          caddieResponse={caddieResponse}
+          hud={NULL_HUD}
+          openingPrompt=""
+          caddieResponse=""
           onTap={handleMicPress}
           emotion={kevinEmotion}
+          fillMode="cover"
         />
-
-        {/* Vignette overlays */}
-        <LinearGradient
-          colors={['transparent', 'rgba(6,15,9,0.35)']}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-        <LinearGradient
-          colors={['rgba(6,15,9,0.15)', 'transparent']}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-
-        {/* Score badge */}
-        {isRoundActive && holesPlayed > 0 && (
-          <View style={styles.scoreBadge}>
-            <Text style={[
-              styles.scoreBadgeDelta,
-              scoreVsPar < 0 && { color: '#00C896' },
-              scoreVsPar > 0 && { color: '#F5A623' },
-            ]}>
-              {scoreVsPar === 0 ? 'E' : (scoreVsPar > 0 ? '+' : '') + scoreVsPar}
-            </Text>
-            <Text style={styles.scoreBadgeThru}>
-              {'THRU ' + holesPlayed}
-            </Text>
-          </View>
-        )}
       </View>
 
+      {/* TOP NAV */}
+      <View style={[styles.topNav, { top: insets.top + 8 }]}>
+        <TouchableOpacity
+          style={styles.navBtn}
+          onPress={() => router.replace('/(tabs)/scorecard' as never)}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="chevron-back" size={24} color="#6b7d72" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.navBtn}
+          onPress={() => setShowMoreMenu(true)}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="ellipsis-horizontal" size={24} color="#6b7d72" />
+        </TouchableOpacity>
+      </View>
+
+      {/* KEVIN RESPONSE TEXT */}
+      <Animated.View style={[styles.responseOverlay, { bottom: responseBottom, opacity: responseFade }]}>
+        <Text
+          style={caddieResponse ? styles.responseText : styles.openingText}
+          numberOfLines={4}
+        >
+          {shownText}
+        </Text>
+      </Animated.View>
+
       {/* MIC BUTTON */}
-      <View style={styles.micZone}>
+      <View style={[styles.micZone, { bottom: micBottom }]}>
         {vadEnabled && voiceState === 'idle' ? (
-          /* Auto-listen status indicator */
           <Animated.View style={{ alignItems: 'center', transform: [{ scale: autoListenPulse }] }}>
             <View style={[styles.micCircle, { opacity: 0.5 }]}>
               <Ionicons name="mic" size={32} color="#ffffff" />
@@ -569,9 +587,7 @@ export default function CaddieTab() {
             <Text style={styles.micStatusLabel}>LISTENING</Text>
           </Animated.View>
         ) : (
-          /* Manual mic button */
           <View style={{ alignItems: 'center' }}>
-            {/* Pulsing ring */}
             <Animated.View
               pointerEvents="none"
               style={[
@@ -606,8 +622,8 @@ export default function CaddieTab() {
         )}
       </View>
 
-      {/* PRIMARY ACTION + SECONDARY PILLS */}
-      <View style={styles.actionZone}>
+      {/* ACTION ZONE — overlays Kevin's lower section */}
+      <View style={[styles.actionZone, { paddingBottom: insets.bottom + 8 }]}>
         <TouchableOpacity
           style={styles.primaryActionBtn}
           onPress={() => isRoundActive ? setShowShotCard(true) : setShowRoundSetup(true)}
@@ -874,6 +890,15 @@ export default function CaddieTab() {
 
             {([
               {
+                icon: '🏌️',
+                label: 'Practice',
+                sub: 'Cage & swing lab',
+                action: () => {
+                  setShowMoreMenu(false);
+                  router.push('/(tabs)/swinglab' as never);
+                },
+              },
+              {
                 icon: '🔭',
                 label: 'SmartVision',
                 sub: 'Analyze the hole',
@@ -883,7 +908,7 @@ export default function CaddieTab() {
                 },
               },
               {
-                icon: '🏌️',
+                icon: '🎯',
                 label: 'SmartMotion',
                 sub: 'In-round swing analysis',
                 action: () => {
@@ -903,6 +928,17 @@ export default function CaddieTab() {
                   setShowMoreMenu(false);
                 },
               },
+              ...(isRoundActive ? [{
+                icon: '🏁',
+                label: 'End Round',
+                sub: 'Finish and get summary',
+                action: async () => {
+                  setShowMoreMenu(false);
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                  endRound();
+                  await generateRoundSummary();
+                },
+              }] : []),
               {
                 icon: '📺',
                 label: castMode ? 'Cast Mode On' : 'Cast Mode',
@@ -942,7 +978,7 @@ export default function CaddieTab() {
         </TouchableOpacity>
       </Modal>
 
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -953,41 +989,51 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#060f09',
   },
-  avatarWrapper: {
-    position: 'relative',
-    width: '100%',
-  },
-  scoreBadge: {
+  topNav: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#0d1a0d',
-    borderWidth: 1,
-    borderColor: '#1e3a28',
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  navBtn: {
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scoreBadgeDelta: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-    lineHeight: 20,
+  responseOverlay: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    zIndex: 8,
+    backgroundColor: 'rgba(6, 15, 9, 0.65)',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  scoreBadgeThru: {
-    color: '#6b7d72',
-    fontSize: 9,
+  responseText: {
+    color: '#ffffff',
+    fontSize: 16,
+    lineHeight: 24,
     fontWeight: '500',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    lineHeight: 12,
+    textAlign: 'center',
+  },
+  openingText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   micZone: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    paddingVertical: 12,
+    zIndex: 10,
   },
   micCircle: {
     width: 72,
@@ -1023,9 +1069,15 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   actionZone: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 16,
-    paddingBottom: 8,
     gap: 10,
+    backgroundColor: 'rgba(6, 15, 9, 0.88)',
+    paddingTop: 12,
+    zIndex: 5,
   },
   primaryActionBtn: {
     height: 64,

@@ -31,6 +31,11 @@ const AVATARS = {
   kevin_happy:        require('../assets/avatars/kevin-happy-portrait-001.png'),
   kevin_enthusiastic: require('../assets/avatars/kevin-enthusiastic-portrait-001.png'),
   kevin_surprised:    require('../assets/avatars/kevin-surprised-portrait-001.png'),
+  kevin_celebrating:  require('../assets/avatars/kevin-celebrating-001.png'),
+  kevin_confident:    require('../assets/avatars/kevin-confident-001.png'),
+  kevin_gameface:     require('../assets/avatars/kevin-gameface-001.png'),
+  kevin_curious:      require('../assets/avatars/kevin-curious-001.png'),
+  kevin_wincing:      require('../assets/avatars/kevin-wincing-001.png'),
 } as const;
 
 type AvatarKey = keyof typeof AVATARS;
@@ -43,26 +48,34 @@ const SERENA = {
 // ─── EMOTION → KEY MAP ────────────────────
 
 const EMOTION_KEY_MAP: Record<string, AvatarKey> = {
-  focused:      'kevin_focused',
-  determined:   'kevin_determined',
-  thinking:     'kevin_pensive',
-  pensive:      'kevin_pensive',
-  listening:    'kevin_listening',
-  speaking:     'kevin_explaining',
-  explaining:   'kevin_explaining',
-  asking:       'kevin_inquisitive',
-  inquisitive:  'kevin_inquisitive',
-  encouraging:  'kevin_supportive',
-  supportive:   'kevin_supportive',
-  reset:        'kevin_supportive',
-  happy:        'kevin_happy',
-  celebrating:  'kevin_enthusiastic',
-  enthusiastic: 'kevin_enthusiastic',
-  surprised:    'kevin_surprised',
-  humble:       'kevin_humble',
-  teaching:     'kevin_mentorship',
-  mentorship:   'kevin_mentorship',
-  idle:         'kevin_idle',
+  focused:       'kevin_focused',
+  determined:    'kevin_determined',
+  thinking:      'kevin_pensive',
+  pensive:       'kevin_pensive',
+  listening:     'kevin_listening',
+  speaking:      'kevin_explaining',
+  explaining:    'kevin_explaining',
+  asking:        'kevin_inquisitive',
+  inquisitive:   'kevin_inquisitive',
+  encouraging:   'kevin_supportive',
+  supportive:    'kevin_supportive',
+  reset:         'kevin_supportive',
+  happy:         'kevin_happy',
+  enthusiastic:  'kevin_enthusiastic',
+  surprised:     'kevin_surprised',
+  humble:        'kevin_humble',
+  teaching:      'kevin_mentorship',
+  mentorship:    'kevin_mentorship',
+  idle:          'kevin_idle',
+  celebrating:   'kevin_celebrating',
+  confident:     'kevin_confident',
+  gameface:      'kevin_gameface',
+  intense:       'kevin_gameface',
+  curious:       'kevin_curious',
+  wincing:       'kevin_wincing',
+  oops:          'kevin_wincing',
+  self_critical: 'kevin_humble',
+  accountable:   'kevin_humble',
 };
 
 function getAvatarKey(
@@ -124,6 +137,7 @@ interface CaddieAvatarProps {
   caddieResponse: string;
   onTap: () => void;
   emotion?: string | null;
+  fillMode?: 'cover' | 'contain';
 }
 
 // ─── COMPONENT ────────────────────────────
@@ -138,7 +152,9 @@ export default function CaddieAvatar({
   caddieResponse,
   onTap,
   emotion,
+  fillMode,
 }: CaddieAvatarProps) {
+  const fill = fillMode ?? 'contain';
   const { width: W, height: H } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
@@ -380,11 +396,11 @@ export default function CaddieAvatar({
   ];
 
   return (
-    <View style={styles.wrapper}>
+    <View style={fill === 'cover' ? styles.wrapperFull : styles.wrapper}>
 
       {/* ── AVATAR FRAME ──────────────── */}
       <TouchableOpacity
-        style={[styles.frame, { height: AVATAR_HEIGHT }]}
+        style={fill === 'cover' ? styles.frameFull : [styles.frame, { height: AVATAR_HEIGHT }]}
         onPress={onTap}
         activeOpacity={0.97}
       >
@@ -392,14 +408,14 @@ export default function CaddieAvatar({
         <Animated.Image
           source={backSource}
           style={[styles.avatarImage, { transform: avatarTransform, opacity: backOpacity }]}
-          resizeMode="contain"
+          resizeMode={fill}
         />
 
         {/* Layer 1b — Front (fading in) */}
         <Animated.Image
           source={frontSource}
           style={[styles.avatarImage, { transform: avatarTransform, opacity: fadeAnim }]}
-          resizeMode="contain"
+          resizeMode={fill}
         />
 
         {/* Layer 2 — Bottom gradient */}
@@ -487,14 +503,16 @@ export default function CaddieAvatar({
       </TouchableOpacity>
 
       {/* ── RESPONSE TEXT ─────────────── */}
-      <Animated.View style={[styles.responseArea, { opacity: responseFade }]}>
-        <Text
-          style={caddieResponse ? styles.responseText : styles.openingText}
-          numberOfLines={3}
-        >
-          {displayedText}
-        </Text>
-      </Animated.View>
+      {fill === 'contain' && (
+        <Animated.View style={[styles.responseArea, { opacity: responseFade }]}>
+          <Text
+            style={caddieResponse ? styles.responseText : styles.openingText}
+            numberOfLines={3}
+          >
+            {displayedText}
+          </Text>
+        </Animated.View>
+      )}
 
     </View>
   );
@@ -508,11 +526,20 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     backgroundColor: '#060f09',
   },
+  wrapperFull: {
+    flex: 1,
+    backgroundColor: '#060f09',
+  },
   frame: {
     width: '100%',
     overflow: 'hidden',
     backgroundColor: '#060f09',
     paddingTop: 8,
+  },
+  frameFull: {
+    flex: 1,
+    overflow: 'hidden',
+    backgroundColor: '#060f09',
   },
   avatarImage: {
     position: 'absolute',

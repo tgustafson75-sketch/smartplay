@@ -35,20 +35,22 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const isRoundActive = useRoundStore(s => s.isRoundActive);
 
+  const sharedTabBarStyle = {
+    backgroundColor: '#0d1a0d',
+    borderTopColor: '#1e3a28',
+    borderTopWidth: 1,
+    height: 60 + insets.bottom,
+    paddingBottom: insets.bottom + 6,
+    paddingTop: 6,
+  };
+
   return (
     <Tabs
-      screenOptions={{
+      screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#0d1a0d',
-          borderTopColor: '#1e3a28',
-          borderTopWidth: 1,
-          height: 60 + insets.bottom,
-          paddingBottom: insets.bottom + 6,
-          paddingTop: 6,
-        },
+        tabBarStyle: route.name === 'caddie' ? { display: 'none' } : sharedTabBarStyle,
         tabBarShowLabel: false,
-      }}
+      })}
     >
       <Tabs.Screen
         name="caddie"
