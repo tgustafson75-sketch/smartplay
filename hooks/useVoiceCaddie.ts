@@ -305,17 +305,17 @@ export const useVoiceCaddie = ({
         }),
       }).finally(() => clearTimeout(timeout));
 
-      if (!res.ok) return { text: 'One shot at a time.', audioBase64: null, toolAction: null };
+      if (!res.ok) return { text: 'Sorry, lost you for a moment. Try again.', audioBase64: null, toolAction: null };
       const data = await res.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null };
       return {
-        text:        data.text       ?? 'One shot at a time.',
+        text:        data.text       ?? 'Got nothing back from the brain. Try again.',
         audioBase64: data.audioBase64 ?? null,
         toolAction:  data.toolAction  ?? null,
       };
 
     } catch (err) {
       console.log('[voice] brain error:', err);
-      return { text: 'One shot at a time.', audioBase64: null, toolAction: null };
+      return { text: 'Hit a snag on my end. Try again.', audioBase64: null, toolAction: null };
     }
   };
 

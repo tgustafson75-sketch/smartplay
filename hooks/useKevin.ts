@@ -61,7 +61,7 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
 
       if (!res.ok) {
         setIsThinking(false);
-        return "One shot at a time.";
+        return "Sorry, lost you for a moment. Try again.";
       }
 
       const data = await res.json() as { text: string; audioBase64: string | null; toolAction: ToolAction | null };
@@ -76,12 +76,12 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
         await speakFromBase64(data.audioBase64);
       }
 
-      return data.text ?? "One shot at a time.";
+      return data.text ?? "Got nothing back from the brain. Try again.";
 
     } catch (err) {
       console.log('[kevin] hook error:', err);
       setIsThinking(false);
-      return "One shot at a time.";
+      return "Hit a snag on my end. Try again.";
     }
   }, [
     name, firstName, handicap, language, roundsTogether, sessionsTogether,

@@ -259,7 +259,10 @@ ${baseMessage}`
     }
 
     text = text.trim();
-    if (!text) text = 'One shot at a time.';
+    if (!text && !toolAction) {
+      console.error('[kevin] empty response from Claude — model returned no content');
+      throw new Error('Empty response from Claude');
+    }
 
     console.log('[kevin] response:', text);
     if (toolAction) console.log('[kevin] tool:', toolAction.type);
@@ -277,11 +280,12 @@ ${baseMessage}`
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.log('[kevin] error:', msg);
-    return res.status(200).json({
-      text: "One shot at a time. I've got you.",
-      audioBase64: null,
-      toolAction: null,
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error('[kevin] error:', msg);
+    if (stack) console.error('[kevin] stack:', stack);
+    return res.status(500).json({
+      error: msg,
+      errorType: err instanceof Error ? err.name : 'UnknownError',
     });
   }
 }
