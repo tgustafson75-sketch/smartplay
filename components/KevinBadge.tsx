@@ -84,7 +84,7 @@ export default function KevinBadge({ onTap, onLongPress }: KevinBadgeProps) {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    left: 16,
+    right: 16,
     zIndex: 100,
     width: 60,
     height: 60,
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   image: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
   },
 });
