@@ -18,7 +18,7 @@ import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
 import { useRoundStore } from '../../store/roundStore';
@@ -30,6 +30,7 @@ import { usePointsStore } from '../../store/pointsStore';
 import { getCourseList, getCourse } from '../../data/courses';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
 import { useKevin, type ToolAction } from '../../hooks/useKevin';
+import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
 import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
@@ -93,6 +94,15 @@ export default function CaddieTab() {
     incrementRounds,
     isSpiralRisk,
   } = useRelationshipStore();
+
+  const { setMode } = useKevinPresence();
+
+  useFocusEffect(
+    useCallback(() => {
+      setMode('full');
+      return () => setMode('badge');
+    }, [setMode]),
+  );
 
   // ── Local state ─────────────────────────
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');

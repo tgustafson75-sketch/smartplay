@@ -2,10 +2,12 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SmartVisionProvider } from '../contexts/SmartVisionContext';
+import { KevinPresenceProvider } from '../contexts/KevinPresenceContext';
 
 export default function RootLayout() {
   return (
     <SmartVisionProvider>
+    <KevinPresenceProvider>
     <SafeAreaProvider>
       <StatusBar style="light" />
       <Stack
@@ -45,6 +47,7 @@ export default function RootLayout() {
         />
       </Stack>
     </SafeAreaProvider>
+    </KevinPresenceProvider>
     </SmartVisionProvider>
   );
 }

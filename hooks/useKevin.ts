@@ -4,6 +4,7 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useKevinPresence } from '../contexts/KevinPresenceContext';
 import type { ToolAction } from '../app/api/kevin+api';
 
 export type { ToolAction };
@@ -16,6 +17,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
 export function useKevin(callbacks: KevinCallbacks = {}) {
   const [isThinking, setIsThinking] = useState(false);
+  const { setIsThinking: setPresenceThinking } = useKevinPresence();
 
   const { name, firstName, handicap } = usePlayerProfileStore();
   const { language } = useSettingsStore();
@@ -28,6 +30,7 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
 
   const ask = useCallback(async (message: string): Promise<string> => {
     setIsThinking(true);
+    setPresenceThinking(true);
     await stopSpeaking();
 
     try {
@@ -61,6 +64,7 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
 
       if (!res.ok) {
         setIsThinking(false);
+        setPresenceThinking(false);
         return "Sorry, lost you for a moment. Try again.";
       }
 
@@ -71,6 +75,7 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
       }
 
       setIsThinking(false);
+      setPresenceThinking(false);
 
       if (data.audioBase64) {
         await speakFromBase64(data.audioBase64);
@@ -81,6 +86,7 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
     } catch (err) {
       console.log('[kevin] hook error:', err);
       setIsThinking(false);
+      setPresenceThinking(false);
       return "Hit a snag on my end. Try again.";
     }
   }, [

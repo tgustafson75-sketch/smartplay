@@ -14,6 +14,8 @@ import {
   useWindowDimensions,
   ActivityIndicator,
 } from 'react-native';
+import KevinBadge from '../components/KevinBadge';
+import { useKevinPresence } from '../contexts/KevinPresenceContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
@@ -110,6 +112,11 @@ export default function HoleView() {
   const { voiceGender, language } = useSettingsStore();
   const { dominantMiss, firstName } = usePlayerProfileStore();
   const { setSmartVisionState } = useSmartVision();
+  const { setMode } = useKevinPresence();
+
+  useEffect(() => {
+    setMode('badge');
+  }, []);
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
   const mapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ?? '';
@@ -413,7 +420,8 @@ export default function HoleView() {
 
   // ── RENDER ─────────────────────────────
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
+      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
@@ -641,7 +649,9 @@ export default function HoleView() {
         </View>
 
       </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+      <KevinBadge />
+    </View>
   );
 }
 
