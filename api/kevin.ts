@@ -259,6 +259,18 @@ ${baseMessage}`
     }
 
     text = text.trim();
+
+    if (toolAction && !text) {
+      const defaults: Record<string, string> = {
+        open_smartvision: 'Pulling up the layout.',
+        open_smartfinder: 'Locking that distance.',
+        open_swinglab:    'Heading to SwingLab.',
+        log_score:        'Logging it.',
+        record_swing:     "I'm watching.",
+      };
+      text = defaults[String(toolAction.type)] ?? 'On it.';
+    }
+
     if (!text && !toolAction) {
       console.error('[kevin] empty response from Claude — model returned no content');
       throw new Error('Empty response from Claude');
