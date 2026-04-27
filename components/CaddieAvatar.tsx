@@ -609,6 +609,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: '#060f09',
+    padding: 12,
   },
   frame: {
     width: '100%',
@@ -622,6 +623,14 @@ const styles = StyleSheet.create({
     height: '100%',
     overflow: 'hidden',
     backgroundColor: '#060f09',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 200, 150, 0.35)',
+    borderRadius: 24,
+    shadowColor: '#00C896',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 12,
   },
   scanLine: {
     position: 'absolute',
