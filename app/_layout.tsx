@@ -41,6 +41,10 @@ export default function RootLayout() {
           name="arena"
           options={{ animation: 'slide_from_right' }}
         />
+        <Stack.Screen
+          name="cage-debug"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
       </Stack>
     </SafeAreaProvider>
     </KevinPresenceProvider>

@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import AddressSilhouette from '../../components/AddressSilhouette';
+import CageSessionOverlay from '../../components/CageSessionOverlay';
 
 // ─── DRILL DATA ────────────────────────────
 
@@ -172,6 +173,27 @@ export default function SwingLab() {
   const { firstName } = usePlayerProfileStore();
   const [activeEnv, setActiveEnv] = useState<DrillEnv | 'all'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [cageActive, setCageActive] = useState(false);
+
+  const handleTitleLongPress = () => {
+    router.push('/cage-debug' as never);
+  };
+
+  // Cage mode: replace entire screen with the overlay
+  if (cageActive) {
+    return (
+      <CageSessionOverlay
+        onComplete={(sessionId) => {
+          setCageActive(false);
+          router.push({
+            pathname: '/cage-debug',
+            params: { sessionId },
+          } as never);
+        }}
+        onCancel={() => setCageActive(false)}
+      />
+    );
+  }
 
   const visibleDrills =
     activeEnv === 'all'
@@ -188,11 +210,32 @@ export default function SwingLab() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
+        {/* Header — long-press title to open cage debug screen */}
+        <TouchableOpacity
+          style={styles.header}
+          onLongPress={handleTitleLongPress}
+          delayLongPress={800}
+          activeOpacity={1}
+        >
           <Text style={styles.headerTitle}>SwingLab</Text>
           <Text style={styles.headerSub}>Drills, technique, and setup guides</Text>
-        </View>
+        </TouchableOpacity>
+
+        {/* Cage Session CTA */}
+        <TouchableOpacity
+          style={styles.cageSessionBtn}
+          onPress={() => setCageActive(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.cageSessionIcon}>📹</Text>
+          <View style={styles.cageSessionText}>
+            <Text style={styles.cageSessionLabel}>Start Cage Session</Text>
+            <Text style={styles.cageSessionSub}>
+              Record continuously · Auto-detect swings · Review later
+            </Text>
+          </View>
+          <Text style={styles.cageSessionArrow}>›</Text>
+        </TouchableOpacity>
 
         {/* Watch banner */}
         {watchConnected && (
@@ -409,6 +452,41 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 13,
     marginTop: 2,
+  },
+
+  // Cage Session CTA
+  cageSessionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0d1f3c',
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#2563eb66',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
+  cageSessionIcon: {
+    fontSize: 28,
+  },
+  cageSessionText: {
+    flex: 1,
+    gap: 3,
+  },
+  cageSessionLabel: {
+    color: '#e8f5e9',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  cageSessionSub: {
+    color: '#6b7280',
+    fontSize: 12,
+  },
+  cageSessionArrow: {
+    color: '#2563eb',
+    fontSize: 22,
+    fontWeight: '700',
   },
 
   // Watch banner
