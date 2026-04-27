@@ -577,12 +577,14 @@ export default function CaddieAvatar({
 
   // Back layer: breathing + nod only
   const backTransform = [
+    { scale: 0.85 },
     { scale: breatheAnim },
     { translateY: nodAnim },
   ];
 
   // Front layer: breathing + nod + micro-drift
   const frontTransform = [
+    { scale: 0.85 },
     { scale: breatheAnim },
     { translateY: nodAnim },
     { translateX: driftX },
