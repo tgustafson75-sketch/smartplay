@@ -1,3 +1,4 @@
+// DEPRECATED — functionality merged into SwingLab. Do not extend. Scheduled for removal post-1.0.
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,

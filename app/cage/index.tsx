@@ -83,18 +83,13 @@ export default function CageIndex() {
               </Text>
               <Text style={styles.cameraSub}>
                 {cameraAlignment?.locked
-                  ? 'SmartMotion active'
+                  ? 'SwingLab ready'
                   : 'Optional — tap to set up'}
               </Text>
             </View>
             <TouchableOpacity
               style={styles.cameraSetBtn}
-              onPress={() =>
-                router.push({
-                  pathname: '/smartmotion',
-                  params: { club: selectedClub },
-                } as never)
-              }
+              onPress={() => router.push('/(tabs)/swinglab' as never)}
             >
               <Text style={styles.cameraSetText}>
                 {cameraAlignment?.locked ? 'Adjust' : 'Set Up'}

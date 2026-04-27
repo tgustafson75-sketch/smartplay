@@ -387,22 +387,13 @@ export default function CageSession() {
           <Text style={styles.logBtnText}>Log Shot</Text>
         </TouchableOpacity>
 
-        {/* SMART MOTION */}
+        {/* SWINGLAB */}
         <TouchableOpacity
           style={styles.smartMotionBtn}
-          onPress={() =>
-            router.push({
-              pathname: '/smartmotion',
-              params: {
-                club,
-                feel: selectedFeel ?? '',
-                shape: selectedShape ?? '',
-              },
-            } as never)
-          }
+          onPress={() => router.push('/(tabs)/swinglab' as never)}
         >
           <Text style={styles.smartMotionIcon}>🎥</Text>
-          <Text style={styles.smartMotionLabel}>SmartMotion</Text>
+          <Text style={styles.smartMotionLabel}>SwingLab</Text>
         </TouchableOpacity>
 
         {/* SHOT HISTORY DOTS */}

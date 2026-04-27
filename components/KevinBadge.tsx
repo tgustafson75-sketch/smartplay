@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { TouchableOpacity, Image, View, StyleSheet } from 'react-native';
+import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
@@ -22,6 +23,8 @@ interface KevinBadgeProps {
 
 export default function KevinBadge({ onTap, onLongPress }: KevinBadgeProps) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const pathname = usePathname();
   const { isThinking, isSpeaking, setIsThinking } = useKevinPresence();
 
   const glowOpacity = useSharedValue(0);
@@ -65,13 +68,20 @@ export default function KevinBadge({ onTap, onLongPress }: KevinBadgeProps) {
     handleMicPress();
   };
 
+  const handleLongPress = () => {
+    onLongPress?.();
+    if (pathname !== '/(tabs)/caddie') {
+      router.push('/(tabs)/caddie' as never);
+    }
+  };
+
   return (
     <View style={[styles.container, { top: insets.top + 12 }]}>
       <Animated.View style={[styles.glow, glowStyle]} />
       <TouchableOpacity
         style={styles.badge}
         onPress={handlePress}
-        onLongPress={onLongPress}
+        onLongPress={handleLongPress}
         delayLongPress={600}
         activeOpacity={0.85}
       >

@@ -309,10 +309,7 @@ export default function CaddieTab() {
         setShowShotCard(true);
         break;
       case 'record_swing':
-        router.push({
-          pathname: '/smartmotion',
-          params: { club: club ?? '7 iron', feel: '', shape: '' },
-        } as never);
+        router.push('/(tabs)/swinglab?mode=record' as never);
         break;
       case 'open_smartfinder':
         console.warn('[Kevin] SmartFinder not yet built');
@@ -997,18 +994,6 @@ export default function CaddieTab() {
                 action: () => {
                   setShowMoreMenu(false);
                   openSmartVision();
-                },
-              },
-              {
-                icon: '🎯',
-                label: 'SmartMotion',
-                sub: 'In-round swing analysis',
-                action: () => {
-                  setShowMoreMenu(false);
-                  router.push({
-                    pathname: '/smartmotion',
-                    params: { club: club ?? '7 iron', feel: '', shape: '' },
-                  } as never);
                 },
               },
               {

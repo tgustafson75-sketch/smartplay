@@ -43,7 +43,7 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'record_swing',
-    description: 'Start recording a swing video via the device camera. Trigger this when Tim says ANY of: "watch this", "record this", "record my swing", "watch my swing", "film this", "video this", "get this on camera", or any phrasing meaning he wants the camera to capture his next swing.',
+    description: 'Open SwingLab in record mode to capture a swing on camera. Trigger this when Tim says ANY of: "watch this", "record this", "record my swing", "watch my swing", "film this", "video this", "get this on camera", or any phrasing meaning he wants the camera to capture his next swing.',
     input_schema: { type: 'object', properties: {}, required: [] },
   },
 ];
@@ -201,11 +201,7 @@ ${mentalState === 'tight' ? 'Mental state is tight. Keep it simple.' : mentalSta
 HERO REEL: If player says "did you get that", "save that", "hero reel", "that's a keeper" — respond with exactly: "Got it. That's yours."
 
 SMARTVISION BEHAVIOR:
-When you receive [SMARTVISION OPEN] context at the top of the message, Tim is looking at the hole layout on screen. Your response should follow this shape:
-1. The tactical read — distances and the most relevant hazard or consideration from the analysis.
-2. The layup option — what's the safer alternative play?
-3. Invite Tim into the decision — ask what's in his bag, what he's feeling, or what he's thinking. Don't dictate. The point is to think together.
-Keep it conversational. Two or three sentences plus the question. Never lecture. Never list more than one or two hazards. If you have analysisText, use it — that's your eyes on the hole.
+When you receive [SMARTVISION OPEN] context at the top of the message, you already have the numbers. Do NOT say "let me look", "I'll check", or any delaying phrase — you are ALREADY looking at it. Deliver the tactical read immediately using the specific yardages provided. Structure: (1) state the key distance(s) — center yards and/or tapped target yards — and the one most relevant consideration, (2) briefly name the conservative play, (3) ask Tim one short question to think together. Two or three sentences total. Use the exact numbers from the context. Never hedge, never delay, never pretend you need to look — the data is already in front of you.
 
 RESPONSE LENGTH: ${responseMode === 'short' ? 'Maximum 15 words.' : responseMode === 'detailed' ? 'Up to 4 sentences if genuinely needed.' : 'Maximum 2 sentences.'}
 
@@ -225,10 +221,12 @@ ${sv.analysisText ? 'SmartVision analysis: ' + sv.analysisText : ''}
 ${baseMessage}`
       : baseMessage;
 
-    const tier = await classifyQuestion(baseMessage);
+    // SmartVision-open requests are always tactical — we have the numbers, deliver the read
+    const tier = sv ? 'TACTICAL' : await classifyQuestion(baseMessage);
     const model = tier === 'TACTICAL' ? 'claude-haiku-4-5' : 'claude-sonnet-4-5';
 
     console.log(`[kevin] tier=${tier} model=${model} q="${userMessage.slice(0, 60)}"`);
+    console.log(`[kevin] smartVisionContext:`, JSON.stringify(sv));
 
     const aiResponse = await anthropic.messages.create({
       model,
@@ -283,6 +281,7 @@ ${baseMessage}`
       model: 'gpt-4o-mini-tts',
       voice: 'onyx',
       input: text,
+      instructions: 'warm, encouraging, conversational, never melancholy, like a friend who\'s been caddying for you for years',
     });
 
     const arrayBuffer = await ttsResponse.arrayBuffer();
