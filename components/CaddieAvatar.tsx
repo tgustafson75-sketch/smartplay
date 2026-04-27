@@ -623,9 +623,6 @@ const styles = StyleSheet.create({
     height: '100%',
     overflow: 'hidden',
     backgroundColor: '#060f09',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 8,
     borderWidth: 1,
     borderColor: 'rgba(0, 200, 150, 0.35)',
     borderRadius: 24,
@@ -635,10 +632,12 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 12,
   },
-  // Flex-positioned container — centered horizontally by parent alignItems:center,
-  // bottom-aligned by parent justifyContent:flex-end. NOT position:absolute.
+  // Explicit math: left=(100%-52%)/2=24% pins center to 50% of frame width.
   kevinContainer: {
+    position: 'absolute',
+    left: '24%',
     width: '52%',
+    bottom: 8,
     aspectRatio: 9 / 16,
   },
   scanLine: {
