@@ -78,6 +78,91 @@ export const isSpeaking = (): boolean => currentSound !== null;
 
 // ─── SPEAK ────────────────────────────────
 
+// ─── SPEAK FROM BASE64 ────────────────────
+
+export const speakFromBase64 = async (base64: string): Promise<void> => {
+  currentSpeechId++;
+  const myId = currentSpeechId;
+
+  if (currentAbortController) {
+    currentAbortController.abort();
+    currentAbortController = null;
+  }
+  if (currentSound) {
+    try {
+      await currentSound.stopAsync();
+      await currentSound.unloadAsync();
+    } catch {}
+    currentSound = null;
+  }
+
+  notifySpeaking(true);
+  await configureAudioForSpeech();
+
+  try {
+    // Decode base64 → Uint8Array
+    const binaryStr = atob(base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+
+    const audioFile = new File(Paths.cache, `kevin_voice_${Date.now()}.mp3`);
+    audioFile.write(bytes);
+
+    if (myId !== currentSpeechId) return;
+
+    const { sound } = await Audio.Sound.createAsync(
+      { uri: audioFile.uri },
+      { shouldPlay: true, volume: 1.0 },
+    );
+
+    if (myId !== currentSpeechId) {
+      await sound.unloadAsync().catch(() => {});
+      return;
+    }
+
+    currentSound = sound;
+
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (!status.isLoaded) return;
+          if (status.didJustFinish) {
+            sound.unloadAsync().catch(() => {});
+            try { audioFile.delete(); } catch {}
+            if (myId === currentSpeechId) {
+              currentSound = null;
+              notifySpeaking(false);
+            }
+            resolve();
+          }
+        });
+      }),
+      new Promise<void>((resolve) =>
+        setTimeout(() => {
+          console.log('[voice] speakFromBase64 timeout');
+          if (myId === currentSpeechId) {
+            currentSound = null;
+            notifySpeaking(false);
+          }
+          resolve();
+        }, SPEAK_TIMEOUT_MS)
+      ),
+    ]);
+
+  } catch (err) {
+    if (myId === currentSpeechId) {
+      currentSound = null;
+      currentAbortController = null;
+      notifySpeaking(false);
+    }
+    console.log('[voice] speakFromBase64 error:', err);
+  }
+};
+
+// ─── SPEAK ────────────────────────────────
+
 export const speak = async (
   text: string,
   gender: 'male' | 'female',

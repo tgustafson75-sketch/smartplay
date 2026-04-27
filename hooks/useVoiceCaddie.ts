@@ -4,9 +4,11 @@ import { Vibration } from 'react-native';
 import {
   configureAudioForRecording,
   speak,
+  speakFromBase64,
   stopSpeaking,
   isSpeaking,
 } from '../services/voiceService';
+import type { ToolAction } from '../app/api/kevin+api';
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
@@ -107,6 +109,7 @@ interface UseVoiceCaddieOptions {
   onHeroMoment?: () => void;
   onVisionTrigger?: () => void;
   onHeroReelView?: () => void;
+  onToolAction?: (action: ToolAction) => void;
 }
 
 export const useVoiceCaddie = ({
@@ -115,6 +118,7 @@ export const useVoiceCaddie = ({
   onHeroMoment,
   onVisionTrigger,
   onHeroReelView,
+  onToolAction,
 }: UseVoiceCaddieOptions) => {
 
   const recordingRef    = useRef<Audio.Recording | null>(null);
@@ -222,7 +226,7 @@ export const useVoiceCaddie = ({
 
   // ── SEND TO BRAIN ─────────────────────────
 
-  const sendToBrain = async (message: string): Promise<string> => {
+  const sendToBrain = async (message: string): Promise<{ text: string; audioBase64: string | null; toolAction: ToolAction | null }> => {
     try {
       const topObs = getTopObservations();
       const heroMoments = getRecentHeroMoments(2);
@@ -246,9 +250,9 @@ export const useVoiceCaddie = ({
         }));
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
+      const timeout = setTimeout(() => controller.abort(), 25_000);
 
-      const res = await fetch(apiUrl + '/api/brain', {
+      const res = await fetch(apiUrl + '/api/kevin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
@@ -292,13 +296,17 @@ export const useVoiceCaddie = ({
         }),
       }).finally(() => clearTimeout(timeout));
 
-      if (!res.ok) return 'One shot at a time.';
-      const data = await res.json() as { response?: string };
-      return data.response || 'One shot at a time.';
+      if (!res.ok) return { text: 'One shot at a time.', audioBase64: null, toolAction: null };
+      const data = await res.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null };
+      return {
+        text:        data.text       ?? 'One shot at a time.',
+        audioBase64: data.audioBase64 ?? null,
+        toolAction:  data.toolAction  ?? null,
+      };
 
     } catch (err) {
       console.log('[voice] brain error:', err);
-      return 'One shot at a time.';
+      return { text: 'One shot at a time.', audioBase64: null, toolAction: null };
     }
   };
 
@@ -370,10 +378,15 @@ export const useVoiceCaddie = ({
         return;
       }
 
-      const response = await sendToBrain(transcript);
-      onResponseReceived(response);
+      const kevinResponse = await sendToBrain(transcript);
+      if (kevinResponse.toolAction) onToolAction?.(kevinResponse.toolAction);
+      onResponseReceived(kevinResponse.text);
       onVoiceStateChange('speaking');
-      await speakResponse(response);
+      if (kevinResponse.audioBase64 && voiceEnabled && !discreteMode) {
+        await speakFromBase64(kevinResponse.audioBase64);
+      } else {
+        await speakResponse(kevinResponse.text);
+      }
       onVoiceStateChange('idle');
 
     } catch (err) {
