@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
+  Alert,
   ActivityIndicator,
   Animated,
   Easing,
@@ -28,7 +29,7 @@ import { useCageStore } from '../../store/cageStore';
 import { usePointsStore } from '../../store/pointsStore';
 import { getCourseList, getCourse } from '../../data/courses';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
-import { useKevin } from '../../hooks/useKevin';
+import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
 import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
@@ -285,6 +286,33 @@ export default function CaddieTab() {
   // ── Kevin programmatic hook ──────────────
   const { isThinking: kevinThinking } = useKevin();
 
+  // ── Tool action handler ──────────────────
+  const handleToolAction = useCallback((action: ToolAction) => {
+    switch (action.type) {
+      case 'open_smartvision':
+        openSmartVision();
+        break;
+      case 'open_swinglab':
+        router.push('/(tabs)/swinglab' as never);
+        break;
+      case 'log_score':
+        setShowShotCard(true);
+        break;
+      case 'record_swing':
+        router.push({
+          pathname: '/smartmotion',
+          params: { club: club ?? '7 iron', feel: '', shape: '' },
+        } as never);
+        break;
+      case 'open_smartfinder':
+        console.warn('[Kevin] SmartFinder not yet built');
+        Alert.alert('Rangefinder coming soon', "I'll build that one out next.");
+        break;
+      default:
+        console.warn('[Kevin] Unknown tool action:', (action as ToolAction).type);
+    }
+  }, [openSmartVision, club, router]);
+
   // ── Voice hook ───────────────────────────
   const { handleMicPress: _handleMicPress, processAudioUri } = useVoiceCaddie({
     onVoiceStateChange: (state) => {
@@ -303,6 +331,7 @@ export default function CaddieTab() {
       setCaddieResponse('Here are your best moments.');
       router.push('/(tabs)/dashboard' as never);
     },
+    onToolAction: handleToolAction,
   });
 
   const handleMicPress = () => {

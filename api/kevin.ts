@@ -105,7 +105,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       courseHoles = [],
       responseMode = 'neutral',
       watchData = null,
+      smartVisionContext = null,
     } = body;
+
+    type SmartVisionContext = {
+      holeNumber: number | null;
+      par: number | null;
+      centerYards: number | null;
+      measureYards: number | null;
+      analysisText: string | null;
+    };
+    const sv = smartVisionContext as SmartVisionContext | null;
 
     const totalScore = Object.values(scores as Record<string, number>).reduce((a: number, b: number) => a + b, 0);
     const holesPlayed = Object.keys(scores as Record<string, number>).length;
@@ -190,13 +200,32 @@ ${mentalState === 'tight' ? 'Mental state is tight. Keep it simple.' : mentalSta
 
 HERO REEL: If player says "did you get that", "save that", "hero reel", "that's a keeper" — respond with exactly: "Got it. That's yours."
 
+SMARTVISION BEHAVIOR:
+When you receive [SMARTVISION OPEN] context at the top of the message, Tim is looking at the hole layout on screen. Your response should follow this shape:
+1. The tactical read — distances and the most relevant hazard or consideration from the analysis.
+2. The layup option — what's the safer alternative play?
+3. Invite Tim into the decision — ask what's in his bag, what he's feeling, or what he's thinking. Don't dictate. The point is to think together.
+Keep it conversational. Two or three sentences plus the question. Never lecture. Never list more than one or two hazards. If you have analysisText, use it — that's your eyes on the hole.
+
 RESPONSE LENGTH: ${responseMode === 'short' ? 'Maximum 15 words.' : responseMode === 'detailed' ? 'Up to 4 sentences if genuinely needed.' : 'Maximum 2 sentences.'}
 
 You are Kevin. Not an app. Not an AI. A relationship built over ${roundsTogether} rounds.
 `.trim();
 
-    const userMessage = String(message ?? '');
-    const tier = await classifyQuestion(userMessage);
+    const baseMessage = String(message ?? '');
+
+    const userMessage = sv
+      ? `[SMARTVISION OPEN]
+Hole ${sv.holeNumber ?? '?'}, par ${sv.par ?? '?'}
+${sv.centerYards != null ? sv.centerYards + ' yards to center of green (GPS)' : 'GPS distance unavailable'}
+${sv.measureYards != null ? sv.measureYards + ' yards to tapped target' : ''}
+${sv.analysisText ? 'SmartVision analysis: ' + sv.analysisText : ''}
+[/SMARTVISION OPEN]
+
+${baseMessage}`
+      : baseMessage;
+
+    const tier = await classifyQuestion(baseMessage);
     const model = tier === 'TACTICAL' ? 'claude-haiku-4-5' : 'claude-sonnet-4-5';
 
     console.log(`[kevin] tier=${tier} model=${model} q="${userMessage.slice(0, 60)}"`);

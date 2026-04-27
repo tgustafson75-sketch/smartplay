@@ -9,6 +9,7 @@ import {
   isSpeaking,
 } from '../services/voiceService';
 import type { ToolAction } from '../app/api/kevin+api';
+import { useSmartVision } from '../contexts/SmartVisionContext';
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
@@ -167,6 +168,7 @@ export const useVoiceCaddie = ({
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
   const currentPar = getCurrentPar();
+  const smartVision = useSmartVision();
 
   // ── CLEAR AUTO STOP ───────────────────────
 
@@ -284,6 +286,13 @@ export const useVoiceCaddie = ({
           scores,
           courseHoles: useRoundStore.getState().courseHoles,
           responseMode,
+          smartVisionContext: smartVision.isOpen ? {
+            holeNumber: smartVision.holeNumber,
+            par: smartVision.par,
+            centerYards: smartVision.centerYards,
+            measureYards: smartVision.measureYards,
+            analysisText: smartVision.analysisText,
+          } : null,
           watchData: watchState.isConnected && watchSummary
             ? {
                 averageTempo: watchSummary.averageTempo.toFixed(1),

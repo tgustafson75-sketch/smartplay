@@ -25,6 +25,7 @@ import { File, Paths } from 'expo-file-system';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
+import { useSmartVision } from '../contexts/SmartVisionContext';
 
 // ─── SATELLITE CACHE ──────────────────────
 const SATELLITE_CACHE: Record<string, string> = {};
@@ -108,6 +109,7 @@ export default function HoleView() {
 
   const { voiceGender, language } = useSettingsStore();
   const { dominantMiss, firstName } = usePlayerProfileStore();
+  const { setSmartVisionState } = useSmartVision();
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
   const mapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ?? '';
@@ -178,6 +180,27 @@ export default function HoleView() {
     startGPS();
     return () => { gpsWatchRef.current?.remove(); };
   }, [isRoundActive, middleLat, middleLng]);
+
+  // ── SmartVision context — open/close ────
+  useEffect(() => {
+    setSmartVisionState({ isOpen: true, holeNumber: hole, par });
+    return () => setSmartVisionState({ isOpen: false, analysisText: null });
+  }, []);
+
+  // ── SmartVision context — live yardage ──
+  useEffect(() => {
+    setSmartVisionState({ centerYards });
+  }, [centerYards]);
+
+  // ── SmartVision context — tap measure ───
+  useEffect(() => {
+    setSmartVisionState({ measureYards });
+  }, [measureYards]);
+
+  // ── SmartVision context — analysis text ─
+  useEffect(() => {
+    if (analysisText) setSmartVisionState({ analysisText });
+  }, [analysisText]);
 
   // ── Satellite URL ──────────────────────
   const getSatelliteUrl = useCallback((): string | null => {
