@@ -486,17 +486,15 @@ export default function CaddieAvatar({
         onPress={onTap}
         activeOpacity={0.97}
       >
-        {/* Kevin portrait — flex-positioned so parent alignItems:center works */}
-        <View style={styles.kevinContainer}>
-          {/* Layer 1a — Back (fading out) */}
-          <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: backOpacity }]}>
-            <LivingKevin source={backSource} resizeMode={fill} voiceState={voiceState} />
-          </Animated.View>
-          {/* Layer 1b — Front (fading in) */}
-          <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: fadeAnim }]}>
-            <LivingKevin source={frontSource} resizeMode={fill} voiceState={voiceState} />
-          </Animated.View>
-        </View>
+        {/* Layer 1a — Back (fading out) */}
+        <Animated.View style={[styles.kevinLayer, { opacity: backOpacity }]}>
+          <LivingKevin source={backSource} resizeMode={fill} voiceState={voiceState} />
+        </Animated.View>
+
+        {/* Layer 1b — Front (fading in) */}
+        <Animated.View style={[styles.kevinLayer, { opacity: fadeAnim }]}>
+          <LivingKevin source={frontSource} resizeMode={fill} voiceState={voiceState} />
+        </Animated.View>
 
         {/* Layer 2 — Bottom gradient */}
         <LinearGradient
@@ -623,6 +621,8 @@ const styles = StyleSheet.create({
     height: '100%',
     overflow: 'hidden',
     backgroundColor: '#060f09',
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(0, 200, 150, 0.35)',
     borderRadius: 24,
@@ -632,13 +632,13 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 12,
   },
-  // Explicit math: left=(100%-52%)/2=24% pins center to 50% of frame width.
-  kevinContainer: {
+  // (100% - 85%) / 2 = 7.5% — equal margin on all sides centers the layer.
+  kevinLayer: {
     position: 'absolute',
-    left: '24%',
-    width: '52%',
-    bottom: 8,
-    aspectRatio: 9 / 16,
+    top: '7.5%',
+    left: '7.5%',
+    width: '85%',
+    height: '85%',
   },
   scanLine: {
     position: 'absolute',
