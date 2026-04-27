@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
-  Alert,
   ActivityIndicator,
   Animated,
   Easing,
@@ -31,7 +30,7 @@ import { getCourseList, getCourse } from '../../data/courses';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
 import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
-import { speak, configureAudioForSpeech, stopSpeaking } from '../../services/voiceService';
+import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { kevinText as kevinTextStyle } from '../../styles/typography';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
 
@@ -42,6 +41,7 @@ export default function CaddieTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: W } = useWindowDimensions();
+  // Natural 9:16 frame height — shows Kevin's full portrait without over-zoom
   const avatarFrameHeight = Math.round(W * 16 / 9);
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
@@ -141,6 +141,49 @@ export default function CaddieTab() {
 
   // Derived early so animation effects can reference it
   const vadEnabled = autoListenEnabled && isRoundActive && appActive;
+
+  // ── Mic animations ───────────────────────
+  const micPulse      = useRef(new Animated.Value(1)).current;
+  const ringScale     = useRef(new Animated.Value(1)).current;
+  const ringOpacity   = useRef(new Animated.Value(0)).current;
+  const autoListenPulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (voiceState === 'listening') {
+      const loop = Animated.loop(
+        Animated.parallel([
+          Animated.sequence([
+            Animated.timing(ringScale,   { toValue: 1.4, duration: 1200, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+            Animated.timing(ringScale,   { toValue: 1.0, duration: 0,    useNativeDriver: true }),
+          ]),
+          Animated.sequence([
+            Animated.timing(ringOpacity, { toValue: 0.6, duration: 0,    useNativeDriver: true }),
+            Animated.timing(ringOpacity, { toValue: 0,   duration: 1200, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+          ]),
+        ])
+      );
+      loop.start();
+      return () => loop.stop();
+    } else {
+      ringOpacity.setValue(0);
+      ringScale.setValue(1);
+    }
+  }, [voiceState]);
+
+  useEffect(() => {
+    if (vadEnabled && voiceState === 'idle') {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(autoListenPulse, { toValue: 1.05, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(autoListenPulse, { toValue: 1.0,  duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      );
+      loop.start();
+      return () => loop.stop();
+    } else {
+      autoListenPulse.setValue(1);
+    }
+  }, [vadEnabled, voiceState]);
 
   // ── Keep Vercel warm ────────────────────
   useEffect(() => {
@@ -259,13 +302,12 @@ export default function CaddieTab() {
   });
 
   const handleMicPress = () => {
-    stopSpeaking().catch(() => {});
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     _handleMicPress();
   };
 
   // ── VAD — continuous listening ───────────
-  const { isListening: _vadListening } = useVoiceActivityDetection({
+  const { isListening: vadListening } = useVoiceActivityDetection({
     enabled: vadEnabled,
     onSpeechStart: () => {
       setKevinEmotion('listening');
@@ -419,27 +461,6 @@ export default function CaddieTab() {
     await generatePreRoundBrief(selectedCourse, isCompetition);
   };
 
-  // ── End round (with confirmation) ───────
-  const handleEndRound = async () => {
-    await stopSpeaking();
-    setShowMoreMenu(false);
-    setShowShotCard(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    endRound();
-    await generateRoundSummary();
-  };
-
-  const confirmEndRound = () => {
-    Alert.alert(
-      'End round?',
-      'Your round will be saved to history. You can review it anytime.',
-      [
-        { text: 'Keep playing', style: 'cancel' },
-        { text: 'End round', style: 'destructive', onPress: handleEndRound },
-      ],
-    );
-  };
-
   // ── Log hole score ───────────────────────
   const handleLogHole = async () => {
     if (holeScore === 0) return;
@@ -538,313 +559,40 @@ export default function CaddieTab() {
     }
   }, [isRoundActive]);
 
+  // ── Positioning helpers ──────────────────
+  // Pre-round: [Start Round 40] → [Bubble 144] → [Mic 244] → Kevin
+  // On-round:  [Data strip 32+insets] → [Mic 132+insets] → Kevin
+  const micBottom = isRoundActive ? insets.bottom + 132 : insets.bottom + 244;
+
   // ── RENDER ───────────────────────────────
-
-  const kevinAvatar = (
-    <CaddieAvatar
-      gender={voiceGender === 'female' ? 'female' : 'male'}
-      isOnCourse={isRoundActive}
-      isCageMode={false}
-      voiceState={voiceState}
-      hud={NULL_HUD}
-      openingPrompt=""
-      caddieResponse=""
-      onTap={handleMicPress}
-      emotion={kevinEmotion}
-      fillMode="cover"
-    />
-  );
-
-  const sharedModals = (
-    <>
-      {/* ── PRE-ROUND BRIEF MODAL ──────────── */}
-      <Modal
-        visible={showPreRound}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowPreRound(false)}
-      >
-        <View style={styles.preRoundOverlay}>
-          <View style={styles.preRoundCard}>
-            <Image
-              source={require('../../assets/avatars/kevin_portrait.jpg')}
-              style={styles.preRoundAvatar}
-              resizeMode="cover"
-            />
-            <Text style={styles.preRoundCourse}>{activeCourse ?? ''}</Text>
-            {preRoundLoading ? (
-              <View style={styles.preRoundLoading}>
-                <ActivityIndicator color="#00C896" size="small" />
-                <Text style={styles.preRoundLoadingText}>Kevin is reading the course...</Text>
-              </View>
-            ) : (
-              <Text style={styles.preRoundBrief}>{preRoundBrief}</Text>
-            )}
-            {!preRoundLoading && (
-              <TouchableOpacity
-                style={styles.preRoundBtn}
-                onPress={() => {
-                  stopSpeaking().catch(() => {});
-                  setShowPreRound(false);
-                  const hole1 = courseHoles.find(h => h.hole === 1);
-                  if (hole1) {
-                    const h1msg =
-                      'Hole 1. Par ' + hole1.par + '. ' + hole1.distance + ' yards. ' +
-                      (hole1.par === 3
-                        ? 'Take your time.'
-                        : hole1.par === 5
-                        ? 'Good driving hole.'
-                        : 'Pick your target.');
-                    setCaddieResponse(h1msg);
-                    if (voiceEnabled) {
-                      speak(h1msg, voiceGender, language, apiUrl).catch(() => {});
-                    }
-                  }
-                }}
-              >
-                <Text style={styles.preRoundBtnText}>Let's Go</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── ROUND SETUP SHEET ──────────────── */}
-      <Modal
-        visible={showRoundSetup}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowRoundSetup(false)}
-      >
-        <TouchableOpacity
-          style={styles.backdrop}
-          onPress={() => setShowRoundSetup(false)}
-          activeOpacity={1}
-        >
-          <View style={styles.sheet}>
-            <View style={styles.handle} />
-            <Text style={styles.sheetTitle}>Start Round</Text>
-            <Text style={styles.sheetLabel}>Course</Text>
-            <View style={styles.pillRow}>
-              {courses.map(c => (
-                <TouchableOpacity
-                  key={c.id}
-                  style={[styles.pill, selectedCourse === c.id && styles.pillActive]}
-                  onPress={() => setSelectedCourse(c.id)}
-                >
-                  <Text style={[styles.pillText, selectedCourse === c.id && styles.pillTextActive]}>
-                    {c.id === 'palms' ? 'Palms' : c.id === 'lakes' ? 'Lakes' : 'Rancho'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={styles.sheetLabel}>Holes</Text>
-            <View style={styles.pillRow}>
-              {([
-                { label: '18 Holes', value: false },
-                { label: '9 Holes',  value: true },
-              ] as const).map(opt => (
-                <TouchableOpacity
-                  key={opt.label}
-                  style={[styles.pill, nineHole === opt.value && styles.pillActive]}
-                  onPress={() => setNineHole(opt.value)}
-                >
-                  <Text style={[styles.pillText, nineHole === opt.value && styles.pillTextActive]}>
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={styles.sheetLabel}>Format</Text>
-            <View style={styles.pillRow}>
-              {([
-                { label: 'Casual',      value: false },
-                { label: 'Competition', value: true },
-              ] as const).map(opt => (
-                <TouchableOpacity
-                  key={opt.label}
-                  style={[styles.pill, isCompetition === opt.value && styles.pillActive]}
-                  onPress={() => setIsCompetition(opt.value)}
-                >
-                  <Text style={[styles.pillText, isCompetition === opt.value && styles.pillTextActive]}>
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <TouchableOpacity style={styles.startBtn} onPress={handleStartRound}>
-              <Text style={styles.startBtnText}>Let's Go</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* ── SHOT CARD SHEET ─────────────────── */}
-      <Modal
-        visible={showShotCard}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowShotCard(false)}
-      >
-        <TouchableOpacity
-          style={styles.backdrop}
-          onPress={() => setShowShotCard(false)}
-          activeOpacity={1}
-        >
-          <View style={styles.sheet}>
-            <View style={styles.handle} />
-            <Text style={styles.sheetTitle}>
-              {'Hole ' + currentHole + (currentPar ? ' · Par ' + currentPar : '')}
-            </Text>
-            <Text style={styles.sheetLabel}>Score</Text>
-            <View style={styles.scoreRow}>
-              <TouchableOpacity style={styles.scoreBtn} onPress={() => setHoleScore(Math.max(1, holeScore - 1))}>
-                <Text style={styles.scoreBtnText}>−</Text>
-              </TouchableOpacity>
-              <Text style={styles.scoreValue}>{holeScore === 0 ? '—' : holeScore}</Text>
-              <TouchableOpacity style={styles.scoreBtn} onPress={() => setHoleScore(holeScore + 1)}>
-                <Text style={styles.scoreBtnText}>+</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.sheetLabel}>Putts</Text>
-            <View style={styles.scoreRow}>
-              <TouchableOpacity style={styles.scoreBtn} onPress={() => setHolePutts(Math.max(0, holePutts - 1))}>
-                <Text style={styles.scoreBtnText}>−</Text>
-              </TouchableOpacity>
-              <Text style={styles.scoreValue}>{holePutts}</Text>
-              <TouchableOpacity style={styles.scoreBtn} onPress={() => setHolePutts(holePutts + 1)}>
-                <Text style={styles.scoreBtnText}>+</Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              style={[styles.startBtn, holeScore === 0 && styles.startBtnDisabled]}
-              onPress={handleLogHole}
-              disabled={holeScore === 0}
-            >
-              <Text style={styles.startBtnText}>Next Hole</Text>
-            </TouchableOpacity>
-            {isRoundActive && (
-              <TouchableOpacity
-                style={styles.endRoundBtn}
-                onPress={confirmEndRound}
-              >
-                <Text style={styles.endRoundText}>End Round</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* ── MORE MENU SHEET ─────────────────── */}
-      <Modal
-        visible={showMoreMenu}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowMoreMenu(false)}
-      >
-        <TouchableOpacity
-          style={styles.backdrop}
-          onPress={() => setShowMoreMenu(false)}
-          activeOpacity={1}
-        >
-          <View style={styles.moreSheet}>
-            <View style={styles.handle} />
-            <Text style={styles.moreTitle}>Tools</Text>
-            {([
-              {
-                icon: '📊',
-                label: 'Dashboard',
-                sub: 'Stats & progress',
-                action: () => { setShowMoreMenu(false); router.push('/(tabs)/dashboard' as never); },
-              },
-              {
-                icon: '🏌️',
-                label: 'Practice',
-                sub: 'Cage & swing lab',
-                action: () => { setShowMoreMenu(false); router.push('/(tabs)/swinglab' as never); },
-              },
-              {
-                icon: '⛳',
-                label: 'Cage Mode',
-                sub: 'Range session',
-                action: () => { setShowMoreMenu(false); router.push('/cage' as never); },
-              },
-              {
-                icon: '🔭',
-                label: 'SmartVision',
-                sub: 'Analyze the hole',
-                action: () => { setShowMoreMenu(false); openSmartVision(); },
-              },
-              {
-                icon: '🎯',
-                label: 'SmartMotion',
-                sub: 'In-round swing analysis',
-                action: () => {
-                  setShowMoreMenu(false);
-                  router.push({ pathname: '/smartmotion', params: { club: club ?? '7 iron', feel: '', shape: '' } } as never);
-                },
-              },
-              {
-                icon: '⚠️',
-                label: 'Penalty Stroke',
-                sub: 'Water · OB · Lost ball',
-                action: () => { if (isRoundActive) addPenalty(currentHole); setShowMoreMenu(false); },
-              },
-              ...(isRoundActive ? [{
-                icon: '🏁',
-                label: 'End Round',
-                sub: 'Finish and get summary',
-                action: () => { setShowMoreMenu(false); confirmEndRound(); },
-              }] : []),
-              {
-                icon: '📺',
-                label: castMode ? 'Cast Mode On' : 'Cast Mode',
-                sub: 'Mirror to TV',
-                action: () => setCastMode(!castMode),
-              },
-              {
-                icon: voiceEnabled ? '🔊' : '🔇',
-                label: voiceEnabled ? 'Voice On' : 'Voice Off',
-                sub: "Toggle Kevin's voice",
-                action: () => setVoiceEnabled(!voiceEnabled),
-              },
-              {
-                icon: '⚙️',
-                label: 'Settings',
-                sub: 'App preferences',
-                action: () => { setShowMoreMenu(false); router.push('/settings' as never); },
-              },
-            ] as const).map(item => (
-              <TouchableOpacity
-                key={item.label}
-                style={styles.moreItem}
-                onPress={() => { stopSpeaking().catch(() => {}); item.action(); }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.moreIcon}>{item.icon}</Text>
-                <View style={styles.moreText}>
-                  <Text style={styles.moreLabel}>{item.label}</Text>
-                  <Text style={styles.moreSub}>{item.sub}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    </>
-  );
-
-  // ── ALL SCREEN SIZES — portrait layout, elements anchored at bottom ──
   return (
     <View style={styles.container}>
 
-      {/* KEVIN — 9:16 frame anchored at top; cover fills without over-zoom */}
+      {/* KEVIN — 9:16 frame anchored at top; no over-zoom on any screen */}
       <View style={{ position: 'absolute', top: 0, left: 0, width: W, height: avatarFrameHeight }}>
-        {kevinAvatar}
+        <CaddieAvatar
+          gender={voiceGender === 'female' ? 'female' : 'male'}
+          isOnCourse={isRoundActive}
+          isCageMode={false}
+          voiceState={voiceState}
+          hud={NULL_HUD}
+          openingPrompt=""
+          caddieResponse=""
+          onTap={handleMicPress}
+          emotion={kevinEmotion}
+          fillMode="cover"
+        />
       </View>
 
-      {/* TOP NAV — ••• only; top-left corner intentionally empty */}
+      {/* TOP NAV */}
       <View style={[styles.topNav, { top: insets.top + 8 }]}>
+        <TouchableOpacity
+          style={styles.navBtn}
+          onPress={() => router.replace('/(tabs)/scorecard' as never)}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="chevron-back" size={24} color="#6b7d72" />
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.navBtn}
           onPress={() => setShowMoreMenu(true)}
@@ -854,16 +602,63 @@ export default function CaddieTab() {
         </TouchableOpacity>
       </View>
 
-      {/* GREETING BUBBLE — pre-round only, floats above Start Round CTA */}
+      {/* GREETING BUBBLE — pre-round only, sits in negative space above Start Round */}
       {!isRoundActive && shownText ? (
         <Animated.View
-          style={[styles.bubble, { bottom: 110 + insets.bottom, opacity: responseFade }]}
+          style={[styles.bubble, { bottom: 144 + insets.bottom, opacity: responseFade }]}
         >
           <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
           <View style={[StyleSheet.absoluteFill, styles.bubbleTint]} />
-          <Text style={styles.bubbleText} numberOfLines={3}>{shownText}</Text>
+          <Text style={styles.bubbleText} numberOfLines={3}>
+            {shownText}
+          </Text>
         </Animated.View>
       ) : null}
+
+      {/* MIC BUTTON */}
+      <View style={[styles.micZone, { bottom: micBottom }]}>
+        {vadEnabled && voiceState === 'idle' ? (
+          <Animated.View style={{ alignItems: 'center', transform: [{ scale: autoListenPulse }] }}>
+            <View style={[styles.micCircle, { opacity: 0.5 }]}>
+              <Ionicons name="mic" size={32} color="#00C896" />
+            </View>
+            <Text style={styles.micStatusLabel}>LISTENING</Text>
+          </Animated.View>
+        ) : (
+          <View style={{ alignItems: 'center' }}>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.micRing,
+                {
+                  transform: [{ scale: ringScale }],
+                  opacity: ringOpacity,
+                },
+              ]}
+            />
+            <TouchableOpacity
+              style={[
+                styles.micCircle,
+                voiceState === 'listening' && styles.micCircleActive,
+                (voiceState === 'thinking' || voiceState === 'speaking') && styles.micCircleBusy,
+              ]}
+              onPress={handleMicPress}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              activeOpacity={0.85}
+            >
+              {voiceState === 'listening' ? (
+                <Ionicons name="stop" size={28} color="#00C896" />
+              ) : voiceState === 'thinking' ? (
+                <Ionicons name="ellipsis-horizontal" size={24} color="rgba(0,200,150,0.5)" />
+              ) : voiceState === 'speaking' ? (
+                <Ionicons name="volume-high" size={28} color="#00C896" />
+              ) : (
+                <Ionicons name="mic" size={32} color="#00C896" />
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
 
       {/* DATA STRIP — cross-fades in when round starts */}
       <Animated.View
@@ -888,7 +683,7 @@ export default function CaddieTab() {
         pointerEvents={isRoundActive ? 'none' : 'box-none'}
       >
         <TouchableOpacity
-          style={[styles.startRoundBtn, { bottom: 24 + insets.bottom }]}
+          style={[styles.startRoundBtn, { bottom: 40 + insets.bottom }]}
           onPress={() => setShowRoundSetup(true)}
           activeOpacity={0.88}
         >
@@ -896,7 +691,341 @@ export default function CaddieTab() {
         </TouchableOpacity>
       </Animated.View>
 
-      {sharedModals}
+      {/* ── PRE-ROUND BRIEF MODAL ──────────── */}
+      <Modal
+        visible={showPreRound}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPreRound(false)}
+      >
+        <View style={styles.preRoundOverlay}>
+          <View style={styles.preRoundCard}>
+
+            <Image
+              source={require('../../assets/avatars/kevin_portrait.jpg')}
+              style={styles.preRoundAvatar}
+              resizeMode="cover"
+            />
+
+            <Text style={styles.preRoundCourse}>
+              {activeCourse ?? ''}
+            </Text>
+
+            {preRoundLoading ? (
+              <View style={styles.preRoundLoading}>
+                <ActivityIndicator color="#00C896" size="small" />
+                <Text style={styles.preRoundLoadingText}>
+                  Kevin is reading the course...
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.preRoundBrief}>{preRoundBrief}</Text>
+            )}
+
+            {!preRoundLoading && (
+              <TouchableOpacity
+                style={styles.preRoundBtn}
+                onPress={() => {
+                  setShowPreRound(false);
+                  const hole1 = courseHoles.find(h => h.hole === 1);
+                  if (hole1) {
+                    const h1msg =
+                      'Hole 1. Par ' + hole1.par + '. ' + hole1.distance + ' yards. ' +
+                      (hole1.par === 3
+                        ? 'Take your time.'
+                        : hole1.par === 5
+                        ? 'Good driving hole.'
+                        : 'Pick your target.');
+                    setCaddieResponse(h1msg);
+                    if (voiceEnabled) {
+                      speak(h1msg, voiceGender, language, apiUrl).catch(() => {});
+                    }
+                  }
+                }}
+              >
+                <Text style={styles.preRoundBtnText}>Let's Go</Text>
+              </TouchableOpacity>
+            )}
+
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── ROUND SETUP SHEET ──────────────── */}
+      <Modal
+        visible={showRoundSetup}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowRoundSetup(false)}
+      >
+        <TouchableOpacity
+          style={styles.backdrop}
+          onPress={() => setShowRoundSetup(false)}
+          activeOpacity={1}
+        >
+          <View style={styles.sheet}>
+            <View style={styles.handle} />
+            <Text style={styles.sheetTitle}>Start Round</Text>
+
+            <Text style={styles.sheetLabel}>Course</Text>
+            <View style={styles.pillRow}>
+              {courses.map(c => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={[styles.pill, selectedCourse === c.id && styles.pillActive]}
+                  onPress={() => setSelectedCourse(c.id)}
+                >
+                  <Text style={[
+                    styles.pillText,
+                    selectedCourse === c.id && styles.pillTextActive,
+                  ]}>
+                    {c.id === 'palms' ? 'Palms' : c.id === 'lakes' ? 'Lakes' : 'Rancho'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.sheetLabel}>Holes</Text>
+            <View style={styles.pillRow}>
+              {([
+                { label: '18 Holes', value: false },
+                { label: '9 Holes',  value: true },
+              ] as const).map(opt => (
+                <TouchableOpacity
+                  key={opt.label}
+                  style={[styles.pill, nineHole === opt.value && styles.pillActive]}
+                  onPress={() => setNineHole(opt.value)}
+                >
+                  <Text style={[
+                    styles.pillText,
+                    nineHole === opt.value && styles.pillTextActive,
+                  ]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.sheetLabel}>Format</Text>
+            <View style={styles.pillRow}>
+              {([
+                { label: 'Casual',      value: false },
+                { label: 'Competition', value: true },
+              ] as const).map(opt => (
+                <TouchableOpacity
+                  key={opt.label}
+                  style={[styles.pill, isCompetition === opt.value && styles.pillActive]}
+                  onPress={() => setIsCompetition(opt.value)}
+                >
+                  <Text style={[
+                    styles.pillText,
+                    isCompetition === opt.value && styles.pillTextActive,
+                  ]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity style={styles.startBtn} onPress={handleStartRound}>
+              <Text style={styles.startBtnText}>Let's Go</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── SHOT CARD SHEET ─────────────────── */}
+      <Modal
+        visible={showShotCard}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowShotCard(false)}
+      >
+        <TouchableOpacity
+          style={styles.backdrop}
+          onPress={() => setShowShotCard(false)}
+          activeOpacity={1}
+        >
+          <View style={styles.sheet}>
+            <View style={styles.handle} />
+            <Text style={styles.sheetTitle}>
+              {'Hole ' + currentHole + (currentPar ? ' · Par ' + currentPar : '')}
+            </Text>
+
+            <Text style={styles.sheetLabel}>Score</Text>
+            <View style={styles.scoreRow}>
+              <TouchableOpacity
+                style={styles.scoreBtn}
+                onPress={() => setHoleScore(Math.max(1, holeScore - 1))}
+              >
+                <Text style={styles.scoreBtnText}>−</Text>
+              </TouchableOpacity>
+              <Text style={styles.scoreValue}>{holeScore === 0 ? '—' : holeScore}</Text>
+              <TouchableOpacity
+                style={styles.scoreBtn}
+                onPress={() => setHoleScore(holeScore + 1)}
+              >
+                <Text style={styles.scoreBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.sheetLabel}>Putts</Text>
+            <View style={styles.scoreRow}>
+              <TouchableOpacity
+                style={styles.scoreBtn}
+                onPress={() => setHolePutts(Math.max(0, holePutts - 1))}
+              >
+                <Text style={styles.scoreBtnText}>−</Text>
+              </TouchableOpacity>
+              <Text style={styles.scoreValue}>{holePutts}</Text>
+              <TouchableOpacity
+                style={styles.scoreBtn}
+                onPress={() => setHolePutts(holePutts + 1)}
+              >
+                <Text style={styles.scoreBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.startBtn, holeScore === 0 && styles.startBtnDisabled]}
+              onPress={handleLogHole}
+              disabled={holeScore === 0}
+            >
+              <Text style={styles.startBtnText}>Next Hole</Text>
+            </TouchableOpacity>
+
+            {isRoundActive && (
+              <TouchableOpacity
+                style={styles.endRoundBtn}
+                onPress={async () => {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                  endRound();
+                  setShowShotCard(false);
+                  await generateRoundSummary();
+                }}
+              >
+                <Text style={styles.endRoundText}>End Round</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── MORE MENU SHEET ─────────────────── */}
+      <Modal
+        visible={showMoreMenu}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMoreMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.backdrop}
+          onPress={() => setShowMoreMenu(false)}
+          activeOpacity={1}
+        >
+          <View style={styles.moreSheet}>
+            <View style={styles.handle} />
+            <Text style={styles.moreTitle}>Tools</Text>
+
+            {([
+              {
+                icon: '🏌️',
+                label: 'Practice',
+                sub: 'Cage & swing lab',
+                action: () => {
+                  setShowMoreMenu(false);
+                  router.push('/(tabs)/swinglab' as never);
+                },
+              },
+              {
+                icon: '⛳',
+                label: 'Cage Mode',
+                sub: 'Range session',
+                action: () => {
+                  setShowMoreMenu(false);
+                  router.push('/cage' as never);
+                },
+              },
+              {
+                icon: '🔭',
+                label: 'SmartVision',
+                sub: 'Analyze the hole',
+                action: () => {
+                  setShowMoreMenu(false);
+                  openSmartVision();
+                },
+              },
+              {
+                icon: '🎯',
+                label: 'SmartMotion',
+                sub: 'In-round swing analysis',
+                action: () => {
+                  setShowMoreMenu(false);
+                  router.push({
+                    pathname: '/smartmotion',
+                    params: { club: club ?? '7 iron', feel: '', shape: '' },
+                  } as never);
+                },
+              },
+              {
+                icon: '⚠️',
+                label: 'Penalty Stroke',
+                sub: 'Water · OB · Lost ball',
+                action: () => {
+                  if (isRoundActive) addPenalty(currentHole);
+                  setShowMoreMenu(false);
+                },
+              },
+              ...(isRoundActive ? [{
+                icon: '🏁',
+                label: 'End Round',
+                sub: 'Finish and get summary',
+                action: async () => {
+                  setShowMoreMenu(false);
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                  endRound();
+                  await generateRoundSummary();
+                },
+              }] : []),
+              {
+                icon: '📺',
+                label: castMode ? 'Cast Mode On' : 'Cast Mode',
+                sub: 'Mirror to TV',
+                action: () => setCastMode(!castMode),
+              },
+              {
+                icon: voiceEnabled ? '🔊' : '🔇',
+                label: voiceEnabled ? 'Voice On' : 'Voice Off',
+                sub: "Toggle Kevin's voice",
+                action: () => setVoiceEnabled(!voiceEnabled),
+              },
+              {
+                icon: '⚙️',
+                label: 'Settings',
+                sub: 'App preferences',
+                action: () => {
+                  setShowMoreMenu(false);
+                  router.push('/settings' as never);
+                },
+              },
+            ] as const).map(item => (
+              <TouchableOpacity
+                key={item.label}
+                style={styles.moreItem}
+                onPress={item.action}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.moreIcon}>{item.icon}</Text>
+                <View style={styles.moreText}>
+                  <Text style={styles.moreLabel}>{item.label}</Text>
+                  <Text style={styles.moreSub}>{item.sub}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </View>
   );
 }
@@ -910,9 +1039,10 @@ const styles = StyleSheet.create({
   },
   topNav: {
     position: 'absolute',
+    left: 20,
     right: 20,
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     alignItems: 'center',
     zIndex: 20,
   },
@@ -947,10 +1077,54 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
   },
+  micZone: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  micCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: 'rgba(0, 200, 150, 0.8)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micCircleActive: {
+    backgroundColor: 'rgba(0, 200, 150, 0.12)',
+    borderColor: '#00C896',
+  },
+  micCircleBusy: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: 'rgba(0, 200, 150, 0.4)',
+  },
+  micRing: {
+    position: 'absolute',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 2,
+    borderColor: '#00C896',
+    backgroundColor: 'transparent',
+  },
+  micStatusLabel: {
+    color: '#6b7d72',
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginTop: 8,
+  },
   startRoundBtn: {
     position: 'absolute',
-    left: 24,
-    right: 24,
+    alignSelf: 'center',
+    left: 40,
+    right: 40,
     height: 60,
     borderRadius: 30,
     backgroundColor: 'transparent',

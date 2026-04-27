@@ -225,7 +225,7 @@ export default function CaddieDataStrip({
     <Animated.View
       style={[
         styles.wrapper,
-        { bottom: 32 + bottomOffset, opacity: mountedOpacity, transform: [{ scale: pressScale }] },
+        { bottom: bottomOffset, opacity: mountedOpacity, transform: [{ scale: pressScale }] },
       ]}
     >
       <Pressable
@@ -268,13 +268,16 @@ const styles = StyleSheet.create({
   // ── Horizontal (portrait) wrapper ────────
   wrapper: {
     position: 'absolute',
-    bottom: 32,
-    left: 8,
-    right: 8,
+    bottom: 0,
+    left: 0,
+    right: 0,
     height: 84,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(30, 58, 40, 0.5)',
+    borderRadius: 0,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(30, 58, 40, 0.5)',
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
     overflow: 'hidden',
     zIndex: 5,
   },
@@ -291,7 +294,7 @@ const styles = StyleSheet.create({
   },
   tintOverlay: {
     backgroundColor: 'rgba(13, 26, 13, 0.5)',
-    borderRadius: 16,
+    borderRadius: 0,
   },
   // ── Horizontal row ───────────────────────
   row: {
