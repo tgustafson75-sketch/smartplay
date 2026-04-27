@@ -607,11 +607,7 @@ const styles = StyleSheet.create({
   wrapperFull: {
     flex: 1,
     width: '100%',
-    height: '100%',
     backgroundColor: '#060f09',
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 200,
   },
   frame: {
     width: '100%',

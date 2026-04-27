@@ -559,17 +559,20 @@ export default function CaddieTab() {
     }
   }, [isRoundActive]);
 
-  // ── Positioning helpers ──────────────────
-  // Pre-round: [Start Round 40] → [Bubble 144] → [Mic 244] → Kevin
-  // On-round:  [Data strip 32+insets] → [Mic 132+insets] → Kevin
-  const micBottom = isRoundActive ? insets.bottom + 132 : insets.bottom + 244;
-
   // ── RENDER ───────────────────────────────
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { flexDirection: 'column' }]}>
 
-      {/* KEVIN — 9:16 frame anchored at top; no over-zoom on any screen */}
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: avatarFrameHeight, alignItems: 'center' }}>
+      {/* TOP BOX — Kevin's frame, 2/3 of vertical space */}
+      <View style={{
+        flex: 2,
+        width: '100%',
+        paddingHorizontal: 24,
+        paddingTop: insets.top + 16,
+        paddingBottom: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
         <CaddieAvatar
           gender={voiceGender === 'female' ? 'female' : 'male'}
           isOnCourse={isRoundActive}
@@ -584,7 +587,89 @@ export default function CaddieTab() {
         />
       </View>
 
-      {/* TOP NAV */}
+      {/* BOTTOM BOX — controls, 1/3 of vertical space */}
+      <View style={{
+        flex: 1,
+        width: '100%',
+        paddingHorizontal: 24,
+        paddingTop: 12,
+        paddingBottom: insets.bottom + 16,
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 16,
+      }}>
+
+        {/* MIC BUTTON */}
+        <View style={{ alignItems: 'center', width: '100%' }}>
+          {vadEnabled && voiceState === 'idle' ? (
+            <Animated.View style={{ alignItems: 'center', transform: [{ scale: autoListenPulse }] }}>
+              <View style={[styles.micCircle, { opacity: 0.5 }]}>
+                <Ionicons name="mic" size={32} color="#00C896" />
+              </View>
+              <Text style={styles.micStatusLabel}>LISTENING</Text>
+            </Animated.View>
+          ) : (
+            <View style={{ alignItems: 'center' }}>
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.micRing,
+                  {
+                    transform: [{ scale: ringScale }],
+                    opacity: ringOpacity,
+                  },
+                ]}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.micCircle,
+                  voiceState === 'listening' && styles.micCircleActive,
+                  (voiceState === 'thinking' || voiceState === 'speaking') && styles.micCircleBusy,
+                ]}
+                onPress={handleMicPress}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                activeOpacity={0.85}
+              >
+                {voiceState === 'listening' ? (
+                  <Ionicons name="stop" size={28} color="#00C896" />
+                ) : voiceState === 'thinking' ? (
+                  <Ionicons name="ellipsis-horizontal" size={24} color="rgba(0,200,150,0.5)" />
+                ) : voiceState === 'speaking' ? (
+                  <Ionicons name="volume-high" size={28} color="#00C896" />
+                ) : (
+                  <Ionicons name="mic" size={32} color="#00C896" />
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* GREETING BUBBLE */}
+        {!isRoundActive && shownText ? (
+          <Animated.View style={[styles.bubbleInline, { opacity: responseFade }]}>
+            <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={[StyleSheet.absoluteFill, styles.bubbleTint]} />
+            <Text style={styles.bubbleText} numberOfLines={3}>{shownText}</Text>
+          </Animated.View>
+        ) : null}
+
+        {/* START ROUND CTA */}
+        <Animated.View
+          style={{ opacity: ctaOpacity, width: '100%' }}
+          pointerEvents={isRoundActive ? 'none' : 'box-none'}
+        >
+          <TouchableOpacity
+            style={styles.startRoundBtnFlex}
+            onPress={() => setShowRoundSetup(true)}
+            activeOpacity={0.88}
+          >
+            <Text style={styles.startRoundText}>Start Round</Text>
+          </TouchableOpacity>
+        </Animated.View>
+
+      </View>
+
+      {/* TOP NAV — absolute, floats over both boxes */}
       <View style={[styles.topNav, { top: insets.top + 8 }]}>
         <TouchableOpacity
           style={styles.navBtn}
@@ -602,65 +687,7 @@ export default function CaddieTab() {
         </TouchableOpacity>
       </View>
 
-      {/* GREETING BUBBLE — pre-round only, sits in negative space above Start Round */}
-      {!isRoundActive && shownText ? (
-        <Animated.View
-          style={[styles.bubble, { bottom: 144 + insets.bottom, opacity: responseFade }]}
-        >
-          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-          <View style={[StyleSheet.absoluteFill, styles.bubbleTint]} />
-          <Text style={styles.bubbleText} numberOfLines={3}>
-            {shownText}
-          </Text>
-        </Animated.View>
-      ) : null}
-
-      {/* MIC BUTTON */}
-      <View style={[styles.micZone, { bottom: micBottom }]}>
-        {vadEnabled && voiceState === 'idle' ? (
-          <Animated.View style={{ alignItems: 'center', transform: [{ scale: autoListenPulse }] }}>
-            <View style={[styles.micCircle, { opacity: 0.5 }]}>
-              <Ionicons name="mic" size={32} color="#00C896" />
-            </View>
-            <Text style={styles.micStatusLabel}>LISTENING</Text>
-          </Animated.View>
-        ) : (
-          <View style={{ alignItems: 'center' }}>
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.micRing,
-                {
-                  transform: [{ scale: ringScale }],
-                  opacity: ringOpacity,
-                },
-              ]}
-            />
-            <TouchableOpacity
-              style={[
-                styles.micCircle,
-                voiceState === 'listening' && styles.micCircleActive,
-                (voiceState === 'thinking' || voiceState === 'speaking') && styles.micCircleBusy,
-              ]}
-              onPress={handleMicPress}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              activeOpacity={0.85}
-            >
-              {voiceState === 'listening' ? (
-                <Ionicons name="stop" size={28} color="#00C896" />
-              ) : voiceState === 'thinking' ? (
-                <Ionicons name="ellipsis-horizontal" size={24} color="rgba(0,200,150,0.5)" />
-              ) : voiceState === 'speaking' ? (
-                <Ionicons name="volume-high" size={28} color="#00C896" />
-              ) : (
-                <Ionicons name="mic" size={32} color="#00C896" />
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-
-      {/* DATA STRIP — cross-fades in when round starts */}
+      {/* DATA STRIP — absolute overlay, cross-fades in when round starts */}
       <Animated.View
         style={[StyleSheet.absoluteFill, { opacity: stripOpacity }]}
         pointerEvents={isRoundActive ? 'box-none' : 'none'}
@@ -675,20 +702,6 @@ export default function CaddieTab() {
           bottomOffset={insets.bottom}
           onPress={() => setShowShotCard(true)}
         />
-      </Animated.View>
-
-      {/* START ROUND CTA — cross-fades out when round starts */}
-      <Animated.View
-        style={[StyleSheet.absoluteFill, { opacity: ctaOpacity }]}
-        pointerEvents={isRoundActive ? 'none' : 'box-none'}
-      >
-        <TouchableOpacity
-          style={[styles.startRoundBtn, { bottom: 40 + insets.bottom }]}
-          onPress={() => setShowRoundSetup(true)}
-          activeOpacity={0.88}
-        >
-          <Text style={styles.startRoundText}>Start Round</Text>
-        </TouchableOpacity>
       </Animated.View>
 
       {/* ── PRE-ROUND BRIEF MODAL ──────────── */}
@@ -1133,6 +1146,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 5,
+  },
+  startRoundBtnFlex: {
+    width: '100%',
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: '#00C896',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bubbleInline: {
+    width: '100%',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(30, 58, 40, 0.5)',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    overflow: 'hidden',
+    alignItems: 'center',
   },
   startRoundText: {
     color: '#00C896',
