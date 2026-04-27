@@ -8,22 +8,22 @@ const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const TOOLS: Anthropic.Tool[] = [
   {
     name: 'open_smartvision',
-    description: 'Open the SmartVision hole overlay so the player can see the hole layout.',
+    description: 'Open the SmartVision tool — a visual hole layout / overhead view / hole map showing the green, fairway, hazards, and yardages. Trigger this when Tim says ANY of: "show me the hole", "let me see the layout", "what does the hole look like", "show the green", "pull up the map", "see the layout", "show me what I\'m looking at", "what am I looking at", "give me a look at this", or any phrasing meaning he wants the visual map of the hole.',
     input_schema: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'open_smartfinder',
-    description: "Open SmartFinder to locate the player's ball on the course.",
+    description: 'Open the SmartFinder — a precise distance-locking tool / rangefinder / yardage finder. Trigger this when Tim says ANY of: "rangefinder", "use the rangefinder", "let me see the rangefinder", "lock the distance", "find the yardage", "how far is it" (when used with "let me see" or "show me"), "give me a precise distance", "let me lock that", or any phrasing meaning he wants to use a rangefinder-style tool. THIS TOOL IS THE RANGEFINDER. The word "rangefinder" should always trigger this.',
     input_schema: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'open_swinglab',
-    description: 'Open SwingLab for swing analysis or practice.',
+    description: 'Open SwingLab — the swing analysis / practice / drill tool. Trigger this when Tim says ANY of: "swinglab", "practice", "let\'s work on my swing", "I want to practice", "open practice", "swing analysis", "swing drills", "let me work on something", or any phrasing meaning he wants to enter practice or analysis mode.',
     input_schema: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'log_score',
-    description: 'Log the score for a hole.',
+    description: 'Open the score entry flow. Trigger this when Tim says ANY of: "log my score", "I finished the hole", "I got a [number]", "putting score in", "done with this hole", "scorecard", "enter score", or any phrasing meaning he wants to record a score.',
     input_schema: {
       type: 'object',
       properties: {
@@ -35,7 +35,7 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'record_swing',
-    description: 'Start a swing recording for analysis.',
+    description: 'Start recording a swing video via the device camera. Trigger this when Tim says ANY of: "watch this", "record this", "record my swing", "watch my swing", "film this", "video this", "get this on camera", or any phrasing meaning he wants the camera to capture his next swing.',
     input_schema: { type: 'object', properties: {}, required: [] },
   },
 ];
