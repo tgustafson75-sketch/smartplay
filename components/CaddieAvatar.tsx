@@ -215,6 +215,7 @@ interface CaddieAvatarProps {
   onTap: () => void;
   emotion?: string | null;
   fillMode?: 'cover' | 'contain';
+  isThinking?: boolean;
 }
 
 // ─── COMPONENT ────────────────────────────
@@ -230,6 +231,7 @@ export default function CaddieAvatar({
   onTap,
   emotion,
   fillMode,
+  isThinking = false,
 }: CaddieAvatarProps) {
   const fill = fillMode ?? 'contain';
   const { width: W, height: H } = useWindowDimensions();
@@ -464,9 +466,10 @@ export default function CaddieAvatar({
     prevVoiceState.current = voiceState;
   }, [voiceState]);
 
-  // ── Glow — voice state ─────────────────
+  // ── Glow — voice state + isThinking ───────────────────
   useEffect(() => {
-    if (voiceState === 'idle') {
+    const isActive = voiceState !== 'idle' || isThinking;
+    if (!isActive) {
       Animated.timing(glowAnim, {
         toValue: 0,
         duration: 400,
@@ -493,7 +496,7 @@ export default function CaddieAvatar({
     );
     loop.start();
     return () => loop.stop();
-  }, [voiceState]);
+  }, [voiceState, isThinking]);
 
   // ── HUD flash on data change ────────────
   useEffect(() => {
@@ -560,12 +563,12 @@ export default function CaddieAvatar({
   }, [voiceState]);
 
   const ringColor =
-    voiceState === 'thinking' ? '#F5A623' : '#00C896';
+    (voiceState === 'thinking' || isThinking) ? '#F5A623' : '#00C896';
 
   const stateText =
-    voiceState === 'listening' ? '● Listening' :
-    voiceState === 'thinking'  ? '◌ Thinking'  :
-    voiceState === 'speaking'  ? '▶ Speaking'  : '';
+    voiceState === 'listening'             ? '● Listening' :
+    (voiceState === 'thinking' || isThinking) ? '◌ Thinking'  :
+    voiceState === 'speaking'              ? '▶ Speaking'  : '';
 
   const hudItems = [
     { label: 'HOLE',  value: hud.hole      !== null ? String(hud.hole)      : '—' },
@@ -660,7 +663,7 @@ export default function CaddieAvatar({
         )}
 
         {/* Layer 5 — Voice ring */}
-        {voiceState !== 'idle' && (
+        {(voiceState !== 'idle' || isThinking) && (
           <Animated.View
             pointerEvents="none"
             style={[
@@ -688,7 +691,7 @@ export default function CaddieAvatar({
         />
 
         {/* Layer 6 — State label */}
-        {voiceState !== 'idle' && (
+        {(voiceState !== 'idle' || isThinking) && (
           <View style={styles.stateTag}>
             <Text style={[styles.stateTagText, { color: ringColor }]}>
               {stateText}

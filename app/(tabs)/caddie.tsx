@@ -28,6 +28,7 @@ import { useCageStore } from '../../store/cageStore';
 import { usePointsStore } from '../../store/pointsStore';
 import { getCourseList, getCourse } from '../../data/courses';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
+import { useKevin } from '../../hooks/useKevin';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
 import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
@@ -280,6 +281,9 @@ export default function CaddieTab() {
       },
     } as never);
   };
+
+  // ── Kevin programmatic hook ──────────────
+  const { isThinking: kevinThinking } = useKevin();
 
   // ── Voice hook ───────────────────────────
   const { handleMicPress: _handleMicPress, processAudioUri } = useVoiceCaddie({
@@ -581,6 +585,7 @@ export default function CaddieTab() {
           onTap={handleMicPress}
           emotion={kevinEmotion}
           fillMode="cover"
+          isThinking={kevinThinking}
         />
       </View>
 
