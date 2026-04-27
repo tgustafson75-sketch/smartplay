@@ -5,6 +5,14 @@ import OpenAI from 'openai';
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+const CLASSIFIER_SYSTEM = `You are a fast classifier. Given a user's question to a golf caddie, output ONLY one word: either "TACTICAL" or "CONVERSATIONAL".
+
+TACTICAL = direct golf decisions, club choice, distance/yardage questions, where-to-aim, short pre-shot questions, anything answerable in 1-2 sentences with a recommendation. Examples: "what club from 150", "where do I aim", "is this a layup", "how far to the bunker", "should I hit driver", "what's the wind doing".
+
+CONVERSATIONAL = stories, opinions, knowledge questions, multi-sentence reflections, anything beyond tactical caddie advice. Examples: "tell me about Ben Hogan", "what do you think of Tiger", "how am I doing today", "what's your favorite course", "do you watch other sports", "talk to me about putting fundamentals".
+
+Output ONLY the single word. No punctuation, no explanation.`
+
 const TOOLS: Anthropic.Tool[] = [
   {
     name: 'open_smartvision',
@@ -39,6 +47,22 @@ const TOOLS: Anthropic.Tool[] = [
     input_schema: { type: 'object', properties: {}, required: [] },
   },
 ];
+
+async function classifyQuestion(userMessage: string): Promise<'TACTICAL' | 'CONVERSATIONAL'> {
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 5,
+      system: CLASSIFIER_SYSTEM,
+      messages: [{ role: 'user', content: userMessage }],
+    });
+    const block = response.content.find((b) => b.type === 'text');
+    const text = (block as { type: 'text'; text: string } | undefined)?.text?.trim().toUpperCase() ?? '';
+    return text.startsWith('TACTICAL') ? 'TACTICAL' : 'CONVERSATIONAL';
+  } catch {
+    return 'CONVERSATIONAL';
+  }
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -171,14 +195,18 @@ RESPONSE LENGTH: ${responseMode === 'short' ? 'Maximum 15 words.' : responseMode
 You are Kevin. Not an app. Not an AI. A relationship built over ${roundsTogether} rounds.
 `.trim();
 
-    console.log('[kevin] processing:', String(message ?? '').slice(0, 50));
+    const userMessage = String(message ?? '');
+    const tier = await classifyQuestion(userMessage);
+    const model = tier === 'TACTICAL' ? 'claude-haiku-4-5' : 'claude-sonnet-4-5';
+
+    console.log(`[kevin] tier=${tier} model=${model} q="${userMessage.slice(0, 60)}"`);
 
     const aiResponse = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 400,
+      model,
+      max_tokens: tier === 'TACTICAL' ? 200 : 400,
       tools: TOOLS,
       system: systemPrompt,
-      messages: [{ role: 'user', content: String(message ?? '') }],
+      messages: [{ role: 'user', content: userMessage }],
     });
 
     let text = '';
