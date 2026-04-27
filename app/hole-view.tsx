@@ -3,6 +3,7 @@ import React, {
   useEffect,
   useRef,
   useCallback,
+  useMemo,
 } from 'react';
 import {
   View,
@@ -13,6 +14,7 @@ import {
   StyleSheet,
   useWindowDimensions,
   ActivityIndicator,
+  PanResponder,
 } from 'react-native';
 import KevinBadge from '../components/KevinBadge';
 import { useKevinPresence } from '../contexts/KevinPresenceContext';
@@ -28,15 +30,10 @@ import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSmartVision } from '../contexts/SmartVisionContext';
+import PALMS_IMAGES from '../data/palmsImages';
 
 // ─── SATELLITE CACHE ──────────────────────
 const SATELLITE_CACHE: Record<string, string> = {};
-
-// ─── HOLE IMAGE HELPER ────────────────────
-// Hole photos are pre-round preview only.
-// Files not yet bundled — returns null gracefully.
-// Never used for measurement.
-const safeHoleImage = (_hole: number): null => null;
 
 // ─── GPS HELPERS ──────────────────────────
 
@@ -44,7 +41,7 @@ const haversineYards = (
   lat1: number, lng1: number,
   lat2: number, lng2: number,
 ): number => {
-  const R = 6371000; // meters
+  const R = 6371000;
   const φ1 = lat1 * Math.PI / 180;
   const φ2 = lat2 * Math.PI / 180;
   const Δφ = (lat2 - lat1) * Math.PI / 180;
@@ -54,7 +51,7 @@ const haversineYards = (
     Math.cos(φ1) * Math.cos(φ2) *
     Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c * 1.09361; // yards
+  return R * c * 1.09361;
 };
 
 const getHoleHeading = (
@@ -76,7 +73,6 @@ const getHoleZoom = (distance: number, par: number): number => {
   return 16;
 };
 
-// Meters per pixel at each zoom level for 600px wide tile
 const mppForZoom = (zoom: number): number => {
   if (zoom === 18) return 1.19;
   if (zoom === 17) return 2.39;
@@ -90,12 +86,18 @@ export default function HoleView() {
   const router = useRouter();
   const { width: W, height: H } = useWindowDimensions();
   const IMAGE_WIDTH = W - 24;
-  const IMAGE_HEIGHT = Math.min(
+  // Satellite: Google Maps tiles are 6:5 aspect
+  const IMAGE_HEIGHT_SAT = Math.min(
     Math.round(IMAGE_WIDTH * (500 / 600)),
     Math.round(H * 0.40),
   );
-  const params = useLocalSearchParams();
+  // Bundled: our Palms images are 705×1455 (≈2.064 tall)
+  const IMAGE_HEIGHT_BUNDLED = Math.min(
+    Math.round(IMAGE_WIDTH * (1455 / 705)),
+    Math.round(H * 0.82),
+  );
 
+  const params = useLocalSearchParams();
   const hole = Number(String(params.hole ?? '')) || 1;
   const par = Number(String(params.par ?? '')) || 4;
   const distance = Number(String(params.distance ?? '')) || 150;
@@ -114,18 +116,14 @@ export default function HoleView() {
   const { setSmartVisionState } = useSmartVision();
   const { setMode } = useKevinPresence();
 
-  useEffect(() => {
-    setMode('badge');
-  }, []);
+  useEffect(() => { setMode('badge'); }, []);
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
   const mapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ?? '';
 
-  // ── State ──────────────────────────────
+  // ── Core state ─────────────────────────
   const [gpsCoords, setGpsCoords] = useState<{
-    latitude: number;
-    longitude: number;
-    accuracy: number;
+    latitude: number; longitude: number; accuracy: number;
   } | null>(null);
   const [gpsValid, setGpsValid] = useState(false);
   const [centerYards, setCenterYards] = useState(distance);
@@ -136,13 +134,181 @@ export default function HoleView() {
   const [analysisText, setAnalysisText] = useState('');
   const [analysisLoading, setAnalysisLoading] = useState(false);
 
+  // ── Bundled marker state ────────────────
+  const [teePos, setTeePos] = useState({ x: 0, y: 0 });
+  const [targetPos, setTargetPos] = useState({ x: 0, y: 0 });
+  const [pinPos, setPinPos] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [markersReady, setMarkersReady] = useState(false);
+
+  // Mutable refs — read inside PanResponder callbacks (stable, captured once)
+  const teePosRef = useRef(teePos);
+  teePosRef.current = teePos;
+  const targetPosRef = useRef(targetPos);
+  targetPosRef.current = targetPos;
+  const pinPosRef = useRef(pinPos);
+  pinPosRef.current = pinPos;
+  const imgWRef = useRef(IMAGE_WIDTH);
+  imgWRef.current = IMAGE_WIDTH;
+  const imgHRef = useRef(IMAGE_HEIGHT_BUNDLED);
+  imgHRef.current = IMAGE_HEIGHT_BUNDLED;
+
+  // Shared pan state (stable ref, mutated by all three PanResponders)
+  const panRef = useRef({ startX: 0, startY: 0, initX: 0, initY: 0 });
+
+  // ── PanResponders (created once) ───────
+  const teePR = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (evt) => {
+      panRef.current.startX = evt.nativeEvent.pageX;
+      panRef.current.startY = evt.nativeEvent.pageY;
+      panRef.current.initX = teePosRef.current.x;
+      panRef.current.initY = teePosRef.current.y;
+      setIsDragging(true);
+    },
+    onPanResponderMove: (evt) => {
+      const next = {
+        x: Math.max(12, Math.min(imgWRef.current - 12,
+          panRef.current.initX + evt.nativeEvent.pageX - panRef.current.startX)),
+        y: Math.max(12, Math.min(imgHRef.current - 12,
+          panRef.current.initY + evt.nativeEvent.pageY - panRef.current.startY)),
+      };
+      teePosRef.current = next;
+      setTeePos(next);
+    },
+    onPanResponderRelease: () => setIsDragging(false),
+    onPanResponderTerminate: () => setIsDragging(false),
+  })).current;
+
+  const targetPR = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (evt) => {
+      panRef.current.startX = evt.nativeEvent.pageX;
+      panRef.current.startY = evt.nativeEvent.pageY;
+      panRef.current.initX = targetPosRef.current.x;
+      panRef.current.initY = targetPosRef.current.y;
+      setIsDragging(true);
+    },
+    onPanResponderMove: (evt) => {
+      const next = {
+        x: Math.max(12, Math.min(imgWRef.current - 12,
+          panRef.current.initX + evt.nativeEvent.pageX - panRef.current.startX)),
+        y: Math.max(12, Math.min(imgHRef.current - 12,
+          panRef.current.initY + evt.nativeEvent.pageY - panRef.current.startY)),
+      };
+      targetPosRef.current = next;
+      setTargetPos(next);
+    },
+    onPanResponderRelease: () => setIsDragging(false),
+    onPanResponderTerminate: () => setIsDragging(false),
+  })).current;
+
+  const pinPR = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (evt) => {
+      panRef.current.startX = evt.nativeEvent.pageX;
+      panRef.current.startY = evt.nativeEvent.pageY;
+      panRef.current.initX = pinPosRef.current.x;
+      panRef.current.initY = pinPosRef.current.y;
+      setIsDragging(true);
+    },
+    onPanResponderMove: (evt) => {
+      const next = {
+        x: Math.max(12, Math.min(imgWRef.current - 12,
+          panRef.current.initX + evt.nativeEvent.pageX - panRef.current.startX)),
+        y: Math.max(12, Math.min(imgHRef.current - 12,
+          panRef.current.initY + evt.nativeEvent.pageY - panRef.current.startY)),
+      };
+      pinPosRef.current = next;
+      setPinPos(next);
+    },
+    onPanResponderRelease: () => setIsDragging(false),
+    onPanResponderTerminate: () => setIsDragging(false),
+  })).current;
+
   const gpsWatchRef = useRef<Location.LocationSubscription | null>(null);
+
+  // ── Image source resolution ────────────
+  const bundledImage = courseName.toLowerCase().includes('palms')
+    ? (PALMS_IMAGES[hole] ?? null)
+    : null;
+
+  const getSatelliteUrl = useCallback((): string | null => {
+    if (!mapsKey) return null;
+    if (Math.abs(middleLat) < 0.01 || Math.abs(middleLng) < 0.01) return null;
+    const hasTee = Math.abs(teeLat) > 0.01 && Math.abs(teeLng) > 0.01;
+    let centerLat = middleLat;
+    let centerLng = middleLng;
+    let heading = 0;
+    if (hasTee) {
+      centerLat = teeLat + (middleLat - teeLat) * 0.55;
+      centerLng = teeLng + (middleLng - teeLng) * 0.55;
+      heading = getHoleHeading(teeLat, teeLng, middleLat, middleLng);
+    }
+    const zoom = getHoleZoom(distance, par);
+    return (
+      'https://maps.googleapis.com/maps/api/staticmap' +
+      '?center=' + centerLat + ',' + centerLng +
+      '&zoom=' + zoom +
+      '&size=600x500' +
+      '&maptype=satellite' +
+      (heading > 0 ? '&heading=' + heading : '') +
+      '&key=' + mapsKey
+    );
+  }, [mapsKey, middleLat, middleLng, teeLat, teeLng, distance, par]);
+
+  const satelliteUrl = getSatelliteUrl();
+
+  type DisplayType = 'bundled' | 'satellite' | 'none';
+  const displayType: DisplayType =
+    bundledImage ? 'bundled'
+    : satelliteUrl ? 'satellite'
+    : 'none';
+
+  const IMAGE_HEIGHT = displayType === 'bundled' ? IMAGE_HEIGHT_BUNDLED : IMAGE_HEIGHT_SAT;
+
+  const imageSource =
+    displayType === 'bundled' ? bundledImage
+    : displayType === 'satellite' ? { uri: satelliteUrl! }
+    : null;
+
+  // ── Yards per pixel (bundled only) ─────
+  const yardsPerPixel = distance / (IMAGE_HEIGHT_BUNDLED * 0.80 || 1);
+
+  const fromTeeYards = useMemo(() => {
+    const dx = targetPos.x - teePos.x;
+    const dy = targetPos.y - teePos.y;
+    return Math.round(Math.sqrt(dx * dx + dy * dy) * yardsPerPixel);
+  }, [teePos, targetPos, yardsPerPixel]);
+
+  const approachYards = useMemo(() => {
+    const dx = pinPos.x - targetPos.x;
+    const dy = pinPos.y - targetPos.y;
+    return Math.round(Math.sqrt(dx * dx + dy * dy) * yardsPerPixel);
+  }, [pinPos, targetPos, yardsPerPixel]);
+
+  // ── Init bundled markers ────────────────
+  useEffect(() => {
+    if (displayType !== 'bundled' || markersReady) return;
+    const cx = IMAGE_WIDTH / 2;
+    const tee    = { x: cx, y: IMAGE_HEIGHT_BUNDLED * 0.87 };
+    const target = { x: cx, y: IMAGE_HEIGHT_BUNDLED * 0.52 };
+    const pin    = { x: cx, y: IMAGE_HEIGHT_BUNDLED * 0.10 };
+    teePosRef.current = tee;
+    targetPosRef.current = target;
+    pinPosRef.current = pin;
+    setTeePos(tee);
+    setTargetPos(target);
+    setPinPos(pin);
+    setMarkersReady(true);
+  }, [displayType, IMAGE_WIDTH, IMAGE_HEIGHT_BUNDLED, markersReady]);
 
   // ── GPS validity ───────────────────────
   const checkGpsValid = (coords: {
-    latitude: number;
-    longitude: number;
-    accuracy: number;
+    latitude: number; longitude: number; accuracy: number;
   }): boolean =>
     Math.abs(coords.latitude) > 0.01 &&
     Math.abs(coords.longitude) > 0.01 &&
@@ -151,16 +317,11 @@ export default function HoleView() {
   // ── GPS watcher ────────────────────────
   useEffect(() => {
     if (!isRoundActive) return;
-
     const startGPS = async () => {
       const { granted } = await Location.requestForegroundPermissionsAsync();
       if (!granted) return;
-
       gpsWatchRef.current = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.BestForNavigation,
-          distanceInterval: 2,
-        },
+        { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 2 },
         (loc) => {
           const coords = {
             latitude: loc.coords.latitude,
@@ -170,172 +331,88 @@ export default function HoleView() {
           setGpsCoords(coords);
           const valid = checkGpsValid(coords);
           setGpsValid(valid);
-
           if (valid && middleLat !== 0 && middleLng !== 0) {
-            const yards = haversineYards(
-              coords.latitude, coords.longitude,
-              middleLat, middleLng,
-            );
-            if (yards > 5 && yards < 800) {
-              setCenterYards(Math.round(yards));
-            }
+            const yards = haversineYards(coords.latitude, coords.longitude, middleLat, middleLng);
+            if (yards > 5 && yards < 800) setCenterYards(Math.round(yards));
           }
         },
       );
     };
-
     startGPS();
     return () => { gpsWatchRef.current?.remove(); };
   }, [isRoundActive, middleLat, middleLng]);
 
-  // ── SmartVision context — open/close ────
+  // ── SmartVision context ─────────────────
   useEffect(() => {
     setSmartVisionState({ isOpen: true, holeNumber: hole, par });
     return () => setSmartVisionState({ isOpen: false, analysisText: null });
   }, []);
 
-  // ── SmartVision context — live yardage ──
   useEffect(() => {
-    setSmartVisionState({ centerYards });
-  }, [centerYards]);
+    if (displayType !== 'bundled') setSmartVisionState({ centerYards });
+  }, [centerYards, displayType]);
 
-  // ── SmartVision context — tap measure ───
   useEffect(() => {
-    setSmartVisionState({ measureYards });
-  }, [measureYards]);
+    if (displayType !== 'bundled') setSmartVisionState({ measureYards });
+  }, [measureYards, displayType]);
 
-  // ── SmartVision context — analysis text ─
+  useEffect(() => {
+    if (displayType === 'bundled' && markersReady) {
+      setSmartVisionState({ centerYards: fromTeeYards, measureYards: approachYards });
+    }
+  }, [fromTeeYards, approachYards, displayType, markersReady]);
+
   useEffect(() => {
     if (analysisText) setSmartVisionState({ analysisText });
   }, [analysisText]);
 
-  // ── Satellite URL ──────────────────────
-  const getSatelliteUrl = useCallback((): string | null => {
-    if (!mapsKey) return null;
-    if (Math.abs(middleLat) < 0.01 || Math.abs(middleLng) < 0.01) return null;
-
-    const hasTee = Math.abs(teeLat) > 0.01 && Math.abs(teeLng) > 0.01;
-
-    let centerLat = middleLat;
-    let centerLng = middleLng;
-    let heading = 0;
-
-    if (hasTee) {
-      centerLat = teeLat + (middleLat - teeLat) * 0.55;
-      centerLng = teeLng + (middleLng - teeLng) * 0.55;
-      heading = getHoleHeading(teeLat, teeLng, middleLat, middleLng);
-    }
-
-    const zoom = getHoleZoom(distance, par);
-    const url =
-      'https://maps.googleapis.com/maps/api/staticmap' +
-      '?center=' + centerLat + ',' + centerLng +
-      '&zoom=' + zoom +
-      '&size=600x500' +
-      '&maptype=satellite' +
-      (heading > 0 ? '&heading=' + heading : '') +
-      '&key=' + mapsKey;
-
-    return url;
-  }, [mapsKey, middleLat, middleLng, teeLat, teeLng, distance, par]);
-
-  // ── Image display logic ────────────────
-  const satelliteUrl = getSatelliteUrl();
-  const bundledImage = !isRoundActive ? safeHoleImage(hole) : null;
-
-  type DisplayType = 'bundled' | 'satellite' | 'none';
-
-  const displayType: DisplayType =
-    bundledImage ? 'bundled'
-    : satelliteUrl ? 'satellite'
-    : 'none';
-
-  const imageSource =
-    displayType === 'bundled' ? bundledImage
-    : displayType === 'satellite' ? { uri: satelliteUrl! }
-    : null;
-
-  // ── SmartVision ────────────────────────
+  // ── SmartVision analysis (satellite only)
   const runSmartVision = useCallback(async () => {
     if (!satelliteUrl) {
       setAnalysisText('No satellite image available. GPS coordinates needed.');
       return;
     }
-
     setAnalysisLoading(true);
     setAnalysisText('');
-
     try {
       const cacheKey = courseName.replace(/\s/g, '_') + '_h' + hole;
       let base64 = SATELLITE_CACHE[cacheKey];
-
       if (!base64) {
-        console.log('[SmartVision] downloading...');
         const dlRes = await fetch(satelliteUrl);
-        if (!dlRes.ok) {
-          throw new Error('Download failed: ' + dlRes.status);
-        }
+        if (!dlRes.ok) throw new Error('Download failed: ' + dlRes.status);
         const arrayBuffer = await dlRes.arrayBuffer();
         const uint8 = new Uint8Array(arrayBuffer);
         const CHUNK = 8192;
         let dlBinary = '';
         for (let offset = 0; offset < uint8.byteLength; offset += CHUNK) {
-          const slice = uint8.subarray(offset, offset + CHUNK);
-          dlBinary += String.fromCharCode(...(slice as unknown as number[]));
+          dlBinary += String.fromCharCode(...(uint8.subarray(offset, offset + CHUNK) as unknown as number[]));
         }
-        const dlBase64 = btoa(dlBinary);
         const cacheFile = new File(Paths.cache, 'sv_' + cacheKey + '.jpg');
-        cacheFile.write(dlBase64, { encoding: 'base64' });
-        console.log('[SmartVision] downloaded');
-
+        cacheFile.write(btoa(dlBinary), { encoding: 'base64' });
         const compressed = await manipulateAsync(
           cacheFile.uri,
           [{ resize: { width: 400 } }],
           { compress: 0.7, format: SaveFormat.JPEG },
         );
-
         base64 = new File(compressed.uri).base64Sync();
-
         SATELLITE_CACHE[cacheKey] = base64;
-        console.log('[SmartVision] base64 length:', base64.length);
-      } else {
-        console.log('[SmartVision] cache hit:', cacheKey);
       }
-
       const res = await fetch(apiUrl + '/api/vision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mode: 'hole',
-          image: base64,
-          hole,
-          par,
-          distance: centerYards,
-          courseName,
-          playerFirstName: firstName,
-          dominantMiss,
-          isRoundActive,
+          mode: 'hole', image: base64, hole, par,
+          distance: centerYards, courseName,
+          playerFirstName: firstName, dominantMiss, isRoundActive,
         }),
       });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        console.log('[SmartVision] API error:', res.status, errText);
-        throw new Error('API error ' + res.status);
-      }
-
+      if (!res.ok) throw new Error('API error ' + res.status);
       const data = await res.json() as { message?: string };
       const message = data.message ?? '';
-      console.log('[SmartVision] response:', message);
-
       if (!message) throw new Error('Empty response');
-
       setAnalysisText(message);
-
-      // Kevin speaks the analysis
       await configureAudioForSpeech();
       await speak(message, voiceGender, language, apiUrl);
-
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.log('[SmartVision] error:', msg);
@@ -345,68 +422,45 @@ export default function HoleView() {
     }
   }, [
     satelliteUrl, hole, par, centerYards, courseName,
-    firstName, dominantMiss, isRoundActive, apiUrl,
-    voiceGender, language,
+    firstName, dominantMiss, isRoundActive, apiUrl, voiceGender, language,
   ]);
 
-  // ── Auto-run vision ────────────────────
   useEffect(() => {
     if (autoRunVision && imageReady && satelliteUrl) {
-      const timer = setTimeout(() => { runSmartVision(); }, 1000);
-      return () => clearTimeout(timer);
+      const t = setTimeout(() => { runSmartVision(); }, 1000);
+      return () => clearTimeout(t);
     }
   }, [autoRunVision, imageReady, satelliteUrl, runSmartVision]);
 
-  // ── Measuring tool ─────────────────────
+  // ── Satellite tap measure ───────────────
   const handleImageTap = (evt: { nativeEvent: { locationX: number; locationY: number } }) => {
-    if (!measureMode) return;
-    if (displayType !== 'satellite') return;
-
+    if (!measureMode || displayType !== 'satellite') return;
     const { locationX, locationY } = evt.nativeEvent;
     setTapPoint({ x: locationX, y: locationY });
-
-    if (Math.abs(middleLat) < 0.01) {
-      setMeasureYards(null);
-      return;
-    }
-
+    if (Math.abs(middleLat) < 0.01) { setMeasureYards(null); return; }
     const zoom = getHoleZoom(distance, par);
     const mpp = mppForZoom(zoom);
-
     const imageCenterLat = teeLat + (middleLat - teeLat) * 0.55;
     const imageCenterLng = teeLng + (middleLng - teeLng) * 0.55;
-
     const cx = IMAGE_WIDTH / 2;
     const cy = IMAGE_HEIGHT / 2;
-    const dxM = (locationX - cx) * mpp;
-    const dyM = (cy - locationY) * mpp;
-
-    const tapLat = imageCenterLat + (dyM / 111320);
-    const tapLng = imageCenterLng + (dxM / (111320 * Math.cos(imageCenterLat * Math.PI / 180)));
-
+    const tapLat = imageCenterLat + ((cy - locationY) * mpp / 111320);
+    const tapLng = imageCenterLng + ((locationX - cx) * mpp / (111320 * Math.cos(imageCenterLat * Math.PI / 180)));
     const yards = haversineYards(tapLat, tapLng, middleLat, middleLng);
     setMeasureYards(yards > 1 && yards < 800 ? Math.round(yards) : null);
   };
 
-  // ── GPS pixel position ─────────────────
+  // ── GPS pixel position (satellite) ─────
   const getPlayerPixel = (): { x: number; y: number } | null => {
     if (!gpsValid || !gpsCoords) return null;
     if (Math.abs(middleLat) < 0.01) return null;
-
     const zoom = getHoleZoom(distance, par);
     const mpp = mppForZoom(zoom);
-
     const imageCenterLat = teeLat + (middleLat - teeLat) * 0.55;
     const imageCenterLng = teeLng + (middleLng - teeLng) * 0.55;
-
     const dyM = (gpsCoords.latitude - imageCenterLat) * 111320;
-    const dxM = (gpsCoords.longitude - imageCenterLng) *
-      111320 * Math.cos(imageCenterLat * Math.PI / 180);
-
-    return {
-      x: IMAGE_WIDTH / 2 + dxM / mpp,
-      y: IMAGE_HEIGHT / 2 - dyM / mpp,
-    };
+    const dxM = (gpsCoords.longitude - imageCenterLng) * 111320 * Math.cos(imageCenterLat * Math.PI / 180);
+    return { x: IMAGE_WIDTH / 2 + dxM / mpp, y: IMAGE_HEIGHT / 2 - dyM / mpp };
   };
 
   const playerPixel = isRoundActive && gpsValid ? getPlayerPixel() : null;
@@ -425,6 +479,7 @@ export default function HoleView() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
+        scrollEnabled={!isDragging}
       >
 
         {/* HEADER */}
@@ -452,14 +507,14 @@ export default function HoleView() {
         {/* HOLE IMAGE */}
         <View
           style={[styles.imageWrapper, { width: IMAGE_WIDTH, height: IMAGE_HEIGHT }]}
-          onStartShouldSetResponder={() => measureMode}
+          onStartShouldSetResponder={() => measureMode && displayType === 'satellite'}
           onResponderRelease={handleImageTap}
         >
           {imageSource ? (
             <Image
               source={imageSource}
               style={styles.holeImage}
-              resizeMode="cover"
+              resizeMode={displayType === 'bundled' ? 'contain' : 'cover'}
               onLoad={() => setImageReady(true)}
             />
           ) : (
@@ -469,76 +524,30 @@ export default function HoleView() {
             </View>
           )}
 
-          {/* SVG overlay — satellite only */}
+          {/* Satellite SVG overlay */}
           {displayType === 'satellite' && imageReady && (
-            <Svg
-              style={StyleSheet.absoluteFill}
-              width={IMAGE_WIDTH}
-              height={IMAGE_HEIGHT}
-            >
-              {/* Green center dot */}
-              <Circle
-                cx={greenPixel.x}
-                cy={greenPixel.y}
-                r={8}
-                fill="#F5A623"
-                stroke="#ffffff"
-                strokeWidth={2}
-              />
-
-              {/* Player dot */}
+            <Svg style={StyleSheet.absoluteFill} width={IMAGE_WIDTH} height={IMAGE_HEIGHT}>
+              <Circle cx={greenPixel.x} cy={greenPixel.y} r={8}
+                fill="#F5A623" stroke="#ffffff" strokeWidth={2} />
               {playerPixel && (
                 <>
-                  <Line
-                    x1={playerPixel.x}
-                    y1={playerPixel.y}
-                    x2={greenPixel.x}
-                    y2={greenPixel.y}
-                    stroke="#00C896"
-                    strokeWidth={2}
-                    strokeDasharray="6,4"
-                    opacity={0.8}
-                  />
-                  <Circle
-                    cx={playerPixel.x}
-                    cy={playerPixel.y}
-                    r={9}
-                    fill="#00C896"
-                    stroke="#ffffff"
-                    strokeWidth={2}
-                  />
+                  <Line x1={playerPixel.x} y1={playerPixel.y}
+                    x2={greenPixel.x} y2={greenPixel.y}
+                    stroke="#00C896" strokeWidth={2} strokeDasharray="6,4" opacity={0.8} />
+                  <Circle cx={playerPixel.x} cy={playerPixel.y} r={9}
+                    fill="#00C896" stroke="#ffffff" strokeWidth={2} />
                 </>
               )}
-
-              {/* Tap measuring point */}
               {tapPoint && measureMode && (
                 <>
-                  <Line
-                    x1={tapPoint.x}
-                    y1={tapPoint.y}
-                    x2={greenPixel.x}
-                    y2={greenPixel.y}
-                    stroke="#ffffff"
-                    strokeWidth={1.5}
-                    strokeDasharray="4,3"
-                    opacity={0.9}
-                  />
-                  <Circle
-                    cx={tapPoint.x}
-                    cy={tapPoint.y}
-                    r={7}
-                    fill="#ffffff"
-                    stroke="#00C896"
-                    strokeWidth={2}
-                  />
+                  <Line x1={tapPoint.x} y1={tapPoint.y}
+                    x2={greenPixel.x} y2={greenPixel.y}
+                    stroke="#ffffff" strokeWidth={1.5} strokeDasharray="4,3" opacity={0.9} />
+                  <Circle cx={tapPoint.x} cy={tapPoint.y} r={7}
+                    fill="#ffffff" stroke="#00C896" strokeWidth={2} />
                   {measureYards && (
-                    <SvgText
-                      x={tapPoint.x + 12}
-                      y={tapPoint.y - 8}
-                      fill="#ffffff"
-                      fontSize={14}
-                      fontWeight="bold"
-                    >
+                    <SvgText x={tapPoint.x + 12} y={tapPoint.y - 8}
+                      fill="#ffffff" fontSize={14} fontWeight="bold">
                       {measureYards + 'y'}
                     </SvgText>
                   )}
@@ -547,16 +556,70 @@ export default function HoleView() {
             </Svg>
           )}
 
-          {/* Pre-round badge */}
-          {displayType === 'bundled' && (
-            <LinearGradient
-              colors={['transparent', 'rgba(6,15,9,0.85)']}
-              style={styles.preRoundBadge}
-              pointerEvents="none"
-            >
-              <Text style={styles.preRoundText}>📸 Hole Preview</Text>
-              <Text style={styles.preRoundSub}>GPS view when round starts</Text>
-            </LinearGradient>
+          {/* Bundled image: shot-line SVG + draggable markers + distance panel */}
+          {displayType === 'bundled' && imageReady && markersReady && (
+            <>
+              {/* Shot lines */}
+              <Svg style={StyleSheet.absoluteFill} width={IMAGE_WIDTH} height={IMAGE_HEIGHT}>
+                <Line
+                  x1={teePos.x} y1={teePos.y}
+                  x2={targetPos.x} y2={targetPos.y}
+                  stroke="#00C896" strokeWidth={2.5} strokeDasharray="10,6" opacity={0.85}
+                />
+                <Line
+                  x1={targetPos.x} y1={targetPos.y}
+                  x2={pinPos.x} y2={pinPos.y}
+                  stroke="#F5A623" strokeWidth={2.5} strokeDasharray="10,6" opacity={0.85}
+                />
+              </Svg>
+
+              {/* TEE marker */}
+              <View
+                {...teePR.panHandlers}
+                style={[styles.marker, styles.markerTee,
+                  { left: teePos.x - 16, top: teePos.y - 16 }]}
+              >
+                <Text style={styles.markerLabel}>T</Text>
+              </View>
+
+              {/* TARGET marker */}
+              <View
+                {...targetPR.panHandlers}
+                style={[styles.marker, styles.markerTarget,
+                  { left: targetPos.x - 16, top: targetPos.y - 16 }]}
+              >
+                <Text style={styles.markerLabel}>A</Text>
+              </View>
+
+              {/* PIN marker */}
+              <View
+                {...pinPR.panHandlers}
+                style={[styles.marker, styles.markerPin,
+                  { left: pinPos.x - 16, top: pinPos.y - 16 }]}
+              >
+                <Text style={styles.markerLabel}>P</Text>
+              </View>
+
+              {/* Distance panel */}
+              <View style={styles.distPanel} pointerEvents="none">
+                <View style={styles.distItem}>
+                  <Text style={styles.distLabel}>FROM TEE</Text>
+                  <Text style={styles.distValue}>{fromTeeYards}</Text>
+                  <Text style={styles.distUnit}>yds</Text>
+                </View>
+                <View style={styles.distDivider} />
+                <View style={styles.distItem}>
+                  <Text style={styles.distLabel}>APPROACH</Text>
+                  <Text style={styles.distValue}>{approachYards}</Text>
+                  <Text style={styles.distUnit}>yds</Text>
+                </View>
+              </View>
+
+              {/* Drag hint */}
+              <View style={styles.dragHint} pointerEvents="none">
+                <Text style={styles.dragHintText}>Drag markers to plan your shot</Text>
+              </View>
+            </>
           )}
         </View>
 
@@ -565,73 +628,60 @@ export default function HoleView() {
           {displayType === 'satellite' && (
             <TouchableOpacity
               style={[styles.btn, measureMode && styles.btnActive]}
-              onPress={() => {
-                setMeasureMode(!measureMode);
-                setTapPoint(null);
-                setMeasureYards(null);
-              }}
+              onPress={() => { setMeasureMode(!measureMode); setTapPoint(null); setMeasureYards(null); }}
             >
               <Text style={[styles.btnText, measureMode && styles.btnTextActive]}>
                 📐 Measure
               </Text>
             </TouchableOpacity>
           )}
-
           <TouchableOpacity
             style={styles.btn}
-            onPress={() =>
-              router.push({
-                pathname: '/hole-view-3d',
-                params: { courseName },
-              } as never)
-            }
+            onPress={() => router.push({ pathname: '/hole-view-3d', params: { courseName } } as never)}
           >
             <Text style={styles.btnText}>🌐 3D View</Text>
           </TouchableOpacity>
         </View>
 
-        {/* MEASURE RESULT */}
+        {/* MEASURE RESULT (satellite) */}
         {measureMode && measureYards !== null && (
           <View style={styles.measureResult}>
             <Text style={styles.measureResultText}>{measureYards + ' yds to flag'}</Text>
           </View>
         )}
 
-        {/* SMARTVISION BUTTON */}
-        <TouchableOpacity
-          style={[styles.svBtn, analysisLoading && styles.svBtnLoading]}
-          onPress={runSmartVision}
-          disabled={analysisLoading}
-          activeOpacity={0.85}
-        >
-          {analysisLoading ? (
-            <ActivityIndicator color="#00C896" size="small" />
-          ) : (
-            <Text style={styles.svBtnText}>
-              {analysisText ? 'SmartVision — tap to re-run' : 'SmartVision Analysis'}
-            </Text>
-          )}
-        </TouchableOpacity>
-
-        {/* ANALYSIS CARD */}
-        {Boolean(analysisText) && (
-          <View style={styles.analysisCard}>
-            <Text style={styles.analysisLabel}>KEVIN</Text>
-            <Text style={styles.analysisText} numberOfLines={4}>
-              {analysisText}
-            </Text>
-          </View>
+        {/* SMARTVISION (satellite only) */}
+        {displayType !== 'bundled' && (
+          <>
+            <TouchableOpacity
+              style={[styles.svBtn, analysisLoading && styles.svBtnLoading]}
+              onPress={runSmartVision}
+              disabled={analysisLoading}
+              activeOpacity={0.85}
+            >
+              {analysisLoading ? (
+                <ActivityIndicator color="#00C896" size="small" />
+              ) : (
+                <Text style={styles.svBtnText}>
+                  {analysisText ? 'SmartVision — tap to re-run' : 'SmartVision Analysis'}
+                </Text>
+              )}
+            </TouchableOpacity>
+            {Boolean(analysisText) && (
+              <View style={styles.analysisCard}>
+                <Text style={styles.analysisLabel}>KEVIN</Text>
+                <Text style={styles.analysisText} numberOfLines={4}>{analysisText}</Text>
+              </View>
+            )}
+          </>
         )}
 
         {/* YARDAGE ROW */}
         <View style={styles.yardRow}>
           <View style={styles.yardCard}>
             <Text style={styles.yardLabel}>FRONT</Text>
-            <Text style={styles.yardValue}>
-              {frontYards > 0 ? frontYards : distance - 16}
-            </Text>
+            <Text style={styles.yardValue}>{frontYards > 0 ? frontYards : distance - 16}</Text>
           </View>
-
           <View style={[styles.yardCard, styles.yardCardCenter]}>
             <Text style={styles.yardLabelGreen}>CTR</Text>
             <Text style={styles.yardValueCenter}>{centerYards}</Text>
@@ -639,12 +689,9 @@ export default function HoleView() {
               <Text style={styles.playsLike}>{'plays like ' + centerYards + ' yds'}</Text>
             )}
           </View>
-
           <View style={styles.yardCard}>
             <Text style={styles.yardLabel}>BACK</Text>
-            <Text style={styles.yardValue}>
-              {backYards > 0 ? backYards : distance + 16}
-            </Text>
+            <Text style={styles.yardValue}>{backYards > 0 ? backYards : distance + 16}</Text>
           </View>
         </View>
 
@@ -658,226 +705,110 @@ export default function HoleView() {
 // ─── STYLES ───────────────────────────────
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#060f09',
-  },
-  scroll: {
-    paddingBottom: 32,
-  },
+  container: { flex: 1, backgroundColor: '#060f09' },
+  scroll: { paddingBottom: 32 },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 16, paddingVertical: 10,
   },
-  backBtn: {
-    width: 60,
-  },
-  backText: {
-    color: '#00C896',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  headerTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  badgeRow: {
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
+  backBtn: { width: 60 },
+  backText: { color: '#00C896', fontSize: 16, fontWeight: '600' },
+  headerTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800' },
+  badgeRow: { paddingHorizontal: 16, marginBottom: 8 },
   badge: {
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    alignSelf: 'flex-start', borderWidth: 1,
+    borderRadius: 16, paddingHorizontal: 12, paddingVertical: 4,
   },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
+  badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
   imageWrapper: {
-    marginHorizontal: 12,
-    marginBottom: 8,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#1a1a1a',
+    marginHorizontal: 12, marginBottom: 8,
+    borderRadius: 12, overflow: 'hidden',
+    backgroundColor: '#0a0a0a',
   },
-  holeImage: {
-    width: '100%',
-    height: '100%',
+  holeImage: { width: '100%', height: '100%' },
+  noImage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0d2418' },
+  noImageText: { color: '#ffffff', fontSize: 32, fontWeight: '900' },
+  noImageSub: { color: '#6b7280', fontSize: 14, marginTop: 4 },
+  // Bundled markers
+  marker: {
+    position: 'absolute', width: 32, height: 32,
+    borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+    elevation: 6,
   },
-  noImage: {
-    flex: 1,
+  markerTee: { backgroundColor: '#1DA1F2', borderWidth: 2, borderColor: '#ffffff' },
+  markerTarget: { backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#00C896' },
+  markerPin: { backgroundColor: '#F5A623', borderWidth: 2, borderColor: '#ffffff' },
+  markerLabel: { color: '#060f09', fontSize: 11, fontWeight: '900' },
+  // Distance panel
+  distPanel: {
+    position: 'absolute', bottom: 10, left: 12, right: 12,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(6,15,9,0.82)',
+    borderRadius: 10, paddingVertical: 8, paddingHorizontal: 16,
+    borderWidth: 1, borderColor: 'rgba(0,200,150,0.3)',
+  },
+  distItem: { flex: 1, alignItems: 'center' },
+  distLabel: { color: '#6b7280', fontSize: 9, fontWeight: '700', letterSpacing: 1.2 },
+  distValue: { color: '#ffffff', fontSize: 26, fontWeight: '900', lineHeight: 30 },
+  distUnit: { color: '#6b7280', fontSize: 10 },
+  distDivider: { width: 1, height: 36, backgroundColor: '#1e3a28', marginHorizontal: 8 },
+  // Drag hint
+  dragHint: {
+    position: 'absolute', top: 10, left: 0, right: 0,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0d2418',
   },
-  noImageText: {
-    color: '#ffffff',
-    fontSize: 32,
-    fontWeight: '900',
+  dragHintText: {
+    color: 'rgba(255,255,255,0.45)', fontSize: 11, fontWeight: '500',
+    backgroundColor: 'rgba(6,15,9,0.5)',
+    paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8,
   },
-  noImageSub: {
-    color: '#6b7280',
-    fontSize: 14,
-    marginTop: 4,
-  },
-  preRoundBadge: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-  },
-  preRoundText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  preRoundSub: {
-    color: '#9ca3af',
-    fontSize: 11,
-    marginTop: 1,
-  },
-  btnRow: {
-    flexDirection: 'row',
-    marginHorizontal: 12,
-    marginBottom: 6,
-    gap: 8,
-  },
+  // Buttons
+  btnRow: { flexDirection: 'row', marginHorizontal: 12, marginBottom: 6, gap: 8 },
   btn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#1e3a28',
-    backgroundColor: '#060f09',
+    flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center',
+    borderWidth: 1, borderColor: '#1e3a28', backgroundColor: '#060f09',
   },
-  btnActive: {
-    borderColor: '#00C896',
-    backgroundColor: '#003d20',
-  },
-  btnText: {
-    color: '#9ca3af',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  btnTextActive: {
-    color: '#00C896',
-  },
+  btnActive: { borderColor: '#00C896', backgroundColor: '#003d20' },
+  btnText: { color: '#9ca3af', fontSize: 13, fontWeight: '600' },
+  btnTextActive: { color: '#00C896' },
   measureResult: {
-    marginHorizontal: 12,
-    marginBottom: 6,
-    backgroundColor: '#0d1a00',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#F5A623',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    alignSelf: 'flex-start',
+    marginHorizontal: 12, marginBottom: 6,
+    backgroundColor: '#0d1a00', borderRadius: 10,
+    borderWidth: 1, borderColor: '#F5A623',
+    paddingVertical: 8, paddingHorizontal: 14, alignSelf: 'flex-start',
   },
-  measureResultText: {
-    color: '#F5A623',
-    fontSize: 14,
-    fontWeight: '700',
-  },
+  measureResultText: { color: '#F5A623', fontSize: 14, fontWeight: '700' },
   svBtn: {
-    marginHorizontal: 12,
-    marginBottom: 8,
-    backgroundColor: '#0d2418',
-    borderWidth: 1.5,
-    borderColor: '#00C896',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
+    marginHorizontal: 12, marginBottom: 8,
+    backgroundColor: '#0d2418', borderWidth: 1.5, borderColor: '#00C896',
+    borderRadius: 12, paddingVertical: 14,
+    alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8,
   },
-  svBtnLoading: {
-    borderColor: '#F5A623',
-  },
-  svBtnText: {
-    color: '#00C896',
-    fontSize: 14,
-    fontWeight: '700',
-  },
+  svBtnLoading: { borderColor: '#F5A623' },
+  svBtnText: { color: '#00C896', fontSize: 14, fontWeight: '700' },
   analysisCard: {
-    marginHorizontal: 12,
-    marginBottom: 8,
-    backgroundColor: '#0d2418',
-    borderLeftWidth: 3,
-    borderLeftColor: '#00C896',
-    borderRadius: 8,
-    padding: 12,
+    marginHorizontal: 12, marginBottom: 8,
+    backgroundColor: '#0d2418', borderLeftWidth: 3, borderLeftColor: '#00C896',
+    borderRadius: 8, padding: 12,
   },
   analysisLabel: {
-    color: '#00C896',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 2,
-    marginBottom: 6,
+    color: '#00C896', fontSize: 10, fontWeight: '800',
+    letterSpacing: 2, marginBottom: 6,
   },
-  analysisText: {
-    color: '#ffffff',
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  yardRow: {
-    flexDirection: 'row',
-    marginHorizontal: 12,
-    gap: 6,
-  },
+  analysisText: { color: '#ffffff', fontSize: 14, lineHeight: 21 },
+  // Yardage row
+  yardRow: { flexDirection: 'row', marginHorizontal: 12, gap: 6 },
   yardCard: {
-    flex: 1,
-    backgroundColor: '#0d2418',
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#1e3a28',
+    flex: 1, backgroundColor: '#0d2418', borderRadius: 10,
+    paddingVertical: 10, alignItems: 'center',
+    borderWidth: 1, borderColor: '#1e3a28',
   },
-  yardCardCenter: {
-    flex: 1.3,
-    borderWidth: 2,
-    borderColor: '#00C896',
-  },
-  yardLabel: {
-    color: '#6b7280',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    marginBottom: 4,
-  },
-  yardLabelGreen: {
-    color: '#00C896',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    marginBottom: 4,
-  },
-  yardValue: {
-    color: '#ffffff',
-    fontSize: 26,
-    fontWeight: '700',
-  },
-  yardValueCenter: {
-    color: '#ffffff',
-    fontSize: 38,
-    fontWeight: '900',
-  },
-  playsLike: {
-    color: '#F5A623',
-    fontSize: 11,
-    marginTop: 3,
-  },
+  yardCardCenter: { flex: 1.3, borderWidth: 2, borderColor: '#00C896' },
+  yardLabel: { color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 1.2, marginBottom: 4 },
+  yardLabelGreen: { color: '#00C896', fontSize: 10, fontWeight: '700', letterSpacing: 1.2, marginBottom: 4 },
+  yardValue: { color: '#ffffff', fontSize: 26, fontWeight: '700' },
+  yardValueCenter: { color: '#ffffff', fontSize: 38, fontWeight: '900' },
+  playsLike: { color: '#F5A623', fontSize: 11, marginTop: 3 },
 });
