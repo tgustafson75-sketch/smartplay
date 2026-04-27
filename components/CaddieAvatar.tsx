@@ -232,8 +232,11 @@ export default function CaddieAvatar({
   fillMode,
 }: CaddieAvatarProps) {
   const fill = fillMode ?? 'contain';
-  const { height: H } = useWindowDimensions();
+  const { height: H, width: W } = useWindowDimensions();
   const FRAME_HEIGHT = Math.round(H * 0.55);
+  // Concrete pixel portrait box — avoids % on absolute children of flex:1 parents.
+  const portraitW = Math.round(W * 0.65);
+  const portraitH = Math.round(portraitW * 16 / 9);
 
   // ── Derived emotion ─────────────────────
   const effectiveEmotion = emotion ?? VOICE_EMOTION[voiceState] ?? null;
@@ -486,15 +489,17 @@ export default function CaddieAvatar({
         onPress={onTap}
         activeOpacity={0.97}
       >
-        {/* Layer 1a — Back (fading out) */}
-        <Animated.View style={[styles.kevinLayer, { opacity: backOpacity }]}>
-          <LivingKevin source={backSource} resizeMode={fill} voiceState={voiceState} />
-        </Animated.View>
-
-        {/* Layer 1b — Front (fading in) */}
-        <Animated.View style={[styles.kevinLayer, { opacity: fadeAnim }]}>
-          <LivingKevin source={frontSource} resizeMode={fill} voiceState={voiceState} />
-        </Animated.View>
+        {/* Portrait container — concrete pixels so flexbox can actually center it */}
+        <View style={{ width: portraitW, height: portraitH }}>
+          {/* Layer 1a — Back (fading out) */}
+          <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: backOpacity }]}>
+            <LivingKevin source={backSource} resizeMode={fill} voiceState={voiceState} />
+          </Animated.View>
+          {/* Layer 1b — Front (fading in) */}
+          <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: fadeAnim }]}>
+            <LivingKevin source={frontSource} resizeMode={fill} voiceState={voiceState} />
+          </Animated.View>
+        </View>
 
         {/* Layer 2 — Bottom gradient */}
         <LinearGradient
@@ -618,11 +623,11 @@ const styles = StyleSheet.create({
   frameFull: {
     flex: 1,
     width: '100%',
-    height: '100%',
     overflow: 'hidden',
     backgroundColor: '#060f09',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 16,
     borderWidth: 1,
     borderColor: 'rgba(0, 200, 150, 0.35)',
     borderRadius: 24,
@@ -631,14 +636,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 12,
-  },
-  // (100% - 85%) / 2 = 7.5% — equal margin on all sides centers the layer.
-  kevinLayer: {
-    position: 'absolute',
-    top: '7.5%',
-    left: '7.5%',
-    width: '85%',
-    height: '85%',
   },
   scanLine: {
     position: 'absolute',
