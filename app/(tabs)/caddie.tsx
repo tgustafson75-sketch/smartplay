@@ -563,12 +563,39 @@ export default function CaddieTab() {
   return (
     <View style={[styles.container, { flexDirection: 'column' }]}>
 
+      {/* NAV ROW — sits above Kevin's box, not overlapping it */}
+      <View style={{
+        paddingTop: insets.top + 8,
+        paddingHorizontal: 20,
+        paddingBottom: 4,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        width: '100%',
+        zIndex: 20,
+      }}>
+        <TouchableOpacity
+          style={styles.navBtn}
+          onPress={() => router.replace('/(tabs)/scorecard' as never)}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="chevron-back" size={24} color="#6b7d72" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.navBtn}
+          onPress={() => setShowMoreMenu(true)}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="ellipsis-horizontal" size={24} color="#6b7d72" />
+        </TouchableOpacity>
+      </View>
+
       {/* TOP BOX — Kevin's frame, 2/3 of vertical space */}
       <View style={{
         flex: 2,
         width: '100%',
         paddingHorizontal: 24,
-        paddingTop: insets.top + 16,
+        paddingTop: 8,
         paddingBottom: 12,
         alignItems: 'center',
         justifyContent: 'center',
@@ -667,24 +694,6 @@ export default function CaddieTab() {
           </TouchableOpacity>
         </Animated.View>
 
-      </View>
-
-      {/* TOP NAV — absolute, floats over both boxes */}
-      <View style={[styles.topNav, { top: insets.top + 8 }]}>
-        <TouchableOpacity
-          style={styles.navBtn}
-          onPress={() => router.replace('/(tabs)/scorecard' as never)}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Ionicons name="chevron-back" size={24} color="#6b7d72" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.navBtn}
-          onPress={() => setShowMoreMenu(true)}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Ionicons name="ellipsis-horizontal" size={24} color="#6b7d72" />
-        </TouchableOpacity>
       </View>
 
       {/* DATA STRIP — absolute overlay, cross-fades in when round starts */}

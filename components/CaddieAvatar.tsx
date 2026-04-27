@@ -181,8 +181,8 @@ function computeSource(
 }
 
 // voiceState → emotion used when no explicit emotion prop is passed
+// 'idle' intentionally omitted — falls through to default portrait (kevin_dark / kevin_course)
 const VOICE_EMOTION: Record<string, string> = {
-  idle:      'idle',
   listening: 'listening',
   thinking:  'thinking',
   speaking:  'speaking',
@@ -633,9 +633,11 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   kevinLayer: {
-    width: '85%',
-    height: '85%',
     position: 'absolute',
+    top: '7.5%',
+    left: '7.5%',
+    right: '7.5%',
+    bottom: '7.5%',
   },
   scanLine: {
     position: 'absolute',
