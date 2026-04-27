@@ -569,7 +569,7 @@ export default function CaddieTab() {
     <View style={styles.container}>
 
       {/* KEVIN — 9:16 frame anchored at top; no over-zoom on any screen */}
-      <View style={{ position: 'absolute', top: 0, left: 0, width: W, height: avatarFrameHeight }}>
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: avatarFrameHeight, alignItems: 'center' }}>
         <CaddieAvatar
           gender={voiceGender === 'female' ? 'female' : 'male'}
           isOnCourse={isRoundActive}
