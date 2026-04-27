@@ -11,7 +11,6 @@ import {
   Easing,
   AppState,
   AppStateStatus,
-  useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
@@ -40,10 +39,6 @@ export default function CaddieTab() {
   useKeepAwake();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width: W } = useWindowDimensions();
-  // Natural 9:16 frame height — shows Kevin's full portrait without over-zoom
-  const avatarFrameHeight = Math.round(W * 16 / 9);
-
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
   // ── Stores ──────────────────────────────
@@ -568,8 +563,15 @@ export default function CaddieTab() {
   return (
     <View style={styles.container}>
 
-      {/* KEVIN — 9:16 frame anchored at top; no over-zoom on any screen */}
-      <View style={{ position: 'absolute', top: 0, left: 0, width: W, height: avatarFrameHeight }}>
+      {/* KEVIN — flex, centered, reserved space for bottom UI */}
+      <View style={{
+        flex: 1,
+        width: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingTop: insets.top + 16,
+        paddingBottom: 220,
+      }}>
         <CaddieAvatar
           gender={voiceGender === 'female' ? 'female' : 'male'}
           isOnCourse={isRoundActive}
@@ -584,15 +586,8 @@ export default function CaddieTab() {
         />
       </View>
 
-      {/* TOP NAV */}
+      {/* TOP NAV — ••• only; top-left corner reserved */}
       <View style={[styles.topNav, { top: insets.top + 8 }]}>
-        <TouchableOpacity
-          style={styles.navBtn}
-          onPress={() => router.replace('/(tabs)/scorecard' as never)}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Ionicons name="chevron-back" size={24} color="#6b7d72" />
-        </TouchableOpacity>
         <TouchableOpacity
           style={styles.navBtn}
           onPress={() => setShowMoreMenu(true)}
@@ -614,51 +609,6 @@ export default function CaddieTab() {
           </Text>
         </Animated.View>
       ) : null}
-
-      {/* MIC BUTTON */}
-      <View style={[styles.micZone, { bottom: micBottom }]}>
-        {vadEnabled && voiceState === 'idle' ? (
-          <Animated.View style={{ alignItems: 'center', transform: [{ scale: autoListenPulse }] }}>
-            <View style={[styles.micCircle, { opacity: 0.5 }]}>
-              <Ionicons name="mic" size={32} color="#00C896" />
-            </View>
-            <Text style={styles.micStatusLabel}>LISTENING</Text>
-          </Animated.View>
-        ) : (
-          <View style={{ alignItems: 'center' }}>
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.micRing,
-                {
-                  transform: [{ scale: ringScale }],
-                  opacity: ringOpacity,
-                },
-              ]}
-            />
-            <TouchableOpacity
-              style={[
-                styles.micCircle,
-                voiceState === 'listening' && styles.micCircleActive,
-                (voiceState === 'thinking' || voiceState === 'speaking') && styles.micCircleBusy,
-              ]}
-              onPress={handleMicPress}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              activeOpacity={0.85}
-            >
-              {voiceState === 'listening' ? (
-                <Ionicons name="stop" size={28} color="#00C896" />
-              ) : voiceState === 'thinking' ? (
-                <Ionicons name="ellipsis-horizontal" size={24} color="rgba(0,200,150,0.5)" />
-              ) : voiceState === 'speaking' ? (
-                <Ionicons name="volume-high" size={28} color="#00C896" />
-              ) : (
-                <Ionicons name="mic" size={32} color="#00C896" />
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
 
       {/* DATA STRIP — cross-fades in when round starts */}
       <Animated.View
