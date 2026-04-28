@@ -108,8 +108,8 @@ export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | nul
     }
   }
 
-  // hole_transition_pattern_aware — pattern miss note on new hole entry (holes 3+)
-  if (ctx.currentHole >= 3 && ctx.dominantMiss && ctx.holesPlayed >= 2) {
+  // hole_transition_pattern_aware — pattern miss note on new hole entry (holes 2+)
+  if (ctx.currentHole >= 2 && ctx.dominantMiss && ctx.holesPlayed >= 1) {
     const cooldown = 12 * 60 * 1000;
     if (!lastFiredAt.hole_transition_pattern_aware || now - (lastFiredAt.hole_transition_pattern_aware ?? 0) > cooldown) {
       const missDir = ctx.dominantMiss === 'right' ? 'left side' : ctx.dominantMiss === 'left' ? 'right side' : 'center';

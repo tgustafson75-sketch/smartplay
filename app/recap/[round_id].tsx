@@ -161,6 +161,7 @@ export default function RecapScreen() {
   const [loading, setLoading] = useState(true);
   const [speaking, setSpeaking] = useState(false);
   const [narrating, setNarrating] = useState(false);
+  const narratingRef = useRef(false);
   const [sharing, setSharing] = useState(false);
   const [highlightedHole, setHighlightedHole] = useState<number | null>(null);
 
@@ -207,18 +208,20 @@ export default function RecapScreen() {
 
   const handleNarrate = useCallback(async () => {
     if (!recap) return;
-    if (narrating) {
+    if (narratingRef.current) {
+      narratingRef.current = false;
       await stopSpeaking();
       setNarrating(false);
       setHighlightedHole(null);
       return;
     }
     if (!voiceEnabled) return;
+    narratingRef.current = true;
     setNarrating(true);
     const segments = buildNarrationScript(recap);
     try {
       for (const segment of segments) {
-        if (!narrating && segments.indexOf(segment) > 0) break;
+        if (!narratingRef.current) break;
         if (segment.hole_to_highlight !== null) {
           setHighlightedHole(segment.hole_to_highlight);
           const idx = recap.hole_comparisons.findIndex(hc => hc.hole_number === segment.hole_to_highlight);
@@ -229,13 +232,15 @@ export default function RecapScreen() {
           setHighlightedHole(null);
         }
         await speak(segment.audio_text, voiceGender, 'en', apiUrl);
+        if (!narratingRef.current) break;
         await new Promise(r => setTimeout(r, 400));
       }
     } finally {
+      narratingRef.current = false;
       setNarrating(false);
       setHighlightedHole(null);
     }
-  }, [recap, narrating, voiceGender, voiceEnabled, apiUrl]);
+  }, [recap, voiceGender, voiceEnabled, apiUrl]);
 
   if (loading) {
     return (

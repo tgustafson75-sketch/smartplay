@@ -127,6 +127,48 @@ export default function CaddieTab() {
     useCallback(() => {
       setMode('full');
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+
+      // Fire round_start_handoff when caddie regains focus with an active round on hole 1
+      // (covers: briefing dismissed, skip_briefings path, any other entry)
+      const storeNow = useRoundStore.getState();
+      const settingsNow = useSettingsStore.getState();
+      if (
+        settingsNow.proactive_kevin_enabled &&
+        storeNow.isRoundActive &&
+        storeNow.currentHole === 1 &&
+        Object.keys(storeNow.scores).length === 0
+      ) {
+        const t = setTimeout(() => {
+          const trigger = shouldFireProactive({
+            holesPlayed: 0,
+            currentHole: 1,
+            recentScores: [],
+            ghostDelta: null,
+            dominantMiss: usePlayerProfileStore.getState().dominantMiss ?? null,
+            firstName: usePlayerProfileStore.getState().firstName || '',
+            mode: storeNow.mode,
+          });
+          if (trigger) {
+            markProactiveFired(trigger.id);
+            setCaddieResponse(trigger.message);
+            setVoiceState('proactive');
+            const { voiceEnabled, discreteMode, voiceGender: vg, language: lang } = useSettingsStore.getState();
+            if (voiceEnabled && !discreteMode) {
+              speak(trigger.message, vg, lang, apiUrl)
+                .catch(() => {})
+                .finally(() => setVoiceState('idle'));
+            } else {
+              setTimeout(() => setVoiceState('idle'), 3000);
+            }
+          }
+        }, 2500);
+        return () => {
+          clearTimeout(t);
+          setMode('badge');
+          ScreenOrientation.unlockAsync();
+        };
+      }
+
       return () => {
         setMode('badge');
         ScreenOrientation.unlockAsync();
