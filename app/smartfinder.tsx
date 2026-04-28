@@ -16,6 +16,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import KevinBadge from '../components/KevinBadge';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { useSmartFinderStore } from '../store/smartFinderStore';
 import {
   computeDistance,
   buildLock,
@@ -71,6 +72,7 @@ export default function SmartFinder() {
   const clearLock = useCallback(() => {
     setLock(null);
     setCountdown(0);
+    useSmartFinderStore.getState().clearLock();
     if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
     if (countdownRef.current) clearInterval(countdownRef.current);
     lockTimerRef.current = null;
@@ -126,6 +128,7 @@ export default function SmartFinder() {
     );
 
     setLock(newLock);
+    useSmartFinderStore.getState().setLock(newLock);
     setCountdown(30);
 
     if (lockTimerRef.current) clearTimeout(lockTimerRef.current);

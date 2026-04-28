@@ -11,21 +11,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import { DeviceMotion } from 'expo-sensors';
-import {
-  computeDistance,
-  buildLock,
-  confidenceMargin,
-} from '../services/rangefinder';
+import { confidenceMargin } from '../services/rangefinder';
 import { useSettingsStore } from '../store/settingsStore';
+import { useSmartFinderStore } from '../store/smartFinderStore';
 import type { RangefinderLock } from '../types/smartfinder';
 
 const MOCK_DISTANCES = [
-  { label: '50 yds (near)', tap_y: 0.62, pitch: -16 },
-  { label: '100 yds (mid)', tap_y: 0.55, pitch: -9 },
-  { label: '150 yds (far)',  tap_y: 0.52, pitch: -6 },
-  { label: '200 yds (long)', tap_y: 0.51, pitch: -4.5 },
-  { label: '250 yds (edge)', tap_y: 0.505, pitch: -3.5 },
-  { label: 'Too flat — low confidence', tap_y: 0.5, pitch: -1 },
+  { label: '50 yds (near)',              yards: 50  },
+  { label: '100 yds (mid)',              yards: 100 },
+  { label: '150 yds (far)',              yards: 150 },
+  { label: '200 yds (long)',             yards: 200 },
+  { label: '250 yds (edge)',             yards: 250 },
+  { label: '400 yds (max / low conf.)',  yards: 400 },
 ];
 
 export default function SmartFinderDebug() {
@@ -69,19 +66,41 @@ export default function SmartFinderDebug() {
     setGpsBusy(false);
   };
 
-  const mockLock = (tap_y: number, mockPitch: number) => {
+  const mockLockYards = (yards: number) => {
     const pos = gps ?? { lat: 34.0522, lng: -118.2437, accuracy: 5 };
-    const result = computeDistance({
-      user_position: pos,
-      compass_heading: heading,
-      tap_y_normalized: tap_y,
-      device_pitch_degrees: mockPitch,
-    });
-    const newLock = buildLock(
-      { user_position: pos, compass_heading: heading, tap_y_normalized: tap_y, device_pitch_degrees: mockPitch },
-      result,
+    const distM = yards * 0.9144;
+    // Project target directly at current heading
+    const R = 6371000;
+    const latR = (pos.lat * Math.PI) / 180;
+    const headR = (heading * Math.PI) / 180;
+    const dR = distM / R;
+    const newLatR = Math.asin(
+      Math.sin(latR) * Math.cos(dR) + Math.cos(latR) * Math.sin(dR) * Math.cos(headR),
     );
+    const newLngR =
+      (pos.lng * Math.PI) / 180 +
+      Math.atan2(
+        Math.sin(headR) * Math.sin(dR) * Math.cos(latR),
+        Math.cos(dR) - Math.sin(latR) * Math.sin(newLatR),
+      );
+    const confidence: 'high' | 'medium' | 'low' =
+      yards >= 50 && yards <= 250 ? 'high' : yards >= 10 && yards <= 400 ? 'medium' : 'low';
+    const newLock: RangefinderLock = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      locked_at: Date.now(),
+      user_position: pos,
+      target_position: {
+        lat: (newLatR * 180) / Math.PI,
+        lng: (newLngR * 180) / Math.PI,
+        estimated: true,
+      },
+      distance_yards: yards,
+      distance_meters: Math.round(distM),
+      compass_heading: heading,
+      tap_y_normalized: 0.52,
+    };
     setLock(newLock);
+    useSmartFinderStore.getState().setLock(newLock);
   };
 
   const displayDist = lock
@@ -89,21 +108,11 @@ export default function SmartFinderDebug() {
     : null;
   const displayUnit = distance_unit === 'meters' ? 'm' : 'yds';
 
-  const getLockConfidence = (l: RangefinderLock) => {
-    const r = computeDistance({
-      user_position: l.user_position,
-      compass_heading: l.compass_heading,
-      tap_y_normalized: l.tap_y_normalized,
-      device_pitch_degrees: pitchForLock(l),
-    });
-    return r.confidence;
-  };
-
-  const pitchForLock = (l: RangefinderLock) => {
-    // reconstruct pitch from distance_yards using reverse trig for display
-    const distM = l.distance_yards * 0.9144;
-    const pitchRad = Math.atan2(1.6, distM);
-    return -(pitchRad * 180) / Math.PI;
+  const getLockConfidence = (l: RangefinderLock): 'high' | 'medium' | 'low' => {
+    const y = l.distance_yards;
+    if (y >= 50 && y <= 250) return 'high';
+    if (y >= 10 && y <= 400) return 'medium';
+    return 'low';
   };
 
   return (
@@ -152,9 +161,9 @@ export default function SmartFinderDebug() {
         <Text style={styles.sectionTitle}>Mock Locks</Text>
         <Text style={styles.sectionSub}>Tap to simulate a lock at various distances (bypasses camera)</Text>
         {MOCK_DISTANCES.map(m => (
-          <TouchableOpacity key={m.label} style={styles.mockCard} onPress={() => mockLock(m.tap_y, m.pitch)}>
+          <TouchableOpacity key={m.label} style={styles.mockCard} onPress={() => mockLockYards(m.yards)}>
             <Text style={styles.mockLabel}>{m.label}</Text>
-            <Text style={styles.mockSub}>tap_y={m.tap_y} pitch={m.pitch}°</Text>
+            <Text style={styles.mockSub}>{m.yards} yds · {Math.round(m.yards * 0.9144)} m</Text>
           </TouchableOpacity>
         ))}
 

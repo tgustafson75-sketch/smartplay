@@ -20,6 +20,7 @@ import { VoiceState } from '../components/CaddieAvatar';
 import { getCourse as getApiCourse, courseSummaryForContext } from '../services/golfCourseApi';
 import { generatePatternInsights } from '../services/patternDetection';
 import { useGhostStore } from '../store/ghostStore';
+import { useSmartFinderStore } from '../store/smartFinderStore';
 
 // ─── CONSTANTS ────────────────────────────
 
@@ -264,6 +265,10 @@ export const useVoiceCaddie = ({
 
       const holePlan = getPlanForHole(currentHole);
       const ghostContext = useGhostStore.getState().getSummaryText();
+      const smartFinderLock = useSmartFinderStore.getState().currentLock;
+      const smartFinderContext = smartFinderLock
+        ? `SMARTFINDER ACTIVE: User has locked distance of ${smartFinderLock.distance_yards} yards (${smartFinderLock.distance_meters} meters) at compass heading ${Math.round(smartFinderLock.compass_heading)}°. Confidence: ${smartFinderLock.distance_yards >= 50 && smartFinderLock.distance_yards <= 250 ? 'high' : smartFinderLock.distance_yards >= 10 && smartFinderLock.distance_yards <= 400 ? 'medium' : 'low'}. Treat the locked distance as the working number.`
+        : null;
 
       // Build player pattern insights (on-device, sync — cheap enough per-request)
       const patternInsights = generatePatternInsights(shots, {
@@ -310,6 +315,7 @@ export const useVoiceCaddie = ({
           patternInsights,
           holePlan,
           ghostContext,
+          smartFinderContext,
           isRoundActive,
           isCompetition,
           mentalState: currentMentalState,

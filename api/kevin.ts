@@ -240,6 +240,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       patternInsights = null,
       holePlan = null,
       ghostContext = null,
+      smartFinderContext = null,
       is_proactive = false,
     } = body;
 
@@ -409,6 +410,10 @@ Reference the plan naturally when relevant — confirm club choices, note if the
 ${ghostContext ? `GHOST MATCH — PLAYING AGAINST PAST SELF:
 ${String(ghostContext)}
 When the player asks "how am I doing against past me?", "am I beating my last round?", "ghost status", or any variation — give a brief, vivid 1-2 sentence answer using this data. Name the margin and direction (ahead or behind). If they've just gained or lost a stroke this hole, acknowledge it. Keep it warm and honest.` : ''}
+
+${smartFinderContext ? `SMARTFINDER LOCK:
+${String(smartFinderContext)}
+The player just used SmartFinder to lock in their distance. When recommending a club or discussing the shot, use this exact yardage as your working number. Say "you've got [X] yards" not "around [X]". Don't mention the tool by name — just treat it as established fact.` : ''}
 
 DIRECTIONAL ADVICE — HAZARD-AWARE TARGETING:
 
