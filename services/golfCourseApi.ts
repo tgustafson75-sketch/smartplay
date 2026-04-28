@@ -100,6 +100,13 @@ type RawCourse = {
 };
 
 function normalizeHole(raw: RawHole): Hole {
+  // DIAGNOSTIC — logs first hole of every fetch; remove after API shape is confirmed
+  if ((raw.hole_number ?? raw.number) === 1) {
+    console.log('[golfcourseapi] raw hole shape:', JSON.stringify(raw, null, 2));
+  }
+
+  // golfcourseapi does not return per-hole hazard data in its current schema.
+  // hazards stays [] until a real data source is wired (Phase 4.x landmark).
   return {
     hole_number: raw.hole_number ?? raw.number ?? 0,
     par: raw.par ?? 4,
@@ -278,7 +285,10 @@ export function courseSummaryForContext(course: Course): string {
   const tee = course.tees[0];
   if (!tee) return `${course.club_name} — no tee data available`;
   const holeList = tee.holes
-    .map((h) => `H${h.hole_number} par${h.par} ${h.yardage}y`)
+    .map((h) => {
+      const hazardStr = h.hazards.length > 0 ? ` [${h.hazards.join('; ')}]` : '';
+      return `H${h.hole_number} par${h.par} ${h.yardage}y${hazardStr}`;
+    })
     .join(' · ');
   return (
     `Course: ${course.club_name} — ${course.location.city}, ${course.location.state}\n` +
