@@ -61,7 +61,17 @@ export async function loadRecap(roundId: string): Promise<RoundRecap | null> {
     const info = await FileSystem.getInfoAsync(path);
     if (!info.exists) return null;
     const raw = await FileSystem.readAsStringAsync(path);
-    return JSON.parse(raw) as RoundRecap;
+    const recap = JSON.parse(raw) as RoundRecap;
+    // Patch pre-v1 archived shots that lack outcome/penalty_strokes fields
+    recap.hole_comparisons = (recap.hole_comparisons ?? []).map(hc => ({
+      ...hc,
+      actual_shots: (hc.actual_shots ?? []).map(s => ({
+        ...s,
+        outcome: s.outcome ?? 'clean',
+        penalty_strokes: s.penalty_strokes ?? 0,
+      })),
+    }));
+    return recap;
   } catch {
     return null;
   }

@@ -213,6 +213,9 @@ export default function CaddieTab() {
   const [showRulesChoice, setShowRulesChoice] = useState(false);
   const [pendingOutcomeForRules, setPendingOutcomeForRules] = useState<'ob' | 'lost' | null>(null);
   const outcomeAutoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guard against double-commit: timer fire + near-simultaneous user tap can both call
+  // commitShot before React flushes the state update that would hide the outcome row.
+  const shotCommittedRef = useRef(false);
 
   // ── Ghost rehydration on mount ───────────
   useEffect(() => {
@@ -391,6 +394,7 @@ export default function CaddieTab() {
       clearTimeout(outcomeAutoTimerRef.current);
       outcomeAutoTimerRef.current = null;
     }
+    shotCommittedRef.current = false;
     setPendingDirection(null);
     setShowOutcomeRow(false);
     setShowRulesChoice(false);
@@ -402,6 +406,8 @@ export default function CaddieTab() {
     outcome: ShotOutcome,
     rulesDecision?: RulesDecision,
   ) => {
+    if (shotCommittedRef.current) return; // already committed — timer + tap race guard
+    shotCommittedRef.current = true;
     const resolution = resolvePenalty(outcome, rulesDecision);
     const shot: ShotResult = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -452,6 +458,11 @@ export default function CaddieTab() {
       if (resolution.kevin_voice_line && voiceEnabled && !discreteMode) {
         speak(resolution.kevin_voice_line, voiceGender, language, apiUrl).catch(() => {});
       }
+      // Auto-resolve as play_forward after 15 seconds if user walks away
+      outcomeAutoTimerRef.current = setTimeout(() => {
+        outcomeAutoTimerRef.current = null;
+        commitShot(pendingDirection, outcome, 'play_forward');
+      }, 15000);
       return;
     }
     commitShot(pendingDirection, outcome);
@@ -818,7 +829,15 @@ export default function CaddieTab() {
   const totalHoles = nineHoleMode ? 9 : (courseHoles.length || 18);
   // targetDirection: not yet in aim engine — show CENTER until wired
   const targetDirection = 'CENTER';
-  const currentStroke = (penalties[currentHole] ?? 0) + 1;
+  const currentStroke = useMemo(() => {
+    const legacyPenalties = penalties[currentHole] ?? 0;
+    const holeShots = shots.filter(s => s.hole === currentHole);
+    if (holeShots.length > 0) {
+      const shotPenalties = holeShots.reduce((acc, s) => acc + (s.penalty_strokes ?? 0), 0);
+      return holeShots.length + shotPenalties + legacyPenalties;
+    }
+    return legacyPenalties + 1;
+  }, [shots, penalties, currentHole]);
 
   // ── Cross-transition: strip ↔ start-round CTA ───
   const stripOpacity = useRef(new Animated.Value(isRoundActive ? 1 : 0)).current;
