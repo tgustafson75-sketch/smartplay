@@ -190,49 +190,6 @@ export default function CaddieTab() {
   // Derived early so animation effects can reference it
   const vadEnabled = autoListenEnabled && isRoundActive && appActive;
 
-  // ── Mic animations ───────────────────────
-  const micPulse      = useRef(new Animated.Value(1)).current;
-  const ringScale     = useRef(new Animated.Value(1)).current;
-  const ringOpacity   = useRef(new Animated.Value(0)).current;
-  const autoListenPulse = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (voiceState === 'listening') {
-      const loop = Animated.loop(
-        Animated.parallel([
-          Animated.sequence([
-            Animated.timing(ringScale,   { toValue: 1.4, duration: 1200, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-            Animated.timing(ringScale,   { toValue: 1.0, duration: 0,    useNativeDriver: true }),
-          ]),
-          Animated.sequence([
-            Animated.timing(ringOpacity, { toValue: 0.6, duration: 0,    useNativeDriver: true }),
-            Animated.timing(ringOpacity, { toValue: 0,   duration: 1200, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-          ]),
-        ])
-      );
-      loop.start();
-      return () => loop.stop();
-    } else {
-      ringOpacity.setValue(0);
-      ringScale.setValue(1);
-    }
-  }, [voiceState]);
-
-  useEffect(() => {
-    if (vadEnabled && voiceState === 'idle') {
-      const loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(autoListenPulse, { toValue: 1.05, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(autoListenPulse, { toValue: 1.0,  duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ])
-      );
-      loop.start();
-      return () => loop.stop();
-    } else {
-      autoListenPulse.setValue(1);
-    }
-  }, [vadEnabled, voiceState]);
-
   // ── Keep Vercel warm ────────────────────
   useEffect(() => {
     const keepWarm = async () => {
@@ -692,11 +649,6 @@ export default function CaddieTab() {
     }
   }, [isRoundActive]);
 
-  // ── Positioning helpers ──────────────────
-  // Pre-round: [Start Round 40] → [Bubble 144] → [Mic 244] → Kevin
-  // On-round:  [Data strip 32+insets] → [Mic 132+insets] → Kevin
-  const micBottom = isRoundActive ? insets.bottom + 132 : insets.bottom + 244;
-
   // ── RENDER ───────────────────────────────
   return (
     <View style={styles.container}>
@@ -783,51 +735,6 @@ export default function CaddieTab() {
           </Text>
         </Animated.View>
       ) : null}
-
-      {/* MIC BUTTON */}
-      <View style={[styles.micZone, { bottom: micBottom }]}>
-        {vadEnabled && voiceState === 'idle' ? (
-          <Animated.View style={{ alignItems: 'center', transform: [{ scale: autoListenPulse }] }}>
-            <View style={[styles.micCircle, { opacity: 0.5 }]}>
-              <Ionicons name="mic" size={32} color="#00C896" />
-            </View>
-            <Text style={styles.micStatusLabel}>LISTENING</Text>
-          </Animated.View>
-        ) : (
-          <View style={{ alignItems: 'center' }}>
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.micRing,
-                {
-                  transform: [{ scale: ringScale }],
-                  opacity: ringOpacity,
-                },
-              ]}
-            />
-            <TouchableOpacity
-              style={[
-                styles.micCircle,
-                voiceState === 'listening' && styles.micCircleActive,
-                (voiceState === 'thinking' || voiceState === 'speaking') && styles.micCircleBusy,
-              ]}
-              onPress={handleMicPress}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              activeOpacity={0.85}
-            >
-              {voiceState === 'listening' ? (
-                <Ionicons name="stop" size={28} color="#00C896" />
-              ) : voiceState === 'thinking' ? (
-                <Ionicons name="ellipsis-horizontal" size={24} color="rgba(0,200,150,0.5)" />
-              ) : voiceState === 'speaking' ? (
-                <Ionicons name="volume-high" size={28} color="#00C896" />
-              ) : (
-                <Ionicons name="mic" size={32} color="#00C896" />
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
 
       {/* DATA STRIP — cross-fades in when round starts */}
       <Animated.View
@@ -1253,49 +1160,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     textAlign: 'center',
     lineHeight: 24,
-  },
-  micZone: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  micCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: 'rgba(0, 200, 150, 0.8)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  micCircleActive: {
-    backgroundColor: 'rgba(0, 200, 150, 0.12)',
-    borderColor: '#00C896',
-  },
-  micCircleBusy: {
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: 'rgba(0, 200, 150, 0.4)',
-  },
-  micRing: {
-    position: 'absolute',
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 2,
-    borderColor: '#00C896',
-    backgroundColor: 'transparent',
-  },
-  micStatusLabel: {
-    color: '#6b7d72',
-    fontSize: 11,
-    fontWeight: '500',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginTop: 8,
   },
   modeBadge: {
     paddingHorizontal: 10,
