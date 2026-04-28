@@ -3,11 +3,19 @@ import {
   View,
   Text,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
   Alert,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withDelay,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
@@ -17,6 +25,8 @@ import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
 import { useSettingsStore } from '../../store/settingsStore';
 import { track } from '../../services/analytics';
 import { buildShareCardProps } from '../../services/shareCardGenerator';
+import { computeRecapHero } from '../../services/recapHero';
+import { buildNarrationScript } from '../../services/recapNarration';
 import RoundShareCard from '../../components/RoundShareCard';
 import type { RoundRecap, HoleComparison } from '../../types/plan';
 import type { GhostHoleResult } from '../../types/ghost';
@@ -49,38 +59,38 @@ function varianceColor(v: number | null): string {
   return '#ef4444';
 }
 
-// ─── Three-column ghost row ───────────────────────────────────────────────────
+// ─── Animated hole card ───────────────────────────────────────────────────────
 
-function GhostRow({ ghostResult, holeNum }: { ghostResult: GhostHoleResult; holeNum: number }) {
-  const { ghost_score, current_score, delta } = ghostResult;
-  return (
-    <View style={styles.ghostRow}>
-      <View style={styles.ghostCol}>
-        <Text style={styles.ghostColLabel}>GHOST</Text>
-        <Text style={styles.ghostColVal}>{ghost_score ?? '—'}</Text>
-      </View>
-      <View style={styles.ghostDivider} />
-      <View style={styles.ghostCol}>
-        <Text style={styles.ghostColLabel}>YOURS</Text>
-        <Text style={styles.ghostColVal}>{current_score}</Text>
-      </View>
-      <View style={styles.ghostDivider} />
-      <View style={styles.ghostCol}>
-        <Text style={styles.ghostColLabel}>VS GHOST</Text>
-        <Text style={[styles.ghostColDelta, { color: deltaColor(delta) }]}>{deltaLabel(delta)}</Text>
-      </View>
-    </View>
-  );
-}
+function AnimatedHoleCard({
+  hc,
+  ghostResult,
+  index,
+  highlightedHole,
+}: {
+  hc: HoleComparison;
+  ghostResult?: GhostHoleResult;
+  index: number;
+  highlightedHole: number | null;
+}) {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(20);
 
-// ─── Hole card ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    opacity.value = withDelay(index * 150, withTiming(1, { duration: 280 }));
+    translateY.value = withDelay(index * 150, withSpring(0, { damping: 14, stiffness: 100 }));
+  }, []);
 
-function HoleCard({ hc, ghostResult }: { hc: HoleComparison; ghostResult?: GhostHoleResult }) {
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  const isHighlighted = highlightedHole === hc.hole_number;
   const v = hc.variance;
   const hasScore = hc.actual_score != null;
 
   return (
-    <View style={styles.holeCard}>
+    <Animated.View style={[styles.holeCard, isHighlighted && styles.holeCardHighlighted, animStyle]}>
       <View style={styles.holeCardHeader}>
         <Text style={styles.holeNum}>Hole {hc.hole_number}</Text>
         {hasScore && !ghostResult && (
@@ -109,6 +119,30 @@ function HoleCard({ hc, ghostResult }: { hc: HoleComparison; ghostResult?: Ghost
       {Boolean(hc.kevin_summary) && (
         <Text style={styles.kevinSummary}>{hc.kevin_summary}</Text>
       )}
+    </Animated.View>
+  );
+}
+
+// ─── Three-column ghost row ───────────────────────────────────────────────────
+
+function GhostRow({ ghostResult }: { ghostResult: GhostHoleResult; holeNum: number }) {
+  const { ghost_score, current_score, delta } = ghostResult;
+  return (
+    <View style={styles.ghostRow}>
+      <View style={styles.ghostCol}>
+        <Text style={styles.ghostColLabel}>GHOST</Text>
+        <Text style={styles.ghostColVal}>{ghost_score ?? '—'}</Text>
+      </View>
+      <View style={styles.ghostDivider} />
+      <View style={styles.ghostCol}>
+        <Text style={styles.ghostColLabel}>YOURS</Text>
+        <Text style={styles.ghostColVal}>{current_score}</Text>
+      </View>
+      <View style={styles.ghostDivider} />
+      <View style={styles.ghostCol}>
+        <Text style={styles.ghostColLabel}>VS GHOST</Text>
+        <Text style={[styles.ghostColDelta, { color: deltaColor(delta) }]}>{deltaLabel(delta)}</Text>
+      </View>
     </View>
   );
 }
@@ -122,10 +156,13 @@ export default function RecapScreen() {
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
   const cardRef = useRef<View>(null);
+  const flatListRef = useRef<FlatList>(null);
   const [recap, setRecap] = useState<RoundRecap | null>(null);
   const [loading, setLoading] = useState(true);
   const [speaking, setSpeaking] = useState(false);
+  const [narrating, setNarrating] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [highlightedHole, setHighlightedHole] = useState<number | null>(null);
 
   useEffect(() => {
     if (!round_id) return;
@@ -147,7 +184,7 @@ export default function RecapScreen() {
       }
       await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share this round' });
       track('round_shared', { round_id: recap.round_id, mode: recap.mode });
-    } catch (err) {
+    } catch {
       Alert.alert('Could not generate share card', 'Try again in a moment.');
     } finally {
       setSharing(false);
@@ -167,6 +204,38 @@ export default function RecapScreen() {
       setSpeaking(false);
     }
   }, [recap, voiceGender, voiceEnabled, apiUrl]);
+
+  const handleNarrate = useCallback(async () => {
+    if (!recap) return;
+    if (narrating) {
+      await stopSpeaking();
+      setNarrating(false);
+      setHighlightedHole(null);
+      return;
+    }
+    if (!voiceEnabled) return;
+    setNarrating(true);
+    const segments = buildNarrationScript(recap);
+    try {
+      for (const segment of segments) {
+        if (!narrating && segments.indexOf(segment) > 0) break;
+        if (segment.hole_to_highlight !== null) {
+          setHighlightedHole(segment.hole_to_highlight);
+          const idx = recap.hole_comparisons.findIndex(hc => hc.hole_number === segment.hole_to_highlight);
+          if (idx >= 0 && flatListRef.current) {
+            flatListRef.current.scrollToIndex({ index: idx, animated: true, viewPosition: 0.3 });
+          }
+        } else {
+          setHighlightedHole(null);
+        }
+        await speak(segment.audio_text, voiceGender, 'en', apiUrl);
+        await new Promise(r => setTimeout(r, 400));
+      }
+    } finally {
+      setNarrating(false);
+      setHighlightedHole(null);
+    }
+  }, [recap, narrating, voiceGender, voiceEnabled, apiUrl]);
 
   if (loading) {
     return (
@@ -198,6 +267,13 @@ export default function RecapScreen() {
 
   const ghost = recap.ghost_match ?? null;
   const ghostDelta = ghost?.overall_delta ?? null;
+  const hero = computeRecapHero(recap);
+
+  // Key moments: up to 3 holes with the longest kevin_summary
+  const keyMoments = recap.hole_comparisons
+    .filter(hc => hc.actual_score != null && hc.kevin_summary && hc.kevin_summary.length > 15)
+    .sort((a, b) => (b.kevin_summary?.length ?? 0) - (a.kevin_summary?.length ?? 0))
+    .slice(0, 3);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -210,11 +286,19 @@ export default function RecapScreen() {
       </View>
 
       <FlatList
+        ref={flatListRef}
         data={recap.hole_comparisons}
         keyExtractor={hc => String(hc.hole_number)}
         contentContainerStyle={styles.listContent}
+        onScrollToIndexFailed={() => {}}
         ListHeaderComponent={
           <View>
+            {/* Hero moment card */}
+            <View style={[styles.heroCard, hero.type === 'ghost_win' || hero.type === 'mode_breakthrough' ? styles.heroCardGold : styles.heroCardDefault]}>
+              <Text style={styles.heroHeadline}>{hero.headline}</Text>
+              <Text style={styles.heroDetail}>{hero.detail}</Text>
+            </View>
+
             <View style={styles.summaryCard}>
               <Text style={styles.courseName}>{recap.course_name}</Text>
               <Text style={styles.modeLabel}>{MODE_LABELS[recap.mode] ?? recap.mode}</Text>
@@ -259,11 +343,20 @@ export default function RecapScreen() {
             <View style={styles.kevinCard}>
               <Text style={styles.kevinLabel}>KEVIN</Text>
               <Text style={styles.kevinOverall}>{recap.overall_kevin_summary}</Text>
-              {voiceEnabled && (
-                <TouchableOpacity style={styles.playBtn} onPress={handlePlayAloud}>
-                  <Text style={styles.playBtnText}>{speaking ? 'Stop' : '▶ Play aloud'}</Text>
-                </TouchableOpacity>
-              )}
+              <View style={styles.kevinActions}>
+                {voiceEnabled && (
+                  <TouchableOpacity style={styles.playBtn} onPress={handlePlayAloud}>
+                    <Text style={styles.playBtnText}>{speaking ? 'Stop' : '▶ Play aloud'}</Text>
+                  </TouchableOpacity>
+                )}
+                {voiceEnabled && (
+                  <TouchableOpacity style={[styles.playBtn, narrating && styles.playBtnActive]} onPress={handleNarrate}>
+                    <Text style={[styles.playBtnText, narrating && styles.playBtnTextActive]}>
+                      {narrating ? '■ Stop' : '◈ Walk me through it'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               <TouchableOpacity
                 style={[styles.shareBtn, sharing && styles.shareBtnDisabled]}
                 onPress={handleShare}
@@ -275,15 +368,47 @@ export default function RecapScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* Key moments */}
+            {keyMoments.length > 0 && (
+              <View style={styles.keyMomentsSection}>
+                <Text style={styles.holesHeader}>KEY MOMENTS</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.keyMomentsScroll}>
+                  {keyMoments.map(hc => (
+                    <TouchableOpacity
+                      key={hc.hole_number}
+                      style={[styles.keyMomentCard, highlightedHole === hc.hole_number && styles.keyMomentCardActive]}
+                      onPress={() => {
+                        setHighlightedHole(hc.hole_number);
+                        const idx = recap.hole_comparisons.findIndex(h => h.hole_number === hc.hole_number);
+                        if (idx >= 0 && flatListRef.current) {
+                          flatListRef.current.scrollToIndex({ index: idx, animated: true, viewPosition: 0.3 });
+                        }
+                      }}
+                    >
+                      <Text style={styles.keyMomentHole}>Hole {hc.hole_number}</Text>
+                      <Text style={[styles.keyMomentScore, { color: varianceColor(hc.variance) }]}>
+                        {hc.actual_score ?? '—'} {hc.variance != null ? '(' + (hc.variance > 0 ? '+' : '') + hc.variance + ')' : ''}
+                      </Text>
+                      <Text style={styles.keyMomentSummary} numberOfLines={3}>
+                        {hc.kevin_summary}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
             <Text style={styles.holesHeader}>
               {ghost ? 'GHOST  ·  YOURS  ·  DELTA' : 'HOLE BY HOLE'}
             </Text>
           </View>
         }
-        renderItem={({ item }) => (
-          <HoleCard
+        renderItem={({ item, index }) => (
+          <AnimatedHoleCard
             hc={item}
             ghostResult={ghost?.hole_results[item.hole_number]}
+            index={index}
+            highlightedHole={highlightedHole}
           />
         )}
         ListFooterComponent={<View style={{ height: 48 }} />}
@@ -316,6 +441,20 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#1e3a28', paddingVertical: 13, paddingHorizontal: 28,
   },
   emptyBtnText: { color: '#00C896', fontSize: 15, fontWeight: '700' },
+
+  heroCard: {
+    marginHorizontal: 12, marginBottom: 12, marginTop: 4,
+    borderRadius: 14, borderWidth: 1.5, padding: 16,
+  },
+  heroCardGold: {
+    backgroundColor: '#1a120a', borderColor: '#F5A623',
+  },
+  heroCardDefault: {
+    backgroundColor: '#0d2418', borderColor: '#00C896',
+  },
+  heroHeadline: { color: '#ffffff', fontSize: 20, fontWeight: '900', marginBottom: 4 },
+  heroDetail: { color: '#9ca3af', fontSize: 13, lineHeight: 19 },
+
   summaryCard: {
     marginHorizontal: 12, marginBottom: 12,
     backgroundColor: '#0d2418', borderRadius: 14,
@@ -342,18 +481,32 @@ const styles = StyleSheet.create({
   },
   kevinLabel: { color: '#00C896', fontSize: 10, fontWeight: '800', letterSpacing: 2, marginBottom: 6 },
   kevinOverall: { color: '#ffffff', fontSize: 15, lineHeight: 22 },
+  kevinActions: { flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' },
   playBtn: {
-    marginTop: 10, alignSelf: 'flex-start',
+    alignSelf: 'flex-start',
     borderWidth: 1, borderColor: '#00C896', borderRadius: 16,
     paddingHorizontal: 14, paddingVertical: 6,
   },
+  playBtnActive: { backgroundColor: '#003d20' },
   playBtnText: { color: '#00C896', fontSize: 13, fontWeight: '600' },
+  playBtnTextActive: { color: '#00C896' },
+  keyMomentsSection: { marginBottom: 12 },
+  keyMomentsScroll: { paddingHorizontal: 12, gap: 10 },
+  keyMomentCard: {
+    width: 160, backgroundColor: '#0d2418', borderRadius: 10,
+    borderWidth: 1, borderColor: '#1e3a28', padding: 12,
+  },
+  keyMomentCardActive: { borderColor: '#00C896', backgroundColor: '#0a2416' },
+  keyMomentHole: { color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 1.2, marginBottom: 2 },
+  keyMomentScore: { fontSize: 18, fontWeight: '900', marginBottom: 6 },
+  keyMomentSummary: { color: '#9ca3af', fontSize: 11, lineHeight: 16 },
   holesHeader: { color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 2, marginHorizontal: 16, marginBottom: 8 },
   holeCard: {
     marginHorizontal: 12, marginBottom: 8,
     backgroundColor: '#0d2418', borderRadius: 10,
     borderWidth: 1, borderColor: '#1e3a28', padding: 12,
   },
+  holeCardHighlighted: { borderColor: '#00C896', backgroundColor: '#0a2416' },
   holeCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
   holeNum: { color: '#ffffff', fontSize: 14, fontWeight: '800' },
   variancePill: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },

@@ -194,7 +194,8 @@ export type VoiceState =
   | 'idle'
   | 'listening'
   | 'thinking'
-  | 'speaking';
+  | 'speaking'
+  | 'proactive';
 
 export interface HUDData {
   hole: number | null;
@@ -478,8 +479,9 @@ export default function CaddieAvatar({
       return;
     }
     const speed =
-      voiceState === 'speaking'  ? 300 :
-      voiceState === 'listening' ? 600 : 1200;
+      voiceState === 'speaking'   ? 300 :
+      voiceState === 'proactive'  ? 400 :
+      voiceState === 'listening'  ? 600 : 1200;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(glowAnim, {
@@ -563,12 +565,14 @@ export default function CaddieAvatar({
   }, [voiceState]);
 
   const ringColor =
+    voiceState === 'proactive'               ? '#F5A623' :
     (voiceState === 'thinking' || isThinking) ? '#F5A623' : '#00C896';
 
   const stateText =
     voiceState === 'listening'             ? '● Listening' :
     (voiceState === 'thinking' || isThinking) ? '◌ Thinking'  :
-    voiceState === 'speaking'              ? '▶ Speaking'  : '';
+    voiceState === 'speaking'              ? '▶ Speaking'  :
+    voiceState === 'proactive'             ? '◆ Kevin'      : '';
 
   const hudItems = [
     { label: 'HOLE',  value: hud.hole      !== null ? String(hud.hole)      : '—' },

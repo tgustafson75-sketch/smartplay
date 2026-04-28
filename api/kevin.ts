@@ -240,6 +240,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       patternInsights = null,
       holePlan = null,
       ghostContext = null,
+      is_proactive = false,
     } = body;
 
     type SmartVisionContext = {
@@ -440,6 +441,8 @@ USER STATE AWARENESS:
 - If asked "show me SmartVision" or "how do I [X]?", describe how to access it via the ••• menu (top-right). Do not pretend to navigate for them — instruct them naturally.
 - If asked about features still in development, be honest. "Cage mode is here. Multi-player is on the way. Right now it's just you and me."
 - Never use the words "tutorial" or "onboarding". Just be Kevin and explain things naturally if asked.
+
+${is_proactive ? `PROACTIVE CONTEXT: You are speaking up on your own — the player did not ask a question. This is an observation, a nudge, or a check-in you chose to offer. Keep it to one sentence. Natural. Not a reminder, not a tip. Something a real caddie would say as they walk between holes.` : ''}
 
 RESPONSE LENGTH: ${responseMode === 'short' ? 'Maximum 15 words.' : responseMode === 'detailed' ? 'Up to 4 sentences if genuinely needed.' : 'Maximum 2 sentences.'}
 

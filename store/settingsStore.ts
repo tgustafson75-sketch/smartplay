@@ -21,6 +21,7 @@ interface SettingsState {
   glassesConnected: boolean;
   autoListenEnabled: boolean;
   skip_briefings: boolean;
+  proactive_kevin_enabled: boolean;
 
   tutorialsSeen: Record<string, boolean>;
 
@@ -40,6 +41,7 @@ interface SettingsState {
   setGlassesConnected: (v: boolean) => void;
   setAutoListenEnabled: (v: boolean) => void;
   setSkipBriefings: (v: boolean) => void;
+  setProactiveKevinEnabled: (v: boolean) => void;
   markTutorialSeen: (key: string) => void;
   resetTutorials: () => void;
 }
@@ -63,6 +65,7 @@ export const useSettingsStore = create<SettingsState>()(
       glassesConnected: false,
       autoListenEnabled: false,
       skip_briefings: false,
+      proactive_kevin_enabled: true,
       tutorialsSeen: {},
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
@@ -79,6 +82,7 @@ export const useSettingsStore = create<SettingsState>()(
       setGlassesConnected: (v) => set({ glassesConnected: v }),
       setAutoListenEnabled: (v) => set({ autoListenEnabled: v }),
       setSkipBriefings: (v) => set({ skip_briefings: v }),
+      setProactiveKevinEnabled: (v) => set({ proactive_kevin_enabled: v }),
       markTutorialSeen: (key) =>
         set(s => ({ tutorialsSeen: { ...s.tutorialsSeen, [key]: true } })),
       resetTutorials: () => set({ tutorialsSeen: {} }),
@@ -99,6 +103,7 @@ export const useSettingsStore = create<SettingsState>()(
         castMode: s.castMode,
         autoListenEnabled: s.autoListenEnabled,
         skip_briefings: s.skip_briefings,
+        proactive_kevin_enabled: s.proactive_kevin_enabled,
         tutorialsSeen: s.tutorialsSeen,
         // watchConnected / glassesConnected not persisted — rechecked on mount
       }),

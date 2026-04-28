@@ -31,6 +31,7 @@ export default function Settings() {
     watchConnected,
     autoListenEnabled,
     skip_briefings,
+    proactive_kevin_enabled,
     theme_preference,
     setVoiceEnabled,
     setVoiceGender,
@@ -42,6 +43,7 @@ export default function Settings() {
     setWatchConnected,
     setAutoListenEnabled,
     setSkipBriefings,
+    setProactiveKevinEnabled,
     setThemePreference,
   } = useSettingsStore();
 
@@ -290,6 +292,12 @@ export default function Settings() {
             sub="Go straight to the round without Kevin's intro"
             value={skip_briefings}
             onValueChange={setSkipBriefings}
+          />
+          <ToggleRow
+            label="Proactive Kevin"
+            sub="Kevin speaks up between holes — streaks, patterns, ghost updates"
+            value={proactive_kevin_enabled}
+            onValueChange={setProactiveKevinEnabled}
           />
         </View>
 

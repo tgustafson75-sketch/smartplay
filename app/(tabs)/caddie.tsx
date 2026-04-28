@@ -45,6 +45,11 @@ import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { kevinText as kevinTextStyle } from '../../styles/typography';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
 import { canAccess, trialDaysLeft } from '../../services/featureAccess';
+import {
+  shouldFireProactive,
+  markProactiveFired,
+  resetProactiveState,
+} from '../../services/proactiveKevin';
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
@@ -100,8 +105,8 @@ export default function CaddieTab() {
     setAutoListenEnabled,
   } = useSettingsStore();
 
-  const { firstName, goal, subscription_status, trial_started_at } = usePlayerProfileStore();
-  const { skip_briefings } = useSettingsStore();
+  const { firstName, goal, subscription_status, trial_started_at, dominantMiss } = usePlayerProfileStore();
+  const { skip_briefings, proactive_kevin_enabled } = useSettingsStore();
   const daysLeft = useMemo(
     () => trialDaysLeft(trial_started_at),
     [subscription_status, trial_started_at],
@@ -515,6 +520,7 @@ export default function CaddieTab() {
     }
 
     incrementRounds();
+    resetProactiveState();
     setShowRoundSetup(false);
     setSelectedGhostId(null);
 
@@ -597,6 +603,41 @@ export default function CaddieTab() {
 
     if (voiceEnabled && !discreteMode) {
       speak(transition, voiceGender, language, apiUrl).catch(() => {});
+    }
+
+    // ── Proactive Kevin evaluation (post-hole-transition) ──────────────
+    if (proactive_kevin_enabled) {
+      const storeNow = useRoundStore.getState();
+      const recentScores: number[] = [];
+      for (let h = Math.max(1, nextHole - 3); h < nextHole; h++) {
+        const s = storeNow.scores[h];
+        const hd = storeNow.courseHoles.find(ch => ch.hole === h);
+        if (s != null && hd) recentScores.push(s - hd.par);
+      }
+      const ghostDelta = useGhostStore.getState().getSnapshot()?.overall_delta ?? null;
+      const proactiveTrigger = shouldFireProactive({
+        holesPlayed: nextHole - 1,
+        currentHole: nextHole,
+        recentScores,
+        ghostDelta,
+        dominantMiss: dominantMiss ?? null,
+        firstName: firstName || '',
+        mode: storeNow.mode,
+      });
+      if (proactiveTrigger) {
+        markProactiveFired(proactiveTrigger.id);
+        setTimeout(() => {
+          setCaddieResponse(proactiveTrigger.message);
+          setVoiceState('proactive');
+          if (voiceEnabled && !discreteMode) {
+            speak(proactiveTrigger.message, voiceGender, language, apiUrl)
+              .catch(() => {})
+              .finally(() => setVoiceState('idle'));
+          } else {
+            setTimeout(() => setVoiceState('idle'), 3000);
+          }
+        }, 2200);
+      }
     }
   };
 
