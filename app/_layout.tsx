@@ -53,6 +53,14 @@ export default function RootLayout() {
           name="patterns-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
+        <Stack.Screen
+          name="plan-debug"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
+        <Stack.Screen
+          name="recap/[round_id]"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
       </Stack>
     </SafeAreaProvider>
     </KevinPresenceProvider>

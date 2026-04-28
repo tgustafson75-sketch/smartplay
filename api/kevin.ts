@@ -236,6 +236,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       courseContext = null,
       roundMode = 'free_play',
       patternInsights = null,
+      holePlan = null,
     } = body;
 
     type SmartVisionContext = {
@@ -372,6 +373,31 @@ ${(() => {
 - Mode: ${modeLabel[String(roundMode)] ?? String(roundMode)}
 ${insightLines}
 (shots analyzed: ${pi?.shot_count_analyzed ?? 0})`;
+})()}
+
+${(() => {
+  type HolePlanMarker = { x: number; y: number; club_intent: string | null };
+  type HolePlan = {
+    hole_number?: number;
+    locked_at?: number | null;
+    markers?: { tee?: HolePlanMarker; approach?: HolePlanMarker | null; pin?: HolePlanMarker | null };
+    computed_yardages?: { from_tee_to_approach?: number | null; from_approach_to_pin?: number | null; total?: number | null };
+    notes?: string | null;
+  };
+  const hp = holePlan as HolePlan | null;
+  if (!hp) return '';
+  const t = hp.markers?.tee;
+  const a = hp.markers?.approach;
+  const p = hp.markers?.pin;
+  const parts: string[] = [];
+  if (t?.club_intent) parts.push(`tee: ${t.club_intent}${hp.computed_yardages?.from_tee_to_approach ? ' (' + hp.computed_yardages.from_tee_to_approach + 'y to approach)' : ''}`);
+  if (a?.club_intent) parts.push(`approach: ${a.club_intent}${hp.computed_yardages?.from_approach_to_pin ? ' (' + hp.computed_yardages.from_approach_to_pin + 'y to pin)' : ''}`);
+  if (p?.club_intent) parts.push(`pin shot: ${p.club_intent}`);
+  const status = hp.locked_at ? 'locked' : 'draft';
+  const planText = parts.length > 0 ? parts.join(', ') : 'markers set, no clubs chosen';
+  return `CURRENT HOLE PLAN (${status}): ${planText}
+Reference the plan naturally when relevant — confirm club choices, note if the player is on or off plan, adapt if conditions changed. Never read it aloud verbatim. Use it as shared context, not a script.
+`;
 })()}
 
 SMARTVISION BEHAVIOR:

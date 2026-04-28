@@ -141,6 +141,7 @@ export const useVoiceCaddie = ({
     mode: roundMode,
     shots,
     courseHoles,
+    getPlanForHole,
   } = useRoundStore();
 
   const {
@@ -260,6 +261,8 @@ export const useVoiceCaddie = ({
           }),
         }));
 
+      const holePlan = getPlanForHole(currentHole);
+
       // Build player pattern insights (on-device, sync — cheap enough per-request)
       const patternInsights = generatePatternInsights(shots, {
         currentRoundMode: roundMode,
@@ -303,6 +306,7 @@ export const useVoiceCaddie = ({
           courseContext,
           roundMode,
           patternInsights,
+          holePlan,
           isRoundActive,
           isCompetition,
           mentalState: currentMentalState,

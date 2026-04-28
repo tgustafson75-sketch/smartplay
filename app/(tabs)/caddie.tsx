@@ -32,6 +32,8 @@ import { getCourseList, getCourse } from '../../data/courses';
 import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
 import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types/patterns';
 import { getCourse as getApiCourse, courseToHoles } from '../../services/golfCourseApi';
+import { generateRecap } from '../../services/recapGenerator';
+import { generatePatternInsights } from '../../services/patternDetection';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
 import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
@@ -60,6 +62,7 @@ export default function CaddieTab() {
     currentYardage,
     club,
     activeCourse,
+    activeCourseId,
     courseHoles,
     scores,
     penalties,
@@ -133,6 +136,7 @@ export default function CaddieTab() {
   const [showPreRound, setShowPreRound] = useState(false);
   const [preRoundBrief, setPreRoundBrief] = useState('');
   const [preRoundLoading, setPreRoundLoading] = useState(false);
+  const [recapLoading, setRecapLoading] = useState(false);
 
   // ── Floating response text ───────────────
   const displayText = caddieResponse || openingPrompt;
@@ -493,6 +497,44 @@ export default function CaddieTab() {
       Math.max(10, 50 - Math.max(0, vspar * 2)),
       'Round completed',
     );
+
+    // Kick off recap generation asynchronously — don't block the summary
+    const storeState = useRoundStore.getState();
+    const roundId = storeState.currentRoundId;
+    if (roundId) {
+      setRecapLoading(true);
+      const patternInsights = generatePatternInsights(storeState.shots, {
+        currentRoundMode: storeState.mode,
+        scores: storeState.scores,
+        courseHoles: storeState.courseHoles,
+        handicap: usePlayerProfileStore.getState().handicap,
+        dominantMiss: usePlayerProfileStore.getState().dominantMiss as 'left' | 'right' | 'straight' | null,
+      });
+      generateRecap(roundId, {
+        courseName: storeState.activeCourse ?? 'Unknown Course',
+        courseId: storeState.activeCourseId,
+        mode: storeState.mode,
+        startedAt: storeState.roundStartTime ?? Date.now(),
+        endedAt: Date.now(),
+        totalScore: total,
+        scoreVsPar: vspar,
+        scores: storeState.scores,
+        plans: storeState.plans,
+        shots: storeState.shots,
+        courseHoles: storeState.courseHoles,
+        patternInsights: patternInsights.insights,
+        playerName: usePlayerProfileStore.getState().firstName || usePlayerProfileStore.getState().name || 'the player',
+        apiUrl,
+      })
+        .then(recap => {
+          setRecapLoading(false);
+          router.push(('/recap/' + recap.round_id) as never);
+        })
+        .catch(err => {
+          console.warn('[caddie] recap generation failed:', err);
+          setRecapLoading(false);
+        });
+    }
   };
 
   // ── Start round ──────────────────────────

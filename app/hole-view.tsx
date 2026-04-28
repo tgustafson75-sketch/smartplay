@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
+  Modal,
   useWindowDimensions,
   ActivityIndicator,
   PanResponder,
@@ -28,9 +29,23 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { File, Paths } from 'expo-file-system';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { useRoundStore } from '../store/roundStore';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import PALMS_IMAGES from '../data/palmsImages';
+
+const CLUBS = [
+  'Driver', '3W', '5W', 'Hybrid',
+  '3i', '4i', '5i', '6i', '7i', '8i', '9i',
+  'PW', 'GW', 'SW', 'LW', 'Putter',
+];
+
+function timeAgo(ms: number): string {
+  const diff = Date.now() - ms;
+  if (diff < 60_000) return 'just now';
+  if (diff < 3600_000) return Math.floor(diff / 60_000) + 'm ago';
+  return Math.floor(diff / 3600_000) + 'h ago';
+}
 
 // ─── SATELLITE CACHE ──────────────────────
 const SATELLITE_CACHE: Record<string, string> = {};
@@ -114,6 +129,12 @@ export default function HoleView() {
   const { voiceGender, language } = useSettingsStore();
   const { dominantMiss, firstName } = usePlayerProfileStore();
   const { setSmartVisionState } = useSmartVision();
+  const {
+    isRoundActive: roundActive,
+    addOrUpdatePlan,
+    lockPlanForHole,
+    getPlanForHole,
+  } = useRoundStore();
   const { setMode } = useKevinPresence();
 
   useEffect(() => { setMode('badge'); }, []);
@@ -140,6 +161,14 @@ export default function HoleView() {
   const [pinPos, setPinPos] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [markersReady, setMarkersReady] = useState(false);
+
+  // ── Plan state ─────────────────────────
+  const [teeClub, setTeeClub]         = useState<string | null>(null);
+  const [approachClub, setApproachClub] = useState<string | null>(null);
+  const [pinClub, setPinClub]         = useState<string | null>(null);
+  const [clubPickerFor, setClubPickerFor] = useState<'tee' | 'approach' | 'pin' | null>(null);
+  const prevDraggingRef = useRef(false);
+  const planSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Mutable refs — read inside PanResponder callbacks (stable, captured once)
   const teePosRef = useRef(teePos);
@@ -306,6 +335,77 @@ export default function HoleView() {
     setMarkersReady(true);
   }, [displayType, IMAGE_WIDTH, IMAGE_HEIGHT_BUNDLED, markersReady]);
 
+  // ── Restore existing plan when markers initialise ──
+  useEffect(() => {
+    if (!markersReady || !roundActive) return;
+    const plan = getPlanForHole(hole);
+    if (!plan) return;
+    const { tee, approach, pin } = plan.markers;
+    teePosRef.current   = { x: tee.x,      y: tee.y };
+    setTeePos({ x: tee.x, y: tee.y });
+    if (approach) {
+      targetPosRef.current = { x: approach.x, y: approach.y };
+      setTargetPos({ x: approach.x, y: approach.y });
+    }
+    if (pin) {
+      pinPosRef.current = { x: pin.x, y: pin.y };
+      setPinPos({ x: pin.x, y: pin.y });
+    }
+    setTeeClub(tee.club_intent);
+    setApproachClub(approach?.club_intent ?? null);
+    setPinClub(pin?.club_intent ?? null);
+  }, [markersReady, roundActive, hole]); // intentionally not tracking getPlanForHole
+
+  // ── Auto-save plan when drag ends ──────
+  useEffect(() => {
+    if (displayType !== 'bundled' || !markersReady || !roundActive) return;
+    if (prevDraggingRef.current && !isDragging) {
+      if (planSaveTimerRef.current) clearTimeout(planSaveTimerRef.current);
+      planSaveTimerRef.current = setTimeout(() => {
+        addOrUpdatePlan({
+          hole_number: hole,
+          markers: {
+            tee:      { x: teePos.x,    y: teePos.y,    club_intent: teeClub },
+            approach: { x: targetPos.x, y: targetPos.y, club_intent: approachClub },
+            pin:      { x: pinPos.x,    y: pinPos.y,    club_intent: pinClub },
+          },
+          computed_yardages: {
+            from_tee_to_approach: fromTeeYards,
+            from_approach_to_pin: approachYards,
+            total: fromTeeYards + approachYards,
+          },
+        });
+      }, 500);
+    }
+    prevDraggingRef.current = isDragging;
+  }, [isDragging]);
+
+  // ── Re-save when club intent changes ───
+  const saveClubUpdate = useCallback((
+    nextTee: string | null,
+    nextApp: string | null,
+    nextPin: string | null,
+  ) => {
+    if (!roundActive || !markersReady) return;
+    addOrUpdatePlan({
+      hole_number: hole,
+      markers: {
+        tee:      { x: teePos.x,    y: teePos.y,    club_intent: nextTee },
+        approach: { x: targetPos.x, y: targetPos.y, club_intent: nextApp },
+        pin:      { x: pinPos.x,    y: pinPos.y,    club_intent: nextPin },
+      },
+      computed_yardages: {
+        from_tee_to_approach: fromTeeYards,
+        from_approach_to_pin: approachYards,
+        total: fromTeeYards + approachYards,
+      },
+    });
+  }, [roundActive, markersReady, hole, teePos, targetPos, pinPos, fromTeeYards, approachYards]);
+
+  const handleLockPlan = useCallback(() => {
+    lockPlanForHole(hole);
+  }, [hole, lockPlanForHole]);
+
   // ── GPS validity ───────────────────────
   const checkGpsValid = (coords: {
     latitude: number; longitude: number; accuracy: number;
@@ -465,6 +565,11 @@ export default function HoleView() {
 
   const playerPixel = isRoundActive && gpsValid ? getPlayerPixel() : null;
   const greenPixel = { x: IMAGE_WIDTH / 2, y: IMAGE_HEIGHT * 0.2 };
+
+  // Plan UI derived state
+  const existingPlan  = roundActive ? getPlanForHole(hole) : null;
+  const isPlanLocked  = existingPlan?.locked_at != null;
+  const planCreatedAt = existingPlan?.created_at ?? null;
 
   const modeBadgeText =
     isRoundActive && gpsValid ? '● LIVE GPS'
@@ -643,6 +748,49 @@ export default function HoleView() {
           </TouchableOpacity>
         </View>
 
+        {/* PLAN ROW — bundled + round active only */}
+        {displayType === 'bundled' && roundActive && markersReady && (
+          <View style={styles.planRow}>
+            {/* Lock / status button */}
+            <TouchableOpacity
+              style={[styles.lockBtn, isPlanLocked && styles.lockBtnLocked]}
+              onPress={handleLockPlan}
+              disabled={isPlanLocked}
+            >
+              <Text style={[styles.lockBtnText, isPlanLocked && styles.lockBtnTextLocked]}>
+                {isPlanLocked ? 'Plan Locked ✓' : existingPlan ? 'Lock Plan' : 'Lock Plan'}
+              </Text>
+            </TouchableOpacity>
+            {planCreatedAt != null && (
+              <Text style={styles.planAgeText}>
+                {isPlanLocked ? 'Locked ' : 'Draft · '}
+                {timeAgo(isPlanLocked ? (existingPlan?.locked_at ?? planCreatedAt) : planCreatedAt)}
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* CLUB INTENT ROW */}
+        {displayType === 'bundled' && roundActive && markersReady && (
+          <View style={styles.clubRow}>
+            {(['tee', 'approach', 'pin'] as const).map(m => {
+              const club = m === 'tee' ? teeClub : m === 'approach' ? approachClub : pinClub;
+              const label = m === 'tee' ? 'T' : m === 'approach' ? 'A' : 'P';
+              const color = m === 'tee' ? '#1DA1F2' : m === 'approach' ? '#00C896' : '#F5A623';
+              return (
+                <TouchableOpacity
+                  key={m}
+                  style={[styles.clubSlot, { borderColor: color + '44' }]}
+                  onPress={() => setClubPickerFor(m)}
+                >
+                  <Text style={[styles.clubSlotLabel, { color }]}>{label}</Text>
+                  <Text style={styles.clubSlotValue}>{club ?? '—'}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
         {/* MEASURE RESULT (satellite) */}
         {measureMode && measureYards !== null && (
           <View style={styles.measureResult}>
@@ -698,6 +846,73 @@ export default function HoleView() {
       </ScrollView>
       </SafeAreaView>
       <KevinBadge />
+
+      {/* CLUB PICKER MODAL */}
+      <Modal
+        visible={clubPickerFor !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setClubPickerFor(null)}
+      >
+        <TouchableOpacity
+          style={styles.clubModalBackdrop}
+          onPress={() => setClubPickerFor(null)}
+          activeOpacity={1}
+        >
+          <View style={styles.clubModalSheet}>
+            <Text style={styles.clubModalTitle}>
+              {clubPickerFor === 'tee' ? 'Tee club' :
+               clubPickerFor === 'approach' ? 'Approach club' : 'Pin club'}
+            </Text>
+            <View style={styles.clubGrid}>
+              {CLUBS.map(club => {
+                const current = clubPickerFor === 'tee' ? teeClub
+                  : clubPickerFor === 'approach' ? approachClub : pinClub;
+                const isSelected = current === club;
+                return (
+                  <TouchableOpacity
+                    key={club}
+                    style={[styles.clubChip, isSelected && styles.clubChipActive]}
+                    onPress={() => {
+                      if (clubPickerFor === 'tee') {
+                        setTeeClub(club);
+                        saveClubUpdate(club, approachClub, pinClub);
+                      } else if (clubPickerFor === 'approach') {
+                        setApproachClub(club);
+                        saveClubUpdate(teeClub, club, pinClub);
+                      } else {
+                        setPinClub(club);
+                        saveClubUpdate(teeClub, approachClub, club);
+                      }
+                      setClubPickerFor(null);
+                    }}
+                  >
+                    <Text style={[styles.clubChipText, isSelected && styles.clubChipTextActive]}>
+                      {club}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+              {/* Clear option */}
+              <TouchableOpacity
+                style={[styles.clubChip, styles.clubChipClear]}
+                onPress={() => {
+                  if (clubPickerFor === 'tee') {
+                    setTeeClub(null); saveClubUpdate(null, approachClub, pinClub);
+                  } else if (clubPickerFor === 'approach') {
+                    setApproachClub(null); saveClubUpdate(teeClub, null, pinClub);
+                  } else {
+                    setPinClub(null); saveClubUpdate(teeClub, approachClub, null);
+                  }
+                  setClubPickerFor(null);
+                }}
+              >
+                <Text style={styles.clubChipText}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -811,4 +1026,55 @@ const styles = StyleSheet.create({
   yardValue: { color: '#ffffff', fontSize: 26, fontWeight: '700' },
   yardValueCenter: { color: '#ffffff', fontSize: 38, fontWeight: '900' },
   playsLike: { color: '#F5A623', fontSize: 11, marginTop: 3 },
+  // Plan row
+  planRow: {
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: 12, marginBottom: 6, gap: 10,
+  },
+  lockBtn: {
+    flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center',
+    borderWidth: 1.5, borderColor: '#00C896', backgroundColor: '#003d20',
+  },
+  lockBtnLocked: {
+    borderColor: '#F5A623', backgroundColor: '#1a1200',
+  },
+  lockBtnText: { color: '#00C896', fontSize: 13, fontWeight: '700' },
+  lockBtnTextLocked: { color: '#F5A623' },
+  planAgeText: { color: '#6b7280', fontSize: 11 },
+  // Club row
+  clubRow: {
+    flexDirection: 'row', marginHorizontal: 12, marginBottom: 6, gap: 6,
+  },
+  clubSlot: {
+    flex: 1, backgroundColor: '#0d2418', borderRadius: 10,
+    borderWidth: 1, borderColor: '#1e3a28',
+    paddingVertical: 8, alignItems: 'center',
+  },
+  clubSlotLabel: { color: '#6b7280', fontSize: 9, fontWeight: '700', letterSpacing: 1.2, marginBottom: 2 },
+  clubSlotValue: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
+  // Club picker modal
+  clubModalBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end',
+  },
+  clubModalSheet: {
+    backgroundColor: '#0d2418', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    paddingHorizontal: 16, paddingTop: 20, paddingBottom: 40,
+  },
+  clubModalTitle: {
+    color: '#ffffff', fontSize: 16, fontWeight: '800',
+    textAlign: 'center', marginBottom: 16,
+  },
+  clubGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8,
+  },
+  clubChip: {
+    paddingVertical: 8, paddingHorizontal: 14,
+    borderRadius: 20, borderWidth: 1, borderColor: '#1e3a28',
+    backgroundColor: '#060f09',
+  },
+  clubChipActive: { borderColor: '#00C896', backgroundColor: '#003d20' },
+  clubChipClear: { borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)' },
+  clubChipText: { color: '#9ca3af', fontSize: 13, fontWeight: '600' },
+  clubChipTextActive: { color: '#00C896' },
 });

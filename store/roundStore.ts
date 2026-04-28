@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RoundMode } from '../types/patterns';
+import type { HolePlan } from '../types/plan';
 
 // ─── TYPES ────────────────────────────────
 
@@ -46,6 +47,7 @@ export interface RoundRecord {
   id: string;
   roundNumber: number;
   courseName: string | null;
+  courseId: string | null;
   startedAt: number;
   endedAt: number;
   holesPlayed: number;
@@ -53,8 +55,11 @@ export interface RoundRecord {
   scoreVsPar: number;
   isCompetition: boolean;
   nineHoleMode: boolean;
+  mode: RoundMode;
   scores: Record<number, number>;
   putts: Record<number, number>;
+  plans: HolePlan[];
+  shots: ShotResult[];
 }
 
 // ─── STATE ────────────────────────────────
@@ -62,6 +67,8 @@ export interface RoundRecord {
 interface RoundState {
   isRoundActive: boolean;
   mode: RoundMode;
+  currentRoundId: string | null;
+  plans: HolePlan[];
   activeCourse: string | null;
   activeCourseId: string | null; // golfcourseapi course_id; null for local/manual rounds
   recentCourseIds: string[]; // last 5 API course IDs played
@@ -103,6 +110,13 @@ interface RoundState {
   ) => void;
   setActiveCourseId: (id: string | null) => void;
   setCurrentRoundMode: (mode: RoundMode) => void;
+  addOrUpdatePlan: (partial: {
+    hole_number: number;
+    markers: HolePlan['markers'];
+    computed_yardages: HolePlan['computed_yardages'];
+  }) => void;
+  lockPlanForHole: (holeNumber: number) => void;
+  getPlanForHole: (holeNumber: number) => HolePlan | null;
 
   endRound: () => void;
   setCurrentHole: (hole: number) => void;
@@ -132,6 +146,8 @@ export const useRoundStore = create<RoundState>()(
     (set, get) => ({
       isRoundActive: false,
       mode: 'free_play' as RoundMode,
+      currentRoundId: null,
+      plans: [],
       activeCourse: null,
       activeCourseId: null,
       recentCourseIds: [],
@@ -160,9 +176,12 @@ export const useRoundStore = create<RoundState>()(
         const updatedRecent = courseId
           ? [courseId, ...prev.recentCourseIds.filter(id => id !== courseId)].slice(0, 5)
           : prev.recentCourseIds;
+        const roundId = Date.now().toString();
         set({
           isRoundActive: true,
           mode: options.mode ?? 'free_play',
+          currentRoundId: roundId,
+          plans: [],
           activeCourse: course,
           activeCourseId: courseId,
           recentCourseIds: updatedRecent,
@@ -186,6 +205,46 @@ export const useRoundStore = create<RoundState>()(
       setActiveCourseId: (id) => set({ activeCourseId: id }),
       setCurrentRoundMode: (mode) => set({ mode }),
 
+      addOrUpdatePlan: (partial) => {
+        const state = get();
+        const existing = state.plans.find(p => p.hole_number === partial.hole_number);
+        if (existing) {
+          set(s => ({
+            plans: s.plans.map(p =>
+              p.hole_number === partial.hole_number
+                ? { ...p, markers: partial.markers, computed_yardages: partial.computed_yardages }
+                : p
+            ),
+          }));
+        } else {
+          const newPlan: HolePlan = {
+            id: Date.now().toString() + '_h' + partial.hole_number,
+            round_id: state.currentRoundId ?? 'unknown',
+            course_id: state.activeCourseId ?? 'local',
+            hole_number: partial.hole_number,
+            player_id: 'primary',
+            created_at: Date.now(),
+            locked_at: null,
+            notes: null,
+            markers: partial.markers,
+            computed_yardages: partial.computed_yardages,
+          };
+          set(s => ({ plans: [...s.plans, newPlan] }));
+        }
+      },
+
+      lockPlanForHole: (holeNumber) =>
+        set(s => ({
+          plans: s.plans.map(p =>
+            p.hole_number === holeNumber && p.locked_at === null
+              ? { ...p, locked_at: Date.now() }
+              : p
+          ),
+        })),
+
+      getPlanForHole: (holeNumber) =>
+        get().plans.find(p => p.hole_number === holeNumber) ?? null,
+
       endRound: () => {
         const s = get();
         let scoreVsPar = 0;
@@ -194,9 +253,10 @@ export const useRoundStore = create<RoundState>()(
           scoreVsPar += score - par;
         }
         const record: RoundRecord = {
-          id: Date.now().toString(),
+          id: s.currentRoundId ?? Date.now().toString(),
           roundNumber: s.roundNumber,
           courseName: s.activeCourse,
+          courseId: s.activeCourseId,
           startedAt: s.roundStartTime ?? Date.now(),
           endedAt: Date.now(),
           holesPlayed: Object.keys(s.scores).length,
@@ -204,8 +264,11 @@ export const useRoundStore = create<RoundState>()(
           scoreVsPar,
           isCompetition: s.isCompetition,
           nineHoleMode: s.nineHoleMode,
+          mode: s.mode,
           scores: { ...s.scores },
           putts: { ...s.putts },
+          plans: [...s.plans],
+          shots: [...s.shots],
         };
         set(state => ({
           isRoundActive: false,
@@ -276,6 +339,8 @@ export const useRoundStore = create<RoundState>()(
       partialize: (s) => ({
         isRoundActive: s.isRoundActive,
         mode: s.mode,
+        currentRoundId: s.currentRoundId,
+        plans: s.plans,
         activeCourse: s.activeCourse,
         activeCourseId: s.activeCourseId,
         recentCourseIds: s.recentCourseIds,
