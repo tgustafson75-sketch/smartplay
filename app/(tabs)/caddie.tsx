@@ -713,6 +713,7 @@ export default function CaddieTab() {
     useRelationshipStore.getState().updateMentalState(holeScore, par ?? 4);
 
     if (nextHole > maxHole) {
+      clearShotPending();
       endRound();
       setShowShotCard(false);
       await generateRoundSummary();
@@ -1363,6 +1364,7 @@ export default function CaddieTab() {
                 action: async () => {
                   setShowMoreMenu(false);
                   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                  clearShotPending();
                   endRound();
                   await generateRoundSummary();
                 },

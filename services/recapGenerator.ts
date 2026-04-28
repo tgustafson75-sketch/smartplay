@@ -74,7 +74,11 @@ function shotsSummary(shots: ShotResult[]): string {
     const dir = s.direction ?? 'unknown';
     const feel = s.feel ?? '';
     const club = s.club ? s.club + ' ' : '';
-    return `shot ${i + 1}: ${club}${feel ? feel + ' ' : ''}${dir}`;
+    const base = `shot ${i + 1}: ${club}${feel ? feel + ' ' : ''}${dir}`;
+    if (!s.outcome || s.outcome === 'clean') return base;
+    const penalty = (s.penalty_strokes ?? 0) > 0 ? ` (+${s.penalty_strokes} stroke)` : '';
+    const rules = s.rules_decision ? ` [${s.rules_decision.replace('_', ' ')}]` : '';
+    return `${base} — ${s.outcome}${penalty}${rules}`;
   }).join(', ');
 }
 
