@@ -1,0 +1,94 @@
+import { create } from 'zustand';
+import type { RoundRecord } from './roundStore';
+import type { GhostHoleResult, GhostMatchSnapshot } from '../types/ghost';
+
+// Not persisted — ghost match is only active during a live round.
+
+interface GhostState {
+  ghostRecord: RoundRecord | null;
+  holeResults: Record<number, GhostHoleResult>;
+  overall_delta: number;
+  holes_compared: number;
+
+  activateGhost: (record: RoundRecord) => void;
+  deactivateGhost: () => void;
+  updateHole: (holeNumber: number, currentScore: number) => void;
+  getLabel: () => string | null;
+  getSummaryText: () => string | null;
+  getSnapshot: () => GhostMatchSnapshot | null;
+}
+
+export const useGhostStore = create<GhostState>((set, get) => ({
+  ghostRecord: null,
+  holeResults: {},
+  overall_delta: 0,
+  holes_compared: 0,
+
+  activateGhost: (record) => set({
+    ghostRecord: record,
+    holeResults: {},
+    overall_delta: 0,
+    holes_compared: 0,
+  }),
+
+  deactivateGhost: () => set({
+    ghostRecord: null,
+    holeResults: {},
+    overall_delta: 0,
+    holes_compared: 0,
+  }),
+
+  updateHole: (holeNumber, currentScore) => {
+    const { ghostRecord, holeResults } = get();
+    if (!ghostRecord) return;
+
+    const ghostScore = ghostRecord.scores[holeNumber] ?? null;
+    const delta = ghostScore != null ? currentScore - ghostScore : null;
+
+    const updated: Record<number, GhostHoleResult> = {
+      ...holeResults,
+      [holeNumber]: { ghost_score: ghostScore, current_score: currentScore, delta },
+    };
+
+    let overall = 0;
+    let compared = 0;
+    for (const r of Object.values(updated)) {
+      if (r.delta != null) { overall += r.delta; compared++; }
+    }
+
+    set({ holeResults: updated, overall_delta: overall, holes_compared: compared });
+  },
+
+  getLabel: () => {
+    const r = get().ghostRecord;
+    if (!r) return null;
+    return `${r.courseName ?? 'Past round'} — ${r.totalScore}`;
+  },
+
+  getSummaryText: () => {
+    const { ghostRecord, overall_delta, holes_compared } = get();
+    if (!ghostRecord) return null;
+    const label = `${ghostRecord.courseName ?? 'past round'} (${ghostRecord.totalScore})`;
+    if (holes_compared === 0) return `Playing ghost of ${label} — no holes compared yet.`;
+    const abs = Math.abs(overall_delta);
+    const strokes = abs === 1 ? 'stroke' : 'strokes';
+    const status = overall_delta === 0
+      ? 'dead even'
+      : overall_delta < 0 ? `ahead by ${abs} ${strokes}`
+      : `behind by ${abs} ${strokes}`;
+    return `vs ${label}: ${status} through ${holes_compared} holes.`;
+  },
+
+  getSnapshot: () => {
+    const { ghostRecord, holeResults, overall_delta, holes_compared } = get();
+    if (!ghostRecord) return null;
+    return {
+      ghost_round_id: ghostRecord.id,
+      ghost_round_label: `${ghostRecord.courseName ?? 'Past round'} (${ghostRecord.totalScore})`,
+      ghost_total: ghostRecord.totalScore,
+      hole_results: holeResults,
+      overall_delta,
+      holes_compared,
+    };
+  },
+}));

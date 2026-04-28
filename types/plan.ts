@@ -1,4 +1,5 @@
 import type { ShotResult } from '../store/roundStore';
+import type { GhostMatchSnapshot } from './ghost';
 
 // ─── HolePlan ─────────────────────────────────────────────────────────────────
 
@@ -56,4 +57,5 @@ export interface RoundRecap {
   total_planned_score: number | null;
   hole_comparisons: HoleComparison[];
   overall_kevin_summary: string | null;
+  ghost_match?: GhostMatchSnapshot | null;
 }

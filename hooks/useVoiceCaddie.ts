@@ -19,6 +19,7 @@ import { useWatchStore } from '../store/watchStore';
 import { VoiceState } from '../components/CaddieAvatar';
 import { getCourse as getApiCourse, courseSummaryForContext } from '../services/golfCourseApi';
 import { generatePatternInsights } from '../services/patternDetection';
+import { useGhostStore } from '../store/ghostStore';
 
 // ─── CONSTANTS ────────────────────────────
 
@@ -262,6 +263,7 @@ export const useVoiceCaddie = ({
         }));
 
       const holePlan = getPlanForHole(currentHole);
+      const ghostContext = useGhostStore.getState().getSummaryText();
 
       // Build player pattern insights (on-device, sync — cheap enough per-request)
       const patternInsights = generatePatternInsights(shots, {
@@ -307,6 +309,7 @@ export const useVoiceCaddie = ({
           roundMode,
           patternInsights,
           holePlan,
+          ghostContext,
           isRoundActive,
           isCompetition,
           mentalState: currentMentalState,

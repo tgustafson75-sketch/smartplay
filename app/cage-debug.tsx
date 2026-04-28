@@ -128,6 +128,9 @@ export default function CageDebug() {
         <TouchableOpacity style={styles.apiDebugBtn} onPress={() => router.push('/plan-debug' as never)}>
           <Text style={styles.apiDebugBtnText}>Plans</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.apiDebugBtn} onPress={() => router.push('/ghost-debug' as never)}>
+          <Text style={styles.apiDebugBtnText}>Ghost</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.synthBtn} onPress={handleSyntheticTest}>
           <Text style={styles.synthBtnText}>+ Synthetic test</Text>
         </TouchableOpacity>

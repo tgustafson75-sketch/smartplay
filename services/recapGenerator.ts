@@ -1,6 +1,7 @@
 import type { HolePlan, HoleComparison, MatchedShot, RoundRecap } from '../types/plan';
 import type { ShotResult, CourseHole } from '../store/roundStore';
 import type { RoundMode } from '../types/patterns';
+import type { GhostMatchSnapshot } from '../types/ghost';
 import { archivePlans, saveRecap } from './planStorage';
 
 // ─── Shot → result mapping ────────────────────────────────────────────────────
@@ -96,6 +97,7 @@ export async function generateRecap(
     patternInsights: string[];
     playerName: string;
     apiUrl: string;
+    ghostSnapshot?: GhostMatchSnapshot | null;
   },
 ): Promise<RoundRecap> {
   const { courseName, courseId, mode, startedAt, endedAt, totalScore, scoreVsPar, scores, plans, shots, courseHoles } = round;
@@ -188,6 +190,7 @@ export async function generateRecap(
     total_planned_score,
     hole_comparisons: finalComparisons,
     overall_kevin_summary: overallSummary,
+    ghost_match: round.ghostSnapshot ?? null,
   };
 
   await saveRecap(roundId, recap);

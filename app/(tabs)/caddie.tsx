@@ -34,6 +34,7 @@ import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types
 import { getCourse as getApiCourse, courseToHoles } from '../../services/golfCourseApi';
 import { generateRecap } from '../../services/recapGenerator';
 import { generatePatternInsights } from '../../services/patternDetection';
+import { useGhostStore } from '../../store/ghostStore';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
 import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
@@ -525,6 +526,7 @@ export default function CaddieTab() {
         patternInsights: patternInsights.insights,
         playerName: usePlayerProfileStore.getState().firstName || usePlayerProfileStore.getState().name || 'the player',
         apiUrl,
+        ghostSnapshot: useGhostStore.getState().getSnapshot(),
       })
         .then(recap => {
           setRecapLoading(false);
@@ -590,6 +592,7 @@ export default function CaddieTab() {
     if (holeScore === 0) return;
     logScore(currentHole, holeScore);
     logPutts(currentHole, holePutts);
+    useGhostStore.getState().updateHole(currentHole, holeScore);
 
     const par = getCurrentPar();
     const maxHole = nineHoleMode ? 9 : 18;

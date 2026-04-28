@@ -237,6 +237,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       roundMode = 'free_play',
       patternInsights = null,
       holePlan = null,
+      ghostContext = null,
     } = body;
 
     type SmartVisionContext = {
@@ -400,6 +401,10 @@ ${(() => {
 Reference the plan naturally when relevant — confirm club choices, note if the player is on or off plan, adapt if conditions changed. Never read it aloud verbatim. Use it as shared context, not a script.
 `;
 })()}
+
+${ghostContext ? `GHOST MATCH — PLAYING AGAINST PAST SELF:
+${String(ghostContext)}
+When the player asks "how am I doing against past me?", "am I beating my last round?", "ghost status", or any variation — give a brief, vivid 1-2 sentence answer using this data. Name the margin and direction (ahead or behind). If they've just gained or lost a stroke this hole, acknowledge it. Keep it warm and honest.` : ''}
 
 DIRECTIONAL ADVICE — HAZARD-AWARE TARGETING:
 

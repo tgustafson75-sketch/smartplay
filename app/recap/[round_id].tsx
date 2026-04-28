@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
-  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -14,6 +13,7 @@ import { loadRecap } from '../../services/planStorage';
 import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
 import { useSettingsStore } from '../../store/settingsStore';
 import type { RoundRecap, HoleComparison } from '../../types/plan';
+import type { GhostHoleResult } from '../../types/ghost';
 
 const MODE_LABELS: Record<string, string> = {
   break_100: 'Break 100',
@@ -22,9 +22,17 @@ const MODE_LABELS: Record<string, string> = {
   free_play: 'Free Play',
 };
 
-function varianceLabel(v: number | null): string {
-  if (v == null) return '';
-  if (v === 0) return 'Even';
+function deltaColor(v: number | null): string {
+  if (v == null) return '#6b7280';
+  if (v < 0) return '#00C896';
+  if (v === 0) return '#9ca3af';
+  if (v === 1) return '#F5A623';
+  return '#ef4444';
+}
+
+function deltaLabel(v: number | null): string {
+  if (v == null) return '—';
+  if (v === 0) return 'even';
   return v > 0 ? '+' + v : String(v);
 }
 
@@ -35,21 +43,56 @@ function varianceColor(v: number | null): string {
   return '#ef4444';
 }
 
-function HoleCard({ hc }: { hc: HoleComparison }) {
+// ─── Three-column ghost row ───────────────────────────────────────────────────
+
+function GhostRow({ ghostResult, holeNum }: { ghostResult: GhostHoleResult; holeNum: number }) {
+  const { ghost_score, current_score, delta } = ghostResult;
+  return (
+    <View style={styles.ghostRow}>
+      <View style={styles.ghostCol}>
+        <Text style={styles.ghostColLabel}>GHOST</Text>
+        <Text style={styles.ghostColVal}>{ghost_score ?? '—'}</Text>
+      </View>
+      <View style={styles.ghostDivider} />
+      <View style={styles.ghostCol}>
+        <Text style={styles.ghostColLabel}>YOURS</Text>
+        <Text style={styles.ghostColVal}>{current_score}</Text>
+      </View>
+      <View style={styles.ghostDivider} />
+      <View style={styles.ghostCol}>
+        <Text style={styles.ghostColLabel}>VS GHOST</Text>
+        <Text style={[styles.ghostColDelta, { color: deltaColor(delta) }]}>{deltaLabel(delta)}</Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Hole card ────────────────────────────────────────────────────────────────
+
+function HoleCard({ hc, ghostResult }: { hc: HoleComparison; ghostResult?: GhostHoleResult }) {
   const v = hc.variance;
   const hasScore = hc.actual_score != null;
+
   return (
     <View style={styles.holeCard}>
       <View style={styles.holeCardHeader}>
         <Text style={styles.holeNum}>Hole {hc.hole_number}</Text>
-        {hasScore && (
+        {hasScore && !ghostResult && (
           <View style={[styles.variancePill, { backgroundColor: varianceColor(v) + '22', borderColor: varianceColor(v) }]}>
             <Text style={[styles.variancePillText, { color: varianceColor(v) }]}>
-              {hc.actual_score} {v != null ? '(' + varianceLabel(v) + ' plan)' : ''}
+              {hc.actual_score}{v != null ? ' (' + (v > 0 ? '+' : '') + v + ' plan)' : ''}
             </Text>
           </View>
         )}
+        {hasScore && ghostResult && (
+          <Text style={[styles.variancePillText, { color: varianceColor(v) }]}>
+            Score: {hc.actual_score}
+          </Text>
+        )}
       </View>
+
+      {ghostResult && <GhostRow ghostResult={ghostResult} holeNum={hc.hole_number} />}
+
       {hc.plan && (
         <Text style={styles.planLine}>
           Plan: {hc.plan.markers.tee.club_intent ?? '—'}
@@ -65,6 +108,8 @@ function HoleCard({ hc }: { hc: HoleComparison }) {
     </View>
   );
 }
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function RecapScreen() {
   const { round_id } = useLocalSearchParams<{ round_id: string }>();
@@ -86,11 +131,7 @@ export default function RecapScreen() {
 
   const handlePlayAloud = useCallback(async () => {
     if (!recap) return;
-    if (isSpeaking()) {
-      await stopSpeaking();
-      setSpeaking(false);
-      return;
-    }
+    if (isSpeaking()) { await stopSpeaking(); setSpeaking(false); return; }
     if (!voiceEnabled) return;
     setSpeaking(true);
     try {
@@ -123,10 +164,8 @@ export default function RecapScreen() {
     );
   }
 
-  const scoreVsPar = recap.total_score - (recap.hole_comparisons.reduce((acc, hc) => {
-    const par = hc.plan ? 4 : 4; // best we have without storing par separately
-    return acc + par;
-  }, 0));
+  const ghost = recap.ghost_match ?? null;
+  const ghostDelta = ghost?.overall_delta ?? null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -144,7 +183,6 @@ export default function RecapScreen() {
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <View>
-            {/* Summary card */}
             <View style={styles.summaryCard}>
               <Text style={styles.courseName}>{recap.course_name}</Text>
               <Text style={styles.modeLabel}>{MODE_LABELS[recap.mode] ?? recap.mode}</Text>
@@ -159,6 +197,12 @@ export default function RecapScreen() {
                     <Text style={styles.scoreValue}>{recap.total_planned_score}</Text>
                   </View>
                 )}
+                {ghost && (
+                  <View style={styles.scoreItem}>
+                    <Text style={styles.scoreLabel}>GHOST</Text>
+                    <Text style={styles.scoreValue}>{ghost.ghost_total}</Text>
+                  </View>
+                )}
                 <View style={styles.scoreItem}>
                   <Text style={styles.scoreLabel}>HOLES</Text>
                   <Text style={styles.scoreValue}>{recap.hole_comparisons.length}</Text>
@@ -166,7 +210,20 @@ export default function RecapScreen() {
               </View>
             </View>
 
-            {/* Kevin overall summary */}
+            {/* Ghost match banner */}
+            {ghost && (
+              <View style={[styles.ghostBanner, { borderColor: deltaColor(ghostDelta) }]}>
+                <Text style={styles.ghostBannerLabel}>GHOST MATCH</Text>
+                <Text style={styles.ghostBannerName}>{ghost.ghost_round_label}</Text>
+                <Text style={[styles.ghostBannerDelta, { color: deltaColor(ghostDelta) }]}>
+                  {ghostDelta === 0 ? 'Dead even'
+                    : ghostDelta != null && ghostDelta < 0
+                      ? `Won by ${Math.abs(ghostDelta)} stroke${Math.abs(ghostDelta) > 1 ? 's' : ''}`
+                      : ghostDelta != null ? `Lost by ${ghostDelta} stroke${ghostDelta > 1 ? 's' : ''}` : '—'}
+                </Text>
+              </View>
+            )}
+
             <View style={styles.kevinCard}>
               <Text style={styles.kevinLabel}>KEVIN</Text>
               <Text style={styles.kevinOverall}>{recap.overall_kevin_summary}</Text>
@@ -177,10 +234,17 @@ export default function RecapScreen() {
               )}
             </View>
 
-            <Text style={styles.holesHeader}>HOLE BY HOLE</Text>
+            <Text style={styles.holesHeader}>
+              {ghost ? 'GHOST  ·  YOURS  ·  DELTA' : 'HOLE BY HOLE'}
+            </Text>
           </View>
         }
-        renderItem={({ item }) => <HoleCard hc={item} />}
+        renderItem={({ item }) => (
+          <HoleCard
+            hc={item}
+            ghostResult={ghost?.hole_results[item.hole_number]}
+          />
+        )}
       />
     </SafeAreaView>
   );
@@ -197,12 +261,10 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800' },
   listContent: { paddingBottom: 48 },
   emptyText: { color: '#6b7280', textAlign: 'center', marginTop: 80, fontSize: 16 },
-  // Summary card
   summaryCard: {
     marginHorizontal: 12, marginBottom: 12,
     backgroundColor: '#0d2418', borderRadius: 14,
-    borderWidth: 1, borderColor: '#1e3a28',
-    padding: 16,
+    borderWidth: 1, borderColor: '#1e3a28', padding: 16,
   },
   courseName: { color: '#ffffff', fontSize: 18, fontWeight: '800', marginBottom: 2 },
   modeLabel: { color: '#00C896', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 12 },
@@ -210,7 +272,14 @@ const styles = StyleSheet.create({
   scoreItem: { alignItems: 'center' },
   scoreLabel: { color: '#6b7280', fontSize: 9, fontWeight: '700', letterSpacing: 1.2, marginBottom: 2 },
   scoreValue: { color: '#ffffff', fontSize: 28, fontWeight: '900' },
-  // Kevin card
+  ghostBanner: {
+    marginHorizontal: 12, marginBottom: 12,
+    backgroundColor: '#0d1a25', borderRadius: 10,
+    borderWidth: 1.5, padding: 12,
+  },
+  ghostBannerLabel: { color: '#6b7280', fontSize: 9, fontWeight: '800', letterSpacing: 2, marginBottom: 2 },
+  ghostBannerName: { color: '#ffffff', fontSize: 13, fontWeight: '700', marginBottom: 4 },
+  ghostBannerDelta: { fontSize: 20, fontWeight: '900' },
   kevinCard: {
     marginHorizontal: 12, marginBottom: 16,
     backgroundColor: '#0d2418', borderLeftWidth: 3, borderLeftColor: '#00C896',
@@ -224,11 +293,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 6,
   },
   playBtnText: { color: '#00C896', fontSize: 13, fontWeight: '600' },
-  holesHeader: {
-    color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 2,
-    marginHorizontal: 16, marginBottom: 8,
-  },
-  // Hole card
+  holesHeader: { color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 2, marginHorizontal: 16, marginBottom: 8 },
   holeCard: {
     marginHorizontal: 12, marginBottom: 8,
     backgroundColor: '#0d2418', borderRadius: 10,
@@ -236,11 +301,18 @@ const styles = StyleSheet.create({
   },
   holeCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
   holeNum: { color: '#ffffff', fontSize: 14, fontWeight: '800' },
-  variancePill: {
-    borderWidth: 1, borderRadius: 12,
-    paddingHorizontal: 10, paddingVertical: 3,
-  },
+  variancePill: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
   variancePillText: { fontSize: 12, fontWeight: '700' },
+  ghostRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#060f09', borderRadius: 8,
+    padding: 10, marginBottom: 8,
+  },
+  ghostCol: { flex: 1, alignItems: 'center' },
+  ghostColLabel: { color: '#6b7280', fontSize: 9, fontWeight: '700', letterSpacing: 1.2, marginBottom: 2 },
+  ghostColVal: { color: '#ffffff', fontSize: 22, fontWeight: '900' },
+  ghostColDelta: { fontSize: 22, fontWeight: '900' },
+  ghostDivider: { width: 1, height: 36, backgroundColor: '#1e3a28' },
   planLine: { color: '#6b7280', fontSize: 11, marginBottom: 6 },
   kevinSummary: { color: '#e5e7eb', fontSize: 13, lineHeight: 19 },
   noSummary: { color: '#374151', fontSize: 12, fontStyle: 'italic' },
