@@ -11,9 +11,9 @@ export interface HolePlan {
   created_at: number;
   locked_at: number | null;
   markers: {
-    tee:      { x: number; y: number; club_intent: string | null };
-    approach: { x: number; y: number; club_intent: string | null } | null;
-    pin:      { x: number; y: number; club_intent: string | null } | null;
+    tee:      { x: number; y: number; club_intent: string | null; landmark_target: { name: string; description: string; position?: { x: number; y: number } } | null };
+    approach: { x: number; y: number; club_intent: string | null; landmark_target: { name: string; description: string; position?: { x: number; y: number } } | null } | null;
+    pin:      { x: number; y: number; club_intent: string | null; landmark_target: { name: string; description: string; position?: { x: number; y: number } } | null } | null;
   };
   computed_yardages: {
     from_tee_to_approach: number | null;

@@ -365,9 +365,9 @@ export default function HoleView() {
         addOrUpdatePlan({
           hole_number: hole,
           markers: {
-            tee:      { x: teePos.x,    y: teePos.y,    club_intent: teeClub },
-            approach: { x: targetPos.x, y: targetPos.y, club_intent: approachClub },
-            pin:      { x: pinPos.x,    y: pinPos.y,    club_intent: pinClub },
+            tee:      { x: teePos.x,    y: teePos.y,    club_intent: teeClub,    landmark_target: null },
+            approach: { x: targetPos.x, y: targetPos.y, club_intent: approachClub, landmark_target: null },
+            pin:      { x: pinPos.x,    y: pinPos.y,    club_intent: pinClub,    landmark_target: null },
           },
           computed_yardages: {
             from_tee_to_approach: fromTeeYards,
@@ -390,9 +390,9 @@ export default function HoleView() {
     addOrUpdatePlan({
       hole_number: hole,
       markers: {
-        tee:      { x: teePos.x,    y: teePos.y,    club_intent: nextTee },
-        approach: { x: targetPos.x, y: targetPos.y, club_intent: nextApp },
-        pin:      { x: pinPos.x,    y: pinPos.y,    club_intent: nextPin },
+        tee:      { x: teePos.x,    y: teePos.y,    club_intent: nextTee, landmark_target: null },
+        approach: { x: targetPos.x, y: targetPos.y, club_intent: nextApp, landmark_target: null },
+        pin:      { x: pinPos.x,    y: pinPos.y,    club_intent: nextPin, landmark_target: null },
       },
       computed_yardages: {
         from_tee_to_approach: fromTeeYards,

@@ -376,7 +376,7 @@ ${insightLines}
 })()}
 
 ${(() => {
-  type HolePlanMarker = { x: number; y: number; club_intent: string | null };
+  type HolePlanMarker = { x: number; y: number; club_intent: string | null; landmark_target?: { name: string; description: string } | null };
   type HolePlan = {
     hole_number?: number;
     locked_at?: number | null;
@@ -390,15 +390,36 @@ ${(() => {
   const a = hp.markers?.approach;
   const p = hp.markers?.pin;
   const parts: string[] = [];
-  if (t?.club_intent) parts.push(`tee: ${t.club_intent}${hp.computed_yardages?.from_tee_to_approach ? ' (' + hp.computed_yardages.from_tee_to_approach + 'y to approach)' : ''}`);
-  if (a?.club_intent) parts.push(`approach: ${a.club_intent}${hp.computed_yardages?.from_approach_to_pin ? ' (' + hp.computed_yardages.from_approach_to_pin + 'y to pin)' : ''}`);
-  if (p?.club_intent) parts.push(`pin shot: ${p.club_intent}`);
+  const landmarkStr = (m: HolePlanMarker | null | undefined) => m?.landmark_target ? `, aim: ${m.landmark_target.name}` : '';
+  if (t?.club_intent) parts.push(`tee: ${t.club_intent}${hp.computed_yardages?.from_tee_to_approach ? ' (' + hp.computed_yardages.from_tee_to_approach + 'y to approach)' : ''}${landmarkStr(t)}`);
+  if (a?.club_intent) parts.push(`approach: ${a.club_intent}${hp.computed_yardages?.from_approach_to_pin ? ' (' + hp.computed_yardages.from_approach_to_pin + 'y to pin)' : ''}${landmarkStr(a)}`);
+  if (p?.club_intent) parts.push(`pin shot: ${p.club_intent}${landmarkStr(p)}`);
   const status = hp.locked_at ? 'locked' : 'draft';
   const planText = parts.length > 0 ? parts.join(', ') : 'markers set, no clubs chosen';
   return `CURRENT HOLE PLAN (${status}): ${planText}
 Reference the plan naturally when relevant — confirm club choices, note if the player is on or off plan, adapt if conditions changed. Never read it aloud verbatim. Use it as shared context, not a script.
 `;
 })()}
+
+DIRECTIONAL ADVICE — HAZARD-AWARE TARGETING:
+
+When the user asks for directional advice ("what's the play?", "where do I aim?", "should I go for it?", "what club?", or any pre-shot question), use the hazards data on the current hole to give targets, not just numbers. Translate hazard descriptors into spatial recommendations.
+
+Examples of the shift:
+- Weak: "It's 158 yards."
+- Strong: "It's 158 — the bunker right is at 145, so anything short and right is trouble. Aim left of the flag, take one more club, swing easy."
+
+When combining hazards with player patterns:
+- Right-miss tendency + hazards right: "Two fairway bunkers on the right at 220 and 240, and you've been pulling shots right today. Aim at the left edge of the fairway — that gives you the whole fairway to work with."
+- Left-miss tendency + water left: "Water all the way down the left. With the way you've been swinging, take an extra club and aim right-center — give yourself room to miss."
+
+Rules:
+- Don't list hazards. Use them to anchor a target recommendation.
+- Always recommend a target side or specific spot, not just a yardage number.
+- When the player has a known miss tendency, recommend targets that turn their miss into a safe miss — aim away from trouble on the miss side.
+- If no hazards data is available for the hole, give your best directional advice based on yardage and pattern context alone.
+- If a HolePlan is locked for this hole, treat the planned target as the anchor and only suggest deviations if conditions clearly warrant (wind, recent misses, pressure situation).
+- Do not invent landmarks. Use only what's in the hazards array. Named-landmark targeting comes later.
 
 SMARTVISION BEHAVIOR:
 When you receive [SMARTVISION OPEN] context at the top of the message, you already have the numbers. Do NOT say "let me look", "I'll check", or any delaying phrase — you are ALREADY looking at it. Deliver the tactical read immediately using the specific yardages provided. Structure: (1) state the key distance(s) — center yards and/or tapped target yards — and the one most relevant consideration, (2) briefly name the conservative play, (3) ask Tim one short question to think together. Two or three sentences total. Use the exact numbers from the context. Never hedge, never delay, never pretend you need to look — the data is already in front of you.

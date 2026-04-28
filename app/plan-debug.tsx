@@ -42,9 +42,9 @@ export default function PlanDebugScreen() {
     useRoundStore.getState().addOrUpdatePlan({
       hole_number: 1,
       markers: {
-        tee: { x: 0.5, y: 0.85, club_intent: 'Driver' },
-        approach: { x: 0.5, y: 0.45, club_intent: '7i' },
-        pin: { x: 0.5, y: 0.15, club_intent: 'PW' },
+        tee: { x: 0.5, y: 0.85, club_intent: 'Driver', landmark_target: null },
+        approach: { x: 0.5, y: 0.45, club_intent: '7i', landmark_target: null },
+        pin: { x: 0.5, y: 0.15, club_intent: 'PW', landmark_target: null },
       },
       computed_yardages: { from_tee_to_approach: 210, from_approach_to_pin: 130, total: 340 },
     });
