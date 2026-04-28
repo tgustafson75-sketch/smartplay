@@ -54,7 +54,12 @@
           "backgroundColor": "#060f09"
         }
       ],
-      "@sentry/react-native"
+      [
+        "@sentry/react-native",
+        {
+          "uploadSourceMaps": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
