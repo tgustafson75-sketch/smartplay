@@ -33,6 +33,11 @@ import { useRoundStore } from '../store/roundStore';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import PALMS_IMAGES from '../data/palmsImages';
+import {
+  getLandmarksForHole,
+  resolveCourseKey,
+  type Landmark,
+} from '../services/landmarks';
 
 const CLUBS = [
   'Driver', '3W', '5W', 'Hybrid',
@@ -134,6 +139,8 @@ export default function HoleView() {
     addOrUpdatePlan,
     lockPlanForHole,
     getPlanForHole,
+    activeCourseId,
+    activeCourse,
   } = useRoundStore();
   const { setMode } = useKevinPresence();
 
@@ -167,6 +174,14 @@ export default function HoleView() {
   const [approachClub, setApproachClub] = useState<string | null>(null);
   const [pinClub, setPinClub]         = useState<string | null>(null);
   const [clubPickerFor, setClubPickerFor] = useState<'tee' | 'approach' | 'pin' | null>(null);
+
+  // ── Landmark state ──────────────────────
+  const [landmarks, setLandmarks] = useState<Landmark[]>([]);
+  const [teeLandmark, setTeeLandmark]         = useState<Landmark | null>(null);
+  const [approachLandmark, setApproachLandmark] = useState<Landmark | null>(null);
+  const [pinLandmark, setPinLandmark]         = useState<Landmark | null>(null);
+  const [landmarkPickerFor, setLandmarkPickerFor] = useState<'tee' | 'approach' | 'pin' | null>(null);
+
   const prevDraggingRef = useRef(false);
   const planSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -365,9 +380,9 @@ export default function HoleView() {
         addOrUpdatePlan({
           hole_number: hole,
           markers: {
-            tee:      { x: teePos.x,    y: teePos.y,    club_intent: teeClub,    landmark_target: null },
-            approach: { x: targetPos.x, y: targetPos.y, club_intent: approachClub, landmark_target: null },
-            pin:      { x: pinPos.x,    y: pinPos.y,    club_intent: pinClub,    landmark_target: null },
+            tee:      { x: teePos.x,    y: teePos.y,    club_intent: teeClub,    landmark_target: teeLandmark ? { name: teeLandmark.name, description: teeLandmark.description } : null },
+            approach: { x: targetPos.x, y: targetPos.y, club_intent: approachClub, landmark_target: approachLandmark ? { name: approachLandmark.name, description: approachLandmark.description } : null },
+            pin:      { x: pinPos.x,    y: pinPos.y,    club_intent: pinClub,    landmark_target: pinLandmark ? { name: pinLandmark.name, description: pinLandmark.description } : null },
           },
           computed_yardages: {
             from_tee_to_approach: fromTeeYards,
@@ -390,9 +405,9 @@ export default function HoleView() {
     addOrUpdatePlan({
       hole_number: hole,
       markers: {
-        tee:      { x: teePos.x,    y: teePos.y,    club_intent: nextTee, landmark_target: null },
-        approach: { x: targetPos.x, y: targetPos.y, club_intent: nextApp, landmark_target: null },
-        pin:      { x: pinPos.x,    y: pinPos.y,    club_intent: nextPin, landmark_target: null },
+        tee:      { x: teePos.x,    y: teePos.y,    club_intent: nextTee, landmark_target: teeLandmark ? { name: teeLandmark.name, description: teeLandmark.description } : null },
+        approach: { x: targetPos.x, y: targetPos.y, club_intent: nextApp, landmark_target: approachLandmark ? { name: approachLandmark.name, description: approachLandmark.description } : null },
+        pin:      { x: pinPos.x,    y: pinPos.y,    club_intent: nextPin, landmark_target: pinLandmark ? { name: pinLandmark.name, description: pinLandmark.description } : null },
       },
       computed_yardages: {
         from_tee_to_approach: fromTeeYards,
@@ -400,7 +415,28 @@ export default function HoleView() {
         total: fromTeeYards + approachYards,
       },
     });
-  }, [roundActive, markersReady, hole, teePos, targetPos, pinPos, fromTeeYards, approachYards]);
+  }, [roundActive, markersReady, hole, teePos, targetPos, pinPos, fromTeeYards, approachYards, teeLandmark, approachLandmark, pinLandmark]);
+
+  const saveLandmarkUpdate = useCallback((
+    nextTee: Landmark | null,
+    nextApp: Landmark | null,
+    nextPin: Landmark | null,
+  ) => {
+    if (!roundActive || !markersReady) return;
+    addOrUpdatePlan({
+      hole_number: hole,
+      markers: {
+        tee:      { x: teePos.x,    y: teePos.y,    club_intent: teeClub,    landmark_target: nextTee ? { name: nextTee.name, description: nextTee.description } : null },
+        approach: { x: targetPos.x, y: targetPos.y, club_intent: approachClub, landmark_target: nextApp ? { name: nextApp.name, description: nextApp.description } : null },
+        pin:      { x: pinPos.x,    y: pinPos.y,    club_intent: pinClub,    landmark_target: nextPin ? { name: nextPin.name, description: nextPin.description } : null },
+      },
+      computed_yardages: {
+        from_tee_to_approach: fromTeeYards,
+        from_approach_to_pin: approachYards,
+        total: fromTeeYards + approachYards,
+      },
+    });
+  }, [roundActive, markersReady, hole, teePos, targetPos, pinPos, teeClub, approachClub, pinClub, fromTeeYards, approachYards]);
 
   const handleLockPlan = useCallback(() => {
     lockPlanForHole(hole);
@@ -531,6 +567,16 @@ export default function HoleView() {
       return () => clearTimeout(t);
     }
   }, [autoRunVision, imageReady, satelliteUrl, runSmartVision]);
+
+  // ── Landmark loading ────────────────────
+  useEffect(() => {
+    const key = resolveCourseKey(activeCourseId ?? null, activeCourse ?? null);
+    if (!key) { setLandmarks([]); return; }
+    getLandmarksForHole(key, hole).then(setLandmarks);
+    setTeeLandmark(null);
+    setApproachLandmark(null);
+    setPinLandmark(null);
+  }, [activeCourseId, activeCourse, hole]);
 
   // ── Satellite tap measure ───────────────
   const handleImageTap = (evt: { nativeEvent: { locationX: number; locationY: number } }) => {
@@ -791,6 +837,29 @@ export default function HoleView() {
           </View>
         )}
 
+        {/* LANDMARK ROW */}
+        {displayType === 'bundled' && roundActive && markersReady && landmarks.length > 0 && (
+          <View style={styles.clubRow}>
+            {(['tee', 'approach', 'pin'] as const).map(m => {
+              const lm = m === 'tee' ? teeLandmark : m === 'approach' ? approachLandmark : pinLandmark;
+              const label = m === 'tee' ? 'T' : m === 'approach' ? 'A' : 'P';
+              const color = m === 'tee' ? '#1DA1F2' : m === 'approach' ? '#00C896' : '#F5A623';
+              return (
+                <TouchableOpacity
+                  key={m}
+                  style={[styles.clubSlot, { borderColor: lm ? color + '88' : '#1e3a28' }]}
+                  onPress={() => setLandmarkPickerFor(m)}
+                >
+                  <Text style={[styles.clubSlotLabel, { color: lm ? color : '#374151' }]}>{label} AIM</Text>
+                  <Text style={[styles.clubSlotValue, { fontSize: 10, color: lm ? '#ffffff' : '#374151' }]} numberOfLines={1}>
+                    {lm ? lm.name : '—'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
         {/* MEASURE RESULT (satellite) */}
         {measureMode && measureYards !== null && (
           <View style={styles.measureResult}>
@@ -905,6 +974,72 @@ export default function HoleView() {
                     setPinClub(null); saveClubUpdate(teeClub, approachClub, null);
                   }
                   setClubPickerFor(null);
+                }}
+              >
+                <Text style={styles.clubChipText}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* LANDMARK PICKER MODAL */}
+      <Modal
+        visible={landmarkPickerFor !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setLandmarkPickerFor(null)}
+      >
+        <TouchableOpacity
+          style={styles.clubModalBackdrop}
+          onPress={() => setLandmarkPickerFor(null)}
+          activeOpacity={1}
+        >
+          <View style={styles.clubModalSheet}>
+            <Text style={styles.clubModalTitle}>
+              {landmarkPickerFor === 'tee' ? 'Tee aim' :
+               landmarkPickerFor === 'approach' ? 'Approach aim' : 'Pin aim'}
+            </Text>
+            <View style={styles.clubGrid}>
+              {landmarks.map(lm => {
+                const current = landmarkPickerFor === 'tee' ? teeLandmark
+                  : landmarkPickerFor === 'approach' ? approachLandmark : pinLandmark;
+                const isSelected = current?.id === lm.id;
+                return (
+                  <TouchableOpacity
+                    key={lm.id}
+                    style={[styles.clubChip, isSelected && styles.clubChipActive]}
+                    onPress={() => {
+                      if (landmarkPickerFor === 'tee') {
+                        setTeeLandmark(lm);
+                        saveLandmarkUpdate(lm, approachLandmark, pinLandmark);
+                      } else if (landmarkPickerFor === 'approach') {
+                        setApproachLandmark(lm);
+                        saveLandmarkUpdate(teeLandmark, lm, pinLandmark);
+                      } else {
+                        setPinLandmark(lm);
+                        saveLandmarkUpdate(teeLandmark, approachLandmark, lm);
+                      }
+                      setLandmarkPickerFor(null);
+                    }}
+                  >
+                    <Text style={[styles.clubChipText, isSelected && styles.clubChipTextActive]}>
+                      {lm.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity
+                style={[styles.clubChip, styles.clubChipClear]}
+                onPress={() => {
+                  if (landmarkPickerFor === 'tee') {
+                    setTeeLandmark(null); saveLandmarkUpdate(null, approachLandmark, pinLandmark);
+                  } else if (landmarkPickerFor === 'approach') {
+                    setApproachLandmark(null); saveLandmarkUpdate(teeLandmark, null, pinLandmark);
+                  } else {
+                    setPinLandmark(null); saveLandmarkUpdate(teeLandmark, approachLandmark, null);
+                  }
+                  setLandmarkPickerFor(null);
                 }}
               >
                 <Text style={styles.clubChipText}>Clear</Text>

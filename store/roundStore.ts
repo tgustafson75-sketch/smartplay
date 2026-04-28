@@ -93,6 +93,7 @@ interface RoundState {
   roundStartTime: number | null;
   roundNumber: number;
   roundHistory: RoundRecord[];
+  active_ghost: { source_round_id: string; label: string } | null;
 
   // ─── ACTIONS ────────────────────────────
 
@@ -132,6 +133,9 @@ interface RoundState {
   setNineHoleMode: (v: boolean) => void;
   setIsCompetition: (v: boolean) => void;
 
+  setActiveGhost: (payload: { source_round_id: string; label: string } | null) => void;
+  clearActiveGhost: () => void;
+
   getCurrentPar: () => number | null;
   getTotalScore: () => number;
   getHolesPlayed: () => number;
@@ -169,6 +173,7 @@ export const useRoundStore = create<RoundState>()(
       roundStartTime: null,
       roundNumber: 0,
       roundHistory: [],
+      active_ghost: null,
 
       startRound: (course, holes, options) => {
         const courseId = options.courseId ?? null;
@@ -199,6 +204,7 @@ export const useRoundStore = create<RoundState>()(
           holeStats: [],
           roundStartTime: Date.now(),
           roundNumber: prev.roundNumber + 1,
+          active_ghost: null,
         });
       },
 
@@ -303,6 +309,8 @@ export const useRoundStore = create<RoundState>()(
       setRoundNotes: (notes) => set({ roundNotes: notes }),
       setNineHoleMode: (v) => set({ nineHoleMode: v }),
       setIsCompetition: (v) => set({ isCompetition: v }),
+      setActiveGhost: (payload) => set({ active_ghost: payload }),
+      clearActiveGhost: () => set({ active_ghost: null }),
 
       getCurrentPar: () => {
         const { courseHoles, currentHole } = get();
@@ -359,6 +367,7 @@ export const useRoundStore = create<RoundState>()(
         holeStats: s.holeStats,
         roundNumber: s.roundNumber,
         roundHistory: s.roundHistory,
+        active_ghost: s.active_ghost,
       }),
     },
   ),

@@ -1,0 +1,182 @@
+[
+  {
+    "id": "palms_h1_bunker_left",
+    "course_id": "palms",
+    "hole_number": 1,
+    "name": "Left Bunker",
+    "description": "Fairway bunker short-left of landing zone",
+    "side": "left",
+    "type": "bunker",
+    "position": { "x": 0.28, "y": 0.45 }
+  },
+  {
+    "id": "palms_h1_tree_right",
+    "course_id": "palms",
+    "hole_number": 1,
+    "name": "Right Tree Line",
+    "description": "Tall palms framing the right edge of the fairway",
+    "side": "right",
+    "type": "tree",
+    "position": { "x": 0.72, "y": 0.42 }
+  },
+  {
+    "id": "palms_h1_center_post",
+    "course_id": "palms",
+    "hole_number": 1,
+    "name": "Fairway Marker Post",
+    "description": "150-yard marker post in center of fairway",
+    "side": "center",
+    "type": "marker",
+    "position": { "x": 0.50, "y": 0.55 }
+  },
+  {
+    "id": "palms_h2_pond_right",
+    "course_id": "palms",
+    "hole_number": 2,
+    "name": "Right Pond",
+    "description": "Water hazard guarding the right side of the green",
+    "side": "right",
+    "type": "water",
+    "position": { "x": 0.68, "y": 0.25 }
+  },
+  {
+    "id": "palms_h2_left_rough",
+    "course_id": "palms",
+    "hole_number": 2,
+    "name": "Left Rough Mound",
+    "description": "Elevated rough mound protecting the left approach",
+    "side": "left",
+    "type": "rough",
+    "position": { "x": 0.30, "y": 0.30 }
+  },
+  {
+    "id": "palms_h3_center_tree",
+    "course_id": "palms",
+    "hole_number": 3,
+    "name": "Center Oak",
+    "description": "Large oak tree splitting the fairway at 200 yards",
+    "side": "center",
+    "type": "tree",
+    "position": { "x": 0.50, "y": 0.48 }
+  },
+  {
+    "id": "palms_h3_green_bunker",
+    "course_id": "palms",
+    "hole_number": 3,
+    "name": "Front Left Bunker",
+    "description": "Greenside bunker front-left — short misses find this",
+    "side": "left",
+    "type": "bunker",
+    "position": { "x": 0.35, "y": 0.18 }
+  },
+  {
+    "id": "palms_h4_dogleg_tree",
+    "course_id": "palms",
+    "hole_number": 4,
+    "name": "Dogleg Corner Tree",
+    "description": "Tall pine at the inside corner of the left dogleg",
+    "side": "left",
+    "type": "tree",
+    "position": { "x": 0.25, "y": 0.50 }
+  },
+  {
+    "id": "palms_h4_right_rough",
+    "course_id": "palms",
+    "hole_number": 4,
+    "name": "Right Rough Ditch",
+    "description": "Drainage ditch running parallel on the right side",
+    "side": "right",
+    "type": "hazard",
+    "position": { "x": 0.75, "y": 0.45 }
+  },
+  {
+    "id": "palms_h5_fairway_bunker",
+    "course_id": "palms",
+    "hole_number": 5,
+    "name": "Fairway Bunker Pair",
+    "description": "Twin bunkers at 230 yards center-right",
+    "side": "right",
+    "type": "bunker",
+    "position": { "x": 0.60, "y": 0.44 }
+  },
+  {
+    "id": "palms_h5_green_back",
+    "course_id": "palms",
+    "hole_number": 5,
+    "name": "Back Slope",
+    "description": "Steep slope behind the green — balls run away fast",
+    "side": "center",
+    "type": "rough",
+    "position": { "x": 0.50, "y": 0.10 }
+  },
+  {
+    "id": "palms_h6_water_left",
+    "course_id": "palms",
+    "hole_number": 6,
+    "name": "Left Pond",
+    "description": "Pond running the full left side off the tee",
+    "side": "left",
+    "type": "water",
+    "position": { "x": 0.22, "y": 0.40 }
+  },
+  {
+    "id": "palms_h6_right_tree",
+    "course_id": "palms",
+    "hole_number": 6,
+    "name": "Right Palm Row",
+    "description": "Row of palms defining the right edge — safe bail-out zone",
+    "side": "right",
+    "type": "tree",
+    "position": { "x": 0.72, "y": 0.38 }
+  },
+  {
+    "id": "palms_h7_front_bunker",
+    "course_id": "palms",
+    "hole_number": 7,
+    "name": "Front Bunker",
+    "description": "Deep pot bunker directly in front of the green",
+    "side": "center",
+    "type": "bunker",
+    "position": { "x": 0.50, "y": 0.28 }
+  },
+  {
+    "id": "palms_h8_center_bunker",
+    "course_id": "palms",
+    "hole_number": 8,
+    "name": "Center Fairway Bunker",
+    "description": "Fairway bunker at 210 yards must be carried or avoided",
+    "side": "center",
+    "type": "bunker",
+    "position": { "x": 0.50, "y": 0.46 }
+  },
+  {
+    "id": "palms_h8_right_water",
+    "course_id": "palms",
+    "hole_number": 8,
+    "name": "Right Water",
+    "description": "Creek cutting across the right side 30 yards short of green",
+    "side": "right",
+    "type": "water",
+    "position": { "x": 0.68, "y": 0.22 }
+  },
+  {
+    "id": "palms_h9_green_hill",
+    "course_id": "palms",
+    "hole_number": 9,
+    "name": "Green Hill",
+    "description": "Elevated green — approaches must account for extra club",
+    "side": "center",
+    "type": "marker",
+    "position": { "x": 0.50, "y": 0.15 }
+  },
+  {
+    "id": "palms_h9_left_bunker",
+    "course_id": "palms",
+    "hole_number": 9,
+    "name": "Left Greenside Bunker",
+    "description": "Bunker guarding the left entrance to the green",
+    "side": "left",
+    "type": "bunker",
+    "position": { "x": 0.30, "y": 0.18 }
+  }
+]

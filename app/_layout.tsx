@@ -62,6 +62,10 @@ export default function RootLayout() {
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
         <Stack.Screen
+          name="landmark-curate"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
+        <Stack.Screen
           name="recap/[round_id]"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />

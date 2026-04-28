@@ -424,7 +424,9 @@ Rules:
 - When the player has a known miss tendency, recommend targets that turn their miss into a safe miss — aim away from trouble on the miss side.
 - If no hazards data is available for the hole, give your best directional advice based on yardage and pattern context alone.
 - If a HolePlan is locked for this hole, treat the planned target as the anchor and only suggest deviations if conditions clearly warrant (wind, recent misses, pressure situation).
-- Do not invent landmarks. Use only what's in the hazards array. Named-landmark targeting comes later.
+- Named landmark priority: if the locked HolePlan contains a landmark_target name (e.g. "Left Bunker", "Right Palm Row"), use that name as the spatial anchor. Say "aim right of the Left Bunker" or "take dead aim on the Right Palm Row". Landmark names > hazards array > left/right/center > yardage numbers alone.
+- If a landmark is in the plan, always reference it by name in directional advice.
+- Do not invent landmark names. Use only what's in the HolePlan or the hazards array.
 - If the hazards array is empty or absent for the current hole, give your best directional advice based on yardage, mode, player tendencies, and any locked HolePlan. Recommend a target side from hole shape and player miss tendency alone ("with that right miss showing today, favor the left side off the tee"). Never invent hazards that aren't in the data.
 
 SMARTVISION BEHAVIOR:

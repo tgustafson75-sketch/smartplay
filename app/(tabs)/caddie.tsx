@@ -35,6 +35,7 @@ import { getCourse as getApiCourse, courseToHoles } from '../../services/golfCou
 import { generateRecap } from '../../services/recapGenerator';
 import { generatePatternInsights } from '../../services/patternDetection';
 import { useGhostStore } from '../../store/ghostStore';
+import { listArchivedRecaps } from '../../services/planStorage';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
 import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
@@ -80,6 +81,10 @@ export default function CaddieTab() {
     getScoreVsPar,
     mode,
     setCurrentRoundMode,
+    active_ghost,
+    setActiveGhost,
+    clearActiveGhost,
+    roundHistory,
   } = useRoundStore();
 
   const {
@@ -138,6 +143,15 @@ export default function CaddieTab() {
   const [preRoundBrief, setPreRoundBrief] = useState('');
   const [preRoundLoading, setPreRoundLoading] = useState(false);
   const [recapLoading, setRecapLoading] = useState(false);
+  const [selectedGhostId, setSelectedGhostId] = useState<string | null>(null);
+
+  // ── Ghost rehydration on mount ───────────
+  useEffect(() => {
+    if (!isRoundActive || !active_ghost) return;
+    if (useGhostStore.getState().ghostRecord != null) return; // already live
+    const record = roundHistory.find(r => r.id === active_ghost.source_round_id);
+    if (record) useGhostStore.getState().activateGhost(record);
+  }, []); // intentionally runs once on mount
 
   // ── Floating response text ───────────────
   const displayText = caddieResponse || openingPrompt;
@@ -582,8 +596,23 @@ export default function CaddieTab() {
       courseId,
       mode: selectedMode,
     });
+
+    // Commit ghost selection and activate runtime store
+    if (selectedGhostId) {
+      const ghostRecord = roundHistory.find(r => r.id === selectedGhostId);
+      if (ghostRecord) {
+        const label = `${ghostRecord.courseName ?? 'Past round'} (${ghostRecord.totalScore})`;
+        setActiveGhost({ source_round_id: selectedGhostId, label });
+        useGhostStore.getState().activateGhost(ghostRecord);
+      }
+    } else {
+      clearActiveGhost();
+      useGhostStore.getState().deactivateGhost();
+    }
+
     incrementRounds();
     setShowRoundSetup(false);
+    setSelectedGhostId(null);
     await generatePreRoundBrief(selectedPickedCourse?.id ?? 'palms', isCompetition);
   };
 
@@ -996,6 +1025,66 @@ export default function CaddieTab() {
                 </TouchableOpacity>
               )))}
             </View>
+
+            {/* GHOST PICKER */}
+            {(() => {
+              const courseKey = selectedPickedCourse?.isLocal
+                ? selectedPickedCourse.name.toLowerCase()
+                : selectedPickedCourse?.id ?? null;
+              const eligible = roundHistory.filter(r => {
+                if (!courseKey) return false;
+                if (selectedPickedCourse?.isLocal) {
+                  return (r.courseName ?? '').toLowerCase().includes(courseKey);
+                }
+                return r.courseId === courseKey;
+              }).slice(-5).reverse();
+
+              const relDate = (ts: number) => {
+                const days = Math.floor((Date.now() - ts) / 86400000);
+                if (days === 0) return 'Today';
+                if (days === 1) return 'Yesterday';
+                if (days < 7) return `${days} days ago`;
+                if (days < 30) return `${Math.floor(days / 7)} week${Math.floor(days / 7) > 1 ? 's' : ''} ago`;
+                return `${Math.floor(days / 30)} month${Math.floor(days / 30) > 1 ? 's' : ''} ago`;
+              };
+
+              return (
+                <View style={styles.ghostPickerSection}>
+                  <Text style={styles.sheetLabel}>Play against a past round?</Text>
+                  <Text style={styles.ghostPickerSub}>Optional — Kevin runs the match hole by hole.</Text>
+                  {eligible.length === 0 ? (
+                    <Text style={styles.ghostPickerEmpty}>No past rounds on this course yet. Play one to unlock ghost mode.</Text>
+                  ) : (
+                    <>
+                      <TouchableOpacity
+                        style={[styles.ghostRow, selectedGhostId === null && styles.ghostRowSelected]}
+                        onPress={() => setSelectedGhostId(null)}
+                      >
+                        <Text style={[styles.ghostRowText, selectedGhostId === null && styles.ghostRowTextSelected]}>
+                          Solo round (skip)
+                        </Text>
+                        {selectedGhostId === null && <Text style={styles.ghostRowCheck}>✓</Text>}
+                      </TouchableOpacity>
+                      {eligible.map(r => (
+                        <TouchableOpacity
+                          key={r.id}
+                          style={[styles.ghostRow, selectedGhostId === r.id && styles.ghostRowSelected]}
+                          onPress={() => setSelectedGhostId(r.id)}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.ghostRowText, selectedGhostId === r.id && styles.ghostRowTextSelected]}>
+                              {r.totalScore} strokes · {ROUND_MODE_LABELS[r.mode] ?? r.mode}
+                            </Text>
+                            <Text style={styles.ghostRowDate}>{relDate(r.endedAt)}</Text>
+                          </View>
+                          {selectedGhostId === r.id && <Text style={styles.ghostRowCheck}>✓</Text>}
+                        </TouchableOpacity>
+                      ))}
+                    </>
+                  )}
+                </View>
+              );
+            })()}
 
             <TouchableOpacity style={styles.startBtn} onPress={handleStartRound}>
               <Text style={styles.startBtnText}>Let's Go</Text>
@@ -1576,5 +1665,55 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 12,
     marginTop: 2,
+  },
+  ghostPickerSection: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  ghostPickerSub: {
+    color: '#4b5563',
+    fontSize: 12,
+    marginBottom: 10,
+    marginTop: -4,
+  },
+  ghostPickerEmpty: {
+    color: '#374151',
+    fontSize: 13,
+    fontStyle: 'italic',
+    paddingVertical: 8,
+  },
+  ghostRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    backgroundColor: '#0d2418',
+    marginBottom: 6,
+  },
+  ghostRowSelected: {
+    borderColor: '#00C896',
+    backgroundColor: '#003d20',
+  },
+  ghostRowText: {
+    flex: 1,
+    color: '#9ca3af',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  ghostRowTextSelected: {
+    color: '#ffffff',
+  },
+  ghostRowDate: {
+    color: '#4b5563',
+    fontSize: 11,
+    marginRight: 6,
+  },
+  ghostRowCheck: {
+    color: '#00C896',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

@@ -59,7 +59,6 @@ export async function clearCourseCache(): Promise<void> {
 // ─── Response normalization ───────────────────────────────────────────────────
 
 // golfcourseapi.com response shapes vary — normalize defensively.
-// All normalization is logged so Tim can diagnose from couch.
 
 type RawHole = {
   hole_number?: number;
@@ -71,6 +70,15 @@ type RawHole = {
   handicap_index?: number;
   lat?: number | null;
   lng?: number | null;
+  note?: string;
+  notes?: string;
+  description?: string;
+  desc?: string;
+  features?: string[] | string;
+  tee_description?: string;
+  hole_description?: string;
+  hazards?: string[] | string;
+  comments?: string;
 };
 
 type RawTee = {
@@ -99,21 +107,49 @@ type RawCourse = {
   tees?: RawTee[] | { male?: RawTee[]; female?: RawTee[] } | Record<string, RawTee[]>;
 };
 
-function normalizeHole(raw: RawHole): Hole {
-  // DIAGNOSTIC — logs first hole of every fetch; remove after API shape is confirmed
-  if ((raw.hole_number ?? raw.number) === 1) {
-    console.log('[golfcourseapi] raw hole shape:', JSON.stringify(raw, null, 2));
+const HAZARD_KEYWORDS = [
+  'bunker', 'sand', 'water', 'hazard', 'ob', 'out of bounds',
+  'pond', 'creek', 'lake', 'stream', 'trees', 'woods', 'rough',
+  'fescue', 'waste', 'marsh', 'fairway bunker', 'greenside',
+];
+
+function extractHazardsFromRawHole(raw: RawHole): string[] {
+  const candidateStrings: string[] = [];
+
+  const stringFields = [
+    raw.note, raw.notes, raw.description, raw.desc,
+    raw.tee_description, raw.hole_description, raw.comments,
+  ];
+  for (const field of stringFields) {
+    if (typeof field === 'string' && field.trim()) {
+      candidateStrings.push(field.trim());
+    }
   }
 
-  // golfcourseapi does not return per-hole hazard data in its current schema.
-  // hazards stays [] until a real data source is wired (Phase 4.x landmark).
+  for (const field of [raw.features, raw.hazards]) {
+    if (Array.isArray(field)) {
+      candidateStrings.push(...field.filter((s): s is string => typeof s === 'string' && s.trim().length > 0));
+    } else if (typeof field === 'string' && field.trim()) {
+      candidateStrings.push(field.trim());
+    }
+  }
+
+  const hazardStrings = candidateStrings.filter(s => {
+    const lower = s.toLowerCase();
+    return HAZARD_KEYWORDS.some(keyword => lower.includes(keyword));
+  });
+
+  return [...new Set(hazardStrings)];
+}
+
+function normalizeHole(raw: RawHole): Hole {
   return {
     hole_number: raw.hole_number ?? raw.number ?? 0,
     par: raw.par ?? 4,
     yardage: raw.yardage ?? raw.yards ?? 0,
     handicap: raw.handicap ?? raw.handicap_index ?? null,
     gps: (raw.lat != null && raw.lng != null) ? { lat: raw.lat, lng: raw.lng } : null,
-    hazards: [],
+    hazards: extractHazardsFromRawHole(raw),
   };
 }
 
