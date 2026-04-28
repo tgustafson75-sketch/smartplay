@@ -214,10 +214,11 @@ export function classifyQuery(transcript: string): FillerCategory {
     t.includes('versus') || t.includes('vs ') || t.includes('against')
   ) return 'ghost';
 
+  // Social: greetings and direct personal questions only.
+  // Requests like "tell me a joke" fall through to conversational (they're chat, not greetings).
   if (
     t.includes('hey ') || t.includes('hi ') || t.includes('hello') ||
-    t.includes('joke') || t.includes('funny') || t.includes('how are you') ||
-    t.includes('what\'s up') || t.includes('whats up')
+    t.includes('how are you') || t.includes('what\'s up') || t.includes('whats up')
   ) return 'social';
 
   if (

@@ -83,6 +83,20 @@ export default function CageDebug() {
 
   useEffect(() => { refreshFillerStatus(); }, [refreshFillerStatus]);
 
+  // Poll while background generation is in progress (fires from onboarding, not from this screen).
+  useEffect(() => {
+    if (!fillerGenerating) return;
+    const id = setInterval(() => {
+      if (!isLibraryGenerating()) {
+        refreshFillerStatus(); // generation finished — update UI and stop polling
+        clearInterval(id);
+      } else {
+        refreshFillerStatus(); // still running — keep display current
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [fillerGenerating, refreshFillerStatus]);
+
   const handleFillerGenerate = useCallback(async () => {
     setFillerGenerating(true);
     await generateLibrary(apiUrl, voiceGender, language).catch(() => {});
