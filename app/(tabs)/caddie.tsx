@@ -28,6 +28,8 @@ import { useRelationshipStore } from '../../store/relationshipStore';
 import { useCageStore } from '../../store/cageStore';
 import { usePointsStore } from '../../store/pointsStore';
 import { getCourseList, getCourse } from '../../data/courses';
+import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
+import { getCourse as getApiCourse, courseToHoles } from '../../services/golfCourseApi';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
 import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
@@ -113,7 +115,9 @@ export default function CaddieTab() {
   const [showShotCard, setShowShotCard] = useState(false);
   const [showRoundSetup, setShowRoundSetup] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [selectedCourse, setSelectedCourse] = useState('palms');
+  const [selectedPickedCourse, setSelectedPickedCourse] = useState<PickedCourse | null>(
+    { id: 'local:palms', name: 'Palms', fullName: 'Palms Golf Course', isLocal: true },
+  );
   const [nineHole, setNineHole] = useState(false);
   const [isCompetition, setIsCompetition] = useState(false);
   const [roundNotes, setRoundNotes] = useState('');
@@ -487,18 +491,49 @@ export default function CaddieTab() {
 
   // ── Start round ──────────────────────────
   const handleStartRound = async () => {
-    const course = getCourse(selectedCourse);
-    if (!course) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    startRound(course.name, course.holes, {
+
+    let courseName = 'Unknown Course';
+    let holes = getCourse('palms')?.holes ?? [];
+    let courseId: string | null = null;
+
+    if (selectedPickedCourse) {
+      if (selectedPickedCourse.isLocal) {
+        // Local course (Palms etc.)
+        const localId = selectedPickedCourse.id.replace('local:', '');
+        const local = getCourse(localId);
+        courseName = local?.name ?? selectedPickedCourse.name;
+        holes = local?.holes ?? [];
+      } else {
+        // API course
+        courseId = selectedPickedCourse.id;
+        courseName = selectedPickedCourse.name;
+        try {
+          const apiCourse = await getApiCourse(courseId);
+          if (apiCourse && apiCourse.tees.length > 0) {
+            holes = courseToHoles(apiCourse);
+            courseName = apiCourse.club_name;
+          }
+        } catch (e) {
+          console.warn('[caddie] Could not load API course holes:', e);
+        }
+      }
+    }
+
+    if (holes.length === 0) {
+      holes = getCourse('palms')?.holes ?? [];
+    }
+
+    startRound(courseName, holes, {
       nineHole,
       isCompetition,
       notes: roundNotes,
       goal: null,
+      courseId,
     });
     incrementRounds();
     setShowRoundSetup(false);
-    await generatePreRoundBrief(selectedCourse, isCompetition);
+    await generatePreRoundBrief(selectedPickedCourse?.id ?? 'palms', isCompetition);
   };
 
   // ── Log hole score ───────────────────────
@@ -569,6 +604,7 @@ export default function CaddieTab() {
     }
   };
 
+  // Local course list kept for pre-round brief fallback
   const courses = getCourseList();
 
   // ── Strip / start-round data ─────────────
@@ -809,22 +845,10 @@ export default function CaddieTab() {
             <Text style={styles.sheetTitle}>Start Round</Text>
 
             <Text style={styles.sheetLabel}>Course</Text>
-            <View style={styles.pillRow}>
-              {courses.map(c => (
-                <TouchableOpacity
-                  key={c.id}
-                  style={[styles.pill, selectedCourse === c.id && styles.pillActive]}
-                  onPress={() => setSelectedCourse(c.id)}
-                >
-                  <Text style={[
-                    styles.pillText,
-                    selectedCourse === c.id && styles.pillTextActive,
-                  ]}>
-                    {c.id === 'palms' ? 'Palms' : c.id === 'lakes' ? 'Lakes' : 'Rancho'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <CoursePicker
+              selected={selectedPickedCourse}
+              onSelect={setSelectedPickedCourse}
+            />
 
             <Text style={styles.sheetLabel}>Holes</Text>
             <View style={styles.pillRow}>

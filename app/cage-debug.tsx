@@ -119,6 +119,9 @@ export default function CageDebug() {
           <Text style={styles.backBtnText}>‹ Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Cage Sessions</Text>
+        <TouchableOpacity style={styles.apiDebugBtn} onPress={() => router.push('/api-debug')}>
+          <Text style={styles.apiDebugBtnText}>Course API</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.synthBtn} onPress={handleSyntheticTest}>
           <Text style={styles.synthBtnText}>+ Synthetic test</Text>
         </TouchableOpacity>
@@ -299,6 +302,20 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#e8f5e9',
     fontSize: 17,
+    fontWeight: '700',
+  },
+  apiDebugBtn: {
+    backgroundColor: '#0a1e12',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    marginRight: 6,
+  },
+  apiDebugBtnText: {
+    color: '#6b7280',
+    fontSize: 12,
     fontWeight: '700',
   },
   synthBtn: {

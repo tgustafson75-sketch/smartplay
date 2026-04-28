@@ -61,6 +61,8 @@ export interface RoundRecord {
 interface RoundState {
   isRoundActive: boolean;
   activeCourse: string | null;
+  activeCourseId: string | null; // golfcourseapi course_id; null for local/manual rounds
+  recentCourseIds: string[]; // last 5 API course IDs played
   courseHoles: CourseHole[];
   nineHoleMode: boolean;
   isCompetition: boolean;
@@ -93,8 +95,10 @@ interface RoundState {
       isCompetition: boolean;
       notes: string;
       goal: string | null;
+      courseId?: string | null;
     },
   ) => void;
+  setActiveCourseId: (id: string | null) => void;
 
   endRound: () => void;
   setCurrentHole: (hole: number) => void;
@@ -124,6 +128,8 @@ export const useRoundStore = create<RoundState>()(
     (set, get) => ({
       isRoundActive: false,
       activeCourse: null,
+      activeCourseId: null,
+      recentCourseIds: [],
       courseHoles: [],
       nineHoleMode: false,
       isCompetition: false,
@@ -143,10 +149,17 @@ export const useRoundStore = create<RoundState>()(
       roundNumber: 0,
       roundHistory: [],
 
-      startRound: (course, holes, options) =>
+      startRound: (course, holes, options) => {
+        const courseId = options.courseId ?? null;
+        const prev = get();
+        const updatedRecent = courseId
+          ? [courseId, ...prev.recentCourseIds.filter(id => id !== courseId)].slice(0, 5)
+          : prev.recentCourseIds;
         set({
           isRoundActive: true,
           activeCourse: course,
+          activeCourseId: courseId,
+          recentCourseIds: updatedRecent,
           courseHoles: holes,
           nineHoleMode: options.nineHole,
           isCompetition: options.isCompetition,
@@ -160,8 +173,11 @@ export const useRoundStore = create<RoundState>()(
           shots: [],
           holeStats: [],
           roundStartTime: Date.now(),
-          roundNumber: get().roundNumber + 1,
-        }),
+          roundNumber: prev.roundNumber + 1,
+        });
+      },
+
+      setActiveCourseId: (id) => set({ activeCourseId: id }),
 
       endRound: () => {
         const s = get();
@@ -253,6 +269,8 @@ export const useRoundStore = create<RoundState>()(
       partialize: (s) => ({
         isRoundActive: s.isRoundActive,
         activeCourse: s.activeCourse,
+        activeCourseId: s.activeCourseId,
+        recentCourseIds: s.recentCourseIds,
         courseHoles: s.courseHoles,
         nineHoleMode: s.nineHoleMode,
         isCompetition: s.isCompetition,

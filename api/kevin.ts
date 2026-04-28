@@ -46,7 +46,133 @@ const TOOLS: Anthropic.Tool[] = [
     description: 'Open SwingLab in record mode to capture a swing on camera. Trigger this when Tim says ANY of: "watch this", "record this", "record my swing", "watch my swing", "film this", "video this", "get this on camera", or any phrasing meaning he wants the camera to capture his next swing.',
     input_schema: { type: 'object', properties: {}, required: [] },
   },
+  {
+    name: 'lookup_course',
+    description: 'Search for a golf course by name or location. Use when the user asks about a course Kevin doesn\'t already have in context. Returns matching courses with basic info.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Course name, club name, or "name in city" (e.g. "Pebble Beach" or "Riverside in Phoenix")' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'lookup_hole',
+    description: 'Get detailed info about a specific hole at a known course. Use when the user is on or asking about a particular hole. Returns par, yardage from each tee, hazards, GPS.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        course_id: { type: 'string' },
+        hole_number: { type: 'number', minimum: 1, maximum: 18 },
+        tee_name: { type: 'string', description: 'Optional. Defaults to first available tee if not specified.' },
+      },
+      required: ['course_id', 'hole_number'],
+    },
+  },
 ];
+
+// ─── Server-side course lookups (golfcourseapi.com, key stays server-side) ────
+
+const GOLFCOURSE_BASE = 'https://api.golfcourseapi.com';
+const COURSE_TIMEOUT_MS = 10_000;
+
+async function serverFetchCourse(path: string): Promise<unknown> {
+  const apiKey = process.env.GOLFCOURSE_API_KEY;
+  if (!apiKey) throw new Error('GOLFCOURSE_API_KEY not set in environment');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), COURSE_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${GOLFCOURSE_BASE}${path}`, {
+      headers: { 'Authorization': `Key ${apiKey}`, 'Accept': 'application/json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`golfcourseapi ${res.status} ${path}`);
+    return res.json();
+  } catch (e) {
+    clearTimeout(timer);
+    throw e;
+  }
+}
+
+async function executeLookupCourse(input: Record<string, unknown>): Promise<string> {
+  const query = String(input.query ?? '').trim();
+  if (!query) return JSON.stringify({ error: 'No query provided' });
+  try {
+    const data = await serverFetchCourse(`/v1/search?search_query=${encodeURIComponent(query)}`);
+    console.log('[golfcourseapi] lookup_course response keys:', Object.keys(data as object));
+    // Normalize to top 5 results
+    const raw = data as Record<string, unknown>;
+    const list: unknown[] =
+      (raw.courses as unknown[] | undefined) ??
+      (raw.data as unknown[] | undefined) ??
+      (Array.isArray(raw) ? raw : []);
+    const results = list.slice(0, 5).map((r) => {
+      const c = r as Record<string, unknown>;
+      return { id: String(c.id ?? ''), name: c.club_name ?? c.name, location: [c.city, c.state_code ?? c.state].filter(Boolean).join(', ') };
+    });
+    return JSON.stringify({ courses: results });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Unknown error';
+    console.error('[golfcourseapi] lookup_course error:', msg);
+    return JSON.stringify({ error: msg });
+  }
+}
+
+async function executeLookupHole(input: Record<string, unknown>): Promise<string> {
+  const courseId = String(input.course_id ?? '').trim();
+  const holeNumber = Number(input.hole_number ?? 0);
+  const teeName = input.tee_name ? String(input.tee_name) : null;
+  if (!courseId) return JSON.stringify({ error: 'No course_id provided' });
+  try {
+    const data = await serverFetchCourse(`/v1/courses/${encodeURIComponent(courseId)}`);
+    console.log('[golfcourseapi] lookup_hole response keys:', Object.keys(data as object));
+    const raw = data as Record<string, unknown>;
+    const course = (raw.course ?? raw.data ?? raw) as Record<string, unknown>;
+
+    // Extract tees
+    type RawTee = { tee_name?: string; name?: string; holes?: unknown[] };
+    let tees: RawTee[] = [];
+    const teesRaw = course.tees;
+    if (Array.isArray(teesRaw)) {
+      tees = teesRaw as RawTee[];
+    } else if (teesRaw && typeof teesRaw === 'object') {
+      for (const arr of Object.values(teesRaw as Record<string, unknown>)) {
+        if (Array.isArray(arr)) tees = tees.concat(arr as RawTee[]);
+      }
+    }
+
+    const tee = teeName
+      ? (tees.find(t => (t.tee_name ?? t.name ?? '').toLowerCase() === teeName.toLowerCase()) ?? tees[0])
+      : tees[0];
+
+    if (!tee) return JSON.stringify({ error: `No tees found for course ${courseId}` });
+
+    type RawHole = { hole_number?: number; number?: number; par?: number; yardage?: number; yards?: number; handicap?: number };
+    const hole = (tee.holes ?? []).find((h) => {
+      const rh = h as RawHole;
+      return (rh.hole_number ?? rh.number) === holeNumber;
+    }) as RawHole | undefined;
+
+    if (!hole) return JSON.stringify({ error: `Hole ${holeNumber} not found` });
+
+    return JSON.stringify({
+      course_id: courseId,
+      hole_number: holeNumber,
+      tee_name: tee.tee_name ?? tee.name,
+      par: hole.par ?? 4,
+      yardage: hole.yardage ?? hole.yards ?? 0,
+      handicap: hole.handicap ?? null,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Unknown error';
+    console.error('[golfcourseapi] lookup_hole error:', msg);
+    return JSON.stringify({ error: msg });
+  }
+}
+
+// ─── Classifier ────────────────────────────────────────────────────────────────
 
 async function classifyQuestion(userMessage: string): Promise<'TACTICAL' | 'CONVERSATIONAL'> {
   try {
@@ -106,6 +232,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       responseMode = 'neutral',
       watchData = null,
       smartVisionContext = null,
+      activeCourseId = null,
+      courseContext = null,
     } = body;
 
     type SmartVisionContext = {
@@ -200,6 +328,16 @@ ${mentalState === 'tight' ? 'Mental state is tight. Keep it simple.' : mentalSta
 
 HERO REEL: If player says "did you get that", "save that", "hero reel", "that's a keeper" — respond with exactly: "Got it. That's yours."
 
+COURSE DATA:
+You have access to lookup_course and lookup_hole tools that can fetch real data for any public US golf course. Use them when:
+- The user mentions a course you don't have in context
+- The user asks about a specific hole's yardage, par, or hazards at a course not already loaded
+- The user is starting a round at a course you haven't seen before
+
+Do NOT use these tools for casual conversation about golf in general. Only when the user is referencing a specific course or hole. After looking up data, speak naturally — don't read raw API output. Translate yardages and pars into friendly, conversational form.
+
+${courseContext ? `COURSE LOADED (use this — do not call lookup_hole for current course):\n${String(courseContext)}` : ''}
+
 SMARTVISION BEHAVIOR:
 When you receive [SMARTVISION OPEN] context at the top of the message, you already have the numbers. Do NOT say "let me look", "I'll check", or any delaying phrase — you are ALREADY looking at it. Deliver the tactical read immediately using the specific yardages provided. Structure: (1) state the key distance(s) — center yards and/or tapped target yards — and the one most relevant consideration, (2) briefly name the conservative play, (3) ask Tim one short question to think together. Two or three sentences total. Use the exact numbers from the context. Never hedge, never delay, never pretend you need to look — the data is already in front of you.
 
@@ -227,33 +365,75 @@ ${baseMessage}`
 
     console.log(`[kevin] tier=${tier} model=${model} q="${userMessage.slice(0, 60)}"`);
     console.log(`[kevin] smartVisionContext:`, JSON.stringify(sv));
+    if (courseContext) console.log(`[kevin] courseContext loaded (${String(courseContext).length} chars)`);
 
-    const aiResponse = await anthropic.messages.create({
-      model,
-      max_tokens: tier === 'TACTICAL' ? 200 : 400,
-      tools: TOOLS,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-    });
-
+    // ─── Agentic loop: resolve data tools before generating final response ────
+    const messages: Anthropic.MessageParam[] = [{ role: 'user', content: userMessage }];
     let text = '';
     let toolAction: Record<string, unknown> | null = null;
+    const MAX_TOOL_ROUNDS = 3;
 
-    for (const block of aiResponse.content) {
-      if (block.type === 'text') {
-        text += block.text;
-      } else if (block.type === 'tool_use') {
-        const input = block.input as Record<string, unknown>;
-        switch (block.name) {
-          case 'open_smartvision': toolAction = { type: 'open_smartvision' }; break;
-          case 'open_smartfinder': toolAction = { type: 'open_smartfinder' }; break;
-          case 'open_swinglab':    toolAction = { type: 'open_swinglab' };    break;
-          case 'record_swing':     toolAction = { type: 'record_swing' };     break;
-          case 'log_score':
-            toolAction = { type: 'log_score', hole: Number(input.hole), score: Number(input.score) };
-            break;
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const aiResponse = await anthropic.messages.create({
+        model,
+        max_tokens: tier === 'TACTICAL' ? 200 : 400,
+        tools: TOOLS,
+        system: systemPrompt,
+        messages,
+      });
+
+      // Collect this round's text + tool calls
+      let roundText = '';
+      let hasDataTools = false;
+      const toolResultBlocks: Anthropic.ToolResultBlockParam[] = [];
+
+      for (const block of aiResponse.content) {
+        if (block.type === 'text') {
+          roundText += block.text;
+        } else if (block.type === 'tool_use') {
+          const input = block.input as Record<string, unknown>;
+
+          if (block.name === 'lookup_course') {
+            // Data tool — fetch and continue loop
+            hasDataTools = true;
+            console.log(`[kevin] calling lookup_course query="${input.query}"`);
+            const result = await executeLookupCourse(input);
+            toolResultBlocks.push({ type: 'tool_result', tool_use_id: block.id, content: result });
+
+          } else if (block.name === 'lookup_hole') {
+            // Data tool — fetch and continue loop
+            hasDataTools = true;
+            console.log(`[kevin] calling lookup_hole course_id="${input.course_id}" hole=${input.hole_number}`);
+            const result = await executeLookupHole(input);
+            toolResultBlocks.push({ type: 'tool_result', tool_use_id: block.id, content: result });
+
+          } else {
+            // Action tool — capture and provide dummy result so the loop can continue
+            switch (block.name) {
+              case 'open_smartvision': toolAction = { type: 'open_smartvision' }; break;
+              case 'open_smartfinder': toolAction = { type: 'open_smartfinder' }; break;
+              case 'open_swinglab':    toolAction = { type: 'open_swinglab' };    break;
+              case 'record_swing':     toolAction = { type: 'record_swing' };     break;
+              case 'log_score':
+                toolAction = { type: 'log_score', hole: Number(input.hole), score: Number(input.score) };
+                break;
+            }
+            toolResultBlocks.push({ type: 'tool_result', tool_use_id: block.id, content: 'Action triggered.' });
+          }
         }
       }
+
+      text += roundText.trim();
+
+      // If no data tools fired (or stop_reason isn't tool_use), we're done
+      if (!hasDataTools || aiResponse.stop_reason !== 'tool_use') {
+        break;
+      }
+
+      // Continue: push assistant message + tool results as next user message
+      messages.push({ role: 'assistant', content: aiResponse.content });
+      messages.push({ role: 'user', content: toolResultBlocks });
+      console.log(`[kevin] tool round ${round + 1} complete, continuing with ${toolResultBlocks.length} result(s)`);
     }
 
     text = text.trim();

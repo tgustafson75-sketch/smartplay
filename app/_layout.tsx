@@ -45,6 +45,10 @@ export default function RootLayout() {
           name="cage-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
+        <Stack.Screen
+          name="api-debug"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
       </Stack>
     </SafeAreaProvider>
     </KevinPresenceProvider>

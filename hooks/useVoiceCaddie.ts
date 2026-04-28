@@ -17,6 +17,7 @@ import { useRelationshipStore } from '../store/relationshipStore';
 import { useCageStore } from '../store/cageStore';
 import { useWatchStore } from '../store/watchStore';
 import { VoiceState } from '../components/CaddieAvatar';
+import { getCourse as getApiCourse, courseSummaryForContext } from '../services/golfCourseApi';
 
 // ─── CONSTANTS ────────────────────────────
 
@@ -131,6 +132,7 @@ export const useVoiceCaddie = ({
     currentHole,
     currentYardage,
     activeCourse,
+    activeCourseId,
     club,
     scores,
     isCompetition,
@@ -251,6 +253,17 @@ export const useVoiceCaddie = ({
           }),
         }));
 
+      // Load course context for active API rounds (cache hit = fast; miss = brief network fetch)
+      let courseContext: string | null = null;
+      if (isRoundActive && activeCourseId) {
+        try {
+          const course = await getApiCourse(activeCourseId);
+          if (course) courseContext = courseSummaryForContext(course);
+        } catch (e) {
+          console.warn('[voiceCaddie] course context load failed:', e);
+        }
+      }
+
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25_000);
 
@@ -270,6 +283,8 @@ export const useVoiceCaddie = ({
           currentPar,
           currentYardage,
           activeCourse,
+          activeCourseId,
+          courseContext,
           isRoundActive,
           isCompetition,
           mentalState: currentMentalState,
