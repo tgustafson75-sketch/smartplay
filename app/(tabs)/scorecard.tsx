@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoundStore } from '../../store/roundStore';
+import type { ShotResult } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { dataValue, dataLabel } from '../../styles/typography';
 
@@ -40,6 +41,7 @@ export default function Scorecard() {
     setCurrentHole,
     logScore,
     logPutts,
+    logShot,
     getTotalScore,
     getScoreVsPar,
     getHolesPlayed,
@@ -111,6 +113,24 @@ export default function Scorecard() {
   });
 
   const handleQuickScore = (score: number) => {
+    // Create placeholder ShotResults so recap and pattern detection have something
+    // to read for quick-score holes — all marked clean, direction unknown.
+    for (let i = 0; i < score; i++) {
+      const placeholder: ShotResult = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + i,
+        feel: null,
+        direction: null,
+        shape: null,
+        club: null,
+        hole: currentHole,
+        timestamp: Date.now(),
+        acousticContact: null,
+        outcome: 'clean',
+        penalty_strokes: 0,
+        rules_decision: undefined,
+      };
+      logShot(placeholder);
+    }
     logScore(currentHole, score);
     logPutts(currentHole, 2);
     const maxHole = nineHoleMode ? 9 : 18;

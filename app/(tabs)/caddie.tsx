@@ -78,7 +78,6 @@ export default function CaddieTab() {
     activeCourseId,
     courseHoles,
     scores,
-    penalties,
     nineHoleMode,
     startRound,
     endRound,
@@ -458,9 +457,13 @@ export default function CaddieTab() {
       if (resolution.kevin_voice_line && voiceEnabled && !discreteMode) {
         speak(resolution.kevin_voice_line, voiceGender, language, apiUrl).catch(() => {});
       }
-      // Auto-resolve as play_forward after 15 seconds if user walks away
+      // Auto-resolve as play_forward after 15 seconds if user walks away.
+      // Plays a voice line before committing so the user isn't surprised by a silent decision.
       outcomeAutoTimerRef.current = setTimeout(() => {
         outcomeAutoTimerRef.current = null;
+        if (voiceEnabled && !discreteMode) {
+          speak("Locked in as play forward — let me know if I got that wrong.", voiceGender, language, apiUrl).catch(() => {});
+        }
         commitShot(pendingDirection, outcome, 'play_forward');
       }, 15000);
       return;
@@ -606,6 +609,8 @@ export default function CaddieTab() {
         patternInsights: patternInsights.insights,
         playerName: usePlayerProfileStore.getState().firstName || usePlayerProfileStore.getState().name || 'the player',
         apiUrl,
+        // IMPORTANT: getSnapshot() must run before any future deactivateGhost() call —
+        // ghost store is in-memory only and deactivation clears all hole results.
         ghostSnapshot: useGhostStore.getState().getSnapshot(),
       })
         .then(recap => {
@@ -831,14 +836,14 @@ export default function CaddieTab() {
   // targetDirection: not yet in aim engine — show CENTER until wired
   const targetDirection = 'CENTER';
   const currentStroke = useMemo(() => {
-    const legacyPenalties = penalties[currentHole] ?? 0;
+    // All penalties now flow through ShotResult (including More Menu addPenalty).
+    // Legacy penalties[] field is no longer written to, so we read only from shots.
     const holeShots = shots.filter(s => s.hole === currentHole);
     if (holeShots.length > 0) {
-      const shotPenalties = holeShots.reduce((acc, s) => acc + (s.penalty_strokes ?? 0), 0);
-      return holeShots.length + shotPenalties + legacyPenalties;
+      return holeShots.length + holeShots.reduce((acc, s) => acc + (s.penalty_strokes ?? 0), 0);
     }
-    return legacyPenalties + 1;
-  }, [shots, penalties, currentHole]);
+    return 1; // no shots yet — first stroke
+  }, [shots, currentHole]);
 
   // ── Cross-transition: strip ↔ start-round CTA ───
   const stripOpacity = useRef(new Animated.Value(isRoundActive ? 1 : 0)).current;

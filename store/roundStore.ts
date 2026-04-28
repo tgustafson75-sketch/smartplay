@@ -306,10 +306,28 @@ export const useRoundStore = create<RoundState>()(
       logPutts: (hole, putts) =>
         set(s => ({ putts: { ...s.putts, [hole]: putts } })),
 
-      addPenalty: (hole) =>
-        set(s => ({
-          penalties: { ...s.penalties, [hole]: (s.penalties[hole] ?? 0) + 1 },
-        })),
+      addPenalty: (hole) => {
+        // Unified path: creates a ShotResult so the penalty flows through computeHoleScore,
+        // pattern detection, and recap — same as all other penalty outcomes.
+        const syntheticShot: ShotResult = {
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          feel: null,
+          direction: null,
+          shape: null,
+          club: null,
+          hole,
+          timestamp: Date.now(),
+          acousticContact: null,
+          outcome: 'manual_penalty',
+          penalty_strokes: 1,
+          rules_decision: undefined,
+        };
+        get().logShot(syntheticShot);
+        // Bump scores[hole] by 1 so the scorecard reflects this penalty immediately.
+        const currentScore = get().scores[hole] ?? 0;
+        get().logScore(hole, currentScore + 1);
+        // Legacy penalties[] field intentionally NOT written — ShotResult is authoritative now.
+      },
 
       logShot: (shot) =>
         set(s => ({ shots: [...s.shots, shot] })),

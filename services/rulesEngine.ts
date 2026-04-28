@@ -76,6 +76,14 @@ export function resolvePenalty(
         requires_choice: false,
       };
 
+    case 'manual_penalty':
+      return {
+        outcome,
+        penalty_strokes: 1,
+        requires_choice: false,
+        // no kevin_voice_line — user initiated from More Menu; Kevin already acknowledged it
+      };
+
     case 'clean':
     default:
       return {
