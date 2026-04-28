@@ -32,7 +32,7 @@ const CLUBS = [
 ];
 
 export default function CageIndex() {
-  useKeepAwake();
+  useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
 
   const { startSession, cameraAlignment, sessionHistory } = useCageStore();

@@ -47,7 +47,7 @@ const SHAPE_OPTIONS = [
 ];
 
 export default function CageSession() {
-  useKeepAwake();
+  useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
   const params = useLocalSearchParams();
 

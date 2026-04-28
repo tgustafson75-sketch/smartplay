@@ -24,7 +24,7 @@ import { useWatchStore } from '../store/watchStore';
 import { simulateSwing, getKevinTempoLine } from '../services/watchService';
 
 export default function SmartMotion() {
-  useKeepAwake();
+  useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
   const params = useLocalSearchParams();
 

@@ -59,7 +59,7 @@ import type { RulesDecision } from '../../types/penalty';
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
 export default function CaddieTab() {
-  useKeepAwake();
+  useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: W } = useWindowDimensions();

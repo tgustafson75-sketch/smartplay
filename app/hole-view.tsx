@@ -102,7 +102,7 @@ const mppForZoom = (zoom: number): number => {
 // ─── COMPONENT ────────────────────────────
 
 export default function HoleView() {
-  useKeepAwake();
+  useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
   const { width: W, height: H } = useWindowDimensions();
   const isLandscape = W > H;

@@ -27,7 +27,7 @@ import type { RangefinderLock } from '../types/smartfinder';
 const LOCK_DURATION_MS = 30_000;
 
 export default function SmartFinder() {
-  useKeepAwake();
+  useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: W, height: H } = useWindowDimensions();
