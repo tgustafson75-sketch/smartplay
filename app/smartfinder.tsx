@@ -53,23 +53,13 @@ export default function SmartFinder() {
     });
   }, []);
 
-  // ── Subscribe to DeviceMotion for heading + pitch ─
+  // ── Subscribe to DeviceMotion for pitch + heading ─
   useEffect(() => {
     DeviceMotion.setUpdateInterval(200);
     const sub = DeviceMotion.addListener(data => {
       if (data.rotation) {
-        // beta: front-to-back tilt (radians). Negative = tilted forward/down.
         const pitchDeg = ((data.rotation.beta ?? 0) * 180) / Math.PI;
         pitchRef.current = pitchDeg;
-      }
-    });
-    return () => sub.remove();
-  }, []);
-
-  // ── Subscribe to Magnetometer for heading (via DeviceMotion alpha) ─
-  useEffect(() => {
-    const sub = DeviceMotion.addListener(data => {
-      if (data.rotation?.alpha != null) {
         const alphaDeg = ((data.rotation.alpha ?? 0) * 180) / Math.PI;
         headingRef.current = ((alphaDeg % 360) + 360) % 360;
       }

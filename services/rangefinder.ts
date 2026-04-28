@@ -1,5 +1,8 @@
-import { nanoid } from 'nanoid/non-secure';
 import type { RangefinderLock } from '../types/smartfinder';
+
+function makeId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
 
 export interface DistanceComputeInput {
   user_position: { lat: number; lng: number; accuracy: number };
@@ -109,7 +112,7 @@ export function buildLock(
   result: DistanceComputeOutput,
 ): RangefinderLock {
   return {
-    id: nanoid(),
+    id: makeId(),
     locked_at: Date.now(),
     user_position: input.user_position,
     target_position: { lat: result.target_lat, lng: result.target_lng, estimated: true },
