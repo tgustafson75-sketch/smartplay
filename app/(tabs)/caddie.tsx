@@ -23,6 +23,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import { useKeepAwake } from 'expo-keep-awake';
 import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
 import { useRoundStore } from '../../store/roundStore';
+import type { ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
@@ -50,6 +51,10 @@ import {
   markProactiveFired,
   resetProactiveState,
 } from '../../services/proactiveKevin';
+import { resolvePenalty } from '../../services/rulesEngine';
+import { OUTCOME_LABELS, OUTCOME_EMOJI } from '../../types/shot';
+import type { ShotOutcome } from '../../types/shot';
+import type { RulesDecision } from '../../types/penalty';
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
@@ -91,6 +96,9 @@ export default function CaddieTab() {
     setActiveGhost,
     clearActiveGhost,
     roundHistory,
+    shots,
+    logShot,
+    computeHoleScore,
   } = useRoundStore();
 
   const {
@@ -198,6 +206,13 @@ export default function CaddieTab() {
 
   const [recapLoading, setRecapLoading] = useState(false);
   const [selectedGhostId, setSelectedGhostId] = useState<string | null>(null);
+
+  // ── Shot tracking state (within shot card) ───
+  const [pendingDirection, setPendingDirection] = useState<ShotResult['direction'] | null>(null);
+  const [showOutcomeRow, setShowOutcomeRow] = useState(false);
+  const [showRulesChoice, setShowRulesChoice] = useState(false);
+  const [pendingOutcomeForRules, setPendingOutcomeForRules] = useState<'ob' | 'lost' | null>(null);
+  const outcomeAutoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Ghost rehydration on mount ───────────
   useEffect(() => {
@@ -369,6 +384,96 @@ export default function CaddieTab() {
       default:
     }
   }, [openSmartVision, club, router]);
+
+  // ── Shot tracking callbacks ──────────────
+  const clearShotPending = useCallback(() => {
+    if (outcomeAutoTimerRef.current) {
+      clearTimeout(outcomeAutoTimerRef.current);
+      outcomeAutoTimerRef.current = null;
+    }
+    setPendingDirection(null);
+    setShowOutcomeRow(false);
+    setShowRulesChoice(false);
+    setPendingOutcomeForRules(null);
+  }, []);
+
+  const commitShot = useCallback((
+    direction: ShotResult['direction'],
+    outcome: ShotOutcome,
+    rulesDecision?: RulesDecision,
+  ) => {
+    const resolution = resolvePenalty(outcome, rulesDecision);
+    const shot: ShotResult = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      feel: null,
+      direction,
+      shape: null,
+      club: club ?? null,
+      hole: currentHole,
+      timestamp: Date.now(),
+      acousticContact: null,
+      outcome: resolution.outcome,
+      penalty_strokes: resolution.penalty_strokes,
+      rules_decision: resolution.rules_decision,
+    };
+    logShot(shot);
+    const suggested = useRoundStore.getState().computeHoleScore(currentHole);
+    if (suggested != null) setHoleScore(suggested);
+    clearShotPending();
+    if (resolution.kevin_voice_line && voiceEnabled && !discreteMode) {
+      speak(resolution.kevin_voice_line, voiceGender, language, apiUrl).catch(() => {});
+    }
+  }, [currentHole, club, logShot, clearShotPending, voiceEnabled, discreteMode, voiceGender, language, apiUrl]);
+
+  const handleDirectionTap = useCallback((direction: ShotResult['direction']) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setPendingDirection(direction);
+    setShowOutcomeRow(true);
+    setShowRulesChoice(false);
+    setPendingOutcomeForRules(null);
+    if (outcomeAutoTimerRef.current) clearTimeout(outcomeAutoTimerRef.current);
+    outcomeAutoTimerRef.current = setTimeout(() => {
+      outcomeAutoTimerRef.current = null;
+      commitShot(direction, 'clean');
+    }, 1500);
+  }, [commitShot]);
+
+  const handleOutcomeTap = useCallback((outcome: ShotOutcome) => {
+    if (!pendingDirection) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    if (outcome === 'ob' || outcome === 'lost') {
+      if (outcomeAutoTimerRef.current) {
+        clearTimeout(outcomeAutoTimerRef.current);
+        outcomeAutoTimerRef.current = null;
+      }
+      setShowRulesChoice(true);
+      setPendingOutcomeForRules(outcome);
+      const resolution = resolvePenalty(outcome);
+      if (resolution.kevin_voice_line && voiceEnabled && !discreteMode) {
+        speak(resolution.kevin_voice_line, voiceGender, language, apiUrl).catch(() => {});
+      }
+      return;
+    }
+    commitShot(pendingDirection, outcome);
+  }, [pendingDirection, commitShot, voiceEnabled, discreteMode, voiceGender, language, apiUrl]);
+
+  const handleRulesChoice = useCallback((decision: RulesDecision) => {
+    if (!pendingDirection || !pendingOutcomeForRules) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    commitShot(pendingDirection, pendingOutcomeForRules, decision);
+  }, [pendingDirection, pendingOutcomeForRules, commitShot]);
+
+  const currentHoleShots = useMemo(
+    () => shots.filter(s => s.hole === currentHole),
+    [shots, currentHole],
+  );
+
+  // Auto-prefill score when shot card opens if shots already logged
+  useEffect(() => {
+    if (!showShotCard) return;
+    const suggested = computeHoleScore(currentHole);
+    if (suggested != null) setHoleScore(suggested);
+  }, [showShotCard]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Voice hook ───────────────────────────
   const { handleMicPress: _handleMicPress, processAudioUri } = useVoiceCaddie({
@@ -606,6 +711,7 @@ export default function CaddieTab() {
     setCurrentHole(nextHole);
     setHoleScore(0);
     setHolePutts(0);
+    clearShotPending();
     setShowShotCard(false);
 
     const holePar = par ?? 4;
@@ -1018,11 +1124,11 @@ export default function CaddieTab() {
         visible={showShotCard}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowShotCard(false)}
+        onRequestClose={() => { setShowShotCard(false); clearShotPending(); }}
       >
         <TouchableOpacity
           style={styles.backdrop}
-          onPress={() => setShowShotCard(false)}
+          onPress={() => { setShowShotCard(false); clearShotPending(); }}
           activeOpacity={1}
         >
           <View style={styles.sheet}>
@@ -1030,6 +1136,75 @@ export default function CaddieTab() {
             <Text style={styles.sheetTitle}>
               {'Hole ' + currentHole + (currentPar ? ' · Par ' + currentPar : '')}
             </Text>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+            {/* ── Shot logging ── */}
+            <Text style={styles.sheetLabel}>Log Shot</Text>
+            <View style={styles.directionRow}>
+              {(['left', 'straight', 'right'] as const).map(dir => (
+                <TouchableOpacity
+                  key={dir}
+                  style={[styles.directionBtn, pendingDirection === dir && styles.directionBtnActive]}
+                  onPress={() => handleDirectionTap(dir)}
+                >
+                  <Text style={styles.directionBtnIcon}>
+                    {dir === 'left' ? '←' : dir === 'right' ? '→' : '●'}
+                  </Text>
+                  <Text style={[
+                    styles.directionBtnText,
+                    pendingDirection === dir && styles.directionBtnTextActive,
+                  ]}>
+                    {dir === 'left' ? 'Left' : dir === 'right' ? 'Right' : 'Straight'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {showOutcomeRow && (
+              <View style={styles.outcomeRow}>
+                {(['clean', 'water', 'ob', 'lost', 'hazard_drop', 'unplayable'] as ShotOutcome[]).map(o => (
+                  <TouchableOpacity
+                    key={o}
+                    style={[styles.outcomePill, o === 'clean' && styles.outcomePillHighlight]}
+                    onPress={() => handleOutcomeTap(o)}
+                  >
+                    <Text style={styles.outcomePillEmoji}>{OUTCOME_EMOJI[o]}</Text>
+                    <Text style={styles.outcomePillText}>{OUTCOME_LABELS[o]}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {showRulesChoice && (
+              <View style={styles.rulesChoiceRow}>
+                <TouchableOpacity
+                  style={styles.rulesChoiceBtn}
+                  onPress={() => handleRulesChoice('play_forward')}
+                >
+                  <Text style={styles.rulesChoiceBtnText}>Play Forward{'\n'}(+1 stroke)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.rulesChoiceBtn}
+                  onPress={() => handleRulesChoice('stroke_and_distance')}
+                >
+                  <Text style={styles.rulesChoiceBtnText}>Stroke & Distance{'\n'}(+2 strokes)</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {currentHoleShots.length > 0 && (
+              <View style={styles.shotChipsRow}>
+                {currentHoleShots.map((s, i) => (
+                  <View key={s.id ?? i} style={styles.shotChip}>
+                    <Text style={styles.shotChipText}>
+                      {i + 1}. {s.direction ?? '?'}
+                      {s.outcome && s.outcome !== 'clean' ? ' ' + OUTCOME_EMOJI[s.outcome] : ''}
+                      {(s.penalty_strokes ?? 0) > 0 ? ' +' + s.penalty_strokes : ''}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
             <Text style={styles.sheetLabel}>Score</Text>
             <View style={styles.scoreRow}>
@@ -1079,6 +1254,7 @@ export default function CaddieTab() {
                 onPress={async () => {
                   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
                   endRound();
+                  clearShotPending();
                   setShowShotCard(false);
                   await generateRoundSummary();
                 }}
@@ -1086,6 +1262,7 @@ export default function CaddieTab() {
                 <Text style={styles.endRoundText}>End Round</Text>
               </TouchableOpacity>
             )}
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -1574,5 +1751,106 @@ const styles = StyleSheet.create({
   },
   trialBannerExpiredText: {
     color: '#ef4444',
+  },
+  directionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  directionBtn: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    backgroundColor: '#060f09',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 2,
+  },
+  directionBtnActive: {
+    borderColor: '#00C896',
+    backgroundColor: '#003d20',
+  },
+  directionBtnIcon: {
+    fontSize: 18,
+    color: '#9ca3af',
+  },
+  directionBtnText: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: '#6b7280',
+  },
+  directionBtnTextActive: {
+    color: '#00C896',
+  },
+  outcomeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  outcomePill: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    backgroundColor: '#060f09',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    minWidth: 80,
+    flex: 1,
+  },
+  outcomePillHighlight: {
+    borderColor: '#00C896',
+    backgroundColor: 'rgba(0, 200, 150, 0.08)',
+  },
+  outcomePillEmoji: {
+    fontSize: 14,
+  },
+  outcomePillText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: '#9ca3af',
+    marginTop: 2,
+  },
+  rulesChoiceRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  rulesChoiceBtn: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#374151',
+    backgroundColor: '#0d2418',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  rulesChoiceBtnText: {
+    color: '#d1d5db',
+    fontSize: 12,
+    fontWeight: '600' as const,
+    textAlign: 'center',
+    lineHeight: 17,
+  },
+  shotChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  shotChip: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    backgroundColor: '#0d2418',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  shotChipText: {
+    color: '#9ca3af',
+    fontSize: 11,
   },
 });

@@ -279,6 +279,21 @@ export const useVoiceCaddie = ({
         dominantMiss: profileDominantMiss,
       });
 
+      // Build penalty context from already-computed patternInsights raw_stats
+      const rs = patternInsights.raw_stats;
+      const penaltyLines: string[] = [];
+      const totalPenalties = Object.values(rs.penalty_event_count_by_outcome ?? {}).reduce((a, b) => a + (b ?? 0), 0);
+      if (totalPenalties > 0) {
+        const parts = Object.entries(rs.penalty_event_count_by_outcome ?? {})
+          .map(([o, c]) => `${c} ${o}`)
+          .join(', ');
+        penaltyLines.push(`Recent penalties: ${parts}.`);
+      }
+      if ((rs.recurring_trouble_holes ?? []).length > 0) {
+        penaltyLines.push(`Recurring trouble holes: ${rs.recurring_trouble_holes.join(', ')}.`);
+      }
+      const penaltyContext = penaltyLines.length > 0 ? penaltyLines.join(' ') : null;
+
       // Load course context for active API rounds (cache hit = fast; miss = brief network fetch)
       let courseContext: string | null = null;
       if (isRoundActive && activeCourseId) {
@@ -316,6 +331,7 @@ export const useVoiceCaddie = ({
           holePlan,
           ghostContext,
           smartFinderContext,
+          penaltyContext,
           isRoundActive,
           isCompetition,
           mentalState: currentMentalState,

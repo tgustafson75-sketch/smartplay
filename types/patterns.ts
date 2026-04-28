@@ -1,3 +1,5 @@
+import type { ShotOutcome } from './shot';
+
 export type RoundMode = 'break_100' | 'break_90' | 'break_80' | 'free_play';
 
 export const ROUND_MODE_LABELS: Record<RoundMode, string> = {
@@ -25,5 +27,8 @@ export interface PatternInsights {
     miss_tendency_under_pressure:   'left' | 'straight' | 'right' | 'balanced' | 'insufficient_data';
     strengths: string[];
     streak: { type: 'good' | 'rough' | 'neutral'; length: number };
+    penalty_event_count_by_outcome: Partial<Record<ShotOutcome, number>>;
+    penalty_holes_count: number;
+    recurring_trouble_holes: number[];
   };
 }

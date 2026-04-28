@@ -3,6 +3,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RoundMode } from '../types/patterns';
 import type { HolePlan } from '../types/plan';
+import type { ShotOutcome } from '../types/shot';
+import type { RulesDecision } from '../types/penalty';
 
 // ─── TYPES ────────────────────────────────
 
@@ -25,6 +27,7 @@ export interface CourseHole {
 }
 
 export interface ShotResult {
+  id?: string;
   feel: 'flush' | 'solid' | 'fat' | 'thin' | 'heel' | 'toe' | null;
   direction: 'left' | 'straight' | 'right' | null;
   shape: 'draw' | 'straight' | 'fade' | null;
@@ -32,6 +35,10 @@ export interface ShotResult {
   hole: number;
   timestamp: number;
   acousticContact: string | null;
+  // Outcome tagging (added v1 migration — absent in old data treated as 'clean')
+  outcome?: ShotOutcome;
+  penalty_strokes?: number;
+  rules_decision?: RulesDecision;
 }
 
 export interface HoleStats {
@@ -141,6 +148,7 @@ interface RoundState {
   getHolesPlayed: () => number;
   getScoreVsPar: () => number;
   getCurrentHoleData: () => CourseHole | null;
+  computeHoleScore: (hole: number) => number | null;
 }
 
 // ─── STORE ────────────────────────────────
@@ -340,9 +348,35 @@ export const useRoundStore = create<RoundState>()(
         const { courseHoles, currentHole } = get();
         return courseHoles.find(h => h.hole === currentHole) ?? null;
       },
+
+      computeHoleScore: (hole: number) => {
+        const holeShots = get().shots.filter(s => s.hole === hole);
+        if (holeShots.length === 0) return null;
+        return holeShots.length + holeShots.reduce((acc, s) => acc + (s.penalty_strokes ?? 0), 0);
+      },
     }),
     {
       name: 'round-store-v1',
+      version: 1,
+      migrate: (persisted, version) => {
+        const s = persisted as RoundState;
+        if (version === 0) {
+          s.shots = (s.shots ?? []).map(sh => ({
+            ...sh,
+            outcome: sh.outcome ?? 'clean',
+            penalty_strokes: sh.penalty_strokes ?? 0,
+          }));
+          s.roundHistory = (s.roundHistory ?? []).map(r => ({
+            ...r,
+            shots: (r.shots ?? []).map(sh => ({
+              ...sh,
+              outcome: sh.outcome ?? 'clean',
+              penalty_strokes: sh.penalty_strokes ?? 0,
+            })),
+          }));
+        }
+        return s;
+      },
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({
         isRoundActive: s.isRoundActive,

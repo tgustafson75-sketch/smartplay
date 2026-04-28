@@ -13,6 +13,7 @@
 
 import type { ShotResult, CourseHole } from '../store/roundStore';
 import type { RoundMode, PatternInsights } from '../types/patterns';
+import type { ShotOutcome } from '../types/shot';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -118,6 +119,26 @@ export function generatePatternInsights(
     return                                        { type: 'neutral', length: 0 };
   })();
 
+  // ── Penalty patterns ───────────────────────────────────────────────────────
+  const last50 = shots.slice(-50);
+  const penaltyShots = last50.filter(s => s.outcome && s.outcome !== 'clean');
+  const penaltyCountByOutcome: Partial<Record<ShotOutcome, number>> = {};
+  for (const s of penaltyShots) {
+    const o = s.outcome as ShotOutcome;
+    penaltyCountByOutcome[o] = (penaltyCountByOutcome[o] ?? 0) + 1;
+  }
+  const penaltyHoles = new Set(penaltyShots.map(s => s.hole));
+  const penalty_holes_count = penaltyHoles.size;
+  // Holes with 2+ penalty shots in this window
+  const holePenaltyCount: Record<number, number> = {};
+  for (const s of penaltyShots) {
+    holePenaltyCount[s.hole] = (holePenaltyCount[s.hole] ?? 0) + 1;
+  }
+  const recurring_trouble_holes = Object.entries(holePenaltyCount)
+    .filter(([, count]) => count >= 2)
+    .map(([hole]) => Number(hole))
+    .sort((a, b) => a - b);
+
   // ── Plain-English insights (max 5, priority order) ─────────────────────────
   const insights: string[] = [];
 
@@ -159,7 +180,18 @@ export function generatePatternInsights(
     }
   }
 
-  // 5 — Strengths
+  // 5 — Penalty patterns
+  const waterCount = penaltyCountByOutcome.water ?? 0;
+  if (waterCount >= 3 && insights.length < 5) {
+    insights.push(`Water has been a theme — ${waterCount} drops in your last ${last50.length} shots.`);
+  } else if (recurring_trouble_holes.length > 0 && insights.length < 5) {
+    const holeStr = recurring_trouble_holes.slice(0, 2).map(h => `hole ${h}`).join(' and ');
+    insights.push(`${holeStr.charAt(0).toUpperCase() + holeStr.slice(1)} ${recurring_trouble_holes.length === 1 ? 'has' : 'have'} caused trouble multiple times — let's plan those carefully.`);
+  } else if (penaltyShots.length === 0 && last50.length >= 10 && insights.length < 5) {
+    insights.push('Clean rounds lately — keeping it in play is a real edge.');
+  }
+
+  // 6 — Strengths
   if (strengths.length > 0 && insights.length < 5) {
     insights.push(`Strengths: ${strengths.join(', ')}.`);
   }
@@ -175,6 +207,9 @@ export function generatePatternInsights(
       miss_tendency_under_pressure,
       strengths,
       streak,
+      penalty_event_count_by_outcome: penaltyCountByOutcome,
+      penalty_holes_count,
+      recurring_trouble_holes,
     },
   };
 }

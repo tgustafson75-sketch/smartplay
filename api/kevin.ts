@@ -241,6 +241,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       holePlan = null,
       ghostContext = null,
       smartFinderContext = null,
+      penaltyContext = null,
       is_proactive = false,
     } = body;
 
@@ -414,6 +415,10 @@ When the player asks "how am I doing against past me?", "am I beating my last ro
 ${smartFinderContext ? `SMARTFINDER LOCK:
 ${String(smartFinderContext)}
 The player just used SmartFinder to lock in their distance. When recommending a club or discussing the shot, use this exact yardage as your working number. Say "you've got [X] yards" not "around [X]". Don't mention the tool by name — just treat it as established fact.` : ''}
+
+${penaltyContext ? `PENALTY HISTORY (use silently — never lecture):
+${String(penaltyContext)}
+When giving directional advice on a hole with relevant hazards, reference this history once: "you've put two in the water right here before — aim left center." Never bring it up unprompted. One mention per hole at most.` : ''}
 
 DIRECTIONAL ADVICE — HAZARD-AWARE TARGETING:
 
