@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,16 @@ import { getCurrentProfile, clearProfile } from '../services/vocabularyProfile';
 import { listReviewSessions } from '../services/cageReview';
 import type { VocabularyProfile } from '../types/vocabulary';
 import type { ReviewSession } from '../types/cageReview';
+import {
+  getLibraryInfo,
+  isLibraryGenerating,
+  generateLibrary,
+  clearLibrary,
+  getClipForCategory,
+} from '../services/fillerLibrary';
+import { playLocalFile } from '../services/voiceService';
+import { useSettingsStore } from '../store/settingsStore';
+import type { FillerCategory } from '../types/filler';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -56,6 +66,41 @@ export default function CageDebug() {
   const [vocabProfile, setVocabProfile] = useState<VocabularyProfile | null>(null);
   const [reviewSessions, setReviewSessions] = useState<ReviewSession[]>([]);
   const [reviewDebugLoading, setReviewDebugLoading] = useState(false);
+
+  // ── Filler debug state ─────────────────────────────────────────────────────
+  const { voiceGender, language } = useSettingsStore();
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+  const [fillerStatus, setFillerStatus] = useState<ReturnType<typeof getLibraryInfo>>(null);
+  const [fillerGenerating, setFillerGenerating] = useState(false);
+  const [fillerPlayingCategory, setFillerPlayingCategory] = useState<FillerCategory | null>(null);
+
+  const fillerInfo = useMemo(() => getLibraryInfo(), [fillerStatus]);
+
+  const refreshFillerStatus = useCallback(() => {
+    setFillerStatus(getLibraryInfo());
+    setFillerGenerating(isLibraryGenerating());
+  }, []);
+
+  useEffect(() => { refreshFillerStatus(); }, [refreshFillerStatus]);
+
+  const handleFillerGenerate = useCallback(async () => {
+    setFillerGenerating(true);
+    await generateLibrary(apiUrl, voiceGender, language).catch(() => {});
+    refreshFillerStatus();
+  }, [apiUrl, voiceGender, language, refreshFillerStatus]);
+
+  const handleFillerClear = useCallback(async () => {
+    await clearLibrary();
+    refreshFillerStatus();
+  }, [refreshFillerStatus]);
+
+  const handleFillerPlay = useCallback(async (category: FillerCategory) => {
+    const clip = getClipForCategory(category);
+    if (!clip) { Alert.alert('No clip', 'Library not generated or category empty.'); return; }
+    setFillerPlayingCategory(category);
+    await playLocalFile(clip.audio_path).catch(() => {});
+    setFillerPlayingCategory(null);
+  }, []);
 
   const videoRef = useRef<Video>(null);
 
@@ -392,6 +437,53 @@ export default function CageDebug() {
               ))}
             </View>
           )}
+        </View>
+
+        {/* ── FILLER LIBRARY DEBUG ── */}
+        <View style={styles.reviewSection}>
+          <Text style={styles.reviewSectionHeader}>FILLER LIBRARY</Text>
+
+          {fillerInfo ? (
+            <View style={styles.reviewCard}>
+              <Text style={styles.reviewCardLabel}>STATUS</Text>
+              <Text style={styles.reviewCardText}>{fillerInfo.clipCount} clips cached</Text>
+              <Text style={styles.reviewCardMeta}>
+                hash: {fillerInfo.hash} · {new Date(fillerInfo.generatedAt).toLocaleDateString()}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.reviewCard}>
+              <Text style={styles.reviewCardText}>Library not generated yet.</Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[styles.reviewActionBtn, fillerGenerating && { opacity: 0.5 }]}
+            onPress={handleFillerGenerate}
+            disabled={fillerGenerating}
+          >
+            <Text style={styles.reviewActionText}>
+              {fillerGenerating ? 'Generating clips…' : fillerInfo ? 'Regenerate library' : 'Generate library'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.reviewDestructiveBtn} onPress={handleFillerClear}>
+            <Text style={styles.reviewDestructiveText}>Clear library</Text>
+          </TouchableOpacity>
+
+          <Text style={[styles.reviewCardLabel, { marginTop: 12, marginBottom: 6 }]}>PLAY TEST CLIPS</Text>
+          {(['tactical', 'conversational', 'social', 'ghost'] as FillerCategory[]).map(cat => (
+            <TouchableOpacity
+              key={cat}
+              style={[styles.reviewActionBtn, fillerPlayingCategory === cat && { opacity: 0.5 }]}
+              onPress={() => handleFillerPlay(cat)}
+              disabled={fillerPlayingCategory !== null}
+            >
+              <Text style={styles.reviewActionText}>
+                {fillerPlayingCategory === cat ? `Playing ${cat}…` : `▶ ${cat}`}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         <View style={styles.bottomPad} />

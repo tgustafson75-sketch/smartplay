@@ -25,6 +25,7 @@ interface SettingsState {
   distance_unit: 'yards' | 'meters';
 
   tutorialsSeen: Record<string, boolean>;
+  fillerEnabled: boolean;
 
   // ─── ACTIONS ────────────────────────────
 
@@ -46,6 +47,7 @@ interface SettingsState {
   setDistanceUnit: (u: 'yards' | 'meters') => void;
   markTutorialSeen: (key: string) => void;
   resetTutorials: () => void;
+  setFillerEnabled: (v: boolean) => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -70,6 +72,7 @@ export const useSettingsStore = create<SettingsState>()(
       proactive_kevin_enabled: true,
       distance_unit: 'yards' as const,
       tutorialsSeen: {},
+      fillerEnabled: true,
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
       setVoiceGender: (g) => set({ voiceGender: g }),
@@ -90,6 +93,7 @@ export const useSettingsStore = create<SettingsState>()(
       markTutorialSeen: (key) =>
         set(s => ({ tutorialsSeen: { ...s.tutorialsSeen, [key]: true } })),
       resetTutorials: () => set({ tutorialsSeen: {} }),
+      setFillerEnabled: (v) => set({ fillerEnabled: v }),
     }),
     {
       name: 'settings-store-v2',
@@ -110,6 +114,7 @@ export const useSettingsStore = create<SettingsState>()(
         proactive_kevin_enabled: s.proactive_kevin_enabled,
         distance_unit: s.distance_unit,
         tutorialsSeen: s.tutorialsSeen,
+        fillerEnabled: s.fillerEnabled,
         // watchConnected / glassesConnected not persisted — rechecked on mount
       }),
     },

@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import { Audio } from 'expo-av';
 import { Vibration } from 'react-native';
 import {
@@ -7,7 +7,14 @@ import {
   speakFromBase64,
   stopSpeaking,
   isSpeaking,
+  playLocalFile,
 } from '../services/voiceService';
+import {
+  initFillerLibrary,
+  isLibraryGenerated,
+  getClipForCategory,
+  classifyQuery,
+} from '../services/fillerLibrary';
 import type { ToolAction } from '../app/api/kevin+api';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import { useRoundStore } from '../store/roundStore';
@@ -152,7 +159,13 @@ export const useVoiceCaddie = ({
     discreteMode,
     language,
     responseMode,
+    fillerEnabled,
   } = useSettingsStore();
+
+  // Load the filler library index into memory on first mount — fast, reads AsyncStorage only.
+  useEffect(() => {
+    initFillerLibrary().catch(() => {});
+  }, []);
 
   const {
     name,
@@ -449,6 +462,14 @@ export const useVoiceCaddie = ({
         return;
       }
 
+      // Fire filler clip in parallel with the brain call.
+      // playLocalFile claims the audio singleton — when speakFromBase64 / speakResponse
+      // runs below, it bumps speechId and naturally cancels any still-playing filler.
+      if (voiceEnabled && !discreteMode && fillerEnabled && isLibraryGenerated()) {
+        const clip = getClipForCategory(classifyQuery(transcript));
+        if (clip) playLocalFile(clip.audio_path).catch(() => {});
+      }
+
       const kevinResponse = await sendToBrain(transcript);
       if (kevinResponse.toolAction) onToolAction?.(kevinResponse.toolAction);
       onResponseReceived(kevinResponse.text);
@@ -466,7 +487,7 @@ export const useVoiceCaddie = ({
     } finally {
       isProcessingRef.current = false;
     }
-  }, [language, voiceEnabled, discreteMode, voiceGender, currentYardage, currentHole, club, isRoundActive, roundMode]);
+  }, [language, voiceEnabled, discreteMode, voiceGender, fillerEnabled, currentYardage, currentHole, club, isRoundActive, roundMode]);
 
   // ── MAIN MIC HANDLER ─────────────────────
 

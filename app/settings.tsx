@@ -34,6 +34,7 @@ export default function Settings() {
     proactive_kevin_enabled,
     distance_unit,
     theme_preference,
+    fillerEnabled,
     setVoiceEnabled,
     setVoiceGender,
     setLanguage,
@@ -47,6 +48,7 @@ export default function Settings() {
     setProactiveKevinEnabled,
     setDistanceUnit,
     setThemePreference,
+    setFillerEnabled,
   } = useSettingsStore();
 
   const {
@@ -300,6 +302,12 @@ export default function Settings() {
             sub="Kevin speaks up between holes — streaks, patterns, ghost updates"
             value={proactive_kevin_enabled}
             onValueChange={setProactiveKevinEnabled}
+          />
+          <ToggleRow
+            label="Voice Filler"
+            sub="Kevin fills the pause while thinking — 'let me see', 'hmm...'"
+            value={fillerEnabled}
+            onValueChange={setFillerEnabled}
           />
         </View>
 

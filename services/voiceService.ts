@@ -76,7 +76,75 @@ export const stopSpeaking = async (): Promise<void> => {
 
 export const isSpeaking = (): boolean => currentSound !== null;
 
-// ─── SPEAK ────────────────────────────────
+// ─── PLAY LOCAL FILE (filler clips) ──────
+// Same singleton semantics as speak/speakFromBase64 — naturally cancelled
+// when the real response calls either of those functions.
+
+export const playLocalFile = async (uri: string): Promise<void> => {
+  currentSpeechId++;
+  const myId = currentSpeechId;
+
+  if (currentAbortController) {
+    currentAbortController.abort();
+    currentAbortController = null;
+  }
+  if (currentSound) {
+    try {
+      await currentSound.stopAsync();
+      await currentSound.unloadAsync();
+    } catch {}
+    currentSound = null;
+  }
+
+  notifySpeaking(true);
+  await configureAudioForSpeech();
+
+  try {
+    const { sound } = await Audio.Sound.createAsync(
+      { uri },
+      { shouldPlay: true, volume: 1.0 },
+    );
+
+    if (myId !== currentSpeechId) {
+      await sound.unloadAsync().catch(() => {});
+      return;
+    }
+
+    currentSound = sound;
+
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (!status.isLoaded) return;
+          if (status.didJustFinish) {
+            sound.unloadAsync().catch(() => {});
+            if (myId === currentSpeechId) {
+              currentSound = null;
+              notifySpeaking(false);
+            }
+            resolve();
+          }
+        });
+      }),
+      new Promise<void>((resolve) =>
+        setTimeout(() => {
+          if (myId === currentSpeechId) {
+            currentSound = null;
+            notifySpeaking(false);
+          }
+          resolve();
+        }, 5_000)
+      ),
+    ]);
+
+  } catch (err) {
+    if (myId === currentSpeechId) {
+      currentSound = null;
+      notifySpeaking(false);
+    }
+    console.log('[voice] playLocalFile error:', err);
+  }
+};
 
 // ─── SPEAK FROM BASE64 ────────────────────
 

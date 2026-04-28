@@ -13,6 +13,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { generateLibrary } from '../../services/fillerLibrary';
 
 const KEVIN_BADGE = require('../../assets/avatars/smartplay_caddie_badge.png');
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
@@ -47,6 +48,11 @@ export default function OnboardingReady() {
   const handleFinish = () => {
     completeOnboarding();
     completeSetup();
+    // Generate filler clips in background — doesn't block navigation.
+    // If voice isn't enabled, skip (clips use TTS API; no point generating silently).
+    if (voiceEnabled) {
+      generateLibrary(apiUrl, voiceGender, language).catch(() => {});
+    }
     router.replace('/(tabs)/caddie' as never);
   };
 
