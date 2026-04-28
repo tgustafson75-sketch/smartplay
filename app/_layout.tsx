@@ -116,6 +116,10 @@ function AppNavigator() {
           options={{ animation: 'fade', headerShown: false }}
         />
         <Stack.Screen
+          name="round/briefing"
+          options={{ animation: 'fade', headerShown: false }}
+        />
+        <Stack.Screen
           name="paywall"
           options={{ animation: 'slide_from_bottom', presentation: 'modal', headerShown: false }}
         />

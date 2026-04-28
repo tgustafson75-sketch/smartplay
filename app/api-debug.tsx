@@ -14,6 +14,61 @@ import { useRouter } from 'expo-router';
 import { searchCourses, getCourse, clearCourseCache } from '../services/golfCourseApi';
 import type { Course } from '../types/course';
 
+const BATTERY_TESTS = [
+  {
+    key: 'briefing',
+    label: 'Pre-round briefing',
+    endpoint: '/api/briefing',
+    payload: {
+      courseName: 'Pebble Beach', mode: 'break_90', playerName: 'Tim',
+      handicap: 14, goal: 'Break 90', dominantMiss: 'right',
+      patternInsights: ['Tending right off the tee under pressure', 'Short game improving'],
+      ghostLabel: 'Past You — 93', roundsTogether: 8,
+    },
+    responseKey: 'brief',
+  },
+  {
+    key: 'commentary',
+    label: 'Live hole commentary',
+    endpoint: '/api/kevin',
+    payload: {
+      message: "What's the play here?",
+      firstName: 'Tim', handicap: 14, roundsTogether: 8,
+      activeCourse: 'Pebble Beach', currentHole: 7, currentPar: 3, currentYardage: 107,
+      isRoundActive: true, mentalState: 'neutral', roundMode: 'break_90',
+      patternInsights: { insights: ['Tending right under pressure'] },
+    },
+    responseKey: 'text',
+  },
+  {
+    key: 'recap',
+    label: 'Round recap summary',
+    endpoint: '/api/recap',
+    payload: {
+      player_name: 'Tim', course_name: 'Pebble Beach', mode: 'break_90',
+      total_score: 92, score_vs_par: 20, holes_played: 18,
+      holes: [
+        { hole_number: 7, par: 3, score: 4, plan_summary: '8-iron to center', shots_summary: 'shot 1: 8-iron thin right', variance: 1 },
+        { hole_number: 18, par: 5, score: 6, plan_summary: '3-wood, 9-iron approach', shots_summary: 'shot 1: 3-wood straight, shot 2: 9-iron left', variance: 1 },
+      ],
+      pattern_insights: ['Tending right off the tee'],
+    },
+    responseKey: 'overall_summary',
+  },
+  {
+    key: 'preround',
+    label: 'Pre-round brief (legacy)',
+    endpoint: '/api/preround',
+    payload: {
+      firstName: 'Tim', courseName: 'Pebble Beach', totalPar: 72,
+      courseRating: '74.7', courseSlope: '145', handicap: 14,
+      roundsTogether: 8, sessionsTogether: 3,
+      goal: 'Break 90', dominantMiss: 'right',
+    },
+    responseKey: 'brief',
+  },
+];
+
 export default function ApiDebug() {
   const router = useRouter();
 
@@ -25,6 +80,30 @@ export default function ApiDebug() {
   const [detailResult, setDetailResult] = useState<Course | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+
+  const [batteryResults, setBatteryResults] = useState<Record<string, string>>({});
+  const [batteryLoading, setBatteryLoading] = useState<Record<string, boolean>>({});
+
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+
+  const runBatteryTest = async (test: typeof BATTERY_TESTS[0]) => {
+    setBatteryLoading(prev => ({ ...prev, [test.key]: true }));
+    setBatteryResults(prev => ({ ...prev, [test.key]: '' }));
+    try {
+      const res = await fetch(apiUrl + test.endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(test.payload),
+      });
+      const data = await res.json() as Record<string, unknown>;
+      const result = String(data[test.responseKey] ?? JSON.stringify(data));
+      setBatteryResults(prev => ({ ...prev, [test.key]: result }));
+    } catch (e) {
+      setBatteryResults(prev => ({ ...prev, [test.key]: 'Error: ' + (e instanceof Error ? e.message : String(e)) }));
+    } finally {
+      setBatteryLoading(prev => ({ ...prev, [test.key]: false }));
+    }
+  };
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -174,6 +253,33 @@ export default function ApiDebug() {
           </View>
         )}
 
+        {/* ── CHARACTER BATTERY ──────────── */}
+        <Text style={[styles.sectionTitle, { marginTop: 28 }]}>Character Battery</Text>
+        <Text style={styles.batterySubtitle}>
+          Tap each to generate Kevin speech and ear-test consistency.
+        </Text>
+
+        {BATTERY_TESTS.map(test => (
+          <View key={test.key} style={styles.batteryCard}>
+            <View style={styles.batteryHeader}>
+              <Text style={styles.batteryLabel}>{test.label}</Text>
+              <TouchableOpacity
+                style={[styles.runBtn, { minWidth: 56 }]}
+                onPress={() => runBatteryTest(test)}
+                disabled={batteryLoading[test.key]}
+              >
+                {batteryLoading[test.key]
+                  ? <ActivityIndicator size="small" color="#060f09" />
+                  : <Text style={styles.runBtnText}>Run</Text>
+                }
+              </TouchableOpacity>
+            </View>
+            {batteryResults[test.key] ? (
+              <Text style={styles.batteryResult}>{batteryResults[test.key]}</Text>
+            ) : null}
+          </View>
+        ))}
+
         <View style={styles.bottomPad} />
       </ScrollView>
     </SafeAreaView>
@@ -265,4 +371,13 @@ const styles = StyleSheet.create({
   teeName: { color: '#00C896', fontSize: 12, fontWeight: '700' },
   holeList: { color: '#a3b8a8', fontSize: 11, lineHeight: 17 },
   bottomPad: { height: 40 },
+  batterySubtitle: { color: '#4b5563', fontSize: 11, marginBottom: 12, fontStyle: 'italic' },
+  batteryCard: {
+    backgroundColor: '#0a1e12', borderRadius: 10,
+    borderWidth: 1, borderColor: '#1e3a28',
+    padding: 12, marginBottom: 10,
+  },
+  batteryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  batteryLabel: { color: '#e8f5e9', fontSize: 13, fontWeight: '600', flex: 1, marginRight: 8 },
+  batteryResult: { color: '#9ca3af', fontSize: 12, lineHeight: 19, marginTop: 10, fontStyle: 'italic' },
 });

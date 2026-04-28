@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Modal,
   Alert,
-  ActivityIndicator,
   Animated,
   Easing,
   AppState,
@@ -102,6 +101,7 @@ export default function CaddieTab() {
   } = useSettingsStore();
 
   const { firstName, goal, subscription_status, trial_started_at } = usePlayerProfileStore();
+  const { skip_briefings } = useSettingsStore();
   const daysLeft = useMemo(
     () => trialDaysLeft(trial_started_at),
     [subscription_status, trial_started_at],
@@ -149,9 +149,6 @@ export default function CaddieTab() {
 
   const [selectedMode, setSelectedMode] = useState<RoundMode>('free_play');
 
-  const [showPreRound, setShowPreRound] = useState(false);
-  const [preRoundBrief, setPreRoundBrief] = useState('');
-  const [preRoundLoading, setPreRoundLoading] = useState(false);
   const [recapLoading, setRecapLoading] = useState(false);
   const [selectedGhostId, setSelectedGhostId] = useState<string | null>(null);
 
@@ -410,77 +407,6 @@ export default function CaddieTab() {
     onTrigger: handleMicPress,
   });
 
-  // ── Pre-round brief ──────────────────────
-  const generatePreRoundBrief = async (
-    selectedCourseId: string,
-    isComp: boolean,
-  ) => {
-    setPreRoundLoading(true);
-    setShowPreRound(true);
-
-    try {
-      const cageState = useCageStore.getState();
-      const relState = useRelationshipStore.getState();
-      const profileState = usePlayerProfileStore.getState();
-
-      const recentSessions = cageState.sessionHistory
-        .slice(-3)
-        .reverse()
-        .map(s => ({
-          club: s.club,
-          dominantMiss: s.dominantMiss,
-          rootCause: s.rootCause,
-          summary: s.summary,
-        }));
-
-      const course = getCourse(selectedCourseId);
-
-      const res = await fetch(apiUrl + '/api/preround', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstName: profileState.firstName,
-          courseName: course?.name ?? '',
-          courseRating: course?.rating ?? '',
-          courseSlope: course?.slope ?? '',
-          totalPar: course?.par ?? 72,
-          roundsTogether: relState.roundsTogether,
-          sessionsTogether: relState.sessionsTogether,
-          handicap: profileState.handicap,
-          goal: profileState.goal,
-          dominantMiss: profileState.dominantMiss,
-          physicalLimitation: profileState.physicalLimitation,
-          personalBest: profileState.personalBest,
-          recentCageSessions: recentSessions,
-          heroMoments: relState.heroMoments.slice(-3),
-          currentMentalState: relState.currentMentalState,
-          isCompetition: isComp,
-          weather: null,
-          language,
-        }),
-      });
-
-      const data = await res.json() as { brief?: string };
-      const brief = data.brief ?? "Let's go play some golf.";
-
-      setPreRoundBrief(brief);
-      setPreRoundLoading(false);
-
-      if (voiceEnabled) {
-        await configureAudioForSpeech();
-        await speak(brief, voiceGender, language, apiUrl);
-      }
-    } catch (err) {
-      const fallback = 'Course is set up. You know what to do. One shot at a time.';
-      setPreRoundBrief(fallback);
-      setPreRoundLoading(false);
-      if (voiceEnabled) {
-        await configureAudioForSpeech();
-        await speak(fallback, voiceGender, language, apiUrl);
-      }
-    }
-  };
-
   // ── Round summary ────────────────────────
   const generateRoundSummary = async () => {
     const total = getTotalScore();
@@ -634,7 +560,18 @@ export default function CaddieTab() {
     incrementRounds();
     setShowRoundSetup(false);
     setSelectedGhostId(null);
-    await generatePreRoundBrief(selectedPickedCourse?.id ?? 'palms', isCompetition);
+
+    if (skip_briefings) {
+      const hole1 = useRoundStore.getState().courseHoles.find(h => h.hole === 1);
+      if (hole1 && voiceEnabled) {
+        const msg = 'Hole 1. Par ' + hole1.par + '. ' + hole1.distance + ' yards. Let\'s go.';
+        setCaddieResponse(msg);
+        speak(msg, voiceGender, language, apiUrl).catch(() => {});
+      }
+      return;
+    }
+
+    router.push('/round/briefing' as never);
   };
 
   // ── Log hole score ───────────────────────
@@ -922,66 +859,6 @@ export default function CaddieTab() {
           <Text style={styles.startRoundText}>Start Round</Text>
         </TouchableOpacity>
       </Animated.View>
-
-      {/* ── PRE-ROUND BRIEF MODAL ──────────── */}
-      <Modal
-        visible={showPreRound}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowPreRound(false)}
-      >
-        <View style={styles.preRoundOverlay}>
-          <View style={styles.preRoundCard}>
-
-            <Image
-              source={require('../../assets/avatars/kevin_portrait.jpg')}
-              style={styles.preRoundAvatar}
-              resizeMode="cover"
-            />
-
-            <Text style={styles.preRoundCourse}>
-              {activeCourse ?? ''}
-            </Text>
-
-            {preRoundLoading ? (
-              <View style={styles.preRoundLoading}>
-                <ActivityIndicator color="#00C896" size="small" />
-                <Text style={styles.preRoundLoadingText}>
-                  Kevin is reading the course...
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.preRoundBrief}>{preRoundBrief}</Text>
-            )}
-
-            {!preRoundLoading && (
-              <TouchableOpacity
-                style={styles.preRoundBtn}
-                onPress={() => {
-                  setShowPreRound(false);
-                  const hole1 = courseHoles.find(h => h.hole === 1);
-                  if (hole1) {
-                    const h1msg =
-                      'Hole 1. Par ' + hole1.par + '. ' + hole1.distance + ' yards. ' +
-                      (hole1.par === 3
-                        ? 'Take your time.'
-                        : hole1.par === 5
-                        ? 'Good driving hole.'
-                        : 'Pick your target.');
-                    setCaddieResponse(h1msg);
-                    if (voiceEnabled) {
-                      speak(h1msg, voiceGender, language, apiUrl).catch(() => {});
-                    }
-                  }
-                }}
-              >
-                <Text style={styles.preRoundBtnText}>Let's Go</Text>
-              </TouchableOpacity>
-            )}
-
-          </View>
-        </View>
-      </Modal>
 
       {/* ── ROUND SETUP SHEET ──────────────── */}
       <Modal
@@ -1494,64 +1371,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     letterSpacing: -0.2,
-  },
-  preRoundOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  preRoundCard: {
-    backgroundColor: '#0d2418',
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#00C896',
-    padding: 24,
-    width: '100%',
-    alignItems: 'center',
-    gap: 16,
-  },
-  preRoundAvatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 2,
-    borderColor: '#00C896',
-  },
-  preRoundCourse: {
-    color: '#6b7280',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  preRoundLoading: {
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 16,
-  },
-  preRoundLoadingText: {
-    color: '#6b7280',
-    fontSize: 13,
-    fontStyle: 'italic',
-  },
-  preRoundBrief: {
-    ...kevinTextStyle,
-    textAlign: 'center',
-  },
-  preRoundBtn: {
-    backgroundColor: '#00C896',
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 48,
-    alignItems: 'center',
-    width: '100%',
-  },
-  preRoundBtnText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '800',
   },
   backdrop: {
     flex: 1,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,12 +6,18 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 import { loadRecap } from '../../services/planStorage';
 import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
 import { useSettingsStore } from '../../store/settingsStore';
+import { track } from '../../services/analytics';
+import { buildShareCardProps } from '../../services/shareCardGenerator';
+import RoundShareCard from '../../components/RoundShareCard';
 import type { RoundRecap, HoleComparison } from '../../types/plan';
 import type { GhostHoleResult } from '../../types/ghost';
 
@@ -115,9 +121,11 @@ export default function RecapScreen() {
   const { voiceGender, voiceEnabled } = useSettingsStore();
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
+  const cardRef = useRef<View>(null);
   const [recap, setRecap] = useState<RoundRecap | null>(null);
   const [loading, setLoading] = useState(true);
   const [speaking, setSpeaking] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
     if (!round_id) return;
@@ -126,6 +134,25 @@ export default function RecapScreen() {
       setLoading(false);
     });
   }, [round_id]);
+
+  const handleShare = useCallback(async () => {
+    if (!recap || sharing) return;
+    setSharing(true);
+    try {
+      const uri = await captureRef(cardRef, { format: 'png', quality: 1, result: 'tmpfile' });
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Share not available', 'Native share is not supported on this device.');
+        return;
+      }
+      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share this round' });
+      track('round_shared', { round_id: recap.round_id, mode: recap.mode });
+    } catch (err) {
+      Alert.alert('Could not generate share card', 'Try again in a moment.');
+    } finally {
+      setSharing(false);
+    }
+  }, [recap, sharing]);
 
   const handlePlayAloud = useCallback(async () => {
     if (!recap) return;
@@ -237,6 +264,15 @@ export default function RecapScreen() {
                   <Text style={styles.playBtnText}>{speaking ? 'Stop' : '▶ Play aloud'}</Text>
                 </TouchableOpacity>
               )}
+              <TouchableOpacity
+                style={[styles.shareBtn, sharing && styles.shareBtnDisabled]}
+                onPress={handleShare}
+                disabled={sharing}
+              >
+                <Text style={styles.shareBtnText}>
+                  {sharing ? 'Generating...' : '↑ Share this round'}
+                </Text>
+              </TouchableOpacity>
             </View>
 
             <Text style={styles.holesHeader}>
@@ -250,7 +286,14 @@ export default function RecapScreen() {
             ghostResult={ghost?.hole_results[item.hole_number]}
           />
         )}
+        ListFooterComponent={<View style={{ height: 48 }} />}
       />
+
+      {/* Hidden share card — rendered offscreen for captureRef */}
+      <View style={styles.offscreen} pointerEvents="none">
+        <RoundShareCard ref={cardRef} {...buildShareCardProps(recap)} />
+      </View>
+
     </SafeAreaView>
   );
 }
@@ -327,4 +370,13 @@ const styles = StyleSheet.create({
   ghostDivider: { width: 1, height: 36, backgroundColor: '#1e3a28' },
   planLine: { color: '#6b7280', fontSize: 11, marginBottom: 6 },
   kevinSummary: { color: '#e5e7eb', fontSize: 13, lineHeight: 19 },
+  shareBtn: {
+    marginTop: 10, alignSelf: 'stretch',
+    backgroundColor: '#003d20', borderRadius: 10,
+    paddingVertical: 12, alignItems: 'center',
+    borderWidth: 1, borderColor: '#00C896',
+  },
+  shareBtnDisabled: { opacity: 0.5 },
+  shareBtnText: { color: '#00C896', fontSize: 13, fontWeight: '700' },
+  offscreen: { position: 'absolute', top: -9999, left: -9999, opacity: 0 },
 });

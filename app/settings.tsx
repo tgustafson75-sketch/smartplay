@@ -30,6 +30,7 @@ export default function Settings() {
     highContrast,
     watchConnected,
     autoListenEnabled,
+    skip_briefings,
     theme_preference,
     setVoiceEnabled,
     setVoiceGender,
@@ -40,6 +41,7 @@ export default function Settings() {
     setHighContrast,
     setWatchConnected,
     setAutoListenEnabled,
+    setSkipBriefings,
     setThemePreference,
   } = useSettingsStore();
 
@@ -278,6 +280,17 @@ export default function Settings() {
             onSelect={(v) => setResponseMode(v as 'short' | 'neutral' | 'detailed')}
           />
 
+        </View>
+
+        {/* ROUND EXPERIENCE */}
+        <SectionHeader title="Round Experience" />
+        <View style={styles.card}>
+          <ToggleRow
+            label="Skip Pre-Round Briefing"
+            sub="Go straight to the round without Kevin's intro"
+            value={skip_briefings}
+            onValueChange={setSkipBriefings}
+          />
         </View>
 
         {/* VOICE */}
