@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { RoundMode } from '../types/patterns';
 
 // ─── TYPES ────────────────────────────────
 
@@ -60,6 +61,7 @@ export interface RoundRecord {
 
 interface RoundState {
   isRoundActive: boolean;
+  mode: RoundMode;
   activeCourse: string | null;
   activeCourseId: string | null; // golfcourseapi course_id; null for local/manual rounds
   recentCourseIds: string[]; // last 5 API course IDs played
@@ -96,9 +98,11 @@ interface RoundState {
       notes: string;
       goal: string | null;
       courseId?: string | null;
+      mode?: RoundMode;
     },
   ) => void;
   setActiveCourseId: (id: string | null) => void;
+  setCurrentRoundMode: (mode: RoundMode) => void;
 
   endRound: () => void;
   setCurrentHole: (hole: number) => void;
@@ -127,6 +131,7 @@ export const useRoundStore = create<RoundState>()(
   persist(
     (set, get) => ({
       isRoundActive: false,
+      mode: 'free_play' as RoundMode,
       activeCourse: null,
       activeCourseId: null,
       recentCourseIds: [],
@@ -157,6 +162,7 @@ export const useRoundStore = create<RoundState>()(
           : prev.recentCourseIds;
         set({
           isRoundActive: true,
+          mode: options.mode ?? 'free_play',
           activeCourse: course,
           activeCourseId: courseId,
           recentCourseIds: updatedRecent,
@@ -178,6 +184,7 @@ export const useRoundStore = create<RoundState>()(
       },
 
       setActiveCourseId: (id) => set({ activeCourseId: id }),
+      setCurrentRoundMode: (mode) => set({ mode }),
 
       endRound: () => {
         const s = get();
@@ -268,6 +275,7 @@ export const useRoundStore = create<RoundState>()(
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({
         isRoundActive: s.isRoundActive,
+        mode: s.mode,
         activeCourse: s.activeCourse,
         activeCourseId: s.activeCourseId,
         recentCourseIds: s.recentCourseIds,

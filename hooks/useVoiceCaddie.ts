@@ -18,6 +18,7 @@ import { useCageStore } from '../store/cageStore';
 import { useWatchStore } from '../store/watchStore';
 import { VoiceState } from '../components/CaddieAvatar';
 import { getCourse as getApiCourse, courseSummaryForContext } from '../services/golfCourseApi';
+import { generatePatternInsights } from '../services/patternDetection';
 
 // ─── CONSTANTS ────────────────────────────
 
@@ -137,6 +138,9 @@ export const useVoiceCaddie = ({
     scores,
     isCompetition,
     getCurrentPar,
+    mode: roundMode,
+    shots,
+    courseHoles,
   } = useRoundStore();
 
   const {
@@ -156,6 +160,9 @@ export const useVoiceCaddie = ({
     goal,
     personalBest,
   } = usePlayerProfileStore();
+
+  // dominantMiss from profile has compatible type — just cast for patternDetection
+  const profileDominantMiss = dominantMiss as 'left' | 'right' | 'straight' | null;
 
   const {
     roundsTogether,
@@ -253,6 +260,15 @@ export const useVoiceCaddie = ({
           }),
         }));
 
+      // Build player pattern insights (on-device, sync — cheap enough per-request)
+      const patternInsights = generatePatternInsights(shots, {
+        currentRoundMode: roundMode,
+        scores,
+        courseHoles,
+        handicap,
+        dominantMiss: profileDominantMiss,
+      });
+
       // Load course context for active API rounds (cache hit = fast; miss = brief network fetch)
       let courseContext: string | null = null;
       if (isRoundActive && activeCourseId) {
@@ -285,6 +301,8 @@ export const useVoiceCaddie = ({
           activeCourse,
           activeCourseId,
           courseContext,
+          roundMode,
+          patternInsights,
           isRoundActive,
           isCompetition,
           mentalState: currentMentalState,
@@ -419,7 +437,7 @@ export const useVoiceCaddie = ({
     } finally {
       isProcessingRef.current = false;
     }
-  }, [language, voiceEnabled, discreteMode, voiceGender, currentYardage, currentHole, club, isRoundActive]);
+  }, [language, voiceEnabled, discreteMode, voiceGender, currentYardage, currentHole, club, isRoundActive, roundMode]);
 
   // ── MAIN MIC HANDLER ─────────────────────
 

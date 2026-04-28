@@ -119,8 +119,11 @@ export default function CageDebug() {
           <Text style={styles.backBtnText}>‹ Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Cage Sessions</Text>
-        <TouchableOpacity style={styles.apiDebugBtn} onPress={() => router.push('/api-debug')}>
+        <TouchableOpacity style={styles.apiDebugBtn} onPress={() => router.push('/api-debug' as never)}>
           <Text style={styles.apiDebugBtnText}>Course API</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.apiDebugBtn} onPress={() => router.push('/patterns-debug' as never)}>
+          <Text style={styles.apiDebugBtnText}>Patterns</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.synthBtn} onPress={handleSyntheticTest}>
           <Text style={styles.synthBtnText}>+ Synthetic test</Text>

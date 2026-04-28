@@ -1,0 +1,180 @@
+/*
+ * KEVIN VOICE TEST PROMPTS — run after build to verify mode-aware + pattern-aware responses:
+ *
+ * 1. Break 100 mode, par 4 with water — ask: "Should I go for it?"
+ *    Expect: lay-up recommendation, "bogey is fine", conservative language.
+ *
+ * 2. Break 80 mode, same scenario — ask: "Should I go for it?"
+ *    Expect: positive risk framing, go-for-it energy if conditions allow.
+ *
+ * 3. Mock +5 right misses via debug screen, hole with right-side trouble — ask: "What's the play?"
+ *    Expect: subtle left-side aim suggestion, no lecturing. Kevin uses patterns silently.
+ */
+
+import type { ShotResult, CourseHole } from '../store/roundStore';
+import type { RoundMode, PatternInsights } from '../types/patterns';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function countDirections(shots: ShotResult[]): { left: number; straight: number; right: number } {
+  const counts = { left: 0, straight: 0, right: 0 };
+  for (const shot of shots) {
+    if (shot.direction === 'left')     counts.left++;
+    else if (shot.direction === 'right')    counts.right++;
+    else if (shot.direction === 'straight') counts.straight++;
+  }
+  return counts;
+}
+
+function dominantDirection(
+  counts: { left: number; straight: number; right: number },
+): 'left' | 'straight' | 'right' | 'balanced' {
+  const total = counts.left + counts.straight + counts.right;
+  if (total === 0) return 'balanced';
+  const sorted = (
+    [
+      ['left',     counts.left],
+      ['straight', counts.straight],
+      ['right',    counts.right],
+    ] as [string, number][]
+  ).sort((a, b) => b[1] - a[1]);
+
+  const [topKey, topVal] = sorted[0];
+  const [, runnerUp]     = sorted[1];
+  // Must be >50% more than the next-highest to be called a tendency
+  if (topVal > 0 && topVal > runnerUp * 1.5) {
+    return topKey as 'left' | 'straight' | 'right';
+  }
+  return 'balanced';
+}
+
+// ─── Main export ──────────────────────────────────────────────────────────────
+
+export function generatePatternInsights(
+  shots: ShotResult[],
+  options?: {
+    currentRoundMode?: RoundMode;
+    scores?: Record<number, number>;
+    courseHoles?: CourseHole[];
+    handicap?: number;
+    dominantMiss?: 'left' | 'right' | 'straight' | null;
+  },
+): PatternInsights {
+  const mode       = options?.currentRoundMode ?? 'free_play';
+  const scores     = options?.scores           ?? {};
+  const courseHoles = options?.courseHoles     ?? [];
+
+  const last5  = shots.slice(-5);
+  const last10 = shots.slice(-10);
+
+  const last_5_shots_breakdown  = countDirections(last5);
+  const last_10_shots_breakdown = countDirections(last10);
+  const miss_tendency_overall   = dominantDirection(countDirections(shots));
+
+  // ── Pressure shots ─────────────────────────────────────────────────────────
+  // A hole is "pressure" if the final score exceeded the mode's tolerance threshold.
+  const pressureThreshold: Record<RoundMode, number> = {
+    break_80:  0,  // any bogey+ is pressure
+    break_90:  1,  // worse than +1
+    break_100: 2,  // worse than +2
+    free_play: 2,
+  };
+  const threshold = pressureThreshold[mode];
+
+  const pressureShots = shots.filter(shot => {
+    const score = scores[shot.hole];
+    if (score == null) return false;
+    const par = courseHoles.find(h => h.hole === shot.hole)?.par ?? 4;
+    return (score - par) > threshold;
+  });
+
+  const miss_tendency_under_pressure: PatternInsights['raw_stats']['miss_tendency_under_pressure'] =
+    pressureShots.length >= 5
+      ? dominantDirection(countDirections(pressureShots))
+      : 'insufficient_data';
+
+  // ── Strengths (from profile data) ──────────────────────────────────────────
+  const strengths: string[] = [];
+  if (options?.dominantMiss === 'straight') strengths.push('consistent ball-striking');
+  if (options?.handicap != null) {
+    if (options.handicap <= 5)       strengths.push('low-handicap precision');
+    else if (options.handicap <= 10) strengths.push('skilled course management');
+    else if (options.handicap <= 18) strengths.push('solid fundamentals');
+  }
+
+  // ── Streak ─────────────────────────────────────────────────────────────────
+  const last3 = shots.slice(-3);
+  const streak: PatternInsights['raw_stats']['streak'] = (() => {
+    if (last3.length < 2) return { type: 'neutral', length: 0 };
+    const goodShots = last3.filter(
+      s => s.direction === 'straight' && (s.feel === 'flush' || s.feel === 'solid'),
+    );
+    const badShots = last3.filter(
+      s => s.direction === 'left' || s.direction === 'right' ||
+           s.feel === 'fat' || s.feel === 'thin',
+    );
+    if (goodShots.length === last3.length) return { type: 'good',    length: last3.length };
+    if (badShots.length >= 2)              return { type: 'rough',   length: badShots.length };
+    return                                        { type: 'neutral', length: 0 };
+  })();
+
+  // ── Plain-English insights (max 5, priority order) ─────────────────────────
+  const insights: string[] = [];
+
+  // 1 — Pressure tendency (highest signal)
+  if (
+    miss_tendency_under_pressure !== 'insufficient_data' &&
+    miss_tendency_under_pressure !== 'balanced'
+  ) {
+    const pc = countDirections(pressureShots);
+    const dir = miss_tendency_under_pressure;
+    insights.push(
+      `Under pressure, misses ${dir} ${pc[dir]} of last ${pressureShots.length} — Kevin should account for this.`,
+    );
+  }
+
+  // 2 — Overall tendency
+  if (miss_tendency_overall !== 'balanced' && insights.length < 5) {
+    insights.push(
+      `Misses ${miss_tendency_overall} more often than not — bring that into target selection.`,
+    );
+  }
+
+  // 3 — Streak
+  if (streak.type === 'good' && insights.length < 5) {
+    insights.push('Hot streak — last 3 shots clean.');
+  } else if (streak.type === 'rough' && insights.length < 5) {
+    insights.push('Cooling off — last 3 had misses or rough contact.');
+  }
+
+  // 4 — Recent (last 5) breakdown
+  if (insights.length < 5) {
+    const dom5 = dominantDirection(last_5_shots_breakdown);
+    if (dom5 !== 'balanced') {
+      const count = last_5_shots_breakdown[dom5];
+      const other = last5.length - count;
+      if (count >= 3) {
+        insights.push(`Last 5 shots: ${count} ${dom5}, ${other} elsewhere.`);
+      }
+    }
+  }
+
+  // 5 — Strengths
+  if (strengths.length > 0 && insights.length < 5) {
+    insights.push(`Strengths: ${strengths.join(', ')}.`);
+  }
+
+  return {
+    generated_at:       Date.now(),
+    shot_count_analyzed: shots.length,
+    insights,
+    raw_stats: {
+      last_5_shots_breakdown,
+      last_10_shots_breakdown,
+      miss_tendency_overall,
+      miss_tendency_under_pressure,
+      strengths,
+      streak,
+    },
+  };
+}

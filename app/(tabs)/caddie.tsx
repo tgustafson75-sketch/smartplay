@@ -12,6 +12,7 @@ import {
   Easing,
   AppState,
   AppStateStatus,
+  ScrollView,
   useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -29,6 +30,7 @@ import { useCageStore } from '../../store/cageStore';
 import { usePointsStore } from '../../store/pointsStore';
 import { getCourseList, getCourse } from '../../data/courses';
 import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
+import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types/patterns';
 import { getCourse as getApiCourse, courseToHoles } from '../../services/golfCourseApi';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
 import { useKevin, type ToolAction } from '../../hooks/useKevin';
@@ -72,6 +74,8 @@ export default function CaddieTab() {
     getTotalScore,
     getHolesPlayed,
     getScoreVsPar,
+    mode,
+    setCurrentRoundMode,
   } = useRoundStore();
 
   const {
@@ -123,6 +127,8 @@ export default function CaddieTab() {
   const [roundNotes, setRoundNotes] = useState('');
   const [holeScore, setHoleScore] = useState(0);
   const [holePutts, setHolePutts] = useState(0);
+
+  const [selectedMode, setSelectedMode] = useState<RoundMode>('free_play');
 
   const [showPreRound, setShowPreRound] = useState(false);
   const [preRoundBrief, setPreRoundBrief] = useState('');
@@ -530,6 +536,7 @@ export default function CaddieTab() {
       notes: roundNotes,
       goal: null,
       courseId,
+      mode: selectedMode,
     });
     incrementRounds();
     setShowRoundSetup(false);
@@ -604,6 +611,24 @@ export default function CaddieTab() {
     }
   };
 
+  // ── Mid-round mode change ────────────────
+  const handleChangeModePress = () => {
+    const options: RoundMode[] = ['break_100', 'break_90', 'break_80', 'free_play'];
+    Alert.alert(
+      'Change Mode',
+      "Kevin's recommendations will adjust.",
+      [
+        ...options
+          .filter(m => m !== mode)
+          .map(m => ({
+            text: ROUND_MODE_CARDS[m].title,
+            onPress: () => setCurrentRoundMode(m),
+          })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    );
+  };
+
   // Local course list kept for pre-round brief fallback
   const courses = getCourseList();
 
@@ -670,6 +695,20 @@ export default function CaddieTab() {
         >
           <Ionicons name="chevron-back" size={24} color="#6b7d72" />
         </TouchableOpacity>
+
+        {/* Mode badge — visible only when round is active */}
+        {isRoundActive ? (
+          <TouchableOpacity
+            style={styles.modeBadge}
+            onPress={handleChangeModePress}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={styles.modeBadgeText}>{ROUND_MODE_LABELS[mode]}</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.modeBadgePlaceholder} />
+        )}
+
         <TouchableOpacity
           style={styles.navBtn}
           onPress={() => setShowMoreMenu(true)}
@@ -843,6 +882,7 @@ export default function CaddieTab() {
           <View style={styles.sheet}>
             <View style={styles.handle} />
             <Text style={styles.sheetTitle}>Start Round</Text>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
             <Text style={styles.sheetLabel}>Course</Text>
             <CoursePicker
@@ -892,9 +932,30 @@ export default function CaddieTab() {
               ))}
             </View>
 
+            <Text style={styles.sheetLabel}>Mode</Text>
+            <View style={[styles.modeGrid, W > 500 && styles.modeGridWide]}>
+              {((['break_100', 'break_90', 'break_80', 'free_play'] as RoundMode[]).map(m => (
+                <TouchableOpacity
+                  key={m}
+                  style={[
+                    styles.modeCard,
+                    W > 500 && styles.modeCardWide,
+                    selectedMode === m && styles.modeCardActive,
+                  ]}
+                  onPress={() => setSelectedMode(m)}
+                >
+                  <Text style={[styles.modeCardTitle, selectedMode === m && styles.modeCardTitleActive]}>
+                    {ROUND_MODE_CARDS[m].title}
+                  </Text>
+                  <Text style={styles.modeCardDesc}>{ROUND_MODE_CARDS[m].description}</Text>
+                </TouchableOpacity>
+              )))}
+            </View>
+
             <TouchableOpacity style={styles.startBtn} onPress={handleStartRound}>
               <Text style={styles.startBtnText}>Let's Go</Text>
             </TouchableOpacity>
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -1172,6 +1233,61 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: 'uppercase',
     marginTop: 8,
+  },
+  modeBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0, 200, 150, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 200, 150, 0.25)',
+  },
+  modeBadgePlaceholder: {
+    width: 80,
+    height: 28,
+  },
+  modeBadgeText: {
+    color: 'rgba(0, 200, 150, 0.7)',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+  },
+  modeGrid: {
+    gap: 8,
+  },
+  modeGridWide: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  modeCard: {
+    backgroundColor: '#060f09',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    gap: 2,
+  },
+  modeCardWide: {
+    flex: 1,
+    minWidth: '45%',
+  },
+  modeCardActive: {
+    borderColor: '#00C896',
+    backgroundColor: '#003d20',
+  },
+  modeCardTitle: {
+    color: '#6b7280',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  modeCardTitleActive: {
+    color: '#00C896',
+  },
+  modeCardDesc: {
+    color: '#4b5563',
+    fontSize: 11,
+    lineHeight: 15,
   },
   startRoundBtn: {
     position: 'absolute',

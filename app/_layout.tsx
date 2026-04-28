@@ -49,6 +49,10 @@ export default function RootLayout() {
           name="api-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
+        <Stack.Screen
+          name="patterns-debug"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
       </Stack>
     </SafeAreaProvider>
     </KevinPresenceProvider>

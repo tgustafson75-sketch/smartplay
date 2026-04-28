@@ -234,6 +234,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       smartVisionContext = null,
       activeCourseId = null,
       courseContext = null,
+      roundMode = 'free_play',
+      patternInsights = null,
     } = body;
 
     type SmartVisionContext = {
@@ -279,6 +281,14 @@ HOW YOU SPEAK:
 - Say what needs to be said. Nothing more.
 - You use all the data. You show none of it.
 - The goal is never the score. The goal is the next shot.
+
+PLAYER PATTERNS AND MODE:
+You have access to PLAYER PATTERNS in your context — the player's current mode and recent shot tendencies. Use this to shape your recommendations silently:
+- Mode break_100: prioritize avoiding doubles. Recommend conservative targets. Bogey is success. Lay up by default unless it's obviously the right play.
+- Mode break_90: balance risk and reward. Recommend smart misses (left side, short side awareness). Par is success. Lay up when in doubt.
+- Mode break_80: more aggressive but never reckless. Hunt scoring chances on par 5s and short par 4s. Birdie matters. Back off only when the risk is clearly bad.
+- Mode free_play: casual companion energy, less prescriptive.
+Pattern insights: when the player has a known miss tendency, factor it in silently — don't read insights aloud, just shape advice. If they miss right, recommend left-side targets without lecturing about it. If they're on a hot streak, encourage the rhythm. If cooling off, dial back risk slightly.
 
 TOOLS:
 Use tools only when the player explicitly asks — "show me the hole", "find my ball", "log my score", "record my swing". Never use a tool unprompted. When you use a tool, speak a brief acknowledgment.
@@ -337,6 +347,32 @@ You have access to lookup_course and lookup_hole tools that can fetch real data 
 Do NOT use these tools for casual conversation about golf in general. Only when the user is referencing a specific course or hole. After looking up data, speak naturally — don't read raw API output. Translate yardages and pars into friendly, conversational form.
 
 ${courseContext ? `COURSE LOADED (use this — do not call lookup_hole for current course):\n${String(courseContext)}` : ''}
+
+${(() => {
+  type PatternInsights = {
+    shot_count_analyzed?: number;
+    insights?: string[];
+    raw_stats?: {
+      miss_tendency_overall?: string;
+      miss_tendency_under_pressure?: string;
+      streak?: { type?: string; length?: number };
+    };
+  };
+  const pi = patternInsights as PatternInsights | null;
+  const modeLabel: Record<string, string> = {
+    break_100: 'Break 100 (avoid doubles, bogey is fine)',
+    break_90:  'Break 90 (smart misses, lay up when in doubt)',
+    break_80:  'Break 80 (hunt birdies, aggressive but disciplined)',
+    free_play: 'Free Play (casual)',
+  };
+  const insightLines = pi && Array.isArray(pi.insights) && pi.insights.length > 0
+    ? pi.insights.map((s: string) => '- ' + s).join('\n')
+    : '- Insufficient shot history — ask about tendencies naturally during round.';
+  return `PLAYER PATTERNS:
+- Mode: ${modeLabel[String(roundMode)] ?? String(roundMode)}
+${insightLines}
+(shots analyzed: ${pi?.shot_count_analyzed ?? 0})`;
+})()}
 
 SMARTVISION BEHAVIOR:
 When you receive [SMARTVISION OPEN] context at the top of the message, you already have the numbers. Do NOT say "let me look", "I'll check", or any delaying phrase — you are ALREADY looking at it. Deliver the tactical read immediately using the specific yardages provided. Structure: (1) state the key distance(s) — center yards and/or tapped target yards — and the one most relevant consideration, (2) briefly name the conservative play, (3) ask Tim one short question to think together. Two or three sentences total. Use the exact numbers from the context. Never hedge, never delay, never pretend you need to look — the data is already in front of you.
