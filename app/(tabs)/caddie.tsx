@@ -45,6 +45,7 @@ import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { kevinText as kevinTextStyle } from '../../styles/typography';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
+import { canAccess, trialDaysLeft } from '../../services/featureAccess';
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
@@ -100,7 +101,11 @@ export default function CaddieTab() {
     setAutoListenEnabled,
   } = useSettingsStore();
 
-  const { firstName, goal } = usePlayerProfileStore();
+  const { firstName, goal, subscription_status, trial_started_at } = usePlayerProfileStore();
+  const daysLeft = useMemo(
+    () => trialDaysLeft(trial_started_at),
+    [subscription_status, trial_started_at],
+  );
 
   const {
     roundsTogether,
@@ -297,6 +302,10 @@ export default function CaddieTab() {
 
   // ── SmartVision ──────────────────────────
   const openSmartVision = () => {
+    if (!canAccess('smartvision', subscription_status)) {
+      router.push('/paywall' as never);
+      return;
+    }
     const state = useRoundStore.getState();
     const {
       currentHole: hole,
@@ -334,6 +343,10 @@ export default function CaddieTab() {
   const handleToolAction = useCallback((action: ToolAction) => {
     switch (action.type) {
       case 'open_smartvision':
+        if (!canAccess('smartvision', subscription_status)) {
+          setCaddieResponse("SmartVision is part of the Pro plan. Want to unlock it?");
+          return;
+        }
         openSmartVision();
         break;
       case 'open_swinglab':
@@ -558,6 +571,11 @@ export default function CaddieTab() {
 
   // ── Start round ──────────────────────────
   const handleStartRound = async () => {
+    if (!canAccess('round_start', subscription_status)) {
+      setShowRoundSetup(false);
+      router.push('/paywall' as never);
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
     let courseName = 'Unknown Course';
@@ -794,6 +812,27 @@ export default function CaddieTab() {
           <Ionicons name="ellipsis-horizontal" size={24} color="#6b7d72" />
         </TouchableOpacity>
       </View>
+
+      {/* TRIAL INDICATOR */}
+      {subscription_status === 'trial' && daysLeft !== null && (
+        <View style={[styles.trialBanner, { top: insets.top + 52 }]}>
+          <Text style={styles.trialBannerText}>
+            {daysLeft > 0
+              ? `${daysLeft} day${daysLeft !== 1 ? 's' : ''} left in trial`
+              : 'Trial ends today'}
+          </Text>
+        </View>
+      )}
+      {subscription_status === 'expired' && (
+        <TouchableOpacity
+          style={[styles.trialBanner, styles.trialBannerExpired, { top: insets.top + 52 }]}
+          onPress={() => router.push('/paywall' as never)}
+        >
+          <Text style={[styles.trialBannerText, styles.trialBannerExpiredText]}>
+            Trial ended — Subscribe
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* GREETING BUBBLE — pre-round only, sits in negative space above Start Round */}
       {!isRoundActive && shownText ? (
@@ -1212,6 +1251,10 @@ export default function CaddieTab() {
                 sub: 'Range session',
                 action: () => {
                   setShowMoreMenu(false);
+                  if (!canAccess('cage_mode', subscription_status)) {
+                    router.push('/paywall' as never);
+                    return;
+                  }
                   router.push('/cage' as never);
                 },
               },
@@ -1724,5 +1767,29 @@ const styles = StyleSheet.create({
     color: '#00C896',
     fontSize: 14,
     fontWeight: '800',
+  },
+  trialBanner: {
+    position: 'absolute',
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 200, 150, 0.08)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 200, 150, 0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    zIndex: 15,
+  },
+  trialBannerExpired: {
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  trialBannerText: {
+    color: 'rgba(0, 200, 150, 0.7)',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  trialBannerExpiredText: {
+    color: '#ef4444',
   },
 });

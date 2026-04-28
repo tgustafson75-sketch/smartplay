@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ─── STATE ────────────────────────────────
 
+export type SubscriptionStatus = 'trial' | 'expired' | 'active' | 'free';
+
 interface PlayerProfileState {
   name: string;
   firstName: string;
@@ -17,6 +19,9 @@ interface PlayerProfileState {
   isSetupComplete: boolean;
   has_completed_onboarding: boolean;
   default_mode: 'break_100' | 'break_90' | 'break_80' | 'free_play' | null;
+  first_opened_at: number | null;
+  trial_started_at: number | null;
+  subscription_status: SubscriptionStatus;
 
   // ─── ACTIONS ────────────────────────────
 
@@ -31,6 +36,8 @@ interface PlayerProfileState {
   completeSetup: () => void;
   completeOnboarding: () => void;
   setDefaultMode: (m: 'break_100' | 'break_90' | 'break_80' | 'free_play') => void;
+  initTrial: () => void;
+  setSubscriptionStatus: (s: SubscriptionStatus) => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -50,6 +57,9 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       isSetupComplete: false,
       has_completed_onboarding: false,
       default_mode: null,
+      first_opened_at: null,
+      trial_started_at: null,
+      subscription_status: 'free',
 
       setName: (name) =>
         set({ name, firstName: name.split(' ')[0] ?? name }),
@@ -63,6 +73,11 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       completeSetup: () => set({ isSetupComplete: true }),
       completeOnboarding: () => set({ has_completed_onboarding: true }),
       setDefaultMode: (m) => set({ default_mode: m }),
+      initTrial: () => {
+        const now = Date.now();
+        set({ first_opened_at: now, trial_started_at: now, subscription_status: 'trial' });
+      },
+      setSubscriptionStatus: (s) => set({ subscription_status: s }),
     }),
     {
       name: 'player-profile-v2',

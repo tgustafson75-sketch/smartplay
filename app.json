@@ -54,7 +54,7 @@
           "backgroundColor": "#060f09"
         }
       ],
-
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true,
