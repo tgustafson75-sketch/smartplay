@@ -10,6 +10,15 @@ export interface AcousticContact {
   source: 'feel-tag' | 'acoustic' | 'error';
 }
 
+export interface ReviewLabels {
+  strike_location: 'center' | 'heel' | 'toe' | 'top' | 'thin' | 'fat' | 'unknown';
+  contact_quality: 'pure' | 'good' | 'okay' | 'bad' | 'unknown';
+  self_diagnosis: string | null;
+  intent: string | null;
+  mental_state: string | null;
+  notable_phrases: string[];
+}
+
 export interface CageShot {
   id: string;
   club: string;
@@ -21,6 +30,8 @@ export interface CageShot {
   clipUri: string | null;
   acousticContact: AcousticContact | null;
   aiAnalysis: string | null;
+  review_labels?: ReviewLabels | null;
+  review_transcript?: string | null;
 }
 
 export interface CageSession {
@@ -65,6 +76,7 @@ interface CageState {
   setCameraAlignment: (x: number, y: number) => void;
   clearCameraAlignment: () => void;
   getClubProfile: (club: string) => CageState['clubProfiles'][string] | null;
+  updateShotLabels: (sessionId: string, shotId: string, labels: ReviewLabels, transcript: string) => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -122,6 +134,22 @@ export const useCageStore = create<CageState>()(
       clearCameraAlignment: () => set({ cameraAlignment: null }),
 
       getClubProfile: (club) => get().clubProfiles[club] ?? null,
+
+      updateShotLabels: (sessionId, shotId, labels, transcript) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              shots: session.shots.map(shot =>
+                shot.id !== shotId ? shot : {
+                  ...shot,
+                  review_labels: labels,
+                  review_transcript: transcript,
+                }
+              ),
+            }
+          ),
+        })),
     }),
     {
       name: 'cage-store-v1',

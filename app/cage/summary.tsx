@@ -225,6 +225,16 @@ export default function CageSummary() {
 
         {/* ACTIONS */}
         <TouchableOpacity
+          style={styles.reviewBtn}
+          onPress={() => router.push({
+            pathname: '/cage-review/start',
+            params: { session_id: session.id },
+          } as never)}
+        >
+          <Text style={styles.reviewBtnText}>Review with Kevin</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={styles.goAgainBtn}
           onPress={() => router.replace('/cage' as never)}
         >
@@ -464,6 +474,20 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
+  },
+  reviewBtn: {
+    backgroundColor: '#0d2418',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#00C896',
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  reviewBtnText: {
+    color: '#00C896',
+    fontSize: 15,
+    fontWeight: '700',
   },
   goAgainBtn: {
     backgroundColor: '#00C896',

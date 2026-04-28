@@ -155,6 +155,16 @@ export default function CageHistory() {
                       <Text style={styles.rootCauseText}>{session.rootCause}</Text>
                     </View>
                   )}
+
+                  <TouchableOpacity
+                    style={styles.reviewBtn}
+                    onPress={() => router.push({
+                      pathname: '/cage-review/start',
+                      params: { session_id: session.id },
+                    } as never)}
+                  >
+                    <Text style={styles.reviewBtnText}>Review with Kevin</Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </TouchableOpacity>
@@ -333,5 +343,19 @@ const styles = StyleSheet.create({
   rootCauseText: {
     color: '#fbbf24',
     fontSize: 13,
+  },
+  reviewBtn: {
+    marginTop: 10,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#00C896',
+    backgroundColor: '#0a1e12',
+    alignItems: 'center',
+  },
+  reviewBtnText: {
+    color: '#00C896',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

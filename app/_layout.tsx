@@ -66,6 +66,10 @@ export default function RootLayout() {
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
         <Stack.Screen
+          name="cage-review"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
+        <Stack.Screen
           name="recap/[round_id]"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />

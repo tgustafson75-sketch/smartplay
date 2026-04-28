@@ -100,10 +100,8 @@ function HoleCard({ hc, ghostResult }: { hc: HoleComparison; ghostResult?: Ghost
           {hc.plan.markers.pin?.club_intent ? ' → ' + hc.plan.markers.pin.club_intent : ''}
         </Text>
       )}
-      {hc.kevin_summary ? (
+      {Boolean(hc.kevin_summary) && (
         <Text style={styles.kevinSummary}>{hc.kevin_summary}</Text>
-      ) : (
-        <Text style={styles.noSummary}>No summary</Text>
       )}
     </View>
   );
@@ -158,8 +156,15 @@ export default function RecapScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
+          <View style={styles.backBtn} />
         </View>
-        <Text style={styles.emptyText}>Recap not found.</Text>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Recap not ready yet</Text>
+          <Text style={styles.emptyText}>Your round data is saved. The recap will be available the next time you open the app.</Text>
+          <TouchableOpacity style={styles.emptyBtn} onPress={() => router.replace('/(tabs)/caddie' as never)}>
+            <Text style={styles.emptyBtnText}>Back to Kevin</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
@@ -260,7 +265,14 @@ const styles = StyleSheet.create({
   backText: { color: '#00C896', fontSize: 16, fontWeight: '600' },
   headerTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800' },
   listContent: { paddingBottom: 48 },
-  emptyText: { color: '#6b7280', textAlign: 'center', marginTop: 80, fontSize: 16 },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  emptyTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800', marginBottom: 10, textAlign: 'center' },
+  emptyText: { color: '#6b7280', textAlign: 'center', fontSize: 14, lineHeight: 21 },
+  emptyBtn: {
+    marginTop: 24, backgroundColor: '#0d2418', borderRadius: 12,
+    borderWidth: 1, borderColor: '#1e3a28', paddingVertical: 13, paddingHorizontal: 28,
+  },
+  emptyBtnText: { color: '#00C896', fontSize: 15, fontWeight: '700' },
   summaryCard: {
     marginHorizontal: 12, marginBottom: 12,
     backgroundColor: '#0d2418', borderRadius: 14,
@@ -315,5 +327,4 @@ const styles = StyleSheet.create({
   ghostDivider: { width: 1, height: 36, backgroundColor: '#1e3a28' },
   planLine: { color: '#6b7280', fontSize: 11, marginBottom: 6 },
   kevinSummary: { color: '#e5e7eb', fontSize: 13, lineHeight: 19 },
-  noSummary: { color: '#374151', fontSize: 12, fontStyle: 'italic' },
 });

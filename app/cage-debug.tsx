@@ -16,6 +16,11 @@ import {
   createSyntheticSession,
 } from '../services/cageStorage';
 import type { CageSession, CageClip } from '../types/cage';
+import { useCageStore } from '../store/cageStore';
+import { getCurrentProfile, clearProfile } from '../services/vocabularyProfile';
+import { listReviewSessions } from '../services/cageReview';
+import type { VocabularyProfile } from '../types/vocabulary';
+import type { ReviewSession } from '../types/cageReview';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -45,6 +50,12 @@ export default function CageDebug() {
   const [expandedId, setExpandedId] = useState<string | null>(focusSessionId ?? null);
   const [selectedClip, setSelectedClip] = useState<{ clip: CageClip; session: CageSession } | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // ── Cage Review debug state ────────────────────────────────────────────────
+  const { sessionHistory } = useCageStore();
+  const [vocabProfile, setVocabProfile] = useState<VocabularyProfile | null>(null);
+  const [reviewSessions, setReviewSessions] = useState<ReviewSession[]>([]);
+  const [reviewDebugLoading, setReviewDebugLoading] = useState(false);
 
   const videoRef = useRef<Video>(null);
 
@@ -101,6 +112,52 @@ export default function CageDebug() {
       videoRef.current?.pauseAsync();
     }
   }, [selectedClip]);
+
+  // ── Review debug handlers ──────────────────────────────────────────────────
+
+  const loadReviewDebugData = useCallback(async () => {
+    const [profile, reviews] = await Promise.all([getCurrentProfile(), listReviewSessions()]);
+    setVocabProfile(profile);
+    setReviewSessions(reviews);
+  }, []);
+
+  const handleMockReview = useCallback(async () => {
+    const session = sessionHistory[sessionHistory.length - 1];
+    if (!session || session.shots.length === 0) return;
+    setReviewDebugLoading(true);
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+    const mockTranscripts = ['heel, came up short', 'pure, right at it', 'fat, didn\'t transfer', 'thin, rushed it', 'solid', 'pulled it left'];
+    const { useCageStore: cageStoreHook } = await import('../store/cageStore');
+    const updateShotLabels = cageStoreHook.getState().updateShotLabels;
+    const shots = session.shots.slice(0, 6);
+    for (let i = 0; i < shots.length; i++) {
+      const transcript = mockTranscripts[i % mockTranscripts.length];
+      try {
+        const res = await fetch(apiUrl + '/api/cage-review', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'extract', transcript }),
+        });
+        const data = await res.json() as { labels?: Parameters<typeof updateShotLabels>[2] };
+        if (data.labels) updateShotLabels(session.id, shots[i].id, data.labels, transcript);
+      } catch { /* continue */ }
+    }
+    try {
+      const vocabRes = await fetch(apiUrl + '/api/cage-review', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'vocab', transcripts: mockTranscripts.slice(0, shots.length), total_reviewed: shots.length }),
+      });
+      const vocabData = await vocabRes.json() as { observed_terminology: VocabularyProfile['observed_terminology']; kevin_summary: string; total_clips_reviewed: number };
+      const { saveGeneratedProfile } = await import('../services/vocabularyProfile');
+      const profile = await saveGeneratedProfile(vocabData);
+      setVocabProfile(profile);
+    } catch { /* continue */ }
+    setReviewDebugLoading(false);
+  }, [sessionHistory]);
+
+  const handleClearVocab = useCallback(async () => {
+    await clearProfile();
+    setVocabProfile(null);
+  }, []);
 
   // Auto-seek to clip start when video loads
   const handleVideoLoad = useCallback(async () => {
@@ -279,6 +336,63 @@ export default function CageDebug() {
             </View>
           );
         })}
+
+        {/* ── CAGE REVIEW SECTION ────────────────────────────── */}
+        <View style={styles.reviewSection}>
+          <View style={styles.reviewSectionHeader}>
+            <Text style={styles.reviewSectionTitle}>CAGE REVIEW</Text>
+            <TouchableOpacity onPress={loadReviewDebugData} style={styles.reviewRefreshBtn}>
+              <Text style={styles.reviewRefreshText}>Refresh</Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.reviewActionBtn, reviewDebugLoading && { opacity: 0.5 }]}
+            onPress={handleMockReview}
+            disabled={reviewDebugLoading || sessionHistory.length === 0}
+          >
+            <Text style={styles.reviewActionText}>
+              {reviewDebugLoading ? 'Running mock review…' : 'Mock review (latest session)'}
+            </Text>
+          </TouchableOpacity>
+
+          {sessionHistory.length > 0 && (
+            <TouchableOpacity
+              style={styles.reviewActionBtn}
+              onPress={() => router.push({
+                pathname: '/cage-review/start',
+                params: { session_id: sessionHistory[sessionHistory.length - 1].id },
+              } as never)}
+            >
+              <Text style={styles.reviewActionText}>Open review flow (latest session)</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity style={styles.reviewDestructiveBtn} onPress={handleClearVocab}>
+            <Text style={styles.reviewDestructiveText}>Reset vocabulary profile</Text>
+          </TouchableOpacity>
+
+          {vocabProfile && (
+            <View style={styles.reviewCard}>
+              <Text style={styles.reviewCardLabel}>VOCABULARY PROFILE</Text>
+              <Text style={styles.reviewCardText}>{vocabProfile.kevin_summary}</Text>
+              <Text style={styles.reviewCardMeta}>
+                {vocabProfile.total_clips_reviewed} clips reviewed · {new Date(vocabProfile.generated_at).toLocaleDateString()}
+              </Text>
+            </View>
+          )}
+
+          {reviewSessions.length > 0 && (
+            <View style={styles.reviewCard}>
+              <Text style={styles.reviewCardLabel}>REVIEW SESSIONS ({reviewSessions.length})</Text>
+              {reviewSessions.slice(-3).reverse().map(r => (
+                <Text key={r.id} style={styles.reviewCardText}>
+                  {r.mode} · {r.shots_reviewed.length} shots · {r.completed_at ? 'done' : 'in progress'}
+                </Text>
+              ))}
+            </View>
+          )}
+        </View>
 
         <View style={styles.bottomPad} />
       </ScrollView>
@@ -555,5 +669,89 @@ const styles = StyleSheet.create({
 
   bottomPad: {
     height: 40,
+  },
+
+  // ── Review debug styles ───────────────────
+  reviewSection: {
+    marginTop: 24,
+    paddingHorizontal: 16,
+  },
+  reviewSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  reviewSectionTitle: {
+    color: '#6b7280',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 2,
+  },
+  reviewRefreshBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+  },
+  reviewRefreshText: {
+    color: '#00C896',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  reviewActionBtn: {
+    backgroundColor: '#0d2418',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    paddingVertical: 11,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  reviewActionText: {
+    color: '#e5e7eb',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  reviewDestructiveBtn: {
+    backgroundColor: '#1a0505',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#3b0d0d44',
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  reviewDestructiveText: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  reviewCard: {
+    backgroundColor: '#0d2418',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    padding: 12,
+    marginBottom: 8,
+    gap: 4,
+  },
+  reviewCardLabel: {
+    color: '#6b7280',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  reviewCardText: {
+    color: '#e5e7eb',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  reviewCardMeta: {
+    color: '#4b5563',
+    fontSize: 11,
+    marginTop: 4,
   },
 });

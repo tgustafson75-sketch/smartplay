@@ -341,11 +341,9 @@ export default function CaddieTab() {
         router.push('/(tabs)/swinglab?mode=record' as never);
         break;
       case 'open_smartfinder':
-        console.warn('[Kevin] SmartFinder not yet built');
-        Alert.alert('Rangefinder coming soon', "I'll build that one out next.");
+        setCaddieResponse("Rangefinder's coming — I'll use GPS for now. What's your yardage?");
         break;
       default:
-        console.warn('[Kevin] Unknown tool action:', (action as ToolAction).type);
     }
   }, [openSmartVision, club, router]);
 
@@ -546,9 +544,9 @@ export default function CaddieTab() {
           setRecapLoading(false);
           router.push(('/recap/' + recap.round_id) as never);
         })
-        .catch(err => {
-          console.warn('[caddie] recap generation failed:', err);
+        .catch(() => {
           setRecapLoading(false);
+          setCaddieResponse("Round saved. Your recap will be ready next time you open the app — something went sideways on my end.");
         });
     }
   };
@@ -578,8 +576,8 @@ export default function CaddieTab() {
             holes = courseToHoles(apiCourse);
             courseName = apiCourse.club_name;
           }
-        } catch (e) {
-          console.warn('[caddie] Could not load API course holes:', e);
+        } catch {
+          setCaddieResponse("Couldn't load the course layout — starting with yardages only. You can still play.");
         }
       }
     }
@@ -1086,8 +1084,14 @@ export default function CaddieTab() {
               );
             })()}
 
-            <TouchableOpacity style={styles.startBtn} onPress={handleStartRound}>
-              <Text style={styles.startBtnText}>Let's Go</Text>
+            <TouchableOpacity
+              style={[styles.startBtn, !selectedPickedCourse && styles.startBtnDisabled]}
+              onPress={handleStartRound}
+              disabled={!selectedPickedCourse}
+            >
+              <Text style={styles.startBtnText}>
+                {selectedPickedCourse ? "Let's Go" : 'Select a course to start'}
+              </Text>
             </TouchableOpacity>
             </ScrollView>
           </View>
