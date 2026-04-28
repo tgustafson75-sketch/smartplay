@@ -18,10 +18,14 @@ export default function Index() {
   }, []);
 
   const isSetupComplete = usePlayerProfileStore(s => s.isSetupComplete);
+  const has_completed_onboarding = usePlayerProfileStore(s => s.has_completed_onboarding);
 
   if (!hydrated) return null;
 
+  // Either flag means the user has been through setup — send to caddie.
+  // Neither flag means a brand-new user — send to onboarding.
+  const isDone = has_completed_onboarding || isSetupComplete;
   return (
-    <Redirect href={isSetupComplete ? '/(tabs)/caddie' : '/intro'} />
+    <Redirect href={isDone ? '/(tabs)/caddie' : '/onboarding/welcome'} />
   );
 }

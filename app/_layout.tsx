@@ -1,4 +1,4 @@
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useEffect } from 'react';
@@ -21,16 +21,10 @@ const TRIAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 // Inner layout reads theme and guards onboarding
 function AppNavigator() {
   const { colors } = useTheme();
-  const router = useRouter();
-  const segments = useSegments();
-  const has_completed_onboarding = usePlayerProfileStore(s => s.has_completed_onboarding);
 
-  useEffect(() => {
-    const inOnboarding = segments[0] === 'onboarding';
-    if (!has_completed_onboarding && !inOnboarding) {
-      router.replace('/onboarding/welcome' as never);
-    }
-  }, [has_completed_onboarding, segments]);
+  // Intentionally removed: do not redirect here. app/index.tsx owns initial
+  // routing after hydration. A guard here fires before AsyncStorage hydrates,
+  // races against index.tsx's redirect, and corrupts the nav stack.
 
   // Trial lifecycle: init on first open, expire after 7 days
   useEffect(() => {

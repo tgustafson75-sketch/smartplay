@@ -21,7 +21,7 @@ export default function OnboardingReady() {
   const router = useRouter();
   const { colors, spacing, radii } = useTheme();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
-  const { firstName, name, completeOnboarding } = usePlayerProfileStore();
+  const { firstName, name, completeOnboarding, completeSetup } = usePlayerProfileStore();
 
   const fadeIn = useRef(new Animated.Value(0)).current;
   const avatarScale = useRef(new Animated.Value(0.9)).current;
@@ -46,6 +46,7 @@ export default function OnboardingReady() {
 
   const handleFinish = () => {
     completeOnboarding();
+    completeSetup();
     router.replace('/(tabs)/caddie' as never);
   };
 
