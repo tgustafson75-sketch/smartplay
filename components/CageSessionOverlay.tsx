@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import {
   View,
   Text,
@@ -59,6 +60,12 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
   const meterBufferRef = useRef<number[]>([]);
   const lastDetectionRef = useRef<number>(0);
   const isMountedRef = useRef(true);
+
+  // Portrait lock — cage recording must be vertical for correct video framing
+  useEffect(() => {
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    return () => { ScreenOrientation.unlockAsync(); };
+  }, []);
 
   // ─── Permissions ──────────────────────────────────────────────────────────
 

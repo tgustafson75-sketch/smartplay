@@ -13,9 +13,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function Settings() {
   const router = useRouter();
+
+  const { colors } = useTheme();
 
   const {
     voiceEnabled,
@@ -27,6 +30,7 @@ export default function Settings() {
     highContrast,
     watchConnected,
     autoListenEnabled,
+    theme_preference,
     setVoiceEnabled,
     setVoiceGender,
     setLanguage,
@@ -36,6 +40,7 @@ export default function Settings() {
     setHighContrast,
     setWatchConnected,
     setAutoListenEnabled,
+    setThemePreference,
   } = useSettingsStore();
 
   const {
@@ -138,10 +143,11 @@ export default function Settings() {
   // ─── RENDER ───────────────────────────────
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
+        style={{ backgroundColor: colors.background }}
       >
 
         {/* HEADER */}
@@ -300,6 +306,18 @@ export default function Settings() {
         {/* DISPLAY */}
         <SectionHeader title="Display" />
         <View style={styles.card}>
+
+          <PillRow
+            label="Theme"
+            options={[
+              { label: 'System', value: 'system' },
+              { label: 'Light', value: 'light' },
+              { label: 'Dark', value: 'dark' },
+            ]}
+            value={theme_preference}
+            onSelect={(v) => setThemePreference(v as 'system' | 'light' | 'dark')}
+          />
+
           <ToggleRow
             label="Cast Mode"
             sub="Mirror to TV or display"

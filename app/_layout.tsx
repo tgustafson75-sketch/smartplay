@@ -1,19 +1,33 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useEffect } from 'react';
 import { SmartVisionProvider } from '../contexts/SmartVisionContext';
 import { KevinPresenceProvider } from '../contexts/KevinPresenceContext';
+import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
+import { usePlayerProfileStore } from '../store/playerProfileStore';
 
-export default function RootLayout() {
+// Inner layout reads theme and guards onboarding
+function AppNavigator() {
+  const { colors } = useTheme();
+  const router = useRouter();
+  const segments = useSegments();
+  const has_completed_onboarding = usePlayerProfileStore(s => s.has_completed_onboarding);
+
+  useEffect(() => {
+    const inOnboarding = segments[0] === 'onboarding';
+    if (!has_completed_onboarding && !inOnboarding) {
+      router.replace('/onboarding/welcome' as never);
+    }
+  }, [has_completed_onboarding, segments]);
+
   return (
-    <SmartVisionProvider>
-    <KevinPresenceProvider>
-    <SafeAreaProvider>
-      <StatusBar style="light" />
+    <>
+      <StatusBar style="auto" />
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: '#060f09' },
+          contentStyle: { backgroundColor: colors.background },
           animation: 'fade',
         }}
       >
@@ -73,7 +87,23 @@ export default function RootLayout() {
           name="recap/[round_id]"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
+        <Stack.Screen
+          name="onboarding"
+          options={{ animation: 'fade', headerShown: false }}
+        />
       </Stack>
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <SmartVisionProvider>
+    <KevinPresenceProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AppNavigator />
+      </ThemeProvider>
     </SafeAreaProvider>
     </KevinPresenceProvider>
     </SmartVisionProvider>

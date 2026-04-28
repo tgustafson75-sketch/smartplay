@@ -12,6 +12,7 @@ interface SettingsState {
   responseMode: 'short' | 'neutral' | 'detailed';
   caddiePersonality: 'kevin' | 'serena';
 
+  theme_preference: 'system' | 'light' | 'dark';
   highContrast: boolean;
   brightMode: boolean;
   castMode: boolean;
@@ -30,6 +31,7 @@ interface SettingsState {
   setDiscreteMode: (v: boolean) => void;
   setResponseMode: (m: 'short' | 'neutral' | 'detailed') => void;
   setCaddiePersonality: (p: 'kevin' | 'serena') => void;
+  setThemePreference: (p: 'system' | 'light' | 'dark') => void;
   setHighContrast: (v: boolean) => void;
   setBrightMode: (v: boolean) => void;
   setCastMode: (v: boolean) => void;
@@ -51,6 +53,7 @@ export const useSettingsStore = create<SettingsState>()(
       discreteMode: false,
       responseMode: 'neutral',
       caddiePersonality: 'kevin',
+      theme_preference: 'system' as const,
       highContrast: false,
       brightMode: false,
       castMode: false,
@@ -65,6 +68,7 @@ export const useSettingsStore = create<SettingsState>()(
       setDiscreteMode: (v) => set({ discreteMode: v }),
       setResponseMode: (m) => set({ responseMode: m }),
       setCaddiePersonality: (p) => set({ caddiePersonality: p }),
+      setThemePreference: (p) => set({ theme_preference: p }),
       setHighContrast: (v) => set({ highContrast: v }),
       setBrightMode: (v) => set({ brightMode: v }),
       setCastMode: (v) => set({ castMode: v }),
@@ -85,6 +89,7 @@ export const useSettingsStore = create<SettingsState>()(
         discreteMode: s.discreteMode,
         responseMode: s.responseMode,
         caddiePersonality: s.caddiePersonality,
+        theme_preference: s.theme_preference,
         highContrast: s.highContrast,
         brightMode: s.brightMode,
         castMode: s.castMode,

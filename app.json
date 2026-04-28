@@ -3,10 +3,10 @@
     "name": "SmartPlay Caddie",
     "slug": "smartplay-caddie",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "smartplay",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
@@ -43,6 +43,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-screen-orientation",
       "expo-camera",
       [
         "expo-splash-screen",

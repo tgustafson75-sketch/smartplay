@@ -105,14 +105,19 @@ export default function HoleView() {
   useKeepAwake();
   const router = useRouter();
   const { width: W, height: H } = useWindowDimensions();
-  const IMAGE_WIDTH = W - 24;
+  const isLandscape = W > H;
+
+  // Landscape: image claims 68% of screen width, nearly full height
+  const IMAGE_WIDTH = isLandscape ? Math.round(W * 0.68) - 4 : W - 24;
+  const LANDSCAPE_IMG_H = Math.round(H * 0.88);
+
   // Satellite: Google Maps tiles are 6:5 aspect
-  const IMAGE_HEIGHT_SAT = Math.min(
+  const IMAGE_HEIGHT_SAT = isLandscape ? LANDSCAPE_IMG_H : Math.min(
     Math.round(IMAGE_WIDTH * (500 / 600)),
     Math.round(H * 0.40),
   );
   // Bundled: our Palms images are 705×1455 (≈2.064 tall)
-  const IMAGE_HEIGHT_BUNDLED = Math.min(
+  const IMAGE_HEIGHT_BUNDLED = isLandscape ? LANDSCAPE_IMG_H : Math.min(
     Math.round(IMAGE_WIDTH * (1455 / 705)),
     Math.round(H * 0.82),
   );
@@ -624,43 +629,14 @@ export default function HoleView() {
   const modeBadgeColor = isRoundActive && gpsValid ? '#00C896' : '#6b7280';
 
   // ── RENDER ─────────────────────────────
-  return (
-    <View style={styles.container}>
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
-        scrollEnabled={!isDragging}
-      >
 
-        {/* HEADER */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backBtn}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Text style={styles.backText}>‹ Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{'Hole ' + hole + ' · Par ' + par}</Text>
-          <View style={{ width: 60 }} />
-        </View>
-
-        {/* MODE BADGE */}
-        <View style={styles.badgeRow}>
-          <View style={[styles.badge, { borderColor: modeBadgeColor }]}>
-            <Text style={[styles.badgeText, { color: modeBadgeColor }]}>
-              {modeBadgeText}
-            </Text>
-          </View>
-        </View>
-
-        {/* HOLE IMAGE */}
-        <View
-          style={[styles.imageWrapper, { width: IMAGE_WIDTH, height: IMAGE_HEIGHT }]}
-          onStartShouldSetResponder={() => measureMode && displayType === 'satellite'}
-          onResponderRelease={handleImageTap}
-        >
+  // Shared: hole image section (same in portrait and landscape)
+  const holeImagePane = (
+    <View
+      style={[styles.imageWrapper, { width: IMAGE_WIDTH, height: IMAGE_HEIGHT }]}
+      onStartShouldSetResponder={() => measureMode && displayType === 'satellite'}
+      onResponderRelease={handleImageTap}
+    >
           {imageSource ? (
             <Image
               source={imageSource}
@@ -773,7 +749,11 @@ export default function HoleView() {
             </>
           )}
         </View>
+  );  // end holeImagePane
 
+  // Shared: controls below / beside the image
+  const controlsPane = (
+    <>
         {/* BUTTON ROW */}
         <View style={styles.btnRow}>
           {displayType === 'satellite' && (
@@ -911,8 +891,65 @@ export default function HoleView() {
             <Text style={styles.yardValue}>{backYards > 0 ? backYards : distance + 16}</Text>
           </View>
         </View>
+    </>
+  );  // end controlsPane
 
-      </ScrollView>
+  const headerRow = (
+    <View style={styles.header}>
+      <TouchableOpacity
+        onPress={() => router.back()}
+        style={styles.backBtn}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <Text style={styles.backText}>‹ Back</Text>
+      </TouchableOpacity>
+      <Text style={styles.headerTitle}>{'Hole ' + hole + ' · Par ' + par}</Text>
+      <View style={{ width: 60 }} />
+    </View>
+  );
+
+  const modeBadgeRow = (
+    <View style={styles.badgeRow}>
+      <View style={[styles.badge, { borderColor: modeBadgeColor }]}>
+        <Text style={[styles.badgeText, { color: modeBadgeColor }]}>
+          {modeBadgeText}
+        </Text>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+      {isLandscape ? (
+        /* ── LANDSCAPE: image left 68%, controls right 32% ── */
+        <View style={styles.landscapeRow}>
+          <View style={[styles.landscapeLeft, { width: IMAGE_WIDTH + 8 }]}>
+            {headerRow}
+            {holeImagePane}
+          </View>
+          <ScrollView
+            style={styles.landscapeRight}
+            contentContainerStyle={styles.landscapeRightContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {modeBadgeRow}
+            {controlsPane}
+          </ScrollView>
+        </View>
+      ) : (
+        /* ── PORTRAIT: existing vertical scroll ── */
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scroll}
+          scrollEnabled={!isDragging}
+        >
+          {headerRow}
+          {modeBadgeRow}
+          {holeImagePane}
+          {controlsPane}
+        </ScrollView>
+      )}
       </SafeAreaView>
       <KevinBadge />
 
@@ -1057,6 +1094,10 @@ export default function HoleView() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#060f09' },
   scroll: { paddingBottom: 32 },
+  landscapeRow: { flex: 1, flexDirection: 'row' },
+  landscapeLeft: { overflow: 'hidden' },
+  landscapeRight: { flex: 1 },
+  landscapeRightContent: { padding: 12, paddingBottom: 32 },
   header: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between',

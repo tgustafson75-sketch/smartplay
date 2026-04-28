@@ -20,6 +20,7 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { useKeepAwake } from 'expo-keep-awake';
 import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
 import { useRoundStore } from '../../store/roundStore';
@@ -115,7 +116,11 @@ export default function CaddieTab() {
   useFocusEffect(
     useCallback(() => {
       setMode('full');
-      return () => setMode('badge');
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      return () => {
+        setMode('badge');
+        ScreenOrientation.unlockAsync();
+      };
     }, [setMode]),
   );
 

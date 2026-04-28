@@ -15,6 +15,8 @@ interface PlayerProfileState {
   homeCourse: string | null;
   preferredTee: 'front' | 'middle' | 'back';
   isSetupComplete: boolean;
+  has_completed_onboarding: boolean;
+  default_mode: 'break_100' | 'break_90' | 'break_80' | 'free_play' | null;
 
   // ─── ACTIONS ────────────────────────────
 
@@ -27,6 +29,8 @@ interface PlayerProfileState {
   setHomeCourse: (course: string | null) => void;
   setPreferredTee: (tee: 'front' | 'middle' | 'back') => void;
   completeSetup: () => void;
+  completeOnboarding: () => void;
+  setDefaultMode: (m: 'break_100' | 'break_90' | 'break_80' | 'free_play') => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -44,6 +48,8 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       homeCourse: null,
       preferredTee: 'middle',
       isSetupComplete: false,
+      has_completed_onboarding: false,
+      default_mode: null,
 
       setName: (name) =>
         set({ name, firstName: name.split(' ')[0] ?? name }),
@@ -55,6 +61,8 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setHomeCourse: (course) => set({ homeCourse: course }),
       setPreferredTee: (tee) => set({ preferredTee: tee }),
       completeSetup: () => set({ isSetupComplete: true }),
+      completeOnboarding: () => set({ has_completed_onboarding: true }),
+      setDefaultMode: (m) => set({ default_mode: m }),
     }),
     {
       name: 'player-profile-v2',
