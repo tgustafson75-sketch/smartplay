@@ -360,7 +360,11 @@ export default function CaddieTab() {
         router.push('/(tabs)/swinglab?mode=record' as never);
         break;
       case 'open_smartfinder':
-        setCaddieResponse("Rangefinder's coming — I'll use GPS for now. What's your yardage?");
+        if (!canAccess('smartfinder', subscription_status)) {
+          setCaddieResponse("SmartFinder is part of the Pro plan. Want to unlock it?");
+          return;
+        }
+        router.push('/smartfinder' as never);
         break;
       default:
     }
@@ -1132,6 +1136,19 @@ export default function CaddieTab() {
                 action: () => {
                   setShowMoreMenu(false);
                   openSmartVision();
+                },
+              },
+              {
+                icon: '🎯',
+                label: 'SmartFinder',
+                sub: 'Tap-to-lock rangefinder',
+                action: () => {
+                  setShowMoreMenu(false);
+                  if (!canAccess('smartfinder', subscription_status)) {
+                    router.push('/paywall' as never);
+                    return;
+                  }
+                  router.push('/smartfinder' as never);
                 },
               },
               {

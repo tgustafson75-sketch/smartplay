@@ -22,6 +22,7 @@ interface SettingsState {
   autoListenEnabled: boolean;
   skip_briefings: boolean;
   proactive_kevin_enabled: boolean;
+  distance_unit: 'yards' | 'meters';
 
   tutorialsSeen: Record<string, boolean>;
 
@@ -42,6 +43,7 @@ interface SettingsState {
   setAutoListenEnabled: (v: boolean) => void;
   setSkipBriefings: (v: boolean) => void;
   setProactiveKevinEnabled: (v: boolean) => void;
+  setDistanceUnit: (u: 'yards' | 'meters') => void;
   markTutorialSeen: (key: string) => void;
   resetTutorials: () => void;
 }
@@ -66,6 +68,7 @@ export const useSettingsStore = create<SettingsState>()(
       autoListenEnabled: false,
       skip_briefings: false,
       proactive_kevin_enabled: true,
+      distance_unit: 'yards' as const,
       tutorialsSeen: {},
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
@@ -83,6 +86,7 @@ export const useSettingsStore = create<SettingsState>()(
       setAutoListenEnabled: (v) => set({ autoListenEnabled: v }),
       setSkipBriefings: (v) => set({ skip_briefings: v }),
       setProactiveKevinEnabled: (v) => set({ proactive_kevin_enabled: v }),
+      setDistanceUnit: (u) => set({ distance_unit: u }),
       markTutorialSeen: (key) =>
         set(s => ({ tutorialsSeen: { ...s.tutorialsSeen, [key]: true } })),
       resetTutorials: () => set({ tutorialsSeen: {} }),
@@ -104,6 +108,7 @@ export const useSettingsStore = create<SettingsState>()(
         autoListenEnabled: s.autoListenEnabled,
         skip_briefings: s.skip_briefings,
         proactive_kevin_enabled: s.proactive_kevin_enabled,
+        distance_unit: s.distance_unit,
         tutorialsSeen: s.tutorialsSeen,
         // watchConnected / glassesConnected not persisted — rechecked on mount
       }),

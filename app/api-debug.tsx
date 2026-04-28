@@ -280,6 +280,16 @@ export default function ApiDebug() {
           </View>
         ))}
 
+        {/* SmartFinder Debug link */}
+        <Text style={[styles.sectionTitle, { marginTop: 28 }]}>Tools</Text>
+        <TouchableOpacity
+          style={styles.batteryCard}
+          onPress={() => router.push('/smartfinder-debug' as never)}
+        >
+          <Text style={styles.batteryLabel}>SmartFinder Debug →</Text>
+          <Text style={styles.batteryResult}>GPS sensors, mock locks, confidence testing</Text>
+        </TouchableOpacity>
+
         <View style={styles.bottomPad} />
       </ScrollView>
     </SafeAreaView>

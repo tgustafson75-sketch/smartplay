@@ -32,6 +32,7 @@ export default function Settings() {
     autoListenEnabled,
     skip_briefings,
     proactive_kevin_enabled,
+    distance_unit,
     theme_preference,
     setVoiceEnabled,
     setVoiceGender,
@@ -44,6 +45,7 @@ export default function Settings() {
     setAutoListenEnabled,
     setSkipBriefings,
     setProactiveKevinEnabled,
+    setDistanceUnit,
     setThemePreference,
   } = useSettingsStore();
 
@@ -350,6 +352,20 @@ export default function Settings() {
             sub="Increased text contrast"
             value={highContrast}
             onValueChange={setHighContrast}
+          />
+        </View>
+
+        {/* MEASUREMENT */}
+        <SectionHeader title="Measurement" />
+        <View style={styles.card}>
+          <PillRow
+            label="Distance Unit"
+            options={[
+              { label: 'Yards', value: 'yards' },
+              { label: 'Meters', value: 'meters' },
+            ]}
+            value={distance_unit}
+            onSelect={(v) => setDistanceUnit(v as 'yards' | 'meters')}
           />
         </View>
 

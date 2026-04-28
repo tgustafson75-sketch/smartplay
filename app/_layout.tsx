@@ -120,6 +120,14 @@ function AppNavigator() {
           options={{ animation: 'fade', headerShown: false }}
         />
         <Stack.Screen
+          name="smartfinder"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
+        <Stack.Screen
+          name="smartfinder-debug"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
+        <Stack.Screen
           name="paywall"
           options={{ animation: 'slide_from_bottom', presentation: 'modal', headerShown: false }}
         />
