@@ -16,6 +16,7 @@
     { "src": "/api/kevin",        "dest": "/api/kevin.ts" },
     { "src": "/api/briefing",     "dest": "/api/briefing.ts" },
     { "src": "/api/recap",        "dest": "/api/recap.ts" },
-    { "src": "/api/course-proxy", "dest": "/api/course-proxy.ts" }
+    { "src": "/api/course-proxy", "dest": "/api/course-proxy.ts" },
+    { "src": "/api/cage-review",  "dest": "/api/cage-review.ts" }
   ]
 }
