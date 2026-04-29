@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { TouchableOpacity, Image, View, StyleSheet } from 'react-native';
+import { TouchableOpacity, Image, View, StyleSheet, Text } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -63,16 +63,16 @@ export default function KevinBadge({ onTap, onLongPress }: KevinBadgeProps) {
     opacity: glowOpacity.value,
   }));
 
+  const isOnCaddie = pathname === '/(tabs)/caddie';
+
   const handlePress = () => {
     onTap?.();
     handleMicPress();
   };
 
-  const handleLongPress = () => {
+  const handleGoToCaddie = () => {
     onLongPress?.();
-    if (pathname !== '/(tabs)/caddie') {
-      router.push('/(tabs)/caddie' as never);
-    }
+    router.push('/(tabs)/caddie' as never);
   };
 
   return (
@@ -81,12 +81,19 @@ export default function KevinBadge({ onTap, onLongPress }: KevinBadgeProps) {
       <TouchableOpacity
         style={styles.badge}
         onPress={handlePress}
-        onLongPress={handleLongPress}
-        delayLongPress={600}
         activeOpacity={0.85}
       >
         <Image source={BADGE} style={styles.image} resizeMode="contain" />
       </TouchableOpacity>
+      {!isOnCaddie && (
+        <TouchableOpacity
+          style={styles.navChip}
+          onPress={handleGoToCaddie}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <Text style={styles.navChipText}>›</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -122,5 +129,23 @@ const styles = StyleSheet.create({
   image: {
     width: 40,
     height: 40,
+  },
+  navChip: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#00C896',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navChipText: {
+    color: '#000',
+    fontSize: 14,
+    fontWeight: '900',
+    lineHeight: 17,
+    marginTop: -1,
   },
 });

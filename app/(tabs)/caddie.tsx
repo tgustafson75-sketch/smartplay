@@ -941,6 +941,14 @@ export default function CaddieTab() {
         </TouchableOpacity>
       )}
 
+      {/* BRAND WORDMARK — pre-round idle state only */}
+      {!isRoundActive && (
+        <View style={[styles.brandWordmark, { top: insets.top + 52 }]}>
+          <Text style={styles.brandName}>SmartPlay</Text>
+          <Text style={styles.brandSub}>Caddie</Text>
+        </View>
+      )}
+
       {/* GREETING BUBBLE — pre-round only, sits in negative space above Start Round */}
       {!isRoundActive && shownText ? (
         <Animated.View
@@ -1831,6 +1839,28 @@ const styles = StyleSheet.create({
     color: '#00C896',
     fontSize: 14,
     fontWeight: '800',
+  },
+  brandWordmark: {
+    position: 'absolute',
+    alignSelf: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  brandName: {
+    color: '#00C896',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 2.5,
+    textTransform: 'uppercase',
+    opacity: 0.7,
+  },
+  brandSub: {
+    color: 'rgba(255,255,255,0.25)',
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 3,
+    textTransform: 'uppercase',
+    marginTop: -1,
   },
   trialBanner: {
     position: 'absolute',
