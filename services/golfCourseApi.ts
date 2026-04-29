@@ -226,7 +226,7 @@ function normalizeSearchResult(raw: RawSearchResult): { id: string; club_name: s
 
 export async function searchCourses(
   query: string,
-): Promise<{ id: string; club_name: string; course_name: string; location: string }[]> {
+): Promise<{ id: string; club_name: string; course_name: string; location: string; _error?: string }[]> {
   console.log('[golfcourseapi] searchCourses:', query);
   try {
     const res = await fetch(proxyUrl({ action: 'search', q: query }), {
@@ -235,7 +235,8 @@ export async function searchCourses(
     if (!res.ok) {
       const err = await res.json().catch(() => ({})) as { error?: string };
       console.error('[golfcourseapi] search error:', res.status, err);
-      return [];
+      // Surface API errors as a sentinel result so UI can show a meaningful message
+      return [{ id: '', club_name: '', course_name: '', location: '', _error: err.error ?? `Search unavailable (${res.status})` }];
     }
     const data = await res.json() as Record<string, unknown>;
     console.log('[golfcourseapi] search raw keys:', Object.keys(data));
@@ -249,7 +250,7 @@ export async function searchCourses(
     return list.slice(0, 10).map(normalizeSearchResult);
   } catch (e) {
     console.error('[golfcourseapi] searchCourses exception:', e);
-    return [];
+    return [{ id: '', club_name: '', course_name: '', location: '', _error: 'Course search unavailable — check connection' }];
   }
 }
 

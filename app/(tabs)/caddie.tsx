@@ -920,8 +920,8 @@ export default function CaddieTab() {
         </TouchableOpacity>
       </View>
 
-      {/* TRIAL INDICATOR */}
-      {subscription_status === 'trial' && daysLeft !== null && (
+      {/* TRIAL INDICATOR — only in final 3 days to avoid persistent clutter */}
+      {subscription_status === 'trial' && daysLeft !== null && daysLeft <= 3 && (
         <View style={[styles.trialBanner, { top: insets.top + 52 }]}>
           <Text style={styles.trialBannerText}>
             {daysLeft > 0
@@ -970,6 +970,18 @@ export default function CaddieTab() {
           onPress={() => setShowShotCard(true)}
         />
       </Animated.View>
+
+      {/* PENALTY QUICK-TAP — floats above the shot strip during active rounds */}
+      {isRoundActive && (
+        <TouchableOpacity
+          style={[styles.penaltyQuickBtn, { bottom: 96 + insets.bottom }]}
+          onPress={() => { addPenalty(currentHole); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); }}
+          activeOpacity={0.75}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.penaltyQuickBtnText}>⚠️ +Penalty</Text>
+        </TouchableOpacity>
+      )}
 
       {/* START ROUND CTA — cross-fades out when round starts */}
       <Animated.View
@@ -1518,6 +1530,23 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     fontSize: 11,
     lineHeight: 15,
+  },
+  penaltyQuickBtn: {
+    position: 'absolute',
+    right: 16,
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    zIndex: 10,
+  },
+  penaltyQuickBtnText: {
+    color: '#f87171',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   startRoundBtn: {
     position: 'absolute',

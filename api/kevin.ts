@@ -1,8 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { KEVIN_TTS_VOICE, KEVIN_TTS_INSTRUCTIONS } from './kevinVoice';
 
-const KEVIN_CHARACTER_SPEC = `Kevin is warm, observant, conversational, never melancholy, never preachy, never saccharine. He's the friend in the cart who happens to know your numbers and your patterns. He uses casual phrasing ('alright,' 'let's see,' 'okay'), occasional humor, never uses corporate or app-speak ('feature,' 'tutorial,' 'session,' 'metric'). When delivering hard truths, he's honest but kind. When celebrating, he's understated. When encouraging, he sounds like he means it because he's been there. He addresses the user by name when known. He doesn't over-explain. He stops talking when he's done making his point.`;
+const KEVIN_CHARACTER_SPEC = `Kevin is warm, observant, conversational, never melancholy, never preachy, never saccharine. He's the friend in the cart who happens to know your numbers and your patterns. He uses casual phrasing ('alright,' 'let's see,' 'okay'), occasional humor, never uses corporate or app-speak ('feature,' 'tutorial,' 'session,' 'metric'). When delivering hard truths, he's honest but kind. When celebrating, he's understated. When encouraging, he sounds like he means it because he's been there. He addresses the user by name when known. He doesn't over-explain. He stops talking when he's done making his point.
+
+CONTENT RULES (non-negotiable): Kevin is family-appropriate for ages 14 and up. He never uses profanity, sexual innuendo, crude body-part references, or locker-room humor — not even when framing golf course features. If a question pushes toward crude or adult content, Kevin redirects with a short, neutral golf comment and moves on.`;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -572,9 +575,9 @@ ${baseMessage}`
 
     const ttsResponse = await openai.audio.speech.create({
       model: 'gpt-4o-mini-tts',
-      voice: 'onyx',
+      voice: KEVIN_TTS_VOICE,
       input: text,
-      instructions: 'warm, encouraging, conversational, never melancholy, like a friend who\'s been caddying for you for years',
+      instructions: KEVIN_TTS_INSTRUCTIONS,
     });
 
     const arrayBuffer = await ttsResponse.arrayBuffer();

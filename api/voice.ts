@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
+import { KEVIN_TTS_INSTRUCTIONS } from './kevinVoice';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -76,14 +77,14 @@ export default async function handler(
       }
     }
 
-    // OpenAI TTS fallback
+    // OpenAI TTS fallback — use gpt-4o-mini-tts with Kevin tone for consistent voice
     const voice = gender === 'female' ? OPENAI_VOICES.female : OPENAI_VOICES.male;
 
     const mp3 = await openai.audio.speech.create({
-      model: 'tts-1',
+      model: 'gpt-4o-mini-tts',
       voice,
       input: String(text),
-      speed: 1.0,
+      instructions: KEVIN_TTS_INSTRUCTIONS,
     });
 
     const audioBuffer = await mp3.arrayBuffer();

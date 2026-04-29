@@ -37,6 +37,7 @@ export default function CoursePicker({ onSelect, selected }: Props) {
   const [results, setResults] = useState<{ id: string; club_name: string; course_name: string; location: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const runSearch = useCallback(async (q: string) => {
@@ -47,7 +48,13 @@ export default function CoursePicker({ onSelect, selected }: Props) {
     }
     setLoading(true);
     const found = await searchCourses(q.trim());
-    setResults(found);
+    // Filter out error sentinels before setting results
+    setResults(found.filter(r => !r._error));
+    if (found.length === 1 && found[0]._error) {
+      setSearchError(found[0]._error);
+    } else {
+      setSearchError(null);
+    }
     setSearched(true);
     setLoading(false);
   }, []);
@@ -108,7 +115,10 @@ export default function CoursePicker({ onSelect, selected }: Props) {
       )}
 
       {/* API results */}
-      {!loading && searched && results.length === 0 && (
+      {!loading && searched && searchError && (
+        <Text style={styles.searchError}>{searchError}</Text>
+      )}
+      {!loading && searched && !searchError && results.length === 0 && (
         <Text style={styles.noResults}>No courses found. Try a different name or city.</Text>
       )}
 
@@ -214,6 +224,11 @@ const styles = StyleSheet.create({
   },
   noResults: {
     color: '#6b7280',
+    fontSize: 12,
+    paddingVertical: 4,
+  },
+  searchError: {
+    color: '#f87171',
     fontSize: 12,
     paddingVertical: 4,
   },

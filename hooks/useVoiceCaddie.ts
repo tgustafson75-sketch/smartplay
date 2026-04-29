@@ -96,6 +96,21 @@ const HERO_VIEW_PHRASES = [
   'show me my irons',
 ];
 
+const PENALTY_PHRASES = [
+  "penalty",
+  "penalty stroke",
+  "water",
+  "in the water",
+  "hit it in the water",
+  "ob",
+  "out of bounds",
+  "lost ball",
+  "lost it",
+  "drop",
+  "take a drop",
+  "add a penalty",
+];
+
 const MUTE_PHRASES = [
   "mute",
   "be quiet",
@@ -216,6 +231,11 @@ export const useVoiceCaddie = ({
     triggerMute?: boolean;
   } => {
     const t = transcript.toLowerCase();
+
+    if (isRoundActive && PENALTY_PHRASES.some(p => t.includes(p))) {
+      useRoundStore.getState().addPenalty(currentHole);
+      return { handled: true, response: 'Got it — penalty stroke added.' };
+    }
 
     if (HERO_PHRASES.some(p => t.includes(p))) {
       const kevinSaid = addHeroMoment({
