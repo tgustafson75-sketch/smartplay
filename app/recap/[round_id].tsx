@@ -22,6 +22,7 @@ import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 import { loadRecap } from '../../services/planStorage';
 import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
+import { checkContent } from '../../services/contentGuardrail';
 import { useSettingsStore } from '../../store/settingsStore';
 import { track } from '../../services/analytics';
 import { buildShareCardProps } from '../../services/shareCardGenerator';
@@ -198,8 +199,9 @@ export default function RecapScreen() {
     if (!voiceEnabled) return;
     setSpeaking(true);
     try {
-      const text = recap.overall_kevin_summary ?? '';
-      if (!text) return;
+      const rawText = recap.overall_kevin_summary ?? '';
+      if (!rawText) return;
+      const { text } = checkContent(rawText, null);
       await speak(text, voiceGender, 'en', apiUrl);
     } finally {
       setSpeaking(false);
@@ -231,7 +233,8 @@ export default function RecapScreen() {
         } else {
           setHighlightedHole(null);
         }
-        await speak(segment.audio_text, voiceGender, 'en', apiUrl);
+        const { text: safeSegmentText } = checkContent(segment.audio_text, null);
+        await speak(safeSegmentText, voiceGender, 'en', apiUrl);
         if (!narratingRef.current) break;
         await new Promise(r => setTimeout(r, 400));
       }

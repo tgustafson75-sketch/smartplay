@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { speakFromBase64, stopSpeaking } from '../services/voiceService';
+import { checkContent } from '../services/contentGuardrail';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 import { useRoundStore } from '../store/roundStore';
@@ -68,20 +69,21 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
         return "Sorry, lost you for a moment. Try again.";
       }
 
-      const data = await res.json() as { text: string; audioBase64: string | null; toolAction: ToolAction | null };
+      const raw = await res.json() as { text: string; audioBase64: string | null; toolAction: ToolAction | null };
+      const { text, audioBase64 } = checkContent(raw.text, raw.audioBase64);
 
-      if (data.toolAction && callbacks.onToolAction) {
-        callbacks.onToolAction(data.toolAction);
+      if (raw.toolAction && callbacks.onToolAction) {
+        callbacks.onToolAction(raw.toolAction);
       }
 
       setIsThinking(false);
       setPresenceThinking(false);
 
-      if (data.audioBase64) {
-        await speakFromBase64(data.audioBase64);
+      if (audioBase64) {
+        await speakFromBase64(audioBase64);
       }
 
-      return data.text ?? "Got nothing back from the brain. Try again.";
+      return text ?? "Got nothing back from the brain. Try again.";
 
     } catch (err) {
       console.log('[kevin] hook error:', err);

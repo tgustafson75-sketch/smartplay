@@ -16,6 +16,7 @@ import { useRelationshipStore } from '../../store/relationshipStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak, stopSpeaking, configureAudioForSpeech } from '../../services/voiceService';
 import { generateBriefing } from '../../services/briefingGenerator';
+import { checkContent } from '../../services/contentGuardrail';
 import { generatePatternInsights } from '../../services/patternDetection';
 import { ROUND_MODE_LABELS } from '../../types/patterns';
 
@@ -103,7 +104,7 @@ export default function BriefingScreen() {
       });
 
       try {
-        const text = await generateBriefing({
+        const rawText = await generateBriefing({
           roundId: currentRoundId ?? 'unknown',
           courseName: activeCourse ?? 'the course',
           mode: mode ?? 'free_play',
@@ -120,6 +121,7 @@ export default function BriefingScreen() {
 
         if (cancelled) return;
 
+        const { text } = checkContent(rawText, null);
         setBriefText(text);
         setPhase('speaking');
         Animated.timing(textFade, { toValue: 1, duration: 400, useNativeDriver: true }).start();

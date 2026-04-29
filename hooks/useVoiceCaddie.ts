@@ -15,6 +15,7 @@ import {
   getClipForCategory,
   classifyQuery,
 } from '../services/fillerLibrary';
+import { checkContent } from '../services/contentGuardrail';
 import type { ToolAction } from '../app/api/kevin+api';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import { useRoundStore } from '../store/roundStore';
@@ -470,7 +471,11 @@ export const useVoiceCaddie = ({
         if (clip) playLocalFile(clip.audio_path).catch(() => {});
       }
 
-      const kevinResponse = await sendToBrain(transcript);
+      const rawResponse = await sendToBrain(transcript);
+      const kevinResponse = {
+        ...rawResponse,
+        ...checkContent(rawResponse.text, rawResponse.audioBase64),
+      };
       if (kevinResponse.toolAction) onToolAction?.(kevinResponse.toolAction);
       onResponseReceived(kevinResponse.text);
       onVoiceStateChange('speaking');
