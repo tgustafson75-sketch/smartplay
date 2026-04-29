@@ -87,8 +87,16 @@ export default function Settings() {
 
   // ─── SUB-COMPONENTS ───────────────────────
 
+  // Computed styles that adapt to the active theme
+  const cardStyle    = [styles.card,       { backgroundColor: colors.surface, borderColor: colors.border }];
+  const labelStyle   = [styles.rowLabel,   { color: colors.text_primary }];
+  const subStyle     = [styles.rowSub,     { color: colors.text_muted }];
+  const rowDivStyle  = [styles.row,        { borderBottomColor: colors.border }];
+  const inputLblStyle = [styles.inputLabel, { color: colors.text_muted }];
+  const inputFldStyle = [styles.input,     { backgroundColor: colors.background, borderColor: colors.border, color: colors.text_primary }];
+
   const SectionHeader = ({ title }: { title: string }) => (
-    <Text style={styles.sectionHeader}>{title}</Text>
+    <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{title}</Text>
   );
 
   const ToggleRow = ({
@@ -102,15 +110,15 @@ export default function Settings() {
     value: boolean;
     onValueChange: (v: boolean) => void;
   }) => (
-    <View style={styles.row}>
+    <View style={rowDivStyle}>
       <View style={styles.rowText}>
-        <Text style={styles.rowLabel}>{label}</Text>
-        {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
+        <Text style={labelStyle}>{label}</Text>
+        {sub ? <Text style={subStyle}>{sub}</Text> : null}
       </View>
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: '#1e3a28', true: '#00C896' }}
+        trackColor={{ false: colors.border, true: colors.accent }}
         thumbColor="#ffffff"
       />
     </View>
@@ -128,17 +136,22 @@ export default function Settings() {
     onSelect: (v: string) => void;
   }) => (
     <View style={styles.pillSection}>
-      <Text style={styles.pillLabel}>{label}</Text>
+      <Text style={[styles.pillLabel, { color: colors.text_secondary }]}>{label}</Text>
       <View style={styles.pillRow}>
         {options.map(opt => (
           <TouchableOpacity
             key={opt.value}
-            style={[styles.pill, value === opt.value && styles.pillActive]}
+            style={[
+              styles.pill,
+              { borderColor: colors.border, backgroundColor: colors.surface_elevated },
+              value === opt.value && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
+            ]}
             onPress={() => onSelect(opt.value)}
           >
             <Text style={[
               styles.pillText,
-              value === opt.value && styles.pillTextActive,
+              { color: colors.text_muted },
+              value === opt.value && { color: colors.accent, fontWeight: '700' },
             ]}>
               {opt.label}
             </Text>
@@ -164,19 +177,19 @@ export default function Settings() {
             onPress={() => router.back()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text style={styles.backText}>‹ Back</Text>
+            <Text style={[styles.backText, { color: colors.accent }]}>‹ Back</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Settings</Text>
+          <Text style={[styles.title, { color: colors.text_primary }]}>Settings</Text>
           <View style={{ width: 60 }} />
         </View>
 
         {/* PROFILE */}
         <SectionHeader title="Profile" />
-        <View style={styles.card}>
+        <View style={cardStyle}>
 
-          <Text style={styles.inputLabel}>Name</Text>
+          <Text style={inputLblStyle}>Name</Text>
           <TextInput
-            style={styles.input}
+            style={inputFldStyle}
             value={editName}
             onChangeText={setEditName}
             placeholder="Your name"
@@ -184,9 +197,9 @@ export default function Settings() {
             autoCapitalize="words"
           />
 
-          <Text style={styles.inputLabel}>Handicap</Text>
+          <Text style={inputLblStyle}>Handicap</Text>
           <TextInput
-            style={styles.input}
+            style={inputFldStyle}
             value={editHandicap}
             onChangeText={setEditHandicap}
             keyboardType="numeric"
@@ -194,9 +207,9 @@ export default function Settings() {
             placeholderTextColor="#374151"
           />
 
-          <Text style={styles.inputLabel}>Personal Best</Text>
+          <Text style={inputLblStyle}>Personal Best</Text>
           <TextInput
-            style={styles.input}
+            style={inputFldStyle}
             value={editBest}
             onChangeText={setEditBest}
             keyboardType="numeric"
@@ -204,18 +217,18 @@ export default function Settings() {
             placeholderTextColor="#374151"
           />
 
-          <Text style={styles.inputLabel}>Goal</Text>
+          <Text style={inputLblStyle}>Goal</Text>
           <TextInput
-            style={styles.input}
+            style={inputFldStyle}
             value={editGoal}
             onChangeText={setEditGoal}
             placeholder="e.g. Break 90"
             placeholderTextColor="#374151"
           />
 
-          <Text style={styles.inputLabel}>Physical Note</Text>
+          <Text style={inputLblStyle}>Physical Note</Text>
           <TextInput
-            style={styles.input}
+            style={inputFldStyle}
             value={editLimitation}
             onChangeText={setEditLimitation}
             placeholder="e.g. Bad left knee"
@@ -252,7 +265,7 @@ export default function Settings() {
 
         {/* CADDIE */}
         <SectionHeader title="Caddie" />
-        <View style={styles.card}>
+        <View style={cardStyle}>
 
           <PillRow
             label="Your Caddie"
@@ -290,7 +303,7 @@ export default function Settings() {
 
         {/* ROUND EXPERIENCE */}
         <SectionHeader title="Round Experience" />
-        <View style={styles.card}>
+        <View style={cardStyle}>
           <ToggleRow
             label="Skip Pre-Round Briefing"
             sub="Go straight to the round without Kevin's intro"
@@ -313,7 +326,7 @@ export default function Settings() {
 
         {/* VOICE */}
         <SectionHeader title="Voice" />
-        <View style={styles.card}>
+        <View style={cardStyle}>
           <ToggleRow
             label="Voice Enabled"
             sub="Kevin speaks responses aloud"
@@ -336,7 +349,7 @@ export default function Settings() {
 
         {/* DISPLAY */}
         <SectionHeader title="Display" />
-        <View style={styles.card}>
+        <View style={cardStyle}>
 
           <PillRow
             label="Theme"
@@ -365,7 +378,7 @@ export default function Settings() {
 
         {/* MEASUREMENT */}
         <SectionHeader title="Measurement" />
-        <View style={styles.card}>
+        <View style={cardStyle}>
           <PillRow
             label="Distance Unit"
             options={[
@@ -379,11 +392,11 @@ export default function Settings() {
 
         {/* GALAXY WATCH */}
         <SectionHeader title="Galaxy Watch" />
-        <View style={styles.card}>
-          <View style={styles.row}>
+        <View style={cardStyle}>
+          <View style={rowDivStyle}>
             <View style={styles.rowText}>
-              <Text style={styles.rowLabel}>Watch Connected</Text>
-              <Text style={styles.rowSub}>
+              <Text style={labelStyle}>Watch Connected</Text>
+              <Text style={subStyle}>
                 {watchConnected
                   ? 'Tempo + transition tracking active'
                   : 'Connect for swing tempo analysis'}
@@ -392,7 +405,7 @@ export default function Settings() {
             <Switch
               value={watchConnected}
               onValueChange={setWatchConnected}
-              trackColor={{ false: '#1e3a28', true: '#60a5fa' }}
+              trackColor={{ false: colors.border, true: '#60a5fa' }}
               thumbColor="#ffffff"
             />
           </View>
@@ -412,18 +425,18 @@ export default function Settings() {
 
         {/* ABOUT */}
         <SectionHeader title="About" />
-        <View style={styles.card}>
+        <View style={cardStyle}>
           <View style={styles.aboutRow}>
-            <Text style={styles.aboutLabel}>App</Text>
-            <Text style={styles.aboutValue}>SmartPlay Caddie</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>App</Text>
+            <Text style={[styles.aboutValue, { color: colors.text_primary }]}>SmartPlay Caddie</Text>
           </View>
           <View style={styles.aboutRow}>
-            <Text style={styles.aboutLabel}>Version</Text>
-            <Text style={styles.aboutValue}>2.0.0</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Version</Text>
+            <Text style={[styles.aboutValue, { color: colors.text_primary }]}>2.0.0</Text>
           </View>
           <View style={styles.aboutRow}>
-            <Text style={styles.aboutLabel}>Caddie</Text>
-            <Text style={styles.aboutValue}>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Caddie</Text>
+            <Text style={[styles.aboutValue, { color: colors.text_primary }]}>
               {voiceGender === 'female' ? 'Serena' : 'Kevin'}
             </Text>
           </View>

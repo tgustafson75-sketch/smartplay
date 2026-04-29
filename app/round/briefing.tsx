@@ -182,21 +182,29 @@ export default function BriefingScreen() {
         )}
       </Animated.View>
 
-      {/* Content area */}
-      {phase === 'thinking' ? (
-        <View style={styles.contentArea}>
+      {/* Content area — both states always mounted to prevent flash-of-unmount glitch */}
+      <View style={styles.contentArea}>
+        {/* Thinking dots — visible during 'thinking', hidden after */}
+        <Animated.View
+          style={{ opacity: phase === 'thinking' ? 1 : 0, alignItems: 'center' }}
+          pointerEvents={phase === 'thinking' ? 'auto' : 'none'}
+        >
           <View style={styles.dotsRow}>
             <Animated.View style={[styles.dot, { opacity: dot1 }]} />
             <Animated.View style={[styles.dot, { opacity: dot2 }]} />
             <Animated.View style={[styles.dot, { opacity: dot3 }]} />
           </View>
           <Text style={styles.thinkingLabel}>Reading the course...</Text>
-        </View>
-      ) : (
-        <Animated.View style={[styles.contentArea, { opacity: textFade }]}>
+        </Animated.View>
+
+        {/* Brief text — fades in once loaded */}
+        <Animated.View
+          style={[StyleSheet.absoluteFill, styles.contentArea, { opacity: textFade }]}
+          pointerEvents={phase !== 'thinking' ? 'auto' : 'none'}
+        >
           <Text style={styles.briefText}>{briefText}</Text>
         </Animated.View>
-      )}
+      </View>
 
       {/* Bottom hint */}
       <View style={[styles.bottomHint, { paddingBottom: insets.bottom + 32 }]}>

@@ -1170,9 +1170,39 @@ export default function CaddieTab() {
         >
           <View style={styles.sheet}>
             <View style={styles.handle} />
-            <Text style={styles.sheetTitle}>
-              {'Hole ' + currentHole + (currentPar ? ' · Par ' + currentPar : '')}
-            </Text>
+            <View style={styles.sheetTitleRow}>
+              <Text style={styles.sheetTitle}>
+                {'Hole ' + currentHole + (currentPar ? ' · Par ' + currentPar : '')}
+              </Text>
+              {useRoundStore.getState().getPlanForHole(currentHole) && !useRoundStore.getState().getPlanForHole(currentHole)?.locked_at && (
+                <TouchableOpacity
+                  style={styles.holeViewNudge}
+                  onPress={() => {
+                    setShowShotCard(false);
+                    const hd = courseHoles.find(h => h.hole === currentHole);
+                    router.push({
+                      pathname: '/hole-view',
+                      params: {
+                        hole: String(currentHole),
+                        par: String(hd?.par ?? currentPar ?? 4),
+                        distance: String(currentYardage ?? hd?.distance ?? 150),
+                        courseName: activeCourse ?? '',
+                        isRoundActive: String(isRoundActive),
+                        autoRunVision: 'false',
+                        teeLat: String(hd?.teeLat ?? 0),
+                        teeLng: String(hd?.teeLng ?? 0),
+                        middleLat: String(hd?.middleLat ?? 0),
+                        middleLng: String(hd?.middleLng ?? 0),
+                        front: String(hd?.front ?? 0),
+                        back: String(hd?.back ?? 0),
+                      },
+                    } as never);
+                  }}
+                >
+                  <Text style={styles.holeViewNudgeText}>📋 Lock Plan</Text>
+                </TouchableOpacity>
+              )}
+            </View>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
             {/* ── Shot logging ── */}
@@ -1600,12 +1630,31 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 16,
   },
+  sheetTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
   sheetTitle: {
     color: '#ffffff',
     fontSize: 20,
     fontWeight: '800',
-    marginBottom: 20,
+    flex: 1,
     textAlign: 'center',
+  },
+  holeViewNudge: {
+    backgroundColor: 'rgba(0,200,150,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,200,150,0.25)',
+    borderRadius: 14,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  holeViewNudgeText: {
+    color: '#00C896',
+    fontSize: 11,
+    fontWeight: '700',
   },
   sheetLabel: {
     color: '#6b7280',
