@@ -16,6 +16,8 @@ import {
   classifyQuery,
 } from '../services/fillerLibrary';
 import { checkContent } from '../services/contentGuardrail';
+import { voiceCommandRouter } from '../services/intents';
+import type { AppContext } from '../types/voiceIntent';
 import type { ToolAction } from '../app/api/kevin+api';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import { useRoundStore } from '../store/roundStore';
@@ -481,6 +483,50 @@ export const useVoiceCaddie = ({
 
         isProcessingRef.current = false;
         return;
+      }
+
+      // ── Voice command routing — runs after bypasses, before brain ──
+      // Builds a snapshot of app state and parses the transcript into a structured
+      // intent. If a handler matches with sufficient confidence, we execute it and
+      // skip the full brain call. Tactical / conversational queries fall through.
+      const appContext: AppContext = {
+        active_screen: 'caddie',
+        active_round: isRoundActive
+          ? {
+              course: activeCourse,
+              mode: roundMode,
+              holesPlayed: useRoundStore.getState().getHolesPlayed(),
+              totalScore: useRoundStore.getState().getTotalScore(),
+              scoreVsPar: useRoundStore.getState().getScoreVsPar(),
+            }
+          : null,
+        current_hole: currentHole,
+        recent_shots: shots.slice(-5),
+        trust_spectrum_level: 2,
+      };
+
+      try {
+        const { intent, result } = await voiceCommandRouter.route(transcript, appContext, apiUrl);
+
+        const isCommandHit =
+          intent.intent_type !== 'unknown' &&
+          intent.confidence !== 'low' &&
+          (result.success || result.follow_up_needed);
+
+        if (isCommandHit) {
+          if (result.tool_action) onToolAction?.(result.tool_action);
+          if (result.voice_response) {
+            onResponseReceived(result.voice_response);
+            onVoiceStateChange('speaking');
+            await speakResponse(result.voice_response);
+          }
+          onVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
+        }
+      } catch (err) {
+        console.log('[voice] command routing error:', err);
+        // Fall through to brain on routing errors — never get stuck.
       }
 
       // Fire filler clip in parallel with the brain call.
