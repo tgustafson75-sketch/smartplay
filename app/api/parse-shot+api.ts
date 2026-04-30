@@ -93,6 +93,7 @@ Parse the shot. Return JSON only.`;
     const result = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 400,
+      temperature: 0,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
     });
@@ -101,10 +102,12 @@ Parse the shot. Return JSON only.`;
     const raw = block && block.type === 'text' ? block.text.trim() : '';
     const parsed = safeParseJson(raw);
 
+    const modelDirection = parsed.direction === 'left' || parsed.direction === 'right' || parsed.direction === 'straight' ? parsed.direction : null;
+
     return new Response(JSON.stringify({
       club: typeof parsed.club === 'string' ? parsed.club : null,
       distance: typeof parsed.distance === 'number' ? parsed.distance : null,
-      direction: parsed.direction === 'left' || parsed.direction === 'right' || parsed.direction === 'straight' ? parsed.direction : null,
+      direction: directionInUtterance(utterance, modelDirection),
       outcome: parsed.outcome === 'good' || parsed.outcome === 'bad' || parsed.outcome === 'neutral' ? parsed.outcome : null,
       lie_followup: parsed.lie_followup === true,
       raw_utterance: utterance,
@@ -125,6 +128,18 @@ Parse the shot. Return JSON only.`;
       follow_up_question: null,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
+}
+
+const DIRECTION_KEYWORDS_LEFT = /\b(left|pulled?|pull|yanked?|snap[- ]?hook(ed)?|hooked)\b/i;
+const DIRECTION_KEYWORDS_RIGHT = /\b(right|blocked?|block|pushed?|push|sliced?|slice|leaked?)\b/i;
+const DIRECTION_KEYWORDS_STRAIGHT = /\b(straight|down the middle|middle of the fairway)\b/i;
+
+function directionInUtterance(utterance: string, modelDirection: string | null): 'left' | 'right' | 'straight' | null {
+  if (!modelDirection) return null;
+  if (modelDirection === 'left' && DIRECTION_KEYWORDS_LEFT.test(utterance)) return 'left';
+  if (modelDirection === 'right' && DIRECTION_KEYWORDS_RIGHT.test(utterance)) return 'right';
+  if (modelDirection === 'straight' && DIRECTION_KEYWORDS_STRAIGHT.test(utterance)) return 'straight';
+  return null;
 }
 
 function safeParseJson(raw: string): Record<string, unknown> {

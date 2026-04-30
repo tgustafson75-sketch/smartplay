@@ -136,6 +136,7 @@ Parse the shot. Return JSON only.`;
     const result = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 400,
+      temperature: 0,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
     });
@@ -146,9 +147,13 @@ Parse the shot. Return JSON only.`;
 
     const club = typeof parsed.club === 'string' ? parsed.club : null;
     const distance = typeof parsed.distance === 'number' ? parsed.distance : null;
-    const direction = parsed.direction === 'left' || parsed.direction === 'right' || parsed.direction === 'straight'
+    const modelDirection = parsed.direction === 'left' || parsed.direction === 'right' || parsed.direction === 'straight'
       ? parsed.direction
       : null;
+    // Deterministic guard: only keep direction when the utterance contains an explicit
+    // direction keyword. Outcome phrases like "to ten feet" or "to the back of the green"
+    // shouldn't get inferred as direction "straight".
+    const direction = directionInUtterance(utterance, modelDirection);
     const outcome = parsed.outcome === 'good' || parsed.outcome === 'bad' || parsed.outcome === 'neutral'
       ? parsed.outcome
       : null;
@@ -182,6 +187,19 @@ Parse the shot. Return JSON only.`;
       follow_up_question: null,
     });
   }
+}
+
+const DIRECTION_KEYWORDS_LEFT = /\b(left|pulled?|pull|yanked?|snap[- ]?hook(ed)?|hooked)\b/i;
+const DIRECTION_KEYWORDS_RIGHT = /\b(right|blocked?|block|pushed?|push|sliced?|slice|leaked?|fade(d)?[- ]right)\b/i;
+const DIRECTION_KEYWORDS_STRAIGHT = /\b(straight|down the middle|middle of the fairway)\b/i;
+
+function directionInUtterance(utterance: string, modelDirection: string | null): 'left' | 'right' | 'straight' | null {
+  if (!modelDirection) return null;
+  if (modelDirection === 'left' && DIRECTION_KEYWORDS_LEFT.test(utterance)) return 'left';
+  if (modelDirection === 'right' && DIRECTION_KEYWORDS_RIGHT.test(utterance)) return 'right';
+  if (modelDirection === 'straight' && DIRECTION_KEYWORDS_STRAIGHT.test(utterance)) return 'straight';
+  // Model output not backed by an explicit keyword in the utterance — drop it.
+  return null;
 }
 
 function safeParseJson(raw: string): Record<string, unknown> {
