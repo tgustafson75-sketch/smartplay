@@ -33,7 +33,7 @@ Club normalization: convert spoken to canonical short form. "seven iron" -> "7 i
 
 Distance extraction: pull a single yardage number. "one fifty" -> 150. "hundred and twenty" -> 120. "from 165" -> 165. If no number stated, null.
 
-Direction normalization: "pulled", "yanked", "snap-hooked", "left" -> "left". "blocked", "pushed", "sliced", "leaked right", "right" -> "right". "straight", "down the middle" -> "straight". Pure "fade" or "draw" without left/right framing -> null (it's a shape, not a miss direction).
+Direction normalization (CRITICAL — only fill this when EXPLICITLY stated): "pulled", "yanked", "snap-hooked", "left" -> "left". "blocked", "pushed", "sliced", "leaked right", "right" -> "right". "straight", "down the middle" -> "straight". Otherwise direction is null. Phrases like "to ten feet", "to the back of the green", "stuck it close" describe distance or outcome — they do NOT imply direction "straight". Leave direction null unless the player used an explicit left/right/straight/pull/push word. Pure "fade" or "draw" without left/right framing -> null.
 
 lie_followup TRUE when:
 - User mentioned a lie/condition keyword that wasn't fully specified ("in the rough" without "thick" or "wispy")

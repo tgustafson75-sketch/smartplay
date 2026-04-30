@@ -28,7 +28,7 @@ Club normalization to canonical short form: "seven iron" -> "7 iron", "pitching 
 
 Distance: extract single yardage number. "one fifty" -> 150. No number stated -> null.
 
-Direction: "pulled"/"yanked"/"snap-hooked"/"left" -> "left". "blocked"/"pushed"/"sliced"/"right" -> "right". "straight"/"down the middle" -> "straight". Pure shape ("fade"/"draw") -> null.
+Direction (only fill when EXPLICITLY stated): "pulled"/"yanked"/"snap-hooked"/"left" -> "left". "blocked"/"pushed"/"sliced"/"right" -> "right". "straight"/"down the middle" -> "straight". Otherwise null. Phrases like "to ten feet" or "to the back of the green" describe outcome, not direction — leave direction null. Pure shape ("fade"/"draw") -> null.
 
 lie_followup TRUE when user mentioned a lie/condition that needs more detail, OR mentioned a hazard without specifying lie quality. FALSE when lie was specified or never mentioned.
 
