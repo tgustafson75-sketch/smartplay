@@ -39,6 +39,15 @@ export interface ShotResult {
   outcome?: ShotOutcome;
   penalty_strokes?: number;
   rules_decision?: RulesDecision;
+  // Phase A.2 — conversational logging fields. All optional for back-compat.
+  distance_yards?: number | null;
+  raw_utterance?: string;
+  logged_via?: 'voice' | 'tap';
+  gps_location?: { lat: number; lng: number } | null;
+  shot_in_round_index?: number;
+  player_id?: string;        // reserved for Phase 1.1 multi-player
+  speaker_id?: string;       // reserved for Phase 1.1 multi-player voice ID
+  weather_snapshot?: Record<string, unknown> | null;  // populated by Phase C
 }
 
 export interface HoleStats {

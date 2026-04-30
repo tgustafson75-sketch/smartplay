@@ -18,6 +18,7 @@
     { "src": "/api/recap",        "dest": "/api/recap.ts" },
     { "src": "/api/course-proxy", "dest": "/api/course-proxy.ts" },
     { "src": "/api/cage-review",  "dest": "/api/cage-review.ts" },
-    { "src": "/api/voice-intent", "dest": "/api/voice-intent.ts" }
+    { "src": "/api/voice-intent", "dest": "/api/voice-intent.ts" },
+    { "src": "/api/parse-shot",   "dest": "/api/parse-shot.ts" }
   ]
 }

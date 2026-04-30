@@ -18,6 +18,75 @@ export const configureAudioForRecording =
     }
   };
 
+const CAPTURE_RECORDING_OPTIONS: Audio.RecordingOptions = {
+  android: {
+    extension: '.m4a',
+    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+    audioEncoder: Audio.AndroidAudioEncoder.AAC,
+    sampleRate: 16000,
+    numberOfChannels: 1,
+    bitRate: 32000,
+  },
+  ios: {
+    extension: '.m4a',
+    outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+    audioQuality: Audio.IOSAudioQuality.LOW,
+    sampleRate: 16000,
+    numberOfChannels: 1,
+    bitRate: 32000,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: { mimeType: 'audio/webm', bitsPerSecond: 32000 },
+};
+
+/**
+ * Record audio for up to {timeoutMs}, transcribe, and return the text.
+ * Returns null on permission denial, recording failure, or transcription error.
+ */
+export const captureUtterance = async (
+  timeoutMs: number,
+  apiUrl: string,
+  language: 'en' | 'es' | 'zh' = 'en',
+): Promise<string | null> => {
+  let recording: Audio.Recording | null = null;
+  try {
+    const { granted } = await Audio.requestPermissionsAsync();
+    if (!granted) return null;
+    await configureAudioForRecording();
+    const r = await Audio.Recording.createAsync(CAPTURE_RECORDING_OPTIONS);
+    recording = r.recording;
+    await new Promise(resolve => setTimeout(resolve, timeoutMs));
+    await recording.stopAndUnloadAsync();
+    const uri = recording.getURI();
+    if (!uri) return null;
+
+    const formData = new FormData();
+    formData.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
+    formData.append('language', language);
+
+    const controller = new AbortController();
+    const cancelTimer = setTimeout(() => controller.abort(), 12_000);
+    const res = await fetch(apiUrl + '/api/transcribe', {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal,
+    }).finally(() => clearTimeout(cancelTimer));
+
+    if (!res.ok) return null;
+    const data = await res.json() as { text?: string };
+    const text = (data.text ?? '').trim();
+    return text || null;
+  } catch (err) {
+    console.log('[voice] captureUtterance error:', err);
+    if (recording) {
+      try { await recording.stopAndUnloadAsync(); } catch { /* ignore */ }
+    }
+    return null;
+  }
+};
+
 export const configureAudioForSpeech =
   async (): Promise<void> => {
     try {

@@ -1,0 +1,311 @@
+import type { ParsedShotRecord } from '../types/parsedShot';
+import type { ShotEvent } from './shotDetectionService';
+import type { ShotResult } from '../store/roundStore';
+import { shotDetectionService, getPromptDelayMs } from './shotDetectionService';
+import { useRoundStore } from '../store/roundStore';
+import { useSettingsStore } from '../store/settingsStore';
+import { speak } from './voiceService';
+import { recordParsedShot, getRecentUserPhrases } from './vocabularyProfileService';
+
+const KEVIN_PROMPT_VARIATIONS = [
+  "What'd you hit?",
+  "How was that one?",
+  "What club?",
+  "Talk to me about that shot.",
+  "Reload?",
+  "What was that?",
+  "How'd it feel?",
+];
+
+const SKIP_PHRASES = ['skip', 'later', 'not now', 'never mind', 'pass', 'no thanks'];
+
+export type OrchestratorState =
+  | { kind: 'idle' }
+  | { kind: 'waiting_for_prompt'; shotEvent: ShotEvent; firesAt: number }
+  | { kind: 'prompting'; shotEvent: ShotEvent }
+  | { kind: 'listening'; shotEvent: ShotEvent }
+  | { kind: 'parsing'; raw_utterance: string; shotEvent: ShotEvent }
+  | { kind: 'lie_followup'; parsed: ParsedShotRecord; shotEvent: ShotEvent }
+  | { kind: 'logged'; finalShot: ShotResult };
+
+export interface CadenceLogEntry {
+  shot_event: ShotEvent;
+  prompt_played: string;
+  user_responded: boolean;
+  user_skipped: boolean;
+  parsed: ParsedShotRecord | null;
+  logged_shot_id: string | null;
+  timestamp: number;
+}
+
+export interface OrchestratorDeps {
+  /** Open mic and capture transcript. Resolves with text or null on timeout / cancellation. */
+  captureUtterance: (timeoutMs: number) => Promise<string | null>;
+  /** apiUrl for parser endpoint. */
+  apiUrl: string;
+  /** Optional callback to surface manual fallback (e.g. open shot card) when voice fails. */
+  onFallbackToManual?: (event: ShotEvent) => void;
+  /** Optional voice gender override. */
+  voiceGender?: 'male' | 'female';
+  /** Optional language override. */
+  language?: 'en' | 'es' | 'zh';
+}
+
+class ConversationalLoggingOrchestrator {
+  private state: OrchestratorState = { kind: 'idle' };
+  private cadenceLog: CadenceLogEntry[] = [];
+  private deps: OrchestratorDeps | null = null;
+  private subscriptionDispose: (() => void) | null = null;
+  private pendingTimer: ReturnType<typeof setTimeout> | null = null;
+  private suspended = false;
+
+  configure(deps: OrchestratorDeps): void {
+    this.deps = deps;
+  }
+
+  /** Subscribe to shotDetectionService and start orchestrating. */
+  start(): void {
+    if (this.subscriptionDispose) return;
+    this.subscriptionDispose = shotDetectionService.on((event) => this.handleShotEvent(event));
+    console.log('[orchestrator] started');
+  }
+
+  stop(): void {
+    if (this.subscriptionDispose) { this.subscriptionDispose(); this.subscriptionDispose = null; }
+    if (this.pendingTimer) { clearTimeout(this.pendingTimer); this.pendingTimer = null; }
+    this.state = { kind: 'idle' };
+    console.log('[orchestrator] stopped');
+  }
+
+  /** Pause without unsubscribing — useful when user is in a modal or other voice flow. */
+  setSuspended(suspended: boolean): void {
+    this.suspended = suspended;
+  }
+
+  getState(): OrchestratorState {
+    return this.state;
+  }
+
+  getCadenceLog(): CadenceLogEntry[] {
+    return [...this.cadenceLog];
+  }
+
+  /**
+   * Manually trigger the conversational flow for a synthetic shot event.
+   * Used for testing and as the integration point from manual "I just hit a shot" trigger.
+   */
+  async triggerManual(): Promise<void> {
+    const round = useRoundStore.getState();
+    const event: ShotEvent = {
+      timestamp: Date.now(),
+      start_location: { lat: 0, lng: 0 },
+      estimated_distance_yards: 0,
+    };
+    await this.runFlow(event, round.currentHole);
+  }
+
+  private handleShotEvent(event: ShotEvent): void {
+    if (this.suspended) return;
+    if (this.state.kind !== 'idle') return; // already handling a shot
+    const round = useRoundStore.getState();
+    if (!round.isRoundActive) return;
+
+    const delay = getPromptDelayMs();
+    this.state = { kind: 'waiting_for_prompt', shotEvent: event, firesAt: Date.now() + delay };
+    this.pendingTimer = setTimeout(() => {
+      this.pendingTimer = null;
+      this.runFlow(event, round.currentHole).catch(err => {
+        console.log('[orchestrator] flow error:', err);
+        this.state = { kind: 'idle' };
+      });
+    }, delay);
+  }
+
+  private async runFlow(event: ShotEvent, currentHole: number): Promise<void> {
+    if (!this.deps) {
+      console.log('[orchestrator] no deps configured — aborting flow');
+      this.state = { kind: 'idle' };
+      return;
+    }
+
+    const settings = useSettingsStore.getState();
+    if (!settings.voiceEnabled || settings.discreteMode) {
+      // Voice disabled — log a silent placeholder and surface manual fallback
+      this.recordCadence(event, '', false, false, null, null);
+      this.deps.onFallbackToManual?.(event);
+      this.state = { kind: 'idle' };
+      return;
+    }
+
+    const prompt = pickPrompt();
+    this.state = { kind: 'prompting', shotEvent: event };
+    try {
+      await speak(prompt, this.deps.voiceGender ?? settings.voiceGender, this.deps.language ?? settings.language, this.deps.apiUrl);
+    } catch (err) {
+      console.log('[orchestrator] prompt speak error — falling back:', err);
+      this.recordCadence(event, prompt, false, false, null, null);
+      this.deps.onFallbackToManual?.(event);
+      this.state = { kind: 'idle' };
+      return;
+    }
+
+    this.state = { kind: 'listening', shotEvent: event };
+    let utterance: string | null = null;
+    try {
+      utterance = await this.deps.captureUtterance(8000);
+    } catch (err) {
+      console.log('[orchestrator] capture error:', err);
+      utterance = null;
+    }
+
+    if (!utterance || !utterance.trim()) {
+      // Silent / no response — log untagged shot
+      const untagged = this.logUntagged(event, currentHole);
+      this.recordCadence(event, prompt, false, false, null, untagged.id ?? null);
+      this.state = { kind: 'idle' };
+      return;
+    }
+
+    const lower = utterance.toLowerCase();
+    if (SKIP_PHRASES.some(p => lower.includes(p))) {
+      this.recordCadence(event, prompt, true, true, null, null);
+      this.state = { kind: 'idle' };
+      return;
+    }
+
+    this.state = { kind: 'parsing', raw_utterance: utterance, shotEvent: event };
+    const parsed = await this.parseUtterance(utterance, currentHole, false);
+
+    if (!parsed) {
+      const untagged = this.logUntagged(event, currentHole, utterance);
+      this.recordCadence(event, prompt, true, false, null, untagged.id ?? null);
+      this.state = { kind: 'idle' };
+      return;
+    }
+
+    let finalParsed = parsed;
+    let lieQuality: string | null = null;
+
+    if (parsed.lie_followup) {
+      this.state = { kind: 'lie_followup', parsed, shotEvent: event };
+      try {
+        await speak("How's the lie?", this.deps.voiceGender ?? settings.voiceGender, this.deps.language ?? settings.language, this.deps.apiUrl);
+        const lieUtterance = await this.deps.captureUtterance(6000);
+        if (lieUtterance && lieUtterance.trim()) {
+          const lieParsed = await this.parseUtterance(lieUtterance, currentHole, true);
+          lieQuality = (lieParsed as unknown as { lie_quality?: string })?.lie_quality ?? null;
+        }
+      } catch (err) {
+        console.log('[orchestrator] lie followup error:', err);
+      }
+    }
+
+    const finalShot = this.logParsed(event, currentHole, finalParsed, lieQuality);
+    recordParsedShot(finalParsed);
+    this.recordCadence(event, prompt, true, false, finalParsed, finalShot.id ?? null);
+    this.state = { kind: 'idle' };
+  }
+
+  private async parseUtterance(utterance: string, currentHole: number, isLieFollowup: boolean): Promise<ParsedShotRecord | null> {
+    if (!this.deps) return null;
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+      const res = await fetch(this.deps.apiUrl + '/api/parse-shot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          utterance,
+          context: {
+            hole_number: currentHole,
+            recent_user_phrases: getRecentUserPhrases(20),
+            is_lie_followup: isLieFollowup,
+          },
+        }),
+      }).finally(() => clearTimeout(timeout));
+
+      if (!res.ok) return null;
+      return await res.json() as ParsedShotRecord;
+    } catch (err) {
+      console.log('[orchestrator] parse error:', err);
+      return null;
+    }
+  }
+
+  private logParsed(event: ShotEvent, hole: number, parsed: ParsedShotRecord, _lieQuality: string | null): ShotResult {
+    const round = useRoundStore.getState();
+    const idx = round.shots.length;
+    const shot: ShotResult = {
+      id: `voice-${event.timestamp}`,
+      feel: parsed.outcome === 'good' ? 'flush' : parsed.outcome === 'bad' ? 'fat' : null,
+      direction: parsed.direction,
+      shape: null,
+      club: parsed.club,
+      hole,
+      timestamp: event.timestamp,
+      acousticContact: null,
+      distance_yards: parsed.distance,
+      raw_utterance: parsed.raw_utterance,
+      logged_via: 'voice',
+      gps_location: event.start_location.lat !== 0 || event.start_location.lng !== 0
+        ? event.start_location
+        : null,
+      shot_in_round_index: idx,
+      weather_snapshot: null,
+    };
+    round.logShot(shot);
+    return shot;
+  }
+
+  private logUntagged(event: ShotEvent, hole: number, raw?: string): ShotResult {
+    const round = useRoundStore.getState();
+    const idx = round.shots.length;
+    const shot: ShotResult = {
+      id: `voice-untagged-${event.timestamp}`,
+      feel: null,
+      direction: null,
+      shape: null,
+      club: null,
+      hole,
+      timestamp: event.timestamp,
+      acousticContact: null,
+      raw_utterance: raw ?? '',
+      logged_via: 'voice',
+      gps_location: event.start_location.lat !== 0 || event.start_location.lng !== 0
+        ? event.start_location
+        : null,
+      shot_in_round_index: idx,
+    };
+    round.logShot(shot);
+    return shot;
+  }
+
+  private recordCadence(
+    event: ShotEvent,
+    prompt: string,
+    responded: boolean,
+    skipped: boolean,
+    parsed: ParsedShotRecord | null,
+    loggedShotId: string | null,
+  ): void {
+    this.cadenceLog.push({
+      shot_event: event,
+      prompt_played: prompt,
+      user_responded: responded,
+      user_skipped: skipped,
+      parsed,
+      logged_shot_id: loggedShotId,
+      timestamp: Date.now(),
+    });
+    if (this.cadenceLog.length > 50) {
+      this.cadenceLog = this.cadenceLog.slice(-50);
+    }
+  }
+}
+
+function pickPrompt(): string {
+  return KEVIN_PROMPT_VARIATIONS[Math.floor(Math.random() * KEVIN_PROMPT_VARIATIONS.length)];
+}
+
+export const conversationalLoggingOrchestrator = new ConversationalLoggingOrchestrator();

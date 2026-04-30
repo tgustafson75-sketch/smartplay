@@ -42,7 +42,9 @@ import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
 import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
-import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { speak, configureAudioForSpeech, captureUtterance } from '../../services/voiceService';
+import { shotDetectionService } from '../../services/shotDetectionService';
+import { conversationalLoggingOrchestrator } from '../../services/conversationalLoggingOrchestrator';
 import { kevinText as kevinTextStyle } from '../../styles/typography';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
 import { canAccess, trialDaysLeft } from '../../services/featureAccess';
@@ -514,6 +516,33 @@ export default function CaddieTab() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     _handleMicPress();
   };
+
+  // ── Conversational shot logging — Phase A.2 ──
+  useEffect(() => {
+    conversationalLoggingOrchestrator.configure({
+      apiUrl,
+      voiceGender,
+      language,
+      captureUtterance: (timeoutMs) => captureUtterance(timeoutMs, apiUrl, language),
+      onFallbackToManual: () => setShowShotCard(true),
+    });
+    if (isRoundActive) {
+      shotDetectionService.start().catch(() => {});
+      conversationalLoggingOrchestrator.start();
+    } else {
+      conversationalLoggingOrchestrator.stop();
+      shotDetectionService.stop();
+    }
+    return () => {
+      conversationalLoggingOrchestrator.stop();
+      shotDetectionService.stop();
+    };
+  }, [isRoundActive, apiUrl, voiceGender, language]);
+
+  // Suspend orchestrator while modals or other voice flows are active.
+  useEffect(() => {
+    conversationalLoggingOrchestrator.setSuspended(showShotCard || showRoundSetup || showMoreMenu);
+  }, [showShotCard, showRoundSetup, showMoreMenu]);
 
   // ── VAD — continuous listening ───────────
   const { isListening: vadListening } = useVoiceActivityDetection({
