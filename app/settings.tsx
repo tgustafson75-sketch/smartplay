@@ -299,6 +299,18 @@ export default function Settings() {
             onSelect={(v) => setResponseMode(v as 'short' | 'neutral' | 'detailed')}
           />
 
+          <TouchableOpacity
+            style={rowDivStyle}
+            onPress={() => router.push('/kevin-learning' as never)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>What Kevin's learning</Text>
+              <Text style={subStyle}>Phrases Kevin has picked up from you</Text>
+            </View>
+            <Text style={[styles.rowSub, { color: colors.text_muted }]}>›</Text>
+          </TouchableOpacity>
+
         </View>
 
         {/* ROUND EXPERIENCE */}
