@@ -3,7 +3,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 /**
  * Phase C — OpenWeatherMap proxy.
  *
- * Server-side proxy keeps OPENWEATHERMAP_API_KEY out of the client bundle. Returns
+ * Server-side proxy keeps WEATHER_API_KEY out of the client bundle. Returns
  * only the fields the app uses, normalized to imperial units. Failure modes:
  *   - missing lat/lng → 400
  *   - missing key in env → 500
@@ -20,9 +20,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'lat and lng required' });
   }
 
-  const apiKey = process.env.OPENWEATHERMAP_API_KEY;
+  const apiKey = process.env.WEATHER_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'OPENWEATHERMAP_API_KEY not configured' });
+    return res.status(500).json({ error: 'WEATHER_API_KEY not configured' });
   }
 
   const url = `https://api.openweathermap.org/data/2.5/weather?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&appid=${apiKey}&units=imperial`;
