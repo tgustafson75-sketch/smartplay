@@ -105,6 +105,17 @@ Infrastructure services that don't belong to any single mode (`utils/geoDistance
 | `services/voiceOnboardingService.ts` | Hint copy keyed by level (`HINTS_BY_LEVEL`). L1 returns null (silent); L2 keeps the original Phase A.4 copy; L3/L4 use proactive / full-engagement framing. | Caddie (entry) |
 | `app/(tabs)/caddie.tsx` | Trust-level-gated avatar rendering: L2 path is byte-identical to the locked elite Kevin layout. L1 swaps the avatar for a mic + logo overlay. L3 shrinks the avatar frame for a top-half presence. L4 raises the avatar slightly for a centered/larger presence. Banner is unchanged across all four levels. | Mode-neutral |
 | `app/onboarding/meet-kevin.tsx` | Inline TrustLevelPicker added below the Skip CTA — four labeled buttons, default L2, "Recommended for most." tag. User can change anytime via Settings. | Mode-neutral |
+
+## Phase F — Visual Identity & Dialog Templates
+
+| File | Purpose | Role |
+|---|---|---|
+| `constants/dialogTemplates/caddieTemplates.ts` | Tactical-register templates: shot prompts, distance callouts, wind callouts, plays-like, no-data apologies, help intros. Variations per situation; engine picks at random per call. Character-agnostic. | Caddie |
+| `constants/dialogTemplates/coachTemplates.ts` | Reflective-register templates: recap intros, pattern callouts, club observations, no-patterns-yet, recap outros. Specific over generic; never lectures. | Coach |
+| `constants/dialogTemplates/psychologistTemplates.ts` | Buddy-register templates: pre-shot calm, post-bad-shot reset, pace check, momentum lift, tilt break, idle walk filler. Mike-test guardrails enforced — never therapy framing. | Psychologist |
+| `services/dialogEngine.ts` | `getDialog(role, situation, context)` returns a single string with `{var}` interpolation. The seam where future Tank / Serena character variants will compose their voice on top of the same generic templates. | Mode-neutral |
+| `components/kevin/KevinAvatar.tsx` | Animated liveliness ring with four states (idle / listening / speaking / thinking) and per-Trust-Spectrum sizing. Wraps any child (avatar image, mic icon). Returns null at L1 unless `sizeOverride` is given. Uses react-native-reanimated; no asset dependency. | Mode-neutral |
+| `services/conversationalLoggingOrchestrator.ts` | `pickPrompt()` now routes through `getDialog('caddie', 'shot_prompt')` instead of the inline `KEVIN_PROMPT_VARIATIONS` array (deleted). Behavior identical; consumer site is now template-shaped. | Caddie |
 | `courseGeometryService.ts` | Course geometry fetch and cache (mem + AsyncStorage, weekly refresh). Returns per-hole tee/green coordinates and reserved fairway/green-outline arrays for richer future sources. | Infra (Caddie + Coach consume) |
 | `roles/caddieRole.ts` | Re-export hub for Caddie-register services. No implementation. | Caddie |
 | `roles/coachRole.ts` | Re-export hub for Coach-register services and recap surfaces. No implementation. | Coach |

@@ -51,6 +51,7 @@ import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
 import SmartFinderCard from '../../components/smartfinder/SmartFinderCard';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
+import KevinAvatar, { type AvatarState } from '../../components/kevin/KevinAvatar';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
 import WhatCanISayChip from '../../components/WhatCanISayChip';
 import VocabBanner from '../../components/VocabBanner';
@@ -75,6 +76,9 @@ export default function CaddieTab() {
   const insets = useSafeAreaInsets();
   const { pre_course_id } = useLocalSearchParams<{ pre_course_id?: string }>();
   const trustLevel = useTrustLevelStore(s => s.level);
+
+  // Phase F — kevinAvatarState derived below after voiceState/kevinThinking
+  // are declared. Consumed by L1's mic-button KevinAvatar wrapping.
   const { width: W } = useWindowDimensions();
   // Natural 9:16 frame height — shows Kevin's full portrait without over-zoom
   const avatarFrameHeight = Math.round(W * 16 / 9);
@@ -399,6 +403,13 @@ export default function CaddieTab() {
 
   // ── Kevin programmatic hook ──────────────
   const { isThinking: kevinThinking } = useKevin();
+
+  // Phase F — Kevin liveliness state derived from existing voice/think signals.
+  const kevinAvatarState: AvatarState =
+    kevinThinking ? 'thinking'
+    : voiceState === 'listening' ? 'listening'
+    : voiceState === 'speaking' ? 'speaking'
+    : 'idle';
 
   // ── Tool action handler ──────────────────
   const handleToolAction = useCallback((action: ToolAction) => {
@@ -1011,15 +1022,22 @@ export default function CaddieTab() {
           <Text style={{ color: '#00C896', fontSize: 13, fontWeight: '800', letterSpacing: 1.4, marginBottom: 12 }}>SmartPlay</Text>
           <TouchableOpacity
             onPress={handleMicPress}
-            style={{
-              width: 56, height: 56, borderRadius: 28,
-              backgroundColor: '#0d2418', borderWidth: 1.5, borderColor: '#00C896',
-              alignItems: 'center', justifyContent: 'center',
-            }}
             accessibilityRole="button"
             accessibilityLabel="Talk to Kevin"
           >
-            <Ionicons name="mic" size={26} color="#00C896" />
+            <KevinAvatar
+              state={kevinAvatarState}
+              presenceLevel={1}
+              sizeOverride={64}
+            >
+              <View style={{
+                width: 56, height: 56, borderRadius: 28,
+                backgroundColor: '#0d2418',
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Ionicons name="mic" size={26} color="#00C896" />
+              </View>
+            </KevinAvatar>
           </TouchableOpacity>
         </View>
       )}

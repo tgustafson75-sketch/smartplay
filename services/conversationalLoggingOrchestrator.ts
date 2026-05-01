@@ -9,16 +9,11 @@ import { recordParsedShot, getRecentUserPhrases } from './vocabularyProfileServi
 import { getFirstShotPrompt, recordVoiceLoggedShot } from './voiceOnboardingService';
 import { getCurrentLocation } from './shotLocationService';
 import { fetchWeatherAt, getCachedWeather } from './weatherService';
+import { getDialog } from './dialogEngine';
 
-const KEVIN_PROMPT_VARIATIONS = [
-  "What'd you hit?",
-  "How was that one?",
-  "What club?",
-  "Talk to me about that shot.",
-  "Reload?",
-  "What was that?",
-  "How'd it feel?",
-];
+// Phase F — shot prompt variations now live in
+// constants/dialogTemplates/caddieTemplates.ts under the 'shot_prompt'
+// situation. The pickPrompt() function below routes through dialogEngine.
 
 const SKIP_PHRASES = ['skip', 'later', 'not now', 'never mind', 'pass', 'no thanks'];
 
@@ -331,7 +326,7 @@ class ConversationalLoggingOrchestrator {
 }
 
 function pickPrompt(): string {
-  return KEVIN_PROMPT_VARIATIONS[Math.floor(Math.random() * KEVIN_PROMPT_VARIATIONS.length)];
+  return getDialog('caddie', 'shot_prompt');
 }
 
 export const conversationalLoggingOrchestrator = new ConversationalLoggingOrchestrator();
