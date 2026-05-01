@@ -16,6 +16,7 @@
 import { CADDIE_ROLE_ID } from './roles/caddieRole';
 import { COACH_ROLE_ID } from './roles/coachRole';
 import { PSYCHOLOGIST_ROLE_ID } from './roles/psychologistRole';
+import { getTrustLevel, psychologistEnabled } from './trustLevelService';
 
 export type RoleId =
   | typeof CADDIE_ROLE_ID
@@ -42,31 +43,44 @@ export interface ModeSignals {
 }
 
 /**
- * Surface-driven default mapping. Future logic will refine this with the other
- * signals; for now the surface hint is the dominant lever.
+ * Surface-driven default mapping, gated by Trust Spectrum level (Phase E).
  *
- * recap → Coach
- * round → Caddie
- * walking-between-shots (silence in round) → Psychologist
- * everything else → Caddie (safe default for tactical present-tense)
+ * recap / round-just-ended → Coach
+ * mid-round silence (walking conversation) → Psychologist if trust level allows
+ * everything else → Caddie
+ *
+ * Trust-level gating:
+ *   L1 Quiet      — Psychologist register dormant. Walking-conversation silence
+ *                   is interpreted as the player wants quiet — falls back to Caddie.
+ *   L2 Companion  — Psychologist register dormant for default. Same fallback.
+ *   L3 Active     — Walking-conversation triggers fire. Psychologist active in silence.
+ *   L4 Full       — Walking-conversation triggers fire and additionally character-breadth
+ *                   conversation is permitted (consumed by future prompt templates).
  */
 export function selectMode(signals: ModeSignals): RoleId {
   if (signals.surface_hint === 'recap' || signals.round_just_ended) {
     return COACH_ROLE_ID;
   }
 
-  // Mid-round, no recent shot, user hasn't spoken — walking conversation territory.
-  // This is where the psychologist register operates. Not yet active.
   if (
     signals.surface_hint === 'round' &&
     !signals.user_just_spoke &&
     signals.seconds_since_last_shot != null &&
-    signals.seconds_since_last_shot > 60
+    signals.seconds_since_last_shot > 60 &&
+    psychologistEnabled()
   ) {
     return PSYCHOLOGIST_ROLE_ID;
   }
 
   return CADDIE_ROLE_ID;
+}
+
+/**
+ * Convenience for callers that want the trust level alongside the chosen role
+ * (e.g. prompt templates that adjust verbosity by level).
+ */
+export function selectModeWithLevel(signals: ModeSignals): { role: RoleId; level: 1 | 2 | 3 | 4 } {
+  return { role: selectMode(signals), level: getTrustLevel() };
 }
 
 /** Stable identifier list for documentation and registration sites. */

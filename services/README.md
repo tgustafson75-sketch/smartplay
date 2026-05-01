@@ -93,6 +93,18 @@ Infrastructure services that don't belong to any single mode (`utils/geoDistance
 | `components/smartfinder/SmartFinderCard.tsx` | Embedded glanceable card on Caddie home — front/middle/back to the green plus hole label and GPS-quality dot. Tap to expand to full-screen. Absolute-positioned, never disturbs Kevin's locked layout. | Caddie |
 | `components/smartfinder/SmartFinderModeToggle.tsx` | Three-button segmented toggle. | Caddie |
 | `components/smartfinder/GPSQuality.tsx` | Color-coded GPS-accuracy dot. Dot-only embedded; dot + accuracy-in-feet on full-screen. | Caddie |
+
+## Phase E — Trust Spectrum
+
+| File | Purpose | Role |
+|---|---|---|
+| `store/trustLevelStore.ts` | Persisted Trust Spectrum level (1–4). Default L2 Companion for new users. AsyncStorage-backed. Exports `TRUST_LEVEL_META` with user-facing labels and one-liners. | Mode-neutral |
+| `services/trustLevelService.ts` | `getTrustLevel()` synchronous read for non-React consumers (modeSelector, intent handlers). `defaultWakeWordOn(level)` — L3/L4 default on, L1/L2 default off (Phase G consumes). `proactiveEnabled(level)` / `psychologistEnabled(level)` — gates for orchestrator and walking-conversation triggers. | Mode-neutral |
+| `app/settings/trust-level.tsx` | Slider screen — four labeled positions (Quiet / Companion / Active / Full) with selection persistence and an expandable "About these" panel. | Mode-neutral |
+| `services/modeSelector.ts` | Now reads trust level. Psychologist register only fires when `psychologistEnabled()` returns true (L3+). `selectModeWithLevel(signals)` returns role plus level for prompt-template consumers that adjust verbosity by level. | Mode-neutral |
+| `services/voiceOnboardingService.ts` | Hint copy keyed by level (`HINTS_BY_LEVEL`). L1 returns null (silent); L2 keeps the original Phase A.4 copy; L3/L4 use proactive / full-engagement framing. | Caddie (entry) |
+| `app/(tabs)/caddie.tsx` | Trust-level-gated avatar rendering: L2 path is byte-identical to the locked elite Kevin layout. L1 swaps the avatar for a mic + logo overlay. L3 shrinks the avatar frame for a top-half presence. L4 raises the avatar slightly for a centered/larger presence. Banner is unchanged across all four levels. | Mode-neutral |
+| `app/onboarding/meet-kevin.tsx` | Inline TrustLevelPicker added below the Skip CTA — four labeled buttons, default L2, "Recommended for most." tag. User can change anytime via Settings. | Mode-neutral |
 | `courseGeometryService.ts` | Course geometry fetch and cache (mem + AsyncStorage, weekly refresh). Returns per-hole tee/green coordinates and reserved fairway/green-outline arrays for richer future sources. | Infra (Caddie + Coach consume) |
 | `roles/caddieRole.ts` | Re-export hub for Caddie-register services. No implementation. | Caddie |
 | `roles/coachRole.ts` | Re-export hub for Coach-register services and recap surfaces. No implementation. | Coach |

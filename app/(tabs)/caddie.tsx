@@ -50,6 +50,7 @@ import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
 import SmartFinderCard from '../../components/smartfinder/SmartFinderCard';
+import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
 import WhatCanISayChip from '../../components/WhatCanISayChip';
 import VocabBanner from '../../components/VocabBanner';
@@ -73,6 +74,7 @@ export default function CaddieTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { pre_course_id } = useLocalSearchParams<{ pre_course_id?: string }>();
+  const trustLevel = useTrustLevelStore(s => s.level);
   const { width: W } = useWindowDimensions();
   // Natural 9:16 frame height — shows Kevin's full portrait without over-zoom
   const avatarFrameHeight = Math.round(W * 16 / 9);
@@ -947,22 +949,80 @@ export default function CaddieTab() {
   return (
     <View style={styles.container}>
 
-      {/* KEVIN — 9:16 frame anchored at top; no over-zoom on any screen */}
-      <View style={{ position: 'absolute', top: -60, left: 0, width: W, height: avatarFrameHeight }}>
-        <CaddieAvatar
-          gender={voiceGender === 'female' ? 'female' : 'male'}
-          isOnCourse={isRoundActive}
-          isCageMode={false}
-          voiceState={voiceState}
-          hud={NULL_HUD}
-          openingPrompt=""
-          caddieResponse=""
-          onTap={handleMicPress}
-          emotion={kevinEmotion}
-          fillMode="cover"
-          isThinking={kevinThinking}
-        />
-      </View>
+      {/* KEVIN — Phase E Trust Spectrum gating.
+           L2 path is byte-identical to the locked elite Kevin layout (the
+           original 9:16 frame anchored at top with no over-zoom). L3 and L4
+           render the same CaddieAvatar with position/size adjustments. L1
+           skips the avatar entirely; the L1 mic-button overlay below
+           takes its place. */}
+      {trustLevel === 2 && (
+        <View style={{ position: 'absolute', top: -60, left: 0, width: W, height: avatarFrameHeight }}>
+          <CaddieAvatar
+            gender={voiceGender === 'female' ? 'female' : 'male'}
+            isOnCourse={isRoundActive}
+            isCageMode={false}
+            voiceState={voiceState}
+            hud={NULL_HUD}
+            openingPrompt=""
+            caddieResponse=""
+            onTap={handleMicPress}
+            emotion={kevinEmotion}
+            fillMode="cover"
+            isThinking={kevinThinking}
+          />
+        </View>
+      )}
+      {trustLevel === 3 && (
+        <View style={{ position: 'absolute', top: insets.top + 60, left: 0, width: W, height: Math.round(avatarFrameHeight * 0.55) }}>
+          <CaddieAvatar
+            gender={voiceGender === 'female' ? 'female' : 'male'}
+            isOnCourse={isRoundActive}
+            isCageMode={false}
+            voiceState={voiceState}
+            hud={NULL_HUD}
+            openingPrompt=""
+            caddieResponse=""
+            onTap={handleMicPress}
+            emotion={kevinEmotion}
+            fillMode="cover"
+            isThinking={kevinThinking}
+          />
+        </View>
+      )}
+      {trustLevel === 4 && (
+        <View style={{ position: 'absolute', top: -30, left: 0, width: W, height: avatarFrameHeight }}>
+          <CaddieAvatar
+            gender={voiceGender === 'female' ? 'female' : 'male'}
+            isOnCourse={isRoundActive}
+            isCageMode={false}
+            voiceState={voiceState}
+            hud={NULL_HUD}
+            openingPrompt=""
+            caddieResponse=""
+            onTap={handleMicPress}
+            emotion={kevinEmotion}
+            fillMode="cover"
+            isThinking={kevinThinking}
+          />
+        </View>
+      )}
+      {trustLevel === 1 && (
+        <View style={{ position: 'absolute', top: insets.top + 60, left: 16, zIndex: 12 }}>
+          <Text style={{ color: '#00C896', fontSize: 13, fontWeight: '800', letterSpacing: 1.4, marginBottom: 12 }}>SmartPlay</Text>
+          <TouchableOpacity
+            onPress={handleMicPress}
+            style={{
+              width: 56, height: 56, borderRadius: 28,
+              backgroundColor: '#0d2418', borderWidth: 1.5, borderColor: '#00C896',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Talk to Kevin"
+          >
+            <Ionicons name="mic" size={26} color="#00C896" />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* TOP NAV */}
       <View style={[styles.topNav, { top: insets.top + 8 }]}>
@@ -1017,8 +1077,9 @@ export default function CaddieTab() {
         </TouchableOpacity>
       )}
 
-      {/* BRAND WORDMARK — pre-round idle state only */}
-      {!isRoundActive && (
+      {/* BRAND WORDMARK — pre-round idle state only. Gated for L1 Quiet
+           (the L1 mic-button overlay above already shows the SmartPlay logo). */}
+      {!isRoundActive && trustLevel !== 1 && (
         <View style={[styles.brandWordmark, { top: insets.top + 52 }]}>
           <Text style={styles.brandName}>SmartPlay</Text>
           <Text style={styles.brandSub}>Caddie</Text>
@@ -1051,7 +1112,7 @@ export default function CaddieTab() {
       )}
 
       {/* GREETING BUBBLE — pre-round only, sits in negative space above Start Round */}
-      {!isRoundActive && shownText ? (
+      {!isRoundActive && shownText && trustLevel !== 1 ? (
         <Animated.View
           style={[styles.bubble, { bottom: 144 + insets.bottom, opacity: responseFade }]}
         >

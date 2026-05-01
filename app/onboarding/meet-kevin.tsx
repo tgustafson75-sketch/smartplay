@@ -17,6 +17,7 @@ import { checkMicPermission, PERMISSION_EXPLAINER_TEXT } from '../../services/vo
 import { voiceCommandRouter } from '../../services/intents';
 import type { AppContext } from '../../types/voiceIntent';
 import { generateLibrary } from '../../services/fillerLibrary';
+import { useTrustLevelStore, TRUST_LEVEL_META, type TrustLevel } from '../../store/trustLevelStore';
 
 const KEVIN_BADGE = require('../../assets/avatars/smartplay_caddie_badge.png');
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
@@ -175,10 +176,61 @@ export default function MeetKevin() {
           </Text>
         </TouchableOpacity>
 
+        <TrustLevelPicker />
+
       </Animated.View>
     </SafeAreaView>
   );
 }
+
+function TrustLevelPicker() {
+  const level = useTrustLevelStore(s => s.level);
+  const setLevel = useTrustLevelStore(s => s.setLevel);
+  const levels: TrustLevel[] = [1, 2, 3, 4];
+  return (
+    <View style={pickerStyles.wrap}>
+      <Text style={pickerStyles.question}>How would you like Kevin?</Text>
+      <View style={pickerStyles.row}>
+        {levels.map(l => {
+          const meta = TRUST_LEVEL_META[l];
+          const active = l === level;
+          return (
+            <TouchableOpacity
+              key={l}
+              onPress={() => setLevel(l)}
+              style={[pickerStyles.cell, active && pickerStyles.cellActive]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+            >
+              <Text style={[pickerStyles.label, active && pickerStyles.labelActive]}>{meta.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      <Text style={pickerStyles.oneLiner}>{TRUST_LEVEL_META[level].one_liner}</Text>
+      {level === 2 && <Text style={pickerStyles.recommended}>Recommended for most.</Text>}
+    </View>
+  );
+}
+
+const pickerStyles = StyleSheet.create({
+  wrap: { marginTop: 24, paddingHorizontal: 8 },
+  question: { color: '#9ca3af', fontSize: 12, fontWeight: '700', letterSpacing: 1, textAlign: 'center', marginBottom: 8 },
+  row: {
+    flexDirection: 'row',
+    backgroundColor: '#0a1e12',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    overflow: 'hidden',
+  },
+  cell: { flex: 1, paddingVertical: 10, alignItems: 'center' },
+  cellActive: { backgroundColor: '#003d20' },
+  label: { color: '#9ca3af', fontSize: 11, fontWeight: '700' },
+  labelActive: { color: '#00C896' },
+  oneLiner: { color: '#e8f5e9', fontSize: 12, textAlign: 'center', marginTop: 8 },
+  recommended: { color: '#00C896', fontSize: 9, fontWeight: '700', letterSpacing: 1.2, textAlign: 'center', marginTop: 4 },
+});
 
 function makeStyles(
   c: ReturnType<typeof useTheme>['colors'],
