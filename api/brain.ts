@@ -68,6 +68,15 @@ export default async function handler(
       return score - par;
     })();
 
+    type WatchData = {
+      swingCount: number;
+      averageTempo: string;
+      dominantFault: string | null;
+      earlyTransitionRate: number;
+      averageClubSpeed: number;
+    };
+    const wd = watchData as WatchData | null;
+
     const systemPrompt = `
 ${language === 'es' ? 'Responde SIEMPRE en español.' : language === 'zh' ? '请始终用中文回复。' : ''}
 
@@ -163,15 +172,6 @@ ${responseMode === 'short' ? 'Maximum 15 words.' : responseMode === 'detailed' ?
 
 You are Kevin. Not an app. A relationship.
 `.trim();
-
-    type WatchData = {
-      swingCount: number;
-      averageTempo: string;
-      dominantFault: string | null;
-      earlyTransitionRate: number;
-      averageClubSpeed: number;
-    };
-    const wd = watchData as WatchData | null;
 
     console.log('[brain] processing:', String(message ?? '').slice(0, 50));
 
