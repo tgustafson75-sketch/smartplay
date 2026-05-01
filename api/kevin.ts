@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import { KEVIN_TTS_VOICE, KEVIN_TTS_INSTRUCTIONS } from './kevinVoice';
+import { KEVIN_TTS_VOICE, KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
 import { KEVIN_CHARACTER_SPEC } from '../constants/kevinCharacter';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
