@@ -142,7 +142,7 @@ export const queryStatusHandler: IntentHandler = {
         if (!green) {
           return {
             success: true,
-            voice_response: 'I don\'t have green coordinates for this hole.',
+            voice_response: 'I don\'t know the green location for this hole yet.',
             side_effects: ['query:distance_to_green:no_green'],
             follow_up_needed: false,
           };

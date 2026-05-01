@@ -207,7 +207,7 @@ export default function HoleShotMap({
         {(!origin || !destination) && (
           <View style={styles.emptyOverlay}>
             <Text style={styles.emptyText}>
-              No GPS data for this hole yet — shots without locations can't be plotted.
+              No locations recorded for this hole yet.
             </Text>
           </View>
         )}
