@@ -48,6 +48,7 @@ import { conversationalLoggingOrchestrator } from '../../services/conversational
 import { fetchCourseGeometry } from '../../services/courseGeometryService';
 import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
+import { playsLikeDistance } from '../../utils/playsLike';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
 import WhatCanISayChip from '../../components/WhatCanISayChip';
 import VocabBanner from '../../components/VocabBanner';
@@ -107,6 +108,16 @@ export default function CaddieTab() {
     logShot,
     computeHoleScore,
   } = useRoundStore();
+
+  // Phase C plays-like wiring — non-layout. Computes the value flowing into the
+  // CaddieDataStrip playsLike prop. Falls back to actual yardage when weather is
+  // unavailable so the user never sees a placeholder, just the unadjusted number.
+  const { weather: caddieWeather, shotBearingDeg: caddieShotBearing } = useCurrentWeather();
+  const playsLikeYardage = useMemo(() => {
+    if (currentYardage == null) return currentYardage;
+    if (!caddieWeather) return currentYardage;
+    return playsLikeDistance(currentYardage, caddieWeather, caddieShotBearing).plays_like_yards;
+  }, [currentYardage, caddieWeather, caddieShotBearing]);
 
   const {
     voiceGender,
@@ -1025,7 +1036,7 @@ export default function CaddieTab() {
       >
         <CaddieDataStrip
           yardage={currentYardage}
-          playsLike={currentYardage}
+          playsLike={playsLikeYardage}
           hole={{ current: currentHole, total: totalHoles }}
           targetDirection={targetDirection}
           stroke={currentStroke}
