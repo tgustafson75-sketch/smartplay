@@ -45,6 +45,9 @@ import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
 import { speak, configureAudioForSpeech, captureUtterance } from '../../services/voiceService';
 import { shotDetectionService } from '../../services/shotDetectionService';
 import { conversationalLoggingOrchestrator } from '../../services/conversationalLoggingOrchestrator';
+import { getFirstToolHint } from '../../services/voiceOnboardingService';
+import WhatCanISayChip from '../../components/WhatCanISayChip';
+import VocabBanner from '../../components/VocabBanner';
 import { kevinText as kevinTextStyle } from '../../styles/typography';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
 import { canAccess, trialDaysLeft } from '../../services/featureAccess';
@@ -387,6 +390,9 @@ export default function CaddieTab() {
         break;
       default:
     }
+    // Phase A.4: first-tool hint after first launch in first round.
+    const hint = getFirstToolHint();
+    if (hint) setCaddieResponse(hint);
   }, [openSmartVision, club, router]);
 
   // ── Shot tracking callbacks ──────────────
@@ -975,8 +981,14 @@ export default function CaddieTab() {
         <View style={[styles.brandWordmark, { top: insets.top + 52 }]}>
           <Text style={styles.brandName}>SmartPlay</Text>
           <Text style={styles.brandSub}>Caddie</Text>
+          <WhatCanISayChip surface="caddie" style={{ marginTop: 12 }} />
         </View>
       )}
+
+      {/* VOCAB BANNER — fires once after the user crosses the voice-shot threshold */}
+      <View style={{ position: 'absolute', top: insets.top + 100, left: 0, right: 0, zIndex: 12 }} pointerEvents="box-none">
+        <VocabBanner />
+      </View>
 
       {/* GREETING BUBBLE — pre-round only, sits in negative space above Start Round */}
       {!isRoundActive && shownText ? (

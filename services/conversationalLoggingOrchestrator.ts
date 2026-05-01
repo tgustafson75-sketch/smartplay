@@ -6,6 +6,7 @@ import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { speak } from './voiceService';
 import { recordParsedShot, getRecentUserPhrases } from './vocabularyProfileService';
+import { getFirstShotPrompt, recordVoiceLoggedShot } from './voiceOnboardingService';
 
 const KEVIN_PROMPT_VARIATIONS = [
   "What'd you hit?",
@@ -137,7 +138,8 @@ class ConversationalLoggingOrchestrator {
       return;
     }
 
-    const prompt = pickPrompt();
+    // Phase A.4: first-shot hint variant for first-round users.
+    const prompt = getFirstShotPrompt(pickPrompt());
     this.state = { kind: 'prompting', shotEvent: event };
     try {
       await speak(prompt, this.deps.voiceGender ?? settings.voiceGender, this.deps.language ?? settings.language, this.deps.apiUrl);
@@ -202,6 +204,7 @@ class ConversationalLoggingOrchestrator {
 
     const finalShot = this.logParsed(event, currentHole, finalParsed, lieQuality);
     recordParsedShot(finalParsed);
+    recordVoiceLoggedShot();
     this.recordCadence(event, prompt, true, false, finalParsed, finalShot.id ?? null);
     this.state = { kind: 'idle' };
   }

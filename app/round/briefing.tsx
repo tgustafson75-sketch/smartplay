@@ -18,6 +18,7 @@ import { speak, stopSpeaking, configureAudioForSpeech } from '../../services/voi
 import { generateBriefing } from '../../services/briefingGenerator';
 import { checkContent } from '../../services/contentGuardrail';
 import { generatePatternInsights } from '../../services/patternDetection';
+import { getFirstTeeHint } from '../../services/voiceOnboardingService';
 import { ROUND_MODE_LABELS } from '../../types/patterns';
 
 type Phase = 'thinking' | 'speaking' | 'done';
@@ -129,6 +130,12 @@ export default function BriefingScreen() {
         if (voiceEnabled) {
           await configureAudioForSpeech();
           await speak(text, voiceGender, language, apiUrl);
+          // Phase A.4: first-tee hint for first-round users — appended once
+          // after the briefing voice finishes, never on subsequent rounds.
+          const hint = getFirstTeeHint();
+          if (hint && !cancelled) {
+            await speak(hint, voiceGender, language, apiUrl);
+          }
         }
 
         if (cancelled) return;

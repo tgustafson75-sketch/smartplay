@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useTheme } from '../contexts/ThemeContext';
+import { clearMicDenial } from '../services/voicePermissionService';
 
 export default function Settings() {
   const router = useRouter();
@@ -343,7 +344,12 @@ export default function Settings() {
             label="Voice Enabled"
             sub="Kevin speaks responses aloud"
             value={voiceEnabled}
-            onValueChange={setVoiceEnabled}
+            onValueChange={(v) => {
+              setVoiceEnabled(v);
+              // Phase A.4: re-enabling voice clears any prior mic denial so prompts
+              // resume in subsequent rounds.
+              if (v) clearMicDenial();
+            }}
           />
           <ToggleRow
             label="Discrete Mode"

@@ -19,6 +19,13 @@ Client-side service layer. Each service is a thin module that wraps a concern an
 | `conversationalLoggingOrchestrator.ts` | Subscribes to `shotDetectionService`, plays one of seven Kevin prompt variations after a 5-15 s natural pause, opens the mic for 8 s, parses the response via `/api/parse-shot`, logs to `roundStore`. Handles skip phrases, lie follow-up, and fallback to manual shot card. |
 | `vocabularyProfileService.ts` | Accumulates the user's actual phrasings into a persisted profile (zustand + AsyncStorage). The top phrases are injected into the parser context so Haiku adapts to the user's vocabulary over time. |
 
+## Voice discovery & onboarding (Phase A.4)
+
+| File | Purpose |
+|---|---|
+| `voiceOnboardingService.ts` | One-time hint orchestrator: first-tee, first-shot, first-tool prompts for first-round users; vocabulary banner trigger threshold; voice-logged shot counter. Hints are extensible — adding new ones is just one entry per hint type. |
+| `voicePermissionService.ts` | Microphone permission gate. `checkMicPermission()` requests if undetermined, persists denial. `isVoiceSuppressed()` is the single read consumed by orchestrator + hint sites — either OS-level denial or the voice-disabled toggle in Settings. `clearMicDenial()` fires when the user re-enables voice in Settings. |
+
 ## Voice I/O & content safety
 
 | File | Purpose |
