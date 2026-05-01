@@ -1,3 +1,24 @@
 {
-  "version": 2
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/*.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    { "src": "/api/brain",      "dest": "/api/brain.ts" },
+    { "src": "/api/voice",      "dest": "/api/voice.ts" },
+    { "src": "/api/transcribe", "dest": "/api/transcribe.ts" },
+    { "src": "/api/vision",     "dest": "/api/vision.ts" },
+    { "src": "/api/preround",     "dest": "/api/preround.ts" },
+    { "src": "/api/smartmotion",  "dest": "/api/smartmotion.ts" },
+    { "src": "/api/kevin",        "dest": "/api/kevin.ts" },
+    { "src": "/api/briefing",     "dest": "/api/briefing.ts" },
+    { "src": "/api/recap",        "dest": "/api/recap.ts" },
+    { "src": "/api/course-proxy", "dest": "/api/course-proxy.ts" },
+    { "src": "/api/cage-review",  "dest": "/api/cage-review.ts" },
+    { "src": "/api/voice-intent", "dest": "/api/voice-intent.ts" },
+    { "src": "/api/parse-shot",   "dest": "/api/parse-shot.ts" }
+  ]
 }
