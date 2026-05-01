@@ -22,11 +22,14 @@ Available intents:
    - "go to settings" -> { tool_name: "settings" }
 
 2. query_status — User wants information about current state.
-   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" }
+   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "shot_distance" | "hole_progress" | "distance_to_green" }
    Examples:
    - "what's my score" -> { query_topic: "score" }
    - "what hole am I on" -> { query_topic: "hole" }
    - "how am I doing against the ghost" -> { query_topic: "ghost_match" }
+   - "how far was that shot" / "how far did I hit it" / "what was that one" -> { query_topic: "shot_distance" }
+   - "how far have I gone" / "how far have I hit it on this hole" / "total yardage" -> { query_topic: "hole_progress" }
+   - "how far to the green" / "yardage to the pin" / "how far to the flag" -> { query_topic: "distance_to_green" }
 
 3. change_setting — User wants to modify a setting.
    parameters: { setting_name: string, new_value: string | boolean }

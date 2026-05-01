@@ -26,6 +26,8 @@ export interface CourseHole {
   estimated: boolean;
 }
 
+export type ShotLocation = { lat: number; lng: number };
+
 export interface ShotResult {
   id?: string;
   feel: 'flush' | 'solid' | 'fat' | 'thin' | 'heel' | 'toe' | null;
@@ -43,11 +45,18 @@ export interface ShotResult {
   distance_yards?: number | null;
   raw_utterance?: string;
   logged_via?: 'voice' | 'tap';
-  gps_location?: { lat: number; lng: number } | null;
+  gps_location?: ShotLocation | null;       // legacy alias of start_location
   shot_in_round_index?: number;
   player_id?: string;        // reserved for Phase 1.1 multi-player
   speaker_id?: string;       // reserved for Phase 1.1 multi-player voice ID
   weather_snapshot?: Record<string, unknown> | null;  // populated by Phase C
+  // Phase B — GPS shot tracking. start_location is the player position when the shot was hit;
+  // end_location is the position where the next shot was taken from (or the green centroid
+  // for the final shot of a hole). Both null when GPS is unavailable.
+  start_location?: ShotLocation | null;
+  end_location?: ShotLocation | null;
+  hole_number?: number;        // alias of `hole`, populated by new code paths for forward-consistency
+  shot_in_hole_index?: number; // 1, 2, 3 within a hole
 }
 
 export interface HoleStats {
@@ -145,6 +154,11 @@ interface RoundState {
   logPutts: (hole: number, putts: number) => void;
   addPenalty: (hole: number) => void;
   logShot: (shot: ShotResult) => void;
+  /**
+   * Phase B — Set the end_location of the last shot on `hole` (typically called when the
+   * player advances to the next hole; `endLoc` should be the green centroid of `hole`).
+   */
+  closeHoleEndLocation: (hole: number, endLoc: ShotLocation) => void;
   setRoundNotes: (notes: string) => void;
   setNineHoleMode: (v: boolean) => void;
   setIsCompetition: (v: boolean) => void;
@@ -300,7 +314,25 @@ export const useRoundStore = create<RoundState>()(
       },
 
       setCurrentHole: (hole) => {
-        const holeData = get().courseHoles.find(h => h.hole === hole);
+        const state = get();
+        // Phase B — close out the previous hole's last shot end_location to that hole's
+        // green centroid before advancing. No-op if it's already set or geometry is missing.
+        const prevHole = state.currentHole;
+        if (prevHole !== hole) {
+          const prev = state.courseHoles.find(h => h.hole === prevHole);
+          if (prev) {
+            const green: ShotLocation | null =
+              prev.middleLat !== 0 && prev.middleLng !== 0
+                ? { lat: prev.middleLat, lng: prev.middleLng }
+                : (prev.frontLat || prev.backLat) && (prev.frontLng || prev.backLng)
+                  ? { lat: (prev.frontLat + prev.backLat) / 2, lng: (prev.frontLng + prev.backLng) / 2 }
+                  : null;
+            if (green) {
+              get().closeHoleEndLocation(prevHole, green);
+            }
+          }
+        }
+        const holeData = state.courseHoles.find(h => h.hole === hole);
         set({ currentHole: hole, currentYardage: holeData?.distance ?? null });
       },
 
@@ -339,7 +371,54 @@ export const useRoundStore = create<RoundState>()(
       },
 
       logShot: (shot) =>
-        set(s => ({ shots: [...s.shots, shot] })),
+        set(s => {
+          // Phase B back-fill: if the previous shot on the same hole has no end_location,
+          // set it to this shot's start_location. Mirrors the "next shot's tee = previous
+          // shot's resting spot" pattern through the round.
+          const incomingStart = shot.start_location ?? shot.gps_location ?? null;
+          const sameHoleShots = s.shots.filter(x => x.hole === shot.hole);
+          const shotInHoleIndex = sameHoleShots.length + 1;
+          const shotInRoundIndex = shot.shot_in_round_index ?? s.shots.length + 1;
+          const enriched: ShotResult = {
+            ...shot,
+            start_location: incomingStart,
+            gps_location: shot.gps_location ?? incomingStart,
+            hole_number: shot.hole_number ?? shot.hole,
+            shot_in_hole_index: shot.shot_in_hole_index ?? shotInHoleIndex,
+            shot_in_round_index: shotInRoundIndex,
+            player_id: shot.player_id ?? 'primary',
+          };
+          let backfilled = s.shots;
+          if (incomingStart) {
+            // Find last shot on the same hole that lacks end_location and patch it.
+            const lastOnHoleIdx = (() => {
+              for (let i = s.shots.length - 1; i >= 0; i--) {
+                if (s.shots[i].hole === shot.hole) return i;
+              }
+              return -1;
+            })();
+            if (lastOnHoleIdx >= 0 && !s.shots[lastOnHoleIdx].end_location) {
+              backfilled = s.shots.map((x, i) =>
+                i === lastOnHoleIdx ? { ...x, end_location: incomingStart } : x,
+              );
+            }
+          }
+          return { shots: [...backfilled, enriched] };
+        }),
+
+      closeHoleEndLocation: (hole, endLoc) =>
+        set(s => {
+          for (let i = s.shots.length - 1; i >= 0; i--) {
+            if (s.shots[i].hole === hole) {
+              if (s.shots[i].end_location) return s; // already closed
+              const updated = s.shots.map((x, idx) =>
+                idx === i ? { ...x, end_location: endLoc } : x,
+              );
+              return { shots: updated };
+            }
+          }
+          return s;
+        }),
 
       setRoundNotes: (notes) => set({ roundNotes: notes }),
       setNineHoleMode: (v) => set({ nineHoleMode: v }),

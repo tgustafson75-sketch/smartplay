@@ -67,11 +67,13 @@ function AnimatedHoleCard({
   ghostResult,
   index,
   highlightedHole,
+  onViewHole,
 }: {
   hc: HoleComparison;
   ghostResult?: GhostHoleResult;
   index: number;
   highlightedHole: number | null;
+  onViewHole: (hole: number) => void;
 }) {
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(20);
@@ -120,6 +122,9 @@ function AnimatedHoleCard({
       {Boolean(hc.kevin_summary) && (
         <Text style={styles.kevinSummary}>{hc.kevin_summary}</Text>
       )}
+      <TouchableOpacity style={styles.viewHoleBtn} onPress={() => onViewHole(hc.hole_number)}>
+        <Text style={styles.viewHoleBtnText}>View hole →</Text>
+      </TouchableOpacity>
     </Animated.View>
   );
 }
@@ -417,6 +422,7 @@ export default function RecapScreen() {
             ghostResult={ghost?.hole_results[item.hole_number]}
             index={index}
             highlightedHole={highlightedHole}
+            onViewHole={(h) => router.push(`/recap/hole/${round_id}/${h}` as never)}
           />
         )}
         ListFooterComponent={<View style={{ height: 48 }} />}
@@ -531,6 +537,12 @@ const styles = StyleSheet.create({
   ghostDivider: { width: 1, height: 36, backgroundColor: '#1e3a28' },
   planLine: { color: '#6b7280', fontSize: 11, marginBottom: 6 },
   kevinSummary: { color: '#e5e7eb', fontSize: 13, lineHeight: 19 },
+  viewHoleBtn: {
+    alignSelf: 'flex-start', marginTop: 10,
+    borderWidth: 1, borderColor: '#1e3a28', borderRadius: 14,
+    paddingHorizontal: 12, paddingVertical: 5,
+  },
+  viewHoleBtnText: { color: '#00C896', fontSize: 12, fontWeight: '700' },
   shareBtn: {
     marginTop: 10, alignSelf: 'stretch',
     backgroundColor: '#003d20', borderRadius: 10,

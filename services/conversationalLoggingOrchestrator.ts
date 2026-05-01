@@ -7,6 +7,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { speak } from './voiceService';
 import { recordParsedShot, getRecentUserPhrases } from './vocabularyProfileService';
 import { getFirstShotPrompt, recordVoiceLoggedShot } from './voiceOnboardingService';
+import { getCurrentLocation } from './shotLocationService';
 
 const KEVIN_PROMPT_VARIATIONS = [
   "What'd you hit?",
@@ -162,7 +163,7 @@ class ConversationalLoggingOrchestrator {
 
     if (!utterance || !utterance.trim()) {
       // Silent / no response — log untagged shot
-      const untagged = this.logUntagged(event, currentHole);
+      const untagged = await this.logUntagged(event, currentHole);
       this.recordCadence(event, prompt, false, false, null, untagged.id ?? null);
       this.state = { kind: 'idle' };
       return;
@@ -179,7 +180,7 @@ class ConversationalLoggingOrchestrator {
     const parsed = await this.parseUtterance(utterance, currentHole, false);
 
     if (!parsed) {
-      const untagged = this.logUntagged(event, currentHole, utterance);
+      const untagged = await this.logUntagged(event, currentHole, utterance);
       this.recordCadence(event, prompt, true, false, null, untagged.id ?? null);
       this.state = { kind: 'idle' };
       return;
@@ -202,7 +203,7 @@ class ConversationalLoggingOrchestrator {
       }
     }
 
-    const finalShot = this.logParsed(event, currentHole, finalParsed, lieQuality);
+    const finalShot = await this.logParsed(event, currentHole, finalParsed, lieQuality);
     recordParsedShot(finalParsed);
     recordVoiceLoggedShot();
     this.recordCadence(event, prompt, true, false, finalParsed, finalShot.id ?? null);
@@ -236,9 +237,18 @@ class ConversationalLoggingOrchestrator {
     }
   }
 
-  private logParsed(event: ShotEvent, hole: number, parsed: ParsedShotRecord, _lieQuality: string | null): ShotResult {
+  private async resolveStartLocation(event: ShotEvent): Promise<{ lat: number; lng: number } | null> {
+    if (event.start_location.lat !== 0 || event.start_location.lng !== 0) {
+      return event.start_location;
+    }
+    // Manual trigger path — fetch a fresh GPS fix.
+    return await getCurrentLocation();
+  }
+
+  private async logParsed(event: ShotEvent, hole: number, parsed: ParsedShotRecord, _lieQuality: string | null): Promise<ShotResult> {
     const round = useRoundStore.getState();
     const idx = round.shots.length;
+    const startLoc = await this.resolveStartLocation(event);
     const shot: ShotResult = {
       id: `voice-${event.timestamp}`,
       feel: parsed.outcome === 'good' ? 'flush' : parsed.outcome === 'bad' ? 'fat' : null,
@@ -251,9 +261,10 @@ class ConversationalLoggingOrchestrator {
       distance_yards: parsed.distance,
       raw_utterance: parsed.raw_utterance,
       logged_via: 'voice',
-      gps_location: event.start_location.lat !== 0 || event.start_location.lng !== 0
-        ? event.start_location
-        : null,
+      gps_location: startLoc,
+      start_location: startLoc,
+      end_location: null,
+      hole_number: hole,
       shot_in_round_index: idx,
       weather_snapshot: null,
     };
@@ -261,9 +272,10 @@ class ConversationalLoggingOrchestrator {
     return shot;
   }
 
-  private logUntagged(event: ShotEvent, hole: number, raw?: string): ShotResult {
+  private async logUntagged(event: ShotEvent, hole: number, raw?: string): Promise<ShotResult> {
     const round = useRoundStore.getState();
     const idx = round.shots.length;
+    const startLoc = await this.resolveStartLocation(event);
     const shot: ShotResult = {
       id: `voice-untagged-${event.timestamp}`,
       feel: null,
@@ -275,9 +287,10 @@ class ConversationalLoggingOrchestrator {
       acousticContact: null,
       raw_utterance: raw ?? '',
       logged_via: 'voice',
-      gps_location: event.start_location.lat !== 0 || event.start_location.lng !== 0
-        ? event.start_location
-        : null,
+      gps_location: startLoc,
+      start_location: startLoc,
+      end_location: null,
+      hole_number: hole,
       shot_in_round_index: idx,
     };
     round.logShot(shot);

@@ -45,6 +45,7 @@ import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
 import { speak, configureAudioForSpeech, captureUtterance } from '../../services/voiceService';
 import { shotDetectionService } from '../../services/shotDetectionService';
 import { conversationalLoggingOrchestrator } from '../../services/conversationalLoggingOrchestrator';
+import { fetchCourseGeometry } from '../../services/courseGeometryService';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
 import WhatCanISayChip from '../../components/WhatCanISayChip';
 import VocabBanner from '../../components/VocabBanner';
@@ -707,6 +708,11 @@ export default function CaddieTab() {
       courseId,
       mode: selectedMode,
     });
+
+    // Phase B — warm course geometry cache so the recap shot map has data ready.
+    if (courseId) {
+      fetchCourseGeometry(courseId).catch(err => console.log('[caddie] geometry warm failed:', err));
+    }
 
     // Commit ghost selection and activate runtime store
     if (selectedGhostId) {

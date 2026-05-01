@@ -1,6 +1,8 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useRoundStore } from '../../store/roundStore';
 import { useGhostStore } from '../../store/ghostStore';
+import { haversineYards, holeProgressYards, shotDistance } from '../../utils/geoDistance';
+import { getCurrentLocation, getGreenCentroid } from '../shotLocationService';
 
 export const queryStatusHandler: IntentHandler = {
   intent_type: 'query_status',
@@ -21,7 +23,7 @@ export const queryStatusHandler: IntentHandler = {
     const topic = String(intent.parameters.query_topic ?? '').toLowerCase();
     const round = useRoundStore.getState();
 
-    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match')) {
+    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green')) {
       return {
         success: true,
         voice_response: 'You\'re not in a round yet. Want to start one?',
@@ -73,6 +75,92 @@ export const queryStatusHandler: IntentHandler = {
           success: true,
           voice_response: 'I don\'t have live weather yet — check the hole view for wind.',
           side_effects: ['query:weather:unavailable'],
+          follow_up_needed: false,
+        };
+      }
+
+      case 'shot_distance': {
+        const lastShot = round.shots[round.shots.length - 1];
+        if (!lastShot) {
+          return {
+            success: true,
+            voice_response: 'No shots logged yet on this round.',
+            side_effects: ['query:shot_distance:empty'],
+            follow_up_needed: false,
+          };
+        }
+        const yds = shotDistance(lastShot);
+        if (yds == null) {
+          return {
+            success: true,
+            voice_response: lastShot.distance_yards
+              ? `That one was about ${lastShot.distance_yards} yards.`
+              : 'I don\'t have GPS for that shot — log the next one and I\'ll measure it.',
+            side_effects: ['query:shot_distance:no_gps'],
+            follow_up_needed: false,
+          };
+        }
+        return {
+          success: true,
+          voice_response: `That shot was ${Math.round(yds)} yards.`,
+          side_effects: ['query:shot_distance'],
+          follow_up_needed: false,
+        };
+      }
+
+      case 'hole_progress': {
+        const currentHole = context.current_hole ?? round.currentHole;
+        const holeShots = round.shots.filter(s => s.hole === currentHole);
+        if (holeShots.length === 0) {
+          return {
+            success: true,
+            voice_response: 'No shots on this hole yet.',
+            side_effects: ['query:hole_progress:empty'],
+            follow_up_needed: false,
+          };
+        }
+        const total = holeProgressYards(holeShots);
+        if (total <= 0) {
+          return {
+            success: true,
+            voice_response: 'I don\'t have GPS for the shots on this hole yet.',
+            side_effects: ['query:hole_progress:no_gps'],
+            follow_up_needed: false,
+          };
+        }
+        return {
+          success: true,
+          voice_response: `You've covered ${Math.round(total)} yards on this hole, across ${holeShots.length} shot${holeShots.length === 1 ? '' : 's'}.`,
+          side_effects: ['query:hole_progress'],
+          follow_up_needed: false,
+        };
+      }
+
+      case 'distance_to_green': {
+        const greenHole = context.current_hole ?? round.currentHole;
+        const green = getGreenCentroid(greenHole);
+        if (!green) {
+          return {
+            success: true,
+            voice_response: 'I don\'t have green coordinates for this hole.',
+            side_effects: ['query:distance_to_green:no_green'],
+            follow_up_needed: false,
+          };
+        }
+        const here = await getCurrentLocation();
+        if (!here) {
+          return {
+            success: true,
+            voice_response: 'I can\'t read your location right now — try again in a moment.',
+            side_effects: ['query:distance_to_green:no_gps'],
+            follow_up_needed: false,
+          };
+        }
+        const yds = Math.round(haversineYards(here, green));
+        return {
+          success: true,
+          voice_response: `${yds} yards to the middle of the green.`,
+          side_effects: ['query:distance_to_green'],
           follow_up_needed: false,
         };
       }
