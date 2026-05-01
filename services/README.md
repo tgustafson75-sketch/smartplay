@@ -71,6 +71,16 @@ Infrastructure services that don't belong to any single mode (`utils/geoDistance
 | `weatherService.ts` | OpenWeatherMap snapshot fetch + per-location bucketed cache (10-minute freshness, ~100m bucket). Wired into orchestrator: each logged shot gets a weather_snapshot fire-and-forget. | Caddie |
 | `utils/playsLike.ts` | Plays-like distance calculation. Wind (1%/mph headwind, 0.5%/mph tailwind, half-cross), air-density via temperature (0.5%/10°F deviation from 70°F), elevation (1y / 3ft). v1 approximate model — calibration-by-history is staged for a later phase. | Infra (Caddie consumes) |
 | `components/caddie/WindArrow.tsx` | Animated SVG wind indicator. Color-coded tailwind/headwind/crosswind, length scales with speed, calm-circle below 3mph, neutral placeholder when weather unavailable. Renders top-right of Caddie home during active rounds. | Caddie |
+
+## Phase D-1 — Course Detail surface
+
+| File | Purpose | Role |
+|---|---|---|
+| `services/courseContentService.ts` | Calls /api/course-content for AI-generated About / Caddie Tips / Hole Notes. Mem + AsyncStorage cache, weekly refresh. | Coach |
+| `api/course-content.ts` | Anthropic-backed (Sonnet) Course Detail prose generator. JSON-shaped output: about, caddie_tips[], hole_notes[]. Per-instance memory cache server-side; client persistence via courseContentService. | Coach (Infra) |
+| `app/course/[course_id].tsx` | Course Detail screen — hero + five-stat strip + AI About + Caddie Tips + hole photos grid + hole guide table + dual CTAs (Book Tee Time / Start Round Here). | Coach |
+| `components/course/*` | CourseDetailBanner, CourseHero, CourseStats, CourseAbout, HolePhotosGrid, HoleGuide. Pure presentation. | Coach |
+| `components/CoursePicker.tsx` | Now exposes optional `onInfo(courseId)` prop driving the per-row (i) affordance that opens Course Detail. | Coach (entry point) |
 | `courseGeometryService.ts` | Course geometry fetch and cache (mem + AsyncStorage, weekly refresh). Returns per-hole tee/green coordinates and reserved fairway/green-outline arrays for richer future sources. | Infra (Caddie + Coach consume) |
 | `roles/caddieRole.ts` | Re-export hub for Caddie-register services. No implementation. | Caddie |
 | `roles/coachRole.ts` | Re-export hub for Coach-register services and recap surfaces. No implementation. | Coach |

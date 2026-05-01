@@ -18,7 +18,7 @@ import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { useKeepAwake } from 'expo-keep-awake';
 import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
@@ -71,6 +71,7 @@ export default function CaddieTab() {
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { pre_course_id } = useLocalSearchParams<{ pre_course_id?: string }>();
   const { width: W } = useWindowDimensions();
   // Natural 9:16 frame height — shows Kevin's full portrait without over-zoom
   const avatarFrameHeight = Math.round(W * 16 / 9);
@@ -108,6 +109,26 @@ export default function CaddieTab() {
     logShot,
     computeHoleScore,
   } = useRoundStore();
+
+  // Phase D-1 — when arriving with a pre_course_id (from Course Detail's
+  // "Start Round Here" CTA), pre-select that course and open the round setup
+  // modal automatically. Runs once when the param appears.
+  useEffect(() => {
+    if (!pre_course_id) return;
+    (async () => {
+      const apiCourse = await getApiCourse(pre_course_id);
+      if (apiCourse) {
+        setSelectedPickedCourse({
+          id: apiCourse.id,
+          name: apiCourse.club_name,
+          fullName: `${apiCourse.club_name} — ${apiCourse.location.city}, ${apiCourse.location.state}`,
+          isLocal: false,
+        });
+      }
+      setShowRoundSetup(true);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pre_course_id]);
 
   // Phase C plays-like wiring — non-layout. Computes the value flowing into the
   // CaddieDataStrip playsLike prop. Falls back to actual yardage when weather is
@@ -1093,6 +1114,10 @@ export default function CaddieTab() {
             <CoursePicker
               selected={selectedPickedCourse}
               onSelect={setSelectedPickedCourse}
+              onInfo={(courseId) => {
+                setShowRoundSetup(false);
+                router.push(`/course/${courseId}` as never);
+              }}
             />
 
             <Text style={styles.sheetLabel}>Holes</Text>

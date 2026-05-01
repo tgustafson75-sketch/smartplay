@@ -22,6 +22,11 @@ export interface PickedCourse {
 interface Props {
   onSelect: (course: PickedCourse | null) => void;
   selected: PickedCourse | null;
+  /** Phase D-1 — Optional handler for the per-row (i) info affordance. When
+   *  provided, each API result row gets a tappable info button that opens the
+   *  Course Detail screen for that course. Local courses don't have detail
+   *  pages so the affordance is hidden for them. */
+  onInfo?: (courseId: string) => void;
 }
 
 // ─── Local fallback courses ────────────────────────────────────────────────────
@@ -32,7 +37,7 @@ const LOCAL_COURSES: PickedCourse[] = [
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function CoursePicker({ onSelect, selected }: Props) {
+export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{ id: string; club_name: string; course_name: string; location: string }[]>([]);
   const [loading, setLoading] = useState(false);
@@ -125,15 +130,27 @@ export default function CoursePicker({ onSelect, selected }: Props) {
       {!loading && results.length > 0 && (
         <ScrollView style={styles.results} nestedScrollEnabled keyboardShouldPersistTaps="handled">
           {results.map((r) => (
-            <TouchableOpacity
-              key={r.id}
-              style={[styles.resultRow, selected?.id === r.id && styles.resultRowActive]}
-              onPress={() => selectApiResult(r)}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.resultName} numberOfLines={1}>{r.club_name}</Text>
-              <Text style={styles.resultSub} numberOfLines={1}>{r.location}</Text>
-            </TouchableOpacity>
+            <View key={r.id} style={styles.resultRowWrap}>
+              <TouchableOpacity
+                style={[styles.resultRow, styles.resultRowFlex, selected?.id === r.id && styles.resultRowActive]}
+                onPress={() => selectApiResult(r)}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.resultName} numberOfLines={1}>{r.club_name}</Text>
+                <Text style={styles.resultSub} numberOfLines={1}>{r.location}</Text>
+              </TouchableOpacity>
+              {onInfo && (
+                <TouchableOpacity
+                  onPress={() => onInfo(r.id)}
+                  style={styles.infoBtn}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Course detail for ${r.club_name}`}
+                >
+                  <Text style={styles.infoBtnText}>i</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           ))}
         </ScrollView>
       )}
@@ -238,6 +255,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1e3a28',
     overflow: 'hidden',
+  },
+  resultRowWrap: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: '#0a1e12',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e3a28',
+  },
+  resultRowFlex: {
+    flex: 1,
+    borderBottomWidth: 0,
+  },
+  infoBtn: {
+    width: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderLeftWidth: 1,
+    borderLeftColor: '#1e3a28',
+  },
+  infoBtnText: {
+    color: '#00C896',
+    fontSize: 14,
+    fontWeight: '800',
+    fontStyle: 'italic',
+    fontFamily: 'serif',
   },
   resultRow: {
     paddingHorizontal: 14,
