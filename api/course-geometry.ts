@@ -76,7 +76,7 @@ function extractHazards(raw: Record<string, unknown>): { label: string; location
   return out;
 }
 
-function projectHole(raw: Record<string, unknown>): {
+function projectHole(raw: Record<string, unknown>, indexFallback: number): {
   hole_number: number;
   par: number;
   yardage: number;
@@ -113,8 +113,8 @@ function projectHole(raw: Record<string, unknown>): {
   // Surface hole_number/par/yardage with the same defensive normalization as
   // services/golfCourseApi.ts.
   const holeNumber =
-    typeof raw.hole_number === 'number' ? raw.hole_number :
-    typeof raw.number === 'number' ? raw.number : 0;
+    typeof raw.hole_number === 'number' && raw.hole_number > 0 ? raw.hole_number :
+    typeof raw.number === 'number' && raw.number > 0 ? raw.number : indexFallback;
   const par = typeof raw.par === 'number' ? raw.par : 4;
   const yardage =
     typeof raw.yardage === 'number' ? raw.yardage :
@@ -197,7 +197,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       data;
 
     const rawHoles = extractRawHoles(course);
-    const holes = rawHoles.map(projectHole).filter(h => h.hole_number > 0);
+    const holes = rawHoles
+      .map((h, i) => projectHole(h, i + 1))
+      .filter(h => h.hole_number > 0);
 
     // Distance-from-tee-to-green sanity check, surfaced for debugging
     for (const h of holes) {
