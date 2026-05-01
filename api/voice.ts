@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
-import { KEVIN_TTS_INSTRUCTIONS } from './kevinVoice';
+import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,

@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { KEVIN_TTS_INSTRUCTIONS } from '../../api/kevinVoice';
+import { KEVIN_TTS_INSTRUCTIONS } from '../../api/_kevinVoice';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
