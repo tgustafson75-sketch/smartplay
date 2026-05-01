@@ -8,6 +8,7 @@ import {
   stopSpeaking,
   isSpeaking,
   playLocalFile,
+  captureUtterance,
 } from '../services/voiceService';
 import {
   initFillerLibrary,
@@ -506,7 +507,32 @@ export const useVoiceCaddie = ({
       };
 
       try {
-        const { intent, result } = await voiceCommandRouter.route(transcript, appContext, apiUrl);
+        let { intent, result } = await voiceCommandRouter.route(transcript, appContext, apiUrl);
+
+        // Phase A.3 ambiguity resolution: if router asks a follow-up, capture one more
+        // utterance and re-route. Single retry only — after that, fall through to brain
+        // or end the loop. Avoids the "endless clarification" trap.
+        if (
+          result.follow_up_needed &&
+          result.voice_response &&
+          (intent.intent_type === 'unknown' || intent.confidence !== 'high')
+        ) {
+          onResponseReceived(result.voice_response);
+          onVoiceStateChange('speaking');
+          await speakResponse(result.voice_response);
+          onVoiceStateChange('listening');
+          const clarification = await captureUtterance(8000, apiUrl, language);
+          if (clarification && clarification.trim()) {
+            const second = await voiceCommandRouter.route(clarification, appContext, apiUrl);
+            intent = second.intent;
+            result = second.result;
+          } else {
+            // No clarification — end gracefully.
+            onVoiceStateChange('idle');
+            isProcessingRef.current = false;
+            return;
+          }
+        }
 
         const isCommandHit =
           intent.intent_type !== 'unknown' &&

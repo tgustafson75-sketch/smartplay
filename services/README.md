@@ -8,7 +8,8 @@ Client-side service layer. Each service is a thin module that wraps a concern an
 |---|---|
 | `voiceCommandParser.ts` | Calls `/api/voice-intent` to classify a transcript into a structured `VoiceIntent`. |
 | `voiceCommandRouter.ts` | Registry + dispatch for `IntentHandler`s. Maintains a 30-entry rolling history. |
-| `intents/` | One handler per intent type: `open_tool`, `query_status`, `change_setting`, `acknowledge`. `index.ts` registers them all on the singleton router. |
+| `voiceHandlerRegistry.ts` | (Phase A.3) Surface-aware action registry. Screens register their own `VoiceAction`s on mount; intent handlers and the help discovery surface query the registry to find context-appropriate actions. New screens add coverage without modifying the router. |
+| `intents/` | One handler per intent type: `open_tool`, `query_status`, `change_setting`, `acknowledge`, `navigate`, `help`. `index.ts` registers them all on the singleton router. |
 
 ## Conversational shot logging (Phase A.2)
 

@@ -1,5 +1,7 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useRoundStore } from '../../store/roundStore';
+import type { RoundMode } from '../../types/patterns';
 
 function asBool(v: unknown): boolean | null {
   if (typeof v === 'boolean') return v;
@@ -80,6 +82,18 @@ export const changeSettingHandler: IntentHandler = {
         }
         settings.setResponseMode(v);
         return ack(`Got it — ${v} responses.`, ['response_mode:' + v]);
+      }
+
+      case 'round_mode': {
+        const v = String(rawValue ?? '').toLowerCase().replace(/\s+/g, '_');
+        const valid: RoundMode[] = ['break_100', 'break_90', 'break_80', 'free_play'];
+        if (!valid.includes(v as RoundMode)) {
+          return clarify('Break 100, break 90, break 80, or free play?');
+        }
+        const round = useRoundStore.getState();
+        round.setCurrentRoundMode(v as RoundMode);
+        const label = v === 'free_play' ? 'free play' : v.replace('_', ' ');
+        return ack(`Switched to ${label}.`, ['round_mode:' + v]);
       }
 
       default:

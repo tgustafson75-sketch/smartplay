@@ -6,6 +6,8 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   smartfinder: { type: 'open_smartfinder' },
   swinglab:    { type: 'open_swinglab' },
   scorecard:   { type: 'navigate', path: '/(tabs)/scorecard' },
+  dashboard:   { type: 'navigate', path: '/(tabs)/dashboard' },
+  settings:    { type: 'navigate', path: '/settings' },
 };
 
 const TOOL_LABEL: Record<string, string> = {
@@ -13,6 +15,8 @@ const TOOL_LABEL: Record<string, string> = {
   smartfinder: 'SmartFinder',
   swinglab:    'SwingLab',
   scorecard:   'your scorecard',
+  dashboard:   'your dashboard',
+  settings:    'settings',
 };
 
 export const openToolHandler: IntentHandler = {
@@ -37,7 +41,7 @@ export const openToolHandler: IntentHandler = {
     if (!action) {
       return {
         success: false,
-        voice_response: 'Which tool — SmartVision, SmartFinder, SwingLab, or scorecard?',
+        voice_response: 'Which tool — SmartVision, SmartFinder, SwingLab, scorecard, dashboard, or settings?',
         side_effects: ['unknown_tool'],
         follow_up_needed: true,
       };

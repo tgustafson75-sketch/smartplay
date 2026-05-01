@@ -7,8 +7,8 @@ const SYSTEM_PROMPT = `You are a voice intent parser for SmartPlay Caddie, a gol
 
 Available intents:
 
-1. open_tool — User wants to launch a tool.
-   parameters: { tool_name: "smartvision" | "smartfinder" | "swinglab" | "scorecard" }
+1. open_tool — User wants to launch a tool or screen.
+   parameters: { tool_name: "smartvision" | "smartfinder" | "swinglab" | "scorecard" | "dashboard" | "settings" }
    Examples:
    - "open SmartVision" -> { tool_name: "smartvision" }
    - "show me the smart finder" -> { tool_name: "smartfinder" }
@@ -16,44 +16,65 @@ Available intents:
    - "open the rangefinder" -> { tool_name: "smartfinder" }
    - "pull up my scorecard" -> { tool_name: "scorecard" }
    - "I want to record a swing" -> { tool_name: "swinglab" }
+   - "show my dashboard" -> { tool_name: "dashboard" }
+   - "open dashboard" -> { tool_name: "dashboard" }
+   - "open settings" -> { tool_name: "settings" }
+   - "go to settings" -> { tool_name: "settings" }
 
 2. query_status — User wants information about current state.
    parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" }
    Examples:
    - "what's my score" -> { query_topic: "score" }
-   - "tell me my score" -> { query_topic: "score" }
-   - "how am I doing" -> { query_topic: "score" }
-   - "what hole is this" -> { query_topic: "hole" }
    - "what hole am I on" -> { query_topic: "hole" }
    - "how am I doing against the ghost" -> { query_topic: "ghost_match" }
-   - "what's the wind" -> { query_topic: "weather" }
-   - "what's my pattern" -> { query_topic: "pattern" }
 
 3. change_setting — User wants to modify a setting.
    parameters: { setting_name: string, new_value: string | boolean }
-   Recognized setting_name values: "theme" (light/dark/system), "voice_enabled" (true/false), "discrete_mode" (true/false), "auto_listen" (true/false), "language" (en/es/zh), "response_mode" (short/neutral/detailed).
+   Recognized setting_name values:
+   - "theme" (light/dark/system)
+   - "voice_enabled" (true/false)
+   - "discrete_mode" (true/false)
+   - "auto_listen" (true/false)
+   - "language" (en/es/zh)
+   - "response_mode" (short/neutral/detailed)
+   - "round_mode" (break_100/break_90/break_80/free_play) — the player's score-target mode for the round
    Examples:
    - "switch to dark mode" -> { setting_name: "theme", new_value: "dark" }
-   - "make it light mode" -> { setting_name: "theme", new_value: "light" }
-   - "turn on always-listening" -> { setting_name: "auto_listen", new_value: true }
    - "mute Kevin" -> { setting_name: "voice_enabled", new_value: false }
-   - "unmute" -> { setting_name: "voice_enabled", new_value: true }
    - "switch to Spanish" -> { setting_name: "language", new_value: "es" }
-   - "be more concise" -> { setting_name: "response_mode", new_value: "short" }
+   - "change to break 80 mode" -> { setting_name: "round_mode", new_value: "break_80" }
+   - "set mode to break 90" -> { setting_name: "round_mode", new_value: "break_90" }
+   - "free play" -> { setting_name: "round_mode", new_value: "free_play" }
 
-4. acknowledge — User is acknowledging Kevin without requesting action.
-   parameters: {} (none)
+4. navigate — User wants navigation: back, forward, home, close, next/previous hole.
+   parameters: { direction: "back" | "home" | "close" | "next_hole" | "previous_hole" | "main_menu" }
    Examples:
-   - "thanks Kevin"
-   - "got it"
-   - "okay"
-   - "alright"
-   - "thanks"
-   - "cool"
+   - "go back" -> { direction: "back" }
+   - "back" -> { direction: "back" }
+   - "main menu" -> { direction: "main_menu" }
+   - "go home" / "home" -> { direction: "home" }
+   - "next hole" -> { direction: "next_hole" }
+   - "previous hole" -> { direction: "previous_hole" }
+   - "close this" / "dismiss" / "close the menu" -> { direction: "close" }
 
-5. unknown — Cannot determine intent.
+5. help — User asked what they can say or for help discovering voice commands.
+   parameters: {}
+   Examples:
+   - "what can I say"
+   - "help"
+   - "what are my options"
+   - "what voice commands work here"
+   - "what can I do with my voice"
+
+6. acknowledge — User is acknowledging Kevin without requesting action.
+   parameters: {}
+   Examples: "thanks Kevin", "got it", "okay", "alright", "cool"
+
+7. unknown — Cannot determine intent.
    parameters: {}
    Set follow_up_question to a brief clarifying question Kevin could ask.
+
+If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_type "unknown" with confidence "medium" and a clarifying follow_up_question. Don't guess between candidates; ask once.
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
@@ -99,6 +120,7 @@ Parse the intent. Return JSON only.`;
     const result = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 400,
+      temperature: 0,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
     });
