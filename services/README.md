@@ -21,7 +21,7 @@ The table maps capability pillars to which role consumes them. A blank cell mean
 | Pillar | Caddie (capture-time) | Coach (recap-time) | Psychologist (cross-round) |
 |---|---|---|---|
 | **Voice I/O** | `voiceService.speak`, `captureUtterance` | recap narration via `recapNarration` | `fillerLibrary` rhythm |
-| **Voice Intent** | `intents/queryStatusHandler` (shot_distance, hole_progress, distance_to_green, hole, score), `openToolHandler`, `navigateHandler`, `changeSettingHandler` | recap-context queries via same handler | `helpHandler` discovery |
+| **Voice Intent** | `intents/queryStatusHandler` (shot_distance, hole_progress, distance_to_green, wind, conditions, plays_like, hole, score), `openToolHandler`, `navigateHandler`, `changeSettingHandler` | recap-context queries via same handler | `helpHandler` discovery |
 | **Shot Capture** | `shotDetectionService`, `conversationalLoggingOrchestrator`, `shotLocationService` | shot history queries against `roundStore.shots` | — |
 | **Round Flow** | `briefingGenerator`, `currentHole` state | `recapGenerator`, `recapHero`, `HoleShotMap` | `proactiveKevin` pacing |
 | **Patterns & Learning** | `vocabularyProfileService` writes during logging | `patternDetection` reads on recap | `kevin-learning` relationship surface |
@@ -68,6 +68,9 @@ Infrastructure services that don't belong to any single mode (`utils/geoDistance
 | File | Purpose | Role |
 |---|---|---|
 | `shotLocationService.ts` | GPS capture for shots: fresh-fix, last-known fallback, green/tee centroid lookup, hole-transition closer. | Caddie |
+| `weatherService.ts` | OpenWeatherMap snapshot fetch + per-location bucketed cache (10-minute freshness, ~100m bucket). Wired into orchestrator: each logged shot gets a weather_snapshot fire-and-forget. | Caddie |
+| `utils/playsLike.ts` | Plays-like distance calculation. Wind (1%/mph headwind, 0.5%/mph tailwind, half-cross), air-density via temperature (0.5%/10°F deviation from 70°F), elevation (1y / 3ft). v1 approximate model — calibration-by-history is staged for a later phase. | Infra (Caddie consumes) |
+| `components/caddie/WindArrow.tsx` | Animated SVG wind indicator. Color-coded tailwind/headwind/crosswind, length scales with speed, calm-circle below 3mph, neutral placeholder when weather unavailable. Renders top-right of Caddie home during active rounds. | Caddie |
 | `courseGeometryService.ts` | Course geometry fetch and cache (mem + AsyncStorage, weekly refresh). Returns per-hole tee/green coordinates and reserved fairway/green-outline arrays for richer future sources. | Infra (Caddie + Coach consume) |
 | `roles/caddieRole.ts` | Re-export hub for Caddie-register services. No implementation. | Caddie |
 | `roles/coachRole.ts` | Re-export hub for Coach-register services and recap surfaces. No implementation. | Coach |

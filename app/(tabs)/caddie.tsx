@@ -46,6 +46,8 @@ import { speak, configureAudioForSpeech, captureUtterance } from '../../services
 import { shotDetectionService } from '../../services/shotDetectionService';
 import { conversationalLoggingOrchestrator } from '../../services/conversationalLoggingOrchestrator';
 import { fetchCourseGeometry } from '../../services/courseGeometryService';
+import WindArrow from '../../components/caddie/WindArrow';
+import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
 import WhatCanISayChip from '../../components/WhatCanISayChip';
 import VocabBanner from '../../components/VocabBanner';
@@ -996,6 +998,13 @@ export default function CaddieTab() {
         <VocabBanner />
       </View>
 
+      {/* WIND ARROW — Caddie-mode wind indicator, only during active rounds */}
+      {isRoundActive && (
+        <View style={{ position: 'absolute', top: insets.top + 110, right: 12, zIndex: 11 }} pointerEvents="none">
+          <CaddieWindArrow />
+        </View>
+      )}
+
       {/* GREETING BUBBLE — pre-round only, sits in negative space above Start Round */}
       {!isRoundActive && shownText ? (
         <Animated.View
@@ -1512,6 +1521,13 @@ export default function CaddieTab() {
 
     </View>
   );
+}
+
+// Inline wrapper so the WindArrow's weather hook lives outside the main component's
+// already-deep state graph.
+function CaddieWindArrow() {
+  const { weather, shotBearingDeg } = useCurrentWeather();
+  return <WindArrow weather={weather} shotBearingDeg={shotBearingDeg} compact />;
 }
 
 // ─── STYLES ───────────────────────────────

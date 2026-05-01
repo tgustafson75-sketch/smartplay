@@ -1,8 +1,34 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useRoundStore } from '../../store/roundStore';
 import { useGhostStore } from '../../store/ghostStore';
-import { haversineYards, holeProgressYards, shotDistance } from '../../utils/geoDistance';
-import { getCurrentLocation, getGreenCentroid } from '../shotLocationService';
+import { haversineYards, holeProgressYards, shotDistance, bearingDegrees } from '../../utils/geoDistance';
+import { getCurrentLocation, getGreenCentroid, getTeeCentroid } from '../shotLocationService';
+import { fetchWeatherAt, getCachedWeather, type WeatherSnapshot } from '../weatherService';
+import { playsLikeDistance, playsLikePhrase } from '../../utils/playsLike';
+import type { ShotLocation } from '../../store/roundStore';
+
+const COMPASS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
+function compassDirFromDeg(deg: number): string {
+  const idx = Math.round(((deg % 360) + 360) % 360 / 45) % 8;
+  return COMPASS[idx];
+}
+
+/**
+ * Best-available shot bearing for the current moment. Prefers tee→green for the
+ * current hole; falls back to the bearing of the player's most recent same-hole
+ * shot start_location → current location. Returns null when no reference exists.
+ */
+function currentShotBearingDeg(
+  round: { courseHoles: { hole: number; teeLat: number; teeLng: number; middleLat: number; middleLng: number; frontLat: number; frontLng: number; backLat: number; backLng: number }[]; shots: { hole: number; start_location?: ShotLocation | null; gps_location?: ShotLocation | null }[] },
+  currentHole: number,
+): number | null {
+  const teeLoc = getTeeCentroid(currentHole);
+  const greenLoc = getGreenCentroid(currentHole);
+  if (teeLoc && greenLoc) return bearingDegrees(teeLoc, greenLoc);
+  // Fallback: last shot start → current player location is unavailable here without
+  // an awaited GPS call. Return null and let the caller phrase accordingly.
+  return null;
+}
 
 export const queryStatusHandler: IntentHandler = {
   intent_type: 'query_status',
@@ -23,7 +49,7 @@ export const queryStatusHandler: IntentHandler = {
     const topic = String(intent.parameters.query_topic ?? '').toLowerCase();
     const round = useRoundStore.getState();
 
-    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green')) {
+    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like')) {
       return {
         success: true,
         voice_response: 'You\'re not in a round yet. Want to start one?',
@@ -70,11 +96,112 @@ export const queryStatusHandler: IntentHandler = {
         };
       }
 
-      case 'weather': {
+      case 'weather':
+      case 'conditions': {
+        const here = await getCurrentLocation();
+        const w = here ? (getCachedWeather(here) ?? await fetchWeatherAt(here)) : null;
+        if (!w) {
+          return {
+            success: true,
+            voice_response: 'I can\'t pull weather right now.',
+            side_effects: ['query:conditions:unavailable'],
+            follow_up_needed: false,
+          };
+        }
+        const conds = w.description ?? w.conditions ?? 'fair';
+        const temp = w.temp_f != null ? `${Math.round(w.temp_f)}°` : null;
         return {
           success: true,
-          voice_response: 'I don\'t have live weather yet — check the hole view for wind.',
-          side_effects: ['query:weather:unavailable'],
+          voice_response: temp
+            ? `${conds}, ${temp}, wind ${Math.round(w.wind_speed_mph)}.`
+            : `${conds}, wind ${Math.round(w.wind_speed_mph)}.`,
+          side_effects: ['query:conditions'],
+          follow_up_needed: false,
+        };
+      }
+
+      case 'wind': {
+        const here = await getCurrentLocation();
+        const w = here ? (getCachedWeather(here) ?? await fetchWeatherAt(here)) : null;
+        if (!w || w.wind_direction_deg == null) {
+          return {
+            success: true,
+            voice_response: 'I can\'t read the wind right now.',
+            side_effects: ['query:wind:unavailable'],
+            follow_up_needed: false,
+          };
+        }
+        if (w.wind_speed_mph < 3) {
+          return {
+            success: true,
+            voice_response: 'Pretty calm out there — barely any wind.',
+            side_effects: ['query:wind:calm'],
+            follow_up_needed: false,
+          };
+        }
+        const bearing = currentShotBearingDeg(round, context.current_hole ?? round.currentHole);
+        if (bearing == null) {
+          return {
+            success: true,
+            voice_response: `${Math.round(w.wind_speed_mph)} miles per hour out of the ${compassDirFromDeg(w.wind_direction_deg)}.`,
+            side_effects: ['query:wind:no_bearing'],
+            follow_up_needed: false,
+          };
+        }
+        // Decompose
+        const windTo = (w.wind_direction_deg + 180) % 360;
+        let rel = windTo - bearing;
+        rel = ((rel + 540) % 360) - 180;
+        const along = Math.cos(rel * Math.PI / 180) * w.wind_speed_mph;
+        const cross = Math.sin(rel * Math.PI / 180) * w.wind_speed_mph;
+        const phrase =
+          Math.abs(along) > Math.abs(cross) * 1.5
+            ? (along < 0 ? `${Math.round(Math.abs(along))} into your face`
+                          : `${Math.round(along)} at your back`)
+            : `${Math.round(Math.abs(cross))} crosswind from the ${cross > 0 ? 'left' : 'right'}`;
+        return {
+          success: true,
+          voice_response: phrase + '.',
+          side_effects: ['query:wind'],
+          follow_up_needed: false,
+        };
+      }
+
+      case 'plays_like': {
+        const here = await getCurrentLocation();
+        const w = here ? (getCachedWeather(here) ?? await fetchWeatherAt(here)) : null;
+        // Determine the actual yardage: explicit param > distance to green
+        const param = intent.parameters.target_yards;
+        let actual: number | null = typeof param === 'number' && param > 0 ? param : null;
+        if (actual == null) {
+          const green = getGreenCentroid(context.current_hole ?? round.currentHole);
+          if (here && green) actual = Math.round(haversineYards(here, green));
+        }
+        if (actual == null) {
+          return {
+            success: true,
+            voice_response: 'Tell me a number — like "plays like 150" — and I\'ll work it out.',
+            side_effects: ['query:plays_like:no_yardage'],
+            follow_up_needed: false,
+          };
+        }
+        if (!w) {
+          return {
+            success: true,
+            voice_response: `${actual} actual — no weather to factor in.`,
+            side_effects: ['query:plays_like:no_weather'],
+            follow_up_needed: false,
+          };
+        }
+        const bearing = currentShotBearingDeg(round, context.current_hole ?? round.currentHole);
+        const breakdown = playsLikeDistance(actual, w, bearing);
+        const phrase = playsLikePhrase(breakdown);
+        return {
+          success: true,
+          voice_response: phrase
+            ? `${actual} actual, plays like ${breakdown.plays_like_yards} — ${phrase}.`
+            : `${actual} actual, plays like ${breakdown.plays_like_yards}.`,
+          side_effects: ['query:plays_like'],
           follow_up_needed: false,
         };
       }

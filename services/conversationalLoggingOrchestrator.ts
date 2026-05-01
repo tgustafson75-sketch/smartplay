@@ -8,6 +8,7 @@ import { speak } from './voiceService';
 import { recordParsedShot, getRecentUserPhrases } from './vocabularyProfileService';
 import { getFirstShotPrompt, recordVoiceLoggedShot } from './voiceOnboardingService';
 import { getCurrentLocation } from './shotLocationService';
+import { fetchWeatherAt, getCachedWeather } from './weatherService';
 
 const KEVIN_PROMPT_VARIATIONS = [
   "What'd you hit?",
@@ -266,9 +267,18 @@ class ConversationalLoggingOrchestrator {
       end_location: null,
       hole_number: hole,
       shot_in_round_index: idx,
-      weather_snapshot: null,
+      weather_snapshot: startLoc ? getCachedWeather(startLoc) : null,
     };
     round.logShot(shot);
+    // Phase C — fire-and-forget weather fetch; populates the shot's
+    // weather_snapshot once the network call returns. Does not block logging.
+    if (startLoc && shot.id) {
+      fetchWeatherAt(startLoc)
+        .then(snap => {
+          if (snap) useRoundStore.getState().updateShotWeather(shot.id!, snap as unknown as Record<string, unknown>);
+        })
+        .catch(err => console.log('[orchestrator] weather attach failed:', err));
+    }
     return shot;
   }
 

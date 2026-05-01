@@ -22,7 +22,7 @@ Available intents:
    - "go to settings" -> { tool_name: "settings" }
 
 2. query_status — User wants information about current state.
-   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "shot_distance" | "hole_progress" | "distance_to_green" }
+   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "shot_distance" | "hole_progress" | "distance_to_green" | "wind" | "conditions" | "plays_like", target_yards?: number }
    Examples:
    - "what's my score" -> { query_topic: "score" }
    - "what hole am I on" -> { query_topic: "hole" }
@@ -30,6 +30,10 @@ Available intents:
    - "how far was that shot" / "how far did I hit it" / "what was that one" -> { query_topic: "shot_distance" }
    - "how far have I gone" / "how far have I hit it on this hole" / "total yardage" -> { query_topic: "hole_progress" }
    - "how far to the green" / "yardage to the pin" / "how far to the flag" -> { query_topic: "distance_to_green" }
+   - "what's the wind doing" / "how's the wind" / "any wind out there" -> { query_topic: "wind" }
+   - "is it going to rain" / "any rain" / "what are conditions like" / "how's the weather" -> { query_topic: "conditions" }
+   - "plays like" alone -> { query_topic: "plays_like" }
+   - "plays like 152" / "what does 165 play like" / "how does 140 play" -> { query_topic: "plays_like", target_yards: 152 } (extract the integer when stated)
 
 3. change_setting — User wants to modify a setting.
    parameters: { setting_name: string, new_value: string | boolean }

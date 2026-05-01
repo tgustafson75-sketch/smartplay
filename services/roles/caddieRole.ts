@@ -36,4 +36,10 @@ export { queryStatusHandler } from '../intents/queryStatusHandler';
 // Live distance math
 export { haversineYards, shotDistance, holeProgressYards } from '../../utils/geoDistance';
 
+// Phase C — weather + plays-like
+export { fetchWeatherAt, getCachedWeather } from '../weatherService';
+export type { WeatherSnapshot } from '../weatherService';
+export { playsLikeDistance, playsLikePhrase } from '../../utils/playsLike';
+export type { PlaysLikeBreakdown } from '../../utils/playsLike';
+
 export const CADDIE_ROLE_ID = 'caddie' as const;

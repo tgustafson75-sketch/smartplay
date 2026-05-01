@@ -159,6 +159,8 @@ interface RoundState {
    * player advances to the next hole; `endLoc` should be the green centroid of `hole`).
    */
   closeHoleEndLocation: (hole: number, endLoc: ShotLocation) => void;
+  /** Phase C — attach a weather snapshot to a previously-logged shot. */
+  updateShotWeather: (shotId: string, weather: Record<string, unknown>) => void;
   setRoundNotes: (notes: string) => void;
   setNineHoleMode: (v: boolean) => void;
   setIsCompetition: (v: boolean) => void;
@@ -405,6 +407,13 @@ export const useRoundStore = create<RoundState>()(
           }
           return { shots: [...backfilled, enriched] };
         }),
+
+      updateShotWeather: (shotId, weather) =>
+        set(s => ({
+          shots: s.shots.map(x =>
+            x.id === shotId ? { ...x, weather_snapshot: weather } : x,
+          ),
+        })),
 
       closeHoleEndLocation: (hole, endLoc) =>
         set(s => {

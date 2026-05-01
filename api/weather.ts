@@ -1,0 +1,62 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+
+/**
+ * Phase C — OpenWeatherMap proxy.
+ *
+ * Server-side proxy keeps OPENWEATHERMAP_API_KEY out of the client bundle. Returns
+ * only the fields the app uses, normalized to imperial units. Failure modes:
+ *   - missing lat/lng → 400
+ *   - missing key in env → 500
+ *   - upstream non-2xx → propagate status
+ *   - exception → 500 with message
+ */
+
+const TIMEOUT_MS = 8_000;
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const lat = req.query.lat as string | undefined;
+  const lng = req.query.lng as string | undefined;
+  if (!lat || !lng) {
+    return res.status(400).json({ error: 'lat and lng required' });
+  }
+
+  const apiKey = process.env.OPENWEATHERMAP_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: 'OPENWEATHERMAP_API_KEY not configured' });
+  }
+
+  const url = `https://api.openweathermap.org/data/2.5/weather?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&appid=${apiKey}&units=imperial`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  try {
+    const upstream = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!upstream.ok) {
+      const text = await upstream.text();
+      console.error('[weather] upstream', upstream.status, text.slice(0, 200));
+      return res.status(upstream.status).json({ error: `Upstream ${upstream.status}` });
+    }
+    const data = (await upstream.json()) as Record<string, unknown>;
+    const main = (data.main ?? {}) as Record<string, number | undefined>;
+    const wind = (data.wind ?? {}) as Record<string, number | undefined>;
+    const weather0 = (Array.isArray(data.weather) ? data.weather[0] : {}) as Record<string, string | undefined>;
+
+    return res.status(200).json({
+      temp_f: main.temp ?? null,
+      humidity: main.humidity ?? null,
+      pressure_hpa: main.pressure ?? null,
+      wind_speed_mph: wind.speed ?? 0,
+      wind_direction_deg: wind.deg ?? null,
+      wind_gust_mph: wind.gust ?? null,
+      conditions: weather0.main ?? null,
+      description: weather0.description ?? null,
+      timestamp: Date.now(),
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    const msg = e instanceof Error ? e.message : 'Unknown error';
+    console.error('[weather] exception:', msg);
+    return res.status(500).json({ error: msg });
+  }
+}
