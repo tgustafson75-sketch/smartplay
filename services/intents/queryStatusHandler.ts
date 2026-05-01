@@ -6,6 +6,7 @@ import { getCurrentLocation, getGreenCentroid, getTeeCentroid } from '../shotLoc
 import { fetchWeatherAt, getCachedWeather, type WeatherSnapshot } from '../weatherService';
 import { playsLikeDistance, playsLikePhrase } from '../../utils/playsLike';
 import type { ShotLocation } from '../../store/roundStore';
+import { getGreenYardages } from '../smartFinderService';
 
 const COMPASS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
 function compassDirFromDeg(deg: number): string {
@@ -49,7 +50,7 @@ export const queryStatusHandler: IntentHandler = {
     const topic = String(intent.parameters.query_topic ?? '').toLowerCase();
     const round = useRoundStore.getState();
 
-    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like')) {
+    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like' || topic === 'green_front' || topic === 'green_back' || topic === 'green_middle')) {
       return {
         success: true,
         voice_response: 'You\'re not in a round yet. Want to start one?',
@@ -288,6 +289,29 @@ export const queryStatusHandler: IntentHandler = {
           success: true,
           voice_response: `${yds} yards to the middle of the green.`,
           side_effects: ['query:distance_to_green'],
+          follow_up_needed: false,
+        };
+      }
+
+      case 'green_front':
+      case 'green_back':
+      case 'green_middle': {
+        const hole = context.current_hole ?? round.currentHole;
+        const yards = await getGreenYardages(hole);
+        const which = topic === 'green_front' ? 'front' : topic === 'green_back' ? 'back' : 'middle';
+        const value = yards[which];
+        if (value == null) {
+          return {
+            success: true,
+            voice_response: `I don\'t have green coordinates for the ${which} of this hole.`,
+            side_effects: [`query:${topic}:no_data`],
+            follow_up_needed: false,
+          };
+        }
+        return {
+          success: true,
+          voice_response: `${value} to the ${which}.`,
+          side_effects: [`query:${topic}`],
           follow_up_needed: false,
         };
       }

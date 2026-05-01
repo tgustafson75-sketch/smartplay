@@ -81,6 +81,18 @@ Infrastructure services that don't belong to any single mode (`utils/geoDistance
 | `app/course/[course_id].tsx` | Course Detail screen — hero + five-stat strip + AI About + Caddie Tips + hole photos grid + hole guide table + dual CTAs (Book Tee Time / Start Round Here). | Coach |
 | `components/course/*` | CourseDetailBanner, CourseHero, CourseStats, CourseAbout, HolePhotosGrid, HoleGuide. Pure presentation. | Coach |
 | `components/CoursePicker.tsx` | Now exposes optional `onInfo(courseId)` prop driving the per-row (i) affordance that opens Course Detail. | Coach (entry point) |
+
+## Phase D-2 — SmartFinder v2
+
+| File | Purpose | Role |
+|---|---|---|
+| `services/smartFinderService.ts` | GPS fix capture with accuracy classification, green front/middle/back yardage computation, distance-to-arbitrary-point. Graceful nulls when course geometry lacks green coordinates (typical case). | Caddie |
+| `store/smartFinderStore.ts` | Persisted mode preference (`standard`/`target`/`map`) plus the legacy AR-lock state. AsyncStorage-backed. | Caddie |
+| `app/smartfinder.tsx` | Full-screen 3-mode SmartFinder. Standard = front/middle/back numbers; Target = tap-to-target on hole overhead view; Map = full hole map with player position. Mode persists across sessions. | Caddie |
+| `app/smartfinder-camera.tsx` | Legacy camera-AR rangefinder, preserved for future reactivation as a 4th "Camera" mode (1.x). | Caddie (deferred) |
+| `components/smartfinder/SmartFinderCard.tsx` | Embedded glanceable card on Caddie home — front/middle/back to the green plus hole label and GPS-quality dot. Tap to expand to full-screen. Absolute-positioned, never disturbs Kevin's locked layout. | Caddie |
+| `components/smartfinder/SmartFinderModeToggle.tsx` | Three-button segmented toggle. | Caddie |
+| `components/smartfinder/GPSQuality.tsx` | Color-coded GPS-accuracy dot. Dot-only embedded; dot + accuracy-in-feet on full-screen. | Caddie |
 | `courseGeometryService.ts` | Course geometry fetch and cache (mem + AsyncStorage, weekly refresh). Returns per-hole tee/green coordinates and reserved fairway/green-outline arrays for richer future sources. | Infra (Caddie + Coach consume) |
 | `roles/caddieRole.ts` | Re-export hub for Caddie-register services. No implementation. | Caddie |
 | `roles/coachRole.ts` | Re-export hub for Coach-register services and recap surfaces. No implementation. | Coach |

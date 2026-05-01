@@ -49,6 +49,7 @@ import { fetchCourseGeometry } from '../../services/courseGeometryService';
 import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
+import SmartFinderCard from '../../components/smartfinder/SmartFinderCard';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
 import WhatCanISayChip from '../../components/WhatCanISayChip';
 import VocabBanner from '../../components/VocabBanner';
@@ -1034,6 +1035,18 @@ export default function CaddieTab() {
       {isRoundActive && (
         <View style={{ position: 'absolute', top: insets.top + 110, right: 12, zIndex: 11 }} pointerEvents="none">
           <WindArrow weather={caddieWeather} shotBearingDeg={caddieShotBearing} compact />
+        </View>
+      )}
+
+      {/* SMARTFINDER CARD — Phase D-2 embedded rangefinder, absolute-positioned
+           above the data strip during active rounds. Does NOT modify Kevin's
+           avatar layout (the locked elite layout). */}
+      {isRoundActive && (
+        <View
+          style={{ position: 'absolute', left: 16, right: 16, bottom: 130 + insets.bottom, zIndex: 8 }}
+          pointerEvents="box-none"
+        >
+          <SmartFinderCard />
         </View>
       )}
 

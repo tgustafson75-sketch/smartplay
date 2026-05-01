@@ -42,4 +42,15 @@ export type { WeatherSnapshot } from '../weatherService';
 export { playsLikeDistance, playsLikePhrase } from '../../utils/playsLike';
 export type { PlaysLikeBreakdown } from '../../utils/playsLike';
 
+// Phase D-2 — SmartFinder (rangefinder data layer)
+export {
+  getGreenYardages,
+  getGreenYardagesSync,
+  refreshFix,
+  getLastFix,
+  classifyAccuracy,
+  distanceToPoint,
+} from '../smartFinderService';
+export type { GreenYardages, GPSQualityReading, GPSQualityLevel } from '../smartFinderService';
+
 export const CADDIE_ROLE_ID = 'caddie' as const;
