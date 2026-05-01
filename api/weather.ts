@@ -20,7 +20,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'lat and lng required' });
   }
 
-  const apiKey = process.env.WEATHER_API_KEY;
+  // Defensive: trim whitespace and surrounding quotes that copy-paste sometimes
+  // smuggles into Vercel env vars. A leading/trailing space or " is the most
+  // common cause of "key set in dashboard but OWM returns 401".
+  const rawKey = process.env.WEATHER_API_KEY ?? '';
+  const apiKey = rawKey.trim().replace(/^["']|["']$/g, '');
   if (!apiKey) {
     return res.status(500).json({ error: 'WEATHER_API_KEY not configured' });
   }
@@ -34,8 +38,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     clearTimeout(timer);
     if (!upstream.ok) {
       const text = await upstream.text();
-      console.error('[weather] upstream', upstream.status, text.slice(0, 200));
-      return res.status(upstream.status).json({ error: `Upstream ${upstream.status}` });
+      // Log a sanitized fingerprint — never the full key. Helps diagnose stale /
+      // wrong-account / activation-pending issues without leaking the secret.
+      const fingerprint = `len=${apiKey.length} suffix=…${apiKey.slice(-4)}`;
+      console.error('[weather] upstream', upstream.status, fingerprint, text.slice(0, 200));
+      return res.status(upstream.status).json({
+        error: `Upstream ${upstream.status}`,
+        upstream_message: text.slice(0, 200),
+        key_fingerprint: fingerprint,
+      });
     }
     const data = (await upstream.json()) as Record<string, unknown>;
     const main = (data.main ?? {}) as Record<string, number | undefined>;

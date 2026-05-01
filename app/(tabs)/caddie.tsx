@@ -1012,7 +1012,7 @@ export default function CaddieTab() {
       {/* WIND ARROW — Caddie-mode wind indicator, only during active rounds */}
       {isRoundActive && (
         <View style={{ position: 'absolute', top: insets.top + 110, right: 12, zIndex: 11 }} pointerEvents="none">
-          <CaddieWindArrow />
+          <WindArrow weather={caddieWeather} shotBearingDeg={caddieShotBearing} compact />
         </View>
       )}
 
@@ -1532,13 +1532,6 @@ export default function CaddieTab() {
 
     </View>
   );
-}
-
-// Inline wrapper so the WindArrow's weather hook lives outside the main component's
-// already-deep state graph.
-function CaddieWindArrow() {
-  const { weather, shotBearingDeg } = useCurrentWeather();
-  return <WindArrow weather={weather} shotBearingDeg={shotBearingDeg} compact />;
 }
 
 // ─── STYLES ───────────────────────────────
