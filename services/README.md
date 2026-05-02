@@ -154,6 +154,19 @@ Infrastructure services that don't belong to any single mode (`utils/geoDistance
 | `app/cage/summary.tsx` | PrimaryIssueCard + DrillCard mounted between the existing Phase I KevinCoachBox and the existing shot grid. Cards render placeholders today; light up automatically when Phase K populates `session.primary_issue` / `session.drill_recommendation`. | Coach |
 | `app/cage/session.tsx` | Phase I.5 follow-up — KevinCoachBox in `minimized` mode renders during active recording (silent ambient indicator). Re-expands at the post-session review. | Coach |
 | `services/intents/queryStatusHandler.ts` + `api/voice-intent.ts` | Two new query topics — `end_session` (ends active Cage Session and routes to summary) and `next_focus` (summarizes Phase K's Primary Issue if populated, honest placeholder otherwise). Both work off-round (Practice context). | Caddie (entry) → Coach (data) |
+
+## Phase K — SwingLab Pose Detection + GolFix Overlay
+
+| File | Purpose | Role |
+|---|---|---|
+| `api/swing-analysis.ts` | Anthropic Claude Sonnet vision endpoint. Accepts 1-5 base64 frames + context (club, swing #, prior issues), returns canonical-issue classification with severity / confidence / observation / follow-up question. Conservative-by-design system prompt — false positives damage trust faster than false negatives. | Coach (Infra) |
+| `services/poseDetection.ts` | Client wrapper. `analyzeSwing(clipUri, context)` returns typed `SwingAnalysisResult`: ok, no_frames, no_network, error. Cloud-based today (option a per spec); future TFJS-local swap is a single-file body change. KNOWN GAP: `extractKeyFrames(clipUri)` returns empty until `expo-video-thumbnails` is wired (~5-line refinement). | Coach (Infra) |
+| `services/swingIssueClassifier.ts` | `classifySession(swingAnalyses)` aggregates per-swing results into a session-level `PrimaryIssue` (severity-weighted tally, low-confidence filter, minimum-occurrence floor). Returns null when data doesn't warrant a primary call. Carries `ISSUE_DISPLAY_NAME`, `ISSUE_CATEGORY`, and `ISSUE_COACH_VOICE` (per-issue authored mechanical breakdown + feel cue). | Coach (Infra) |
+| `services/drillRecommendation.ts` | `recommendDrill(issue)` maps a canonical issue to a SwingLab `DrillRecommendation` (drill_id matching the existing DRILLS array + Kevin's Coach voice reason). `none` returns null → DrillCard placeholder. | Coach (Infra) |
+| `app/cage/summary.tsx` | Pose-detection pipeline runs once on mount: each swing's clipUri → `analyzeSwing` → aggregate via `classifySession` → recommend via `recommendDrill` → populate `primaryIssue` and `drillRec` state → cards render real analysis. Falls back to placeholders when frames empty / data insufficient / network down. | Coach |
+| `services/intents/queryStatusHandler.ts` + `api/voice-intent.ts` | Two new query topics — `swing_observation` ("what'd you see") and `tell_me_more` (feel cue + drill reason). | Coach |
+
+**Cloud-vision tradeoff.** Privacy implication: swing frames travel to Anthropic. Future swap to local TFJS pose detection is a single-file body change in `poseDetection.ts` (the consumer signature stays stable). Visual reference assets per-issue are deferred to 1.x; PrimaryIssueCard renders text-only when `visual_reference_path` is null (already-shipped fallback).
 | `courseGeometryService.ts` | Course geometry fetch and cache (mem + AsyncStorage, weekly refresh). Returns per-hole tee/green coordinates and reserved fairway/green-outline arrays for richer future sources. | Infra (Caddie + Coach consume) |
 | `roles/caddieRole.ts` | Re-export hub for Caddie-register services. No implementation. | Caddie |
 | `roles/coachRole.ts` | Re-export hub for Coach-register services and recap surfaces. No implementation. | Coach |

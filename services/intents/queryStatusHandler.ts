@@ -50,7 +50,7 @@ export const queryStatusHandler: IntentHandler = {
     const topic = String(intent.parameters.query_topic ?? '').toLowerCase();
     const round = useRoundStore.getState();
 
-    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like' || topic === 'green_front' || topic === 'green_back' || topic === 'green_middle') /* end_session and next_focus deliberately allowed off-round */) {
+    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like' || topic === 'green_front' || topic === 'green_back' || topic === 'green_middle') /* end_session, next_focus, swing_observation, tell_me_more deliberately allowed off-round */) {
       return {
         success: true,
         voice_response: 'You\'re not in a round yet. Want to start one?',
@@ -325,6 +325,58 @@ export const queryStatusHandler: IntentHandler = {
             side_effects: ['cage:end_session:error'],
             follow_up_needed: false,
           };
+        }
+      }
+
+      case 'swing_observation': {
+        // Phase K — replay primary issue observation from the most recent
+        // session.
+        try {
+          const { useCageStore } = await import('../../store/cageStore');
+          const last = useCageStore.getState().sessionHistory.slice(-1)[0];
+          if (last?.primary_issue) {
+            return {
+              success: true,
+              voice_response: `${last.primary_issue.name}. ${last.primary_issue.mechanical_breakdown}`,
+              side_effects: ['cage:swing_observation'],
+              follow_up_needed: false,
+            };
+          }
+          return {
+            success: true,
+            voice_response: "I didn't see a clear primary issue from that session.",
+            side_effects: ['cage:swing_observation:none'],
+            follow_up_needed: false,
+          };
+        } catch {
+          return { success: true, voice_response: "Couldn't pull that up.", side_effects: ['cage:swing_observation:error'], follow_up_needed: false };
+        }
+      }
+
+      case 'tell_me_more': {
+        // Phase K — expanded analysis. Plays the feel cue + drill recommendation
+        // reason if both are populated.
+        try {
+          const { useCageStore } = await import('../../store/cageStore');
+          const last = useCageStore.getState().sessionHistory.slice(-1)[0];
+          if (last?.primary_issue) {
+            const feel = last.primary_issue.feel_cue;
+            const drill = last.drill_recommendation?.reason ?? '';
+            return {
+              success: true,
+              voice_response: `${feel} ${drill}`.trim(),
+              side_effects: ['cage:tell_me_more'],
+              follow_up_needed: false,
+            };
+          }
+          return {
+            success: true,
+            voice_response: "That's the main thing — nothing more to add.",
+            side_effects: ['cage:tell_me_more:none'],
+            follow_up_needed: false,
+          };
+        } catch {
+          return { success: true, voice_response: "Couldn't pull that up.", side_effects: ['cage:tell_me_more:error'], follow_up_needed: false };
         }
       }
 

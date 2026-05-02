@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -20,9 +20,19 @@ import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
 import PrimaryIssueCard from '../../components/swinglab/PrimaryIssueCard';
 import DrillCard from '../../components/swinglab/DrillCard';
 import { getDialog } from '../../services/dialogEngine';
+import { analyzeSwing, type SwingAnalysis } from '../../services/poseDetection';
+import { classifySession } from '../../services/swingIssueClassifier';
+import { recommendDrill } from '../../services/drillRecommendation';
+import { useTrustLevelStore } from '../../store/trustLevelStore';
+import type { PrimaryIssue, DrillRecommendation } from '../../store/cageStore';
 
 export default function CageSummary() {
   const router = useRouter();
+  const trustLevel = useTrustLevelStore(s => s.level);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [primaryIssue, setPrimaryIssue] = useState<PrimaryIssue | null>(null);
+  const [drillRec, setDrillRec] = useState<DrillRecommendation | null>(null);
+  const [analysisStatus, setAnalysisStatus] = useState<'pending' | 'no_frames' | 'no_data' | 'done' | 'error'>('pending');
 
   const { sessionHistory } = useCageStore();
   const { addPoints } = usePointsStore();
@@ -42,6 +52,49 @@ export default function CageSummary() {
 
   const shots = session?.shots ?? [];
   const pattern = analyzeSession(shots, session?.club ?? '');
+
+  // Phase K — pose-detection pipeline runs once per session on mount.
+  // Each captured swing's clipUri is sent to /api/swing-analysis via the
+  // poseDetection service; results aggregate into a session-level
+  // PrimaryIssue + DrillRecommendation that populate the Phase J cards.
+  // KNOWN GAP: extractKeyFrames() returns empty until expo-video-thumbnails
+  // lands; the pipeline reports 'no_frames' and cards show placeholder.
+  useEffect(() => {
+    if (!session || analysisStatus !== 'pending') return;
+    let cancelled = false;
+    (async () => {
+      const swingsWithClips = session.shots.filter(s => s.clipUri);
+      if (swingsWithClips.length === 0) {
+        if (!cancelled) setAnalysisStatus('no_data');
+        return;
+      }
+      setAnalyzing(true);
+      const results: { swing_id: string; analysis: SwingAnalysis }[] = [];
+      let anyNoFrames = false;
+      for (let i = 0; i < swingsWithClips.length; i++) {
+        if (cancelled) return;
+        const swing = swingsWithClips[i];
+        const r = await analyzeSwing(swing.clipUri!, {
+          club: session.club,
+          swing_number: i + 1,
+          prior_issues: results.slice(-3).map(x => x.analysis.detected_issue).filter(x => x !== 'none'),
+        });
+        if (r.kind === 'ok') results.push({ swing_id: swing.id, analysis: r.analysis });
+        if (r.kind === 'no_frames') anyNoFrames = true;
+      }
+      if (cancelled) return;
+      setAnalyzing(false);
+      if (results.length === 0) {
+        setAnalysisStatus(anyNoFrames ? 'no_frames' : 'no_data');
+        return;
+      }
+      const issue = classifySession(results);
+      setPrimaryIssue(issue);
+      if (issue) setDrillRec(recommendDrill(issue.issue_id as never));
+      setAnalysisStatus('done');
+    })();
+    return () => { cancelled = true; };
+  }, [session, analysisStatus]);
 
   useEffect(() => {
     if (!session) {
@@ -105,11 +158,19 @@ export default function CageSummary() {
              session.primary_issue / session.drill_recommendation are null
              (today, always — Phase K populates them). When Phase K ships,
              these cards render real analysis automatically. */}
+        {/* Phase K — analyzing indicator while pose detection runs */}
+        {analyzing && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4, marginBottom: 10 }}>
+            <Text style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>
+              Analyzing swings…
+            </Text>
+          </View>
+        )}
         <PrimaryIssueCard
-          issue={session.primary_issue ?? null}
+          issue={primaryIssue ?? session.primary_issue ?? null}
           totalShots={session.shots.length}
         />
-        <DrillCard recommendation={session.drill_recommendation ?? null} />
+        <DrillCard recommendation={drillRec ?? session.drill_recommendation ?? null} />
 
         {/* KEVIN DEBRIEF */}
         <View style={styles.debriefCard}>

@@ -1,0 +1,148 @@
+import type { CanonicalIssue, SwingAnalysis } from './poseDetection';
+import type { PrimaryIssue } from '../store/cageStore';
+
+/**
+ * Phase K — Aggregate per-swing analyses into a session-level Primary Issue.
+ *
+ * Strategy:
+ * - Discard low-confidence analyses (per-swing) from primary-issue tally
+ *   (their observations stay for context but don't drive the call).
+ * - Tally `detected_issue` across remaining swings.
+ * - Primary issue = most-frequent issue, weighted by severity (significant
+ *   counts 3x, moderate 2x, minor 1x).
+ * - When the top issue is `none` or has fewer than 2 occurrences across the
+ *   session, return null Primary Issue (Mike sees "no clear primary issue
+ *   from this session" — honest, not a forced call).
+ * - When a primary issue is identified, mechanical_breakdown and feel_cue
+ *   come from `ISSUE_COACH_VOICE` (per-issue authored copy below).
+ */
+
+export const ISSUE_DISPLAY_NAME: Record<CanonicalIssue, string> = {
+  club_face_open: 'Open Clubface at Impact',
+  club_face_closed: 'Closed Clubface at Impact',
+  swing_path_outside_in: 'Outside-In Swing Path',
+  swing_path_inside_out: 'Inside-Out Swing Path',
+  attack_angle_steep: 'Steep Angle of Attack',
+  attack_angle_shallow: 'Shallow Angle of Attack',
+  early_extension: 'Early Extension',
+  over_the_top: 'Over-the-Top Transition',
+  chicken_wing: 'Chicken Wing Through Impact',
+  reverse_pivot: 'Reverse Pivot',
+  none: 'No Clear Primary Issue',
+};
+
+export const ISSUE_CATEGORY: Record<CanonicalIssue, PrimaryIssue['category']> = {
+  club_face_open: 'club_face',
+  club_face_closed: 'club_face',
+  swing_path_outside_in: 'swing_path',
+  swing_path_inside_out: 'swing_path',
+  attack_angle_steep: 'attack_angle',
+  attack_angle_shallow: 'attack_angle',
+  early_extension: 'setup',
+  over_the_top: 'swing_path',
+  chicken_wing: 'tempo',
+  reverse_pivot: 'tempo',
+  none: 'other',
+};
+
+/** Per-issue Coach voice. Mechanical breakdown reads in Kevin's voice — same
+ *  character that authored the per-drill walkthroughs in Phase I. */
+export const ISSUE_COACH_VOICE: Record<CanonicalIssue, { mechanical: string; feel: string }> = {
+  club_face_open: {
+    mechanical: "Your clubface is open at impact — the ball squirts right because the face never squares up. Grip and release timing are usually the cause.",
+    feel: "Feel like the back of your lead hand points at the target through impact. Squares the face naturally.",
+  },
+  club_face_closed: {
+    mechanical: "Your clubface is closed at impact — the ball pulls left because the face is shut at the moment of truth. Often a too-strong grip or early release.",
+    feel: "Feel the toe of the club racing past your hands at impact. Wakes the face up.",
+  },
+  swing_path_outside_in: {
+    mechanical: "Your club is approaching from outside the target line. The path comes across the ball, opening the face — that's the slice.",
+    feel: "Think of swinging out toward right field. Feels exaggerated, but it's just neutral path.",
+  },
+  swing_path_inside_out: {
+    mechanical: "Your club is coming from inside the target line and swinging out — that's the hook tendency. Path is too far in-to-out.",
+    feel: "Feel like you're swinging toward left field. Brings the path back to neutral.",
+  },
+  attack_angle_steep: {
+    mechanical: "You're chopping down on the ball — too steep an angle of attack. Big divots after the ball, ballooning trajectory.",
+    feel: "Feel like you're sweeping the grass after the ball, not digging into it.",
+  },
+  attack_angle_shallow: {
+    mechanical: "You're sweeping the ball — no compression, weak strike. Ball flight stays low and short of expected.",
+    feel: "Feel like you're trapping the ball against the ground for an instant before the divot.",
+  },
+  early_extension: {
+    mechanical: "Your hips are moving toward the ball at impact instead of rotating around. Spine angle stands up, club gets stuck.",
+    feel: "Feel like your butt stays on the wall behind you through the swing. Hips rotate, not push forward.",
+  },
+  over_the_top: {
+    mechanical: "Your club is coming over the plane on transition — shoulders fire before the lower body, club casts out. Classic slice ingredient.",
+    feel: "Feel the lower body start the downswing. Hips lead, then arms follow. Slow it down to find it.",
+  },
+  chicken_wing: {
+    mechanical: "Your lead arm is bending through impact — the elbow flies out instead of extending toward the target.",
+    feel: "Feel both arms extending toward the target through impact. Long arms, tall finish.",
+  },
+  reverse_pivot: {
+    mechanical: "Your weight is shifting backward on the downswing instead of forward. Robs power, exposes the swing to inconsistency.",
+    feel: "Feel your front foot press into the ground as you start down. Weight goes forward, then rotates.",
+  },
+  none: { mechanical: '', feel: '' },
+};
+
+const SEVERITY_WEIGHT: Record<SwingAnalysis['severity'], number> = {
+  none: 0,
+  minor: 1,
+  moderate: 2,
+  significant: 3,
+};
+
+const MIN_SESSION_SWINGS_FOR_PRIMARY = 3;
+const MIN_OCCURRENCES_FOR_PRIMARY = 2;
+
+/**
+ * Roll up a session's per-swing analyses into one PrimaryIssue (or null).
+ */
+export function classifySession(
+  swingAnalyses: { swing_id: string; analysis: SwingAnalysis }[],
+): PrimaryIssue | null {
+  if (swingAnalyses.length < MIN_SESSION_SWINGS_FOR_PRIMARY) return null;
+
+  // Tally per-issue weighted score, ignoring low-confidence + 'none'.
+  const tally: Record<string, { score: number; count: number; severity: SwingAnalysis['severity']; swing_ids: string[] }> = {};
+  for (const { swing_id, analysis } of swingAnalyses) {
+    if (analysis.confidence === 'low') continue;
+    if (analysis.detected_issue === 'none') continue;
+    const issue = analysis.detected_issue;
+    const slot = tally[issue] ?? { score: 0, count: 0, severity: 'minor' as const, swing_ids: [] };
+    slot.score += SEVERITY_WEIGHT[analysis.severity];
+    slot.count += 1;
+    slot.swing_ids.push(swing_id);
+    // Track the highest severity observed for this issue
+    if (SEVERITY_WEIGHT[analysis.severity] > SEVERITY_WEIGHT[slot.severity]) {
+      slot.severity = analysis.severity;
+    }
+    tally[issue] = slot;
+  }
+
+  const ranked = Object.entries(tally)
+    .map(([issue, data]) => ({ issue: issue as CanonicalIssue, ...data }))
+    .sort((a, b) => b.score - a.score);
+
+  const top = ranked[0];
+  if (!top || top.count < MIN_OCCURRENCES_FOR_PRIMARY) return null;
+
+  const voice = ISSUE_COACH_VOICE[top.issue];
+  return {
+    issue_id: top.issue,
+    name: ISSUE_DISPLAY_NAME[top.issue],
+    category: ISSUE_CATEGORY[top.issue],
+    severity: top.severity === 'none' ? 'minor' : top.severity,
+    occurrence_count: top.count,
+    visual_reference_path: null,  // Visual assets pending; PrimaryIssueCard renders text-only
+    mechanical_breakdown: voice.mechanical,
+    feel_cue: voice.feel,
+    detected_in_shots: top.swing_ids,
+  };
+}
