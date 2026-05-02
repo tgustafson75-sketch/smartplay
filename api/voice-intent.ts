@@ -20,7 +20,7 @@ Available intents:
    - "open dashboard" -> { tool_name: "dashboard" }
    - "open settings" -> { tool_name: "settings" }
    - "go to settings" -> { tool_name: "settings" }
-   - "Kevin what should I do here" / "analyze my lie" / "what's my play" / "look at this lie" -> { tool_name: "lie_analysis" }
+   - "Kevin what should I do here" / "analyze my lie" / "what's my play" / "look at this lie" / "take a look at this" / "what do you see" -> { tool_name: "lie_analysis" }
    - "should I go for it" / "can I go at this pin" -> { tool_name: "lie_analysis", play_intent: "aggressive" }
    - "should I lay up" / "should I play safe here" -> { tool_name: "lie_analysis", play_intent: "conservative" }
 
