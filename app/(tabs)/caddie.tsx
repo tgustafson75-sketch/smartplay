@@ -759,6 +759,38 @@ export default function CaddieTab() {
         handicap: usePlayerProfileStore.getState().handicap,
         dominantMiss: usePlayerProfileStore.getState().dominantMiss as 'left' | 'right' | 'straight' | null,
       });
+      // Phase U — bundle recent cage practice + pre-round notes for recap context.
+      // 14-day window picks up the most recent practice work without surfacing
+      // stale issues. Cage data drives the "your work on X is showing" honesty
+      // bar in the Sonnet recap prompt.
+      const cageContext = (() => {
+        const cs = useCageStore.getState();
+        const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
+        const recent = cs.sessionHistory.filter(s => s.date >= cutoff);
+        if (recent.length === 0) return null;
+        const issues = recent
+          .filter(s => s.primary_issue)
+          .map(s => ({
+            issue_name: s.primary_issue!.name,
+            severity: s.primary_issue!.severity,
+            occurrence_count: s.primary_issue!.occurrence_count,
+            session_date: new Date(s.date).toISOString().slice(0, 10),
+          }));
+        const drills = recent
+          .filter(s => s.drill_recommendation)
+          .map(s => ({
+            drill_name: s.drill_recommendation!.drill_name,
+            target_issue: s.primary_issue?.name ?? 'general',
+          }));
+        return {
+          recent_sessions_count: recent.length,
+          primary_issues: issues,
+          drill_recommendations: drills,
+          most_recent_session_date: recent[recent.length - 1]
+            ? new Date(recent[recent.length - 1].date).toISOString().slice(0, 10)
+            : null,
+        };
+      })();
       generateRecap(roundId, {
         courseName: storeState.activeCourse ?? 'Unknown Course',
         courseId: storeState.activeCourseId,
@@ -777,6 +809,8 @@ export default function CaddieTab() {
         // IMPORTANT: getSnapshot() must run before any future deactivateGhost() call —
         // ghost store is in-memory only and deactivation clears all hole results.
         ghostSnapshot: useGhostStore.getState().getSnapshot(),
+        cageContext,
+        preRoundNotes: storeState.roundNotes || null,
       })
         .then(recap => {
           setRecapLoading(false);

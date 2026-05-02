@@ -30,6 +30,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // via services/handicapCalculator so this endpoint stays math-free.
       courseHandicap = null,
       teeName = null,
+      // Phase U — meaningful pattern shift across recent rounds (computed
+      // client-side via services/patternDetection.detectPatternShift).
+      patternShiftAlert = null,
     } = req.body;
 
     const name = String(playerName || '').trim();
@@ -42,6 +45,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       : '';
     const handicapBlock = (courseHandicap != null)
       ? `Course Handicap from ${teeName || 'these tees'} today is ${courseHandicap}. Drop this in naturally — one short line.`
+      : '';
+    const patternShiftBlock = patternShiftAlert
+      ? `Pattern shift across recent rounds: ${patternShiftAlert}. Mention this briefly so the user heads onto the course aware of the trend.`
       : '';
 
     const systemPrompt = `${KEVIN_CHARACTER_SPEC}
@@ -72,6 +78,7 @@ Rounds together: ${roundsTogether}
 ${insightsBlock}
 ${ghostBlock}
 ${handicapBlock}
+${patternShiftBlock}
 
 Give the pre-round briefing now.`;
 

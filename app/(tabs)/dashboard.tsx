@@ -4,6 +4,7 @@ import {
   Text,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoundStore } from '../../store/roundStore';
@@ -11,8 +12,11 @@ import { useRelationshipStore } from '../../store/relationshipStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { usePointsStore } from '../../store/pointsStore';
 import AppIcon from '../../components/AppIcon';
+import { useRouter } from 'expo-router';
+import { detectPatternShift } from '../../services/patternDetection';
 
 export default function Dashboard() {
+  const router = useRouter();
   const {
     isRoundActive,
     activeCourse,
@@ -20,6 +24,12 @@ export default function Dashboard() {
     getScoreVsPar,
     getHolesPlayed,
   } = useRoundStore();
+  const roundHistory = useRoundStore(s => s.roundHistory);
+  // Phase U Component 3 — surface a meaningful pattern drift when one exists.
+  const patternShift = React.useMemo(
+    () => detectPatternShift(roundHistory.map(r => ({ shots: r.shots }))),
+    [roundHistory],
+  );
 
   const {
     roundsTogether,
@@ -265,6 +275,24 @@ export default function Dashboard() {
             </Text>
           )}
         </View>
+
+        {/* PHASE U — pattern shift alert (proactive surfacing) */}
+        {patternShift && (
+          <TouchableOpacity
+            style={[styles.card, { borderColor: patternShift.severity === 'significant' ? '#fbbf24' : '#1e3a28', borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', gap: 12 }]}
+            onPress={() => router.push('/(tabs)/swinglab' as never)}
+            activeOpacity={0.85}
+          >
+            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(251,191,36,0.12)', alignItems: 'center', justifyContent: 'center' }}>
+              <AppIcon name="trending-up-outline" size={20} color="#fbbf24" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#fbbf24', fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>PATTERN SHIFT</Text>
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', marginTop: 4, lineHeight: 18 }}>{patternShift.alert_message}</Text>
+            </View>
+            <AppIcon name="chevron-forward" size={18} color="#6b7280" />
+          </TouchableOpacity>
+        )}
 
         {/* BREAKTHROUGHS */}
         {breakthroughs.length > 0 && (

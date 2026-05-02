@@ -16,6 +16,8 @@ interface BriefingParams {
   // Phase T — pre-computed by caller via handicapCalculator if Index is set
   courseHandicap?: number | null;
   teeName?: string | null;
+  // Phase U — meaningful drift across recent rounds (from detectPatternShift)
+  patternShiftAlert?: string | null;
 }
 
 // In-memory cache: roundId → briefing text

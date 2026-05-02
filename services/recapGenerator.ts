@@ -102,6 +102,14 @@ export async function generateRecap(
     playerName: string;
     apiUrl: string;
     ghostSnapshot?: GhostMatchSnapshot | null;
+    // Phase U Component 1+2 — recap context enrichment.
+    cageContext?: {
+      recent_sessions_count: number;
+      primary_issues: Array<{ issue_name: string; severity: string; occurrence_count: number; session_date: string }>;
+      drill_recommendations?: Array<{ drill_name: string; target_issue: string }>;
+      most_recent_session_date?: string | null;
+    } | null;
+    preRoundNotes?: string | null;
   },
 ): Promise<RoundRecap> {
   const { courseName, courseId, mode, startedAt, endedAt, totalScore, scoreVsPar, scores, plans, shots, courseHoles } = round;
@@ -157,6 +165,9 @@ export async function generateRecap(
         holes_played: scoredHoles.length,
         holes,
         pattern_insights: round.patternInsights,
+        // Phase U: cage practice + pre-round focus context
+        cage_context: round.cageContext ?? null,
+        pre_round_notes: round.preRoundNotes ?? null,
       }),
     }).finally(() => clearTimeout(timeout));
 

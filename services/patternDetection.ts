@@ -213,3 +213,84 @@ export function generatePatternInsights(
     },
   };
 }
+
+// ─── Phase U Component 3 — Pattern shift detection ───────────────────
+
+export interface PatternShift {
+  axis: 'driver_miss' | 'overall_miss';
+  from: 'left' | 'right' | 'straight' | 'balanced';
+  to: 'left' | 'right' | 'straight' | 'balanced';
+  rounds_consistent: number;
+  severity: 'mild' | 'moderate' | 'significant';
+  alert_message: string;
+}
+
+/**
+ * Detect a meaningful drift in miss tendency across recent rounds.
+ *
+ * Threshold logic (intentionally conservative — surface real shifts only):
+ *   • Need at least 3 recent rounds AND at least 2 baseline rounds for comparison
+ *   • Shift fires only when the recent-window tendency differs from the
+ *     baseline-window tendency
+ *   • Recent window holds for at least 3 rounds (no single-round noise)
+ *   • Returns null when no meaningful shift exists (the dashboard then
+ *     hides the alert card — no false alerts)
+ *
+ * Used by:
+ *   • dashboard.tsx milestone card (proactive surface)
+ *   • api/briefing.ts (pre-round mention when shift active)
+ */
+export function detectPatternShift(
+  rounds: Array<{ shots: Array<{ direction: string | null; club: string | null }> }>,
+): PatternShift | null {
+  if (rounds.length < 5) return null;
+
+  const recent = rounds.slice(-3);
+  const baseline = rounds.slice(0, -3);
+  if (baseline.length < 2) return null;
+
+  function dominantOf(roundList: typeof rounds): 'left' | 'right' | 'straight' | 'balanced' {
+    const counts = { left: 0, right: 0, straight: 0 };
+    for (const r of roundList) {
+      for (const s of r.shots) {
+        if (s.direction === 'left') counts.left++;
+        else if (s.direction === 'right') counts.right++;
+        else if (s.direction === 'straight') counts.straight++;
+      }
+    }
+    const total = counts.left + counts.right + counts.straight;
+    if (total < 5) return 'balanced';
+    const max = Math.max(counts.left, counts.right, counts.straight);
+    const ratio = max / total;
+    if (ratio < 0.45) return 'balanced';
+    if (counts.left === max) return 'left';
+    if (counts.right === max) return 'right';
+    return 'straight';
+  }
+
+  const recentTendency = dominantOf(recent);
+  const baselineTendency = dominantOf(baseline);
+  if (recentTendency === baselineTendency) return null;
+  // Only surface drift TO a directional miss (not random noise)
+  if (recentTendency === 'balanced' && baselineTendency !== 'left' && baselineTendency !== 'right') return null;
+
+  const severity: PatternShift['severity'] =
+    recent.length >= 5 ? 'significant' :
+    recent.length >= 4 ? 'moderate' : 'mild';
+
+  const alert_message =
+    recentTendency === 'left' || recentTendency === 'right'
+      ? `Your driver has trended ${recentTendency} across last ${recent.length} rounds. Worth a Gate Drill session before it sticks.`
+      : recentTendency === 'balanced' && baselineTendency !== 'balanced'
+        ? `Your ${baselineTendency} miss has cleaned up — last ${recent.length} rounds are balanced. Keep doing what you're doing.`
+        : `Pattern shift detected: ${baselineTendency} → ${recentTendency} across ${recent.length} rounds.`;
+
+  return {
+    axis: 'driver_miss',
+    from: baselineTendency,
+    to: recentTendency,
+    rounds_consistent: recent.length,
+    severity,
+    alert_message,
+  };
+}

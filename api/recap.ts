@@ -16,6 +16,21 @@ Mode-aware tone:
 - break_80: focus on scoring chances and discipline, call out unnecessary risks
 - free_play: light, conversational, not prescriptive
 
+Phase U honesty bar — connection logic for the overall_summary:
+- If "Recent practice" context shows the user worked on a specific issue
+  AND the round's pattern signals show genuine improvement on that axis,
+  mention the connection naturally ("your work on outside-in path is
+  showing — driver dispersion held tighter than recent rounds").
+- If practice targeted an issue and round signals show no improvement
+  or regression, name it honestly ("the path drill might need more reps
+  — driver leaks today suggest the move isn't sticking yet").
+- If there's NO genuine connection in the data, do NOT fabricate one.
+  Better to omit than confabulate. Connections only earn their place
+  when the evidence supports them.
+- If "Pre-round focus" was set, treat it as the user's stated intention.
+  Acknowledge effort if the round shows they worked on it; call out
+  drift honestly if the focus slipped during the round.
+
 After the per-hole summaries, write one overall_summary: one strong observation about the round and one concrete takeaway for next time. Max 3 sentences for overall_summary.
 
 Never use the words 'metric', 'session', 'feature', 'system', or 'data' in responses.
@@ -38,6 +53,13 @@ interface HoleSummaryRequest {
   variance: number | null;
 }
 
+interface CageContext {
+  recent_sessions_count: number;
+  primary_issues: Array<{ issue_name: string; severity: string; occurrence_count: number; session_date: string }>;
+  drill_recommendations?: Array<{ drill_name: string; target_issue: string }>;
+  most_recent_session_date?: string | null;
+}
+
 interface RecapRequest {
   player_name: string;
   course_name: string;
@@ -47,6 +69,10 @@ interface RecapRequest {
   holes_played: number;
   holes: HoleSummaryRequest[];
   pattern_insights: string[];
+  // Phase U Component 1: recent cage practice context
+  cage_context?: CageContext | null;
+  // Phase U Component 2: user's pre-round focus notes
+  pre_round_notes?: string | null;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -87,10 +113,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? `\nPlayer patterns this round:\n${body.pattern_insights.map(i => '- ' + i).join('\n')}`
       : '';
 
+    // Phase U Component 1 — recent cage practice context
+    let cageBlock = '';
+    if (body.cage_context && body.cage_context.recent_sessions_count > 0) {
+      const c = body.cage_context;
+      const issuesLine = c.primary_issues.length > 0
+        ? c.primary_issues.map(i => `${i.issue_name} (severity ${i.severity}, ${i.occurrence_count} occurrences, ${i.session_date})`).join('; ')
+        : 'no specific primary issue';
+      const drillsLine = (c.drill_recommendations ?? []).length > 0
+        ? (c.drill_recommendations ?? []).map(d => `${d.drill_name} → ${d.target_issue}`).join('; ')
+        : 'no specific drill';
+      cageBlock = `\nRecent practice (last 14 days, ${c.recent_sessions_count} cage session${c.recent_sessions_count > 1 ? 's' : ''}):\n  Issues worked on: ${issuesLine}\n  Drills targeted: ${drillsLine}\n  Connection logic: only mention practice if today's pattern signals genuinely correlate.`;
+    }
+
+    // Phase U Component 2 — pre-round focus notes
+    const notesBlock = body.pre_round_notes && body.pre_round_notes.trim()
+      ? `\nPre-round focus (user wrote): "${body.pre_round_notes.trim()}"\n  Treat as a coaching contract — acknowledge if the round showed evidence the user worked on this; call out honestly if focus drifted.`
+      : '';
+
     const userMessage = `Recap for ${body.player_name || 'the player'} at ${body.course_name}.
 Mode: ${modeLabel[body.mode] ?? body.mode}
 Total: ${body.total_score} (${body.score_vs_par >= 0 ? '+' : ''}${body.score_vs_par}) over ${body.holes_played} holes
-${patternBlock}
+${patternBlock}${cageBlock}${notesBlock}
 
 ${holesBlock}
 
