@@ -19,7 +19,9 @@ const rrCounters: Partial<Record<FillerCategory, number>> = {};
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function voiceHash(gender: string, language: string): string {
-  return `${gender}_${language}_v1`;
+  // v2 = Phase P expansion (looking, thinking, checking, analyzing,
+  // acknowledging, confirming, engaging, casual). Bump forces regeneration.
+  return `${gender}_${language}_v2`;
 }
 
 function clipFile(id: string): File {

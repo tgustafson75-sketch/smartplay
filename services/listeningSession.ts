@@ -1,4 +1,4 @@
-import { speak, stopSpeaking, isSpeaking, captureUtterance } from './voiceService';
+import { speak, stopSpeaking, isSpeaking, captureUtterance, playLocalFile } from './voiceService';
 import { getDialog } from './dialogEngine';
 import { getTrustLevel } from './trustLevelService';
 import { useRoundStore } from '../store/roundStore';
@@ -6,6 +6,8 @@ import { useSettingsStore } from '../store/settingsStore';
 import { voiceCommandRouter } from './intents';
 import { subscribeEarbudTap } from './earbudControl';
 import { getCurrentRoute } from './audioRoutingService';
+import { routeQuery } from './responseRouter';
+import { getClipForCategory } from './fillerLibrary';
 import type { AppContext } from '../types/voiceIntent';
 
 /**
@@ -120,6 +122,8 @@ async function openSession() {
 
   // Phase 3 — classify + respond
   state = 'thinking';
+  // Phase P — TTFA instrumentation. t0 = capture end.
+  const t0 = Date.now();
   try {
     const round = useRoundStore.getState();
     const ctx: AppContext = {
@@ -149,13 +153,46 @@ async function openSession() {
       return;
     }
     const intent = await parseRes.json();
+    const t_intent = Date.now();
     if (state !== 'thinking') return;
 
     state = 'responding';
+
+    // Phase P — fire filler (if router prescribes one) in parallel with handler.
+    // playLocalFile is non-blocking start; we await it later before speak() so
+    // the real response doesn't cancel the filler mid-clip.
+    const role: 'caddie' | 'coach' | 'psychologist' = round.isRoundActive ? 'caddie' : 'coach';
+    const decision = routeQuery(intent.intent_type, {
+      role,
+      trust_level: getTrustLevel() as 1 | 2 | 3 | 4,
+      topic: intent.parameters?.query_topic ?? null,
+    });
+    let fillerP: Promise<void> = Promise.resolve();
+    let t_filler_start: number | null = null;
+    if (decision.filler && ttsAllowed) {
+      const clip = getClipForCategory(decision.filler);
+      if (clip) {
+        t_filler_start = Date.now();
+        fillerP = playLocalFile(clip.audio_path).catch(() => {});
+      }
+    }
+
     const handler = voiceCommandRouter.getHandler(intent.intent_type);
     if (handler) {
       const result = await handler.execute(intent, ctx);
+      // Wait for the filler to finish before the real response so transitions
+      // are clean rather than cut. If no filler fired, this resolves instantly.
+      await fillerP;
+      const t_response_start = Date.now();
       if (result.voice_response && ttsAllowed) {
+        console.log('[ttfa]', JSON.stringify({
+          intent: intent.intent_type,
+          topic: intent.parameters?.query_topic ?? null,
+          filler: decision.filler,
+          intent_ms: t_intent - t0,
+          filler_start_ms: t_filler_start != null ? t_filler_start - t0 : null,
+          response_start_ms: t_response_start - t0,
+        }));
         await speak(result.voice_response, settings.voiceGender, settings.language, apiUrl);
       }
     }

@@ -227,5 +227,15 @@ The hole-shot-map UI lives at `components/recap/HoleShotMap.tsx` and the route a
 
 **Audio safety hardening (Phase O.5).** `services/voiceService.ts` `speak()` now consults `voiceEnabled` + audio route + `voiceOnPhoneSpeaker` at the top of every call. Closes the audit-flagged blast leaks at `app/hole-view.tsx` (SmartVision) and `services/conversationalLoggingOrchestrator.ts` (shot-prompt) without touching their callsites — single source of truth.
 
+## Phase P — Latency Masking
+
+| File | Purpose | Role |
+|---|---|---|
+| `responseRouter.ts` | Per-intent routing decision: direct handler / Haiku / Sonnet, plus filler category to play during the gap. Single source of truth for the table in [docs/voice-routing.md](../docs/voice-routing.md). All future model migrations live here. | Mode-neutral |
+| `fillerLibrary.ts` (extended) | Phase A.4 library extended with 8 Phase P contextual categories (`looking`, `thinking`, `checking`, `analyzing`, `acknowledging`, `confirming`, `engaging`, `casual`). Voice-hash bumped to v2 → regenerates on next boot. Round-robin selection avoids robotic repetition. | Mode-neutral |
+| `listeningSession.ts` (extended) | Now consults `responseRouter` after intent classification, fires the prescribed filler clip via `playLocalFile` in parallel with handler.execute(), waits for both before speaking the real response. TTFA timestamps logged via `console.log('[ttfa] ...')` — scrapeable from device logs without a metrics pipeline. | Caddie + Coach |
+
+**Phase P finding.** The runtime conversation loop is already optimal: in-loop calls are Haiku (intent classification) + direct synchronous handlers + TTS. No Sonnet on the hot path. The "Hey— [silence]" gap was the cumulative intent-classifier + TTS latency (~1.0–1.4s); Phase P bridges that gap with pre-rendered clips. Out-of-band Sonnet calls (lie analysis, swing analysis, course content, recap, briefing, CV scoring) live on UI surfaces with their own loading states; `fillerForSonnetVision()` in `responseRouter` exposes the canonical filler vocabulary for those surfaces too.
+
 **Cage Session silence (Phase O.5).** `app/cage/session.tsx` calls `setSuppressed(true)` on mount, restored on unmount. While the user is in active swing capture, earbud taps are silently ignored so a tap mid-swing doesn't fire Kevin TTS over the recording. PostSessionReview gets normal earbud behavior again.
 
