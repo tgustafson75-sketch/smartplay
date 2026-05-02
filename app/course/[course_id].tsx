@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet,
-  Linking, Image, Dimensions, type ImageSourcePropType,
+  Image, Dimensions, type ImageSourcePropType,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import { getCourse } from '../../services/golfCourseApi';
 import { fetchCourseContent, getCachedContent, type CourseContent } from '../../services/courseContentService';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { getCourseImageryUrl, getHoleThumbnailUrl } from '../../services/mapboxImagery';
+import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import PALMS_IMAGES from '../../data/palmsImages';
 import type { Course } from '../../types/course';
 
@@ -146,8 +147,8 @@ export default function CourseDetailScreen() {
 
   const handleBookTeeTime = () => {
     if (!course) return;
-    const q = encodeURIComponent(course.club_name);
-    Linking.openURL(`https://www.golfnow.com/tee-times/search?searchText=${q}`).catch(() => {});
+    const loc = [course.location.city, course.location.state].filter(Boolean).join(', ');
+    void openTeeTimeSearch(course.club_name, loc);
   };
 
   if (loading || !course) {

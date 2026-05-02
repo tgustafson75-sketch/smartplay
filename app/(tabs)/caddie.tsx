@@ -34,6 +34,7 @@ import { usePointsStore } from '../../store/pointsStore';
 import { getCourseList, getCourse } from '../../data/courses';
 import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
 import StartRoundCourseCard from '../../components/course/StartRoundCourseCard';
+import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types/patterns';
 import { getCourse as getApiCourse, courseToHoles } from '../../services/golfCourseApi';
 import { generateRecap } from '../../services/recapGenerator';
@@ -1657,10 +1658,7 @@ export default function CaddieTab() {
               {selectedPickedCourse && (
                 <TouchableOpacity
                   style={styles.findTeeBtn}
-                  onPress={() => {
-                    const q = encodeURIComponent(selectedPickedCourse.name);
-                    Linking.openURL(`https://www.golfnow.com/tee-times/search?searchText=${q}`).catch(() => {});
-                  }}
+                  onPress={() => { void openTeeTimeSearch(selectedPickedCourse.name); }}
                 >
                   <Text style={styles.findTeeBtnText}>Find Tee Time</Text>
                 </TouchableOpacity>
