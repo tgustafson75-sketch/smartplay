@@ -1187,6 +1187,20 @@ export default function CaddieTab() {
           {/* Phase R — quick scorecard glance */}
           <ScorecardChip />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+          {/* SmartFinder quick-launch — visible on every trust level. Lives in
+              the top-right header so taps never overlap Kevin's avatar tap
+              area (which fires the mic). hitSlop kept tight to the button. */}
+          {canAccess('smartfinder', subscription_status) && (
+            <TouchableOpacity
+              style={styles.smartFinderBtn}
+              onPress={() => router.push('/smartfinder' as never)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Open SmartFinder rangefinder"
+            >
+              <Ionicons name="locate" size={18} color="#F5A623" />
+            </TouchableOpacity>
+          )}
           {/* Phase R — round memory photo capture */}
           <PhotoCaptureButton />
           <TouchableOpacity
@@ -1948,6 +1962,16 @@ const styles = StyleSheet.create({
   navBtn: {
     width: 36,
     height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  smartFinderBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#F5A623',
+    backgroundColor: 'rgba(245,166,35,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
   },

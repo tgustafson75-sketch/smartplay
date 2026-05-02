@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ImageBackground, StyleSheet, type ImageSourcePropType } from 'react-native';
+import { View, Text, TouchableOpacity, ImageBackground, Image, StyleSheet, type ImageSourcePropType } from 'react-native';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
 import { useRoundStore } from '../../store/roundStore';
 import { getHoleGeometry, fetchCourseGeometry, type HoleGeometry } from '../../services/courseGeometryService';
 import { refreshFix, getLastFix } from '../../services/smartFinderService';
 import { haversineYards, projectToAxis } from '../../utils/geoDistance';
+import { getHoleThumbnailUrl } from '../../services/mapboxImagery';
 
 const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
@@ -176,34 +177,49 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   const greenPos = project(0, axisYards);
   const playerPos = playerProj ? project(playerProj.x, playerProj.y) : null;
 
+  // Mapbox aerial as substrate (when configured + geometry available).
+  // Falls back to the green SVG sketch when Mapbox returns null.
+  const aerialUrl = getHoleThumbnailUrl({
+    courseId: activeCourseId,
+    holeNumber: currentHole,
+    par: 4,
+    yardage: axisYards,
+    tee: geometry.tee,
+    green: geometry.green,
+  }, W, H);
+
   return (
     <SmartVisionTap>
     <View style={[styles.wrap, wrapDims]}>
-      <Svg width={W} height={H}>
-        <Rect x={0} y={0} width={W} height={H} rx={10} fill="#0a1f12" />
-        {/* Centerline */}
-        <Line
-          x1={teePos.sx} y1={teePos.sy} x2={greenPos.sx} y2={greenPos.sy}
-          stroke="#1e3a28" strokeWidth={1} strokeDasharray="4 4"
-        />
-        {/* Tee */}
-        <Circle cx={teePos.sx} cy={teePos.sy} r={4} fill="#6b7280" />
-        <SvgText x={teePos.sx} y={teePos.sy + 13} fill="#9ca3af" fontSize={8} textAnchor="middle">TEE</SvgText>
-        {/* Green */}
-        <Circle cx={greenPos.sx} cy={greenPos.sy} r={7} fill="#003d20" stroke="#00C896" strokeWidth={1.2} />
-        <SvgText x={greenPos.sx} y={greenPos.sy - 11} fill="#00C896" fontSize={8} textAnchor="middle">GREEN</SvgText>
-        {/* Player */}
+      {aerialUrl ? (
+        <Image source={{ uri: aerialUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      ) : null}
+      <Svg width={W} height={H} style={StyleSheet.absoluteFill}>
+        {/* Quiet sketch only when no aerial — otherwise the aerial IS the substrate */}
+        {!aerialUrl && (
+          <>
+            <Rect x={0} y={0} width={W} height={H} rx={10} fill="#0a1f12" />
+            <Line
+              x1={teePos.sx} y1={teePos.sy} x2={greenPos.sx} y2={greenPos.sy}
+              stroke="#1e3a28" strokeWidth={1} strokeDasharray="4 4"
+            />
+            <Circle cx={teePos.sx} cy={teePos.sy} r={4} fill="#6b7280" />
+            <SvgText x={teePos.sx} y={teePos.sy + 13} fill="#9ca3af" fontSize={8} textAnchor="middle">TEE</SvgText>
+            <Circle cx={greenPos.sx} cy={greenPos.sy} r={7} fill="#003d20" stroke="#00C896" strokeWidth={1.2} />
+            <SvgText x={greenPos.sx} y={greenPos.sy - 11} fill="#00C896" fontSize={8} textAnchor="middle">GREEN</SvgText>
+          </>
+        )}
+        {/* Player position overlay — lives over either substrate */}
         {playerPos && (
           <>
             <Path
               d={`M ${playerPos.sx} ${playerPos.sy} L ${greenPos.sx} ${greenPos.sy}`}
-              stroke="#F5A623" strokeWidth={1.2} strokeDasharray="3 3" opacity={0.6}
+              stroke="#F5A623" strokeWidth={1.5} strokeDasharray="3 3" opacity={0.85}
             />
-            <Circle cx={playerPos.sx} cy={playerPos.sy} r={5} fill="#F5A623" stroke="#0a1f12" strokeWidth={1.5} />
+            <Circle cx={playerPos.sx} cy={playerPos.sy} r={5} fill="#F5A623" stroke="#0d1a0d" strokeWidth={1.5} />
           </>
         )}
-        {/* Hole label corner */}
-        <SvgText x={W - pad} y={pad + 2} fill="#6b7280" fontSize={9} fontWeight="800" textAnchor="end" letterSpacing={1}>
+        <SvgText x={W - pad} y={pad + 2} fill="#fff" fontSize={9} fontWeight="800" textAnchor="end" letterSpacing={1}>
           HOLE {currentHole}
         </SvgText>
       </Svg>
