@@ -1144,6 +1144,23 @@ export default function CaddieTab() {
   const totalHoles = nineHoleMode ? 9 : (courseHoles.length || 18);
   // targetDirection: not yet in aim engine — show CENTER until wired
   const targetDirection = 'CENTER';
+
+  // Pre-beta — pre-round hole 1 default yardage. When a player has picked
+  // a local course but hasn't started yet, the data strip should show
+  // hole 1's distance instead of an empty cell. This is what the legacy
+  // app surfaced and the user expects on Quiet pre-round.
+  const preRoundDefaultYards = useMemo(() => {
+    if (isRoundActive) return null;
+    if (!selectedPickedCourse?.isLocal) return null;
+    const slug = selectedPickedCourse.id.replace('local:', '');
+    const local = getCourse(slug);
+    return local?.holes[0]?.distance ?? null;
+  }, [isRoundActive, selectedPickedCourse]);
+  const stripYardage = currentYardage ?? preRoundDefaultYards;
+  const stripPlaysLike = (currentYardage == null && preRoundDefaultYards != null && !caddieWeather)
+    ? preRoundDefaultYards
+    : playsLikeYardage;
+
   const currentStroke = useMemo(() => {
     // All penalties now flow through ShotResult (including More Menu addPenalty).
     // Legacy penalties[] field is no longer written to, so we read only from shots.
@@ -1329,52 +1346,68 @@ export default function CaddieTab() {
           />
         </View>
       )}
-      {trustLevel === 1 && (
-        <View style={{ position: 'absolute', top: insets.top + 60, left: 16, zIndex: 12 }}>
-          <Text style={{ color: '#00C896', fontSize: 13, fontWeight: '800', letterSpacing: 1.4, marginBottom: 12 }}>SmartPlay</Text>
-          <TouchableOpacity
-            onPress={handleMicPress}
-            accessibilityRole="button"
-            accessibilityLabel="Talk to Kevin (Quiet Mode)"
-          >
-            {/* Tap target is the SmartPlay Caddie badge — matches the legacy
-                app's logo-as-Kevin-tap pattern. KevinAvatar liveliness ring
-                still wraps it so idle/listening/speaking/thinking states pulse. */}
-            <Animated.View style={{ position: 'relative', opacity: quietPulse }}>
-              <KevinAvatar
-                state={kevinAvatarState}
-                presenceLevel={1}
-                sizeOverride={72}
-              >
-                <Image
-                  source={require('../../assets/avatars/smartplay_caddie_badge.png')}
-                  style={{ width: 64, height: 64 }}
-                  resizeMode="contain"
-                />
-              </KevinAvatar>
-              {/* Pre-beta — Discrete Mode mute dot. Lives ON the badge
-                  (DEFAULT) rather than as a third corner element. Tells
-                  the player at a glance that Kevin is intentionally
-                  silent, not crashed. Orange overrides gray when battery
-                  saver is active for the round (distinct from gray-Quiet
-                  and amber-thinking). */}
+      {trustLevel === 1 && (() => {
+        // Pre-beta — Quiet (L1) mirrors the L2 Companion stacked layout so
+        // pre-round and in-round both surface Kevin's face tile, the
+        // SmartVision card, and the SmartFinder card stacked top-to-bottom.
+        // Quiet's behavioral difference (no proactive speech) is enforced
+        // elsewhere; visually the player keeps the legacy stack.
+        const cellTop = insets.top + 100;
+        const cellW = W - 24;
+        const cellH = 180;
+        const gap = 10;
+        return (
+          <Animated.View pointerEvents="box-none" style={{ opacity: quietPulse }}>
+            <View
+              style={{
+                position: 'absolute', top: cellTop, left: 12,
+                width: cellW, height: cellH,
+                borderRadius: 14, borderWidth: 1.5, borderColor: '#1e3a28',
+                overflow: 'hidden', backgroundColor: '#060f09', zIndex: 6,
+              }}
+            >
+              <CaddieAvatar
+                gender={voiceGender === 'female' ? 'female' : 'male'}
+                isOnCourse={isRoundActive}
+                isCageMode={false}
+                voiceState={voiceState}
+                hud={NULL_HUD}
+                openingPrompt=""
+                caddieResponse=""
+                onTap={handleMicPress}
+                emotion={kevinEmotion}
+                fillMode="cover"
+                isThinking={kevinThinking}
+                trustLevel={trustLevel as 1 | 2 | 3 | 4}
+              />
+              {/* Quiet/saver indicator dot — bottom-right of the Kevin tile.
+                  Gray = quiet (Kevin intentionally silent); orange = battery
+                  saver active. Distinct from amber-thinking which lives in
+                  the avatar's own state. */}
               <View
                 style={{
                   position: 'absolute',
-                  bottom: 2,
-                  right: 2,
+                  bottom: 8,
+                  right: 8,
                   width: 14,
                   height: 14,
                   borderRadius: 7,
                   backgroundColor: saverActive ? '#F5A623' : '#6b7280',
                   borderWidth: 2,
                   borderColor: '#060f09',
+                  zIndex: 7,
                 }}
               />
-            </Animated.View>
-          </TouchableOpacity>
-        </View>
-      )}
+            </View>
+            <View
+              style={{ position: 'absolute', top: cellTop + cellH + gap, left: 12, zIndex: 6 }}
+              pointerEvents="box-none"
+            >
+              <L1HolePreview onOpenSmartVision={openSmartVision} width={cellW} height={cellH} />
+            </View>
+          </Animated.View>
+        );
+      })()}
 
       {/* TOP BANNER — SmartPlay Caddie wordmark across the very top, always
            visible. Sits above the existing top-nav row. */}
@@ -1503,9 +1536,10 @@ export default function CaddieTab() {
       )}
 
       {/* SMARTFINDER CARD — Phase D-2 embedded rangefinder. Hidden at L4
-           (Full) where it collapses to a small right-side icon to keep
-           Kevin's full-screen presence uncluttered. */}
-      {isRoundActive && trustLevel !== 4 && (
+           (Full) where it collapses to a small right-side icon. At L1
+           Quiet, the card renders pre-round AND in-round so the legacy
+           stack (SmartVision → SmartFinder → Start Round) is intact. */}
+      {((isRoundActive && trustLevel !== 4) || trustLevel === 1) && (
         <View
           style={{ position: 'absolute', left: 16, right: 16, bottom: 130 + insets.bottom, zIndex: 8 }}
           pointerEvents="box-none"
@@ -1605,67 +1639,10 @@ export default function CaddieTab() {
         </TouchableOpacity>
       )}
 
-      {/* L1 QUIET — fixed SmartVision-tap preview above the SmartFinder card.
-           L1-only; other levels are unaffected. Bumped further up the screen
-           (bottom 260+ vs 230) to leave clear space between this card and the
-           SmartFinder card below it. */}
-      {trustLevel === 1 && (
-        <View
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 260 + insets.bottom,
-            alignItems: 'center',
-            zIndex: 7,
-          }}
-          pointerEvents="box-none"
-        >
-          <L1HolePreview onOpenSmartVision={openSmartVision} />
-        </View>
-      )}
-
-      {/* L1 QUIET pre-round — restore the legacy SmartFinder preview card so
-          the stack reads SmartVision → SmartFinder → Start Round, clean and
-          logical. In-round, the standard SmartFinderCard renders below; this
-          pre-round stub only fills the empty space pre-round at L1. */}
-      {trustLevel === 1 && !isRoundActive && (
-        <View
-          style={{
-            position: 'absolute',
-            left: 16,
-            right: 16,
-            bottom: 130 + insets.bottom,
-            zIndex: 7,
-          }}
-          pointerEvents="box-none"
-        >
-          <TouchableOpacity
-            onPress={() => router.push('/smartfinder' as never)}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              backgroundColor: '#0d2418',
-              borderColor: '#1e3a28',
-              borderWidth: 1,
-              borderRadius: 14,
-              paddingVertical: 12,
-              paddingHorizontal: 14,
-              gap: 12,
-            }}
-            activeOpacity={0.88}
-          >
-            <View style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 1.5, borderColor: '#00C896', alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="locate-outline" size={18} color="#00C896" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: '#00C896', fontSize: 11, fontWeight: '800', letterSpacing: 1.2 }}>SMARTFINDER</Text>
-              <Text style={{ color: '#9ca3af', fontSize: 12, marginTop: 2 }}>Tap-to-lock rangefinder · Start a round to see live yardages</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#6b7280" />
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* L1 SmartVision card is now rendered inside the L1 Quiet block
+           above (stacked under Kevin's tile). This previous standalone
+           bottom-anchored copy was removed when L1 was restructured to
+           mirror the L2 Companion stack. */}
 
       {/* GREETING BUBBLE — pre-round only, sits in negative space above Start Round.
           Bottom = startRoundBtn (40 + 60 height) + 24 clearance = 124. */}
@@ -1682,17 +1659,19 @@ export default function CaddieTab() {
         </Animated.View>
       ) : null}
 
-      {/* DATA STRIP — cross-fades in when round starts */}
+      {/* DATA STRIP — cross-fades in when round starts. Pre-beta: at L1
+           Quiet, render the strip pre-round too with hole 1 defaults so
+           the player sees yardage/hole context the whole time. */}
       <Animated.View
-        style={[StyleSheet.absoluteFill, { opacity: stripOpacity }]}
-        pointerEvents={isRoundActive ? 'box-none' : 'none'}
+        style={[StyleSheet.absoluteFill, { opacity: isRoundActive ? stripOpacity : (trustLevel === 1 ? 1 : 0) }]}
+        pointerEvents={isRoundActive || trustLevel === 1 ? 'box-none' : 'none'}
       >
         <CaddieDataStrip
-          yardage={currentYardage}
-          playsLike={playsLikeYardage}
+          yardage={stripYardage}
+          playsLike={stripPlaysLike}
           hole={{ current: currentHole, total: totalHoles }}
           targetDirection={targetDirection}
-          stroke={currentStroke}
+          stroke={isRoundActive ? currentStroke : 1}
           visible={true}
           bottomOffset={insets.bottom}
           onPress={() => setShowShotCard(true)}

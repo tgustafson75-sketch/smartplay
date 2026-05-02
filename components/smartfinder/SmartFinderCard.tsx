@@ -56,7 +56,10 @@ export default function SmartFinderCard() {
     };
   }, [isRoundActive, currentHole]);
 
-  if (!isRoundActive) return null;
+  // Pre-beta — pre-round, render the same scope card with the hole 1
+  // label + dashes so the layout never disappears between Caddie home
+  // entry and round start. GPS dot reads 'none' (orange-ish) which
+  // matches the legacy 'GPS off' state honestly.
 
   return (
     <TouchableOpacity
