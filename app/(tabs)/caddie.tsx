@@ -129,11 +129,26 @@ export default function CaddieTab() {
     computeHoleScore,
   } = useRoundStore();
 
-  // Phase Q.5b — Caddie subscribes to roundStore.pendingStartCourseId.
-  // Play tab + Course Detail set this when the user picks a course;
-  // Caddie consumes it (resolves the real course, pre-fills the round
-  // setup sheet, opens the sheet) then clears it. This decouples from
-  // useLocalSearchParams which is unreliable across tab navigations.
+  // Pre-beta — Start Round handoff from the Play tab is a DIRECT launch.
+  // The Play tab sets roundStore.pendingStartCourseId when the user taps
+  // Start Round on the course card; Caddie consumes the signal here,
+  // resolves the course, and immediately calls runStartRound() with
+  // sensible defaults (free play, full 18, no ghost). The legacy
+  // round-setup modal is no longer part of the Play→Caddie path; it
+  // only opens when the user explicitly invokes setShowRoundSetup(true)
+  // from inside Caddie. Kills the "Start Round loop" where the modal
+  // re-appeared after the Play tab handed off control.
+  //
+  // runStartRoundRef is filled by an effect below (after the function is
+  // declared) so we can reference the latest closure here without a TDZ
+  // error from forward-referencing the const.
+  const runStartRoundRef = useRef<((picked: PickedCourse, opts: {
+    nineHole: boolean;
+    isCompetition: boolean;
+    notes: string;
+    mode: RoundMode;
+    ghostRoundId: string | null;
+  }) => Promise<void>) | null>(null);
   const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
   const clearPendingStart = useRoundStore(s => s.setPendingStartCourse);
   useEffect(() => {
@@ -141,79 +156,97 @@ export default function CaddieTab() {
     const id = pendingStartCourseId;
     clearPendingStart(null);
     void (async () => {
-      let resolvedId = id;
+      let picked: PickedCourse | null = null;
       if (id.startsWith('local:')) {
         const slug = id.slice('local:'.length);
-        const friendly =
-          slug === 'palms' ? 'Menifee Lakes Palms' :
-          slug === 'lakes' ? 'Menifee Lakes Lakes' :
-          slug === 'rancho-california' ? 'Rancho California Golf Club' :
-          slug;
+        const local = getCourse(slug);
+        picked = {
+          id, // keep the local: prefix so runStartRound takes the local branch
+          name: local?.name ?? slug,
+          fullName: local?.name ?? slug,
+          isLocal: true,
+        };
+      } else {
         try {
-          const { searchCourses } = await import('../../services/golfCourseApi');
-          const found = await searchCourses(friendly);
-          const real = found.find(r => !r._error);
-          if (real?.id) resolvedId = real.id;
+          const apiCourse = await getApiCourse(id);
+          if (apiCourse) {
+            picked = {
+              id: apiCourse.id,
+              name: apiCourse.club_name,
+              fullName: `${apiCourse.club_name} — ${apiCourse.location.city}, ${apiCourse.location.state}`,
+              isLocal: false,
+            };
+          }
         } catch (e) {
-          console.log('[caddie] local-course resolve failed:', e);
+          console.log('[caddie] pendingStart getCourse failed:', e);
         }
       }
-      try {
-        const apiCourse = await getApiCourse(resolvedId);
-        if (apiCourse) {
-          setSelectedPickedCourse({
-            id: apiCourse.id,
-            name: apiCourse.club_name,
-            fullName: `${apiCourse.club_name} — ${apiCourse.location.city}, ${apiCourse.location.state}`,
-            isLocal: false,
-          });
-        }
-      } catch (e) {
-        console.log('[caddie] pendingStart getCourse failed:', e);
+      if (!picked) {
+        // Resolution failed — fall back to opening the setup card so the
+        // user can pick again rather than silently dropping the request.
+        setShowRoundSetup(true);
+        return;
       }
-      setShowRoundSetup(true);
+      setSelectedPickedCourse(picked);
+      const fn = runStartRoundRef.current;
+      if (fn) {
+        await fn(picked, {
+          nineHole: false,
+          isCompetition: false,
+          notes: '',
+          mode: 'free_play',
+          ghostRoundId: null,
+        });
+      }
     })();
   }, [pendingStartCourseId, clearPendingStart]);
 
   // Legacy pre_course_id param path — kept for older callers (Course
-  // Detail's "Start Round Here" historic deep link). Prefers the
-  // pendingStartCourseId path but doesn't break this one.
+  // Detail's "Start Round Here" historic deep link). Same direct-launch
+  // semantics as pendingStartCourseId: skip the modal.
   useEffect(() => {
     if (!pre_course_id) return;
     void (async () => {
-      let resolvedId = pre_course_id;
-      // Resolve local: prefix synthetic id via name search (Play tab's
-      // CLOSEST LOCAL COURSES uses local:palms etc.).
+      let picked: PickedCourse | null = null;
       if (pre_course_id.startsWith('local:')) {
         const slug = pre_course_id.slice('local:'.length);
-        const friendly =
-          slug === 'palms' ? 'Menifee Lakes Palms' :
-          slug === 'lakes' ? 'Menifee Lakes Lakes' :
-          slug === 'rancho-california' ? 'Rancho California Golf Club' :
-          slug;
+        const local = getCourse(slug);
+        picked = {
+          id: pre_course_id,
+          name: local?.name ?? slug,
+          fullName: local?.name ?? slug,
+          isLocal: true,
+        };
+      } else {
         try {
-          const { searchCourses } = await import('../../services/golfCourseApi');
-          const found = await searchCourses(friendly);
-          const real = found.find(r => !r._error);
-          if (real?.id) resolvedId = real.id;
+          const apiCourse = await getApiCourse(pre_course_id);
+          if (apiCourse) {
+            picked = {
+              id: apiCourse.id,
+              name: apiCourse.club_name,
+              fullName: `${apiCourse.club_name} — ${apiCourse.location.city}, ${apiCourse.location.state}`,
+              isLocal: false,
+            };
+          }
         } catch (e) {
-          console.log('[caddie] local-course resolve failed:', e);
+          console.log('[caddie] pre_course_id getCourse failed:', e);
         }
       }
-      try {
-        const apiCourse = await getApiCourse(resolvedId);
-        if (apiCourse) {
-          setSelectedPickedCourse({
-            id: apiCourse.id,
-            name: apiCourse.club_name,
-            fullName: `${apiCourse.club_name} — ${apiCourse.location.city}, ${apiCourse.location.state}`,
-            isLocal: false,
-          });
-        }
-      } catch (e) {
-        console.log('[caddie] pre_course_id getCourse failed:', e);
+      if (!picked) {
+        setShowRoundSetup(true);
+        return;
       }
-      setShowRoundSetup(true);
+      setSelectedPickedCourse(picked);
+      const fn = runStartRoundRef.current;
+      if (fn) {
+        await fn(picked, {
+          nineHole: false,
+          isCompetition: false,
+          notes: '',
+          mode: 'free_play',
+          ghostRoundId: null,
+        });
+      }
     })();
     // Nonce ensures every navigation with the same course id re-fires.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -866,7 +899,24 @@ export default function CaddieTab() {
   };
 
   // ── Start round ──────────────────────────
-  const handleStartRound = async () => {
+  /**
+   * Pre-beta — single round-launch entry point. Takes a picked course and
+   * options explicitly so it can be called from EITHER the round-setup
+   * modal (handleStartRound) OR the Play tab Start-Round flow via the
+   * pendingStartCourseId effect (no modal — direct launch). This kills
+   * the "Start Round loop" where the modal kept reappearing after the
+   * Play tab handed off control.
+   */
+  const runStartRound = useCallback(async (
+    picked: PickedCourse,
+    opts: {
+      nineHole: boolean;
+      isCompetition: boolean;
+      notes: string;
+      mode: RoundMode;
+      ghostRoundId: string | null;
+    },
+  ): Promise<void> => {
     if (!canAccess('round_start', subscription_status)) {
       setShowRoundSetup(false);
       void triggerPaywall('round_start', () => router.push('/paywall' as never));
@@ -874,30 +924,26 @@ export default function CaddieTab() {
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
-    let courseName = 'Unknown Course';
+    let courseName = picked.name ?? 'Unknown Course';
     let holes = getCourse('palms')?.holes ?? [];
     let courseId: string | null = null;
 
-    if (selectedPickedCourse) {
-      if (selectedPickedCourse.isLocal) {
-        // Local course (Palms etc.)
-        const localId = selectedPickedCourse.id.replace('local:', '');
-        const local = getCourse(localId);
-        courseName = local?.name ?? selectedPickedCourse.name;
-        holes = local?.holes ?? [];
-      } else {
-        // API course
-        courseId = selectedPickedCourse.id;
-        courseName = selectedPickedCourse.name;
-        try {
-          const apiCourse = await getApiCourse(courseId);
-          if (apiCourse && apiCourse.tees.length > 0) {
-            holes = courseToHoles(apiCourse);
-            courseName = apiCourse.club_name;
-          }
-        } catch {
-          setCaddieResponse("Couldn't load the course layout — starting with yardages only. You can still play.");
+    if (picked.isLocal) {
+      const localId = picked.id.replace('local:', '');
+      const local = getCourse(localId);
+      courseName = local?.name ?? picked.name;
+      holes = local?.holes ?? [];
+    } else {
+      courseId = picked.id;
+      courseName = picked.name;
+      try {
+        const apiCourse = await getApiCourse(courseId);
+        if (apiCourse && apiCourse.tees.length > 0) {
+          holes = courseToHoles(apiCourse);
+          courseName = apiCourse.club_name;
         }
+      } catch {
+        setCaddieResponse("Couldn't load the course layout — starting with yardages only. You can still play.");
       }
     }
 
@@ -906,25 +952,23 @@ export default function CaddieTab() {
     }
 
     startRound(courseName, holes, {
-      nineHole,
-      isCompetition,
-      notes: roundNotes,
+      nineHole: opts.nineHole,
+      isCompetition: opts.isCompetition,
+      notes: opts.notes,
       goal: null,
       courseId,
-      mode: selectedMode,
+      mode: opts.mode,
     });
 
-    // Phase B — warm course geometry cache so the recap shot map has data ready.
     if (courseId) {
       fetchCourseGeometry(courseId).catch(err => console.log('[caddie] geometry warm failed:', err));
     }
 
-    // Commit ghost selection and activate runtime store
-    if (selectedGhostId) {
-      const ghostRecord = roundHistory.find(r => r.id === selectedGhostId);
+    if (opts.ghostRoundId) {
+      const ghostRecord = roundHistory.find(r => r.id === opts.ghostRoundId);
       if (ghostRecord) {
         const label = `${ghostRecord.courseName ?? 'Past round'} (${ghostRecord.totalScore})`;
-        setActiveGhost({ source_round_id: selectedGhostId, label });
+        setActiveGhost({ source_round_id: opts.ghostRoundId, label });
         useGhostStore.getState().activateGhost(ghostRecord);
       }
     } else {
@@ -948,6 +992,25 @@ export default function CaddieTab() {
     }
 
     router.push('/round/briefing' as never);
+  }, [
+    subscription_status, router, startRound, roundHistory, setActiveGhost,
+    clearActiveGhost, incrementRounds, skip_briefings, voiceEnabled, voiceGender,
+    language, apiUrl,
+  ]);
+
+  // Wire the latest runStartRound into the forward-referenced ref so the
+  // pendingStartCourseId / pre_course_id effects above can call it.
+  useEffect(() => {
+    runStartRoundRef.current = runStartRound;
+  }, [runStartRound]);
+
+  // Modal "Start Round" button — collects modal state and delegates.
+  const handleStartRound = async () => {
+    if (!selectedPickedCourse) return;
+    await runStartRound(selectedPickedCourse, {
+      nineHole, isCompetition, notes: roundNotes,
+      mode: selectedMode, ghostRoundId: selectedGhostId,
+    });
   };
 
   // ── Log hole score ───────────────────────

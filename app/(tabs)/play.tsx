@@ -21,7 +21,7 @@ import {
   Image, ActivityIndicator, type ImageSourcePropType,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useRoundStore } from '../../store/roundStore';
 import { searchCourses, getCourse } from '../../services/golfCourseApi';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
@@ -72,6 +72,15 @@ export default function PlayTab() {
   const [selected, setSelected] = useState<Course | null>(null);
   const [selectedLoading, setSelectedLoading] = useState(false);
   const [selectedHero, setSelectedHero] = useState<string | null>(null);
+
+  // Pre-beta — clear stale search error on every entry to the tab so a
+  // failed search from a prior visit doesn't keep "Course search unavailable"
+  // pinned at the bottom forever.
+  useFocusEffect(
+    useCallback(() => {
+      setSearchError(null);
+    }, []),
+  );
 
   // Hydrate recent courses from store
   useEffect(() => {
