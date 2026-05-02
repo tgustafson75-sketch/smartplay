@@ -1,37 +1,39 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet,
-  Linking, Image, Dimensions,
+  Linking, Image, Dimensions, type ImageSourcePropType,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import CourseDetailBanner from '../../components/course/CourseDetailBanner';
-import CourseDetailModal, { type ModalHole } from '../../components/course/CourseDetailModal';
+import HoleGuide from '../../components/course/HoleGuide';
+import HolePhotosGrid from '../../components/course/HolePhotosGrid';
 import { getCourse } from '../../services/golfCourseApi';
 import { fetchCourseContent, getCachedContent, type CourseContent } from '../../services/courseContentService';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
-import { getCourseImageryUrl } from '../../services/mapboxImagery';
+import { getCourseImageryUrl, getHoleThumbnailUrl } from '../../services/mapboxImagery';
+import PALMS_IMAGES from '../../data/palmsImages';
 import type { Course } from '../../types/course';
 
 const SCREEN_W = Dimensions.get('window').width;
 
 /**
- * Course Detail — legacy-app compact format.
+ * Course Detail — legacy long-scroll format.
  *
- * Layout (top to bottom):
- *   • Banner
- *   • Hero thumbnail (Mapbox course-wide aerial) with course name + (i) icon
- *   • Stats row (par / yards / rating / slope)
- *   • About paragraph
- *   • Caddie tips preview (3 bullets)
- *   • [scrollable middle]
- *   • Sticky bottom: [ Find Tee Time ]  [ Start Round ]
+ * Top to bottom (single ScrollView):
+ *   < Courses back link
+ *   Hero (Mapbox aerial, or Palms bundled image when Palms)
+ *   Course name + location overlay on hero
+ *   Stats strip (HOLES / PAR / YARDS / RATING / SLOPE)
+ *   ABOUT paragraph
+ *   CADDIE TIPS bullet list
+ *   HOLE PHOTOS — 3-column grid (Mapbox per-hole tiles, or Palms bundled)
+ *   HOLE GUIDE — # / Par / Yds / Note table with totals row
+ *   Sticky bottom bar: [ Book Tee Time ]  [ Start Round Here ]
  *
- * (i) icon opens CourseDetailModal — course aerial + hole-by-hole list with
- * per-hole Mapbox thumbnails and AI-generated hole notes from /api/course-content.
- *
- * Tied to golfcourseapi via getCourse() for metadata + tee box, and to
- * courseGeometryService for hole-level GPS (powers Mapbox thumbnail bbox).
+ * Tied to golfcourseapi via getCourse(); AI-generated About / Caddie Tips /
+ * Hole Notes via /api/course-content; per-hole + course-wide imagery via
+ * Mapbox (Palms uses curated bundled screenshots as the override).
  */
 export default function CourseDetailScreen() {
   const { course_id } = useLocalSearchParams<{ course_id: string }>();
@@ -42,9 +44,7 @@ export default function CourseDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(true);
   const [geometryReady, setGeometryReady] = useState(false);
-  const [detailOpen, setDetailOpen] = useState(false);
 
-  // Load course metadata + warm courseGeometryService cache
   useEffect(() => {
     let cancelled = false;
     if (!course_id) return;
@@ -60,7 +60,6 @@ export default function CourseDetailScreen() {
     return () => { cancelled = true; };
   }, [course_id]);
 
-  // Load AI-generated content
   useEffect(() => {
     let cancelled = false;
     if (!course) return;
@@ -88,38 +87,57 @@ export default function CourseDetailScreen() {
   }, [course]);
 
   const tee = course?.tees[0] ?? null;
+  const isPalms = (course?.club_name ?? '').toLowerCase().includes('palms');
   const noteByHole = useMemo(() => {
     const m = new Map<number, string>();
     (content?.hole_notes ?? []).forEach(n => m.set(n.hole_number, n.note));
     return m;
   }, [content]);
 
-  // Modal hole rows: combine tee data + content notes + geometry GPS
-  // (geometry feeds the per-hole Mapbox thumbnail bbox).
-  const modalHoles = useMemo<ModalHole[]>(() => {
+  const holeRows = useMemo(() => {
+    if (!tee) return [];
+    return tee.holes.map(h => ({
+      hole_number: h.hole_number,
+      par: h.par,
+      yardage: h.yardage,
+      note: noteByHole.get(h.hole_number),
+    }));
+  }, [tee, noteByHole]);
+
+  // Hole photos: per-hole Mapbox tiles, or Palms bundled images for Palms.
+  const holePhotos = useMemo(() => {
     if (!tee || !course) return [];
     return tee.holes.map(h => {
-      const geom = course.id ? getHoleGeometry(course.id, h.hole_number) : null;
-      return {
-        hole_number: h.hole_number,
+      if (isPalms && PALMS_IMAGES[h.hole_number]) {
+        return { hole_number: h.hole_number, url: '__palms__' };
+      }
+      const geom = getHoleGeometry(course.id, h.hole_number);
+      const url = getHoleThumbnailUrl({
+        courseId: course.id,
+        holeNumber: h.hole_number,
         par: h.par,
         yardage: h.yardage,
-        note: noteByHole.get(h.hole_number),
-        tee: geom?.tee ?? (h.gps ? { lat: h.gps.lat, lng: h.gps.lng } : null),
+        tee: geom?.tee ?? null,
         green: geom?.green ?? null,
-      };
-    });
-  }, [tee, course, noteByHole, geometryReady]);
+      });
+      return url ? { hole_number: h.hole_number, url } : null;
+    }).filter((x): x is { hole_number: number; url: string } => x !== null);
+  }, [tee, course, isPalms, geometryReady]);
 
-  // Course-wide hero aerial via Mapbox
-  const heroUrl = useMemo(() => {
-    if (!course || !geometryReady) return null;
-    return getCourseImageryUrl(
-      { courseId: course.id, holes: modalHoles.map(h => ({ tee: h.tee, green: h.green })) },
-      Math.round(SCREEN_W),
-      Math.round(SCREEN_W * 0.55),
-    );
-  }, [course, modalHoles, geometryReady]);
+  // Course hero — Palms bundled image or Mapbox course-wide aerial.
+  const heroSource: ImageSourcePropType | { uri: string } | null = useMemo(() => {
+    if (!course) return null;
+    if (isPalms && PALMS_IMAGES[1]) return PALMS_IMAGES[1] as ImageSourcePropType;
+    if (!tee || !geometryReady) return null;
+    const url = getCourseImageryUrl({
+      courseId: course.id,
+      holes: tee.holes.map(h => {
+        const g = getHoleGeometry(course.id, h.hole_number);
+        return { tee: g?.tee ?? null, green: g?.green ?? null };
+      }),
+    }, Math.round(SCREEN_W), Math.round(SCREEN_W * 0.55));
+    return url ? { uri: url } : null;
+  }, [course, tee, isPalms, geometryReady]);
 
   const handleStartRound = () => {
     if (!course) return;
@@ -160,41 +178,28 @@ export default function CourseDetailScreen() {
     <View style={styles.container}>
       <CourseDetailBanner />
 
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <TouchableOpacity onPress={() => router.back()} style={styles.back}>
           <Text style={styles.backText}>‹ Courses</Text>
         </TouchableOpacity>
 
-        {/* Hero thumbnail */}
+        {/* Hero */}
         <View style={styles.heroWrap}>
-          {heroUrl ? (
-            <Image source={{ uri: heroUrl }} style={styles.heroImage} resizeMode="cover" />
+          {heroSource ? (
+            <Image source={heroSource} style={styles.heroImage} resizeMode="cover" />
           ) : (
             <View style={[styles.heroImage, styles.heroPlaceholder]}>
-              {!geometryReady ? (
-                <ActivityIndicator color="#00C896" />
-              ) : (
+              {!geometryReady ? <ActivityIndicator color="#00C896" /> : (
                 <Text style={styles.heroPlaceholderText}>Aerial unavailable for this course</Text>
               )}
             </View>
           )}
           <View style={styles.heroOverlay}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.heroTitle} numberOfLines={2}>{course.club_name}</Text>
+            <Text style={styles.heroTitle} numberOfLines={2}>{course.club_name}</Text>
+            <View style={styles.heroLocRow}>
+              <Ionicons name="location-outline" size={14} color="#9ca3af" />
               <Text style={styles.heroLocation} numberOfLines={1}>{location}</Text>
             </View>
-            <TouchableOpacity
-              onPress={() => setDetailOpen(true)}
-              style={styles.infoBtn}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              accessibilityRole="button"
-              accessibilityLabel="Open course details"
-            >
-              <Ionicons name="information-circle" size={28} color="#00C896" />
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -207,35 +212,46 @@ export default function CourseDetailScreen() {
           {tee.slope_rating != null && <Stat label="SLOPE" value={String(tee.slope_rating)} />}
         </View>
 
-        {/* About preview */}
-        {(content?.about || contentLoading) && (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>ABOUT</Text>
-            {content?.about ? (
-              <Text style={styles.aboutText}>{content.about}</Text>
-            ) : (
-              <Text style={styles.aboutLoading}>Loading…</Text>
-            )}
-          </View>
-        )}
+        {/* About */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>ABOUT</Text>
+          {content?.about ? (
+            <Text style={styles.aboutText}>{content.about}</Text>
+          ) : (
+            <Text style={styles.aboutLoading}>{contentLoading ? 'Loading…' : 'No description available.'}</Text>
+          )}
+        </View>
 
-        {/* Caddie tips preview (first 3) */}
-        {content?.caddie_tips && content.caddie_tips.length > 0 && (
+        {/* Caddie tips */}
+        {(content?.caddie_tips && content.caddie_tips.length > 0) && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>CADDIE TIPS</Text>
-            {content.caddie_tips.slice(0, 3).map((tip, i) => (
+            {content.caddie_tips.map((tip, i) => (
               <View key={i} style={styles.tipRow}>
                 <Text style={styles.tipBullet}>•</Text>
                 <Text style={styles.tipText}>{tip}</Text>
               </View>
             ))}
-            {content.caddie_tips.length > 3 && (
-              <TouchableOpacity onPress={() => setDetailOpen(true)} style={styles.moreLink}>
-                <Text style={styles.moreLinkText}>See all in details ›</Text>
-              </TouchableOpacity>
-            )}
           </View>
         )}
+
+        {/* Hole photos */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>HOLE PHOTOS</Text>
+          <HolePhotosGrid
+            photos={holePhotos.map(p => ({
+              hole_number: p.hole_number,
+              url: p.url === '__palms__' ? '' : p.url,
+              palmsImage: p.url === '__palms__' ? PALMS_IMAGES[p.hole_number] as ImageSourcePropType : undefined,
+            }))}
+          />
+        </View>
+
+        {/* Hole guide */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>HOLE GUIDE</Text>
+          <HoleGuide holes={holeRows} notesLoading={contentLoading && !content} />
+        </View>
 
         <View style={{ height: 24 }} />
       </ScrollView>
@@ -243,20 +259,14 @@ export default function CourseDetailScreen() {
       {/* Sticky bottom CTAs */}
       <View style={styles.ctaBar}>
         <TouchableOpacity style={[styles.cta, styles.ctaBook]} onPress={handleBookTeeTime}>
-          <Text style={styles.ctaBookText}>Find Tee Time</Text>
+          <Ionicons name="calendar-outline" size={16} color="#F5A623" style={{ marginRight: 6 }} />
+          <Text style={styles.ctaBookText}>Book Tee Time</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.cta, styles.ctaStart]} onPress={handleStartRound}>
-          <Text style={styles.ctaStartText}>Start Round</Text>
+          <Ionicons name="flag" size={16} color="#0d1a0d" style={{ marginRight: 6 }} />
+          <Text style={styles.ctaStartText}>Start Round Here</Text>
         </TouchableOpacity>
       </View>
-
-      <CourseDetailModal
-        visible={detailOpen}
-        onClose={() => setDetailOpen(false)}
-        courseName={course.club_name}
-        location={location}
-        holes={modalHoles}
-      />
     </View>
   );
 }
@@ -274,7 +284,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#060f09' },
   loadingState: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { color: '#6b7280', fontSize: 14 },
-  scroll: { paddingBottom: 100 }, // leave room for sticky CTAs
+  scroll: { paddingBottom: 100 },
   back: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 4 },
   backText: { color: '#00C896', fontSize: 14, fontWeight: '700' },
 
@@ -284,13 +294,12 @@ const styles = StyleSheet.create({
   heroPlaceholderText: { color: '#6b7280', fontSize: 13 },
   heroOverlay: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
-    flexDirection: 'row', alignItems: 'flex-end',
-    paddingHorizontal: 16, paddingTop: 28, paddingBottom: 12,
+    paddingHorizontal: 16, paddingTop: 30, paddingBottom: 12,
     backgroundColor: 'rgba(6,15,9,0.85)',
   },
   heroTitle: { color: '#fff', fontSize: 22, fontWeight: '900' },
-  heroLocation: { color: '#9ca3af', fontSize: 13, marginTop: 2 },
-  infoBtn: { padding: 4, marginLeft: 12 },
+  heroLocRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  heroLocation: { color: '#9ca3af', fontSize: 13 },
 
   statsStrip: {
     flexDirection: 'row', justifyContent: 'space-around',
@@ -302,19 +311,17 @@ const styles = StyleSheet.create({
   statValue: { color: '#fff', fontSize: 17, fontWeight: '900' },
   statLabel: { color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 1, marginTop: 2 },
 
-  section: { paddingHorizontal: 16, paddingTop: 16 },
+  section: { paddingHorizontal: 16, paddingTop: 18 },
   sectionLabel: {
     color: '#00C896', fontSize: 11, fontWeight: '800',
-    letterSpacing: 1.6, marginBottom: 8,
+    letterSpacing: 1.6, marginBottom: 10,
   },
   aboutText: { color: '#d1d5db', fontSize: 14, lineHeight: 21 },
   aboutLoading: { color: '#6b7280', fontSize: 13, fontStyle: 'italic' },
 
-  tipRow: { flexDirection: 'row', marginBottom: 6 },
+  tipRow: { flexDirection: 'row', marginBottom: 8 },
   tipBullet: { color: '#00C896', fontSize: 14, marginRight: 8 },
-  tipText: { color: '#d1d5db', fontSize: 13, lineHeight: 19, flex: 1 },
-  moreLink: { marginTop: 6 },
-  moreLinkText: { color: '#00C896', fontSize: 13, fontWeight: '700' },
+  tipText: { color: '#d1d5db', fontSize: 13, lineHeight: 20, flex: 1 },
 
   ctaBar: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
@@ -323,9 +330,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#060f09',
     borderTopWidth: 1, borderTopColor: '#1e3a28',
   },
-  cta: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  cta: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
   ctaBook: { backgroundColor: '#3a2a08', borderWidth: 1, borderColor: '#F5A623' },
   ctaBookText: { color: '#F5A623', fontSize: 14, fontWeight: '800' },
-  ctaStart: { backgroundColor: '#003d20', borderWidth: 1, borderColor: '#00C896' },
-  ctaStartText: { color: '#00C896', fontSize: 14, fontWeight: '800' },
+  ctaStart: { backgroundColor: '#00C896' },
+  ctaStartText: { color: '#0d1a0d', fontSize: 14, fontWeight: '800' },
 });

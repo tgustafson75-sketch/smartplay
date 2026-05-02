@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, Image, TouchableOpacity, Modal, StyleSheet, useWindowDimensions, FlatList } from 'react-native';
+import { View, Text, Image, TouchableOpacity, Modal, StyleSheet, useWindowDimensions, FlatList, type ImageSourcePropType } from 'react-native';
 
 type HolePhoto = {
   hole_number: number;
   url: string;
+  /** Optional bundled image (Palms curated screenshots). Wins over url when present. */
+  palmsImage?: ImageSourcePropType;
 };
 
 type Props = {
@@ -41,7 +43,11 @@ export default function HolePhotosGrid({ photos }: Props) {
             onPress={() => setActiveIdx(i)}
             activeOpacity={0.85}
           >
-            <Image source={{ uri: p.url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+            {p.palmsImage ? (
+              <Image source={p.palmsImage} style={StyleSheet.absoluteFill} resizeMode="cover" />
+            ) : (
+              <Image source={{ uri: p.url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+            )}
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{p.hole_number}</Text>
             </View>
@@ -60,7 +66,11 @@ export default function HolePhotosGrid({ photos }: Props) {
             getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
             renderItem={({ item }) => (
               <View style={[styles.viewerSlide, { width }]}>
-                <Image source={{ uri: item.url }} style={styles.viewerImg} resizeMode="contain" />
+                {item.palmsImage ? (
+                  <Image source={item.palmsImage} style={styles.viewerImg} resizeMode="contain" />
+                ) : (
+                  <Image source={{ uri: item.url }} style={styles.viewerImg} resizeMode="contain" />
+                )}
                 <View style={styles.viewerLabel}>
                   <Text style={styles.viewerLabelText}>Hole {item.hole_number}</Text>
                 </View>
