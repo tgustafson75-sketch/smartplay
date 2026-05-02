@@ -1280,7 +1280,7 @@ export default function CaddieTab() {
           1: { top: insets.top + 60, right: 12, size: 44, zIndex: 14 },
           2: { top: insets.top + 290, right: 12, size: 44, zIndex: 14 },
           3: { top: insets.top + 290, right: 12, size: 44, zIndex: 14 },
-          4: { right: 12, bottom: 144 + insets.bottom, size: 44, zIndex: 14 },
+          4: { right: 12, bottom: 136 + insets.bottom, size: 56, zIndex: 14 },
         };
         const p = placements[trustLevel] ?? placements[2];
         return (
