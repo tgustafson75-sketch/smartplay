@@ -13,6 +13,8 @@ import { initListeningSession } from '../services/listeningSession';
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
 import { activateMediaSession, deactivateMediaSession } from '../services/mediaKeyBridge';
 import { startHoleDetection, stopHoleDetection, subscribeToHoleDetection } from '../services/holeDetection';
+import { consumeDeferredPaywall } from '../services/paywallGuard';
+import { router } from 'expo-router';
 
 // TODO (Wednesday MacBook setup): add EXPO_PUBLIC_SENTRY_DSN + Sentry org/project to eas.json,
 // then remove SENTRY_DISABLE_AUTO_UPLOAD=true from eas.json build profiles.
@@ -74,6 +76,28 @@ function AppNavigator() {
       unsub();
       void deactivateMediaSession();
     };
+  }, []);
+
+  // Pre-beta — consume any deferred paywall on cold start AND when an
+  // active round transitions to inactive (round finalize). The guard in
+  // services/paywallGuard.ts writes the flag whenever a paywall would
+  // otherwise have interrupted play.
+  useEffect(() => {
+    const showIfPending = async () => {
+      const deferred = await consumeDeferredPaywall();
+      if (!deferred) return;
+      console.log('[paywall] resuming deferred paywall —', deferred.reason);
+      try { router.push('/paywall' as never); } catch {}
+    };
+    void showIfPending();
+    let active = useRoundStore.getState().isRoundActive;
+    const unsub = useRoundStore.subscribe((s) => {
+      if (s.isRoundActive === active) return;
+      const wasActive = active;
+      active = s.isRoundActive;
+      if (wasActive && !active) void showIfPending();
+    });
+    return () => { unsub(); };
   }, []);
 
   // Phase Q.5b — hole detection polling tied to round-active state.

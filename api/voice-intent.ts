@@ -109,6 +109,14 @@ Available intents:
    parameters: {}
    Examples: "thanks Kevin", "got it", "okay", "alright", "cool"
 
+10. set_trust_quiet — User wants Kevin silent / Discrete mode.
+   parameters: {}
+   Examples: "Kevin go quiet", "Kevin be quiet", "Kevin quiet mode", "Kevin quiet down", "Kevin shush", "go silent", "quiet please"
+
+11. set_trust_companion — User wants Kevin back from Quiet mode.
+   parameters: {}
+   Examples: "Kevin come back", "Kevin speak up", "Kevin talk to me", "Kevin un-quiet", "back to normal"
+
 7. unknown — Cannot determine intent.
    parameters: {}
    Set follow_up_question to a brief clarifying question Kevin could ask.
@@ -117,7 +125,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null

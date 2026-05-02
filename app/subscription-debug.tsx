@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import * as Sentry from '@sentry/react-native';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { trialDaysLeft } from '../services/featureAccess';
+import { forcePaywall } from '../services/paywallGuard';
 
 export default function SubscriptionDebugScreen() {
   const insets = useSafeAreaInsets();
@@ -93,6 +94,13 @@ export default function SubscriptionDebugScreen() {
           onPress={() => router.push('/paywall' as never)}
         >
           <Text style={styles.btnText}>Trigger paywall screen</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.btn, styles.btnForce]}
+          onPress={() => forcePaywall(() => router.push('/paywall' as never))}
+        >
+          <Text style={[styles.btnText, { color: '#fbbf24' }]}>[DEBUG] Force Paywall Now</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -181,6 +189,10 @@ const styles = StyleSheet.create({
   btnDanger: {
     borderColor: '#ef4444',
     marginTop: 8,
+  },
+  btnForce: {
+    borderColor: '#fbbf24',
+    marginTop: 4,
   },
   btnText: {
     color: '#ffffff',

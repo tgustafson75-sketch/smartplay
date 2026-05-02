@@ -67,6 +67,7 @@ import VocabBanner from '../../components/VocabBanner';
 import { kevinText as kevinTextStyle } from '../../styles/typography';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
 import { canAccess, trialDaysLeft } from '../../services/featureAccess';
+import { triggerPaywall } from '../../services/paywallGuard';
 import {
   shouldFireProactive,
   markProactiveFired,
@@ -357,6 +358,21 @@ export default function CaddieTab() {
   const [shownText, setShownText] = useState(displayText);
   const responseFade = useRef(new Animated.Value(1)).current;
 
+  // Pre-beta — Discrete Mode badge pulse. Brief opacity dip + restore
+  // when the user enters Quiet, so the mute dot landing reads as an
+  // intentional transition instead of a static state change.
+  const quietPulse = useRef(new Animated.Value(1)).current;
+  const prevTrustLevel = useRef(trustLevel);
+  useEffect(() => {
+    if (prevTrustLevel.current !== 1 && trustLevel === 1) {
+      Animated.sequence([
+        Animated.timing(quietPulse, { toValue: 0.35, duration: 180, useNativeDriver: true }),
+        Animated.timing(quietPulse, { toValue: 1,    duration: 320, useNativeDriver: true }),
+      ]).start();
+    }
+    prevTrustLevel.current = trustLevel;
+  }, [trustLevel]);
+
   useEffect(() => {
     if (shownText === displayText) return;
     Animated.timing(responseFade, {
@@ -449,7 +465,7 @@ export default function CaddieTab() {
   // ── SmartVision ──────────────────────────
   const openSmartVision = () => {
     if (!canAccess('smartvision', subscription_status)) {
-      router.push('/paywall' as never);
+      void triggerPaywall('smartvision', () => router.push('/paywall' as never));
       return;
     }
     const state = useRoundStore.getState();
@@ -848,7 +864,7 @@ export default function CaddieTab() {
   const handleStartRound = async () => {
     if (!canAccess('round_start', subscription_status)) {
       setShowRoundSetup(false);
-      router.push('/paywall' as never);
+      void triggerPaywall('round_start', () => router.push('/paywall' as never));
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -1251,22 +1267,41 @@ export default function CaddieTab() {
           <TouchableOpacity
             onPress={handleMicPress}
             accessibilityRole="button"
-            accessibilityLabel="Talk to Kevin"
+            accessibilityLabel="Talk to Kevin (Quiet Mode)"
           >
             {/* Tap target is the SmartPlay Caddie badge — matches the legacy
                 app's logo-as-Kevin-tap pattern. KevinAvatar liveliness ring
                 still wraps it so idle/listening/speaking/thinking states pulse. */}
-            <KevinAvatar
-              state={kevinAvatarState}
-              presenceLevel={1}
-              sizeOverride={72}
-            >
-              <Image
-                source={require('../../assets/avatars/smartplay_caddie_badge.png')}
-                style={{ width: 64, height: 64 }}
-                resizeMode="contain"
+            <Animated.View style={{ position: 'relative', opacity: quietPulse }}>
+              <KevinAvatar
+                state={kevinAvatarState}
+                presenceLevel={1}
+                sizeOverride={72}
+              >
+                <Image
+                  source={require('../../assets/avatars/smartplay_caddie_badge.png')}
+                  style={{ width: 64, height: 64 }}
+                  resizeMode="contain"
+                />
+              </KevinAvatar>
+              {/* Pre-beta — Discrete Mode mute dot. Lives ON the badge
+                  (DEFAULT) rather than as a third corner element. Tells
+                  the player at a glance that Kevin is intentionally
+                  silent, not crashed. */}
+              <View
+                style={{
+                  position: 'absolute',
+                  bottom: 2,
+                  right: 2,
+                  width: 14,
+                  height: 14,
+                  borderRadius: 7,
+                  backgroundColor: '#6b7280',
+                  borderWidth: 2,
+                  borderColor: '#060f09',
+                }}
               />
-            </KevinAvatar>
+            </Animated.View>
           </TouchableOpacity>
         </View>
       )}
@@ -1358,7 +1393,7 @@ export default function CaddieTab() {
       {subscription_status === 'expired' && (
         <TouchableOpacity
           style={[styles.trialBanner, styles.trialBannerExpired, { top: insets.top + 52 }]}
-          onPress={() => router.push('/paywall' as never)}
+          onPress={() => triggerPaywall('trial_expired_banner', () => router.push('/paywall' as never))}
         >
           <Text style={[styles.trialBannerText, styles.trialBannerExpiredText]}>
             Trial ended — Subscribe
@@ -2040,11 +2075,20 @@ export default function CaddieTab() {
             >
 
             {(([
+              // Pre-beta — Discrete Mode quick-toggle. First entry by design:
+              // when a player needs Kevin silent right now (quiet group, on a
+              // tee, etc.), the action must be the very first thing in the
+              // menu. Label flips between Quiet ↔ Resume based on current
+              // trust level.
+              { icon: trustLevel === 1 ? 'volume-high-outline' as IconName : 'volume-mute-outline' as IconName,
+                label: trustLevel === 1 ? 'Resume Kevin' : 'Quiet Mode',
+                sub: trustLevel === 1 ? 'Bring Kevin back to Companion' : "Mute Kevin until I'm ready",
+                action: () => { setShowMoreMenu(false); setTrustLevel(trustLevel === 1 ? 2 : 1); } },
               { icon: 'options-outline',     label: `Kevin's Presence: ${TRUST_LEVEL_META[trustLevel].label}`, sub: `${TRUST_LEVEL_META[trustLevel].one_liner} · Tap to cycle`, action: () => { const next = (((trustLevel) % 4) + 1) as TrustLevel; setTrustLevel(next); } },
               { icon: 'golf-outline',        label: 'Practice',         sub: 'Cage & swing lab',         action: () => { setShowMoreMenu(false); router.push('/(tabs)/swinglab' as never); } },
-              { icon: 'videocam-outline',    label: 'Cage Mode',        sub: 'Range session',            action: () => { setShowMoreMenu(false); if (!canAccess('cage_mode', subscription_status)) { router.push('/paywall' as never); return; } router.push('/cage' as never); } },
+              { icon: 'videocam-outline',    label: 'Cage Mode',        sub: 'Range session',            action: () => { setShowMoreMenu(false); if (!canAccess('cage_mode', subscription_status)) { void triggerPaywall('cage_mode', () => router.push('/paywall' as never)); return; } router.push('/cage' as never); } },
               { icon: 'telescope-outline',   label: 'SmartVision',      sub: 'Analyze the hole',         action: () => { setShowMoreMenu(false); openSmartVision(); } },
-              { icon: 'locate-outline',      label: 'SmartFinder',      sub: 'Tap-to-lock rangefinder',  action: () => { setShowMoreMenu(false); if (!canAccess('smartfinder', subscription_status)) { router.push('/paywall' as never); return; } router.push('/smartfinder' as never); } },
+              { icon: 'locate-outline',      label: 'SmartFinder',      sub: 'Tap-to-lock rangefinder',  action: () => { setShowMoreMenu(false); if (!canAccess('smartfinder', subscription_status)) { void triggerPaywall('smartfinder', () => router.push('/paywall' as never)); return; } router.push('/smartfinder' as never); } },
               { icon: 'warning-outline',     label: 'Penalty Stroke',   sub: 'Water · OB · Lost ball',   action: () => { if (isRoundActive) addPenalty(currentHole); setShowMoreMenu(false); } },
               ...(isRoundActive ? [{
                 icon: 'flag-outline' as IconName, label: 'End Round',   sub: 'Finish and get summary',   action: async () => { setShowMoreMenu(false); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {}); clearShotPending(); endRound(); await generateRoundSummary(); },

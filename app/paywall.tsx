@@ -17,6 +17,7 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
 import { track } from '../services/analytics';
+import { PRICING, PAYWALL_HEADLINE, PAYWALL_SUBHEAD } from '../lib/pricing';
 
 const FEATURES: Array<{ icon: IconName; label: string; sub: string }> = [
   { icon: 'golf-outline',         label: 'Kevin on every hole', sub: 'Real-time caddie advice, club selection, and course strategy' },
@@ -42,7 +43,7 @@ export default function PaywallScreen() {
       const delay = setTimeout(async () => {
         await configureAudioForSpeech();
         await speak(
-          "Everything you need to play better golf. Seven days on me — no card required.",
+          "Full Kevin for nine ninety-nine a month, or seventy-nine a year. Seven days on me — no card required.",
           voiceGender, language, apiUrl,
         );
       }, 800);
@@ -88,9 +89,10 @@ export default function PaywallScreen() {
             resizeMode="cover"
           />
 
-          <Text style={styles.headline}>Your caddie is ready.</Text>
+          <Text style={styles.headline}>{PAYWALL_HEADLINE}</Text>
           <Text style={styles.subhead}>
-            7-day free trial. Cancel anytime.{'\n'}No credit card required to start.
+            {PAYWALL_SUBHEAD}{'\n'}
+            {PRICING.trialDays}-day free trial. Cancel anytime.
           </Text>
 
           <View style={styles.featureList}>
@@ -106,9 +108,12 @@ export default function PaywallScreen() {
           </View>
 
           <View style={styles.pricingCard}>
-            <Text style={styles.pricingTitle}>SmartPlay Caddie Pro</Text>
-            <Text style={styles.pricingPrice}>$9.99 / month</Text>
-            <Text style={styles.pricingTrial}>Free for 7 days, then $9.99/mo</Text>
+            <Text style={styles.pricingTitle}>SmartPlay Caddie</Text>
+            <Text style={styles.pricingPrice}>{PRICING.monthly.displayPrice} / {PRICING.monthly.period}</Text>
+            <Text style={styles.pricingTrial}>
+              or {PRICING.annual.displayPrice}/{PRICING.annual.period} — save {PRICING.annual.savingsPct}%
+            </Text>
+            <Text style={styles.pricingTrial}>Free for {PRICING.trialDays} days</Text>
           </View>
 
           <TouchableOpacity style={styles.ctaBtn} onPress={handleSubscribe} activeOpacity={0.88}>
