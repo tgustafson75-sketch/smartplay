@@ -13,6 +13,18 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
+import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
+import { getDialog } from '../../services/dialogEngine';
+
+// Phase I — short club label for the Coach intro template
+const CLUB_LABELS: Record<string, string> = {
+  '7I': '7 Iron', '5I': '5 Iron', '8I': '8 Iron', '9I': '9 Iron',
+  PW: 'Pitching Wedge', SW: 'Sand Wedge', LW: 'Lob Wedge', GW: 'Gap Wedge',
+  '3W': '3 Wood', '5W': '5 Wood', D: 'Driver', H: 'Hybrid',
+};
+function clubLabel(code: string): string {
+  return CLUB_LABELS[code] ?? code;
+}
 
 const CLUBS = [
   { label: 'Driver', value: 'DR' },
@@ -72,6 +84,13 @@ export default function CageIndex() {
           <Text style={styles.title}>Cage Mode</Text>
           <View style={{ width: 60 }} />
         </View>
+
+        {/* Phase I — Coach intro keyed off the selected club. Updates as the
+             club selection changes. */}
+        <KevinCoachBox
+          body={getDialog('coach', 'cage_mode_setup_intro', { club: clubLabel(selectedClub) })}
+          accent="coach"
+        />
 
         {/* CAMERA STATUS */}
         <View style={[styles.cameraCard, cameraAlignment?.locked && styles.cameraCardLocked]}>

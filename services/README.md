@@ -128,6 +128,19 @@ Infrastructure services that don't belong to any single mode (`utils/geoDistance
 | `components/lieAnalysis/AnalysisResult.tsx` | Results display: thumbnail, situation, advice, recommended club, alternative play, confidence dot, replay/got-it/try-again actions. | Caddie |
 
 **Tank persona seam.** Lie Analysis is character-agnostic. The vision endpoint produces structured fields; the dialog engine selects which character speaks them. Kevin (Caddie register) speaks today; when Tank's character role is fully clarified in a future phase, Tank-specific templates plug in alongside Kevin's in `caddieTemplates.ts` and a character selector decides which voice fires (potentially gated by `confidence_level: 'low'` or other escalation triggers). The analysis pipeline does not change.
+
+## Phase I — Kevin Coach-mode on SwingLab
+
+| File | Purpose | Role |
+|---|---|---|
+| `components/swinglab/KevinCoachBox.tsx` | Contained-presence card. Kevin avatar + Coach text + close X. Visible by default at L2/L3/L4, hidden at L1, dismissible per-session (component-local state — re-engages on next surface visit). Accent prop `coach` (green) or `psychologist` (amber, for Arena). Minimized variant for ambient use during active Cage Session recording. | Coach |
+| `constants/dialogTemplates/coachTemplates.ts` | Phase I additions: `swinglab_home_intro`, `swinglab_home_intro_returning`, `drill_suggestion_generic`, `drill_suggestion_with_pattern`, `cage_mode_setup_intro`, `cage_session_review_intro`, `arena_intro`, `arena_challenge_intro`, `drill_detail_intro`. {variable} placeholders for name, drill, club, pattern, challenge. | Coach |
+| `app/(tabs)/swinglab.tsx` | KevinCoachBox at top of SwingLab home with intro + drill suggestion. Each drill in `DRILLS` now carries an authored `coach_voice` field; the expanded drill detail renders KevinCoachBox with that drill-specific Coach walkthrough. | Coach |
+| `app/cage/index.tsx` | KevinCoachBox at top of Cage Mode setup, club-aware via `cage_mode_setup_intro` template. Updates as the user changes club selection. | Coach |
+| `app/cage/summary.tsx` | KevinCoachBox at top of Cage post-session summary with `cage_session_review_intro`. Phase K's pose detection will fill in actual analysis content; today this just establishes Kevin's voice presence at the review entry point. | Coach |
+| `app/arena/index.tsx` | KevinCoachBox at top of Arena landing with `arena_intro`. Uses `psychologist` accent for the gameplay register. | Coach (Psychologist-leaning) |
+
+**Contained-presence pattern.** Distinct from Caddie home's Trust-Spectrum continuous-scaling presence. Practice surfaces use a dismissible card so Kevin can step back when the user wants quiet practice — re-engaging next visit without permanent dismissal. Future Practice surfaces (Phase J Cage v2 Lite completion, Phase K GolFix overlay, Phase L Arena CV scoring) plug into the same pattern.
 | `courseGeometryService.ts` | Course geometry fetch and cache (mem + AsyncStorage, weekly refresh). Returns per-hole tee/green coordinates and reserved fairway/green-outline arrays for richer future sources. | Infra (Caddie + Coach consume) |
 | `roles/caddieRole.ts` | Re-export hub for Caddie-register services. No implementation. | Caddie |
 | `roles/coachRole.ts` | Re-export hub for Coach-register services and recap surfaces. No implementation. | Coach |

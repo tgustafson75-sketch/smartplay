@@ -12,6 +12,9 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import AddressSilhouette from '../../components/AddressSilhouette';
 import CageSessionOverlay from '../../components/CageSessionOverlay';
+import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
+import { getDialog } from '../../services/dialogEngine';
+import { useRelationshipStore } from '../../store/relationshipStore';
 
 // ─── DRILL DATA ────────────────────────────
 
@@ -25,6 +28,10 @@ interface Drill {
   steps: string[];
   tip: string;
   navigateTo: 'cage' | 'arena' | null;
+  /** Phase I — Kevin's Coach voice walkthrough for this drill. Authored
+   *  per drill so each reads in its own rhythm — Tempo Training has a
+   *  different voice than Impact Position. Kept short (2–4 sentences). */
+  coach_voice: string;
 }
 
 const DRILLS: Drill[] = [
@@ -42,6 +49,7 @@ const DRILLS: Drill[] = [
     ],
     tip: 'Most amateurs aim right. Your shoulders are usually the culprit.',
     navigateTo: 'cage',
+    coach_voice: "Alignment is the silent killer. Most amateurs think they're aiming at the flag — they're not. Get the shoulders square. If the shoulders are right, the swing path follows.",
   },
   {
     id: 'tempo',
@@ -57,6 +65,7 @@ const DRILLS: Drill[] = [
     ],
     tip: 'Rushing the downswing is the #1 cause of over-the-top moves.',
     navigateTo: null,
+    coach_voice: "Tempo wins more rounds than swing speed. Three-to-one is the rhythm — slow back, easy through. Feel the pause at the top. When the rhythm's in, every club gets longer.",
   },
   {
     id: 'impact',
@@ -72,6 +81,7 @@ const DRILLS: Drill[] = [
     ],
     tip: 'Shaft lean at impact = distance. Every pro has it. Train it deliberately.',
     navigateTo: 'cage',
+    coach_voice: "Impact is the only position that matters — everything else is just getting there. Hands ahead, weight forward, hips clearing. Train it slowly. The body learns position before it learns speed.",
   },
   {
     id: 'gate',
@@ -87,6 +97,7 @@ const DRILLS: Drill[] = [
     ],
     tip: 'Start with a 7-iron. The gate exposes path immediately — no hiding.',
     navigateTo: 'cage',
+    coach_voice: "Path doesn't lie. The gate gives you immediate feedback — no second-guessing. Hit the inside tee, you're cutting across. Hit the outside tee, you're swinging out. Aim to clean it through ten in a row.",
   },
   {
     id: 'pump',
@@ -102,6 +113,7 @@ const DRILLS: Drill[] = [
     ],
     tip: 'The pump exaggerates lag. After 20 reps, your natural swing retains it.',
     navigateTo: null,
+    coach_voice: "Lag is a feel, not a position. The pump teaches your hands to lead the clubhead — that's the whole game on the downswing. Reps over thinking. Twenty pumps, then go hit a ball. The body remembers.",
   },
   {
     id: 'landing-zone',
@@ -117,6 +129,7 @@ const DRILLS: Drill[] = [
     ],
     tip: 'Misses patterning right? Your release is early. Left? You\'re holding off.',
     navigateTo: 'arena',
+    coach_voice: "Targets sharpen everything. Aim small, miss small. Watch where misses cluster — that's the read. Right pattern is an early release; left is the opposite. The pattern tells the truth.",
   },
   {
     id: 'one-handed',
@@ -132,6 +145,7 @@ const DRILLS: Drill[] = [
     ],
     tip: 'One-handed swings reveal which hand is dominating. Balance them.',
     navigateTo: null,
+    coach_voice: "One-handed work strips the swing down to feel. Trail hand teaches release; lead hand teaches structure. Slow swings only — speed comes back when both hands rejoin. Feel which hand wants to take over.",
   },
   {
     id: 'distance-control',
@@ -147,6 +161,7 @@ const DRILLS: Drill[] = [
     ],
     tip: 'Most scoring happens inside 150 yards. Own those shots.',
     navigateTo: 'arena',
+    coach_voice: "Scoring lives inside 150. Half-shots, three-quarter shots, knockdowns — these are the clubs that drop strokes. Adjust tempo, never effort. Build a yardage ladder you can trust under pressure.",
   },
 ];
 
@@ -171,9 +186,23 @@ export default function SwingLab() {
   const router = useRouter();
   const { watchConnected } = useSettingsStore();
   const { firstName } = usePlayerProfileStore();
+  const { roundsTogether } = useRelationshipStore();
   const [activeEnv, setActiveEnv] = useState<DrillEnv | 'all'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [cageActive, setCageActive] = useState(false);
+
+  // Phase I — Coach intro + drill suggestion (rotates per render via dialogEngine).
+  // For new users with no rounds: welcome variant; otherwise the returning variant.
+  // Drill suggestion is generic today; pattern-aware variant lights up when
+  // pattern detection feeds in (1.x).
+  const coachIntroBody = React.useMemo(() => {
+    const introKey = roundsTogether === 0 ? 'swinglab_home_intro' : 'swinglab_home_intro_returning';
+    const intro = getDialog('coach', introKey, { name: firstName ?? 'there' });
+    const suggested = DRILLS[Math.floor(Math.random() * DRILLS.length)];
+    const suggestion = getDialog('coach', 'drill_suggestion_generic', { drill: suggested.title });
+    return `${intro} ${suggestion}`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleTitleLongPress = () => {
     router.push('/cage-debug' as never);
@@ -220,6 +249,10 @@ export default function SwingLab() {
           <Text style={styles.headerTitle}>SwingLab</Text>
           <Text style={styles.headerSub}>Drills, technique, and setup guides</Text>
         </TouchableOpacity>
+
+        {/* Phase I — Kevin's Coach-mode contained-presence card. Visible by
+             default at L2/L3/L4. Hidden at L1. Dismissible per-session. */}
+        <KevinCoachBox body={coachIntroBody} accent="coach" />
 
         {/* Cage Session CTA */}
         <TouchableOpacity
@@ -384,6 +417,10 @@ function DrillCard({ drill, expanded, onToggle, onNavigate }: DrillCardProps) {
       {expanded && (
         <View style={styles.drillBody}>
           <View style={styles.divider} />
+
+          {/* Phase I — Coach voice walkthrough — authored per drill so each
+               reads in its own rhythm. */}
+          <KevinCoachBox body={drill.coach_voice} accent="coach" />
 
           <Text style={styles.stepsLabel}>Steps</Text>
           {drill.steps.map((step, i) => (

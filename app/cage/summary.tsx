@@ -16,6 +16,8 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { usePointsStore } from '../../store/pointsStore';
 import { analyzeSession } from '../../services/patternEngine';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
+import { getDialog } from '../../services/dialogEngine';
 
 export default function CageSummary() {
   const router = useRouter();
@@ -87,6 +89,14 @@ export default function CageSummary() {
           <Text style={styles.title}>Session Complete</Text>
           <Text style={styles.subtitle}>{session.club + ' · ' + total + ' shots'}</Text>
         </View>
+
+        {/* Phase I — Coach review intro. Phase K's pose detection will fill
+             in actual analysis content; today this just establishes Kevin's
+             voice presence at the review entry point. */}
+        <KevinCoachBox
+          body={getDialog('coach', 'cage_session_review_intro')}
+          accent="coach"
+        />
 
         {/* KEVIN DEBRIEF */}
         <View style={styles.debriefCard}>

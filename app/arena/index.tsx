@@ -10,6 +10,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { usePointsStore } from '../../store/pointsStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
+import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
+import { getDialog } from '../../services/dialogEngine';
 
 const CHALLENGES = [
   {
@@ -90,6 +92,13 @@ export default function ArenaIndex() {
             <Text style={styles.pointsLabel}>Rounds</Text>
           </View>
         </View>
+
+        {/* Phase I — Kevin's Psychologist-leaning intro on Arena (gameplay
+             register, not coaching register). */}
+        <KevinCoachBox
+          body={getDialog('coach', 'arena_intro')}
+          accent="psychologist"
+        />
 
         {/* CHALLENGES */}
         <Text style={styles.sectionLabel}>Choose a Challenge</Text>
