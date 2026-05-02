@@ -4,6 +4,21 @@
     "appVersionSource": "local"
   },
   "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://smartplay-beta.vercel.app",
+        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCh6a4PaRpohas6kmh1KjrmdYDQkIZuth4",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      }
+    },
     "preview": {
       "distribution": "internal",
       "env": {
