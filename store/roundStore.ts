@@ -286,6 +286,30 @@ export const useRoundStore = create<RoundState>()(
 
       endRound: () => {
         const s = get();
+
+        // Phase B refinement (bundle, item 2) — close out the final played hole's
+        // last shot end_location to that hole's green centroid before persisting
+        // the round record. Without this, the final shot of the round leaks a
+        // null end_location whenever the user ends the round on the final hole
+        // (no setCurrentHole transition past it).
+        const playedHoles = Array.from(new Set(s.shots.map(x => x.hole))).sort((a, b) => a - b);
+        const finalHole = playedHoles[playedHoles.length - 1];
+        if (finalHole != null) {
+          const last = [...s.shots].reverse().find(x => x.hole === finalHole);
+          if (last && !last.end_location) {
+            const hData = s.courseHoles.find(h => h.hole === finalHole);
+            if (hData) {
+              const green: ShotLocation | null =
+                hData.middleLat !== 0 && hData.middleLng !== 0
+                  ? { lat: hData.middleLat, lng: hData.middleLng }
+                  : (hData.frontLat || hData.backLat) && (hData.frontLng || hData.backLng)
+                    ? { lat: (hData.frontLat + hData.backLat) / 2, lng: (hData.frontLng + hData.backLng) / 2 }
+                    : null;
+              if (green) get().closeHoleEndLocation(finalHole, green);
+            }
+          }
+        }
+
         let scoreVsPar = 0;
         for (const [holeNum, score] of Object.entries(s.scores)) {
           const par = s.courseHoles.find(h => h.hole === Number(holeNum))?.par ?? 0;

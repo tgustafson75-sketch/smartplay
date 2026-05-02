@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import { useRoundStore, type ShotLocation, type CourseHole } from '../store/roundStore';
+import { getHoleGeometry } from './courseGeometryService';
 
 /**
  * Phase B — GPS location capture for shots.
@@ -44,12 +45,33 @@ export async function getCurrentLocation(): Promise<ShotLocation | null> {
 }
 
 /**
- * Returns the green centroid for a hole using the CourseHole record. Prefers middleLat/Lng;
- * falls back to the average of front/back when middle is missing. Returns null if neither
- * is populated.
+ * Returns the green centroid for a hole. Phase B refinement (bundle, item 3) —
+ * prefers courseGeometryService as the authoritative source; falls back to the
+ * CourseHole record (the legacy data path) when geometry is unavailable. The
+ * fallback also handles (front+back)/2 averaging when middle is missing.
+ *
+ * Single source of truth for "where is the green for this hole" — used by
+ * SmartFinder distance queries, hole-transition end_location closure, and the
+ * distance_to_green voice query.
  */
 export function getGreenCentroid(holeNumber: number): ShotLocation | null {
-  const holes: CourseHole[] = useRoundStore.getState().courseHoles;
+  const round = useRoundStore.getState();
+  const courseId = round.activeCourseId;
+
+  // Geometry-service path (preferred)
+  if (courseId) {
+    const geo = getHoleGeometry(courseId, holeNumber);
+    if (geo?.green) return geo.green;
+    if (geo?.green_front && geo?.green_back) {
+      return {
+        lat: (geo.green_front.lat + geo.green_back.lat) / 2,
+        lng: (geo.green_front.lng + geo.green_back.lng) / 2,
+      };
+    }
+  }
+
+  // Legacy CourseHole-record fallback
+  const holes: CourseHole[] = round.courseHoles;
   const h = holes.find(x => x.hole === holeNumber);
   if (!h) return null;
   if (h.middleLat !== 0 && h.middleLng !== 0) {

@@ -9,6 +9,7 @@ import HolePhotosGrid from '../../components/course/HolePhotosGrid';
 import HoleGuide from '../../components/course/HoleGuide';
 import { getCourse } from '../../services/golfCourseApi';
 import { fetchCourseContent, getCachedContent, type CourseContent } from '../../services/courseContentService';
+import { fetchCourseGeometry } from '../../services/courseGeometryService';
 import type { Course } from '../../types/course';
 
 /**
@@ -31,7 +32,9 @@ export default function CourseDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(true);
 
-  // Load course metadata
+  // Load course metadata + warm courseGeometryService cache so SmartFinder /
+  // HoleShotMap don't pay the upstream cost again later in this session
+  // (refinement bundle item 4).
   useEffect(() => {
     let cancelled = false;
     if (!course_id) return;
@@ -41,6 +44,7 @@ export default function CourseDetailScreen() {
         setLoading(false);
       }
     });
+    fetchCourseGeometry(course_id).catch(err => console.log('[course-detail] geometry warm failed:', err));
     return () => { cancelled = true; };
   }, [course_id]);
 
@@ -165,7 +169,7 @@ export default function CourseDetailScreen() {
         <View style={styles.divider} />
 
         <Text style={styles.sectionHeading}>HOLE GUIDE</Text>
-        <HoleGuide holes={holeRows} />
+        <HoleGuide holes={holeRows} notesLoading={contentLoading && !content} />
 
         <View style={styles.ctaRow}>
           <TouchableOpacity style={[styles.cta, styles.ctaBook]} onPress={handleBookTeeTime}>

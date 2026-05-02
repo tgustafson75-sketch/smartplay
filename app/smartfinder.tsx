@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Modal,
   StyleSheet,
   ScrollView,
   useWindowDimensions,
@@ -26,6 +27,9 @@ import { haversineYards, projectToAxis } from '../utils/geoDistance';
 import GPSQuality from '../components/smartfinder/GPSQuality';
 import SmartFinderModeToggle from '../components/smartfinder/SmartFinderModeToggle';
 import CourseDetailBanner from '../components/course/CourseDetailBanner';
+import { useCurrentWeather } from '../hooks/useCurrentWeather';
+import { playsLikeDistance } from '../utils/playsLike';
+import type { WeatherSnapshot } from '../services/weatherService';
 
 const REFRESH_MS = 3_000;
 const CANVAS_W_FRACTION = 0.92;
@@ -96,6 +100,10 @@ export default function SmartFinder() {
   const prevHole = idx > 0 ? playedHoles[idx - 1] : null;
   const nextHole = idx >= 0 && idx < playedHoles.length - 1 ? playedHoles[idx + 1] : null;
 
+  // Refinement bundle items 6 + 7
+  const { weather: caddieWeather, shotBearingDeg } = useCurrentWeather();
+  const [holePickerOpen, setHolePickerOpen] = useState(false);
+
   return (
     <SafeAreaView style={styles.container}>
       <CourseDetailBanner />
@@ -115,11 +123,11 @@ export default function SmartFinder() {
         {!isRoundActive ? (
           <Text style={styles.empty}>Start a round to see yardages.</Text>
         ) : mode === 'standard' ? (
-          <StandardView yards={yards} />
+          <StandardView yards={yards} weather={caddieWeather} shotBearingDeg={shotBearingDeg} />
         ) : mode === 'target' ? (
           <TargetView geometry={geometry} width={width * CANVAS_W_FRACTION} />
         ) : (
-          <MapView geometry={geometry} yards={yards} width={width * CANVAS_W_FRACTION} />
+          <MapView geometry={geometry} yards={yards} width={width * CANVAS_W_FRACTION} weather={caddieWeather} shotBearingDeg={shotBearingDeg} />
         )}
 
         <View style={styles.holeNav}>
@@ -130,7 +138,10 @@ export default function SmartFinder() {
           >
             <Text style={[styles.holeBtnText, prevHole == null && styles.holeBtnTextDisabled]}>← Prev</Text>
           </TouchableOpacity>
-          <Text style={styles.holeNavLabel}>HOLE {currentHole}</Text>
+          {/* Refinement bundle item 7 — tap the hole label to open the picker */}
+          <TouchableOpacity onPress={() => setHolePickerOpen(true)} accessibilityRole="button" accessibilityLabel="Pick hole">
+            <Text style={styles.holeNavLabel}>HOLE {currentHole} ▾</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.holeBtn, nextHole == null && styles.holeBtnDisabled]}
             disabled={nextHole == null}
@@ -139,22 +150,46 @@ export default function SmartFinder() {
             <Text style={[styles.holeBtnText, nextHole == null && styles.holeBtnTextDisabled]}>Next →</Text>
           </TouchableOpacity>
         </View>
+
+        <HolePickerModal
+          visible={holePickerOpen}
+          holes={playedHoles}
+          currentHole={currentHole}
+          onSelect={(h) => { setCurrentHole(h); setHolePickerOpen(false); }}
+          onClose={() => setHolePickerOpen(false)}
+          width={width}
+        />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function StandardView({ yards }: { yards: GreenYardages }) {
+function StandardView({
+  yards,
+  weather,
+  shotBearingDeg,
+}: {
+  yards: GreenYardages;
+  weather: WeatherSnapshot | null;
+  shotBearingDeg: number | null;
+}) {
   const allMissing = yards.front == null && yards.middle == null && yards.back == null;
+  // Refinement bundle item 6 — plays-like overlay. Only shown when a meaningful
+  // adjustment exists (>=3 yard delta) so calm-day cells stay clean.
+  const playsLike = (actual: number | null): number | null => {
+    if (actual == null || !weather) return null;
+    const breakdown = playsLikeDistance(actual, weather, shotBearingDeg);
+    return Math.abs(breakdown.delta_yards) >= 3 ? breakdown.plays_like_yards : null;
+  };
   return (
     <View style={styles.standardWrap}>
       <View style={styles.greenIcon}>
         <Text style={styles.greenIconText}>⛳</Text>
       </View>
       <View style={styles.standardRow}>
-        <BigCell label="FRONT" value={yards.front} />
-        <BigCell label="MIDDLE" value={yards.middle} emphasis />
-        <BigCell label="BACK" value={yards.back} />
+        <BigCell label="FRONT" value={yards.front} playsLikeValue={playsLike(yards.front)} />
+        <BigCell label="MIDDLE" value={yards.middle} playsLikeValue={playsLike(yards.middle)} emphasis />
+        <BigCell label="BACK" value={yards.back} playsLikeValue={playsLike(yards.back)} />
       </View>
       {allMissing && (
         <Text style={styles.empty}>Green coordinates aren&apos;t available for this hole.</Text>
@@ -163,14 +198,74 @@ function StandardView({ yards }: { yards: GreenYardages }) {
   );
 }
 
-function BigCell({ label, value, emphasis }: { label: string; value: number | null; emphasis?: boolean }) {
+function BigCell({
+  label,
+  value,
+  emphasis,
+  playsLikeValue,
+}: {
+  label: string;
+  value: number | null;
+  emphasis?: boolean;
+  playsLikeValue?: number | null;
+}) {
   return (
     <View style={styles.bigCell}>
       <Text style={[styles.bigValue, emphasis && styles.bigValueEmphasis]}>
         {value != null ? value : '—'}
       </Text>
+      {playsLikeValue != null && (
+        <Text style={styles.playsLike}>plays {playsLikeValue}</Text>
+      )}
       <Text style={styles.bigLabel}>{label}</Text>
     </View>
+  );
+}
+
+// Refinement bundle item 7 — modal grid picker for jumping to any played hole.
+function HolePickerModal({
+  visible, holes, currentHole, onSelect, onClose, width,
+}: {
+  visible: boolean;
+  holes: number[];
+  currentHole: number;
+  onSelect: (h: number) => void;
+  onClose: () => void;
+  width: number;
+}) {
+  const cols = width >= 700 ? 6 : 3;
+  const cellWidth = Math.floor((Math.min(width, 480) - 32 - (cols - 1) * 8) / cols);
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={styles.pickerScrim} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={styles.pickerCard}>
+          <Text style={styles.pickerTitle}>JUMP TO HOLE</Text>
+          <View style={styles.pickerGrid}>
+            {holes.map(h => {
+              const active = h === currentHole;
+              return (
+                <TouchableOpacity
+                  key={h}
+                  onPress={() => onSelect(h)}
+                  style={[
+                    styles.pickerBtn,
+                    { width: cellWidth, height: cellWidth },
+                    active && styles.pickerBtnActive,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text style={[styles.pickerBtnText, active && styles.pickerBtnTextActive]}>{h}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <TouchableOpacity onPress={onClose} style={styles.pickerCloseBtn}>
+            <Text style={styles.pickerCloseText}>Close</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
   );
 }
 
@@ -250,11 +345,19 @@ function TargetView({ geometry, width }: { geometry: HoleGeometry | null; width:
   );
 }
 
-function MapView({ geometry, yards, width }: { geometry: HoleGeometry | null; yards: GreenYardages; width: number }) {
+function MapView({
+  geometry, yards, width, weather, shotBearingDeg,
+}: {
+  geometry: HoleGeometry | null;
+  yards: GreenYardages;
+  width: number;
+  weather: WeatherSnapshot | null;
+  shotBearingDeg: number | null;
+}) {
   if (!geometry || !geometry.tee || !geometry.green) {
     return (
       <View style={styles.canvasWrap}>
-        <StandardView yards={yards} />
+        <StandardView yards={yards} weather={weather} shotBearingDeg={shotBearingDeg} />
         <Text style={styles.empty}>Map view needs course geometry. Showing numbers above instead.</Text>
         {geometry && geometry.hazards.length > 0 && (
           <View style={styles.hazardList}>
@@ -293,6 +396,53 @@ const styles = StyleSheet.create({
   bigValue: { color: '#e8f5e9', fontSize: 36, fontWeight: '900', fontVariant: ['tabular-nums'] },
   bigValueEmphasis: { color: '#ffffff', fontSize: 56 },
   bigLabel: { color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginTop: 4 },
+  playsLike: { color: '#F5A623', fontSize: 12, fontWeight: '700', marginTop: 2 },
+
+  pickerScrim: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  pickerCard: {
+    backgroundColor: '#0d2418',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    padding: 16,
+    width: '100%',
+    maxWidth: 480,
+  },
+  pickerTitle: {
+    color: '#00C896',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  pickerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
+  pickerBtn: {
+    backgroundColor: '#0a1e12',
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickerBtnActive: { backgroundColor: '#003d20', borderColor: '#00C896' },
+  pickerBtnText: { color: '#9ca3af', fontSize: 18, fontWeight: '800' },
+  pickerBtnTextActive: { color: '#00C896' },
+  pickerCloseBtn: {
+    marginTop: 16,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    borderRadius: 10,
+  },
+  pickerCloseText: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
   canvasWrap: { paddingHorizontal: 16, paddingTop: 12, alignItems: 'center' },
   canvasHint: { color: '#9ca3af', fontSize: 12, marginBottom: 8 },
   tapResult: { color: '#ffffff', fontSize: 16, fontWeight: '800', marginTop: 12 },

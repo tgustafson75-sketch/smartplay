@@ -10,6 +10,9 @@ type HoleRow = {
 
 type Props = {
   holes: HoleRow[];
+  /** Refinement bundle item 5 — when true, missing notes show "loading…"
+   *  instead of "—" so users understand the table is still filling in. */
+  notesLoading?: boolean;
 };
 
 /**
@@ -19,7 +22,7 @@ type Props = {
  * Sized for both Fold-closed and Fold-open widths — the Note column flexes
  * while the numeric columns stay fixed.
  */
-export default function HoleGuide({ holes }: Props) {
+export default function HoleGuide({ holes, notesLoading }: Props) {
   const sorted = [...holes].sort((a, b) => a.hole_number - b.hole_number);
   const parTotal = sorted.reduce((a, h) => a + h.par, 0);
   const ydsTotal = sorted.reduce((a, h) => a + h.yardage, 0);
@@ -37,8 +40,11 @@ export default function HoleGuide({ holes }: Props) {
           <Text style={[styles.cell, styles.colHole]}>{h.hole_number}</Text>
           <Text style={[styles.cell, styles.colPar]}>{h.par}</Text>
           <Text style={[styles.cell, styles.colYds]}>{h.yardage > 0 ? h.yardage : '—'}</Text>
-          <Text style={[styles.cell, styles.colNote, styles.note]} numberOfLines={2}>
-            {h.note ?? '—'}
+          <Text
+            style={[styles.cell, styles.colNote, styles.note, notesLoading && !h.note && styles.noteLoading]}
+            numberOfLines={2}
+          >
+            {h.note ?? (notesLoading ? 'loading…' : '—')}
           </Text>
         </View>
       ))}
@@ -74,6 +80,7 @@ const styles = StyleSheet.create({
   colYds: { width: 52 },
   colNote: { flex: 1 },
   note: { color: '#9ca3af', fontSize: 12, lineHeight: 16 },
+  noteLoading: { color: '#4b5563', fontStyle: 'italic' },
   totalRow: {
     borderBottomWidth: 0,
     borderTopWidth: 1,

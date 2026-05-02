@@ -1,6 +1,7 @@
 import { useRef, useCallback, useEffect } from 'react';
 import { Audio } from 'expo-av';
 import { Vibration } from 'react-native';
+import { usePathname } from 'expo-router';
 import {
   configureAudioForRecording,
   speak,
@@ -143,6 +144,26 @@ interface UseVoiceCaddieOptions {
   onToolAction?: (action: ToolAction) => void;
 }
 
+/**
+ * Phase A.3 refinement — map an expo-router pathname to the surface identifier
+ * the help-discovery handler expects. Falls back to 'caddie' for unknown paths
+ * so help continues to behave as it did pre-refinement.
+ */
+function pathnameToSurface(pathname: string | null | undefined): string {
+  if (!pathname) return 'caddie';
+  const p = pathname.toLowerCase();
+  if (p.includes('scorecard')) return 'scorecard';
+  if (p.includes('swinglab') || p.includes('swing-lab')) return 'swinglab';
+  if (p.includes('dashboard')) return 'dashboard';
+  if (p.includes('smartfinder')) return 'smartfinder';
+  if (p.includes('smartvision')) return 'smartvision';
+  if (p.includes('settings')) return 'settings';
+  if (p.includes('recap')) return 'recap';
+  if (p.includes('course/')) return 'course-detail';
+  if (p.includes('caddie') || p === '/' || p === '/(tabs)') return 'caddie';
+  return 'caddie';
+}
+
 export const useVoiceCaddie = ({
   onVoiceStateChange,
   onResponseReceived,
@@ -152,6 +173,7 @@ export const useVoiceCaddie = ({
   onToolAction,
 }: UseVoiceCaddieOptions) => {
 
+  const currentPathname = usePathname();
   const recordingRef    = useRef<Audio.Recording | null>(null);
   const isProcessingRef = useRef(false);
   const autoStopTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -491,7 +513,7 @@ export const useVoiceCaddie = ({
       // intent. If a handler matches with sufficient confidence, we execute it and
       // skip the full brain call. Tactical / conversational queries fall through.
       const appContext: AppContext = {
-        active_screen: 'caddie',
+        active_screen: pathnameToSurface(currentPathname),
         active_round: isRoundActive
           ? {
               course: activeCourse,
