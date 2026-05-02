@@ -82,7 +82,7 @@ export default function CaddieTab() {
 
   // Phase F — kevinAvatarState derived below after voiceState/kevinThinking
   // are declared. Consumed by L1's mic-button KevinAvatar wrapping.
-  const { width: W } = useWindowDimensions();
+  const { width: W, height: H } = useWindowDimensions();
   // Natural 9:16 frame height — shows Kevin's full portrait without over-zoom
   const avatarFrameHeight = Math.round(W * 16 / 9);
 
@@ -1053,7 +1053,20 @@ export default function CaddieTab() {
         );
       })()}
       {trustLevel === 3 && (
-        <View style={{ position: 'absolute', top: insets.top + 60, left: 0, width: W, height: Math.round(avatarFrameHeight * 0.55) }}>
+        // L3 Active — Kevin takes 2/3 of screen height, anchored from the
+        // bottom so his lower edge sits just above the SmartFinder card
+        // (which renders at bottom: 130 + insets.bottom, ~110 tall, so its
+        // top is ~240 + insets.bottom from screen bottom). Kevin's bottom
+        // anchor 252 leaves a small visual gap above SmartFinder.
+        <View
+          style={{
+            position: 'absolute',
+            left: 0,
+            width: W,
+            bottom: 252 + insets.bottom,
+            height: Math.round(H * 2 / 3),
+          }}
+        >
           <CaddieAvatar
             gender={voiceGender === 'female' ? 'female' : 'male'}
             isOnCourse={isRoundActive}
