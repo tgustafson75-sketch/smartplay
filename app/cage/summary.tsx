@@ -25,6 +25,7 @@ import { classifySession } from '../../services/swingIssueClassifier';
 import { recommendDrill } from '../../services/drillRecommendation';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import type { PrimaryIssue, DrillRecommendation } from '../../store/cageStore';
+import { activateMediaSession, deactivateMediaSession } from '../../services/mediaKeyBridge';
 
 export default function CageSummary() {
   const router = useRouter();
@@ -121,6 +122,12 @@ export default function CageSummary() {
     })();
     return () => { cancelled = true; };
   }, [session, analysisStatus]);
+
+  // Phase O.5 — earbud tap targets SmartPlay while user reviews session
+  useEffect(() => {
+    void activateMediaSession();
+    return () => { void deactivateMediaSession(); };
+  }, []);
 
   useEffect(() => {
     if (!session) {

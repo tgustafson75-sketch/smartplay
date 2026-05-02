@@ -23,6 +23,7 @@ type Listener = () => void;
 
 const listeners: Set<Listener> = new Set();
 let enabled = true;
+let suppressed = false;
 
 /**
  * Subscribe to earbud-tap events. Returns an unsubscribe function.
@@ -38,10 +39,19 @@ export function subscribeEarbudTap(listener: Listener): () => void {
  * button so the listening-session orchestration is testable end-to-end.
  */
 export function notifyEarbudTap(): void {
-  if (!enabled) return;
+  if (!enabled || suppressed) return;
   listeners.forEach(l => {
     try { l(); } catch (e) { console.log('[earbudControl] listener err', e); }
   });
+}
+
+/**
+ * Surface-level suppression — orthogonal to the user `enabled` setting.
+ * Used by Cage Session screen to silence Kevin during active swing capture
+ * so a tap doesn't open TTS over a swing in progress. Pop on unmount.
+ */
+export function setSuppressed(value: boolean): void {
+  suppressed = value;
 }
 
 /**

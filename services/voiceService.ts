@@ -306,6 +306,20 @@ export const speak = async (
   language: 'en' | 'es' | 'zh' = 'en',
   apiUrl: string,
 ): Promise<void> => {
+  // Phase O.5 — global TTS safety: respect voiceEnabled + audio-route policy.
+  // Single source of truth so consumer sites don't need to repeat the check.
+  // Lazy require avoids a circular dependency at module load time.
+  try {
+    const settingsMod = require('../store/settingsStore');
+    const routingMod = require('./audioRoutingService');
+    const settings = settingsMod.useSettingsStore.getState();
+    if (!settings.voiceEnabled) return;
+    const route = routingMod.getCurrentRoute();
+    if (route === 'phone_speaker' && !settings.voiceOnPhoneSpeaker) return;
+  } catch {
+    // If the guard itself fails, fall through — never block speech on a guard error.
+  }
+
   // Claim ownership: bump speechId and cancel anything in-flight.
   currentSpeechId++;
   const myId = currentSpeechId;

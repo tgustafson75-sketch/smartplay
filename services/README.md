@@ -215,5 +215,17 @@ The hole-shot-map UI lives at `components/recap/HoleShotMap.tsx` and the route a
 | `earbudControl.ts` | Event-bus shape for earbud media-key taps. `notifyEarbudTap()` is the single entry point — fired today by the on-screen `TapToTalkButton` fallback; will be fired by a native iOS MPRemoteCommandCenter / Android MediaSession detector once that ships, with no consumer-site changes required. | Infra |
 | `listeningSession.ts` | Single-tap listening session orchestrator. State machine (`idle → opening → listening → thinking → responding`). Picks a role-aware (Caddie if round active, Coach otherwise) and trust-aware opener via `dialogEngine` (`earbud_open` template; L1 returns terse `"Yeah?"`), captures an utterance, routes through the existing `/api/voice-intent` classifier, executes the matched handler, speaks the response. Re-tap at any phase closes the session. | Caddie + Coach |
 
-**Phase O scope.** The native cross-platform key-event detector (iOS `MPRemoteCommandCenter`, Android `MediaSession`) is intentionally NOT in this phase — Expo managed workflow does not expose that bridge without a custom dev-client module. The orchestration, audio routing, opener templates, settings (`earbudTapToTalk`, `voiceOnPhoneSpeaker`), and on-screen Tap-to-Talk fallback button on the Caddie home are all live. When the native detector lands, the only required change is calling `notifyEarbudTap()` from its callback.
+**Phase O scope.** Orchestration, audio routing, opener templates, settings (`earbudTapToTalk`, `voiceOnPhoneSpeaker`), and on-screen Tap-to-Talk fallback button on the Caddie home are all live. The native key-event bridge ships in Phase O.5 below.
+
+## Phase O.5 — Real Bluetooth Media Key Detection
+
+| File | Purpose | Role |
+|---|---|---|
+| `mediaKeyBridge.ts` | Wraps `react-native-track-player` to register a media session that captures hardware play/pause events from connected Bluetooth earbuds. Both `RemotePlay` and `RemotePause` route to a single tap signal that fires `notifyEarbudTap()` (the existing Phase O seam). Lifecycle: media session is activated only while a round is active OR the user is on a Cage / Arena surface — outside those contexts, system media controls revert to other apps (Spotify, podcasts) untouched. Uses a phantom (1ms silence) track because track-player needs a queue item to keep remote-command callbacks alive; we never call `play()`. | Infra |
+
+**Phase O.5 build requirement.** `react-native-track-player` is not compatible with Expo Go. A one-time `eas build --profile development --platform <ios\|android>` is required to pick up the new native module. The TypeScript layer ships over the air thereafter. iOS needs `UIBackgroundModes: ["audio"]` (added to `app.json`); Android needs `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permissions (added).
+
+**Audio safety hardening (Phase O.5).** `services/voiceService.ts` `speak()` now consults `voiceEnabled` + audio route + `voiceOnPhoneSpeaker` at the top of every call. Closes the audit-flagged blast leaks at `app/hole-view.tsx` (SmartVision) and `services/conversationalLoggingOrchestrator.ts` (shot-prompt) without touching their callsites — single source of truth.
+
+**Cage Session silence (Phase O.5).** `app/cage/session.tsx` calls `setSuppressed(true)` on mount, restored on unmount. While the user is in active swing capture, earbud taps are silently ignored so a tap mid-swing doesn't fire Kevin TTS over the recording. PostSessionReview gets normal earbud behavior again.
 

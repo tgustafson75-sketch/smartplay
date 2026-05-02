@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { activateMediaSession, deactivateMediaSession } from '../../services/mediaKeyBridge';
 import {
   View,
   Text,
@@ -56,6 +57,12 @@ export default function ArenaIndex() {
   const router = useRouter();
   const { totalPoints, tier } = usePointsStore();
   const { roundsTogether } = useRelationshipStore();
+
+  // Phase O.5 — Arena is an earbud-tap-active surface
+  useEffect(() => {
+    void activateMediaSession();
+    return () => { void deactivateMediaSession(); };
+  }, []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

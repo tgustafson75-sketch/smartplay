@@ -27,6 +27,7 @@ import {
 } from '../../services/voiceService';
 import { useWatchStore } from '../../store/watchStore';
 import { simulateSwing, getKevinTempoLine } from '../../services/watchService';
+import { setSuppressed as setEarbudSuppressed } from '../../services/earbudControl';
 
 const FEEL_OPTIONS = [
   { label: 'Flush',  value: 'flush', color: '#00C896', emoji: '🎯' },
@@ -75,6 +76,13 @@ export default function CageSession() {
       router.replace('/cage' as never);
     }
   }, [activeSession]);
+
+  // Phase O.5 — earbud-tap suppression while user is in active swing capture.
+  // Restored on unmount so PostSessionReview gets normal earbud behavior.
+  useEffect(() => {
+    setEarbudSuppressed(true);
+    return () => { setEarbudSuppressed(false); };
+  }, []);
 
   useEffect(() => {
     if (!activeSession) return;

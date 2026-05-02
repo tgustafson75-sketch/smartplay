@@ -8,8 +8,10 @@ import { KevinPresenceProvider } from '../contexts/KevinPresenceContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useRoundStore } from '../store/roundStore';
 import { initListeningSession } from '../services/listeningSession';
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
+import { activateMediaSession, deactivateMediaSession } from '../services/mediaKeyBridge';
 
 // TODO (Wednesday MacBook setup): add EXPO_PUBLIC_SENTRY_DSN + Sentry org/project to eas.json,
 // then remove SENTRY_DISABLE_AUTO_UPLOAD=true from eas.json build profiles.
@@ -52,6 +54,25 @@ function AppNavigator() {
     });
     setEarbudEnabled(useSettingsStore.getState().earbudTapToTalk);
     return () => { unsub(); };
+  }, []);
+
+  // Phase O.5 — activate the native media session only while a round is
+  // active, so other media apps (Spotify, podcasts) keep their system
+  // controls when SmartPlay isn't the relevant earbud-tap target.
+  // Cage and Arena screens activate locally via their own focus effects.
+  useEffect(() => {
+    let active = useRoundStore.getState().isRoundActive;
+    if (active) void activateMediaSession();
+    const unsub = useRoundStore.subscribe((s) => {
+      if (s.isRoundActive === active) return;
+      active = s.isRoundActive;
+      if (active) void activateMediaSession();
+      else void deactivateMediaSession();
+    });
+    return () => {
+      unsub();
+      void deactivateMediaSession();
+    };
   }, []);
 
   return (

@@ -15,7 +15,8 @@
         "NSMicrophoneUsageDescription": "SmartPlay Caddie uses the microphone to listen for your voice commands.",
         "NSCameraUsageDescription": "SmartPlay Caddie uses the camera to record and analyze your swing in the practice cage.",
         "NSLocationWhenInUseUsageDescription": "SmartPlay Caddie uses your location to find nearby golf courses.",
-        "NSPhotoLibraryUsageDescription": "SmartPlay Caddie saves your hero moments to your photo library."
+        "NSPhotoLibraryUsageDescription": "SmartPlay Caddie saves your hero moments to your photo library.",
+        "UIBackgroundModes": ["audio"]
       }
     },
     "android": {
@@ -33,7 +34,9 @@
         "android.permission.CAMERA",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ]
     },
     "web": {
