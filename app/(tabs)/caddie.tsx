@@ -1028,18 +1028,19 @@ export default function CaddieTab() {
             accessibilityRole="button"
             accessibilityLabel="Talk to Kevin"
           >
+            {/* Tap target is the SmartPlay Caddie badge — matches the legacy
+                app's logo-as-Kevin-tap pattern. KevinAvatar liveliness ring
+                still wraps it so idle/listening/speaking/thinking states pulse. */}
             <KevinAvatar
               state={kevinAvatarState}
               presenceLevel={1}
-              sizeOverride={64}
+              sizeOverride={72}
             >
-              <View style={{
-                width: 56, height: 56, borderRadius: 28,
-                backgroundColor: '#0d2418',
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Ionicons name="mic" size={26} color="#00C896" />
-              </View>
+              <Image
+                source={require('../../assets/avatars/smartplay_caddie_badge.png')}
+                style={{ width: 64, height: 64 }}
+                resizeMode="contain"
+              />
             </KevinAvatar>
           </TouchableOpacity>
         </View>
@@ -1141,27 +1142,21 @@ export default function CaddieTab() {
         </View>
       )}
 
-      {/* L1 QUIET — fixed logo + hole preview block above the SmartFinder card.
-           L1-only; other levels are unaffected. Position is anchored from the
-           bottom so it sits cleanly above the SmartFinder card without
-           overlapping it or any other Caddie-home element. */}
+      {/* L1 QUIET — fixed hole-preview block above the SmartFinder card.
+           L1-only; other levels are unaffected. Logo removed per Tim — the
+           preview is now the sole content of this block (and is bigger). */}
       {trustLevel === 1 && (
         <View
           style={{
             position: 'absolute',
             left: 0,
             right: 0,
-            bottom: 240 + insets.bottom,
+            bottom: 230 + insets.bottom,
             alignItems: 'center',
             zIndex: 7,
           }}
           pointerEvents="box-none"
         >
-          <Image
-            source={require('../../assets/avatars/smartplay_caddie_badge.png')}
-            style={{ width: 76, height: 76, marginBottom: 10 }}
-            resizeMode="contain"
-          />
           <L1HolePreview />
         </View>
       )}
