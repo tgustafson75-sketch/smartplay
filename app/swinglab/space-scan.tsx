@@ -110,11 +110,18 @@ export default function SpaceScanScreen() {
     // v1 — keep the picker URI as-is; temp eviction means the thumbnail
     // can disappear over time, but the assessment text always survives.
     // Stable persistent storage is a follow-up.
-    await saveSpaceConfiguration({
+    const result = await saveSpaceConfiguration({
       label: label.trim() || SPACE_TYPE_LABEL[assessment.space_type],
       thumbnail_uri: photoUri,
       assessment,
     });
+    if (result.kind === 'error') {
+      Alert.alert(
+        "Couldn't save",
+        "Local storage is full or unavailable. The scan stays on this screen so you can try again.",
+      );
+      return;
+    }
     Alert.alert('Saved', 'Your space is saved. Cage Mode will pre-fill from it next time.');
     router.replace('/(tabs)/swinglab' as never);
   };

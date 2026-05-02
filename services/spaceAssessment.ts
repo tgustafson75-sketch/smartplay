@@ -113,8 +113,7 @@ export async function saveSpaceConfiguration(input: {
   label: string;
   thumbnail_uri: string | null;
   assessment: SpaceAssessment;
-}): Promise<SpaceConfiguration> {
-  const all = await listSpaceConfigurations();
+}): Promise<{ kind: 'ok'; config: SpaceConfiguration } | { kind: 'error'; message: string }> {
   const config: SpaceConfiguration = {
     id: `${Date.now()}_space`,
     saved_at: Date.now(),
@@ -122,16 +121,29 @@ export async function saveSpaceConfiguration(input: {
     thumbnail_uri: input.thumbnail_uri,
     assessment: input.assessment,
   };
-  // Keep last 10 to bound storage.
-  const next = [...all, config].slice(-10);
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  return config;
+  try {
+    const all = await listSpaceConfigurations();
+    // Keep last 10 to bound storage.
+    const next = [...all, config].slice(-10);
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    return { kind: 'ok', config };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.log('[spaceAssessment] save failed:', msg);
+    return { kind: 'error', message: msg };
+  }
 }
 
-export async function deleteSpaceConfiguration(id: string): Promise<void> {
-  const all = await listSpaceConfigurations();
-  const next = all.filter(c => c.id !== id);
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+export async function deleteSpaceConfiguration(id: string): Promise<boolean> {
+  try {
+    const all = await listSpaceConfigurations();
+    const next = all.filter(c => c.id !== id);
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    return true;
+  } catch (e) {
+    console.log('[spaceAssessment] delete failed:', e);
+    return false;
+  }
 }
 
 function labelForType(t: SpaceType): string {

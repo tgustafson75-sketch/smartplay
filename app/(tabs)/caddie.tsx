@@ -183,12 +183,13 @@ export default function CaddieTab() {
         return;
       }
       setSelectedPickedCourse(picked);
+      // Pre-beta — consume + clear factors UP FRONT so a downstream
+      // paywall block / runStartRound throw doesn't leave stale factors
+      // hanging around for the next session pick.
+      const factors = useRoundStore.getState().pendingStartFactors;
+      useRoundStore.getState().setPendingStartFactors(null);
       const fn = runStartRoundRef.current;
       if (fn) {
-        // Pre-beta — consume factors set by the Play tab. Falls back to
-        // sensible defaults if the deep-link entry skipped the picker.
-        const factors = useRoundStore.getState().pendingStartFactors;
-        useRoundStore.getState().setPendingStartFactors(null);
         await fn(picked, {
           nineHole: factors?.nineHole ?? false,
           isCompetition: factors?.isCompetition ?? false,

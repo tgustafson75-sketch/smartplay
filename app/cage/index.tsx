@@ -123,16 +123,20 @@ export default function CageIndex() {
               <Text style={styles.spaceLabel}>{savedSpace.label.toUpperCase()}</Text>
               <Text style={styles.spaceRescan}>Re-scan ›</Text>
             </View>
-            <Text style={styles.spaceSummary}>{savedSpace.assessment.summary}</Text>
-            <View style={styles.spaceRow}>
-              <Text style={styles.spaceTag}>MAT</Text>
-              <Text style={styles.spaceVal}>{savedSpace.assessment.recommended_setup.mat_position}</Text>
-            </View>
-            <View style={styles.spaceRow}>
-              <Text style={styles.spaceTag}>AIM</Text>
-              <Text style={styles.spaceVal}>{savedSpace.assessment.recommended_setup.aim_direction}</Text>
-            </View>
-            {savedSpace.assessment.camera_position.dtl_placement ? (
+            <Text style={styles.spaceSummary}>{savedSpace.assessment.summary || 'Saved.'}</Text>
+            {savedSpace.assessment.recommended_setup?.mat_position ? (
+              <View style={styles.spaceRow}>
+                <Text style={styles.spaceTag}>MAT</Text>
+                <Text style={styles.spaceVal}>{savedSpace.assessment.recommended_setup.mat_position}</Text>
+              </View>
+            ) : null}
+            {savedSpace.assessment.recommended_setup?.aim_direction ? (
+              <View style={styles.spaceRow}>
+                <Text style={styles.spaceTag}>AIM</Text>
+                <Text style={styles.spaceVal}>{savedSpace.assessment.recommended_setup.aim_direction}</Text>
+              </View>
+            ) : null}
+            {savedSpace.assessment.camera_position?.dtl_placement ? (
               <View style={styles.spaceRow}>
                 <Text style={styles.spaceTag}>PHONE</Text>
                 <Text style={styles.spaceVal}>{savedSpace.assessment.camera_position.dtl_placement}</Text>
