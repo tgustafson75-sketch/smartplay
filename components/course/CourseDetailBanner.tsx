@@ -19,8 +19,7 @@ export default function CourseDetailBanner({ onMenuPress }: Props) {
     <View style={[styles.bar, { paddingTop: insets.top + 8 }]}>
       <View style={styles.avatarDot} />
       <View style={styles.brand}>
-        <Text style={styles.brandName}>SmartPlay</Text>
-        <Text style={styles.brandSub}>Caddie</Text>
+        <Text style={styles.brandName}>SmartPlay<Text style={styles.brandSub}> Caddie</Text></Text>
       </View>
       <TouchableOpacity
         onPress={onMenuPress}
@@ -55,8 +54,8 @@ const styles = StyleSheet.create({
     borderColor: '#00C896',
   },
   brand: { alignItems: 'center' },
-  brandName: { color: '#00C896', fontSize: 13, fontWeight: '800', letterSpacing: 0.5 },
-  brandSub: { color: '#9ca3af', fontSize: 10, fontWeight: '700', letterSpacing: 1.4, marginTop: 1 },
+  brandName: { color: '#00C896', fontSize: 16, fontWeight: '800', letterSpacing: 2.5, textTransform: 'uppercase' },
+  brandSub: { color: '#ffffff', fontSize: 16, fontWeight: '800', letterSpacing: 2.5, textTransform: 'uppercase' },
   menuBtn: { padding: 8, gap: 3 },
   dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#9ca3af' },
 });

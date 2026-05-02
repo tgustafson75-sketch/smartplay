@@ -1099,8 +1099,10 @@ export default function CaddieTab() {
            (the L1 mic-button overlay above already shows the SmartPlay logo). */}
       {!isRoundActive && trustLevel !== 1 && (
         <View style={[styles.brandWordmark, { top: insets.top + 52 }]}>
-          <Text style={styles.brandName}>SmartPlay</Text>
-          <Text style={styles.brandSub}>Caddie</Text>
+          <View style={styles.brandRow}>
+            <Text style={styles.brandName}>SmartPlay</Text>
+            <Text style={styles.brandSub}> Caddie</Text>
+          </View>
           <WhatCanISayChip surface="caddie" style={{ marginTop: 12 }} />
         </View>
       )}
@@ -2030,21 +2032,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
   },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
   brandName: {
     color: '#00C896',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '800',
     letterSpacing: 2.5,
     textTransform: 'uppercase',
-    opacity: 0.7,
   },
   brandSub: {
-    color: 'rgba(255,255,255,0.25)',
-    fontSize: 9,
-    fontWeight: '600',
-    letterSpacing: 3,
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 2.5,
     textTransform: 'uppercase',
-    marginTop: -1,
   },
   trialBanner: {
     position: 'absolute',
