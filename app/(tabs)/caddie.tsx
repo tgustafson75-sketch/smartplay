@@ -56,7 +56,6 @@ import L1HolePreview from '../../components/caddie/L1HolePreview';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
 import WhatCanISayChip from '../../components/WhatCanISayChip';
 import KevinHelpButton from '../../components/KevinHelpButton';
-import TapToTalkButton from '../../components/TapToTalkButton';
 import ScorecardChip from '../../components/caddie/ScorecardChip';
 import PhotoCaptureButton from '../../components/caddie/PhotoCaptureButton';
 import VocabBanner from '../../components/VocabBanner';
@@ -1230,11 +1229,11 @@ export default function CaddieTab() {
         </View>
       )}
 
-      {/* Phase O — Tap to Talk fallback button (visible until native earbud media-key
-          detector ships). Honors earbudTapToTalk setting via the component itself. */}
-      <View style={{ position: 'absolute', bottom: insets.bottom + 90, left: 0, right: 0, zIndex: 14 }} pointerEvents="box-none">
-        <TapToTalkButton />
-      </View>
+      {/* Phase O — Tap to Talk fallback button hidden on Caddie home. Tapping
+          Kevin's avatar (handleMicPress) already serves the same function;
+          the floating chip duplicates that affordance. The component remains
+          available for surfaces without an avatar tap target (Cage summary,
+          Arena landing). */}
 
       {/* VOCAB BANNER — fires once after the user crosses the voice-shot threshold */}
       <View style={{ position: 'absolute', top: insets.top + 100, left: 0, right: 0, zIndex: 12 }} pointerEvents="box-none">

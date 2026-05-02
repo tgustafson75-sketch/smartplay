@@ -32,6 +32,7 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRoundStore } from '../store/roundStore';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSmartVision } from '../contexts/SmartVisionContext';
+import PALMS_IMAGES from '../data/palmsImages';
 import { getHoleImageryUrl, isMapboxConfigured } from '../services/mapboxImagery';
 import {
   getLandmarksForHole,
@@ -334,14 +335,25 @@ export default function HoleView() {
   // entirely on satellite imagery (Mapbox primary, Google Maps fallback).
   // The dead 'bundled' branches below are kept as no-ops to minimize
   // diff surface; a follow-up cleanup can prune them.
+  // Phase S — bundled screenshots retained for The Palms only as a curated
+  // override (Tim's home course). Other courses fall through to satellite
+  // imagery via Mapbox / Google Maps.
+  const bundledImage = courseName.toLowerCase().includes('palms')
+    ? (PALMS_IMAGES[hole] ?? null)
+    : null;
+
   type DisplayType = 'satellite' | 'none' | 'bundled';
-  // Cast widens the union past TS narrowing so the dead 'bundled' branches
-  // below compile cleanly during the migration window.
-  const displayType: DisplayType = (satelliteUrl ? 'satellite' : 'none') as DisplayType;
+  const displayType: DisplayType =
+    bundledImage ? 'bundled'
+    : satelliteUrl ? 'satellite'
+    : 'none';
 
-  const IMAGE_HEIGHT = IMAGE_HEIGHT_SAT;
+  const IMAGE_HEIGHT = displayType === 'bundled' ? IMAGE_HEIGHT_BUNDLED : IMAGE_HEIGHT_SAT;
 
-  const imageSource = satelliteUrl ? { uri: satelliteUrl } : null;
+  const imageSource =
+    displayType === 'bundled' ? bundledImage
+    : displayType === 'satellite' ? { uri: satelliteUrl! }
+    : null;
 
   // ── Yards per pixel (bundled only) ─────
   const yardsPerPixel = distance / (IMAGE_HEIGHT_BUNDLED * 0.80 || 1);

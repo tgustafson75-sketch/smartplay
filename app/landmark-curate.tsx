@@ -13,12 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-// Phase S — PALMS_IMAGES removed (hardcoded screenshots replaced with
-// Mapbox-based SmartVision). landmark-curate is a debug tool; without
-// the Palms assets it now shows the "No image" placeholder. To curate
-// landmarks against Mapbox imagery, swap holeImage below to a Mapbox
-// fetch in a future debug-tool refresh.
-const PALMS_IMAGES: Record<number, undefined> = {};
+import PALMS_IMAGES from '../data/palmsImages';
 import type { Landmark } from '../services/landmarks';
 
 const STORAGE_KEY = 'landmark_curate_draft';
