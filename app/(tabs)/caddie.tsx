@@ -1269,7 +1269,13 @@ export default function CaddieTab() {
           accessibilityRole="button"
           accessibilityLabel="Open SmartFinder"
         >
-          <Text style={{ fontSize: 24 }}>🎯</Text>
+          {/* Legacy SmartFinder reticle: white horizontal + vertical line through
+               a yellow ring. Same primitives as the camera-AR reticle. */}
+          <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ position: 'absolute', width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: '#F5A623' }} />
+            <View style={{ position: 'absolute', width: 18, height: 1.5, backgroundColor: '#ffffff' }} />
+            <View style={{ position: 'absolute', width: 1.5, height: 18, backgroundColor: '#ffffff' }} />
+          </View>
         </TouchableOpacity>
       )}
 
