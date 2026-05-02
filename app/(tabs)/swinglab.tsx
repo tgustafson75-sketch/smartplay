@@ -328,6 +328,12 @@ export default function SwingLab() {
               onPress={() => router.push('/swinglab/upload' as never)}
             />
             <ToolRow
+              icon="scan-outline"
+              label="Scan Your Space"
+              sub="30-second setup read"
+              onPress={() => router.push('/swinglab/space-scan' as never)}
+            />
+            <ToolRow
               icon="library-outline"
               label="My Swing Library"
               sub="Browse + replay"

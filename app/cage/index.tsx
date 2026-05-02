@@ -17,6 +17,7 @@ import { useRelationshipStore } from '../../store/relationshipStore';
 import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
 import AppIcon from '../../components/AppIcon';
 import { getDialog } from '../../services/dialogEngine';
+import { getMostRecentSpaceConfiguration, type SpaceConfiguration } from '../../services/spaceAssessment';
 
 // Phase I — short club label for the Coach intro template
 const CLUB_LABELS: Record<string, string> = {
@@ -56,6 +57,17 @@ export default function CageIndex() {
   const { confidenceByClub } = useRelationshipStore();
 
   const [selectedClub, setSelectedClub] = useState('7I');
+  // Phase W — surface the user's most-recent space scan so the cage setup
+  // pre-fills with Kevin's saved advice (mat / aim / phone placement).
+  const [savedSpace, setSavedSpace] = useState<SpaceConfiguration | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const s = await getMostRecentSpaceConfiguration();
+      if (!cancelled) setSavedSpace(s);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const lastSession =
     sessionHistory.length > 0 ? sessionHistory[sessionHistory.length - 1] : null;
@@ -95,6 +107,52 @@ export default function CageIndex() {
           body={getDialog('coach', 'cage_mode_setup_intro', { club: clubLabel(selectedClub) })}
           accent="coach"
         />
+
+        {/* Phase W — saved practice space pre-fill. Shows Kevin's setup
+            advice from the most recent /swinglab/space-scan so the player
+            doesn't need to re-derive mat / aim / phone position each time.
+            Tap routes back to the scan flow if they want to update. */}
+        {savedSpace ? (
+          <TouchableOpacity
+            style={styles.spaceCard}
+            activeOpacity={0.85}
+            onPress={() => router.push('/swinglab/space-scan' as never)}
+          >
+            <View style={styles.spaceHeader}>
+              <AppIcon name="scan-outline" size={18} color="#00C896" />
+              <Text style={styles.spaceLabel}>{savedSpace.label.toUpperCase()}</Text>
+              <Text style={styles.spaceRescan}>Re-scan ›</Text>
+            </View>
+            <Text style={styles.spaceSummary}>{savedSpace.assessment.summary}</Text>
+            <View style={styles.spaceRow}>
+              <Text style={styles.spaceTag}>MAT</Text>
+              <Text style={styles.spaceVal}>{savedSpace.assessment.recommended_setup.mat_position}</Text>
+            </View>
+            <View style={styles.spaceRow}>
+              <Text style={styles.spaceTag}>AIM</Text>
+              <Text style={styles.spaceVal}>{savedSpace.assessment.recommended_setup.aim_direction}</Text>
+            </View>
+            {savedSpace.assessment.camera_position.dtl_placement ? (
+              <View style={styles.spaceRow}>
+                <Text style={styles.spaceTag}>PHONE</Text>
+                <Text style={styles.spaceVal}>{savedSpace.assessment.camera_position.dtl_placement}</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.scanPromptCard}
+            activeOpacity={0.85}
+            onPress={() => router.push('/swinglab/space-scan' as never)}
+          >
+            <AppIcon name="scan-outline" size={20} color="#00C896" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.scanPromptTitle}>Scan your space</Text>
+              <Text style={styles.scanPromptSub}>30 seconds. Kevin tells you where to put your mat, phone, and which drills work here.</Text>
+            </View>
+            <AppIcon name="chevron-forward" size={18} color="#6b7280" />
+          </TouchableOpacity>
+        )}
 
         {/* CAMERA STATUS */}
         <View style={[styles.cameraCard, cameraAlignment?.locked && styles.cameraCardLocked]}>
@@ -298,6 +356,26 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
   },
+  spaceCard: {
+    marginHorizontal: 16, marginTop: 12, padding: 14,
+    backgroundColor: '#0d2418', borderColor: '#00C896', borderWidth: 1,
+    borderRadius: 14, gap: 8,
+  },
+  spaceHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  spaceLabel: { color: '#00C896', fontSize: 11, fontWeight: '900', letterSpacing: 1.4, flex: 1 },
+  spaceRescan: { color: '#9ca3af', fontSize: 11, fontWeight: '700' },
+  spaceSummary: { color: '#fff', fontSize: 13, lineHeight: 19 },
+  spaceRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', marginTop: 4 },
+  spaceTag: { color: '#6b7280', fontSize: 10, fontWeight: '900', letterSpacing: 1.2, width: 50, marginTop: 2 },
+  spaceVal: { flex: 1, color: '#e5e7eb', fontSize: 12, lineHeight: 17 },
+  scanPromptCard: {
+    marginHorizontal: 16, marginTop: 12, padding: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#0d1a0d', borderColor: '#1e3a28', borderWidth: 1,
+    borderRadius: 14,
+  },
+  scanPromptTitle: { color: '#00C896', fontSize: 13, fontWeight: '800' },
+  scanPromptSub: { color: '#9ca3af', fontSize: 11, marginTop: 2, lineHeight: 16 },
   cameraCard: {
     backgroundColor: '#1a0a00',
     borderRadius: 14,
