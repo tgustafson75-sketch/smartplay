@@ -970,28 +970,59 @@ export default function CaddieTab() {
            skips the avatar entirely; the L1 mic-button overlay below
            takes its place. */}
       {trustLevel === 2 && (() => {
-        // L2 Companion split — both boxes same size, same top, side by side.
-        // Wind arrow (top: insets.top + 110, right: 12, zIndex 11) is
-        // explicitly allowed to overlay the SmartVision box; its existing
-        // zIndex keeps it on top, function unchanged.
-        const cellW = (W - 36) / 2;   // half-width minus 12+12 outer + 12 gutter
-        const cellH = 280;
+        // L2 Companion split. Fold-open (wide) → side-by-side. Fold-closed
+        // (narrow) → stacked vertically, both full width. Wind arrow allowed
+        // to overlay freely; its zIndex (11) sits above these cells (6).
+        const isWide = W >= 600;
         const cellTop = insets.top + 100;
+        if (isWide) {
+          const cellW = (W - 36) / 2;
+          const cellH = 280;
+          return (
+            <>
+              <View
+                style={{
+                  position: 'absolute', top: cellTop, left: 12,
+                  width: cellW, height: cellH,
+                  borderRadius: 14, borderWidth: 1.5, borderColor: '#1e3a28',
+                  overflow: 'hidden', backgroundColor: '#060f09', zIndex: 6,
+                }}
+              >
+                <CaddieAvatar
+                  gender={voiceGender === 'female' ? 'female' : 'male'}
+                  isOnCourse={isRoundActive}
+                  isCageMode={false}
+                  voiceState={voiceState}
+                  hud={NULL_HUD}
+                  openingPrompt=""
+                  caddieResponse=""
+                  onTap={handleMicPress}
+                  emotion={kevinEmotion}
+                  fillMode="cover"
+                  isThinking={kevinThinking}
+                />
+              </View>
+              <View
+                style={{ position: 'absolute', top: cellTop, right: 12, zIndex: 6 }}
+                pointerEvents="box-none"
+              >
+                <L1HolePreview onOpenSmartVision={openSmartVision} width={cellW} height={cellH} />
+              </View>
+            </>
+          );
+        }
+        // Stacked layout for narrow / Fold-closed.
+        const cellW = W - 24;
+        const cellH = 220;
+        const gap = 10;
         return (
           <>
             <View
               style={{
-                position: 'absolute',
-                top: cellTop,
-                left: 12,
-                width: cellW,
-                height: cellH,
-                borderRadius: 14,
-                borderWidth: 1.5,
-                borderColor: '#1e3a28',
-                overflow: 'hidden',
-                backgroundColor: '#060f09',
-                zIndex: 6,
+                position: 'absolute', top: cellTop, left: 12,
+                width: cellW, height: cellH,
+                borderRadius: 14, borderWidth: 1.5, borderColor: '#1e3a28',
+                overflow: 'hidden', backgroundColor: '#060f09', zIndex: 6,
               }}
             >
               <CaddieAvatar
@@ -1009,19 +1040,10 @@ export default function CaddieTab() {
               />
             </View>
             <View
-              style={{
-                position: 'absolute',
-                top: cellTop,
-                right: 12,
-                zIndex: 6,
-              }}
+              style={{ position: 'absolute', top: cellTop + cellH + gap, left: 12, zIndex: 6 }}
               pointerEvents="box-none"
             >
-              <L1HolePreview
-                onOpenSmartVision={openSmartVision}
-                width={cellW}
-                height={cellH}
-              />
+              <L1HolePreview onOpenSmartVision={openSmartVision} width={cellW} height={cellH} />
             </View>
           </>
         );
@@ -1086,8 +1108,29 @@ export default function CaddieTab() {
         </View>
       )}
 
-      {/* TOP NAV */}
-      <View style={[styles.topNav, { top: insets.top + 8 }]}>
+      {/* TOP BANNER — SmartPlay Caddie wordmark across the very top, always
+           visible. Sits above the existing top-nav row. */}
+      <View
+        style={{
+          position: 'absolute',
+          top: insets.top + 4,
+          left: 0,
+          right: 0,
+          alignItems: 'center',
+          zIndex: 22,
+        }}
+        pointerEvents="none"
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+          <Text style={styles.brandName}>SmartPlay</Text>
+          <Text style={styles.brandSub}> Caddie</Text>
+        </View>
+      </View>
+
+      {/* TOP NAV — sits below the SmartPlay banner. Free Play (mode badge)
+           is now stacked above the right-side tools button rather than
+           occupying the centered spot. */}
+      <View style={[styles.topNav, { top: insets.top + 38 }]}>
         <TouchableOpacity
           style={styles.navBtn}
           onPress={() => router.replace('/(tabs)/scorecard' as never)}
@@ -1096,19 +1139,18 @@ export default function CaddieTab() {
           <Ionicons name="chevron-back" size={24} color="#6b7d72" />
         </TouchableOpacity>
 
-        {/* Mode badge — visible only when round is active */}
-        {isRoundActive ? (
-          <TouchableOpacity
-            style={styles.modeBadge}
-            onPress={handleChangeModePress}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Text style={styles.modeBadgeText}>{ROUND_MODE_LABELS[mode]}</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.modeBadgePlaceholder} />
-        )}
+        <View style={styles.modeBadgePlaceholder} />
 
+        <View style={{ alignItems: 'flex-end' }}>
+          {isRoundActive && (
+            <TouchableOpacity
+              style={[styles.modeBadge, { marginBottom: 4 }]}
+              onPress={handleChangeModePress}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.modeBadgeText}>{ROUND_MODE_LABELS[mode]}</Text>
+            </TouchableOpacity>
+          )}
         <TouchableOpacity
           style={styles.navBtn}
           onPress={() => setShowMoreMenu(true)}
@@ -1116,6 +1158,7 @@ export default function CaddieTab() {
         >
           <Ionicons name="ellipsis-horizontal" size={24} color="#6b7d72" />
         </TouchableOpacity>
+        </View>
       </View>
 
       {/* TRIAL INDICATOR — only in final 3 days to avoid persistent clutter */}
