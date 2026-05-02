@@ -1063,7 +1063,7 @@ export default function CaddieTab() {
             position: 'absolute',
             left: 0,
             width: W,
-            bottom: 252 + insets.bottom,
+            bottom: 200 + insets.bottom,
             height: Math.round(H * 2 / 3),
           }}
         >
