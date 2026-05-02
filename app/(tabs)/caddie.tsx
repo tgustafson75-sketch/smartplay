@@ -1725,6 +1725,34 @@ export default function CaddieTab() {
             <View style={styles.handle} />
             <Text style={styles.moreTitle}>Tools</Text>
 
+            {/* Status row — pinned at the top of the sheet so the round
+                state is visible at a glance whenever Tools is open. */}
+            {isRoundActive && (
+              <View style={styles.toolsStatusRow}>
+                <View style={styles.toolsStatusItem}>
+                  <Text style={styles.toolsStatusLabel}>MODE</Text>
+                  <Text style={styles.toolsStatusValue}>{ROUND_MODE_LABELS[mode]}</Text>
+                </View>
+                <View style={styles.toolsStatusDivider} />
+                <View style={styles.toolsStatusItem}>
+                  <Text style={styles.toolsStatusLabel}>HOLE</Text>
+                  <Text style={styles.toolsStatusValue}>{currentHole}</Text>
+                </View>
+                <View style={styles.toolsStatusDivider} />
+                <View style={styles.toolsStatusItem}>
+                  <Text style={styles.toolsStatusLabel}>SCORE</Text>
+                  <Text style={styles.toolsStatusValue}>{getTotalScore() || '—'}</Text>
+                </View>
+                <View style={styles.toolsStatusDivider} />
+                <View style={styles.toolsStatusItem}>
+                  <Text style={styles.toolsStatusLabel}>VOICE</Text>
+                  <Text style={[styles.toolsStatusValue, { color: voiceEnabled ? '#00C896' : '#6b7280' }]}>
+                    {voiceEnabled ? 'ON' : 'OFF'}
+                  </Text>
+                </View>
+              </View>
+            )}
+
             <ScrollView
               style={styles.moreScroll}
               contentContainerStyle={styles.moreScrollContent}
@@ -2030,6 +2058,20 @@ const styles = StyleSheet.create({
   moreScroll: {
     flexGrow: 0,
   },
+  toolsStatusRow: {
+    flexDirection: 'row',
+    backgroundColor: '#0d2418',
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    borderRadius: 10,
+    paddingVertical: 10,
+    marginBottom: 14,
+    alignItems: 'center',
+  },
+  toolsStatusItem: { flex: 1, alignItems: 'center' },
+  toolsStatusLabel: { color: '#6b7280', fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
+  toolsStatusValue: { color: '#ffffff', fontSize: 13, fontWeight: '800', marginTop: 2 },
+  toolsStatusDivider: { width: 1, height: 26, backgroundColor: '#1e3a28' },
   moreScrollContent: {
     paddingBottom: 24,
   },
