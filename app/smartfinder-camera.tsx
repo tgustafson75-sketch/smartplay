@@ -30,10 +30,10 @@ export default function SmartFinder() {
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width: W, height: H } = useWindowDimensions();
+  const { width: _W, height: H } = useWindowDimensions();
 
   const { distance_unit } = useSettingsStore();
-  const { subscription_status } = usePlayerProfileStore();
+  const { subscription_status: _subscription_status } = usePlayerProfileStore();
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [locationGranted, setLocationGranted] = useState(false);

@@ -26,6 +26,7 @@ export default function HoleShotMapScreen() {
   );
 
   const courseId = isLive ? live.activeCourseId : record?.courseId ?? null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const allShots: ShotResult[] = isLive ? live.shots : record?.shots ?? [];
   const playedHoles = useMemo(() => {
     const set = new Set<number>();

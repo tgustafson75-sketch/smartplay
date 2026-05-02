@@ -22,7 +22,7 @@ export default function SubscriptionDebugScreen() {
     first_opened_at,
     trial_started_at,
     setSubscriptionStatus,
-    initTrial,
+    initTrial: _initTrial,
   } = usePlayerProfileStore();
 
   const daysLeft = trialDaysLeft(trial_started_at);

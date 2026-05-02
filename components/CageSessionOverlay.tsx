@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   useWindowDimensions,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -141,6 +140,7 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
       setMeterAvailable(false);
       meteringRecRef.current = null;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meterAvailable]);
 
   const stopMetering = useCallback(async () => {
@@ -345,7 +345,7 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
         {!meterAvailable && (
           <View style={styles.warnBanner}>
             <Text style={styles.warnText}>
-              Microphone unavailable — auto-detection off. Use "Log swing" manually.
+              Microphone unavailable — auto-detection off. Use &quot;Log swing&quot; manually.
             </Text>
           </View>
         )}

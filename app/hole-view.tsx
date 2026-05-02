@@ -25,7 +25,6 @@ import * as Location from 'expo-location';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { useKeepAwake } from 'expo-keep-awake';
 import Svg, { Line, Circle, Text as SvgText } from 'react-native-svg';
-import { LinearGradient } from 'expo-linear-gradient';
 import { File, Paths } from 'expo-file-system';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
@@ -33,7 +32,7 @@ import { useRoundStore } from '../store/roundStore';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import PALMS_IMAGES from '../data/palmsImages';
-import { getHoleImageryUrl, isMapboxConfigured } from '../services/mapboxImagery';
+import { getHoleImageryUrl } from '../services/mapboxImagery';
 import {
   getLandmarksForHole,
   resolveCourseKey,
@@ -150,6 +149,7 @@ export default function HoleView() {
   } = useRoundStore();
   const { setMode } = useKevinPresence();
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setMode('badge'); }, []);
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
@@ -405,6 +405,7 @@ export default function HoleView() {
     setTeeClub(tee.club_intent);
     setApproachClub(approach?.club_intent ?? null);
     setPinClub(pin?.club_intent ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [markersReady, roundActive, hole]); // intentionally not tracking getPlanForHole
 
   // ── Auto-save plan when drag ends ──────
@@ -429,6 +430,7 @@ export default function HoleView() {
       }, 500);
     }
     prevDraggingRef.current = isDragging;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDragging]);
 
   // ── Re-save when club intent changes ───
@@ -451,6 +453,7 @@ export default function HoleView() {
         total: fromTeeYards + approachYards,
       },
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roundActive, markersReady, hole, teePos, targetPos, pinPos, fromTeeYards, approachYards, teeLandmark, approachLandmark, pinLandmark]);
 
   const saveLandmarkUpdate = useCallback((
@@ -472,6 +475,7 @@ export default function HoleView() {
         total: fromTeeYards + approachYards,
       },
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roundActive, markersReady, hole, teePos, targetPos, pinPos, teeClub, approachClub, pinClub, fromTeeYards, approachYards]);
 
   const handleLockPlan = useCallback(() => {
@@ -518,24 +522,29 @@ export default function HoleView() {
   useEffect(() => {
     setSmartVisionState({ isOpen: true, holeNumber: hole, par });
     return () => setSmartVisionState({ isOpen: false, analysisText: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (displayType !== 'bundled') setSmartVisionState({ centerYards });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centerYards, displayType]);
 
   useEffect(() => {
     if (displayType !== 'bundled') setSmartVisionState({ measureYards });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [measureYards, displayType]);
 
   useEffect(() => {
     if (displayType === 'bundled' && markersReady) {
       setSmartVisionState({ centerYards: fromTeeYards, measureYards: approachYards });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromTeeYards, approachYards, displayType, markersReady]);
 
   useEffect(() => {
     if (analysisText) setSmartVisionState({ analysisText });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisText]);
 
   // ── SmartVision analysis (satellite only)

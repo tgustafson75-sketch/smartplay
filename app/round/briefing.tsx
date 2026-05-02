@@ -27,7 +27,7 @@ export default function BriefingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const { activeCourse, mode, active_ghost, courseHoles, shots, scores, currentRoundId } =
+  const { activeCourse, mode, active_ghost, courseHoles: _courseHoles, shots: _shots, scores: _scores, currentRoundId } =
     useRoundStore();
   const { firstName, handicap, goal, dominantMiss } = usePlayerProfileStore();
   const { roundsTogether } = useRelationshipStore();
@@ -55,6 +55,7 @@ export default function BriefingScreen() {
     );
     loop.start();
     return () => loop.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
   // Thinking dots
@@ -74,6 +75,7 @@ export default function BriefingScreen() {
     const a3 = stagger(dot3, 480);
     a1.start(); a2.start(); a3.start();
     return () => { a1.stop(); a2.stop(); a3.stop(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
   const doSkip = useCallback(() => {
@@ -149,6 +151,7 @@ export default function BriefingScreen() {
 
     run();
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const modeLabel = ROUND_MODE_LABELS[mode ?? 'free_play'] ?? 'Free Play';

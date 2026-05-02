@@ -75,7 +75,7 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
 
       <View style={styles.divider} />
 
-      <Text style={styles.sectionLabel}>WHAT'S HAPPENING</Text>
+      <Text style={styles.sectionLabel}>WHAT&apos;S HAPPENING</Text>
       <Text style={styles.body}>{issue.mechanical_breakdown}</Text>
 
       <Text style={[styles.sectionLabel, styles.feelLabel]}>FEEL CUE</Text>

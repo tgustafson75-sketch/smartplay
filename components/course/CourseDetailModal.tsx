@@ -13,7 +13,7 @@
 import React from 'react';
 import {
   Modal, View, Text, ScrollView, Image, TouchableOpacity, StyleSheet,
-  Pressable, Dimensions, type ImageSourcePropType,
+  Dimensions, type ImageSourcePropType,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getHoleThumbnailUrl, getCourseImageryUrl } from '../../services/mapboxImagery';

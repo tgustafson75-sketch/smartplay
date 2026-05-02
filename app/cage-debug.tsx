@@ -74,6 +74,7 @@ export default function CageDebug() {
   const [fillerGenerating, setFillerGenerating] = useState(false);
   const [fillerPlayingCategory, setFillerPlayingCategory] = useState<FillerCategory | null>(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const fillerInfo = useMemo(() => getLibraryInfo(), [fillerStatus]);
 
   const refreshFillerStatus = useCallback(() => {
@@ -297,7 +298,7 @@ export default function CageDebug() {
           <View style={styles.emptyBox}>
             <Text style={styles.emptyText}>No sessions yet.</Text>
             <Text style={styles.emptyHint}>
-              Tap "+ Synthetic test" above to verify storage works without going to the cage.
+              Tap &quot;+ Synthetic test&quot; above to verify storage works without going to the cage.
             </Text>
           </View>
         )}

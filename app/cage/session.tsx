@@ -52,13 +52,13 @@ const SHAPE_OPTIONS = [
 export default function CageSession() {
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
-  const params = useLocalSearchParams();
+  const _params = useLocalSearchParams();
 
   const { activeSession, addShot, endSession } = useCageStore();
   const { voiceGender, voiceEnabled, language } = useSettingsStore();
   const { isConnected: watchConnected, recordSwing: recordWatchSwing } = useWatchStore();
   const { addObservation, updateClubConfidence } = useRelationshipStore();
-  const { dominantMiss } = usePlayerProfileStore();
+  const { dominantMiss: _dominantMiss } = usePlayerProfileStore();
 
   const [selectedFeel, setSelectedFeel] = useState<string | null>(null);
   const [selectedShape, setSelectedShape] = useState<string | null>(null);
@@ -76,6 +76,7 @@ export default function CageSession() {
     if (!activeSession) {
       router.replace('/cage' as never);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSession]);
 
   // Phase O.5 — earbud-tap suppression while user is in active swing capture.
@@ -97,6 +98,7 @@ export default function CageSession() {
         setIsKevinSpeaking(false);
       }, 600);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const flashKevinCard = () => {

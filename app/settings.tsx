@@ -332,7 +332,7 @@ export default function Settings() {
             activeOpacity={0.7}
           >
             <View style={styles.rowText}>
-              <Text style={labelStyle}>What Kevin's learning</Text>
+              <Text style={labelStyle}>What Kevin&apos;s learning</Text>
               <Text style={subStyle}>Phrases Kevin has picked up from you</Text>
             </View>
             <Text style={[styles.rowSub, { color: colors.text_muted }]}>›</Text>

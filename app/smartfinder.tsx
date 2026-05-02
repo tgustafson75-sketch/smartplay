@@ -54,7 +54,7 @@ const LOCK_DURATION_MS = 30_000;
 export default function SmartFinder() {
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const _insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
   const isRoundActive = useRoundStore(s => s.isRoundActive);

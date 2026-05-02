@@ -7,7 +7,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -36,6 +36,7 @@ export default function BatteryPrompt() {
       "Phone's at 20%. Want me to slow down lie analysis and stretch the battery?",
       voiceGender, language, apiUrl,
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bs?.promptVisible, trustLevel, voiceEnabled]);
 
   if (!bs?.promptVisible) return null;

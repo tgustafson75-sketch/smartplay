@@ -240,7 +240,7 @@ export default function HoleShotMap({
               </Text>
             </View>
             {selected.raw_utterance ? (
-              <Text style={styles.utterance}>"{selected.raw_utterance}"</Text>
+              <Text style={styles.utterance}>&quot;{selected.raw_utterance}&quot;</Text>
             ) : null}
           </>
         ) : (

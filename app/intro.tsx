@@ -33,6 +33,7 @@ export default function Intro() {
       duration: 800,
       useNativeDriver: true,
     }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   const goToStep = (n: number) => {
@@ -85,7 +86,7 @@ export default function Intro() {
         {/* STEP 0 — NAME */}
         {step === 0 && (
           <Animated.View style={[styles.stepContainer, { opacity: fadeAnim }]}>
-            <Text style={styles.kevinSays}>Hey. I'm Kevin.</Text>
+            <Text style={styles.kevinSays}>Hey. I&apos;m Kevin.</Text>
             <Text style={styles.kevinSub}>What should I call you?</Text>
             <TextInput
               style={styles.nameInput}
@@ -103,7 +104,7 @@ export default function Intro() {
               onPress={handleNameSubmit}
               disabled={!playerName.trim()}
             >
-              <Text style={styles.btnText}>That's me</Text>
+              <Text style={styles.btnText}>That&apos;s me</Text>
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -169,7 +170,7 @@ export default function Intro() {
               You can tell me more about your game as we go.
             </Text>
             <TouchableOpacity style={styles.btn} onPress={handleFinish}>
-              <Text style={styles.btnText}>Let's go</Text>
+              <Text style={styles.btnText}>Let&apos;s go</Text>
             </TouchableOpacity>
           </Animated.View>
         )}

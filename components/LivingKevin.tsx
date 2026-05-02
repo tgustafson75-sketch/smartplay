@@ -21,7 +21,7 @@ interface LivingKevinProps {
 
 export default function LivingKevin({
   source,
-  resizeMode = 'contain',
+  resizeMode: _resizeMode = 'contain',
   voiceState,
 }: LivingKevinProps) {
   const breathScale = useSharedValue(1.0);
@@ -64,6 +64,7 @@ export default function LivingKevin({
       -1,
       false,
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceState]);
 
   // ── Micro-drift: X 7300 ms, Y 5500 ms — set once on mount ───────────────
@@ -90,6 +91,7 @@ export default function LivingKevin({
       cancelAnimation(driftX);
       cancelAnimation(driftY);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Nod: greeting on mount, then on speaking → idle ──────────────────────
@@ -101,6 +103,7 @@ export default function LivingKevin({
       );
     }, 1800);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -111,6 +114,7 @@ export default function LivingKevin({
       );
     }
     prevVoiceRef.current = voiceState;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceState]);
 
   // ── UI-thread animated style ──────────────────────────────────────────────

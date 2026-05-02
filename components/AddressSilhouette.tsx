@@ -32,7 +32,7 @@ function FaceOnSilhouette({
   color: string;
   accentColor: string;
 }) {
-  const s = size / 160;
+  const _s = size / 160;
 
   return (
     <Svg width={size} height={size} viewBox="0 0 160 200">

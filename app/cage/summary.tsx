@@ -166,6 +166,7 @@ export default function CageSummary() {
         }
       }, 3000);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!session) return null;

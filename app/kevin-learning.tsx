@@ -88,7 +88,7 @@ export default function KevinLearningScreen() {
         >
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>Kevin's Learning</Text>
+        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>Kevin&apos;s Learning</Text>
         <View style={{ width: 26 }} />
       </View>
 
@@ -131,7 +131,7 @@ export default function KevinLearningScreen() {
                   >
                     <View style={styles.rowText}>
                       <Text style={[styles.phrase, { color: colors.text_primary }, isFold && { fontSize: 14 }]} numberOfLines={2}>
-                        "{entry.phrase}"
+                        &quot;{entry.phrase}&quot;
                       </Text>
                       <Text style={[styles.meaning, { color: colors.text_muted }]} numberOfLines={1}>
                         {summary}{entry.was_corrected ? ' · corrected' : ''} · said {entry.count}×

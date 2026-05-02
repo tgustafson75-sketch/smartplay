@@ -140,7 +140,7 @@ export default function VoiceDebugScreen() {
         ) : history.map((log, i) => (
           <View key={i} style={styles.card}>
             <Text style={styles.timestamp}>{new Date(log.timestamp).toLocaleTimeString()}</Text>
-            <Text style={styles.historyText}>"{log.raw_text}"</Text>
+            <Text style={styles.historyText}>&quot;{log.raw_text}&quot;</Text>
             <Text style={styles.historyMeta}>
               → {log.parsed_intent.intent_type} ({log.parsed_intent.confidence})
               {log.result.success ? ' ✓' : ' ✗'}

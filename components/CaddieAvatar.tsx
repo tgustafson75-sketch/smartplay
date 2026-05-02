@@ -375,6 +375,7 @@ export default function CaddieAvatar({
       currentAnimRef.current = anim;
       anim.start(() => { currentAnimRef.current = null; });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetSource]);
 
   const prevVoiceState = useRef<VoiceState>('idle');
@@ -422,6 +423,7 @@ export default function CaddieAvatar({
     );
     loop.start();
     return () => loop.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceState, isThinking, trustLevel]);
 
   // ── Micro-drift on front layer ──────────
@@ -445,6 +447,7 @@ export default function CaddieAvatar({
     loopX.start();
     loopY.start();
     return () => { loopX.stop(); loopY.stop(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Scan line on mount ──────────────────
@@ -456,6 +459,7 @@ export default function CaddieAvatar({
       easing: Easing.linear,
       useNativeDriver: true,
     }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Nod animation ──────────────────────
@@ -480,6 +484,7 @@ export default function CaddieAvatar({
   useEffect(() => {
     const timer = setTimeout(() => triggerNod(), 1800);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Nod when speaking → idle ────────────
@@ -490,6 +495,7 @@ export default function CaddieAvatar({
       return () => clearTimeout(timer);
     }
     prevVoiceState.current = voiceState;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceState]);
 
   // ── Glow — voice state + isThinking ───────────────────
@@ -523,6 +529,7 @@ export default function CaddieAvatar({
     );
     loop.start();
     return () => loop.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceState, isThinking]);
 
   // ── HUD flash on data change ────────────
@@ -540,6 +547,7 @@ export default function CaddieAvatar({
         useNativeDriver: true,
       }),
     ]).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hud.hole, hud.yards]);
 
   // ── Response text fade on change ────────
@@ -561,6 +569,7 @@ export default function CaddieAvatar({
         useNativeDriver: true,
       }).start();
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayText]);
 
   // ── Idle tap hint ───────────────────────
@@ -587,6 +596,7 @@ export default function CaddieAvatar({
     );
     loop.start();
     return () => loop.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceState]);
 
   const ringColor =

@@ -87,8 +87,8 @@ export default function UploadSwing() {
               Pick a swing video from your phone. Cap is {MAX_FILE_SIZE_MB}MB.
             </Text>
             <Text style={[styles.copySub, { color: colors.text_muted }]}>
-              Videos with coaching audio (a coach's voice over the swing) play with the audio
-              preserved during review. You can toggle to Kevin's analysis voice anytime.
+              Videos with coaching audio (a coach&apos;s voice over the swing) play with the audio
+              preserved during review. You can toggle to Kevin&apos;s analysis voice anytime.
             </Text>
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.accent }]} onPress={onPick}>
               <Text style={styles.primaryBtnText}>Pick Video</Text>
@@ -141,7 +141,7 @@ export default function UploadSwing() {
             </View>
 
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.label, { color: colors.text_muted }]}>WHO'S SWINGING?</Text>
+              <Text style={[styles.label, { color: colors.text_muted }]}>WHO&apos;S SWINGING?</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text_primary }]}
                 value={swinger}

@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useRoundStore } from '../store/roundStore';
-import { listArchivedRecaps, loadRecap } from '../services/planStorage';
+import { listArchivedRecaps } from '../services/planStorage';
 import { generateRecap } from '../services/recapGenerator';
 import type { RoundRecap } from '../types/plan';
 

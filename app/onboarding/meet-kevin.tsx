@@ -45,6 +45,7 @@ export default function MeetKevin() {
       Animated.timing(fadeIn, { toValue: 1, duration: 700, useNativeDriver: true }),
       Animated.spring(avatarScale, { toValue: 1, friction: 6, useNativeDriver: true }),
     ]).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const finishToCaddie = () => {
@@ -138,12 +139,12 @@ export default function MeetKevin() {
         <Text style={[styles.heading, { color: colors.accent }]}>MEET KEVIN</Text>
         <Text style={[styles.message, { color: colors.text_primary }]}>{KEVIN_INTRO}</Text>
         <Text style={[styles.message, { color: colors.text_muted, fontSize: 13, marginTop: 8 }]}>
-          Tip: with earbuds connected, a single tap opens Kevin's listening hands-free.
+          Tip: with earbuds connected, a single tap opens Kevin&apos;s listening hands-free.
         </Text>
 
         {kevinResponse ? (
           <Text style={[styles.kevinResponse, { color: colors.text_primary }]}>
-            "{kevinResponse}"
+            &quot;{kevinResponse}&quot;
           </Text>
         ) : null}
 
@@ -175,7 +176,7 @@ export default function MeetKevin() {
           disabled={phase !== 'idle' && phase !== 'done'}
         >
           <Text style={[styles.secondaryCtaText, { color: colors.text_muted }]}>
-            Skip — I'll discover this myself
+            Skip — I&apos;ll discover this myself
           </Text>
         </TouchableOpacity>
 

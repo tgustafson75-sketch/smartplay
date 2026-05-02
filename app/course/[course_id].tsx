@@ -157,6 +157,7 @@ export default function CourseDetailScreen() {
       });
       return url ? { hole_number: h.hole_number, url } : null;
     }).filter((x): x is { hole_number: number; url: string } => x !== null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tee, course, isPalms, geometryReady]);
 
   // Course hero — Palms bundled image or Mapbox course-wide aerial.
@@ -204,7 +205,7 @@ export default function CourseDetailScreen() {
       <View style={styles.container}>
         <CourseDetailBanner />
         <View style={styles.loadingState}>
-          <Text style={styles.emptyText}>This course doesn't have detailed data yet.</Text>
+          <Text style={styles.emptyText}>This course doesn&apos;t have detailed data yet.</Text>
         </View>
       </View>
     );

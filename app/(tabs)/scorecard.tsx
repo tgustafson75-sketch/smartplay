@@ -107,6 +107,7 @@ export default function Scorecard() {
       useNativeDriver: false,
     }).start();
     return () => { activeBorderAnim.setValue(0); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentHole]);
   const activeBorderColor = activeBorderAnim.interpolate({
     inputRange: [0, 1],

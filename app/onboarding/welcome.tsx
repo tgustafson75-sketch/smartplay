@@ -21,7 +21,7 @@ const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
 export default function OnboardingWelcome() {
   const router = useRouter();
-  const { colors, spacing, typography, radii } = useTheme();
+  const { colors, spacing, typography: _typography, radii } = useTheme();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
 
   const [voiceDone, setVoiceDone] = useState(false);
@@ -43,6 +43,7 @@ export default function OnboardingWelcome() {
     }, 600);
 
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const styles = useMemo(() => makeStyles(colors, spacing, radii), [colors, spacing, radii]);
@@ -76,7 +77,7 @@ export default function OnboardingWelcome() {
           disabled={!voiceDone}
           activeOpacity={0.85}
         >
-          <Text style={[styles.btnText, { color: '#ffffff' }]}>Let's go</Text>
+          <Text style={[styles.btnText, { color: '#ffffff' }]}>Let&apos;s go</Text>
         </TouchableOpacity>
 
         {!voiceDone && (

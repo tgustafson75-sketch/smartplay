@@ -84,6 +84,7 @@ function AnimatedHoleCard({
   useEffect(() => {
     opacity.value = withDelay(index * 150, withTiming(1, { duration: 280 }));
     translateY.value = withDelay(index * 150, withSpring(0, { damping: 14, stiffness: 100 }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const animStyle = useAnimatedStyle(() => ({

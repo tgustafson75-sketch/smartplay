@@ -69,6 +69,7 @@ export default function CaddieDataStrip({
         useNativeDriver: true,
       }).start(() => setIsMounted(false));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   // ── Idle dot pulse loop ──────────────────
@@ -94,6 +95,7 @@ export default function CaddieDataStrip({
     );
     loops.forEach(l => l.start());
     return () => loops.forEach(l => l.stop());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Flash a dot when value changes ──────
@@ -106,18 +108,22 @@ export default function CaddieDataStrip({
 
   useEffect(() => {
     if (yardage !== prevYardage.current) { flashDot(dotAnims[1]); prevYardage.current = yardage; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yardage]);
 
   useEffect(() => {
     if (playsLike !== prevPlaysLike.current) { flashDot(dotAnims[2]); prevPlaysLike.current = playsLike; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playsLike]);
 
   useEffect(() => {
     if (hole.current !== prevHole.current) { flashDot(dotAnims[0]); prevHole.current = hole.current; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hole.current]);
 
   useEffect(() => {
     if (stroke !== prevStroke.current) { flashDot(dotAnims[3]); prevStroke.current = stroke; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stroke]);
 
   // ── Press scale animation ────────────────
@@ -168,7 +174,7 @@ export default function CaddieDataStrip({
           <View style={[StyleSheet.absoluteFill, styles.tintOverlay]} />
 
           <View style={styles.gridRow}>
-            {row1.map((c, i) => (
+            {row1.map((c, _i) => (
               <React.Fragment key={c.label}>
                 <View style={styles.gridCell}>
                   <Text style={styles.cellLabel}>{c.label}</Text>

@@ -15,6 +15,7 @@ export default function Index() {
   useEffect(() => {
     if (hydrated) return;
     return usePlayerProfileStore.persist.onFinishHydration(() => setHydrated(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isSetupComplete = usePlayerProfileStore(s => s.isSetupComplete);

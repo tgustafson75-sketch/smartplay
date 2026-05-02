@@ -175,7 +175,7 @@ export default function Dashboard() {
 
         {/* KEVIN'S RELATIONSHIP */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Kevin's Read</Text>
+          <Text style={styles.cardTitle}>Kevin&apos;s Read</Text>
 
           <View style={styles.statRow}>
             <View style={styles.stat}>

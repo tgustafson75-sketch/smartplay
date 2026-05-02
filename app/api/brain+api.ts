@@ -13,7 +13,7 @@ export async function POST(request: Request) {
       language = 'en',
       playerName = '',
       firstName = '',
-      handicap = 18,
+      handicap: _handicap = 18,
       roundsTogether = 0,
       sessionsTogether = 0,
       currentHole = null,

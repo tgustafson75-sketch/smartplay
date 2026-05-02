@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('expo:', p.dependencies.expo\\); console.log\\('expo-router:', p.dependencies['expo-router']\\); console.log\\('react-native:', p.dependencies['react-native']\\);\")",
+      "PowerShell(Get-NetTCPConnection -LocalPort 8081,8082,8083,8084,8085,19000,19001,19002 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }; Write-Host \"Ports cleared\")",
+      "PowerShell(Get-NetTCPConnection -LocalPort 8081,8082,8083,8084,8085,19000,19001,19002 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }; Start-Sleep 1; Write-Host \"Ports cleared\")",
+      "Bash(node -e ' *)",
+      "Bash(npx qrcode-terminal *)",
+      "Bash(npx ngrok *)",
+      "WebFetch(domain:job-logs.eascdn.net)",
+      "Bash(npx eas *)",
+      "Bash(git commit -m ' *)",
+      "Bash(curl -s \"https://smartplay-beta.vercel.app/api/health\" --max-time 10)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://smartplay-beta.vercel.app/api/health\" --max-time 10)",
+      "Bash(curl -i \"https://smartplay-beta.vercel.app/api/health\" --max-time 10)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' -X POST https://smartplay-beta.vercel.app/api/__TRACKED_VAR__ -H 'Content-Type: application/json' -d '{}' --max-time 8)",
+      "Bash(curl -s \"https://smartplay-beta.vercel.app/api/weather?lat=33.6&lng=-117.2\")"
+    ]
+  }
+}

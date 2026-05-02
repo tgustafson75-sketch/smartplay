@@ -33,7 +33,7 @@ export default function PaywallScreen() {
   const fadeIn = useRef(new Animated.Value(0)).current;
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
-  const { subscription_status, setSubscriptionStatus } = usePlayerProfileStore();
+  const { subscription_status, setSubscriptionStatus: _setSubscriptionStatus } = usePlayerProfileStore();
 
   useEffect(() => {
     Animated.timing(fadeIn, { toValue: 1, duration: 500, useNativeDriver: true }).start();
@@ -49,6 +49,7 @@ export default function PaywallScreen() {
       }, 800);
       return () => clearTimeout(delay);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSubscribe = () => {

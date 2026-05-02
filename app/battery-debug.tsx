@@ -7,7 +7,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -28,7 +28,7 @@ import {
 export default function BatteryDebugScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [tick, setTick] = useState(0);
+  const [_tick, setTick] = useState(0);
   const [bs, setBs] = useState<BatteryState | null>(null);
 
   useEffect(() => {
@@ -74,7 +74,7 @@ export default function BatteryDebugScreen() {
         <Text style={styles.section}>Actions</Text>
 
         <TouchableOpacity style={styles.btn} onPress={() => bumpToActive('debug_button')}>
-          <Text style={styles.btnText}>Force bumpToActive('debug_button')</Text>
+          <Text style={styles.btnText}>Force bumpToActive(&apos;debug_button&apos;)</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.btn} onPress={acceptBatterySaver}>

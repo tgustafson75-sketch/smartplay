@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useRoundStore } from '../../store/roundStore';
@@ -22,6 +22,7 @@ export default function SimRound() {
       }
     }
     router.replace('/(tabs)/caddie' as never);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

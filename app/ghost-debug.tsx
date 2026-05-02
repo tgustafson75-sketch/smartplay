@@ -13,7 +13,6 @@ import { useRoundStore, type RoundRecord } from '../store/roundStore';
 import { useGhostStore } from '../store/ghostStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { generateRecap } from '../services/recapGenerator';
-import { saveRecap } from '../services/planStorage';
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
@@ -281,7 +280,7 @@ export default function GhostDebugScreen() {
             >
               {commentaryLoading
                 ? <ActivityIndicator color="#060f09" />
-                : <Text style={[styles.btnText, styles.btnTextDark]}>"How am I doing against past me?"</Text>
+                : <Text style={[styles.btnText, styles.btnTextDark]}>&quot;How am I doing against past me?&quot;</Text>
               }
             </TouchableOpacity>
             {commentary && (

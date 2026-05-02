@@ -36,6 +36,7 @@ export default function OnboardingName() {
       inputRef.current?.focus();
     }, 300);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleContinue = () => {

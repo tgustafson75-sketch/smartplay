@@ -57,6 +57,7 @@ export default function KevinBadge({ onTap, onLongPress }: KevinBadgeProps) {
       cancelAnimation(glowOpacity);
       glowOpacity.value = withTiming(0, { duration: 300 });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isThinking, isSpeaking]);
 
   const glowStyle = useAnimatedStyle(() => ({

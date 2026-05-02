@@ -23,7 +23,7 @@ export async function POST(req: Request) {
       personalBest = null,
       recentCageSessions = [],
       heroMoments = [],
-      currentMentalState = 'neutral',
+      currentMentalState: _currentMentalState = 'neutral',
       isCompetition = false,
       weather = null,
       language = 'en',

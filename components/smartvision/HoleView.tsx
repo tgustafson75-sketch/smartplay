@@ -113,6 +113,7 @@ export default function HoleView({
       setImageUrl(url ?? fallbackUrl);
     })();
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geometry.hole_number, geometry.tee, geometry.green, width, height, zoom, fallbackUrl]);
 
   // Pre-compute overlay layer data

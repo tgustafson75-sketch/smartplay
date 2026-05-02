@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ImageBackground, Image, StyleSheet, type ImageSourcePropType } from 'react-native';
+import { View, Text, TouchableOpacity, ImageBackground, Image, StyleSheet } from 'react-native';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
 import { useRoundStore } from '../../store/roundStore';
 import { getHoleGeometry, fetchCourseGeometry, type HoleGeometry } from '../../services/courseGeometryService';
@@ -12,7 +12,7 @@ import { getHoleThumbnailUrl } from '../../services/mapboxImagery';
 // registered as empty so dropping `assets/courses/lakes/hole-XX.jpg` /
 // `assets/courses/rancho-california/hole-XX.jpg` files later picks them
 // up without further code changes (just add the require() entries here).
-import { LOCAL_COURSE_IMAGES, getLocalHoleImage } from '../../data/localCourseImages';
+import { getLocalHoleImage } from '../../data/localCourseImages';
 
 const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
@@ -93,6 +93,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   // Default preview when no active round — show Tim's home course (Palms)
   // hole 1 image so the SmartVision card is never empty/green.
   if (!isRoundActive) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const defaultImg = require('../../data/localCourseImages').getDefaultPreviewImage();
     if (defaultImg) {
       return (

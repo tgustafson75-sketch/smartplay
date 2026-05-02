@@ -18,7 +18,7 @@ import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRelationshipStore } from '../store/relationshipStore';
-import { compressFrame, analyzeSwingFrame } from '../services/swingCapture';
+import { analyzeSwingFrame } from '../services/swingCapture';
 import type { SwingView } from '../services/swingCapture';
 import { useWatchStore } from '../store/watchStore';
 import { simulateSwing, getKevinTempoLine } from '../services/watchService';
@@ -61,6 +61,7 @@ export default function SmartMotion() {
     if (!permission?.granted) {
       requestPermission();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -94,6 +95,7 @@ export default function SmartMotion() {
       if (timerRef.current) clearInterval(timerRef.current);
       if (autoStopRef.current) clearTimeout(autoStopRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRecording]);
 
   const handleStartRecording = async () => {

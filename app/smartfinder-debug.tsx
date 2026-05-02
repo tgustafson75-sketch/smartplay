@@ -83,7 +83,7 @@ export default function SmartFinderDebug() {
         Math.sin(headR) * Math.sin(dR) * Math.cos(latR),
         Math.cos(dR) - Math.sin(latR) * Math.sin(newLatR),
       );
-    const confidence: 'high' | 'medium' | 'low' =
+    const _confidence: 'high' | 'medium' | 'low' =
       yards >= 50 && yards <= 250 ? 'high' : yards >= 10 && yards <= 400 ? 'medium' : 'low';
     const newLock: RangefinderLock = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),

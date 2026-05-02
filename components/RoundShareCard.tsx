@@ -22,7 +22,7 @@ export interface ShareCardProps {
 
 // Rendered offscreen at 360×640 — captureRef scales to 1080×1920
 const RoundShareCard = forwardRef<View, ShareCardProps>(
-  ({ courseName, date, totalScore, mode, ghostVariance, ghostLabel, heroStat, kevinQuote }, ref) => {
+  ({ courseName, date, totalScore, mode, ghostVariance, ghostLabel: _ghostLabel, heroStat, kevinQuote }, ref) => {
     const modeLabel = MODE_LABELS[mode] ?? mode;
 
     const ghostColor = ghostVariance == null
@@ -71,7 +71,7 @@ const RoundShareCard = forwardRef<View, ShareCardProps>(
 
         {/* ── QUOTE ─────────────────────────── */}
         <View style={styles.quoteSection}>
-          <Text style={styles.quoteText}>"{kevinQuote}"</Text>
+          <Text style={styles.quoteText}>&quot;{kevinQuote}&quot;</Text>
           <Text style={styles.quoteAttrib}>— Kevin</Text>
         </View>
 

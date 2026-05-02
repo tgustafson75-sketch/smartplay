@@ -26,7 +26,7 @@ export default function TrustLevelScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Kevin's presence</Text>
+        <Text style={styles.title}>Kevin&apos;s presence</Text>
         <View style={styles.backBtn} />
       </View>
 

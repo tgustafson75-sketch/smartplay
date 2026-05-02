@@ -40,6 +40,7 @@ export default function OnboardingMode() {
       }
     }, 300);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSelect = (mode: Mode) => {
@@ -79,7 +80,7 @@ export default function OnboardingMode() {
         ))}
 
         <TouchableOpacity style={styles.skip} onPress={handleSkip}>
-          <Text style={[styles.skipText, { color: colors.text_muted }]}>Skip — I'll decide later</Text>
+          <Text style={[styles.skipText, { color: colors.text_muted }]}>Skip — I&apos;ll decide later</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
