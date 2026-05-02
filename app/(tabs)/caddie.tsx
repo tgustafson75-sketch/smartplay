@@ -54,6 +54,7 @@ import { useTrustLevelStore } from '../../store/trustLevelStore';
 import KevinAvatar, { type AvatarState } from '../../components/kevin/KevinAvatar';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
 import WhatCanISayChip from '../../components/WhatCanISayChip';
+import KevinHelpButton from '../../components/KevinHelpButton';
 import VocabBanner from '../../components/VocabBanner';
 import { kevinText as kevinTextStyle } from '../../styles/typography';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
@@ -1103,7 +1104,14 @@ export default function CaddieTab() {
             <Text style={styles.brandName}>SmartPlay</Text>
             <Text style={styles.brandSub}> Caddie</Text>
           </View>
-          <WhatCanISayChip surface="caddie" style={{ marginTop: 12 }} />
+        </View>
+      )}
+
+      {/* "?" help button — to the right of Kevin, vertically near the avatar
+          midline so it doesn't fight the WindArrow (top-right) or any face area. */}
+      {trustLevel !== 1 && (
+        <View style={{ position: 'absolute', top: insets.top + 240, right: 12, zIndex: 13 }}>
+          <KevinHelpButton surface="caddie" />
         </View>
       )}
 
@@ -1134,7 +1142,7 @@ export default function CaddieTab() {
       {/* GREETING BUBBLE — pre-round only, sits in negative space above Start Round */}
       {!isRoundActive && shownText && trustLevel !== 1 ? (
         <Animated.View
-          style={[styles.bubble, { bottom: 144 + insets.bottom, opacity: responseFade }]}
+          style={[styles.bubble, { bottom: 96 + insets.bottom, opacity: responseFade }]}
         >
           {/* Backdrop deliberately almost-transparent so Kevin's face shows through.
               Text legibility is preserved by the textShadow on bubbleText. */}
