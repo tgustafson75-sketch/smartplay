@@ -1235,7 +1235,7 @@ export default function CaddieTab() {
 
       {/* WIND ARROW — Caddie-mode wind indicator, only during active rounds */}
       {isRoundActive && (
-        <View style={{ position: 'absolute', top: insets.top + 145, right: 12, zIndex: 11 }} pointerEvents="none">
+        <View style={{ position: 'absolute', top: insets.top + (trustLevel === 4 ? 145 : 110), right: 12, zIndex: 11 }} pointerEvents="none">
           <WindArrow weather={caddieWeather} shotBearingDeg={caddieShotBearing} compact />
         </View>
       )}
