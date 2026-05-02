@@ -15,6 +15,9 @@ import { activateMediaSession, deactivateMediaSession } from '../services/mediaK
 import { startHoleDetection, stopHoleDetection, subscribeToHoleDetection } from '../services/holeDetection';
 import { consumeDeferredPaywall } from '../services/paywallGuard';
 import { router } from 'expo-router';
+import { initAudioLifecycle } from '../services/audioLifecycle';
+import { initBatteryMonitor } from '../services/batteryMonitor';
+import BatteryPrompt from '../components/battery/BatteryPrompt';
 
 // TODO (Wednesday MacBook setup): add EXPO_PUBLIC_SENTRY_DSN + Sentry org/project to eas.json,
 // then remove SENTRY_DISABLE_AUTO_UPLOAD=true from eas.json build profiles.
@@ -47,6 +50,12 @@ function AppNavigator() {
         setSubscriptionStatus('expired');
       }
     }
+  }, []);
+
+  // Pre-beta — boot battery discipline lifecycles. Both are idempotent.
+  useEffect(() => {
+    initAudioLifecycle();
+    initBatteryMonitor();
   }, []);
 
   // Phase O — boot earbud listening session bus, honoring user setting
@@ -127,6 +136,7 @@ function AppNavigator() {
   return (
     <>
       <StatusBar style="auto" />
+      <BatteryPrompt />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -228,6 +238,10 @@ function AppNavigator() {
         />
         <Stack.Screen
           name="subscription-debug"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
+        <Stack.Screen
+          name="battery-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
       </Stack>

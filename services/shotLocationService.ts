@@ -1,6 +1,7 @@
 import * as Location from 'expo-location';
 import { useRoundStore, type ShotLocation, type CourseHole } from '../store/roundStore';
 import { getHoleGeometry } from './courseGeometryService';
+import { getOneShotFix } from './gpsManager';
 
 /**
  * Phase B — GPS location capture for shots.
@@ -34,6 +35,13 @@ export async function getCurrentLocation(): Promise<ShotLocation | null> {
     if (!granted) {
       const req = await Location.requestForegroundPermissionsAsync();
       if (!req.granted) return lastLocation;
+    }
+    // Pre-beta — prefer cached fix from gpsManager (<10s old) before
+    // firing a redundant high-accuracy pulse.
+    const fix = await getOneShotFix();
+    if (fix) {
+      lastLocation = { lat: fix.lat, lng: fix.lng };
+      return lastLocation;
     }
     const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
     lastLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };

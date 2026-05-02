@@ -1,5 +1,6 @@
 import { Audio } from 'expo-av';
 import { File, Paths } from 'expo-file-system';
+import { noteAudioActivity } from './audioLifecycle';
 
 // ─── AUDIO MODE MANAGEMENT ────────────────
 
@@ -52,6 +53,7 @@ export const captureUtterance = async (
 ): Promise<string | null> => {
   let recording: Audio.Recording | null = null;
   try {
+    noteAudioActivity('capture');
     const { granted } = await Audio.requestPermissionsAsync();
     if (!granted) return null;
     await configureAudioForRecording();
@@ -337,6 +339,7 @@ export const speak = async (
   }
 
   notifySpeaking(true);
+  noteAudioActivity('tts');
   await configureAudioForSpeech();
 
   try {

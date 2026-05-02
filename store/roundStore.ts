@@ -414,6 +414,10 @@ export const useRoundStore = create<RoundState>()(
         try {
           require('../services/holeDetection').noteManualOverride();
         } catch {}
+        // Pre-beta — hole change is a shot-intent signal; bump GPS to active.
+        try {
+          require('../services/gpsManager').bumpToActive('hole_change');
+        } catch {}
       },
 
       setCurrentYardage: (yards) => set({ currentYardage: yards }),

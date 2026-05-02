@@ -50,6 +50,14 @@ export const queryStatusHandler: IntentHandler = {
     const topic = String(intent.parameters.query_topic ?? '').toLowerCase();
     const round = useRoundStore.getState();
 
+    // Pre-beta — distance/wind/carry queries are shot-intent signals; bump
+    // GPS to active so the next answer reads from a fresh fix.
+    if (topic === 'distance_to_green' || topic === 'green_front' || topic === 'green_back' ||
+        topic === 'green_middle' || topic === 'wind' || topic === 'plays_like' ||
+        topic === 'carry_check' || topic === 'shot_distance' || topic === 'hole_progress') {
+      try { require('../gpsManager').bumpToActive('voice_query:' + topic); } catch {}
+    }
+
     if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like' || topic === 'green_front' || topic === 'green_back' || topic === 'green_middle') /* end_session, next_focus, swing_observation, tell_me_more deliberately allowed off-round */) {
       return {
         success: true,

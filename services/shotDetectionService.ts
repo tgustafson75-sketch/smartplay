@@ -1,4 +1,5 @@
 import * as Location from 'expo-location';
+import { startGpsManager, subscribe as subscribeGps, stopGpsManager } from './gpsManager';
 
 export interface GPSSample {
   lat: number;
@@ -53,6 +54,7 @@ class ShotDetector {
   private listeners: Set<Listener> = new Set();
   private samples: GPSSample[] = [];
   private subscription: Location.LocationSubscription | null = null;
+  private unsubscribeGps: (() => void) | null = null;
   private running = false;
   private lastShotEmitTime = 0;
   private readonly EMIT_COOLDOWN_MS = 30_000;
@@ -77,26 +79,20 @@ class ShotDetector {
   async start(): Promise<boolean> {
     if (this.running) return true;
     try {
-      const { granted } = await Location.requestForegroundPermissionsAsync();
-      if (!granted) {
-        console.log('[shotDetection] location permission denied');
-        return false;
-      }
-      this.subscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: this.config.pollIntervalMs,
-          distanceInterval: 2,
-        },
-        (loc) => this.ingest({
-          lat: loc.coords.latitude,
-          lng: loc.coords.longitude,
-          timestamp: loc.timestamp,
-          speed: loc.coords.speed ?? null,
-        }),
-      );
+      // Pre-beta — route through gpsManager so the underlying watch is a
+      // single adaptive subscription (active/walking/stationary modes)
+      // instead of a dedicated high-accuracy 2.5s poll. Battery win.
+      await startGpsManager();
+      this.unsubscribeGps = subscribeGps((fix) => {
+        this.ingest({
+          lat: fix.lat,
+          lng: fix.lng,
+          timestamp: fix.timestamp,
+          speed: fix.speed,
+        });
+      });
       this.running = true;
-      console.log('[shotDetection] started');
+      console.log('[shotDetection] started (via gpsManager)');
       return true;
     } catch (err) {
       console.log('[shotDetection] start error:', err);
@@ -105,12 +101,20 @@ class ShotDetector {
   }
 
   stop(): void {
+    if (this.unsubscribeGps) {
+      this.unsubscribeGps();
+      this.unsubscribeGps = null;
+    }
     if (this.subscription) {
       this.subscription.remove();
       this.subscription = null;
     }
     this.running = false;
     this.samples = [];
+    // Round-end stops the underlying gpsManager too. Other subscribers
+    // (smartfinder, hole-view) tear down their watches when leaving the
+    // round flow on their own.
+    stopGpsManager();
     console.log('[shotDetection] stopped');
   }
 

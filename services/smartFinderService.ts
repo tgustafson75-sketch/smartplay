@@ -1,6 +1,7 @@
 import * as Location from 'expo-location';
 import { useRoundStore, type ShotLocation } from '../store/roundStore';
 import { haversineYards } from '../utils/geoDistance';
+import { getOneShotFix, bumpToActive } from './gpsManager';
 
 /**
  * Phase D-2 — SmartFinder data layer.
@@ -74,17 +75,15 @@ export function isSimulatedActive(): boolean {
 export async function refreshFix(): Promise<LastFix | null> {
   // Sim override: just return whatever the harness set.
   if (simulatedActive) return lastFix;
+  // SmartFinder being open is a shot-intent signal — bump GPS to active.
+  bumpToActive('smartfinder_refresh');
   try {
-    const { granted } = await Location.getForegroundPermissionsAsync();
-    if (!granted) {
-      const req = await Location.requestForegroundPermissionsAsync();
-      if (!req.granted) return null;
-    }
-    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+    const fix = await getOneShotFix();
+    if (!fix) return lastFix;
     lastFix = {
-      location: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-      accuracy_m: pos.coords.accuracy ?? null,
-      timestamp: pos.timestamp,
+      location: { lat: fix.lat, lng: fix.lng },
+      accuracy_m: fix.accuracy_m ?? null,
+      timestamp: fix.timestamp,
     };
     return lastFix;
   } catch (e) {

@@ -68,6 +68,7 @@ import { kevinText as kevinTextStyle } from '../../styles/typography';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
 import { canAccess, trialDaysLeft } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
+import { subscribeBattery } from '../../services/batteryMonitor';
 import {
   shouldFireProactive,
   markProactiveFired,
@@ -357,6 +358,10 @@ export default function CaddieTab() {
   const displayText = caddieResponse || openingPrompt;
   const [shownText, setShownText] = useState(displayText);
   const responseFade = useRef(new Animated.Value(1)).current;
+
+  // Pre-beta — battery-saver state for the L1 badge dot color.
+  const [saverActive, setSaverActive] = useState(false);
+  useEffect(() => subscribeBattery((s) => setSaverActive(s.saverActive)), []);
 
   // Pre-beta — Discrete Mode badge pulse. Brief opacity dip + restore
   // when the user enters Quiet, so the mute dot landing reads as an
@@ -1287,7 +1292,9 @@ export default function CaddieTab() {
               {/* Pre-beta — Discrete Mode mute dot. Lives ON the badge
                   (DEFAULT) rather than as a third corner element. Tells
                   the player at a glance that Kevin is intentionally
-                  silent, not crashed. */}
+                  silent, not crashed. Orange overrides gray when battery
+                  saver is active for the round (distinct from gray-Quiet
+                  and amber-thinking). */}
               <View
                 style={{
                   position: 'absolute',
@@ -1296,7 +1303,7 @@ export default function CaddieTab() {
                   width: 14,
                   height: 14,
                   borderRadius: 7,
-                  backgroundColor: '#6b7280',
+                  backgroundColor: saverActive ? '#F5A623' : '#6b7280',
                   borderWidth: 2,
                   borderColor: '#060f09',
                 }}
@@ -1552,6 +1559,48 @@ export default function CaddieTab() {
           pointerEvents="box-none"
         >
           <L1HolePreview onOpenSmartVision={openSmartVision} />
+        </View>
+      )}
+
+      {/* L1 QUIET pre-round — restore the legacy SmartFinder preview card so
+          the stack reads SmartVision → SmartFinder → Start Round, clean and
+          logical. In-round, the standard SmartFinderCard renders below; this
+          pre-round stub only fills the empty space pre-round at L1. */}
+      {trustLevel === 1 && !isRoundActive && (
+        <View
+          style={{
+            position: 'absolute',
+            left: 16,
+            right: 16,
+            bottom: 130 + insets.bottom,
+            zIndex: 7,
+          }}
+          pointerEvents="box-none"
+        >
+          <TouchableOpacity
+            onPress={() => router.push('/smartfinder' as never)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: '#0d2418',
+              borderColor: '#1e3a28',
+              borderWidth: 1,
+              borderRadius: 14,
+              paddingVertical: 12,
+              paddingHorizontal: 14,
+              gap: 12,
+            }}
+            activeOpacity={0.88}
+          >
+            <View style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 1.5, borderColor: '#00C896', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="locate-outline" size={18} color="#00C896" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#00C896', fontSize: 11, fontWeight: '800', letterSpacing: 1.2 }}>SMARTFINDER</Text>
+              <Text style={{ color: '#9ca3af', fontSize: 12, marginTop: 2 }}>Tap-to-lock rangefinder · Start a round to see live yardages</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#6b7280" />
+          </TouchableOpacity>
         </View>
       )}
 
