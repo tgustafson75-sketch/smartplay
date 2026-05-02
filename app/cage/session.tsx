@@ -28,6 +28,7 @@ import {
 import { useWatchStore } from '../../store/watchStore';
 import { simulateSwing, getKevinTempoLine } from '../../services/watchService';
 import { setSuppressed as setEarbudSuppressed } from '../../services/earbudControl';
+import AppIcon from '../../components/AppIcon';
 
 const FEEL_OPTIONS = [
   { label: 'Flush',  value: 'flush', color: '#00C896', emoji: '🎯' },
@@ -260,7 +261,7 @@ export default function CageSession() {
               {trendIcon}
             </Text>
             {watchConnected && (
-              <Text style={styles.watchDot}>⌚</Text>
+              <AppIcon name="watch-outline" size={14} color="#60a5fa" />
             )}
           </View>
         </View>
@@ -406,7 +407,7 @@ export default function CageSession() {
           style={styles.smartMotionBtn}
           onPress={() => router.push('/(tabs)/swinglab' as never)}
         >
-          <Text style={styles.smartMotionIcon}>🎥</Text>
+          <AppIcon name="film-outline" size={20} color="#00C896" />
           <Text style={styles.smartMotionLabel}>SwingLab</Text>
         </TouchableOpacity>
 

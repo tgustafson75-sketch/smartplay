@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoundStore } from '../../store/roundStore';
+import AppIcon from '../../components/AppIcon';
 import type { ShotResult } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { dataValue, dataLabel } from '../../styles/typography';
@@ -398,8 +399,9 @@ export default function Scorecard() {
 
         {/* COMPETITION BADGE */}
         {isCompetition && (
-          <View style={styles.compBadge}>
-            <Text style={styles.compBadgeText}>🏆 Competition Round</Text>
+          <View style={[styles.compBadge, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+            <AppIcon name="trophy" size={14} color="#F5A623" />
+            <Text style={styles.compBadgeText}>Competition Round</Text>
           </View>
         )}
 

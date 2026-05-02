@@ -10,6 +10,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { usePointsStore } from '../../store/pointsStore';
+import AppIcon from '../../components/AppIcon';
 
 export default function Dashboard() {
   const {
@@ -274,7 +275,7 @@ export default function Dashboard() {
               .reverse()
               .map(bt => (
                 <View key={bt.id} style={styles.btItem}>
-                  <Text style={styles.btIcon}>🏆</Text>
+                  <AppIcon name="trophy" size={18} color="#F5A623" />
                   <Text style={styles.btText}>{bt.description}</Text>
                 </View>
               ))}

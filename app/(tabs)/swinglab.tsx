@@ -13,6 +13,7 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import AddressSilhouette from '../../components/AddressSilhouette';
 import CageSessionOverlay from '../../components/CageSessionOverlay';
 import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
+import AppIcon from '../../components/AppIcon';
 import { getDialog } from '../../services/dialogEngine';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useRoundStore } from '../../store/roundStore';
@@ -298,14 +299,16 @@ export default function SwingLab() {
           onPress={() => setCageActive(true)}
           activeOpacity={0.8}
         >
-          <Text style={styles.cageSessionIcon}>📹</Text>
+          <View style={styles.cageSessionIconWrap}>
+            <AppIcon name="videocam" size={24} color="#00C896" />
+          </View>
           <View style={styles.cageSessionText}>
             <Text style={styles.cageSessionLabel}>Start Cage Session</Text>
             <Text style={styles.cageSessionSub}>
               Record continuously · Auto-detect swings · Review later
             </Text>
           </View>
-          <Text style={styles.cageSessionArrow}>›</Text>
+          <AppIcon name="chevron-forward" size={20} color="#2563eb" />
         </TouchableOpacity>
 
         {/* Phase R — Upload Swing + My Swing Library */}
@@ -315,7 +318,7 @@ export default function SwingLab() {
             onPress={() => router.push('/swinglab/upload' as never)}
             activeOpacity={0.8}
           >
-            <Text style={styles.phaseRIcon}>⬆️</Text>
+            <AppIcon name="cloud-upload-outline" size={22} color="#00C896" />
             <Text style={styles.phaseRLabel}>Upload Swing</Text>
             <Text style={styles.phaseRSub}>From phone library</Text>
           </TouchableOpacity>
@@ -324,7 +327,7 @@ export default function SwingLab() {
             onPress={() => router.push('/swinglab/library' as never)}
             activeOpacity={0.8}
           >
-            <Text style={styles.phaseRIcon}>📚</Text>
+            <AppIcon name="library-outline" size={22} color="#00C896" />
             <Text style={styles.phaseRLabel}>My Swing Library</Text>
             <Text style={styles.phaseRSub}>Browse + replay</Text>
           </TouchableOpacity>
@@ -333,7 +336,7 @@ export default function SwingLab() {
         {/* Watch banner */}
         {watchConnected && (
           <View style={styles.watchBanner}>
-            <Text style={styles.watchIcon}>⌚</Text>
+            <AppIcon name="watch-outline" size={18} color="#60a5fa" />
             <Text style={styles.watchText}>
               Motion Tracking active — your watch will capture swing data during drills.
             </Text>
@@ -350,7 +353,7 @@ export default function SwingLab() {
             onPress={() => router.push('/cage')}
             activeOpacity={0.75}
           >
-            <Text style={styles.quickIcon}>🎯</Text>
+            <AppIcon name="golf-outline" size={26} color="#00C896" />
             <Text style={styles.quickLabel}>Cage Mode</Text>
             <Text style={styles.quickDesc}>Shot analysis + video</Text>
           </TouchableOpacity>
@@ -359,7 +362,7 @@ export default function SwingLab() {
             onPress={() => router.push('/arena')}
             activeOpacity={0.75}
           >
-            <Text style={styles.quickIcon}>🏟️</Text>
+            <AppIcon name="trophy-outline" size={26} color="#F5A623" />
             <Text style={styles.quickLabel}>Arena</Text>
             <Text style={styles.quickDesc}>Target games + scoring</Text>
           </TouchableOpacity>
@@ -493,7 +496,7 @@ function DrillCard({ drill, expanded, onToggle, onNavigate }: DrillCardProps) {
           ))}
 
           <View style={styles.tipBox}>
-            <Text style={styles.tipIcon}>💬</Text>
+            <AppIcon name="chatbubble-ellipses-outline" size={18} color="#00C896" />
             <View style={styles.tipContent}>
               <Text style={styles.tipLabel}>Kevin says</Text>
               <Text style={styles.tipText}>{drill.tip}</Text>
@@ -564,8 +567,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     gap: 12,
   },
-  cageSessionIcon: {
-    fontSize: 28,
+  cageSessionIconWrap: {
+    width: 36, height: 36, borderRadius: 8,
+    backgroundColor: 'rgba(0,200,150,0.12)',
+    alignItems: 'center', justifyContent: 'center',
   },
   cageSessionText: {
     flex: 1,

@@ -57,6 +57,7 @@ import { getFirstToolHint } from '../../services/voiceOnboardingService';
 import WhatCanISayChip from '../../components/WhatCanISayChip';
 import KevinHelpButton from '../../components/KevinHelpButton';
 import ScorecardChip from '../../components/caddie/ScorecardChip';
+import AppIcon, { type IconName } from '../../components/AppIcon';
 import PhotoCaptureButton from '../../components/caddie/PhotoCaptureButton';
 import VocabBanner from '../../components/VocabBanner';
 import { kevinText as kevinTextStyle } from '../../styles/typography';
@@ -1409,7 +1410,10 @@ export default function CaddieTab() {
           activeOpacity={0.75}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Text style={styles.penaltyQuickBtnText}>⚠️ +Penalty</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <AppIcon name="warning-outline" size={14} color="#fbbf24" />
+            <Text style={styles.penaltyQuickBtnText}>+Penalty</Text>
+          </View>
         </TouchableOpacity>
       )}
 
@@ -1633,7 +1637,10 @@ export default function CaddieTab() {
                     } as never);
                   }}
                 >
-                  <Text style={styles.holeViewNudgeText}>📋 Lock Plan</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <AppIcon name="clipboard-outline" size={14} color="#00C896" />
+                    <Text style={styles.holeViewNudgeText}>Lock Plan</Text>
+                  </View>
                 </TouchableOpacity>
               )}
             </View>
@@ -1818,119 +1825,30 @@ export default function CaddieTab() {
               showsVerticalScrollIndicator
             >
 
-            {([
-              {
-                icon: '🎚️',
-                label: `Kevin's Presence: ${TRUST_LEVEL_META[trustLevel].label}`,
-                sub: `${TRUST_LEVEL_META[trustLevel].one_liner} · Tap to cycle`,
-                action: () => {
-                  const next = (((trustLevel) % 4) + 1) as TrustLevel;
-                  setTrustLevel(next);
-                },
-              },
-              {
-                icon: '🏌️',
-                label: 'Practice',
-                sub: 'Cage & swing lab',
-                action: () => {
-                  setShowMoreMenu(false);
-                  router.push('/(tabs)/swinglab' as never);
-                },
-              },
-              {
-                icon: '⛳',
-                label: 'Cage Mode',
-                sub: 'Range session',
-                action: () => {
-                  setShowMoreMenu(false);
-                  if (!canAccess('cage_mode', subscription_status)) {
-                    router.push('/paywall' as never);
-                    return;
-                  }
-                  router.push('/cage' as never);
-                },
-              },
-              {
-                icon: '🔭',
-                label: 'SmartVision',
-                sub: 'Analyze the hole',
-                action: () => {
-                  setShowMoreMenu(false);
-                  openSmartVision();
-                },
-              },
-              {
-                icon: '🎯',
-                label: 'SmartFinder',
-                sub: 'Tap-to-lock rangefinder',
-                action: () => {
-                  setShowMoreMenu(false);
-                  if (!canAccess('smartfinder', subscription_status)) {
-                    router.push('/paywall' as never);
-                    return;
-                  }
-                  router.push('/smartfinder' as never);
-                },
-              },
-              {
-                icon: '⚠️',
-                label: 'Penalty Stroke',
-                sub: 'Water · OB · Lost ball',
-                action: () => {
-                  if (isRoundActive) addPenalty(currentHole);
-                  setShowMoreMenu(false);
-                },
-              },
+            {(([
+              { icon: 'options-outline',     label: `Kevin's Presence: ${TRUST_LEVEL_META[trustLevel].label}`, sub: `${TRUST_LEVEL_META[trustLevel].one_liner} · Tap to cycle`, action: () => { const next = (((trustLevel) % 4) + 1) as TrustLevel; setTrustLevel(next); } },
+              { icon: 'golf-outline',        label: 'Practice',         sub: 'Cage & swing lab',         action: () => { setShowMoreMenu(false); router.push('/(tabs)/swinglab' as never); } },
+              { icon: 'videocam-outline',    label: 'Cage Mode',        sub: 'Range session',            action: () => { setShowMoreMenu(false); if (!canAccess('cage_mode', subscription_status)) { router.push('/paywall' as never); return; } router.push('/cage' as never); } },
+              { icon: 'telescope-outline',   label: 'SmartVision',      sub: 'Analyze the hole',         action: () => { setShowMoreMenu(false); openSmartVision(); } },
+              { icon: 'locate-outline',      label: 'SmartFinder',      sub: 'Tap-to-lock rangefinder',  action: () => { setShowMoreMenu(false); if (!canAccess('smartfinder', subscription_status)) { router.push('/paywall' as never); return; } router.push('/smartfinder' as never); } },
+              { icon: 'warning-outline',     label: 'Penalty Stroke',   sub: 'Water · OB · Lost ball',   action: () => { if (isRoundActive) addPenalty(currentHole); setShowMoreMenu(false); } },
               ...(isRoundActive ? [{
-                icon: '🏁',
-                label: 'End Round',
-                sub: 'Finish and get summary',
-                action: async () => {
-                  setShowMoreMenu(false);
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-                  clearShotPending();
-                  endRound();
-                  await generateRoundSummary();
-                },
+                icon: 'flag-outline' as IconName, label: 'End Round',   sub: 'Finish and get summary',   action: async () => { setShowMoreMenu(false); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {}); clearShotPending(); endRound(); await generateRoundSummary(); },
               }] : []),
-              {
-                icon: '📺',
-                label: castMode ? 'Cast Mode On' : 'Cast Mode',
-                sub: 'Mirror to TV',
-                action: () => setCastMode(!castMode),
-              },
-              {
-                icon: voiceEnabled ? '🔊' : '🔇',
-                label: voiceEnabled ? 'Voice On' : 'Voice Off',
-                sub: "Toggle Kevin's voice",
-                action: () => setVoiceEnabled(!voiceEnabled),
-              },
-              {
-                icon: '📚',
-                label: 'Tutorials',
-                sub: 'How each tool works',
-                action: () => {
-                  setShowMoreMenu(false);
-                  router.push('/tutorials' as never);
-                },
-              },
-              {
-                icon: '⚙️',
-                label: 'Settings',
-                sub: 'App preferences',
-                action: () => {
-                  setShowMoreMenu(false);
-                  router.push('/settings' as never);
-                },
-              },
-            ] as const).map(item => (
+              { icon: 'tv-outline',          label: castMode ? 'Cast Mode On' : 'Cast Mode',     sub: 'Mirror to TV',                  action: () => setCastMode(!castMode) },
+              { icon: voiceEnabled ? 'volume-high-outline' : 'volume-mute-outline', label: voiceEnabled ? 'Voice On' : 'Voice Off',  sub: "Toggle Kevin's voice", action: () => setVoiceEnabled(!voiceEnabled) },
+              { icon: 'library-outline',     label: 'Tutorials',        sub: 'How each tool works',      action: () => { setShowMoreMenu(false); router.push('/tutorials' as never); } },
+              { icon: 'settings-outline',    label: 'Settings',         sub: 'App preferences',          action: () => { setShowMoreMenu(false); router.push('/settings' as never); } },
+            ]) as Array<{ icon: IconName; label: string; sub: string; action: () => void | Promise<void> }>).map(item => (
               <TouchableOpacity
                 key={item.label}
                 style={styles.moreItem}
                 onPress={item.action}
                 activeOpacity={0.8}
               >
-                <Text style={styles.moreIcon}>{item.icon}</Text>
+                <View style={styles.moreIconWrap}>
+                  <AppIcon name={item.icon} size={22} color="#00C896" />
+                </View>
                 <View style={styles.moreText}>
                   <Text style={styles.moreLabel}>{item.label}</Text>
                   <Text style={styles.moreSub}>{item.sub}</Text>
@@ -2280,6 +2198,10 @@ const styles = StyleSheet.create({
     fontSize: 22,
     width: 32,
     textAlign: 'center',
+  },
+  moreIconWrap: {
+    width: 32, height: 32, borderRadius: 6,
+    alignItems: 'center', justifyContent: 'center',
   },
   moreText: {
     flex: 1,

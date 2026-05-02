@@ -13,45 +13,17 @@ import { useRouter } from 'expo-router';
 import { usePointsStore } from '../../store/pointsStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
+import AppIcon, { type IconName } from '../../components/AppIcon';
 import { getDialog } from '../../services/dialogEngine';
 
-const CHALLENGES = [
-  {
-    id: 'ctp',
-    icon: '🎯',
-    title: 'Closest to Pin',
-    sub: 'Pick a distance. Best of 5 shots.',
-    points: '50 pts',
-    color: '#00C896',
-    route: '/arena/ctp',
-  },
-  {
-    id: 'skills',
-    icon: '⭐',
-    title: 'Skills Challenge',
-    sub: 'Hit targets at multiple distances.',
-    points: '75 pts',
-    color: '#F5A623',
-    route: '/arena/skills',
-  },
-  {
-    id: 'sim',
-    icon: '🏌️',
-    title: 'Sim Round',
-    sub: 'Play a simulated round hole by hole.',
-    points: '100 pts',
-    color: '#3b82f6',
-    route: '/arena/sim-round',
-  },
-  {
-    id: 'scramble',
-    icon: '🤝',
-    title: 'Scramble',
-    sub: 'Best ball format. Play with a partner.',
-    points: '60 pts',
-    color: '#a855f7',
-    route: '/arena/scramble',
-  },
+const CHALLENGES: Array<{
+  id: string; icon: IconName; title: string; sub: string;
+  points: string; color: string; route: string;
+}> = [
+  { id: 'ctp',      icon: 'flag',           title: 'Closest to Pin',  sub: 'Pick a distance. Best of 5 shots.',     points: '50 pts',  color: '#00C896', route: '/arena/ctp' },
+  { id: 'skills',   icon: 'star-outline',   title: 'Skills Challenge', sub: 'Hit targets at multiple distances.',    points: '75 pts',  color: '#F5A623', route: '/arena/skills' },
+  { id: 'sim',      icon: 'golf-outline',   title: 'Sim Round',        sub: 'Play a simulated round hole by hole.',  points: '100 pts', color: '#3b82f6', route: '/arena/sim-round' },
+  { id: 'scramble', icon: 'people-outline', title: 'Scramble',         sub: 'Best ball format. Play with a partner.', points: '60 pts',  color: '#a855f7', route: '/arena/scramble' },
 ];
 
 export default function ArenaIndex() {
@@ -124,7 +96,7 @@ export default function ArenaIndex() {
             activeOpacity={0.85}
           >
             <View style={[styles.challengeIcon, { backgroundColor: challenge.color + '20' }]}>
-              <Text style={styles.challengeEmoji}>{challenge.icon}</Text>
+              <AppIcon name={challenge.icon} size={26} color={challenge.color} />
             </View>
             <View style={styles.challengeInfo}>
               <Text style={styles.challengeTitle}>{challenge.title}</Text>

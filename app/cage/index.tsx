@@ -15,6 +15,7 @@ import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
+import AppIcon from '../../components/AppIcon';
 import { getDialog } from '../../services/dialogEngine';
 
 // Phase I — short club label for the Coach intro template
@@ -98,7 +99,7 @@ export default function CageIndex() {
         {/* CAMERA STATUS */}
         <View style={[styles.cameraCard, cameraAlignment?.locked && styles.cameraCardLocked]}>
           <View style={styles.cameraRow}>
-            <Text style={styles.cameraIcon}>📹</Text>
+            <AppIcon name="videocam-outline" size={22} color={cameraAlignment?.locked ? '#00C896' : '#9ca3af'} />
             <View style={styles.cameraText}>
               <Text style={styles.cameraTitle}>
                 {cameraAlignment?.locked ? 'Camera Ready ✓' : 'Camera Not Set'}
@@ -135,13 +136,13 @@ export default function CageIndex() {
         {/* DEVICE STATUS */}
         <View style={styles.deviceRow}>
           <View style={[styles.devicePill, watchConnected && styles.devicePillActive]}>
-            <Text style={styles.deviceIcon}>⌚</Text>
+            <AppIcon name="watch-outline" size={16} color={watchConnected ? '#60a5fa' : '#6b7280'} />
             <Text style={[styles.deviceLabel, watchConnected && styles.deviceLabelActive]}>
               {watchConnected ? 'Watch On' : 'Watch Off'}
             </Text>
           </View>
           <View style={styles.devicePill}>
-            <Text style={styles.deviceIcon}>🎵</Text>
+            <AppIcon name="musical-notes-outline" size={16} color="#6b7280" />
             <Text style={styles.deviceLabel}>Sound On</Text>
           </View>
         </View>

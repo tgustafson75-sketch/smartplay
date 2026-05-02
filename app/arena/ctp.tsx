@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { usePointsStore } from '../../store/pointsStore';
+import AppIcon from '../../components/AppIcon';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import * as ImagePicker from 'expo-image-picker';
@@ -161,7 +162,7 @@ export default function CTP() {
         <Modal visible={tierUpgrade != null} transparent animationType="fade" onRequestClose={() => setTierUpgrade(null)}>
           <Pressable style={styles.tierBg} onPress={() => setTierUpgrade(null)}>
             <Pressable style={styles.tierCard} onPress={() => {}}>
-              <Text style={styles.tierEmoji}>🏆</Text>
+              <AppIcon name="trophy" size={56} color="#F5A623" />
               <Text style={styles.tierTitle}>Tier Up</Text>
               <Text style={styles.tierFrom}>{tierUpgrade?.from}</Text>
               <Text style={styles.tierArrow}>↓</Text>
@@ -233,7 +234,7 @@ export default function CTP() {
               }}
               activeOpacity={0.85}
             >
-              <Text style={{ fontSize: 18 }}>📷</Text>
+              <AppIcon name="camera" size={18} color="#F5A623" />
               <Text style={{ color: '#F5A623', fontSize: 14, fontWeight: '800', letterSpacing: 0.4 }}>
                 {scoring ? 'Scoring…' : 'Score with photo'}
               </Text>
