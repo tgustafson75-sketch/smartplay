@@ -358,14 +358,35 @@ function StandardCameraOverlay({
       {/* Tap surface — full-screen, behind overlays */}
       <TouchableOpacity activeOpacity={1} style={StyleSheet.absoluteFill} onPress={handleTap} />
 
-      {/* Reticle */}
+      {/* Yellow corner focus brackets — legacy v2 frame */}
+      <View pointerEvents="none" style={styles.focusFrame}>
+        <View style={[styles.focusCorner, styles.focusCornerTL]} />
+        <View style={[styles.focusCorner, styles.focusCornerTR]} />
+        <View style={[styles.focusCorner, styles.focusCornerBL]} />
+        <View style={[styles.focusCorner, styles.focusCornerBR]} />
+      </View>
+
+      {/* Yellow crosshair reticle (legacy v2) */}
       <View style={styles.reticleContainer} pointerEvents="none">
         <View style={styles.reticleH} />
         <View style={styles.reticleV} />
-        <View style={styles.reticleCircle} />
+        <View style={styles.reticleCenterDot} />
       </View>
 
-      {/* Bottom panel */}
+      {/* Top-right zoom indicator + flashlight (visual only — actual zoom /
+           torch are 1.x. Layout matches legacy v2 reference. */}
+      <View pointerEvents="none" style={[styles.zoomCol, { top: insets.top + 130 }]}>
+        <Text style={styles.zoomLabel}>1.0x</Text>
+        <View style={styles.zoomDots}>
+          <View style={styles.zoomDotBg}><Text style={styles.zoomDotMinus}>−</Text></View>
+          <View style={styles.zoomDotActive} />
+          <View style={styles.zoomDotBg}><Text style={styles.zoomDotPlus}>+</Text></View>
+        </View>
+      </View>
+
+      {/* Bottom panel — legacy v2 layout: locked badge + big yardage row,
+           "club · commit to the shot" yellow-bordered pill, big shutter
+           capture button. */}
       <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
         {lock ? (
           <>
@@ -373,6 +394,10 @@ function StandardCameraOverlay({
               <Text style={styles.lockedBadge}>🔒 LOCKED</Text>
               <Text style={[styles.distanceNumber, { color: confidenceColor }]}>{lock.distance_yards}</Text>
               <Text style={styles.distanceUnit}>yds</Text>
+            </View>
+            <View style={styles.commitPill}>
+              <Text style={styles.commitPillIcon}>🔒</Text>
+              <Text style={styles.commitPillText}>commit to the shot</Text>
             </View>
             <View style={styles.lockFooter}>
               <Text style={styles.countdownText}>Clears in {countdown}s</Text>
@@ -384,6 +409,20 @@ function StandardCameraOverlay({
         ) : (
           <Text style={styles.instructionText}>Aim at target · tap anywhere to lock distance</Text>
         )}
+
+        {/* Shutter capture button — visible cue that the screen is the
+             capture surface. Tapping it does the same thing as tapping
+             anywhere on the camera (handleTap via the full-screen
+             TouchableOpacity above). */}
+        <View style={styles.shutterRow}>
+          <TouchableOpacity
+            style={styles.shutterOuter}
+            onPress={() => handleTap({ nativeEvent: { locationX: 0, locationY: height / 2 } })}
+            activeOpacity={0.85}
+          >
+            <View style={styles.shutterInner} />
+          </TouchableOpacity>
+        </View>
       </View>
     </>
   );
@@ -706,11 +745,75 @@ const styles = StyleSheet.create({
 
   // Reticle
   reticleContainer: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  reticleH: { position: 'absolute', width: 28, height: 1.5, backgroundColor: 'rgba(255,255,255,0.85)' },
-  reticleV: { position: 'absolute', width: 1.5, height: 28, backgroundColor: 'rgba(255,255,255,0.85)' },
-  reticleCircle: {
-    position: 'absolute', width: 44, height: 44, borderRadius: 22,
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.55)',
+  reticleH: { position: 'absolute', width: 36, height: 2, backgroundColor: '#F5A623' },
+  reticleV: { position: 'absolute', width: 2, height: 36, backgroundColor: '#F5A623' },
+  reticleCenterDot: { position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: '#F5A623' },
+
+  // Legacy v2 yellow corner focus brackets
+  focusFrame: {
+    position: 'absolute',
+    top: '34%',
+    bottom: '38%',
+    left: '20%',
+    right: '20%',
+  },
+  focusCorner: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderColor: '#F5A623',
+  },
+  focusCornerTL: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3 },
+  focusCornerTR: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3 },
+  focusCornerBL: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3 },
+  focusCornerBR: { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3 },
+
+  // Top-right zoom column (visual only)
+  zoomCol: {
+    position: 'absolute',
+    right: 16,
+    alignItems: 'center',
+    gap: 6,
+  },
+  zoomLabel: { color: '#F5A623', fontSize: 13, fontWeight: '800' },
+  zoomDots: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  zoomDotBg: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  zoomDotActive: {
+    width: 10, height: 10, borderRadius: 5, backgroundColor: '#F5A623',
+  },
+  zoomDotMinus: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
+  zoomDotPlus: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
+
+  // "club · commit to the shot" yellow pill
+  commitPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: '#F5A623',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    marginTop: 8,
+    backgroundColor: 'rgba(245,166,35,0.08)',
+  },
+  commitPillIcon: { fontSize: 14 },
+  commitPillText: { color: '#F5A623', fontSize: 13, fontWeight: '700' },
+
+  // Shutter button
+  shutterRow: { alignItems: 'center', marginTop: 12, marginBottom: 4 },
+  shutterOuter: {
+    width: 64, height: 64, borderRadius: 32,
+    borderWidth: 4, borderColor: '#ffffff',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  shutterInner: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: '#ffffff',
   },
 
   // Bottom panel (camera modes)
