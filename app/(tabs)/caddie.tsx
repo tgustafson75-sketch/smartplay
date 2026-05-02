@@ -969,61 +969,63 @@ export default function CaddieTab() {
            render the same CaddieAvatar with position/size adjustments. L1
            skips the avatar entirely; the L1 mic-button overlay below
            takes its place. */}
-      {trustLevel === 2 && (
-        <>
-          {/* L2 Companion — upper-half split: Kevin's face on the left in a
-               bordered box, SmartVision holeview card on the right. Both
-               sized to fit the upper half of the screen with clean,
-               non-overlapping borders. The right card top-anchors below the
-               wind arrow (which renders during active rounds at
-               top: insets.top + 110, right: 12) so it doesn't conflict.
-               SmartFinder card position unchanged. */}
-          <View
-            style={{
-              position: 'absolute',
-              top: insets.top + 60,
-              left: 12,
-              width: (W - 36) / 2,
-              height: 320,
-              borderRadius: 14,
-              borderWidth: 1.5,
-              borderColor: '#1e3a28',
-              overflow: 'hidden',
-              backgroundColor: '#060f09',
-              zIndex: 6,
-            }}
-          >
-            <CaddieAvatar
-              gender={voiceGender === 'female' ? 'female' : 'male'}
-              isOnCourse={isRoundActive}
-              isCageMode={false}
-              voiceState={voiceState}
-              hud={NULL_HUD}
-              openingPrompt=""
-              caddieResponse=""
-              onTap={handleMicPress}
-              emotion={kevinEmotion}
-              fillMode="cover"
-              isThinking={kevinThinking}
-            />
-          </View>
-          <View
-            style={{
-              position: 'absolute',
-              top: insets.top + 200,
-              right: 12,
-              zIndex: 6,
-            }}
-            pointerEvents="box-none"
-          >
-            <L1HolePreview
-              onOpenSmartVision={openSmartVision}
-              width={(W - 36) / 2}
-              height={180}
-            />
-          </View>
-        </>
-      )}
+      {trustLevel === 2 && (() => {
+        // L2 Companion split — both boxes same size, same top, side by side.
+        // Wind arrow (top: insets.top + 110, right: 12, zIndex 11) is
+        // explicitly allowed to overlay the SmartVision box; its existing
+        // zIndex keeps it on top, function unchanged.
+        const cellW = (W - 36) / 2;   // half-width minus 12+12 outer + 12 gutter
+        const cellH = 220;
+        const cellTop = insets.top + 60;
+        return (
+          <>
+            <View
+              style={{
+                position: 'absolute',
+                top: cellTop,
+                left: 12,
+                width: cellW,
+                height: cellH,
+                borderRadius: 14,
+                borderWidth: 1.5,
+                borderColor: '#1e3a28',
+                overflow: 'hidden',
+                backgroundColor: '#060f09',
+                zIndex: 6,
+              }}
+            >
+              <CaddieAvatar
+                gender={voiceGender === 'female' ? 'female' : 'male'}
+                isOnCourse={isRoundActive}
+                isCageMode={false}
+                voiceState={voiceState}
+                hud={NULL_HUD}
+                openingPrompt=""
+                caddieResponse=""
+                onTap={handleMicPress}
+                emotion={kevinEmotion}
+                fillMode="cover"
+                isThinking={kevinThinking}
+              />
+            </View>
+            <View
+              style={{
+                position: 'absolute',
+                top: cellTop,
+                right: 12,
+                zIndex: 6,
+              }}
+              pointerEvents="box-none"
+            >
+              <L1HolePreview
+                onOpenSmartVision={openSmartVision}
+                width={cellW}
+                height={cellH}
+              />
+            </View>
+          </>
+        );
+      })()}
       {trustLevel === 3 && (
         <View style={{ position: 'absolute', top: insets.top + 60, left: 0, width: W, height: Math.round(avatarFrameHeight * 0.55) }}>
           <CaddieAvatar
