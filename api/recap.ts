@@ -60,6 +60,15 @@ interface CageContext {
   most_recent_session_date?: string | null;
 }
 
+// Phase V Component 2 — Arena practice (Skills Challenge / CTP / Sim Round)
+// is logged in pointsStore separately from cageStore. Surface it here so
+// the recap can connect Arena work to on-course outcomes.
+interface ArenaContext {
+  recent_sessions_count: number;
+  recent_sessions: Array<{ reason: string; points: number; date: string }>;
+  most_recent_date?: string | null;
+}
+
 interface RecapRequest {
   player_name: string;
   course_name: string;
@@ -73,6 +82,8 @@ interface RecapRequest {
   cage_context?: CageContext | null;
   // Phase U Component 2: user's pre-round focus notes
   pre_round_notes?: string | null;
+  // Phase V Component 2: Arena practice context
+  arena_context?: ArenaContext | null;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -131,10 +142,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? `\nPre-round focus (user wrote): "${body.pre_round_notes.trim()}"\n  Treat as a coaching contract — acknowledge if the round showed evidence the user worked on this; call out honestly if focus drifted.`
       : '';
 
+    // Phase V Component 2 — Arena practice context (Skills, CTP, Sim Round)
+    let arenaBlock = '';
+    if (body.arena_context && body.arena_context.recent_sessions_count > 0) {
+      const a = body.arena_context;
+      const sessionsLine = a.recent_sessions
+        .slice(-5)
+        .map(s => `${s.date}: ${s.reason} (+${s.points} pts)`)
+        .join('; ');
+      arenaBlock = `\nRecent Arena practice (last 14 days, ${a.recent_sessions_count} session${a.recent_sessions_count > 1 ? 's' : ''}):\n  ${sessionsLine}\n  Connection logic: only mention Arena work if today's pattern signals genuinely correlate (e.g. distance-control Skills work + tighter approach dispersion).`;
+    }
+
     const userMessage = `Recap for ${body.player_name || 'the player'} at ${body.course_name}.
 Mode: ${modeLabel[body.mode] ?? body.mode}
 Total: ${body.total_score} (${body.score_vs_par >= 0 ? '+' : ''}${body.score_vs_par}) over ${body.holes_played} holes
-${patternBlock}${cageBlock}${notesBlock}
+${patternBlock}${cageBlock}${arenaBlock}${notesBlock}
 
 ${holesBlock}
 

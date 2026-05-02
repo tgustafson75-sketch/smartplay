@@ -16,12 +16,34 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import AppIcon from '../AppIcon';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
-import { computeRoundHandicap } from '../../services/handicapCalculator';
+import { computeRoundHandicap, estimateNewIndex } from '../../services/handicapCalculator';
+
+/**
+ * Phase V — confidence band for the Index estimate. WHS itself doesn't
+ * issue a definitive Index until you have 20 rounds; below that the
+ * estimate is informational. Surface the confidence so the user reads
+ * the number with appropriate trust.
+ */
+type IndexConfidence = 'low' | 'medium' | 'high';
+function confidenceForN(n: number): IndexConfidence {
+  if (n >= 10) return 'high';
+  if (n >= 5) return 'medium';
+  return 'low';
+}
+const CONFIDENCE_COLORS: Record<IndexConfidence, string> = {
+  low: '#fbbf24', medium: '#60a5fa', high: '#00C896',
+};
+const CONFIDENCE_LABELS: Record<IndexConfidence, string> = {
+  low: 'Low confidence — keep posting',
+  medium: 'Medium confidence',
+  high: 'High confidence',
+};
 
 export default function HandicapImpactCard({ roundId }: { roundId: string | null }) {
   const handicapIndex = usePlayerProfileStore(s => s.handicap_index);
   const recentDifferentials = usePlayerProfileStore(s => s.recent_differentials);
   const pushDifferential = usePlayerProfileStore(s => s.pushDifferential);
+  const setHandicapIndex = usePlayerProfileStore(s => s.setHandicapIndex);
 
   const round = useRoundStore(s => s.roundHistory.find(r => r.id === roundId) ?? null);
   const courseHoles = useRoundStore(s => s.courseHoles);
@@ -77,12 +99,35 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
 
       <Text style={styles.impact}>{result.estimated_index_impact}</Text>
 
+      {/* Phase V — confidence band tied to differential count */}
+      {(() => {
+        const n = recentDifferentials.length + (posted ? 1 : 0);
+        const conf = confidenceForN(n);
+        return (
+          <View style={[styles.confidenceRow, { borderColor: CONFIDENCE_COLORS[conf] }]}>
+            <View style={[styles.confidenceDot, { backgroundColor: CONFIDENCE_COLORS[conf] }]} />
+            <Text style={[styles.confidenceText, { color: CONFIDENCE_COLORS[conf] }]}>
+              {CONFIDENCE_LABELS[conf]} · {n} round{n === 1 ? '' : 's'} on file
+            </Text>
+          </View>
+        );
+      })()}
+
       {!posted ? (
         <View style={styles.ctaRow}>
           <TouchableOpacity
             style={[styles.cta, styles.ctaPrimary]}
             onPress={() => {
+              // Phase V — append differential AND auto-update profile Index
+              // so all downstream math (Course Handicap, briefing, voice
+              // queries) uses the latest estimate. Stale Index was the
+              // top opportunity surfaced by the 10-round walkthrough.
               pushDifferential(result.score_differential);
+              const updatedDiffs = [...recentDifferentials, result.score_differential];
+              const est = estimateNewIndex(updatedDiffs);
+              if (est.newIndex != null) {
+                setHandicapIndex(est.newIndex);
+              }
               setPosted(true);
             }}
           >
@@ -95,7 +140,7 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
       ) : (
         <View style={styles.posted}>
           <AppIcon name="checkmark-circle" size={16} color="#00C896" />
-          <Text style={styles.postedText}>Differential posted to your Index history.</Text>
+          <Text style={styles.postedText}>Posted. Your Index updated.</Text>
         </View>
       )}
     </View>
@@ -140,4 +185,13 @@ const styles = StyleSheet.create({
     marginTop: 6, paddingVertical: 8,
   },
   postedText: { color: '#00C896', fontSize: 13, fontWeight: '700' },
+  // Phase V — confidence band
+  confidenceRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingVertical: 6, paddingHorizontal: 10,
+    borderWidth: 1, borderRadius: 8, marginVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+  },
+  confidenceDot: { width: 8, height: 8, borderRadius: 4 },
+  confidenceText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.4 },
 });

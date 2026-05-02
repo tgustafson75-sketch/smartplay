@@ -228,11 +228,15 @@ export interface PatternShift {
 /**
  * Detect a meaningful drift in miss tendency across recent rounds.
  *
- * Threshold logic (intentionally conservative — surface real shifts only):
- *   • Need at least 3 recent rounds AND at least 2 baseline rounds for comparison
+ * Threshold logic (Phase V — lowered minimum to surface trends earlier):
+ *   • Need at least 4 total rounds (3 recent + 1 baseline minimum)
+ *   • Recent window = last 3 rounds (no single-round noise)
  *   • Shift fires only when the recent-window tendency differs from the
  *     baseline-window tendency
- *   • Recent window holds for at least 3 rounds (no single-round noise)
+ *   • Severity tag scales with confidence:
+ *       baseline ≥ 4 rounds → significant
+ *       baseline ≥ 2 rounds → moderate
+ *       baseline = 1 round  → mild (early signal — flag with caveat)
  *   • Returns null when no meaningful shift exists (the dashboard then
  *     hides the alert card — no false alerts)
  *
@@ -243,11 +247,11 @@ export interface PatternShift {
 export function detectPatternShift(
   rounds: Array<{ shots: Array<{ direction: string | null; club: string | null }> }>,
 ): PatternShift | null {
-  if (rounds.length < 5) return null;
+  if (rounds.length < 4) return null;
 
   const recent = rounds.slice(-3);
   const baseline = rounds.slice(0, -3);
-  if (baseline.length < 2) return null;
+  if (baseline.length < 1) return null;
 
   function dominantOf(roundList: typeof rounds): 'left' | 'right' | 'straight' | 'balanced' {
     const counts = { left: 0, right: 0, straight: 0 };
@@ -274,16 +278,21 @@ export function detectPatternShift(
   // Only surface drift TO a directional miss (not random noise)
   if (recentTendency === 'balanced' && baselineTendency !== 'left' && baselineTendency !== 'right') return null;
 
+  // Severity scales with baseline-window depth (more baseline = higher confidence)
   const severity: PatternShift['severity'] =
-    recent.length >= 5 ? 'significant' :
-    recent.length >= 4 ? 'moderate' : 'mild';
+    baseline.length >= 4 ? 'significant' :
+    baseline.length >= 2 ? 'moderate' : 'mild';
 
-  const alert_message =
+  const baseMessage =
     recentTendency === 'left' || recentTendency === 'right'
       ? `Your driver has trended ${recentTendency} across last ${recent.length} rounds. Worth a Gate Drill session before it sticks.`
       : recentTendency === 'balanced' && baselineTendency !== 'balanced'
         ? `Your ${baselineTendency} miss has cleaned up — last ${recent.length} rounds are balanced. Keep doing what you're doing.`
         : `Pattern shift detected: ${baselineTendency} → ${recentTendency} across ${recent.length} rounds.`;
+  // Phase V — mild signals get a "early read" caveat so the user weights it appropriately
+  const alert_message = severity === 'mild'
+    ? `${baseMessage} (Early read — small baseline.)`
+    : baseMessage;
 
   return {
     axis: 'driver_miss',

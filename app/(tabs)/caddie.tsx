@@ -791,6 +791,26 @@ export default function CaddieTab() {
             : null,
         };
       })();
+      // Phase V Component 2 — Arena practice context. Reads pointsStore
+      // history within the same 14-day window as cage_context. Lets the
+      // recap connect Skills/CTP/Sim work to on-course outcomes.
+      const arenaContext = (() => {
+        const ps = usePointsStore.getState();
+        const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
+        const recent = ps.history.filter(h => h.timestamp >= cutoff);
+        if (recent.length === 0) return null;
+        return {
+          recent_sessions_count: recent.length,
+          recent_sessions: recent.map(h => ({
+            reason: h.reason,
+            points: h.points,
+            date: new Date(h.timestamp).toISOString().slice(0, 10),
+          })),
+          most_recent_date: recent[recent.length - 1]
+            ? new Date(recent[recent.length - 1].timestamp).toISOString().slice(0, 10)
+            : null,
+        };
+      })();
       generateRecap(roundId, {
         courseName: storeState.activeCourse ?? 'Unknown Course',
         courseId: storeState.activeCourseId,
@@ -811,6 +831,7 @@ export default function CaddieTab() {
         ghostSnapshot: useGhostStore.getState().getSnapshot(),
         cageContext,
         preRoundNotes: storeState.roundNotes || null,
+        arenaContext,
       })
         .then(recap => {
           setRecapLoading(false);

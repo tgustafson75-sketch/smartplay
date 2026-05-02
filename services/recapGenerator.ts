@@ -110,6 +110,12 @@ export async function generateRecap(
       most_recent_session_date?: string | null;
     } | null;
     preRoundNotes?: string | null;
+    // Phase V Component 2 — Arena practice context
+    arenaContext?: {
+      recent_sessions_count: number;
+      recent_sessions: Array<{ reason: string; points: number; date: string }>;
+      most_recent_date?: string | null;
+    } | null;
   },
 ): Promise<RoundRecap> {
   const { courseName, courseId, mode, startedAt, endedAt, totalScore, scoreVsPar, scores, plans, shots, courseHoles } = round;
@@ -168,6 +174,8 @@ export async function generateRecap(
         // Phase U: cage practice + pre-round focus context
         cage_context: round.cageContext ?? null,
         pre_round_notes: round.preRoundNotes ?? null,
+        // Phase V: Arena practice context
+        arena_context: round.arenaContext ?? null,
       }),
     }).finally(() => clearTimeout(timeout));
 
