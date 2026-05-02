@@ -37,9 +37,33 @@ export type LastFix = {
 };
 
 let lastFix: LastFix | null = null;
+// Phase Q.5b — sim override flag. When true, refreshFix() returns the
+// caller-set lastFix instead of calling Location. Only set by the
+// services/simulatedGPS.ts test harness; production code never touches.
+let simulatedActive = false;
 
 export function getLastFix(): LastFix | null {
   return lastFix;
+}
+
+/**
+ * Phase Q.5b — set the cached fix directly. Used by the simulated GPS
+ * test harness to feed waypoint coordinates without going through the
+ * device geolocation API. Idempotent.
+ */
+export function setSimulatedFix(loc: ShotLocation, accuracy_m = 3): void {
+  lastFix = { location: loc, accuracy_m, timestamp: Date.now() };
+  simulatedActive = true;
+}
+
+/** Stop simulation and clear the cached fix so next refreshFix() hits real GPS. */
+export function clearSimulatedFix(): void {
+  simulatedActive = false;
+  lastFix = null;
+}
+
+export function isSimulatedActive(): boolean {
+  return simulatedActive;
 }
 
 /**
@@ -48,6 +72,8 @@ export function getLastFix(): LastFix | null {
  * (callers should show the GPS-weak state).
  */
 export async function refreshFix(): Promise<LastFix | null> {
+  // Sim override: just return whatever the harness set.
+  if (simulatedActive) return lastFix;
   try {
     const { granted } = await Location.getForegroundPermissionsAsync();
     if (!granted) {

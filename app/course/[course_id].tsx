@@ -11,6 +11,7 @@ import HolePhotosGrid from '../../components/course/HolePhotosGrid';
 import { getCourse, searchCourses } from '../../services/golfCourseApi';
 import { fetchCourseContent, getCachedContent, type CourseContent } from '../../services/courseContentService';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
+import { useRoundStore } from '../../store/roundStore';
 import { getCourseImageryUrl, getHoleThumbnailUrl } from '../../services/mapboxImagery';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import PALMS_IMAGES from '../../data/palmsImages';
@@ -175,7 +176,10 @@ export default function CourseDetailScreen() {
 
   const handleStartRound = () => {
     if (!course) return;
-    router.push({ pathname: '/(tabs)/caddie', params: { pre_course_id: course.id } } as never);
+    // Phase Q.5b — same store-based signal as Play tab. Avoids the
+    // tabs-navigator param-propagation issue that broke the loop.
+    useRoundStore.getState().setPendingStartCourse(course.id);
+    router.push('/(tabs)/caddie' as never);
   };
 
   const handleBookTeeTime = () => {

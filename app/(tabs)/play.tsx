@@ -193,7 +193,12 @@ export default function PlayTab() {
 
   const handleStartRound = () => {
     if (!selected) return;
-    router.push({ pathname: '/(tabs)/caddie', params: { pre_course_id: selected.id } } as never);
+    // Phase Q.5b — set the pending-start signal in roundStore so the
+    // Caddie tab's subscriber consumes it on every push (Tabs navigator
+    // doesn't reliably propagate route params across tab switches, which
+    // was the root cause of the prior "start round loop broken" bug).
+    useRoundStore.getState().setPendingStartCourse(selected.id);
+    router.push('/(tabs)/caddie' as never);
   };
 
   const handleHoleMap = () => {

@@ -83,7 +83,7 @@ export default function CaddieTab() {
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { pre_course_id } = useLocalSearchParams<{ pre_course_id?: string }>();
+  const { pre_course_id, _t: preCourseNonce } = useLocalSearchParams<{ pre_course_id?: string; _t?: string }>();
   const trustLevel = useTrustLevelStore(s => s.level);
   const setTrustLevel = useTrustLevelStore(s => s.setLevel);
 
@@ -127,25 +127,95 @@ export default function CaddieTab() {
     computeHoleScore,
   } = useRoundStore();
 
-  // Phase D-1 — when arriving with a pre_course_id (from Course Detail's
-  // "Start Round Here" CTA), pre-select that course and open the round setup
-  // modal automatically. Runs once when the param appears.
+  // Phase Q.5b — Caddie subscribes to roundStore.pendingStartCourseId.
+  // Play tab + Course Detail set this when the user picks a course;
+  // Caddie consumes it (resolves the real course, pre-fills the round
+  // setup sheet, opens the sheet) then clears it. This decouples from
+  // useLocalSearchParams which is unreliable across tab navigations.
+  const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
+  const clearPendingStart = useRoundStore(s => s.setPendingStartCourse);
   useEffect(() => {
-    if (!pre_course_id) return;
-    (async () => {
-      const apiCourse = await getApiCourse(pre_course_id);
-      if (apiCourse) {
-        setSelectedPickedCourse({
-          id: apiCourse.id,
-          name: apiCourse.club_name,
-          fullName: `${apiCourse.club_name} — ${apiCourse.location.city}, ${apiCourse.location.state}`,
-          isLocal: false,
-        });
+    if (!pendingStartCourseId) return;
+    const id = pendingStartCourseId;
+    clearPendingStart(null);
+    void (async () => {
+      let resolvedId = id;
+      if (id.startsWith('local:')) {
+        const slug = id.slice('local:'.length);
+        const friendly =
+          slug === 'palms' ? 'Menifee Lakes Palms' :
+          slug === 'lakes' ? 'Menifee Lakes Lakes' :
+          slug === 'rancho-california' ? 'Rancho California Golf Club' :
+          slug;
+        try {
+          const { searchCourses } = await import('../../services/golfCourseApi');
+          const found = await searchCourses(friendly);
+          const real = found.find(r => !r._error);
+          if (real?.id) resolvedId = real.id;
+        } catch (e) {
+          console.log('[caddie] local-course resolve failed:', e);
+        }
+      }
+      try {
+        const apiCourse = await getApiCourse(resolvedId);
+        if (apiCourse) {
+          setSelectedPickedCourse({
+            id: apiCourse.id,
+            name: apiCourse.club_name,
+            fullName: `${apiCourse.club_name} — ${apiCourse.location.city}, ${apiCourse.location.state}`,
+            isLocal: false,
+          });
+        }
+      } catch (e) {
+        console.log('[caddie] pendingStart getCourse failed:', e);
       }
       setShowRoundSetup(true);
     })();
+  }, [pendingStartCourseId, clearPendingStart]);
+
+  // Legacy pre_course_id param path — kept for older callers (Course
+  // Detail's "Start Round Here" historic deep link). Prefers the
+  // pendingStartCourseId path but doesn't break this one.
+  useEffect(() => {
+    if (!pre_course_id) return;
+    void (async () => {
+      let resolvedId = pre_course_id;
+      // Resolve local: prefix synthetic id via name search (Play tab's
+      // CLOSEST LOCAL COURSES uses local:palms etc.).
+      if (pre_course_id.startsWith('local:')) {
+        const slug = pre_course_id.slice('local:'.length);
+        const friendly =
+          slug === 'palms' ? 'Menifee Lakes Palms' :
+          slug === 'lakes' ? 'Menifee Lakes Lakes' :
+          slug === 'rancho-california' ? 'Rancho California Golf Club' :
+          slug;
+        try {
+          const { searchCourses } = await import('../../services/golfCourseApi');
+          const found = await searchCourses(friendly);
+          const real = found.find(r => !r._error);
+          if (real?.id) resolvedId = real.id;
+        } catch (e) {
+          console.log('[caddie] local-course resolve failed:', e);
+        }
+      }
+      try {
+        const apiCourse = await getApiCourse(resolvedId);
+        if (apiCourse) {
+          setSelectedPickedCourse({
+            id: apiCourse.id,
+            name: apiCourse.club_name,
+            fullName: `${apiCourse.club_name} — ${apiCourse.location.city}, ${apiCourse.location.state}`,
+            isLocal: false,
+          });
+        }
+      } catch (e) {
+        console.log('[caddie] pre_course_id getCourse failed:', e);
+      }
+      setShowRoundSetup(true);
+    })();
+    // Nonce ensures every navigation with the same course id re-fires.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pre_course_id]);
+  }, [pre_course_id, preCourseNonce]);
 
   // Phase C plays-like wiring — non-layout. Computes the value flowing into the
   // CaddieDataStrip playsLike prop. Falls back to actual yardage when weather is

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,10 @@ import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useTheme } from '../contexts/ThemeContext';
 import { clearMicDenial } from '../services/voicePermissionService';
+import {
+  startSimulatedWalk, stopSimulatedWalk, getAvailableWalks,
+  subscribeToWalk, isSimulatedActive, type SimulatedWalkState,
+} from '../services/simulatedGPS';
 
 export default function Settings() {
   const router = useRouter();
@@ -457,6 +461,9 @@ export default function Settings() {
           )}
         </View>
 
+        {/* DEVELOPER TOOLS — dev builds only */}
+        {__DEV__ && <DeveloperToolsSection cardStyle={cardStyle} colors={colors} />}
+
         {/* ABOUT */}
         <SectionHeader title="About" />
         <View style={cardStyle}>
@@ -480,6 +487,91 @@ export default function Settings() {
 
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+// ─── DEVELOPER TOOLS ────────────────────────
+// Phase Q.5b — simulated GPS walk picker. Drives services/simulatedGPS.ts
+// which feeds smartFinderService cached fix from a pre-built waypoint
+// path. Used to verify holeDetection sustained-position transitions
+// without requiring a real course visit.
+
+function DeveloperToolsSection({ cardStyle, colors }: { cardStyle: object[]; colors: { accent: string; text_primary: string; text_muted: string; border: string } }) {
+  const walks = getAvailableWalks();
+  const [walkState, setWalkState] = useState<SimulatedWalkState | null>(null);
+  const [active, setActive] = useState(isSimulatedActive());
+
+  useEffect(() => {
+    const unsub = subscribeToWalk(s => {
+      setWalkState(s);
+      setActive(isSimulatedActive());
+    });
+    return () => { unsub(); };
+  }, []);
+
+  return (
+    <>
+      <Text style={{
+        color: '#F5A623', fontSize: 11, fontWeight: '700', letterSpacing: 1.5,
+        textTransform: 'uppercase', paddingHorizontal: 20, marginTop: 20, marginBottom: 8,
+      }}>Developer Tools (dev build)</Text>
+
+      <View style={cardStyle}>
+        <Text style={{ color: colors.text_primary, fontSize: 13, fontWeight: '700', marginBottom: 8 }}>
+          Simulated GPS Walk
+        </Text>
+        <Text style={{ color: colors.text_muted, fontSize: 12, lineHeight: 17, marginBottom: 12 }}>
+          Replaces the real GPS source with a pre-built waypoint trace. Use to verify hole detection + distance calculations without driving to a course. Console logs every waypoint reached.
+        </Text>
+
+        {!active ? (
+          <View style={{ gap: 8 }}>
+            {walks.map(w => (
+              <TouchableOpacity
+                key={w.id}
+                style={{
+                  borderColor: colors.border, borderWidth: 1, borderRadius: 10,
+                  paddingVertical: 12, paddingHorizontal: 14,
+                }}
+                onPress={() => startSimulatedWalk(w.id)}
+              >
+                <Text style={{ color: colors.text_primary, fontSize: 13, fontWeight: '700' }}>{w.display_name}</Text>
+                <Text style={{ color: colors.text_muted, fontSize: 11, marginTop: 2 }}>{w.description}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <View style={{ gap: 8 }}>
+            <View style={{ backgroundColor: 'rgba(0,200,150,0.10)', borderColor: '#00C896', borderWidth: 1, borderRadius: 10, padding: 12 }}>
+              <Text style={{ color: '#00C896', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>
+                ● SIM ACTIVE
+              </Text>
+              {walkState ? (
+                <>
+                  <Text style={{ color: colors.text_primary, fontSize: 12, marginTop: 6 }}>
+                    Waypoint {walkState.waypoint_index + 1} · {(walkState.fraction_through * 100).toFixed(0)}% through
+                  </Text>
+                  <Text style={{ color: colors.text_muted, fontSize: 11, marginTop: 2 }}>
+                    {walkState.current_lat.toFixed(5)}, {walkState.current_lng.toFixed(5)}
+                  </Text>
+                  {walkState.next_label && (
+                    <Text style={{ color: colors.text_muted, fontSize: 11, marginTop: 2 }}>
+                      Next: {walkState.next_label}
+                    </Text>
+                  )}
+                </>
+              ) : null}
+            </View>
+            <TouchableOpacity
+              style={{ backgroundColor: '#3a1a1a', borderColor: '#ef4444', borderWidth: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
+              onPress={() => stopSimulatedWalk()}
+            >
+              <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '800' }}>Stop Simulated Walk</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </>
   );
 }
 

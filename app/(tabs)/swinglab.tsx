@@ -5,6 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -428,6 +429,19 @@ export default function SwingLab() {
             <Text style={styles.silhouetteHint}>
               Feet shoulder-width apart{'\n'}Slight knee flex{'\n'}Spine tilt away from target
             </Text>
+            <TouchableOpacity
+              style={styles.demoBtn}
+              onPress={() => {
+                // YouTube search surfaces top-ranked short instructional videos.
+                // Tim picks from the results — keeps the link evergreen, no
+                // hardcoded URL that can rot.
+                const q = encodeURIComponent('golf full swing setup tutorial 2 minutes');
+                Linking.openURL(`https://www.youtube.com/results?search_query=${q}`).catch(() => {});
+              }}
+            >
+              <AppIcon name="logo-youtube" size={14} color="#ef4444" />
+              <Text style={styles.demoBtnText}>Watch Demo</Text>
+            </TouchableOpacity>
           </View>
           <View style={styles.silhouetteCard}>
             <AddressSilhouette type="putting" size={140} />
@@ -435,6 +449,16 @@ export default function SwingLab() {
             <Text style={styles.silhouetteHint}>
               Feet narrower, even{'\n'}Eyes over ball{'\n'}Arms form a triangle
             </Text>
+            <TouchableOpacity
+              style={styles.demoBtn}
+              onPress={() => {
+                const q = encodeURIComponent('golf putting setup tutorial 2 minutes');
+                Linking.openURL(`https://www.youtube.com/results?search_query=${q}`).catch(() => {});
+              }}
+            >
+              <AppIcon name="logo-youtube" size={14} color="#ef4444" />
+              <Text style={styles.demoBtnText}>Watch Demo</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -950,6 +974,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 16,
   },
+  demoBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    marginTop: 10, paddingVertical: 6, paddingHorizontal: 10,
+    borderRadius: 999, borderWidth: 1, borderColor: '#1e3a28',
+    backgroundColor: 'rgba(239,68,68,0.08)',
+  },
+  demoBtnText: { color: '#ef4444', fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
 
   bottomPad: {
     height: 32,

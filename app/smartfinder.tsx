@@ -639,7 +639,9 @@ function MapView({
         <View style={styles.standardWrap}>
           <View style={styles.standardRow}>
             <BigCell label="FRONT" value={yards.front} playsLikeValue={playsLike(yards.front)} />
+            <View style={styles.standardDivider} />
             <BigCell label="MIDDLE" value={yards.middle} playsLikeValue={playsLike(yards.middle)} emphasis />
+            <View style={styles.standardDivider} />
             <BigCell label="BACK" value={yards.back} playsLikeValue={playsLike(yards.back)} />
           </View>
         </View>
@@ -851,10 +853,28 @@ const styles = StyleSheet.create({
   backLinkText: { color: '#6b7280', fontSize: 14 },
 
   // SVG mode standard fallback
-  standardWrap: { paddingHorizontal: 16, paddingVertical: 24, alignItems: 'center' },
-  standardRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 18 },
-  bigCell: { alignItems: 'center', minWidth: 80 },
-  bigValue: { color: '#e8f5e9', fontSize: 36, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  standardWrap: {
+    paddingHorizontal: 16, paddingVertical: 18, alignItems: 'center',
+    backgroundColor: 'rgba(13, 36, 24, 0.92)',
+    borderRadius: 14, borderWidth: 1.5, borderColor: '#F5A623',
+    marginHorizontal: 12, marginTop: 12,
+    shadowColor: '#F5A623', shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
+  },
+  // Single-row layout: FRONT | MIDDLE (big) | BACK — divided by thin lines.
+  // Tabular-nums + minWidth keeps spacing rock-steady as values change.
+  standardRow: {
+    flexDirection: 'row', alignItems: 'flex-end',
+    justifyContent: 'space-between', gap: 0,
+    width: '100%', maxWidth: 360,
+  },
+  bigCell: {
+    alignItems: 'center',
+    flex: 1, minWidth: 0,
+    paddingHorizontal: 6,
+  },
+  standardDivider: { width: 1, height: 40, backgroundColor: '#1e3a28' },
+  bigValue: { color: '#e8f5e9', fontSize: 32, fontWeight: '900', fontVariant: ['tabular-nums'] },
   bigValueEmphasis: { color: '#ffffff', fontSize: 56 },
   bigLabel: { color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginTop: 4 },
   playsLike: { color: '#F5A623', fontSize: 12, fontWeight: '700', marginTop: 2 },

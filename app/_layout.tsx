@@ -12,6 +12,7 @@ import { useRoundStore } from '../store/roundStore';
 import { initListeningSession } from '../services/listeningSession';
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
 import { activateMediaSession, deactivateMediaSession } from '../services/mediaKeyBridge';
+import { startHoleDetection, stopHoleDetection, subscribeToHoleDetection } from '../services/holeDetection';
 
 // TODO (Wednesday MacBook setup): add EXPO_PUBLIC_SENTRY_DSN + Sentry org/project to eas.json,
 // then remove SENTRY_DISABLE_AUTO_UPLOAD=true from eas.json build profiles.
@@ -72,6 +73,30 @@ function AppNavigator() {
     return () => {
       unsub();
       void deactivateMediaSession();
+    };
+  }, []);
+
+  // Phase Q.5b — hole detection polling tied to round-active state.
+  // Subscriber routes detected transitions through roundStore.setCurrentHole
+  // (which in turn closes the prior hole's last shot end_location via
+  // courseGeometryService — Component 3).
+  useEffect(() => {
+    const unsubDetect = subscribeToHoleDetection((nextHole) => {
+      const round = useRoundStore.getState();
+      if (round.currentHole !== nextHole) round.setCurrentHole(nextHole);
+    });
+    let active = useRoundStore.getState().isRoundActive;
+    if (active) startHoleDetection();
+    const unsubRound = useRoundStore.subscribe((s) => {
+      if (s.isRoundActive === active) return;
+      active = s.isRoundActive;
+      if (active) startHoleDetection();
+      else stopHoleDetection();
+    });
+    return () => {
+      unsubDetect();
+      unsubRound();
+      stopHoleDetection();
     };
   }, []);
 

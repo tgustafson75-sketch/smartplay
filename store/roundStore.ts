@@ -28,6 +28,39 @@ export interface CourseHole {
 
 export type ShotLocation = { lat: number; lng: number };
 
+/**
+ * Phase Q.5b Component 3 — single-source-of-truth green centroid lookup.
+ * Reads courseGeometryService first (the authoritative paid-tier data
+ * cached after fetchCourseGeometry warms it). Falls back to legacy
+ * courseHoles records when the service has no data yet (which is the
+ * typical case until the round-warmup geometry call resolves).
+ *
+ * Lazy require avoids a circular import (courseGeometryService imports
+ * from this file in some helpers).
+ */
+function greenForHole(
+  courseId: string | null,
+  holeNumber: number,
+  courseHoles: CourseHole[],
+): ShotLocation | null {
+  // Try service first
+  if (courseId) {
+    try {
+      const { getHoleGeometry } = require('../services/courseGeometryService');
+      const g = getHoleGeometry(courseId, holeNumber);
+      if (g?.green) return g.green as ShotLocation;
+    } catch {}
+  }
+  // Legacy fallback — courseHoles records from golfcourseapi
+  const h = courseHoles.find(x => x.hole === holeNumber);
+  if (!h) return null;
+  if (h.middleLat !== 0 && h.middleLng !== 0) return { lat: h.middleLat, lng: h.middleLng };
+  if ((h.frontLat || h.backLat) && (h.frontLng || h.backLng)) {
+    return { lat: (h.frontLat + h.backLat) / 2, lng: (h.frontLng + h.backLng) / 2 };
+  }
+  return null;
+}
+
 export interface ShotResult {
   id?: string;
   feel: 'flush' | 'solid' | 'fat' | 'thin' | 'heel' | 'toe' | null;
@@ -157,6 +190,10 @@ interface RoundState {
   endRound: () => void;
   /** Phase R — capture a memory photo at the current hole during an active round. */
   addRoundPhoto: (uri: string) => void;
+  /** Phase Q.5b — pending course id signaled by Play tab / Course Detail
+   *  for Caddie tab to consume on focus. Set then auto-cleared. */
+  pendingStartCourseId: string | null;
+  setPendingStartCourse: (id: string | null) => void;
   setCurrentHole: (hole: number) => void;
   setCurrentYardage: (yards: number | null) => void;
   setClub: (club: string) => void;
@@ -301,26 +338,17 @@ export const useRoundStore = create<RoundState>()(
       endRound: () => {
         const s = get();
 
-        // Phase B refinement (bundle, item 2) — close out the final played hole's
-        // last shot end_location to that hole's green centroid before persisting
-        // the round record. Without this, the final shot of the round leaks a
-        // null end_location whenever the user ends the round on the final hole
-        // (no setCurrentHole transition past it).
+        // Phase B refinement + Phase Q.5b Component 3 — close out the
+        // final played hole's last shot end_location to its green centroid
+        // before persisting. Sourced from courseGeometryService (single
+        // source of truth) with courseHoles fallback for legacy compat.
         const playedHoles = Array.from(new Set(s.shots.map(x => x.hole))).sort((a, b) => a - b);
         const finalHole = playedHoles[playedHoles.length - 1];
         if (finalHole != null) {
           const last = [...s.shots].reverse().find(x => x.hole === finalHole);
           if (last && !last.end_location) {
-            const hData = s.courseHoles.find(h => h.hole === finalHole);
-            if (hData) {
-              const green: ShotLocation | null =
-                hData.middleLat !== 0 && hData.middleLng !== 0
-                  ? { lat: hData.middleLat, lng: hData.middleLng }
-                  : (hData.frontLat || hData.backLat) && (hData.frontLng || hData.backLng)
-                    ? { lat: (hData.frontLat + hData.backLat) / 2, lng: (hData.frontLng + hData.backLng) / 2 }
-                    : null;
-              if (green) get().closeHoleEndLocation(finalHole, green);
-            }
+            const green = greenForHole(s.activeCourseId, finalHole, s.courseHoles);
+            if (green) get().closeHoleEndLocation(finalHole, green);
           }
         }
 
@@ -354,6 +382,9 @@ export const useRoundStore = create<RoundState>()(
         }));
       },
 
+      pendingStartCourseId: null,
+      setPendingStartCourse: (id) => set({ pendingStartCourseId: id }),
+
       addRoundPhoto: (uri) =>
         set(s => {
           if (!s.isRoundActive) return s;
@@ -367,25 +398,22 @@ export const useRoundStore = create<RoundState>()(
 
       setCurrentHole: (hole) => {
         const state = get();
-        // Phase B — close out the previous hole's last shot end_location to that hole's
-        // green centroid before advancing. No-op if it's already set or geometry is missing.
+        // Phase B + Phase Q.5b — close out the previous hole's last shot
+        // end_location to that hole's green centroid before advancing.
+        // Component 3: green now sourced from courseGeometryService (single
+        // source of truth) with courseHoles records as legacy fallback.
         const prevHole = state.currentHole;
         if (prevHole !== hole) {
-          const prev = state.courseHoles.find(h => h.hole === prevHole);
-          if (prev) {
-            const green: ShotLocation | null =
-              prev.middleLat !== 0 && prev.middleLng !== 0
-                ? { lat: prev.middleLat, lng: prev.middleLng }
-                : (prev.frontLat || prev.backLat) && (prev.frontLng || prev.backLng)
-                  ? { lat: (prev.frontLat + prev.backLat) / 2, lng: (prev.frontLng + prev.backLng) / 2 }
-                  : null;
-            if (green) {
-              get().closeHoleEndLocation(prevHole, green);
-            }
-          }
+          const green = greenForHole(state.activeCourseId, prevHole, state.courseHoles);
+          if (green) get().closeHoleEndLocation(prevHole, green);
         }
         const holeData = state.courseHoles.find(h => h.hole === hole);
         set({ currentHole: hole, currentYardage: holeData?.distance ?? null });
+        // Notify holeDetection of manual override so its sustained-position
+        // window doesn't immediately race against the user's pick.
+        try {
+          require('../services/holeDetection').noteManualOverride();
+        } catch {}
       },
 
       setCurrentYardage: (yards) => set({ currentYardage: yards }),
