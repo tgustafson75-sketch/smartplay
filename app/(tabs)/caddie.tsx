@@ -1053,18 +1053,16 @@ export default function CaddieTab() {
         );
       })()}
       {trustLevel === 3 && (
-        // L3 Active — Kevin takes 2/3 of screen height, anchored from the
-        // bottom so his lower edge sits just above the SmartFinder card
-        // (which renders at bottom: 130 + insets.bottom, ~110 tall, so its
-        // top is ~240 + insets.bottom from screen bottom). Kevin's bottom
-        // anchor 252 leaves a small visual gap above SmartFinder.
+        // L3 Active — Kevin takes 2/3 of screen height (80% of that on
+        // Fold-open / wide screens, per Tim). Anchored from the bottom so
+        // his lower edge sits just above the SmartFinder card.
         <View
           style={{
             position: 'absolute',
             left: 0,
             width: W,
             bottom: 200 + insets.bottom,
-            height: Math.round(H * 2 / 3),
+            height: Math.round(H * 2 / 3 * (W >= 540 ? 0.8 : 1)),
           }}
         >
           <CaddieAvatar
