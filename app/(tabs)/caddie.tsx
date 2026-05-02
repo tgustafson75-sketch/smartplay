@@ -409,6 +409,15 @@ export default function CaddieTab() {
     if (trustLevel !== 4) setL4FinderExpanded(false);
   }, [trustLevel]);
 
+  // Sim-report — same long-press pattern for SmartVision on L4 so the
+  // player can glance at the hole layout without leaving the full Kevin
+  // screen. Short tap routes to the full /hole-view; long-press toggles
+  // an inline preview.
+  const [l4VisionExpanded, setL4VisionExpanded] = useState(false);
+  useEffect(() => {
+    if (trustLevel !== 4) setL4VisionExpanded(false);
+  }, [trustLevel]);
+
   // Sim-report gap 2 — pre-warm audio engine when entering Quiet (L1) so
   // the first mic tap doesn't pay the ~200ms cold→warm cost. Fires once
   // per L1 entry; the audioLifecycle 90s idle timer still sweeps it back
@@ -1311,30 +1320,54 @@ export default function CaddieTab() {
         // L3 Active — Kevin takes 2/3 of screen height (80% of that on
         // Fold-open / wide screens, per Tim). Anchored from the bottom so
         // his lower edge sits just above the SmartFinder card.
-        <View
-          style={{
-            position: 'absolute',
-            left: 0,
-            width: W,
-            bottom: 200 + insets.bottom,
-            height: Math.round(H * 2 / 3 * (W >= 540 ? 0.8 : 1)),
-          }}
-        >
-          <CaddieAvatar
-            gender={voiceGender === 'female' ? 'female' : 'male'}
-            isOnCourse={isRoundActive}
-            isCageMode={false}
-            voiceState={voiceState}
-            hud={NULL_HUD}
-            openingPrompt=""
-            caddieResponse=""
-            onTap={handleMicPress}
-            emotion={kevinEmotion}
-            fillMode="cover"
-            isThinking={kevinThinking}
-            trustLevel={trustLevel as 1 | 2 | 3 | 4}
-          />
-        </View>
+        <>
+          {/* Sim-report — SmartVision card on L3, both pre-round and
+              in-round. Palms behavior preserved by L1HolePreview's own
+              fallback chain (default Palms image pre-round, Palms hole
+              imagery in-round). New tile fills the empty top region of
+              the L3 layout. */}
+          <View
+            style={{
+              position: 'absolute',
+              top: insets.top + 92,
+              left: 16, right: 80,
+              height: 140,
+              borderRadius: 12,
+              borderWidth: 1.5,
+              borderColor: '#00C896',
+              overflow: 'hidden',
+              backgroundColor: '#0d2418',
+              zIndex: 6,
+            }}
+            pointerEvents="box-none"
+          >
+            <L1HolePreview onOpenSmartVision={openSmartVision} width={W - 96} height={140} />
+          </View>
+          <View
+            style={{
+              position: 'absolute',
+              left: 0,
+              width: W,
+              bottom: 200 + insets.bottom,
+              height: Math.round(H * 2 / 3 * (W >= 540 ? 0.8 : 1)),
+            }}
+          >
+            <CaddieAvatar
+              gender={voiceGender === 'female' ? 'female' : 'male'}
+              isOnCourse={isRoundActive}
+              isCageMode={false}
+              voiceState={voiceState}
+              hud={NULL_HUD}
+              openingPrompt=""
+              caddieResponse=""
+              onTap={handleMicPress}
+              emotion={kevinEmotion}
+              fillMode="cover"
+              isThinking={kevinThinking}
+              trustLevel={trustLevel as 1 | 2 | 3 | 4}
+            />
+          </View>
+        </>
       )}
       {trustLevel === 4 && (
         // L4 Full — Fold-open keeps the explicit 9:16 frame nudged up.
@@ -1655,6 +1688,57 @@ export default function CaddieTab() {
           </TouchableOpacity>
         );
       })()}
+
+      {/* L4 SmartVision ICON — telescope affordance to open hole-view
+           or peek inline. Sits above the lie-analysis camera (which is
+           at insets.top + 60 → mid-right via placements; SmartVision lives
+           on the LEFT edge so they don't crowd each other). */}
+      {trustLevel === 4 && (
+        <>
+          <TouchableOpacity
+            onPress={openSmartVision}
+            onLongPress={() => setL4VisionExpanded(v => !v)}
+            delayLongPress={400}
+            style={{
+              position: 'absolute',
+              left: 12,
+              top: insets.top + 100,
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              backgroundColor: 'rgba(13, 36, 24, 0.85)',
+              borderWidth: 1.5,
+              borderColor: '#00C896',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 14,
+              shadowColor: '#00C896',
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: 0.55,
+              shadowRadius: 8,
+              elevation: 6,
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Open SmartVision · long-press to peek inline"
+          >
+            <Ionicons name="telescope-outline" size={20} color="#00C896" />
+          </TouchableOpacity>
+          {l4VisionExpanded && (
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={() => setL4VisionExpanded(false)}
+              style={{
+                position: 'absolute', left: 64, right: 16,
+                top: insets.top + 100, height: 160, zIndex: 13,
+                borderRadius: 12, overflow: 'hidden',
+                borderWidth: 1.5, borderColor: '#00C896', backgroundColor: '#0d2418',
+              }}
+            >
+              <L1HolePreview onOpenSmartVision={openSmartVision} width={W - 80} height={160} />
+            </TouchableOpacity>
+          )}
+        </>
+      )}
 
       {/* L4 SmartFinder ICON — replaces the embedded card at L4. Sits on
            the right edge. Tap routes to /smartfinder; sim-report gap 3:

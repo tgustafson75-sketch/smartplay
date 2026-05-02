@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { useTrustLevelStore, type TrustLevel } from '../../store/trustLevelStore';
 
 const KEVIN_BADGE = require('../../assets/avatars/smartplay_caddie_badge.png');
 const GREETING =
@@ -23,7 +24,13 @@ export default function OnboardingWelcome() {
   const router = useRouter();
   const { colors, spacing, typography: _typography, radii } = useTheme();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
+  const trustLevel = useTrustLevelStore(s => s.level);
+  const setTrustLevel = useTrustLevelStore(s => s.setLevel);
 
+  // Sim-report — CTA was previously locked until TTS finished, which made
+  // users wait 8-10s to advance. Voice now plays in the background and the
+  // user can tap through whenever they're ready. setVoiceDone retained as
+  // an indicator for the soft 'Finishing intro…' hint, not a gate.
   const [voiceDone, setVoiceDone] = useState(false);
   const fadeIn = useRef(new Animated.Value(0)).current;
   const avatarScale = useRef(new Animated.Value(0.85)).current;
@@ -46,6 +53,16 @@ export default function OnboardingWelcome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Sim-report — Trust Spectrum at onboarding. Quinn-style users find the
+  // Quiet toggle here instead of digging post-onboarding. Defaults stay at
+  // L2 (Companion) so existing behavior is preserved for anyone who skips.
+  const TRUST_OPTIONS: { level: TrustLevel; label: string; sub: string }[] = [
+    { level: 1, label: 'Quiet',     sub: 'I tap when I need you' },
+    { level: 2, label: 'Companion', sub: 'Be here when I ask' },
+    { level: 3, label: 'Active',    sub: 'Chime in along the way' },
+    { level: 4, label: 'Full',      sub: "You're right next to me" },
+  ];
+
   const styles = useMemo(() => makeStyles(colors, spacing, radii), [colors, spacing, radii]);
 
   return (
@@ -66,23 +83,39 @@ export default function OnboardingWelcome() {
           </Text>
         </View>
 
-        {/* CTA */}
+        {/* TRUST SPECTRUM — pick how present Kevin should be. Default L2. */}
+        <View style={styles.trustRow}>
+          {TRUST_OPTIONS.map(t => {
+            const active = trustLevel === t.level;
+            return (
+              <TouchableOpacity
+                key={t.level}
+                onPress={() => setTrustLevel(t.level)}
+                style={[
+                  styles.trustChip,
+                  { borderColor: active ? colors.accent : colors.border, backgroundColor: active ? '#0d2418' : colors.surface },
+                ]}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.trustLabel, { color: active ? colors.accent : colors.text_primary }]}>{t.label}</Text>
+                <Text style={[styles.trustSub, { color: colors.text_muted }]}>{t.sub}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* CTA — always tappable; TTS plays in background. */}
         <TouchableOpacity
-          style={[
-            styles.btn,
-            { backgroundColor: colors.accent },
-            !voiceDone && styles.btnDisabled,
-          ]}
+          style={[styles.btn, { backgroundColor: colors.accent }]}
           onPress={() => router.push('/onboarding/name' as never)}
-          disabled={!voiceDone}
           activeOpacity={0.85}
         >
           <Text style={[styles.btnText, { color: '#ffffff' }]}>Let&apos;s go</Text>
         </TouchableOpacity>
 
-        {!voiceDone && (
+        {!voiceDone && voiceEnabled && (
           <Text style={[styles.waitHint, { color: colors.text_muted }]}>
-            Finishing intro…
+            Kevin&apos;s still talking — tap anytime to skip ahead.
           </Text>
         )}
 
@@ -143,6 +176,24 @@ function makeStyles(
       lineHeight: 27,
       textAlign: 'center',
     },
+    trustRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      gap: 8,
+      marginBottom: s.lg,
+      paddingHorizontal: s.md,
+    },
+    trustChip: {
+      borderWidth: 1,
+      borderRadius: r.md,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      minWidth: 130,
+      alignItems: 'center',
+    },
+    trustLabel: { fontSize: 13, fontWeight: '800', marginBottom: 2 },
+    trustSub: { fontSize: 11, textAlign: 'center' },
     btn: {
       borderRadius: r.lg,
       paddingVertical: 16,

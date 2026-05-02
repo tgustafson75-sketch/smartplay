@@ -136,7 +136,13 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
       <SmartVisionTap>
         <View style={[styles.wrap, wrapDims, styles.placeholder]}>
           <Text style={styles.placeholderText}>HOLE {currentHole}</Text>
-          <Text style={styles.placeholderSub}>Hole geometry unavailable.</Text>
+          <Text style={styles.placeholderSub}>Hole geometry unavailable for this course.</Text>
+          {/* Sim-report — give the user somewhere to go from the dead-end.
+              hole-view has its own Mapbox aerial path that may render even
+              when geometry is missing. Palms never lands here (curated
+              imagery hits getLocalHoleImage above), so this CTA only
+              affects non-Palms courses. */}
+          <Text style={styles.placeholderCta}>Tap to open SmartVision →</Text>
         </View>
       </SmartVisionTap>
     );
@@ -233,6 +239,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   placeholderText: { color: '#6b7280', fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
+  placeholderCta: { color: '#00C896', fontSize: 11, fontWeight: '700', marginTop: 10 },
   placeholderSub: { color: '#4b5563', fontSize: 11, marginTop: 6, textAlign: 'center' },
   placeholderSubLight: { color: 'rgba(255,255,255,0.85)', fontSize: 11, marginTop: 4, textAlign: 'center' },
   imgRadius: { borderRadius: 10 },
