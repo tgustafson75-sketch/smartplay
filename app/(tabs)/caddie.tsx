@@ -998,11 +998,15 @@ export default function CaddieTab() {
     language, apiUrl,
   ]);
 
-  // Wire the latest runStartRound into the forward-referenced ref so the
-  // pendingStartCourseId / pre_course_id effects above can call it.
-  useEffect(() => {
-    runStartRoundRef.current = runStartRound;
-  }, [runStartRound]);
+  // Wire the latest runStartRound into the forward-referenced ref. Done
+  // inline during render (NOT in a useEffect) so the ref is populated
+  // before the pendingStartCourseId / pre_course_id effects run on the
+  // first mount. Previously this lived in a useEffect, which created a
+  // race: the local-course async branch had no awaits before reading
+  // the ref, so it observed null and silently dropped the round-start.
+  // API courses worked because their getApiCourse await yielded the
+  // microtask queue, letting the ref-wiring effect run first.
+  runStartRoundRef.current = runStartRound;
 
   // Modal "Start Round" button — collects modal state and delegates.
   const handleStartRound = async () => {
