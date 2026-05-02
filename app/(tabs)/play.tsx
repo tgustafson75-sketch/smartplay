@@ -81,6 +81,10 @@ export default function PlayTab() {
   // Distinguish "haven't searched yet" from "searched and got zero results".
   const [hasSearched, setHasSearched] = useState(false);
   const lastQueryRef = useRef<string>('');
+  // Audit — monotonic request ID. setResults / setSearchError only fire
+  // when the response's seq matches the current latest seq, so a stale
+  // first response can't overwrite a fresher second one mid-typing.
+  const searchSeqRef = useRef<number>(0);
 
   const [recentCourses, setRecentCourses] = useState<CourseSummary[]>([]);
   const [selected, setSelected] = useState<Course | null>(null);
@@ -133,12 +137,15 @@ export default function PlayTab() {
     // for trailing whitespace / cursor moves.
     if (lastQueryRef.current === trimmed && searching) return;
     lastQueryRef.current = trimmed;
+    const mySeq = ++searchSeqRef.current;
     setSearching(true);
     setSearchError(null);
     setResults([]);
     setHasSearched(true);
     try {
       const found = await searchCourses(trimmed);
+      // Audit — drop response if a newer request superseded us.
+      if (mySeq !== searchSeqRef.current) return;
       const mapped: CourseSummary[] = found
         .filter(r => !r._error)
         .map(r => ({
@@ -152,10 +159,13 @@ export default function PlayTab() {
       const err = found.find(r => r._error);
       if (err && mapped.length === 0) setSearchError(err._error ?? 'Search unavailable.');
     } catch (e) {
+      if (mySeq !== searchSeqRef.current) return;
       console.warn('[play] search failed:', e);
       setSearchError(e instanceof Error ? e.message : 'Search failed.');
     } finally {
-      setSearching(false);
+      // Only clear searching if we're still the latest request, otherwise
+      // the newer request owns the spinner state.
+      if (mySeq === searchSeqRef.current) setSearching(false);
     }
   }, [searching]);
 

@@ -121,8 +121,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('[cage-coach] tool input missing kevin_response');
       return res.status(502).json({ error: 'Tool input missing kevin_response' });
     }
+    // Audit — explicit allowlist check so a model typo ('mediam', 'hi')
+    // doesn't silently get coerced to 'medium' as if it were valid input.
+    const VALID_CONFIDENCE = ['high', 'medium', 'low'] as const;
     const confidence: CageCoachResponse['confidence'] =
-      input.confidence === 'high' || input.confidence === 'low' ? input.confidence : 'medium';
+      (VALID_CONFIDENCE as readonly string[]).includes(input.confidence ?? '')
+        ? (input.confidence as CageCoachResponse['confidence'])
+        : 'medium';
 
     const response: CageCoachResponse = {
       kevin_response: input.kevin_response.trim(),

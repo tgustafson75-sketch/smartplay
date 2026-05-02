@@ -23,7 +23,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
-  Modal, ScrollView, Image, useWindowDimensions, Animated,
+  Modal, ScrollView, Image, useWindowDimensions, Animated, Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -167,6 +167,23 @@ export default function CageDrillScreen() {
 
   const handleStartRecording = useCallback(async () => {
     if (!cameraRef.current) return;
+    // Audit fix — double-tap guard. If a recording promise is already
+    // in flight (rapid tap before the first state flush), bail. The
+    // phase check covers the same case via React state.
+    if (recordingPromiseRef.current) return;
+    // Audit fix — mic permission gate. recordAsync silently produces
+    // a videoless / audioless file when mic isn't granted; surface it
+    // as a recoverable alert instead of a confusing capture failure.
+    if (!micPerm?.granted) {
+      const r = await requestMicPerm();
+      if (!r.granted) {
+        Alert.alert(
+          'Microphone needed',
+          'Cage Drill records audio to detect strikes. Allow microphone access to record.',
+        );
+        return;
+      }
+    }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setRecordedSeconds(0);
     setPhase('RECORDING');
@@ -193,7 +210,7 @@ export default function CageDrillScreen() {
       setPhase('ERROR');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [micPerm, requestMicPerm]);
 
   const stopRecordingAndUpload = useCallback(async () => {
     if (recordTimerRef.current) {
@@ -205,10 +222,16 @@ export default function CageDrillScreen() {
       recordCountdownRef.current = null;
     }
 
+    // Audit fix — stop the recording WHILE the camera is still mounted.
+    // Switching to UPLOADING below removes the CameraView from the tree
+    // (cameraVisible is false for UPLOADING). Calling stopRecording after
+    // unmount would no-op against a null ref and the recordAsync promise
+    // could hang or reject. Stop synchronously, then transition.
+    try { cameraRef.current?.stopRecording(); } catch {}
+
     setPhase('UPLOADING');
 
     try {
-      cameraRef.current?.stopRecording();
       const recorded = await recordingPromiseRef.current;
       recordingPromiseRef.current = null;
       const sourceUri = recorded?.uri;
@@ -314,7 +337,11 @@ export default function CageDrillScreen() {
   }
 
   // ── Render ──────────────────────────────────────────────────────────
-  const cameraVisible = phase === 'SETUP' || phase === 'CHECKING' || phase === 'READY' || phase === 'NOT_READY' || phase === 'RECORDING';
+  // Audit fix — keep camera mounted through UPLOADING so the recordAsync
+  // promise can resolve cleanly. The full-screen UPLOADING overlay covers
+  // the camera visually; functional reason for keeping the View alive is
+  // the recording promise lifecycle, not the pixel.
+  const cameraVisible = phase === 'SETUP' || phase === 'CHECKING' || phase === 'READY' || phase === 'NOT_READY' || phase === 'RECORDING' || phase === 'UPLOADING';
 
   return (
     <View style={styles.container}>
