@@ -975,8 +975,8 @@ export default function CaddieTab() {
         // explicitly allowed to overlay the SmartVision box; its existing
         // zIndex keeps it on top, function unchanged.
         const cellW = (W - 36) / 2;   // half-width minus 12+12 outer + 12 gutter
-        const cellH = 220;
-        const cellTop = insets.top + 60;
+        const cellH = 280;
+        const cellTop = insets.top + 100;
         return (
           <>
             <View
