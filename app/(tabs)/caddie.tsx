@@ -1208,16 +1208,9 @@ export default function CaddieTab() {
         </TouchableOpacity>
       )}
 
-      {/* BRAND WORDMARK — pre-round idle state only. Gated for L1 Quiet
-           (the L1 mic-button overlay above already shows the SmartPlay logo). */}
-      {!isRoundActive && trustLevel !== 1 && (
-        <View style={[styles.brandWordmark, { top: insets.top + 52 }]}>
-          <View style={styles.brandRow}>
-            <Text style={styles.brandName}>SmartPlay</Text>
-            <Text style={styles.brandSub}> Caddie</Text>
-          </View>
-        </View>
-      )}
+      {/* (Pre-round brand wordmark removed — the always-visible top banner
+           now serves as the single SmartPlay Caddie heading across all
+           round states. Was duplicating the banner pre-round.) */}
 
       {/* "?" help button — visible at L2 and L3 only. L1 has no Kevin
           presence to ask about; L4 users are past discovery (Tutorials in
