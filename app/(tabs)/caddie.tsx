@@ -1199,8 +1199,8 @@ export default function CaddieTab() {
               accessibilityRole="button"
               accessibilityLabel="Open SmartFinder rangefinder"
             >
-              {/* Same icon as the SmartFinder entry in the tools menu (locate-outline) */}
-              <Ionicons name="locate-outline" size={18} color="#F5A623" />
+              {/* Same icon + color as the SmartFinder entry in the tools menu */}
+              <Ionicons name="locate-outline" size={18} color="#00C896" />
             </TouchableOpacity>
           )}
           {/* Phase R — round memory photo capture */}
@@ -1391,10 +1391,11 @@ export default function CaddieTab() {
         </View>
       )}
 
-      {/* GREETING BUBBLE — pre-round only, sits in negative space above Start Round */}
+      {/* GREETING BUBBLE — pre-round only, sits in negative space above Start Round.
+          Bottom = startRoundBtn (40 + 60 height) + 24 clearance = 124. */}
       {!isRoundActive && shownText && trustLevel !== 1 ? (
         <Animated.View
-          style={[styles.bubble, { bottom: 96 + insets.bottom, opacity: responseFade }]}
+          style={[styles.bubble, { bottom: 124 + insets.bottom, opacity: responseFade }]}
         >
           {/* Backdrop deliberately almost-transparent so Kevin's face shows through.
               Text legibility is preserved by the textShadow on bubbleText. */}
@@ -1976,8 +1977,8 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     borderWidth: 1.5,
-    borderColor: '#F5A623',
-    backgroundColor: 'rgba(245,166,35,0.10)',
+    borderColor: '#00C896',
+    backgroundColor: 'rgba(0,200,150,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },

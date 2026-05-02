@@ -11,35 +11,12 @@ const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
 const DEFAULT_H = 300;
 
-// Phase S — Palms-only curated screenshot fallback. Other courses
-// fall through to the SVG quiet sketch (or Mapbox imagery in the full
-// SmartVision surface). The bundler needs literal require() calls.
-const PALMS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1:  require('../../assets/courses/palms/hole-01.jpg'),
-  2:  require('../../assets/courses/palms/hole-02.jpg'),
-  3:  require('../../assets/courses/palms/hole-03.jpg'),
-  4:  require('../../assets/courses/palms/hole-04.jpg'),
-  5:  require('../../assets/courses/palms/hole-05.jpg'),
-  6:  require('../../assets/courses/palms/hole-06.jpg'),
-  7:  require('../../assets/courses/palms/hole-07.jpg'),
-  8:  require('../../assets/courses/palms/hole-08.jpg'),
-  9:  require('../../assets/courses/palms/hole-09.jpg'),
-  10: require('../../assets/courses/palms/hole-10.jpg'),
-  11: require('../../assets/courses/palms/hole-11.jpg'),
-  12: require('../../assets/courses/palms/hole-12.jpg'),
-  13: require('../../assets/courses/palms/hole-13.jpg'),
-  14: require('../../assets/courses/palms/hole-14.jpg'),
-  15: require('../../assets/courses/palms/hole-15.jpg'),
-  16: require('../../assets/courses/palms/hole-16.jpg'),
-  17: require('../../assets/courses/palms/hole-17.jpg'),
-  18: require('../../assets/courses/palms/hole-18.jpg'),
-};
-
-function localHoleImageFor(courseName: string | null, holeNumber: number): ImageSourcePropType | null {
-  if (!courseName) return null;
-  if (courseName.toLowerCase().includes('palms')) return PALMS_HOLE_IMAGES[holeNumber] ?? null;
-  return null;
-}
+// Curated screenshot fallback for local courses Tim has playtested. The
+// Palms set is bundled today; Lakes and Rancho California maps are
+// registered as empty so dropping `assets/courses/lakes/hole-XX.jpg` /
+// `assets/courses/rancho-california/hole-XX.jpg` files later picks them
+// up without further code changes (just add the require() entries here).
+import { LOCAL_COURSE_IMAGES, getLocalHoleImage } from '../../data/localCourseImages';
 
 /**
  * L1 (Quiet) hole preview — a glanceable top-down sketch of the current hole
@@ -116,7 +93,22 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
 
   const wrapDims = { width: W, height: H };
 
+  // Default preview when no active round — show Tim's home course (Palms)
+  // hole 1 image so the SmartVision card is never empty/green.
   if (!isRoundActive) {
+    const defaultImg = require('../../data/localCourseImages').getDefaultPreviewImage();
+    if (defaultImg) {
+      return (
+        <SmartVisionTap>
+          <ImageBackground source={defaultImg} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
+            <View style={styles.imageOverlay}>
+              <Text style={styles.imageHoleLabel}>SMARTVISION</Text>
+              <Text style={styles.placeholderSubLight}>Start a round to see your hole.</Text>
+            </View>
+          </ImageBackground>
+        </SmartVisionTap>
+      );
+    }
     return (
       <SmartVisionTap>
         <View style={[styles.wrap, wrapDims, styles.placeholder]}>
@@ -128,8 +120,9 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   }
 
   if (!geometry || !geometry.tee || !geometry.green) {
-    // Palms-only curated screenshot fallback when geometry is missing.
-    const localImg = localHoleImageFor(activeCourse, currentHole);
+    // Curated screenshot fallback when geometry is missing — Palms today;
+    // Lakes / Rancho California land here once Tim drops their JPGs.
+    const localImg = getLocalHoleImage(activeCourse, currentHole);
     if (localImg) {
       return (
         <SmartVisionTap>
@@ -243,6 +236,7 @@ const styles = StyleSheet.create({
   },
   placeholderText: { color: '#6b7280', fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
   placeholderSub: { color: '#4b5563', fontSize: 11, marginTop: 6, textAlign: 'center' },
+  placeholderSubLight: { color: 'rgba(255,255,255,0.85)', fontSize: 11, marginTop: 4, textAlign: 'center' },
   imgRadius: { borderRadius: 10 },
   imageOverlay: {
     position: 'absolute',

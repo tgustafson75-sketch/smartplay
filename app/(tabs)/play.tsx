@@ -166,6 +166,30 @@ export default function PlayTab() {
     setSelectedLoading(false);
   }, []);
 
+  // Local courses don't have a real API course_id (their id is the
+  // synthetic 'local:palms'). When the user taps (i) on a local row,
+  // resolve the course by name via the API search so Course Detail can
+  // load real metadata + AI About / Caddie Tips / Hole Notes. If no
+  // match, fall back to the local-id route (which renders a quiet
+  // "no detailed data" empty state).
+  const onTapInfo = useCallback(async (c: CourseSummary) => {
+    if (!c.isLocal) {
+      router.push(`/course/${c.id}` as never);
+      return;
+    }
+    try {
+      const found = await searchCourses(c.club_name);
+      const real = found.find(r => !r._error);
+      if (real) {
+        router.push(`/course/${real.id}` as never);
+        return;
+      }
+    } catch (e) {
+      console.log('[play] local-course info resolve failed:', e);
+    }
+    router.push(`/course/${c.id}` as never);
+  }, [router]);
+
   const handleStartRound = () => {
     if (!selected) return;
     router.push({ pathname: '/(tabs)/caddie', params: { pre_course_id: selected.id } } as never);
@@ -260,12 +284,11 @@ export default function PlayTab() {
                 </View>
                 {isActive && <AppIcon name="checkmark" size={18} color="#00C896" />}
                 <TouchableOpacity
-                  onPress={() => router.push(`/course/${c.id}` as never)}
+                  onPress={() => onTapInfo(c)}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   style={styles.infoBtn}
-                  disabled={c.isLocal}
                 >
-                  <AppIcon name="information-circle-outline" size={20} color={c.isLocal ? '#3a5a40' : '#00C896'} />
+                  <AppIcon name="information-circle-outline" size={20} color="#00C896" />
                 </TouchableOpacity>
               </TouchableOpacity>
             );
