@@ -26,6 +26,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ghostLabel = null,
       roundsTogether = 0,
       language = 'en',
+      // Phase T — handicap context. courseHandicap pre-computed by caller
+      // via services/handicapCalculator so this endpoint stays math-free.
+      courseHandicap = null,
+      teeName = null,
     } = req.body;
 
     const name = String(playerName || '').trim();
@@ -35,6 +39,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       : '';
     const ghostBlock = ghostLabel
       ? `Ghost match active — playing against: ${ghostLabel}. Mention this briefly.`
+      : '';
+    const handicapBlock = (courseHandicap != null)
+      ? `Course Handicap from ${teeName || 'these tees'} today is ${courseHandicap}. Drop this in naturally — one short line.`
       : '';
 
     const systemPrompt = `${KEVIN_CHARACTER_SPEC}
@@ -64,6 +71,7 @@ Player: ${name || 'the player'}, handicap ${handicap}${goal ? ', goal: ' + goal 
 Rounds together: ${roundsTogether}
 ${insightsBlock}
 ${ghostBlock}
+${handicapBlock}
 
 Give the pre-round briefing now.`;
 

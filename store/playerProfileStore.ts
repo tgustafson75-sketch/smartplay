@@ -23,6 +23,14 @@ interface PlayerProfileState {
   trial_started_at: number | null;
   subscription_status: SubscriptionStatus;
 
+  // Phase T — WHS handicap fields
+  /** USGA Handicap Index (one decimal, e.g. 18.0). null until user sets it. */
+  handicap_index: number | null;
+  /** Player gender — drives tee + rating selection. 'x' = unspecified / mixed. */
+  handicap_gender: 'm' | 'f' | 'x';
+  /** Recent score differentials (last 20 retained). Drives Index estimate. */
+  recent_differentials: number[];
+
   // ─── ACTIONS ────────────────────────────
 
   setName: (name: string) => void;
@@ -38,6 +46,10 @@ interface PlayerProfileState {
   setDefaultMode: (m: 'break_100' | 'break_90' | 'break_80' | 'free_play') => void;
   initTrial: () => void;
   setSubscriptionStatus: (s: SubscriptionStatus) => void;
+  // Phase T
+  setHandicapIndex: (idx: number | null) => void;
+  setHandicapGender: (g: 'm' | 'f' | 'x') => void;
+  pushDifferential: (diff: number) => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -60,6 +72,9 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       first_opened_at: null,
       trial_started_at: null,
       subscription_status: 'free',
+      handicap_index: null,
+      handicap_gender: 'x',
+      recent_differentials: [],
 
       setName: (name) =>
         set({ name, firstName: name.split(' ')[0] ?? name }),
@@ -78,6 +93,10 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
         set({ first_opened_at: now, trial_started_at: now, subscription_status: 'trial' });
       },
       setSubscriptionStatus: (s) => set({ subscription_status: s }),
+      setHandicapIndex: (idx) => set({ handicap_index: idx }),
+      setHandicapGender: (g) => set({ handicap_gender: g }),
+      pushDifferential: (diff) =>
+        set(s => ({ recent_differentials: [...s.recent_differentials, diff].slice(-20) })),
     }),
     {
       name: 'player-profile-v2',

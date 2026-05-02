@@ -48,6 +48,25 @@ Available intents:
    - "look at last Tuesday's swing" / "show me Friday's swing" / "pull up that upload from last week" -> { query_topic: "look_at_swing", swing_phrase: "last tuesday" } (carry the date phrase verbatim)
    - "can I carry the bunker" / "can I carry that water" / "can I clear the trees" / "can I get over it" -> { query_topic: "carry_check", hazard_phrase: "bunker" } (extract the hazard noun)
 
+8. rules_query — User is asking about a Rules of Golf situation.
+   parameters: { query_text: string }
+   Examples:
+   - "can I drop free here" / "do I get relief" -> { intent_type: "rules_query", parameters: { query_text: "can I drop free here" } }
+   - "is that out of bounds" / "is the ball OB" -> { intent_type: "rules_query", parameters: { query_text: "is that out of bounds" } }
+   - "what's the rule on embedded ball" -> { intent_type: "rules_query", parameters: { query_text: "what's the rule on embedded ball" } }
+   - "can I move my ball from a divot" -> { intent_type: "rules_query", parameters: { query_text: "can I move my ball from a divot" } }
+   - "what are my options for a lateral hazard" -> { intent_type: "rules_query", parameters: { query_text: "what are my options for a lateral hazard" } }
+   ALWAYS pass query_text containing the original utterance verbatim — the rules handler needs the original phrasing for keyword matching.
+
+9. handicap_query — User is asking about WHS handicap calculations.
+   parameters: { handicap_topic: "course_handicap" | "score_differential" | "net_double_bogey" | "index_impact" | "explain", score_value?: number, par_value?: number }
+   Examples:
+   - "what is my course handicap" / "what's my course handicap from these tees" -> { handicap_topic: "course_handicap" }
+   - "what does a 95 do to my index" / "what does shooting 87 do" -> { handicap_topic: "index_impact", score_value: 95 }
+   - "what's my net double bogey on this hole" / "what's my max for handicap" -> { handicap_topic: "net_double_bogey" }
+   - "how does my handicap work" / "what's my Index" -> { handicap_topic: "explain" }
+   - "what's the differential on a 92 from this tee" -> { handicap_topic: "score_differential", score_value: 92 }
+
 3. change_setting — User wants to modify a setting.
    parameters: { setting_name: string, new_value: string | boolean }
    Recognized setting_name values:
@@ -98,7 +117,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "acknowledge" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null

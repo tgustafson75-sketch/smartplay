@@ -80,6 +80,9 @@ export default function Settings() {
   const [editName, setEditName] = useState(name);
   const [editHandicap, setEditHandicap] = useState(String(handicap));
   const [editGoal, setEditGoal] = useState(goal ?? '');
+  const handicapIndex = usePlayerProfileStore(s => s.handicap_index);
+  const setHandicapIndex = usePlayerProfileStore(s => s.setHandicapIndex);
+  const [editIndex, setEditIndex] = useState(handicapIndex != null ? String(handicapIndex) : '');
   const [editLimitation, setEditLimitation] = useState(physicalLimitation ?? '');
   const [editBest, setEditBest] = useState(personalBest ? String(personalBest) : '');
 
@@ -223,6 +226,21 @@ export default function Settings() {
             onChangeText={setEditBest}
             keyboardType="numeric"
             placeholder="Best round score"
+            placeholderTextColor="#374151"
+          />
+
+          <Text style={inputLblStyle}>Handicap Index (USGA)</Text>
+          <TextInput
+            style={inputFldStyle}
+            value={editIndex}
+            onChangeText={(v) => {
+              setEditIndex(v);
+              const n = parseFloat(v);
+              if (Number.isFinite(n)) setHandicapIndex(n);
+              else if (v === '') setHandicapIndex(null);
+            }}
+            keyboardType="decimal-pad"
+            placeholder="e.g. 18.0"
             placeholderTextColor="#374151"
           />
 

@@ -135,6 +135,10 @@ function AppNavigator() {
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
+          name="reference"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
           name="swinglab/upload"
           options={{ animation: 'slide_from_bottom' }}
         />

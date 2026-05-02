@@ -26,6 +26,7 @@ import { checkContent } from '../../services/contentGuardrail';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useRoundStore } from '../../store/roundStore';
 import PhotoCollage from '../../components/recap/PhotoCollage';
+import HandicapImpactCard from '../../components/recap/HandicapImpactCard';
 import { track } from '../../services/analytics';
 import { buildShareCardProps } from '../../services/shareCardGenerator';
 import { computeRecapHero } from '../../services/recapHero';
@@ -319,6 +320,10 @@ export default function RecapScreen() {
 
             {/* Phase R — round photo collage */}
             <PhotoCollage photos={roundPhotos} />
+
+            {/* Phase T — handicap impact (Score Differential + Update Index? CTA).
+                Hidden when Index isn't set; component handles its own gating. */}
+            <HandicapImpactCard roundId={round_id ?? null} />
 
             <View style={styles.summaryCard}>
               <Text style={styles.courseName}>{recap.course_name}</Text>

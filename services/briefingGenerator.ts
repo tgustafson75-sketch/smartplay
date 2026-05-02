@@ -13,6 +13,9 @@ interface BriefingParams {
   roundsTogether: number;
   apiUrl: string;
   language?: string;
+  // Phase T — pre-computed by caller via handicapCalculator if Index is set
+  courseHandicap?: number | null;
+  teeName?: string | null;
 }
 
 // In-memory cache: roundId → briefing text
