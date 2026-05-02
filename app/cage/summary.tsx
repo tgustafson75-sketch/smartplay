@@ -105,7 +105,11 @@ export default function CageSummary() {
           }).then(r => ({ swing, r })),
         ));
         for (const { swing, r } of chunkResults) {
-          if (r.kind === 'ok') results.push({ swing_id: swing.id, analysis: r.analysis });
+          if (r.kind === 'ok') {
+            results.push({ swing_id: swing.id, analysis: r.analysis });
+            // Phase R — persist frame timestamps for swing detail anchors
+            useCageStore.getState().setShotIssueTimestamps(session.id, swing.id, r.frame_timestamps_sec);
+          }
           if (r.kind === 'no_frames') anyNoFrames = true;
         }
       }

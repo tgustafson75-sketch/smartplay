@@ -104,7 +104,12 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       swing_number: i + 1,
       prior_issues: results.slice(-3).map(x => x.analysis.detected_issue),
     });
-    if (r.kind === 'ok') results.push({ swing_id: swing.id, analysis: r.analysis });
+    if (r.kind === 'ok') {
+      results.push({ swing_id: swing.id, analysis: r.analysis });
+      // Phase R — persist the sampled frame timestamps so the swing detail
+      // surface can render tappable anchors on the detected issue.
+      useCageStore.getState().setShotIssueTimestamps(sessionId, swing.id, r.frame_timestamps_sec);
+    }
   }
 
   const primary_issue = classifySession(results);

@@ -10,12 +10,11 @@
  * inference path. Consumer signature stays stable — `swingIssueClassifier`
  * and the rest of the pipeline don't change.
  *
- * KNOWN GAP (Phase K v1): `extractKeyFrames(clipUri)` returns empty array
- * until `expo-video-thumbnails` (or equivalent video-frame-extraction
- * library) is added. With an empty frame array, the pipeline gracefully
- * reports "couldn't get clear frames" and the cards stay in placeholder
- * mode. Adding the dep + populating the function = ~5 lines; tracked as
- * a refinement-bundle item.
+ * Phase R update — `extractKeyFrames` now probes real clip duration via
+ * expo-av before sampling, so uploaded videos (typically much longer than
+ * a 2s cage capture) get frames spread across their actual swing window
+ * rather than the first 2 seconds. Each returned frame carries its own
+ * `time_sec` so consumers can wire detected-issue timestamp anchors.
  */
 
 export type CanonicalIssue =
@@ -40,7 +39,7 @@ export type SwingAnalysis = {
 };
 
 export type SwingAnalysisResult =
-  | { kind: 'ok'; analysis: SwingAnalysis }
+  | { kind: 'ok'; analysis: SwingAnalysis; frame_timestamps_sec: number[] }
   | { kind: 'no_frames' }
   | { kind: 'no_network' }
   | { kind: 'error'; message: string };
@@ -48,43 +47,64 @@ export type SwingAnalysisResult =
 const REQUEST_TIMEOUT_MS = 30_000;
 
 /**
- * Sample 5 key frames from a swing clip via expo-video-thumbnails. Each frame
- * is extracted at a normalized time fraction (5%, 30%, 55%, 80%, 95% of the
- * clip — covers address through follow-through), resized + JPEG-compressed
- * via expo-image-manipulator, and returned as base64 ready for the vision
- * endpoint. Returns empty array on any failure (consumer treats as no_frames).
+ * Sample 5 key frames from a swing clip via expo-video-thumbnails. Each
+ * frame is extracted at a normalized time fraction (5%, 30%, 55%, 80%, 95%
+ * of the clip — covers address through follow-through), resized + JPEG-
+ * compressed via expo-image-manipulator, and returned as base64 ready for
+ * the vision endpoint. Each frame carries its own `time_sec` so consumers
+ * can anchor detected-issue timestamps for Phase R temporal alignment.
+ *
+ * Duration is probed via expo-av before sampling. If the probe fails or
+ * returns nothing usable, falls back to a 2-second window (typical cage
+ * capture length). Returns empty array on any failure — consumer treats
+ * as `no_frames`.
  */
 import * as VT from 'expo-video-thumbnails';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { Audio } from 'expo-av';
 
 const FRAME_TIME_FRACTIONS = [0.05, 0.30, 0.55, 0.80, 0.95];
-// expo-video-thumbnails takes time in milliseconds; we don't have a clip-
-// duration probe API, so use absolute timestamps approximating a 2-second
-// swing window. Falls within a typical Cage Session capture clip length.
-const APPROX_SWING_DURATION_MS = 2000;
+const FALLBACK_DURATION_MS = 2000;
 
-export async function extractKeyFrames(clipUri: string): Promise<{ b64: string; media_type: string }[]> {
+export type Frame = { b64: string; media_type: string; time_sec: number };
+
+async function probeDurationMs(clipUri: string): Promise<number> {
+  try {
+    const { sound, status } = await Audio.Sound.createAsync({ uri: clipUri }, { shouldPlay: false });
+    let ms: number = FALLBACK_DURATION_MS;
+    if (status.isLoaded && status.durationMillis && status.durationMillis > 0) {
+      ms = status.durationMillis;
+    }
+    await sound.unloadAsync().catch(() => {});
+    return ms;
+  } catch {
+    return FALLBACK_DURATION_MS;
+  }
+}
+
+export async function extractKeyFrames(clipUri: string): Promise<Frame[]> {
   if (!clipUri) return [];
   try {
+    const durationMs = await probeDurationMs(clipUri);
     const frames = await Promise.all(
       FRAME_TIME_FRACTIONS.map(async (t) => {
+        const timeMs = Math.round(durationMs * t);
         try {
-          const r = await VT.getThumbnailAsync(clipUri, {
-            time: Math.round(APPROX_SWING_DURATION_MS * t),
-            quality: 0.8,
-          });
+          const r = await VT.getThumbnailAsync(clipUri, { time: timeMs, quality: 0.8 });
           const m = await ImageManipulator.manipulateAsync(
             r.uri,
             [{ resize: { width: 1024 } }],
             { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG, base64: true },
           );
-          return m.base64 ? { b64: m.base64, media_type: 'image/jpeg' as const } : null;
+          return m.base64
+            ? { b64: m.base64, media_type: 'image/jpeg', time_sec: timeMs / 1000 }
+            : null;
         } catch {
           return null;
         }
       }),
     );
-    return frames.filter((f): f is { b64: string; media_type: 'image/jpeg' } => f !== null);
+    return frames.filter((f): f is Frame => f !== null);
   } catch (e) {
     console.log('[poseDetection] extractKeyFrames failed:', e);
     return [];
@@ -93,8 +113,10 @@ export async function extractKeyFrames(clipUri: string): Promise<{ b64: string; 
 
 /**
  * Analyze a single swing. Extracts frames, sends to vision endpoint, returns
- * structured swing fault. Returns no_frames result when frame extraction is
- * unavailable so the consumer renders honest empty-state instead of fake data.
+ * structured swing fault + the list of timestamps (in seconds) those frames
+ * were sampled from. Returns no_frames result when frame extraction is
+ * unavailable so the consumer renders honest empty-state instead of fake
+ * data.
  */
 export async function analyzeSwing(
   clipUri: string,
@@ -105,15 +127,19 @@ export async function analyzeSwing(
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   try {
+    // Server-side endpoint accepts the frames; we strip time_sec for the
+    // wire payload (server doesn't need it) but keep it client-side so
+    // consumers can populate temporal anchors.
+    const wireFrames = frames.map(({ b64, media_type }) => ({ b64, media_type }));
     const res = await fetch(`${apiUrl}/api/swing-analysis`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ frames, context }),
+      body: JSON.stringify({ frames: wireFrames, context }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!res.ok) return { kind: 'error', message: `Server returned ${res.status}` };
     const data = (await res.json()) as SwingAnalysis;
-    return { kind: 'ok', analysis: data };
+    return { kind: 'ok', analysis: data, frame_timestamps_sec: frames.map(f => f.time_sec) };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (/network|abort|timeout|fetch/i.test(msg)) return { kind: 'no_network' };
