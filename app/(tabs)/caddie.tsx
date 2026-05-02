@@ -1198,7 +1198,8 @@ export default function CaddieTab() {
               accessibilityRole="button"
               accessibilityLabel="Open SmartFinder rangefinder"
             >
-              <Ionicons name="locate" size={18} color="#F5A623" />
+              {/* Same icon as the SmartFinder entry in the tools menu (locate-outline) */}
+              <Ionicons name="locate-outline" size={18} color="#F5A623" />
             </TouchableOpacity>
           )}
           {/* Phase R — round memory photo capture */}
@@ -1442,7 +1443,14 @@ export default function CaddieTab() {
       >
         <TouchableOpacity
           style={[styles.startRoundBtn, { bottom: 40 + insets.bottom }]}
-          onPress={() => setShowRoundSetup(true)}
+          // Caddie's Start Round button now routes to the Play tab (Course
+          // Discovery). After a course is picked there, the Selected Course
+          // card's "Start Round" button navigates back here with
+          // pre_course_id, which triggers setShowRoundSetup(true) via the
+          // existing effect — round-config sheet still gets the same
+          // course-prefilled flow it had before, just one step earlier in
+          // the navigation.
+          onPress={() => router.push('/(tabs)/play' as never)}
           activeOpacity={0.88}
         >
           <Text style={styles.startRoundText}>Start Round</Text>
