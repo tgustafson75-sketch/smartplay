@@ -1145,22 +1145,6 @@ export default function CaddieTab() {
   // targetDirection: not yet in aim engine — show CENTER until wired
   const targetDirection = 'CENTER';
 
-  // Pre-beta — pre-round hole 1 default yardage. When a player has picked
-  // a local course but hasn't started yet, the data strip should show
-  // hole 1's distance instead of an empty cell. This is what the legacy
-  // app surfaced and the user expects on Quiet pre-round.
-  const preRoundDefaultYards = useMemo(() => {
-    if (isRoundActive) return null;
-    if (!selectedPickedCourse?.isLocal) return null;
-    const slug = selectedPickedCourse.id.replace('local:', '');
-    const local = getCourse(slug);
-    return local?.holes[0]?.distance ?? null;
-  }, [isRoundActive, selectedPickedCourse]);
-  const stripYardage = currentYardage ?? preRoundDefaultYards;
-  const stripPlaysLike = (currentYardage == null && preRoundDefaultYards != null && !caddieWeather)
-    ? preRoundDefaultYards
-    : playsLikeYardage;
-
   const currentStroke = useMemo(() => {
     // All penalties now flow through ShotResult (including More Menu addPenalty).
     // Legacy penalties[] field is no longer written to, so we read only from shots.
@@ -1352,10 +1336,18 @@ export default function CaddieTab() {
         // SmartVision card, and the SmartFinder card stacked top-to-bottom.
         // Quiet's behavioral difference (no proactive speech) is enforced
         // elsewhere; visually the player keeps the legacy stack.
+        //
+        // Cell height is computed from available vertical space between
+        // the top-banner area (insets.top + 100) and the SmartFinder card
+        // landing zone (bottom: 130 + insets.bottom plus ~90px card body),
+        // so the two tiles never overlap the SmartFinder card on shorter
+        // phones. Cap at 200 to keep proportions sensible on tall screens.
         const cellTop = insets.top + 100;
         const cellW = W - 24;
-        const cellH = 180;
         const gap = 10;
+        const reservedBottom = 130 + insets.bottom + 90;
+        const available = H - cellTop - reservedBottom - gap;
+        const cellH = Math.max(130, Math.min(200, Math.floor(available / 2)));
         return (
           <Animated.View pointerEvents="box-none" style={{ opacity: quietPulse }}>
             <View
@@ -1423,14 +1415,8 @@ export default function CaddieTab() {
         pointerEvents="none"
       >
         <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-          {trustLevel === 1 ? (
-            <Text style={styles.brandSub}>Caddie</Text>
-          ) : (
-            <>
-              <Text style={styles.brandName}>SmartPlay</Text>
-              <Text style={styles.brandSub}> Caddie</Text>
-            </>
-          )}
+          <Text style={styles.brandName}>SmartPlay</Text>
+          <Text style={styles.brandSub}> Caddie</Text>
         </View>
       </View>
 
@@ -1665,19 +1651,18 @@ export default function CaddieTab() {
         </Animated.View>
       ) : null}
 
-      {/* DATA STRIP — cross-fades in when round starts. Pre-beta: at L1
-           Quiet, render the strip pre-round too with hole 1 defaults so
-           the player sees yardage/hole context the whole time. */}
+      {/* DATA STRIP — cross-fades in when round starts. Hidden pre-round
+           on every trust level (no round, no data). */}
       <Animated.View
-        style={[StyleSheet.absoluteFill, { opacity: isRoundActive ? stripOpacity : (trustLevel === 1 ? 1 : 0) }]}
-        pointerEvents={isRoundActive || trustLevel === 1 ? 'box-none' : 'none'}
+        style={[StyleSheet.absoluteFill, { opacity: stripOpacity }]}
+        pointerEvents={isRoundActive ? 'box-none' : 'none'}
       >
         <CaddieDataStrip
-          yardage={stripYardage}
-          playsLike={stripPlaysLike}
+          yardage={currentYardage}
+          playsLike={playsLikeYardage}
           hole={{ current: currentHole, total: totalHoles }}
           targetDirection={targetDirection}
-          stroke={isRoundActive ? currentStroke : 1}
+          stroke={currentStroke}
           visible={true}
           bottomOffset={insets.bottom}
           onPress={() => setShowShotCard(true)}
