@@ -1081,7 +1081,7 @@ export default function CaddieTab() {
         </View>
       )}
       {trustLevel === 4 && (
-        <View style={{ position: 'absolute', top: -30, left: 0, width: W, height: avatarFrameHeight }}>
+        <View style={{ position: 'absolute', top: -70, left: 0, width: W, height: avatarFrameHeight }}>
           <CaddieAvatar
             gender={voiceGender === 'female' ? 'female' : 'male'}
             isOnCourse={isRoundActive}
@@ -1228,16 +1228,49 @@ export default function CaddieTab() {
         </View>
       )}
 
-      {/* SMARTFINDER CARD — Phase D-2 embedded rangefinder, absolute-positioned
-           above the data strip during active rounds. Does NOT modify Kevin's
-           avatar layout (the locked elite layout). */}
-      {isRoundActive && (
+      {/* SMARTFINDER CARD — Phase D-2 embedded rangefinder. Hidden at L4
+           (Full) where it collapses to a small right-side icon to keep
+           Kevin's full-screen presence uncluttered. */}
+      {isRoundActive && trustLevel !== 4 && (
         <View
           style={{ position: 'absolute', left: 16, right: 16, bottom: 130 + insets.bottom, zIndex: 8 }}
           pointerEvents="box-none"
         >
           <SmartFinderCard />
         </View>
+      )}
+
+      {/* L4 SmartFinder ICON — replaces the embedded card at L4. Sits on the
+           right edge, vertically centered around the data strip area, so it
+           doesn't intercept taps on Kevin's avatar (which fills the screen
+           at L4). Tap routes to /smartfinder. */}
+      {isRoundActive && trustLevel === 4 && (
+        <TouchableOpacity
+          onPress={() => router.push('/smartfinder' as never)}
+          style={{
+            position: 'absolute',
+            right: 12,
+            bottom: 200 + insets.bottom,
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            backgroundColor: 'rgba(13, 36, 24, 0.85)',
+            borderWidth: 1.5,
+            borderColor: '#F5A623',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 14,
+            shadowColor: '#F5A623',
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.55,
+            shadowRadius: 8,
+            elevation: 6,
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Open SmartFinder"
+        >
+          <Text style={{ fontSize: 24 }}>🎯</Text>
+        </TouchableOpacity>
       )}
 
       {/* L1 QUIET — fixed SmartVision-tap preview above the SmartFinder card.
