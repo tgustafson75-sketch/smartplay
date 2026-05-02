@@ -251,6 +251,40 @@ function AppNavigator() {
           name="battery-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
+        {/* Nav audit — register the remaining route files so none of them
+            fall back to Expo Router's default header on a deep-link entry. */}
+        <Stack.Screen
+          name="tutorials"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
+        <Stack.Screen
+          name="voice-debug"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
+        <Stack.Screen
+          name="kevin-learning"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
+        <Stack.Screen
+          name="lie-analysis"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
+        <Stack.Screen
+          name="smartfinder-camera"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
+        <Stack.Screen
+          name="settings/trust-level"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
+        <Stack.Screen
+          name="course/[course_id]"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
+        <Stack.Screen
+          name="recap/hole/[round_id]/[hole]"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
       </Stack>
     </>
   );

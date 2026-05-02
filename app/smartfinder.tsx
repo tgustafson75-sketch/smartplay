@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
-import { useRouter } from 'expo-router';
+import { safeBack } from '../services/safeBack';
 import { useKeepAwake } from 'expo-keep-awake';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
@@ -53,7 +53,6 @@ const LOCK_DURATION_MS = 30_000;
  */
 export default function SmartFinder() {
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
-  const router = useRouter();
   const _insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
 
@@ -118,7 +117,7 @@ export default function SmartFinder() {
         currentHole={currentHole}
         gps={gps}
         onModeChange={setMode}
-        onClose={() => router.back()}
+        onClose={() => safeBack()}
         height={height}
       />
     );
@@ -128,7 +127,7 @@ export default function SmartFinder() {
   return (
     <SafeAreaView style={styles.svgContainer}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
+        <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn}>
           <Text style={styles.headerBtnText}>← Caddie</Text>
         </TouchableOpacity>
         <Text style={styles.title}>SmartFinder</Text>

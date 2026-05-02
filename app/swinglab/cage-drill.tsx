@@ -40,6 +40,7 @@ import {
   type CoachReviewResponse,
 } from '../../services/cageApi';
 import { toggle as toggleListening } from '../../services/listeningSession';
+import { safeBack } from '../../services/safeBack';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 
@@ -300,7 +301,7 @@ export default function CageDrillScreen() {
   if (!camPerm.granted) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <Header insets={insets} onBack={() => router.back()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
+        <Header insets={insets} onBack={() => safeBack()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
         <View style={styles.permWrap}>
           <Text style={styles.permTitle}>Camera permission needed</Text>
           <Text style={styles.permBody}>Cage Drill records your swing to score your strikes.</Text>
@@ -330,7 +331,7 @@ export default function CageDrillScreen() {
       {/* Dim overlay so chrome reads on bright camera frames. */}
       {cameraVisible && <View style={styles.cameraDim} pointerEvents="none" />}
 
-      <Header insets={insets} onBack={() => router.back()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
+      <Header insets={insets} onBack={() => safeBack()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
 
       {/* Kevin caption — always visible, fades on phase change. */}
       <Animated.View
@@ -399,7 +400,7 @@ export default function CageDrillScreen() {
       {/* RESULT — Kevin's response card + collapsible features.json. */}
       {phase === 'RESULT' && result && (
         <SafeAreaView style={styles.resultContainer} edges={['top', 'bottom']}>
-          <Header insets={insets} onBack={() => router.back()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
+          <Header insets={insets} onBack={() => safeBack()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
           <ScrollView style={styles.resultScroll} contentContainerStyle={styles.resultScrollContent}>
 
             {/* Kevin response card — primary surface */}
@@ -455,7 +456,7 @@ export default function CageDrillScreen() {
       {/* ERROR — message + Try Again. */}
       {phase === 'ERROR' && (
         <SafeAreaView style={styles.resultContainer} edges={['top', 'bottom']}>
-          <Header insets={insets} onBack={() => router.back()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
+          <Header insets={insets} onBack={() => safeBack()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
           <View style={styles.errorWrap}>
             <Ionicons name="alert-circle-outline" size={36} color="#ef4444" />
             <Text style={styles.errorTitle}>{KEVIN_CAPTION.ERROR}</Text>

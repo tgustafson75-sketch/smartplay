@@ -9,7 +9,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import {
   getCurrentMode,
   getLastFix,
@@ -24,10 +23,10 @@ import {
   declineBatterySaver,
   type BatteryState,
 } from '../services/batteryMonitor';
+import { safeBack } from '../services/safeBack';
 
 export default function BatteryDebugScreen() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const [_tick, setTick] = useState(0);
   const [bs, setBs] = useState<BatteryState | null>(null);
 
@@ -85,7 +84,7 @@ export default function BatteryDebugScreen() {
           <Text style={styles.btnText}>Decline battery saver</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.closeBtn} onPress={() => safeBack()}>
           <Text style={styles.closeBtnText}>Close</Text>
         </TouchableOpacity>
       </ScrollView>

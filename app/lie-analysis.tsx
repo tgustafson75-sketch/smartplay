@@ -4,7 +4,8 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { safeBack } from '../services/safeBack';
 import { useKeepAwake } from 'expo-keep-awake';
 import CourseDetailBanner from '../components/course/CourseDetailBanner';
 import AnalysisResult from '../components/lieAnalysis/AnalysisResult';
@@ -30,7 +31,6 @@ type Phase = 'camera' | 'analyzing' | 'result' | 'low_quality' | 'no_network' | 
 
 export default function LieAnalysisScreen() {
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ intent?: string }>();
   const playIntent: PlayIntent = (params.intent === 'aggressive' || params.intent === 'conservative') ? params.intent : null;
@@ -143,7 +143,7 @@ export default function LieAnalysisScreen() {
   }, [imageUri, runAnalysis]);
 
   const handleSaveForLater = useCallback(async () => {
-    if (!imageUri) { router.back(); return; }
+    if (!imageUri) { safeBack(); return; }
     try {
       const dir = (FileSystem.documentDirectory ?? '') + 'lie_analysis_pending/';
       const info = await FileSystem.getInfoAsync(dir);
@@ -153,8 +153,8 @@ export default function LieAnalysisScreen() {
     } catch (e) {
       console.log('[lie-analysis] save-for-later failed:', e);
     }
-    router.back();
-  }, [imageUri, router]);
+    safeBack();
+  }, [imageUri]);
 
   const handleReplay = useCallback(async () => {
     if (!analysis) return;
@@ -183,7 +183,7 @@ export default function LieAnalysisScreen() {
           <TouchableOpacity style={styles.permLink} onPress={() => Linking.openSettings()}>
             <Text style={styles.permLinkText}>Open Settings</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.permLink} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.permLink} onPress={() => safeBack()}>
             <Text style={styles.permLinkText}>← Back</Text>
           </TouchableOpacity>
         </View>
@@ -196,7 +196,7 @@ export default function LieAnalysisScreen() {
       <SafeAreaView style={styles.container}>
         <CourseDetailBanner />
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
+          <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn}>
             <Text style={styles.headerBtnText}>← Back</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Lie Analysis</Text>
@@ -207,7 +207,7 @@ export default function LieAnalysisScreen() {
           analysis={analysis}
           speaking={speaking}
           onReplay={handleReplay}
-          onGotIt={() => router.back()}
+          onGotIt={() => safeBack()}
           onTryAgain={() => { setAnalysis(null); setImageUri(null); setPhase('camera'); }}
         />
       </SafeAreaView>
@@ -225,7 +225,7 @@ export default function LieAnalysisScreen() {
       <SafeAreaView style={styles.container}>
         <CourseDetailBanner />
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
+          <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn}>
             <Text style={styles.headerBtnText}>← Back</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Lie Analysis</Text>
@@ -261,7 +261,7 @@ export default function LieAnalysisScreen() {
 
       {/* Top header */}
       <View style={[styles.cameraTop, { top: insets.top + 8 }]} pointerEvents="box-none">
-        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+        <TouchableOpacity onPress={() => safeBack()} style={styles.iconBtn}>
           <Text style={styles.iconBtnText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.cameraTitle}>LIE ANALYSIS</Text>

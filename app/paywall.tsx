@@ -10,7 +10,6 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AppIcon, { type IconName } from '../components/AppIcon';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
@@ -18,6 +17,7 @@ import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
 import { track } from '../services/analytics';
 import { PRICING, PAYWALL_HEADLINE, PAYWALL_SUBHEAD } from '../lib/pricing';
+import { safeBack } from '../services/safeBack';
 
 const FEATURES: { icon: IconName; label: string; sub: string }[] = [
   { icon: 'golf-outline',         label: 'Kevin on every hole', sub: 'Real-time caddie advice, club selection, and course strategy' },
@@ -28,7 +28,6 @@ const FEATURES: { icon: IconName; label: string; sub: string }[] = [
 ];
 
 export default function PaywallScreen() {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const fadeIn = useRef(new Animated.Value(0)).current;
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
@@ -68,7 +67,7 @@ export default function PaywallScreen() {
   };
 
   const handleClose = () => {
-    router.back();
+    safeBack();
   };
 
   return (

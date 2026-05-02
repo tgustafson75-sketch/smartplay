@@ -25,6 +25,7 @@ import {
 } from '../../services/spaceAssessment';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { safeBack } from '../../services/safeBack';
 
 type Phase = 'capture' | 'analyzing' | 'result' | 'failed';
 
@@ -137,7 +138,7 @@ export default function SpaceScanScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <TouchableOpacity onPress={() => safeBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Text style={styles.back}>‹ Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Scan Your Space</Text>
