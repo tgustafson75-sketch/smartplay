@@ -1334,76 +1334,52 @@ export default function CaddieTab() {
           />
         </View>
       )}
-      {trustLevel === 1 && (() => {
-        // Pre-beta — Quiet (L1) mirrors the L2 Companion stacked layout so
-        // pre-round and in-round both surface Kevin's face tile, the
-        // SmartVision card, and the SmartFinder card stacked top-to-bottom.
-        // Quiet's behavioral difference (no proactive speech) is enforced
-        // elsewhere; visually the player keeps the legacy stack.
-        //
-        // Cell height is computed from available vertical space between
-        // the top-banner area (insets.top + 100) and the SmartFinder card
-        // landing zone (bottom: 130 + insets.bottom plus ~90px card body),
-        // so the two tiles never overlap the SmartFinder card on shorter
-        // phones. Cap at 200 to keep proportions sensible on tall screens.
-        const cellTop = insets.top + 100;
-        const cellW = W - 24;
-        const gap = 10;
-        const reservedBottom = 130 + insets.bottom + 90;
-        const available = H - cellTop - reservedBottom - gap;
-        const cellH = Math.max(130, Math.min(200, Math.floor(available / 2)));
-        return (
-          <Animated.View pointerEvents="box-none" style={{ opacity: quietPulse }}>
-            <View
-              style={{
-                position: 'absolute', top: cellTop, left: 12,
-                width: cellW, height: cellH,
-                borderRadius: 14, borderWidth: 1.5, borderColor: '#1e3a28',
-                overflow: 'hidden', backgroundColor: '#060f09', zIndex: 6,
-              }}
-            >
-              <CaddieAvatar
-                gender={voiceGender === 'female' ? 'female' : 'male'}
-                isOnCourse={isRoundActive}
-                isCageMode={false}
-                voiceState={voiceState}
-                hud={NULL_HUD}
-                openingPrompt=""
-                caddieResponse=""
-                onTap={handleMicPress}
-                emotion={kevinEmotion}
-                fillMode="cover"
-                isThinking={kevinThinking}
-                trustLevel={trustLevel as 1 | 2 | 3 | 4}
-              />
-              {/* Quiet/saver indicator dot — bottom-right of the Kevin tile.
-                  Gray = quiet (Kevin intentionally silent); orange = battery
-                  saver active. Distinct from amber-thinking which lives in
-                  the avatar's own state. */}
+      {trustLevel === 1 && (
+        // L1 Quiet — locked design. Kevin DOES NOT show. Just the
+        // SmartPlay Caddie badge in the upper-left corner; tapping it
+        // triggers the mic. KevinAvatar wraps the badge image so the
+        // liveliness ring still pulses for idle/listening/speaking state
+        // without rendering a face. The lie-analysis camera lives on
+        // the right edge via the placements block below; no other tiles
+        // or cards belong on the L1 screen.
+        <View style={{ position: 'absolute', top: insets.top + 60, left: 16, zIndex: 12 }}>
+          <TouchableOpacity
+            onPress={handleMicPress}
+            accessibilityRole="button"
+            accessibilityLabel="Talk to Kevin (Quiet Mode)"
+          >
+            <Animated.View style={{ position: 'relative', opacity: quietPulse }}>
+              <KevinAvatar
+                state={kevinAvatarState}
+                presenceLevel={1}
+                sizeOverride={72}
+              >
+                <Image
+                  source={require('../../assets/avatars/smartplay_caddie_badge.png')}
+                  style={{ width: 64, height: 64 }}
+                  resizeMode="contain"
+                />
+              </KevinAvatar>
+              {/* Quiet/saver dot on the badge. Gray = quiet (Kevin
+                  intentionally silent); orange = battery saver. Distinct
+                  from the amber thinking pulse on the liveliness ring. */}
               <View
                 style={{
                   position: 'absolute',
-                  bottom: 8,
-                  right: 8,
+                  bottom: 2,
+                  right: 2,
                   width: 14,
                   height: 14,
                   borderRadius: 7,
                   backgroundColor: saverActive ? '#F5A623' : '#6b7280',
                   borderWidth: 2,
                   borderColor: '#060f09',
-                  zIndex: 7,
                 }}
               />
-            </View>
-            <View
-              style={{ position: 'absolute', top: cellTop + cellH + gap, left: 12, zIndex: 6 }}
-              pointerEvents="box-none"
-            >
-              <L1HolePreview onOpenSmartVision={openSmartVision} width={cellW} height={cellH} />
-            </View>
-          </Animated.View>
-        );
-      })()}
+            </Animated.View>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* TOP BANNER — SmartPlay Caddie wordmark across the very top, always
            visible. Sits above the existing top-nav row. */}
@@ -1466,8 +1442,10 @@ export default function CaddieTab() {
               <Ionicons name="locate-outline" size={18} color="#00C896" />
             </TouchableOpacity>
           )}
-          {/* Phase R — round memory photo capture */}
-          <PhotoCaptureButton />
+          {/* Phase R — round memory photo capture. Hidden at L1 so the
+              only camera affordance on the Quiet screen is the
+              lie-analysis camera on the right edge (no duplicates). */}
+          {trustLevel !== 1 && <PhotoCaptureButton />}
           <TouchableOpacity
             style={styles.navBtn}
             onPress={() => setShowMoreMenu(true)}
@@ -1531,11 +1509,10 @@ export default function CaddieTab() {
         </View>
       )}
 
-      {/* SMARTFINDER CARD — Phase D-2 embedded rangefinder. Hidden at L4
-           (Full) where it collapses to a small right-side icon. At L1
-           Quiet, the card renders pre-round AND in-round so the legacy
-           stack (SmartVision → SmartFinder → Start Round) is intact. */}
-      {((isRoundActive && trustLevel !== 4) || trustLevel === 1) && (
+      {/* SMARTFINDER CARD — Phase D-2 embedded rangefinder. Hidden at L1
+           (Quiet — only the badge + camera show) and L4 (Full — collapses
+           to a right-side reticle). */}
+      {isRoundActive && trustLevel !== 4 && trustLevel !== 1 && (
         <View
           style={{ position: 'absolute', left: 16, right: 16, bottom: 130 + insets.bottom, zIndex: 8 }}
           pointerEvents="box-none"
