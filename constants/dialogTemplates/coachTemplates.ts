@@ -24,7 +24,10 @@ export type CoachSituation =
   | 'cage_session_review_intro'
   | 'arena_intro'
   | 'arena_challenge_intro'
-  | 'drill_detail_intro';
+  | 'drill_detail_intro'
+  | 'primary_issue_summary_terse'
+  | 'primary_issue_summary_standard'
+  | 'primary_issue_summary_engaged';
 
 const TEMPLATES: Record<CoachSituation, string[]> = {
   recap_intro: [
@@ -116,6 +119,22 @@ const TEMPLATES: Record<CoachSituation, string[]> = {
   drill_detail_intro: [
     "Here's how I'd think about this one.",
     "Quick walk-through.",
+  ],
+
+  // Phase K.5 — verbosity-keyed wrappers for the swing-analysis primary issue
+  // observation. The cage summary picks the right key by trust level the same
+  // way Phase H picks lie_analysis_summary variants.
+  primary_issue_summary_terse: [
+    "{name}. {feel}",
+    "{name} — {feel}",
+  ],
+  primary_issue_summary_standard: [
+    "{name}. {mechanical} {feel}",
+    "Looks like {name}. {mechanical} {feel}",
+  ],
+  primary_issue_summary_engaged: [
+    "Alright, what I'm seeing: {name}. {mechanical} Here's the cue — {feel}",
+    "Let me walk you through it. {name}. {mechanical} Try this — {feel}",
   ],
 };
 

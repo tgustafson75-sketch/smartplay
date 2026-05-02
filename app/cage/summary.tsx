@@ -53,12 +53,9 @@ export default function CageSummary() {
   const shots = session?.shots ?? [];
   const pattern = analyzeSession(shots, session?.club ?? '');
 
-  // Phase K — pose-detection pipeline runs once per session on mount.
-  // Each captured swing's clipUri is sent to /api/swing-analysis via the
-  // poseDetection service; results aggregate into a session-level
-  // PrimaryIssue + DrillRecommendation that populate the Phase J cards.
-  // KNOWN GAP: extractKeyFrames() returns empty until expo-video-thumbnails
-  // lands; the pipeline reports 'no_frames' and cards show placeholder.
+  // Phase K — pose-detection pipeline. K.5: parallelized in pairs (chunks of
+  // 2) so wall-clock drops from N×4s sequential to (N/2)×4s while still
+  // passing prior_issues context-window between chunks.
   useEffect(() => {
     if (!session || analysisStatus !== 'pending') return;
     let cancelled = false;
@@ -71,16 +68,22 @@ export default function CageSummary() {
       setAnalyzing(true);
       const results: { swing_id: string; analysis: SwingAnalysis }[] = [];
       let anyNoFrames = false;
-      for (let i = 0; i < swingsWithClips.length; i++) {
+      const CHUNK = 2;
+      for (let chunkStart = 0; chunkStart < swingsWithClips.length; chunkStart += CHUNK) {
         if (cancelled) return;
-        const swing = swingsWithClips[i];
-        const r = await analyzeSwing(swing.clipUri!, {
-          club: session.club,
-          swing_number: i + 1,
-          prior_issues: results.slice(-3).map(x => x.analysis.detected_issue).filter(x => x !== 'none'),
-        });
-        if (r.kind === 'ok') results.push({ swing_id: swing.id, analysis: r.analysis });
-        if (r.kind === 'no_frames') anyNoFrames = true;
+        const priorIssues = results.slice(-3).map(x => x.analysis.detected_issue).filter(x => x !== 'none');
+        const chunk = swingsWithClips.slice(chunkStart, chunkStart + CHUNK);
+        const chunkResults = await Promise.all(chunk.map((swing, j) =>
+          analyzeSwing(swing.clipUri!, {
+            club: session.club,
+            swing_number: chunkStart + j + 1,
+            prior_issues: priorIssues,
+          }).then(r => ({ swing, r })),
+        ));
+        for (const { swing, r } of chunkResults) {
+          if (r.kind === 'ok') results.push({ swing_id: swing.id, analysis: r.analysis });
+          if (r.kind === 'no_frames') anyNoFrames = true;
+        }
       }
       if (cancelled) return;
       setAnalyzing(false);

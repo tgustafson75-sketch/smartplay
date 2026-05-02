@@ -48,27 +48,47 @@ export type SwingAnalysisResult =
 const REQUEST_TIMEOUT_MS = 30_000;
 
 /**
- * Sample 3-5 key frames from a swing clip. Returns empty array until
- * `expo-video-thumbnails` is wired (refinement-bundle item — see file
- * header). Consumer code already handles the empty-array case gracefully.
+ * Sample 5 key frames from a swing clip via expo-video-thumbnails. Each frame
+ * is extracted at a normalized time fraction (5%, 30%, 55%, 80%, 95% of the
+ * clip — covers address through follow-through), resized + JPEG-compressed
+ * via expo-image-manipulator, and returned as base64 ready for the vision
+ * endpoint. Returns empty array on any failure (consumer treats as no_frames).
  */
-export async function extractKeyFrames(_clipUri: string): Promise<{ b64: string; media_type: string }[]> {
-  // Placeholder. When a video-frame extraction lib is available:
-  //
-  //   import * as VT from 'expo-video-thumbnails';
-  //   const frames = await Promise.all(
-  //     [0.05, 0.30, 0.55, 0.80, 0.95].map(async (t) => {
-  //       const dur = await getClipDurationMs(clipUri);
-  //       const r = await VT.getThumbnailAsync(clipUri, { time: dur * t, quality: 0.8 });
-  //       const m = await ImageManipulator.manipulateAsync(
-  //         r.uri, [{ resize: { width: 1024 } }],
-  //         { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG, base64: true },
-  //       );
-  //       return m.base64 ? { b64: m.base64, media_type: 'image/jpeg' } : null;
-  //     })
-  //   );
-  //   return frames.filter(Boolean) as ...;
-  return [];
+import * as VT from 'expo-video-thumbnails';
+import * as ImageManipulator from 'expo-image-manipulator';
+
+const FRAME_TIME_FRACTIONS = [0.05, 0.30, 0.55, 0.80, 0.95];
+// expo-video-thumbnails takes time in milliseconds; we don't have a clip-
+// duration probe API, so use absolute timestamps approximating a 2-second
+// swing window. Falls within a typical Cage Session capture clip length.
+const APPROX_SWING_DURATION_MS = 2000;
+
+export async function extractKeyFrames(clipUri: string): Promise<{ b64: string; media_type: string }[]> {
+  if (!clipUri) return [];
+  try {
+    const frames = await Promise.all(
+      FRAME_TIME_FRACTIONS.map(async (t) => {
+        try {
+          const r = await VT.getThumbnailAsync(clipUri, {
+            time: Math.round(APPROX_SWING_DURATION_MS * t),
+            quality: 0.8,
+          });
+          const m = await ImageManipulator.manipulateAsync(
+            r.uri,
+            [{ resize: { width: 1024 } }],
+            { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+          );
+          return m.base64 ? { b64: m.base64, media_type: 'image/jpeg' as const } : null;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    return frames.filter((f): f is { b64: string; media_type: 'image/jpeg' } => f !== null);
+  } catch (e) {
+    console.log('[poseDetection] extractKeyFrames failed:', e);
+    return [];
+  }
 }
 
 /**

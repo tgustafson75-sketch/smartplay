@@ -7,7 +7,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import AddressSilhouette from '../../components/AddressSilhouette';
@@ -184,12 +184,22 @@ const ENV_COLORS: Record<DrillEnv, string> = {
 
 export default function SwingLab() {
   const router = useRouter();
+  const { drill_id: drillIdParam } = useLocalSearchParams<{ drill_id?: string }>();
   const { watchConnected } = useSettingsStore();
   const { firstName } = usePlayerProfileStore();
   const { roundsTogether } = useRelationshipStore();
   const [activeEnv, setActiveEnv] = useState<DrillEnv | 'all'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [cageActive, setCageActive] = useState(false);
+
+  // Phase J.5 deep-link — when arriving with ?drill_id=X (from DrillCard's
+  // "Open Drill" CTA on the Cage post-session review), auto-expand that
+  // drill so the user lands on the right walkthrough.
+  React.useEffect(() => {
+    if (drillIdParam && DRILLS.some(d => d.id === drillIdParam)) {
+      setExpandedId(drillIdParam);
+    }
+  }, [drillIdParam]);
 
   // Phase I — Coach intro + drill suggestion (rotates per render via dialogEngine).
   // For new users with no rounds: welcome variant; otherwise the returning variant.

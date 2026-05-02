@@ -167,6 +167,24 @@ Infrastructure services that don't belong to any single mode (`utils/geoDistance
 | `services/intents/queryStatusHandler.ts` + `api/voice-intent.ts` | Two new query topics — `swing_observation` ("what'd you see") and `tell_me_more` (feel cue + drill reason). | Coach |
 
 **Cloud-vision tradeoff.** Privacy implication: swing frames travel to Anthropic. Future swap to local TFJS pose detection is a single-file body change in `poseDetection.ts` (the consumer signature stays stable). Visual reference assets per-issue are deferred to 1.x; PrimaryIssueCard renders text-only when `visual_reference_path` is null (already-shipped fallback).
+
+## Phase L — Arena CV Scoring (CTP only in v1)
+
+| File | Purpose | Role |
+|---|---|---|
+| `api/cv-scoring.ts` | Anthropic Claude Sonnet vision endpoint scoring a single CTP photo. Uses the flagstick (~7 ft regulation height) as the scale anchor to estimate ball-to-pin proximity. Conservative-by-design — declines when both ball and pin aren't clearly visible. Today only `challenge: 'ctp'` is implemented; Skills / Sim / Scramble explicitly rejected with a "deferred" error message. | Coach (Infra, Psychologist surface) |
+| `services/cvScoring.ts` | Client wrapper. `scoreCTPShot(b64, distanceYards, mediaType)` returns typed `CVScoringResult`: ok / low_quality / no_network / error. `bucketToFeet(bucket)` maps the API's bucket back to the existing CTP RESULT_OPTIONS feet value so manual + CV paths feed the same scoring pipeline. | Coach (Infra) |
+| `app/arena/ctp.tsx` | New "📷 Score with photo" CTA above the manual bucket buttons. Camera permission gate, photo capture via expo-image-picker, resize via expo-image-manipulator, send to /api/cv-scoring, route the bucket through the existing `handleResult(feet)` so points/voice summary/completion flow are unchanged. Manual buttons stay as fallback. | Psychologist surface |
+
+**Phase L scope.** Wired only into Closest-to-Pin in v1. Skills (multi-target multi-distance), Sim Round (18-hole tracking), and Scramble (partner format) each have different scoring shapes that warrant their own targeted prompts + UI; deferred to a future focused phase.
+
+## Refinement bundle (K.5 + sweep)
+
+- K.5(a): `extractKeyFrames` now uses expo-video-thumbnails (5 frames at 5/30/55/80/95% of a 2s window).
+- K.5(b): `primary_issue_summary_terse` / `_standard` / `_engaged` template keys added; consumer site picks by trust level.
+- K.5(c): swing analysis runs in chunks of 2 (Promise.all) preserving prior_issues context-passing between chunks. ~N/2 × 4s wall-clock.
+- Phase H #28: explicit "GPS distance unavailable" disclaimer baked into the lie-analysis vision prompt context block when `current_hole != null && distance_to_green_yards == null`.
+- Phase J.5: `DrillCard` "Open Drill" CTA now passes `?drill_id=X` query param; `app/(tabs)/swinglab.tsx` reads the param on mount and auto-expands the matching drill.
 | `courseGeometryService.ts` | Course geometry fetch and cache (mem + AsyncStorage, weekly refresh). Returns per-hole tee/green coordinates and reserved fairway/green-outline arrays for richer future sources. | Infra (Caddie + Coach consume) |
 | `roles/caddieRole.ts` | Re-export hub for Caddie-register services. No implementation. | Caddie |
 | `roles/coachRole.ts` | Re-export hub for Coach-register services and recap surfaces. No implementation. | Coach |

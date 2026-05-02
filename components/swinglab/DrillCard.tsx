@@ -39,7 +39,12 @@ export default function DrillCard({ recommendation }: Props) {
       <Text style={styles.title}>{recommendation.drill_name}</Text>
       <Text style={styles.reason}>{recommendation.reason}</Text>
       <TouchableOpacity
-        onPress={() => router.push('/(tabs)/swinglab' as never)}
+        onPress={() =>
+          // Phase J.5 — pass the drill_id so SwingLab can auto-expand the
+          // matching drill. Falls back gracefully when the SwingLab home
+          // doesn't read the param (today scrolls to top).
+          router.push({ pathname: '/(tabs)/swinglab', params: { drill_id: recommendation.drill_id } } as never)
+        }
         style={styles.cta}
         activeOpacity={0.85}
         accessibilityRole="button"

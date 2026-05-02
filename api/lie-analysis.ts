@@ -98,6 +98,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const contextLines: string[] = [];
     if (ctx.current_hole != null) contextLines.push(`Hole ${ctx.current_hole} (par ${ctx.par ?? '?'})`);
     if (ctx.distance_to_green_yards != null) contextLines.push(`Distance to middle of green: ${ctx.distance_to_green_yards} yards`);
+    // Phase H v2.5 — explicit GPS-missing disclaimer so Kevin's voice
+    // acknowledges the data gap rather than recommending blind.
+    if (ctx.current_hole != null && ctx.distance_to_green_yards == null) {
+      contextLines.push("GPS distance unavailable — open with a brief 'can't see exact distances right now' acknowledgement, then read the lie and recommend.");
+    }
     if (ctx.weather) {
       const w = ctx.weather as Record<string, unknown>;
       const parts: string[] = [];

@@ -11,6 +11,10 @@ import { useRouter } from 'expo-router';
 import { usePointsStore } from '../../store/pointsStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { scoreCTPShot, bucketToFeet } from '../../services/cvScoring';
+import { Alert } from 'react-native';
 
 const DISTANCES = [50, 75, 100, 125, 150, 175, 200];
 
@@ -36,6 +40,45 @@ export default function CTP() {
   const [started, setStarted] = useState(false);
   const [results, setResults] = useState<number[]>([]);
   const [complete, setComplete] = useState(false);
+  const [scoring, setScoring] = useState(false);
+
+  // Phase L — score the current shot via camera + CV. Falls back to manual
+  // bucket buttons either way (Mike's choice; CV is just a faster path).
+  const handleCameraScore = async () => {
+    if (scoring) return;
+    setScoring(true);
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Camera needed', 'Grant camera access to score shots with the camera.');
+        return;
+      }
+      const photo = await ImagePicker.launchCameraAsync({ quality: 0.85, base64: false });
+      if (photo.canceled || !photo.assets?.[0]?.uri) return;
+      const m = await ImageManipulator.manipulateAsync(
+        photo.assets[0].uri,
+        [{ resize: { width: 1024 } }],
+        { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      );
+      if (!m.base64) {
+        Alert.alert('Could not encode photo', 'Try again.');
+        return;
+      }
+      const result = await scoreCTPShot(m.base64, distance, 'image/jpeg');
+      if (result.kind === 'ok') {
+        const feet = result.scoring.proximity_feet ?? bucketToFeet(result.scoring.proximity_bucket);
+        handleResult(feet);
+      } else if (result.kind === 'low_quality') {
+        Alert.alert('Hard to read', result.follow_up);
+      } else if (result.kind === 'no_network') {
+        Alert.alert('No connection', "Use the manual buttons or try the camera again when you're back online.");
+      } else {
+        Alert.alert('Scoring failed', "Use the manual buttons for this shot.");
+      }
+    } finally {
+      setScoring(false);
+    }
+  };
 
   const handleResult = async (feet: number) => {
     const newResults = [...results, feet];
@@ -150,6 +193,26 @@ export default function CTP() {
             </View>
 
             <Text style={styles.label}>How close?</Text>
+
+            {/* Phase L — Camera-based scoring shortcut. Manual buckets stay as
+                 the primary fallback. */}
+            <TouchableOpacity
+              onPress={handleCameraScore}
+              disabled={scoring}
+              style={{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                gap: 8, paddingVertical: 14, marginBottom: 12,
+                borderWidth: 1.5, borderColor: '#F5A623', borderRadius: 12,
+                backgroundColor: 'rgba(245,166,35,0.08)',
+                opacity: scoring ? 0.5 : 1,
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={{ fontSize: 18 }}>📷</Text>
+              <Text style={{ color: '#F5A623', fontSize: 14, fontWeight: '800', letterSpacing: 0.4 }}>
+                {scoring ? 'Scoring…' : 'Score with photo'}
+              </Text>
+            </TouchableOpacity>
 
             {RESULT_OPTIONS.map(opt => (
               <TouchableOpacity
