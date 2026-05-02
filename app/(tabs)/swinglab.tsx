@@ -195,6 +195,8 @@ export default function SwingLab() {
   const roundHistory = useRoundStore(s => s.roundHistory);
   const [activeEnv, setActiveEnv] = useState<DrillEnv | 'all'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Phase R polish — drill list collapsed by default; tap header to expand.
+  const [drillsOpen, setDrillsOpen] = useState(false);
   const [cageActive, setCageActive] = useState(false);
 
   // Phase J.5 deep-link — when arriving with ?drill_id=X (from DrillCard's
@@ -368,47 +370,62 @@ export default function SwingLab() {
           </TouchableOpacity>
         </View>
 
-        {/* Environment filter */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Drills</Text>
-        </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterScroll}
-          contentContainerStyle={styles.filterContent}
+        {/* Drills — entire list lives inside a single collapsible card so the
+            SwingLab home reads as a tight stack, not a wall of buttons.
+            Collapsed: header + count + chevron. Expanded: env filter +
+            full drill cards. */}
+        <TouchableOpacity
+          style={styles.drillsCardHeader}
+          onPress={() => setDrillsOpen(o => !o)}
+          activeOpacity={0.85}
         >
-          {ENV_FILTERS.map(f => (
-            <TouchableOpacity
-              key={f.key}
-              style={[styles.filterPill, activeEnv === f.key && styles.filterPillActive]}
-              onPress={() => setActiveEnv(f.key)}
-              activeOpacity={0.75}
-            >
-              <Text
-                style={[styles.filterLabel, activeEnv === f.key && styles.filterLabelActive]}
-              >
-                {f.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Drill cards */}
-        {visibleDrills.map(drill => (
-          <DrillCard
-            key={drill.id}
-            drill={drill}
-            expanded={expandedId === drill.id}
-            onToggle={() => toggleDrill(drill.id)}
-            onNavigate={(dest) => router.push(`/${dest}`)}
-          />
-        ))}
-
-        {visibleDrills.length === 0 && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No drills for this environment yet.</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.drillsCardTitle}>Drills</Text>
+            <Text style={styles.drillsCardSub}>{visibleDrills.length} {visibleDrills.length === 1 ? 'drill' : 'drills'} · {ENV_FILTERS.find(f => f.key === activeEnv)?.label ?? 'All'}</Text>
           </View>
+          <AppIcon name={drillsOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#00C896" />
+        </TouchableOpacity>
+
+        {drillsOpen && (
+          <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.filterScroll}
+              contentContainerStyle={styles.filterContent}
+            >
+              {ENV_FILTERS.map(f => (
+                <TouchableOpacity
+                  key={f.key}
+                  style={[styles.filterPill, activeEnv === f.key && styles.filterPillActive]}
+                  onPress={() => setActiveEnv(f.key)}
+                  activeOpacity={0.75}
+                >
+                  <Text
+                    style={[styles.filterLabel, activeEnv === f.key && styles.filterLabelActive]}
+                  >
+                    {f.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {visibleDrills.map(drill => (
+              <DrillCard
+                key={drill.id}
+                drill={drill}
+                expanded={expandedId === drill.id}
+                onToggle={() => toggleDrill(drill.id)}
+                onNavigate={(dest) => router.push(`/${dest}`)}
+              />
+            ))}
+
+            {visibleDrills.length === 0 && (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>No drills for this environment yet.</Text>
+              </View>
+            )}
+          </>
         )}
 
         {/* Setup Guide */}
@@ -684,6 +701,16 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 11,
   },
+
+  // Drills collapsible header
+  drillsCardHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: 16, marginTop: 16, marginBottom: 8,
+    backgroundColor: '#0d1a0d', borderColor: '#1e3a28', borderWidth: 1,
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
+  },
+  drillsCardTitle: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  drillsCardSub: { color: '#6b7280', fontSize: 12, marginTop: 2 },
 
   // Filter
   filterScroll: {
