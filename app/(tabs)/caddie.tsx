@@ -1252,6 +1252,39 @@ export default function CaddieTab() {
         </View>
       )}
 
+      {/* LIE ANALYSIS camera icon — bottom-right corner of content area.
+           Tappable on any Trust Spectrum level during an active round. Sits
+           above the SmartFinder card on L1/L2/L3 (card top ~240+insets.bottom),
+           and above the L4 SmartFinder reticle button. */}
+      {isRoundActive && (
+        <TouchableOpacity
+          onPress={() => router.push('/lie-analysis' as never)}
+          style={{
+            position: 'absolute',
+            right: 12,
+            bottom: 280 + insets.bottom,
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+            backgroundColor: 'rgba(13, 36, 24, 0.85)',
+            borderWidth: 1.5,
+            borderColor: '#00C896',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 14,
+            shadowColor: '#00C896',
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.55,
+            shadowRadius: 8,
+            elevation: 6,
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Open Lie Analysis"
+        >
+          <Ionicons name="camera" size={22} color="#00C896" />
+        </TouchableOpacity>
+      )}
+
       {/* L4 SmartFinder ICON — replaces the embedded card at L4. Sits on the
            right edge, vertically centered around the data strip area, so it
            doesn't intercept taps on Kevin's avatar (which fills the screen

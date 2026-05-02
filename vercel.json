@@ -23,6 +23,7 @@
     { "src": "/api/health",          "dest": "/api/health.ts" },
     { "src": "/api/course-geometry", "dest": "/api/course-geometry.ts" },
     { "src": "/api/weather",         "dest": "/api/weather.ts" },
-    { "src": "/api/course-content",  "dest": "/api/course-content.ts" }
+    { "src": "/api/course-content",  "dest": "/api/course-content.ts" },
+    { "src": "/api/lie-analysis",    "dest": "/api/lie-analysis.ts" }
   ]
 }

@@ -22,7 +22,12 @@ export type CaddieSituation =
   | 'wind_callout'
   | 'plays_like'
   | 'no_data_apology'
-  | 'help_intro';
+  | 'help_intro'
+  | 'lie_analysis_summary'
+  | 'club_recommendation'
+  | 'safety_call'
+  | 'aggressive_call'
+  | 'lie_low_confidence';
 
 const TEMPLATES: Record<CaddieSituation, string[]> = {
   shot_prompt: [
@@ -77,6 +82,38 @@ const TEMPLATES: Record<CaddieSituation, string[]> = {
   help_intro: [
     "Here's what you can say.",
     "Try one of these.",
+  ],
+
+  // Phase H — Lie analysis output. The lieAnalysis surface fills these
+  // with the API's situation/advice/club/alternative fields. Engine picks
+  // the variation; client interpolates {variables}. Future Tank-character
+  // variants can be added alongside without rewriting this surface.
+  lie_analysis_summary: [
+    "{situation} {advice}",
+    "Looks like {situation} {advice}",
+  ],
+
+  club_recommendation: [
+    "Go {club}.",
+    "{club}'s the play.",
+    "I'd hit {club} here.",
+  ],
+
+  safety_call: [
+    "Smart play — take the medicine.",
+    "Take your bogey and move on.",
+    "Don't get cute. Punch out, par putt counts the same.",
+  ],
+
+  aggressive_call: [
+    "Line's open. Go after it.",
+    "If you're committed, this one's on.",
+  ],
+
+  lie_low_confidence: [
+    "Hard to tell from this one — try another angle?",
+    "Photo's a little tough — give me one with better light?",
+    "Couldn't read it cleanly — one more shot?",
   ],
 };
 

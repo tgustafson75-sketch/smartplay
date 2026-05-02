@@ -116,6 +116,18 @@ Infrastructure services that don't belong to any single mode (`utils/geoDistance
 | `services/dialogEngine.ts` | `getDialog(role, situation, context)` returns a single string with `{var}` interpolation. The seam where future Tank / Serena character variants will compose their voice on top of the same generic templates. | Mode-neutral |
 | `components/kevin/KevinAvatar.tsx` | Animated liveliness ring with four states (idle / listening / speaking / thinking) and per-Trust-Spectrum sizing. Wraps any child (avatar image, mic icon). Returns null at L1 unless `sizeOverride` is given. Uses react-native-reanimated; no asset dependency. | Mode-neutral |
 | `services/conversationalLoggingOrchestrator.ts` | `pickPrompt()` now routes through `getDialog('caddie', 'shot_prompt')` instead of the inline `KEVIN_PROMPT_VARIATIONS` array (deleted). Behavior identical; consumer site is now template-shaped. | Caddie |
+
+## Phase H — Lie Analysis Tool
+
+| File | Purpose | Role |
+|---|---|---|
+| `api/lie-analysis.ts` | Anthropic vision endpoint (Claude Sonnet) — accepts a base64 JPEG of a lie + context (hole/par/distance/weather/last-shot/play-intent) and returns structured situation/advice/club/alternative/confidence JSON. Voice spoken via dialog templates on the client. | Caddie (Infra) |
+| `services/lieAnalysisContext.ts` | Bundles the context the vision endpoint uses to produce specific (rather than generic) advice. Reads from roundStore + smartFinderService GPS + getCachedWeather + courseGeometry. Each field gracefully degrades when its source is unavailable. | Caddie |
+| `services/lieAnalysisService.ts` | Client-side fetcher. Returns typed `LieAnalysisResult` discriminated union — `ok`, `no_network`, `too_large`, `low_quality`, `error`. Never throws; the screen renders each case directly. | Caddie |
+| `app/lie-analysis.tsx` | Camera capture screen → resize/compress → analyze → speak Kevin's analysis → results display. Voice-trigger entry via `?intent=aggressive\|conservative` query param. Permission gate, no-network "save for later", low-quality retry. | Caddie |
+| `components/lieAnalysis/AnalysisResult.tsx` | Results display: thumbnail, situation, advice, recommended club, alternative play, confidence dot, replay/got-it/try-again actions. | Caddie |
+
+**Tank persona seam.** Lie Analysis is character-agnostic. The vision endpoint produces structured fields; the dialog engine selects which character speaks them. Kevin (Caddie register) speaks today; when Tank's character role is fully clarified in a future phase, Tank-specific templates plug in alongside Kevin's in `caddieTemplates.ts` and a character selector decides which voice fires (potentially gated by `confidence_level: 'low'` or other escalation triggers). The analysis pipeline does not change.
 | `courseGeometryService.ts` | Course geometry fetch and cache (mem + AsyncStorage, weekly refresh). Returns per-hole tee/green coordinates and reserved fairway/green-outline arrays for richer future sources. | Infra (Caddie + Coach consume) |
 | `roles/caddieRole.ts` | Re-export hub for Caddie-register services. No implementation. | Caddie |
 | `roles/coachRole.ts` | Re-export hub for Coach-register services and recap surfaces. No implementation. | Coach |

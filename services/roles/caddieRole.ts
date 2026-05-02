@@ -42,6 +42,12 @@ export type { WeatherSnapshot } from '../weatherService';
 export { playsLikeDistance, playsLikePhrase } from '../../utils/playsLike';
 export type { PlaysLikeBreakdown } from '../../utils/playsLike';
 
+// Phase H — Lie Analysis (vision-based situation assessment)
+export { bundleLieAnalysisContext } from '../lieAnalysisContext';
+export type { LieAnalysisContext, PlayIntent } from '../lieAnalysisContext';
+export { analyzeLie } from '../lieAnalysisService';
+export type { LieAnalysis, LieAnalysisResult } from '../lieAnalysisService';
+
 // Phase D-2 — SmartFinder (rangefinder data layer)
 export {
   getGreenYardages,
