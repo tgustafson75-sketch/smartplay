@@ -34,11 +34,14 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   checkBullseye,
   analyzeCageVideo,
+  coachReview,
   isMockMode,
   type CageAnalyzeResponse,
+  type CoachReviewResponse,
 } from '../../services/cageApi';
 import { toggle as toggleListening } from '../../services/listeningSession';
 import { useSettingsStore } from '../../store/settingsStore';
+import { speak, configureAudioForSpeech } from '../../services/voiceService';
 
 type Phase =
   | 'SETUP'
@@ -63,6 +66,12 @@ const KEVIN_CAPTION: Partial<Record<Phase, string>> = {
   ERROR:     'Something went sideways on my end.',
 };
 
+const CONFIDENCE_DOT: Record<CoachReviewResponse['confidence'], string> = {
+  high:   '#00C896',
+  medium: '#fbbf24',
+  low:    '#9ca3af',
+};
+
 export default function CageDrillScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -85,9 +94,12 @@ export default function CageDrillScreen() {
   const [recordedSeconds, setRecordedSeconds] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [result, setResult] = useState<CageAnalyzeResponse | null>(null);
+  const [coach, setCoach] = useState<CoachReviewResponse | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const { voiceEnabled: _voiceEnabled } = useSettingsStore();
+  const { voiceEnabled, voiceGender, language } = useSettingsStore();
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
 
   // ── Permissions ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -228,16 +240,39 @@ export default function CageDrillScreen() {
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setResult(res.data);
+
+      // Hand features.json to Kevin's cage_swing_review tool. The coach
+      // response replaces the raw-JSON display from Prompt 1; the JSON is
+      // still available behind a 'Show details' expander.
+      const coachRes = await coachReview(res.data);
+      if (coachRes.kind === 'ok') {
+        setCoach(coachRes.data);
+        if (voiceEnabled) {
+          void (async () => {
+            await configureAudioForSpeech();
+            await speak(coachRes.data.kevin_response, voiceGender, language, apiUrl);
+          })();
+        }
+      } else {
+        // Don't fail the whole flow if Kevin times out — still show the
+        // result card with a soft fallback caption.
+        setCoach({
+          kevin_response: "I saw the swing — couldn't put words to it just now. Take another and we'll see.",
+          confidence: 'low',
+        });
+      }
       setPhase('RESULT');
     } catch (e) {
       setErrorMessage(e instanceof Error ? e.message : String(e));
       setPhase('ERROR');
     }
-  }, []);
+  }, [voiceEnabled, voiceGender, language, apiUrl]);
 
   const handleSwingAgain = useCallback(() => {
     setResult(null);
+    setCoach(null);
     setErrorMessage(null);
+    setDetailsOpen(false);
     setRecordedSeconds(0);
     setPhase('SETUP');
   }, []);
@@ -361,17 +396,52 @@ export default function CageDrillScreen() {
         </View>
       )}
 
-      {/* RESULT — scrollable monospace JSON card + Swing Again. */}
+      {/* RESULT — Kevin's response card + collapsible features.json. */}
       {phase === 'RESULT' && result && (
         <SafeAreaView style={styles.resultContainer} edges={['top', 'bottom']}>
           <Header insets={insets} onBack={() => router.back()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
-          <View style={styles.resultHeader}>
-            <Text style={styles.resultTitle}>features.json</Text>
-          </View>
           <ScrollView style={styles.resultScroll} contentContainerStyle={styles.resultScrollContent}>
-            <View style={styles.jsonCard}>
-              <Text style={styles.jsonText}>{JSON.stringify(result, null, 2)}</Text>
+
+            {/* Kevin response card — primary surface */}
+            <View style={styles.kevinCard}>
+              <View style={styles.kevinHeader}>
+                <Image
+                  source={require('../../assets/avatars/smartplay_caddie_badge.png')}
+                  style={styles.kevinAvatar}
+                  resizeMode="contain"
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.kevinName}>Kevin</Text>
+                  {coach ? (
+                    <View style={styles.confidenceRow}>
+                      <View style={[styles.confidenceDot, { backgroundColor: CONFIDENCE_DOT[coach.confidence] }]} />
+                      <Text style={styles.confidenceLabel}>{coach.confidence.toUpperCase()} CONFIDENCE</Text>
+                    </View>
+                  ) : (
+                    <ActivityIndicator color="#00C896" size="small" style={{ alignSelf: 'flex-start', marginTop: 4 }} />
+                  )}
+                </View>
+              </View>
+              <Text style={styles.kevinResponse}>
+                {coach ? coach.kevin_response : 'Working on it…'}
+              </Text>
             </View>
+
+            {/* Collapsible features.json — debug surface, off by default */}
+            <TouchableOpacity
+              style={styles.detailsToggle}
+              onPress={() => setDetailsOpen(o => !o)}
+              activeOpacity={0.85}
+            >
+              <Ionicons name={detailsOpen ? 'chevron-down' : 'chevron-forward'} size={16} color="#9ca3af" />
+              <Text style={styles.detailsLabel}>{detailsOpen ? 'Hide details' : 'Show details'}</Text>
+            </TouchableOpacity>
+            {detailsOpen && (
+              <View style={styles.jsonCard}>
+                <Text style={styles.jsonText}>{JSON.stringify(result, null, 2)}</Text>
+              </View>
+            )}
+
           </ScrollView>
           <View style={[styles.ctaWrap, { paddingBottom: insets.bottom + 24, position: 'relative' }]} pointerEvents="box-none">
             <TouchableOpacity style={styles.primaryBtn} onPress={handleSwingAgain} activeOpacity={0.85}>
@@ -559,10 +629,29 @@ const styles = StyleSheet.create({
   uploadText: { color: '#ffffff', fontSize: 15, fontWeight: '600', textAlign: 'center', lineHeight: 21 },
 
   resultContainer: { ...StyleSheet.absoluteFillObject, backgroundColor: '#060f09', zIndex: 45 },
-  resultHeader: { paddingHorizontal: 16, paddingTop: 70, paddingBottom: 8 },
-  resultTitle: { color: '#00C896', fontSize: 12, fontWeight: '900', letterSpacing: 1.6 },
   resultScroll: { flex: 1 },
-  resultScrollContent: { paddingHorizontal: 16, paddingBottom: 100 },
+  resultScrollContent: { paddingHorizontal: 16, paddingTop: 70, paddingBottom: 120 },
+
+  kevinCard: {
+    backgroundColor: '#0d2418', borderColor: '#00C896', borderWidth: 1.5,
+    borderRadius: 16, padding: 16, gap: 12,
+  },
+  kevinHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  kevinAvatar: {
+    width: 44, height: 44, borderRadius: 22,
+    borderWidth: 1.5, borderColor: '#00C896',
+  },
+  kevinName: { color: '#00C896', fontSize: 13, fontWeight: '900', letterSpacing: 1.2 },
+  confidenceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  confidenceDot: { width: 8, height: 8, borderRadius: 4 },
+  confidenceLabel: { color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
+  kevinResponse: { color: '#ffffff', fontSize: 16, fontWeight: '500', lineHeight: 23 },
+
+  detailsToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingVertical: 12, paddingHorizontal: 4, marginTop: 12,
+  },
+  detailsLabel: { color: '#9ca3af', fontSize: 12, fontWeight: '700', letterSpacing: 0.8 },
   jsonCard: {
     backgroundColor: '#0d1a0d', borderColor: '#1e3a28', borderWidth: 1,
     borderRadius: 12, padding: 14,

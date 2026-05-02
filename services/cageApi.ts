@@ -11,7 +11,9 @@
  */
 
 const MOCK_MODE = process.env.EXPO_PUBLIC_CAGE_MOCK_MODE === 'true';
+const KEVIN_MOCK_MODE = process.env.EXPO_PUBLIC_CAGE_KEVIN_MOCK_MODE === 'true';
 const MOCK_LATENCY_MS = 1500;
+const KEVIN_MOCK_LATENCY_MS = 1000;
 const REQUEST_TIMEOUT_MS = 30_000;
 
 export type CheckBullseyeResponse = {
@@ -118,3 +120,47 @@ export async function analyzeCageVideo(videoUri: string): Promise<ApiResult<Cage
 }
 
 export const isMockMode = (): boolean => MOCK_MODE;
+export const isKevinMockMode = (): boolean => KEVIN_MOCK_MODE;
+
+// ─── /api/kevin/coach ────────────────────────────────────────────────────────
+
+export type CoachReviewResponse = {
+  kevin_response: string;
+  confidence: 'high' | 'medium' | 'low';
+};
+
+/**
+ * Pass features.json to Kevin's cage_swing_review tool. Returns the
+ * in-character 1-2 sentence response. With EXPO_PUBLIC_CAGE_KEVIN_MOCK_MODE=true
+ * a hardcoded response comes back after 1s so the cage screen can be
+ * exercised without burning Anthropic tokens.
+ */
+export async function coachReview(features: CageAnalyzeResponse): Promise<ApiResult<CoachReviewResponse>> {
+  if (KEVIN_MOCK_MODE) {
+    await delay(KEVIN_MOCK_LATENCY_MS);
+    return {
+      kind: 'ok',
+      data: {
+        kevin_response:
+          'Pure. That one came off the face flush — barely moved off the bullseye.',
+        confidence: 'high',
+      },
+    };
+  }
+
+  try {
+    const res = await fetch(`${apiUrl()}/api/kevin/coach`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ features }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!res.ok) return { kind: 'error', message: `Server returned ${res.status}` };
+    const data = (await res.json()) as CoachReviewResponse;
+    return { kind: 'ok', data };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/network|abort|timeout|fetch/i.test(msg)) return { kind: 'no_network' };
+    return { kind: 'error', message: msg };
+  }
+}
