@@ -1090,7 +1090,7 @@ export default function CaddieTab() {
           style={
             W >= 540
               ? { position: 'absolute', top: -70, left: 0, width: W, height: avatarFrameHeight }
-              : { position: 'absolute', top: 0, left: 0, right: 0, bottom: 130 + insets.bottom }
+              : { position: 'absolute', top: 60, left: 0, right: 0, bottom: 130 + insets.bottom }
           }
         >
           <CaddieAvatar
