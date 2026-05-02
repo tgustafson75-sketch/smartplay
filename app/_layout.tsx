@@ -110,6 +110,18 @@ function AppNavigator() {
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
+          name="swinglab/upload"
+          options={{ animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen
+          name="swinglab/library"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="swinglab/swing/[swing_id]"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
           name="cage-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />

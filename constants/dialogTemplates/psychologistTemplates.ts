@@ -25,7 +25,9 @@ export type PsychologistSituation =
   | 'pace_check'
   | 'momentum_lift'
   | 'tilt_break'
-  | 'idle_walk_filler';
+  | 'idle_walk_filler'
+  // Phase R — earbud opener for between-shot conversation surfaces (Arena landing, etc.)
+  | 'earbud_open';
 
 const TEMPLATES: Record<PsychologistSituation, string[]> = {
   pre_shot_calm: [
@@ -65,6 +67,14 @@ const TEMPLATES: Record<PsychologistSituation, string[]> = {
     "Course is in good shape.",
     "Long walk between these tees.",
     "",  // empty — sometimes the best psychologist response is silence
+  ],
+
+  earbud_open: [
+    "What's up?",
+    "How you doing?",
+    "Talk to me.",
+    "Yeah?",
+    "What are you tackling?",
   ],
 };
 

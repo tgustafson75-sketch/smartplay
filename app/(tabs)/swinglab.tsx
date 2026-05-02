@@ -308,6 +308,28 @@ export default function SwingLab() {
           <Text style={styles.cageSessionArrow}>›</Text>
         </TouchableOpacity>
 
+        {/* Phase R — Upload Swing + My Swing Library */}
+        <View style={styles.phaseRRow}>
+          <TouchableOpacity
+            style={styles.phaseRBtn}
+            onPress={() => router.push('/swinglab/upload' as never)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.phaseRIcon}>⬆️</Text>
+            <Text style={styles.phaseRLabel}>Upload Swing</Text>
+            <Text style={styles.phaseRSub}>From phone library</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.phaseRBtn}
+            onPress={() => router.push('/swinglab/library' as never)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.phaseRIcon}>📚</Text>
+            <Text style={styles.phaseRLabel}>My Swing Library</Text>
+            <Text style={styles.phaseRSub}>Browse + replay</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Watch banner */}
         {watchConnected && (
           <View style={styles.watchBanner}>
@@ -563,6 +585,26 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
   },
+
+  // Phase R — Upload + Library row
+  phaseRRow: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 12,
+    gap: 10,
+  },
+  phaseRBtn: {
+    flex: 1,
+    backgroundColor: '#0d1a0d',
+    borderColor: '#1e3a28',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+    alignItems: 'flex-start',
+  },
+  phaseRIcon: { fontSize: 22, marginBottom: 6 },
+  phaseRLabel: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  phaseRSub: { color: '#6b7280', fontSize: 11, marginTop: 2 },
 
   // Watch banner
   watchBanner: {

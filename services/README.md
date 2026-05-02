@@ -227,6 +227,22 @@ The hole-shot-map UI lives at `components/recap/HoleShotMap.tsx` and the route a
 
 **Audio safety hardening (Phase O.5).** `services/voiceService.ts` `speak()` now consults `voiceEnabled` + audio route + `voiceOnPhoneSpeaker` at the top of every call. Closes the audit-flagged blast leaks at `app/hole-view.tsx` (SmartVision) and `services/conversationalLoggingOrchestrator.ts` (shot-prompt) without touching their callsites — single source of truth.
 
+## Phase R — SwingLab Video Upload + v1.0 Refinement Bundle
+
+| File | Purpose | Role |
+|---|---|---|
+| `videoUpload.ts` | Picker + validation + duration/audio probe + dispatch to Phase K. `pickVideo()` opens the system video picker (expo-image-picker, ≤200MB cap). `probeVideo()` reads duration + audio-track presence via expo-av. `ingestVideoFromPick()` hands off to `useCageStore.ingestUploadedSwing` which surfaces the upload as a one-shot `CageSession` with `source: 'uploaded_video'` and `upload: UploadMetadata`. `runPhaseKOnSession()` runs the same Phase K analyzeSwing → classifySession → recommendDrill chain that the live cage post-session pipeline uses. | Coach |
+| `swingLibrary.ts` | Read-only unified browse helpers across cage sessions and uploaded videos. `getLibrary(filter)` returns chronological entries; `findSessionByRelativeDate(phrase)` resolves voice queries like "last Tuesday's swing". | Coach |
+| `activeSurfaceRegistry.ts` | Module-level surface tracker. Surfaces register themselves on mount (Arena → 'arena'); `listeningSession.pickOpener()` reads it to switch to the Psychologist register on Arena. | Mode-neutral |
+
+**Phase R scope.** Video upload + analysis + audio playback ships first-class. Embedded coaching audio is preserved (the `Coach Audio` toggle is the default when audio is detected); Kevin's analysis voice is the alternative (`Kevin Analysis` toggle plays the Phase K analysis as TTS while video plays muted). Detected issue timestamps anchor on the swing detail surface — tap to scrub. Swing library unifies cage + uploads, sortable + filterable + deletable. Voice queries: `hole_history` ("how was last time I played this hole?"), `look_at_swing` ("look at last Tuesday's swing").
+
+**Phase R polish bundle.** `ScorecardChip` on Caddie home shows `+3 thru 7` glance with tap-to-open scorecard modal. `PhotoCaptureButton` on Caddie home stores memory photos against the active round; `PhotoCollage` renders them at the top of the recap surface with tap-to-lightbox.
+
+**Phase R refinement debt addressed.** Tier upgrade celebration on Arena CTP (Modal mounts when CTP completion crosses a tier threshold). Arena→Psychologist opener routing via `activeSurfaceRegistry`. `psychologist.earbud_open` template added. Final-hole `end_location` closure was already shipped in a prior commit. Round photos persisted onto `RoundRecord.round_photos`.
+
+**Phase R deferred.** Plays-like overlay in SmartFinder Standard mode, hole-jump picker, CourseStats consolidation, Streaks/milestones surface, Arena-specific intent handlers (`arena_score`, `arena_tip`), `query_status` distance/yardage handler split. Carry into a future refinement bundle.
+
 ## Phase P — Latency Masking
 
 | File | Purpose | Role |

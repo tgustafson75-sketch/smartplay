@@ -5,6 +5,8 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -41,6 +43,7 @@ export default function CTP() {
   const [results, setResults] = useState<number[]>([]);
   const [complete, setComplete] = useState(false);
   const [scoring, setScoring] = useState(false);
+  const [tierUpgrade, setTierUpgrade] = useState<{ from: string; to: string } | null>(null);
 
   // Phase L — score the current shot via camera + CV. Falls back to manual
   // bucket buttons either way (Mike's choice; CV is just a faster path).
@@ -93,7 +96,13 @@ export default function CTP() {
         best <= 6 ? 40 :
         best <= 10 ? 30 :
         best <= 20 ? 20 : 10;
+      // Phase R — capture old tier before mutating to detect upgrade celebration
+      const oldTier = usePointsStore.getState().tier;
       addPoints(pts, 'CTP Challenge');
+      const newTier = usePointsStore.getState().tier;
+      if (newTier !== oldTier) {
+        setTierUpgrade({ from: oldTier, to: newTier });
+      }
 
       const summary =
         best < 99
@@ -147,6 +156,22 @@ export default function CTP() {
             <Text style={styles.doneBtnText}>Back to Arena</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Phase R — tier upgrade celebration */}
+        <Modal visible={tierUpgrade != null} transparent animationType="fade" onRequestClose={() => setTierUpgrade(null)}>
+          <Pressable style={styles.tierBg} onPress={() => setTierUpgrade(null)}>
+            <Pressable style={styles.tierCard} onPress={() => {}}>
+              <Text style={styles.tierEmoji}>🏆</Text>
+              <Text style={styles.tierTitle}>Tier Up</Text>
+              <Text style={styles.tierFrom}>{tierUpgrade?.from}</Text>
+              <Text style={styles.tierArrow}>↓</Text>
+              <Text style={styles.tierTo}>{tierUpgrade?.to}</Text>
+              <TouchableOpacity style={styles.tierBtn} onPress={() => setTierUpgrade(null)}>
+                <Text style={styles.tierBtnText}>Nice</Text>
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -407,4 +432,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
   },
+  // Phase R — tier upgrade celebration
+  tierBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', alignItems: 'center', justifyContent: 'center' },
+  tierCard: {
+    width: '78%', maxWidth: 360, padding: 28, borderRadius: 20,
+    backgroundColor: '#0d1a0d', borderWidth: 2, borderColor: '#F5A623',
+    alignItems: 'center',
+  },
+  tierEmoji: { fontSize: 56 },
+  tierTitle: { color: '#F5A623', fontSize: 22, fontWeight: '900', letterSpacing: 1, marginTop: 8 },
+  tierFrom: { color: '#6b7280', fontSize: 14, marginTop: 16 },
+  tierArrow: { color: '#6b7280', fontSize: 18, marginVertical: 4 },
+  tierTo: { color: '#fff', fontSize: 22, fontWeight: '800' },
+  tierBtn: { marginTop: 24, backgroundColor: '#F5A623', paddingHorizontal: 36, paddingVertical: 12, borderRadius: 12 },
+  tierBtnText: { color: '#0d1a0d', fontSize: 15, fontWeight: '900' },
 });

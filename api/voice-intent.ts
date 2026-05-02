@@ -25,7 +25,7 @@ Available intents:
    - "should I lay up" / "should I play safe here" -> { tool_name: "lie_analysis", play_intent: "conservative" }
 
 2. query_status — User wants information about current state.
-   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "shot_distance" | "hole_progress" | "distance_to_green" | "wind" | "conditions" | "plays_like" | "green_front" | "green_back" | "green_middle" | "end_session" | "next_focus" | "swing_observation" | "tell_me_more", target_yards?: number }
+   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "shot_distance" | "hole_progress" | "distance_to_green" | "wind" | "conditions" | "plays_like" | "green_front" | "green_back" | "green_middle" | "end_session" | "next_focus" | "swing_observation" | "tell_me_more" | "hole_history" | "look_at_swing", target_yards?: number, swing_phrase?: string }
    Examples:
    - "what's my score" -> { query_topic: "score" }
    - "what hole am I on" -> { query_topic: "hole" }
@@ -44,6 +44,8 @@ Available intents:
    - "tell me more" / "go deeper on that" -> { query_topic: "tell_me_more" }
    - "how far to the back" / "yardage to the back of the green" -> { query_topic: "green_back" }
    - "how far to the middle" / "middle of the green" -> { query_topic: "green_middle" }
+   - "how was last time I played this hole" / "what did I do here last round" / "how was my last round here" -> { query_topic: "hole_history" }
+   - "look at last Tuesday's swing" / "show me Friday's swing" / "pull up that upload from last week" -> { query_topic: "look_at_swing", swing_phrase: "last tuesday" } (carry the date phrase verbatim)
 
 3. change_setting — User wants to modify a setting.
    parameters: { setting_name: string, new_value: string | boolean }

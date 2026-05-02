@@ -32,6 +32,22 @@ export interface CageShot {
   aiAnalysis: string | null;
   review_labels?: ReviewLabels | null;
   review_transcript?: string | null;
+  // Phase R — frame-level timestamps (seconds into clip) for temporal alignment
+  // of detected issues with audio. Populated when Phase K analyzes a clip.
+  detected_issue_timestamps_sec?: number[];
+}
+
+export type SwingSource = 'live_cage' | 'uploaded_video';
+export type SwingTag = 'range' | 'cage' | 'indoor' | 'course' | 'other';
+
+export interface UploadMetadata {
+  uploaded_at: number;
+  taken_at?: number | null;     // file metadata; user-editable
+  notes?: string | null;
+  swinger?: string | null;       // defaults to "Me"
+  tag?: SwingTag | null;
+  has_audio?: boolean;
+  duration_sec?: number | null;
 }
 
 export interface CageSession {
@@ -47,6 +63,11 @@ export interface CageSession {
   // Phase K populates them.
   primary_issue?: PrimaryIssue | null;
   drill_recommendation?: DrillRecommendation | null;
+  // Phase R — source kind. 'live_cage' is the original Phase J flow; an
+  // 'uploaded_video' session wraps a single uploaded swing (one CageShot)
+  // with upload metadata so it browses uniformly in the swing library.
+  source?: SwingSource;
+  upload?: UploadMetadata | null;
 }
 
 export interface PrimaryIssue {
@@ -103,6 +124,22 @@ interface CageState {
   }) => void;
   setCameraAlignment: (x: number, y: number) => void;
   clearCameraAlignment: () => void;
+  /** Phase R — ingest a single uploaded video as a one-shot CageSession.
+   *  Returns the new session id so the caller can navigate to its detail
+   *  surface and Phase K analysis can attach to it. */
+  ingestUploadedSwing: (input: {
+    clipUri: string;
+    club: string;
+    upload: UploadMetadata;
+  }) => string;
+  /** Phase R — patch Phase K analysis onto an existing session, used both
+   *  by the live cage post-session pipeline (already in app/cage/summary.tsx)
+   *  and by the upload analysis pipeline. */
+  setSessionAnalysis: (sessionId: string, primary_issue: PrimaryIssue | null, drill_recommendation: DrillRecommendation | null) => void;
+  /** Phase R — store frame timestamps for issue temporal alignment. */
+  setShotIssueTimestamps: (sessionId: string, shotId: string, timestamps_sec: number[]) => void;
+  /** Phase R — delete a session from the library. */
+  deleteSession: (sessionId: string) => void;
   /** Phase J — set the distance calibration for the current cage. Pass yards.
    *  Optional cage_id defaults to 'home' when omitted. */
   setDistanceCalibration: (yards: number, cageId?: string) => void;
@@ -187,6 +224,56 @@ export const useCageStore = create<CageState>()(
         })),
 
       getClubProfile: (club) => get().clubProfiles[club] ?? null,
+
+      ingestUploadedSwing: ({ clipUri, club, upload }) => {
+        const sessionId = `${Date.now()}_upload`;
+        const shotId = `${Date.now()}_uploaded_shot`;
+        const session: CageSession = {
+          id: sessionId,
+          date: upload.taken_at ?? upload.uploaded_at,
+          club,
+          shots: [{
+            id: shotId,
+            club,
+            feel: null, shape: null, contact: null, direction: null,
+            timestamp: upload.taken_at ?? upload.uploaded_at,
+            clipUri,
+            acousticContact: null,
+            aiAnalysis: null,
+          }],
+          dominantMiss: null,
+          rootCause: null,
+          summary: null,
+          source: 'uploaded_video',
+          upload,
+        };
+        set(s => ({ sessionHistory: [...s.sessionHistory, session].slice(-50) }));
+        return sessionId;
+      },
+
+      setSessionAnalysis: (sessionId, primary_issue, drill_recommendation) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : { ...session, primary_issue, drill_recommendation }
+          ),
+        })),
+
+      setShotIssueTimestamps: (sessionId, shotId, timestamps_sec) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              shots: session.shots.map(shot =>
+                shot.id !== shotId ? shot : { ...shot, detected_issue_timestamps_sec: timestamps_sec }
+              ),
+            }
+          ),
+        })),
+
+      deleteSession: (sessionId) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.filter(session => session.id !== sessionId),
+        })),
 
       updateShotLabels: (sessionId, shotId, labels, transcript) =>
         set(s => ({

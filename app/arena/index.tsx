@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { activateMediaSession, deactivateMediaSession } from '../../services/mediaKeyBridge';
+import { setActiveSurface } from '../../services/activeSurfaceRegistry';
 import {
   View,
   Text,
@@ -59,9 +60,14 @@ export default function ArenaIndex() {
   const { roundsTogether } = useRelationshipStore();
 
   // Phase O.5 — Arena is an earbud-tap-active surface
+  // Phase R — also register as Psychologist-mode surface for opener routing
   useEffect(() => {
     void activateMediaSession();
-    return () => { void deactivateMediaSession(); };
+    setActiveSurface('arena');
+    return () => {
+      void deactivateMediaSession();
+      setActiveSurface(null);
+    };
   }, []);
 
   return (

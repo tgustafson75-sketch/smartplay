@@ -48,7 +48,9 @@ export type ToolAction =
   | { type: 'open_smartfinder' }
   | { type: 'open_swinglab' }
   | { type: 'log_score'; hole: number; score: number }
-  | { type: 'record_swing' };
+  | { type: 'record_swing' }
+  // Phase R — generic in-app navigation for voice handlers (swing detail, library)
+  | { type: 'open_url'; url: string };
 
 // ── POST handler ──────────────────────────────────────────────────────────────
 

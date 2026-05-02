@@ -116,8 +116,14 @@ export default function CageSummary() {
         return;
       }
       const issue = classifySession(results);
+      const drill = issue ? recommendDrill(issue.issue_id as never) : null;
       setPrimaryIssue(issue);
-      if (issue) setDrillRec(recommendDrill(issue.issue_id as never));
+      if (drill) setDrillRec(drill);
+      // Phase R — persist analysis onto the session record so it surfaces in
+      // the unified swing library browse.
+      if (session) {
+        useCageStore.getState().setSessionAnalysis(session.id, issue, drill);
+      }
       setAnalysisStatus('done');
     })();
     return () => { cancelled = true; };

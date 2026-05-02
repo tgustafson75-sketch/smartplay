@@ -24,6 +24,8 @@ import { loadRecap } from '../../services/planStorage';
 import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
 import { checkContent } from '../../services/contentGuardrail';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useRoundStore } from '../../store/roundStore';
+import PhotoCollage from '../../components/recap/PhotoCollage';
 import { track } from '../../services/analytics';
 import { buildShareCardProps } from '../../services/shareCardGenerator';
 import { computeRecapHero } from '../../services/recapHero';
@@ -159,6 +161,9 @@ export default function RecapScreen() {
   const { round_id } = useLocalSearchParams<{ round_id: string }>();
   const router = useRouter();
   const { voiceGender, voiceEnabled } = useSettingsStore();
+  // Phase R — pull round photos from the persisted RoundRecord (recap api
+  // returns a different shape — photos live on the local roundStore).
+  const roundPhotos = useRoundStore(s => s.roundHistory.find(r => r.id === round_id)?.round_photos ?? []);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
   const cardRef = useRef<View>(null);
@@ -311,6 +316,9 @@ export default function RecapScreen() {
               <Text style={styles.heroHeadline}>{hero.headline}</Text>
               <Text style={styles.heroDetail}>{hero.detail}</Text>
             </View>
+
+            {/* Phase R — round photo collage */}
+            <PhotoCollage photos={roundPhotos} />
 
             <View style={styles.summaryCard}>
               <Text style={styles.courseName}>{recap.course_name}</Text>

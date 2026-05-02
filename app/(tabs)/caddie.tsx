@@ -57,6 +57,8 @@ import { getFirstToolHint } from '../../services/voiceOnboardingService';
 import WhatCanISayChip from '../../components/WhatCanISayChip';
 import KevinHelpButton from '../../components/KevinHelpButton';
 import TapToTalkButton from '../../components/TapToTalkButton';
+import ScorecardChip from '../../components/caddie/ScorecardChip';
+import PhotoCaptureButton from '../../components/caddie/PhotoCaptureButton';
 import VocabBanner from '../../components/VocabBanner';
 import { kevinText as kevinTextStyle } from '../../styles/typography';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
@@ -1178,13 +1180,19 @@ export default function CaddieTab() {
               <Text style={styles.modeBadgeText}>{ROUND_MODE_LABELS[mode]}</Text>
             </TouchableOpacity>
           )}
-        <TouchableOpacity
-          style={styles.navBtn}
-          onPress={() => setShowMoreMenu(true)}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Ionicons name="ellipsis-horizontal" size={24} color="#6b7d72" />
-        </TouchableOpacity>
+          {/* Phase R — quick scorecard glance */}
+          <ScorecardChip />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+          {/* Phase R — round memory photo capture */}
+          <PhotoCaptureButton />
+          <TouchableOpacity
+            style={styles.navBtn}
+            onPress={() => setShowMoreMenu(true)}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Ionicons name="ellipsis-horizontal" size={24} color="#6b7d72" />
+          </TouchableOpacity>
+        </View>
         </View>
       </View>
 

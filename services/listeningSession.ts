@@ -8,6 +8,7 @@ import { subscribeEarbudTap } from './earbudControl';
 import { getCurrentRoute } from './audioRoutingService';
 import { routeQuery } from './responseRouter';
 import { getClipForCategory } from './fillerLibrary';
+import { getActiveSurface } from './activeSurfaceRegistry';
 import type { AppContext } from '../types/voiceIntent';
 
 /**
@@ -64,14 +65,16 @@ export async function toggle(): Promise<void> {
 function pickOpener(): string {
   const round = useRoundStore.getState();
   const trustLevel = getTrustLevel();
+  const surface = getActiveSurface();
 
-  // Role inference: round active → Caddie. Otherwise Coach.
-  // Future: read current pathname / surface for richer Psychologist routing.
-  const role = round.isRoundActive ? 'caddie' : 'coach';
+  // Phase R — Role inference now reads activeSurfaceRegistry for richer
+  // routing. Arena → Psychologist (between-shot conversation register).
+  // Active round → Caddie. Otherwise Coach.
+  const role: 'caddie' | 'coach' | 'psychologist' =
+    surface === 'arena' ? 'psychologist' :
+    round.isRoundActive ? 'caddie' : 'coach';
 
-  // Trust-level-aware opener selection. L1 = terse "Yeah?"; L4 = engaged
-  // ("Hey, what are you thinking? Walk me through it."). L2/L3 use the
-  // standard opener templates.
+  // Trust-level-aware opener selection. L1 = terse "Yeah?"; L4 = engaged.
   if (trustLevel === 1) return 'Yeah?';
 
   return getDialog(role, 'earbud_open');

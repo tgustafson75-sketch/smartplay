@@ -458,6 +458,80 @@ export const queryStatusHandler: IntentHandler = {
         };
       }
 
+      // Phase R — hole history voice query
+      case 'hole_history': {
+        if (!round.activeCourseId || !round.currentHole) {
+          return {
+            success: true,
+            voice_response: "I'd need an active round and a course I can match for that.",
+            side_effects: ['query:hole_history_no_context'],
+            follow_up_needed: false,
+          };
+        }
+        const priorRounds = round.roundHistory.filter(r =>
+          r.courseId === round.activeCourseId &&
+          r.scores[round.currentHole] != null &&
+          r.id !== round.currentRoundId,
+        );
+        if (priorRounds.length === 0) {
+          return {
+            success: true,
+            voice_response: `This is your first time playing hole ${round.currentHole} here that I've got data on.`,
+            side_effects: ['query:hole_history_first_time'],
+            follow_up_needed: false,
+          };
+        }
+        const par = round.courseHoles.find(h => h.hole === round.currentHole)?.par ?? 4;
+        if (priorRounds.length === 1) {
+          const r = priorRounds[0];
+          const score = r.scores[round.currentHole];
+          const v = score - par;
+          const vStr = v === 0 ? 'paired it' : v > 0 ? `${v === 1 ? 'bogeyed' : v === 2 ? 'doubled' : `went +${v}`} it` : `went ${v} on it`;
+          return {
+            success: true,
+            voice_response: `Last time, you ${vStr}.`,
+            side_effects: ['query:hole_history_one'],
+            follow_up_needed: false,
+          };
+        }
+        // Multiple prior rounds — last 3 + average
+        const lastThree = priorRounds.slice(-3);
+        const labels = lastThree.map(r => {
+          const v = r.scores[round.currentHole] - par;
+          return v === 0 ? 'par' : v === 1 ? 'bogey' : v === 2 ? 'double' : v < 0 ? `${v}` : `+${v}`;
+        });
+        const avgVsPar = priorRounds.reduce((a, r) => a + (r.scores[round.currentHole] - par), 0) / priorRounds.length;
+        const avgPhrase = Math.abs(avgVsPar) < 0.25 ? 'around par' : avgVsPar > 0 ? `over par by ${avgVsPar.toFixed(1)}` : `under par by ${Math.abs(avgVsPar).toFixed(1)}`;
+        return {
+          success: true,
+          voice_response: `Last ${lastThree.length} times: ${labels.join(', ')}. Average here is ${avgPhrase}.`,
+          side_effects: ['query:hole_history_multi'],
+          follow_up_needed: false,
+        };
+      }
+
+      // Phase R — swing library lookup ("look at last Tuesday's swing")
+      case 'look_at_swing': {
+        const phrase = String(intent.parameters.swing_phrase ?? '');
+        const { findSessionByRelativeDate, formatSessionSummary } = await import('../swingLibrary');
+        const session = findSessionByRelativeDate(phrase || 'last');
+        if (!session) {
+          return {
+            success: true,
+            voice_response: "I don't have a swing in your library matching that.",
+            side_effects: ['query:no_swing_match'],
+            follow_up_needed: false,
+          };
+        }
+        return {
+          success: true,
+          voice_response: formatSessionSummary(session),
+          side_effects: [`query:open_swing:${session.id}`],
+          follow_up_needed: false,
+          tool_action: { type: 'open_url', url: `/swinglab/swing/${session.id}` },
+        };
+      }
+
       default:
         return {
           success: false,

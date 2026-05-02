@@ -68,6 +68,12 @@ export interface HoleStats {
   girHit: boolean | null;
 }
 
+export interface RoundPhoto {
+  uri: string;
+  hole: number;
+  timestamp: number;
+}
+
 export interface RoundRecord {
   id: string;
   roundNumber: number;
@@ -85,6 +91,8 @@ export interface RoundRecord {
   putts: Record<number, number>;
   plans: HolePlan[];
   shots: ShotResult[];
+  // Phase R — round memory photos captured during play, displayed in recap collage.
+  round_photos?: RoundPhoto[];
 }
 
 // ─── STATE ────────────────────────────────
@@ -114,6 +122,8 @@ interface RoundState {
   penalties: Record<number, number>;
   shots: ShotResult[];
   holeStats: HoleStats[];
+  // Phase R — memory photos captured during the active round.
+  currentRoundPhotos: RoundPhoto[];
 
   roundStartTime: number | null;
   roundNumber: number;
@@ -145,6 +155,8 @@ interface RoundState {
   getPlanForHole: (holeNumber: number) => HolePlan | null;
 
   endRound: () => void;
+  /** Phase R — capture a memory photo at the current hole during an active round. */
+  addRoundPhoto: (uri: string) => void;
   setCurrentHole: (hole: number) => void;
   setCurrentYardage: (yards: number | null) => void;
   setClub: (club: string) => void;
@@ -203,6 +215,7 @@ export const useRoundStore = create<RoundState>()(
       penalties: {},
       shots: [],
       holeStats: [],
+      currentRoundPhotos: [],
       roundStartTime: null,
       roundNumber: 0,
       roundHistory: [],
@@ -235,6 +248,7 @@ export const useRoundStore = create<RoundState>()(
           penalties: {},
           shots: [],
           holeStats: [],
+          currentRoundPhotos: [],
           roundStartTime: Date.now(),
           roundNumber: prev.roundNumber + 1,
           active_ghost: null,
@@ -332,12 +346,24 @@ export const useRoundStore = create<RoundState>()(
           putts: { ...s.putts },
           plans: [...s.plans],
           shots: [...s.shots],
+          round_photos: s.currentRoundPhotos.length > 0 ? [...s.currentRoundPhotos] : undefined,
         };
         set(state => ({
           isRoundActive: false,
           roundHistory: [...state.roundHistory, record],
         }));
       },
+
+      addRoundPhoto: (uri) =>
+        set(s => {
+          if (!s.isRoundActive) return s;
+          return {
+            currentRoundPhotos: [
+              ...s.currentRoundPhotos,
+              { uri, hole: s.currentHole, timestamp: Date.now() },
+            ],
+          };
+        }),
 
       setCurrentHole: (hole) => {
         const state = get();
