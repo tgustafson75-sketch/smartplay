@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import AppIcon, { type IconName } from '../components/AppIcon';
 
 /**
  * Tutorials surface — selectable cards by app function. Tap a card to expand
@@ -11,7 +12,7 @@ import { useRouter } from 'expo-router';
 
 type Tutorial = {
   id: string;
-  icon: string;
+  icon: IconName;
   title: string;
   blurb: string;
   steps: string[];
@@ -20,7 +21,7 @@ type Tutorial = {
 const TUTORIALS: Tutorial[] = [
   {
     id: 'voice',
-    icon: '🎤',
+    icon: 'mic',
     title: 'Talking to Kevin',
     blurb: 'Voice anytime, tap anytime, both equal.',
     steps: [
@@ -32,7 +33,7 @@ const TUTORIALS: Tutorial[] = [
   },
   {
     id: 'trust',
-    icon: '🎚️',
+    icon: 'options-outline',
     title: 'Trust Spectrum (Kevin\'s Presence)',
     blurb: 'Four levels, your call any time.',
     steps: [
@@ -45,7 +46,7 @@ const TUTORIALS: Tutorial[] = [
   },
   {
     id: 'smartfinder',
-    icon: '🎯',
+    icon: 'locate-outline',
     title: 'SmartFinder',
     blurb: 'Camera rangefinder with three modes plus Putt.',
     steps: [
@@ -58,7 +59,7 @@ const TUTORIALS: Tutorial[] = [
   },
   {
     id: 'smartvision',
-    icon: '🔭',
+    icon: 'telescope-outline',
     title: 'SmartVision',
     blurb: 'Tap the hole-view card to open it for the current hole.',
     steps: [
@@ -70,7 +71,7 @@ const TUTORIALS: Tutorial[] = [
   },
   {
     id: 'course',
-    icon: '🏌️',
+    icon: 'golf-outline',
     title: 'Course Detail',
     blurb: 'Preview a course before you tee off.',
     steps: [
@@ -81,7 +82,7 @@ const TUTORIALS: Tutorial[] = [
   },
   {
     id: 'shots',
-    icon: '⛳',
+    icon: 'flag-outline',
     title: 'Shot Logging',
     blurb: 'Voice or tap, after each shot.',
     steps: [
@@ -93,7 +94,7 @@ const TUTORIALS: Tutorial[] = [
   },
   {
     id: 'recap',
-    icon: '📊',
+    icon: 'stats-chart-outline',
     title: 'Recap',
     blurb: 'Coach voice after the round.',
     steps: [
@@ -104,7 +105,7 @@ const TUTORIALS: Tutorial[] = [
   },
   {
     id: 'tools',
-    icon: '🛠️',
+    icon: 'construct-outline',
     title: 'Tools menu',
     blurb: 'Three-dot menu top-right of Caddie home.',
     steps: [
@@ -143,7 +144,7 @@ export default function TutorialsScreen() {
               onPress={() => setOpenId(open ? null : t.id)}
             >
               <View style={styles.cardHeader}>
-                <Text style={styles.cardIcon}>{t.icon}</Text>
+                <AppIcon name={t.icon} size={24} color="#00C896" />
                 <View style={styles.cardHeaderText}>
                   <Text style={styles.cardTitle}>{t.title}</Text>
                   <Text style={styles.cardBlurb}>{t.blurb}</Text>

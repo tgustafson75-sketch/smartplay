@@ -13,10 +13,11 @@
 import React from 'react';
 import {
   Modal, View, Text, ScrollView, Image, TouchableOpacity, StyleSheet,
-  Pressable, Dimensions,
+  Pressable, Dimensions, type ImageSourcePropType,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getHoleThumbnailUrl, getCourseImageryUrl } from '../../services/mapboxImagery';
+import PALMS_IMAGES from '../../data/palmsImages';
 
 const SCREEN_W = Dimensions.get('window').width;
 
@@ -38,10 +39,13 @@ type Props = {
 };
 
 export default function CourseDetailModal({ visible, onClose, courseName, location, holes }: Props) {
-  const courseUrl = getCourseImageryUrl({
+  // Palms is curated — bundled screenshots beat Mapbox tiles for this course.
+  const isPalms = courseName.toLowerCase().includes('palms');
+  const courseUrl = isPalms ? null : getCourseImageryUrl({
     courseId: null,
     holes: holes.map(h => ({ tee: h.tee, green: h.green })),
   }, Math.round(SCREEN_W * 0.92), Math.round(SCREEN_W * 0.92 * 0.55));
+  const courseAerialPalms: ImageSourcePropType | null = isPalms ? PALMS_IMAGES[1] ?? null : null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -57,9 +61,11 @@ export default function CourseDetailModal({ visible, onClose, courseName, locati
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          {/* Course-wide aerial */}
+          {/* Course-wide aerial — Palms uses curated bundled image. */}
           <Text style={styles.sectionLabel}>COURSE AERIAL</Text>
-          {courseUrl ? (
+          {courseAerialPalms ? (
+            <Image source={courseAerialPalms} style={styles.courseAerial} resizeMode="cover" />
+          ) : courseUrl ? (
             <Image source={{ uri: courseUrl }} style={styles.courseAerial} resizeMode="cover" />
           ) : (
             <View style={[styles.courseAerial, styles.placeholderTile]}>
@@ -70,7 +76,8 @@ export default function CourseDetailModal({ visible, onClose, courseName, locati
           {/* Hole-by-hole */}
           <Text style={[styles.sectionLabel, { marginTop: 22 }]}>HOLE BY HOLE</Text>
           {holes.map(h => {
-            const thumbUrl = getHoleThumbnailUrl({
+            const palmsImage: ImageSourcePropType | null = isPalms ? PALMS_IMAGES[h.hole_number] ?? null : null;
+            const thumbUrl = palmsImage ? null : getHoleThumbnailUrl({
               courseId: null,
               holeNumber: h.hole_number,
               par: h.par,
@@ -81,7 +88,9 @@ export default function CourseDetailModal({ visible, onClose, courseName, locati
             return (
               <View key={h.hole_number} style={styles.holeRow}>
                 <View style={styles.thumbWrap}>
-                  {thumbUrl ? (
+                  {palmsImage ? (
+                    <Image source={palmsImage} style={styles.thumb} resizeMode="cover" />
+                  ) : thumbUrl ? (
                     <Image source={{ uri: thumbUrl }} style={styles.thumb} resizeMode="cover" />
                   ) : (
                     <View style={[styles.thumb, styles.placeholderTile]}>

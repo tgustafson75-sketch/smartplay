@@ -12,17 +12,18 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import AppIcon, { type IconName } from '../../components/AppIcon';
 
 const PROMPT = "What are you trying to do this season? Don't worry, you can change this anytime.";
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
 type Mode = 'break_100' | 'break_90' | 'break_80' | 'free_play';
 
-const MODES: { id: Mode; title: string; description: string; icon: string }[] = [
-  { id: 'break_100', title: 'Break 100', description: 'Getting the scorecard under control. Smart decisions, fewer disasters.', icon: '🎯' },
-  { id: 'break_90',  title: 'Break 90',  description: 'Building consistency. Less chunking, more pars.', icon: '📈' },
-  { id: 'break_80',  title: 'Break 80',  description: 'Scoring mode. Dialing in the short game, playing the angles.', icon: '🔥' },
-  { id: 'free_play', title: 'Free Play', description: 'No specific target — just enjoy the game and get better.', icon: '⛳' },
+const MODES: { id: Mode; title: string; description: string; icon: IconName }[] = [
+  { id: 'break_100', title: 'Break 100', description: 'Getting the scorecard under control. Smart decisions, fewer disasters.', icon: 'trending-up-outline' },
+  { id: 'break_90',  title: 'Break 90',  description: 'Building consistency. Less chunking, more pars.', icon: 'analytics-outline' },
+  { id: 'break_80',  title: 'Break 80',  description: 'Scoring mode. Dialing in the short game, playing the angles.', icon: 'flame-outline' },
+  { id: 'free_play', title: 'Free Play', description: 'No specific target — just enjoy the game and get better.', icon: 'golf-outline' },
 ];
 
 export default function OnboardingMode() {
@@ -69,7 +70,7 @@ export default function OnboardingMode() {
             onPress={() => handleSelect(mode.id)}
             activeOpacity={0.8}
           >
-            <Text style={styles.icon}>{mode.icon}</Text>
+            <AppIcon name={mode.icon} size={26} color="#00C896" />
             <View style={styles.cardText}>
               <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{mode.title}</Text>
               <Text style={[styles.cardDesc, { color: colors.text_muted }]}>{mode.description}</Text>

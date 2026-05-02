@@ -12,17 +12,18 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AppIcon, { type IconName } from '../components/AppIcon';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
 import { track } from '../services/analytics';
 
-const FEATURES = [
-  { icon: '🏌️', label: 'Kevin on every hole', sub: 'Real-time caddie advice, club selection, and course strategy' },
-  { icon: '🔭', label: 'SmartVision', sub: 'AI hole analysis from satellite and on-course images' },
-  { icon: '⛳', label: 'Cage Mode', sub: 'Structured range sessions with pattern detection' },
-  { icon: '🎙️', label: 'Voice caddie', sub: 'Hands-free operation during your round' },
-  { icon: '📊', label: 'Round intelligence', sub: 'Post-round recap, scoring trends, and ghost mode' },
+const FEATURES: Array<{ icon: IconName; label: string; sub: string }> = [
+  { icon: 'golf-outline',         label: 'Kevin on every hole', sub: 'Real-time caddie advice, club selection, and course strategy' },
+  { icon: 'telescope-outline',    label: 'SmartVision',         sub: 'AI hole analysis from satellite and on-course images' },
+  { icon: 'videocam-outline',     label: 'Cage Mode',           sub: 'Structured range sessions with pattern detection' },
+  { icon: 'mic-outline',          label: 'Voice caddie',        sub: 'Hands-free operation during your round' },
+  { icon: 'stats-chart-outline',  label: 'Round intelligence',  sub: 'Post-round recap, scoring trends, and ghost mode' },
 ];
 
 export default function PaywallScreen() {
@@ -95,7 +96,7 @@ export default function PaywallScreen() {
           <View style={styles.featureList}>
             {FEATURES.map(f => (
               <View key={f.label} style={styles.featureRow}>
-                <Text style={styles.featureIcon}>{f.icon}</Text>
+                <AppIcon name={f.icon} size={24} color="#00C896" />
                 <View style={styles.featureText}>
                   <Text style={styles.featureLabel}>{f.label}</Text>
                   <Text style={styles.featureSub}>{f.sub}</Text>

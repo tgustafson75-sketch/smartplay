@@ -13,6 +13,8 @@ import {
   AppStateStatus,
   ScrollView,
   useWindowDimensions,
+  TextInput,
+  Linking,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
@@ -31,6 +33,7 @@ import { useCageStore } from '../../store/cageStore';
 import { usePointsStore } from '../../store/pointsStore';
 import { getCourseList, getCourse } from '../../data/courses';
 import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
+import StartRoundCourseCard from '../../components/course/StartRoundCourseCard';
 import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types/patterns';
 import { getCourse as getApiCourse, courseToHoles } from '../../services/golfCourseApi';
 import { generateRecap } from '../../services/recapGenerator';
@@ -251,6 +254,7 @@ export default function CaddieTab() {
   const [nineHole, setNineHole] = useState(false);
   const [isCompetition, setIsCompetition] = useState(false);
   const [roundNotes, setRoundNotes] = useState('');
+  const [notesDictating, setNotesDictating] = useState(false);
   const [holeScore, setHoleScore] = useState(0);
   const [holePutts, setHolePutts] = useState(0);
 
@@ -1458,6 +1462,19 @@ export default function CaddieTab() {
               }}
             />
 
+            {selectedPickedCourse && !selectedPickedCourse.isLocal && (
+              <StartRoundCourseCard
+                courseId={selectedPickedCourse.id}
+                courseName={selectedPickedCourse.name}
+              />
+            )}
+            {selectedPickedCourse?.isLocal && (
+              <StartRoundCourseCard
+                courseId={null}
+                courseName={selectedPickedCourse.name}
+              />
+            )}
+
             <Text style={styles.sheetLabel}>Holes</Text>
             <View style={styles.pillRow}>
               {([
@@ -1580,15 +1597,62 @@ export default function CaddieTab() {
               );
             })()}
 
-            <TouchableOpacity
-              style={[styles.startBtn, !selectedPickedCourse && styles.startBtnDisabled]}
-              onPress={handleStartRound}
-              disabled={!selectedPickedCourse}
-            >
-              <Text style={styles.startBtnText}>
-                {selectedPickedCourse ? "Let's Go" : 'Select a course to start'}
-              </Text>
-            </TouchableOpacity>
+            {/* Notes for Caddie — typed or voice-dictated, surfaces to Kevin's
+                round-context analysis on briefings and during play. */}
+            <Text style={styles.sheetLabel}>Notes for Kevin</Text>
+            <View style={styles.notesWrap}>
+              <TextInput
+                style={styles.notesInput}
+                value={roundNotes}
+                onChangeText={setRoundNotes}
+                placeholder="Conditions, focus, anything Kevin should know…"
+                placeholderTextColor="#4b5563"
+                multiline
+                numberOfLines={3}
+              />
+              <TouchableOpacity
+                style={styles.notesMicBtn}
+                disabled={notesDictating}
+                onPress={async () => {
+                  setNotesDictating(true);
+                  try {
+                    const text = await captureUtterance(8000, apiUrl, language);
+                    if (text) {
+                      setRoundNotes(prev => (prev ? prev + ' ' : '') + text);
+                    }
+                  } finally {
+                    setNotesDictating(false);
+                  }
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Dictate notes"
+              >
+                <AppIcon name={notesDictating ? 'radio-outline' : 'mic'} size={18} color="#00C896" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+              {selectedPickedCourse && (
+                <TouchableOpacity
+                  style={styles.findTeeBtn}
+                  onPress={() => {
+                    const q = encodeURIComponent(selectedPickedCourse.name);
+                    Linking.openURL(`https://www.golfnow.com/tee-times/search?searchText=${q}`).catch(() => {});
+                  }}
+                >
+                  <Text style={styles.findTeeBtnText}>Find Tee Time</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.startBtn, !selectedPickedCourse && styles.startBtnDisabled, selectedPickedCourse && { flex: 1 }]}
+                onPress={handleStartRound}
+                disabled={!selectedPickedCourse}
+              >
+                <Text style={styles.startBtnText}>
+                  {selectedPickedCourse ? 'Start Round' : 'Select a course to start'}
+                </Text>
+              </TouchableOpacity>
+            </View>
             </ScrollView>
           </View>
         </TouchableOpacity>
@@ -1838,6 +1902,7 @@ export default function CaddieTab() {
               { icon: 'tv-outline',          label: castMode ? 'Cast Mode On' : 'Cast Mode',     sub: 'Mirror to TV',                  action: () => setCastMode(!castMode) },
               { icon: voiceEnabled ? 'volume-high-outline' : 'volume-mute-outline', label: voiceEnabled ? 'Voice On' : 'Voice Off',  sub: "Toggle Kevin's voice", action: () => setVoiceEnabled(!voiceEnabled) },
               { icon: 'library-outline',     label: 'Tutorials',        sub: 'How each tool works',      action: () => { setShowMoreMenu(false); router.push('/tutorials' as never); } },
+              { icon: 'logo-youtube',        label: 'YouTube Channel',  sub: '@smartplaycaddie',         action: () => { Linking.openURL('https://youtube.com/@smartplaycaddie').catch(() => {}); setShowMoreMenu(false); } },
               { icon: 'settings-outline',    label: 'Settings',         sub: 'App preferences',          action: () => { setShowMoreMenu(false); router.push('/settings' as never); } },
             ]) as Array<{ icon: IconName; label: string; sub: string; action: () => void | Promise<void> }>).map(item => (
               <TouchableOpacity
@@ -2128,7 +2193,44 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 24,
+    marginTop: 0,
+    flex: 1,
+  },
+  findTeeBtn: {
+    backgroundColor: '#3a2a08',
+    borderColor: '#F5A623',
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  findTeeBtnText: { color: '#F5A623', fontSize: 14, fontWeight: '800' },
+  notesWrap: {
+    flexDirection: 'row',
+    backgroundColor: '#0d1a0d',
+    borderColor: '#1e3a28',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 4,
+    marginTop: 8,
+    alignItems: 'flex-start',
+  },
+  notesInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  notesMicBtn: {
+    width: 38, height: 38, borderRadius: 8,
+    backgroundColor: 'rgba(0,200,150,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+    margin: 4,
   },
   startBtnDisabled: {
     backgroundColor: '#1e3a28',
