@@ -10,8 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCageStore } from '../../store/cageStore';
-import { startReviewSession } from '../../services/cageReview';
-import { getShotsForReview } from '../../services/cageReview';
+import { startReviewSession , getShotsForReview } from '../../services/cageReview';
 import { REVIEW_MODES, type ReviewSession } from '../../types/cageReview';
 
 export default function CageReviewStart() {

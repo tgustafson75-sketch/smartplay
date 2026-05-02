@@ -16,10 +16,10 @@ import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
 import AppIcon, { type IconName } from '../../components/AppIcon';
 import { getDialog } from '../../services/dialogEngine';
 
-const CHALLENGES: Array<{
+const CHALLENGES: {
   id: string; icon: IconName; title: string; sub: string;
   points: string; color: string; route: string;
-}> = [
+}[] = [
   { id: 'ctp',      icon: 'flag',           title: 'Closest to Pin',  sub: 'Pick a distance. Best of 5 shots.',     points: '50 pts',  color: '#00C896', route: '/arena/ctp' },
   { id: 'skills',   icon: 'star-outline',   title: 'Skills Challenge', sub: 'Hit targets at multiple distances.',    points: '75 pts',  color: '#F5A623', route: '/arena/skills' },
   { id: 'sim',      icon: 'golf-outline',   title: 'Sim Round',        sub: 'Play a simulated round hole by hole.',  points: '100 pts', color: '#3b82f6', route: '/arena/sim-round' },

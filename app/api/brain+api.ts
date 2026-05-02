@@ -53,23 +53,23 @@ export async function POST(request: Request) {
       mentalState?: string;
       consecutiveBadHoles?: number;
       isSpiralRisk?: boolean;
-      topObservations?: Array<{ content: string }>;
-      recentHeroMoments?: Array<{ hole: number; club: string; courseName: string; kevinSaid: string }>;
+      topObservations?: { content: string }[];
+      recentHeroMoments?: { hole: number; club: string; courseName: string; kevinSaid: string }[];
       dominantMiss?: string | null;
       physicalLimitation?: string | null;
       goal?: string | null;
       personalBest?: number | null;
-      recentCageSessions?: Array<{
+      recentCageSessions?: {
         club: string;
         shots: number;
         dominantMiss: string | null;
         rootCause: string | null;
         summary: string | null;
         date: string;
-      }>;
+      }[];
       club?: string | null;
       scores?: Record<string, number>;
-      courseHoles?: Array<{ hole: number; par: number }>;
+      courseHoles?: { hole: number; par: number }[];
       responseMode?: string;
     };
 

@@ -301,7 +301,7 @@ export default function CaddieAvatar({
     }
 
     // Read current opacity to determine which layer is more visible
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const frozenFade = (fadeAnim as any).__getValue() as number;
     const currentVisible =
       frozenFade >= 0.5 ? frontSourceRef.current : backSourceRef.current;

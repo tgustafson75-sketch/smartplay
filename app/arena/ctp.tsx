@@ -7,7 +7,7 @@ import {
   StyleSheet,
   Modal,
   Pressable,
-} from 'react-native';
+ Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { usePointsStore } from '../../store/pointsStore';
@@ -17,7 +17,7 @@ import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { scoreCTPShot, bucketToFeet } from '../../services/cvScoring';
-import { Alert } from 'react-native';
+
 
 const DISTANCES = [50, 75, 100, 125, 150, 175, 200];
 

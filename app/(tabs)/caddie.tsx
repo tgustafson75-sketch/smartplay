@@ -253,7 +253,7 @@ export default function CaddieTab() {
       }
     })();
     // Nonce ensures every navigation with the same course id re-fires.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [pre_course_id, preCourseNonce]);
 
   // Phase C plays-like wiring — non-layout. Computes the value flowing into the
@@ -2218,7 +2218,7 @@ export default function CaddieTab() {
               { icon: 'book-outline',        label: 'Rules & Handicap', sub: 'Quick reference + WHS calculator', action: () => { setShowMoreMenu(false); router.push('/reference' as never); } },
               { icon: 'logo-youtube',        label: 'YouTube Channel',  sub: '@smartplaycaddie',         action: () => { Linking.openURL('https://youtube.com/@smartplaycaddie').catch(() => {}); setShowMoreMenu(false); } },
               { icon: 'settings-outline',    label: 'Settings',         sub: 'App preferences',          action: () => { setShowMoreMenu(false); router.push('/settings' as never); } },
-            ]) as Array<{ icon: IconName; label: string; sub: string; action: () => void | Promise<void> }>).map(item => (
+            ]) as { icon: IconName; label: string; sub: string; action: () => void | Promise<void> }[]).map(item => (
               <TouchableOpacity
                 key={item.label}
                 style={styles.moreItem}

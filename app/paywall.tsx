@@ -19,7 +19,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { track } from '../services/analytics';
 import { PRICING, PAYWALL_HEADLINE, PAYWALL_SUBHEAD } from '../lib/pricing';
 
-const FEATURES: Array<{ icon: IconName; label: string; sub: string }> = [
+const FEATURES: { icon: IconName; label: string; sub: string }[] = [
   { icon: 'golf-outline',         label: 'Kevin on every hole', sub: 'Real-time caddie advice, club selection, and course strategy' },
   { icon: 'telescope-outline',    label: 'SmartVision',         sub: 'AI hole analysis from satellite and on-course images' },
   { icon: 'videocam-outline',     label: 'Cage Mode',           sub: 'Structured range sessions with pattern detection' },

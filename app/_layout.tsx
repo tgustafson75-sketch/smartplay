@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack , router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useEffect } from 'react';
@@ -14,7 +14,6 @@ import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
 import { activateMediaSession, deactivateMediaSession } from '../services/mediaKeyBridge';
 import { startHoleDetection, stopHoleDetection, subscribeToHoleDetection } from '../services/holeDetection';
 import { consumeDeferredPaywall } from '../services/paywallGuard';
-import { router } from 'expo-router';
 import { initAudioLifecycle } from '../services/audioLifecycle';
 import { initBatteryMonitor } from '../services/batteryMonitor';
 import BatteryPrompt from '../components/battery/BatteryPrompt';

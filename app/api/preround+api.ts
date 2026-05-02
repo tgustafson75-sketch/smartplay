@@ -40,12 +40,12 @@ export async function POST(req: Request) {
       dominantMiss?: string | null;
       physicalLimitation?: string | null;
       personalBest?: number | null;
-      recentCageSessions?: Array<{
+      recentCageSessions?: {
         club: string;
         dominantMiss: string | null;
         rootCause: string | null;
-      }>;
-      heroMoments?: Array<unknown>;
+      }[];
+      heroMoments?: unknown[];
       currentMentalState?: string;
       isCompetition?: boolean;
       weather?: string | null;

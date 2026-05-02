@@ -104,19 +104,19 @@ export async function POST(request: Request) {
       mentalState?: string;
       consecutiveBadHoles?: number;
       isSpiralRisk?: boolean;
-      topObservations?: Array<{ content: string }>;
-      recentHeroMoments?: Array<{ hole: number; club: string; courseName: string; kevinSaid: string }>;
+      topObservations?: { content: string }[];
+      recentHeroMoments?: { hole: number; club: string; courseName: string; kevinSaid: string }[];
       dominantMiss?: string | null;
       physicalLimitation?: string | null;
       goal?: string | null;
       personalBest?: number | null;
-      recentCageSessions?: Array<{
+      recentCageSessions?: {
         club: string; shots: number; dominantMiss: string | null;
         rootCause: string | null; summary: string | null; date: string;
-      }>;
+      }[];
       club?: string | null;
       scores?: Record<string, number>;
-      courseHoles?: Array<{ hole: number; par: number }>;
+      courseHoles?: { hole: number; par: number }[];
       responseMode?: string;
       watchData?: {
         averageTempo: string; dominantFault: string | null;
@@ -126,10 +126,10 @@ export async function POST(request: Request) {
 
     const totalScore   = Object.values(scores as Record<string, number>).reduce((a, b) => a + b, 0);
     const holesPlayed  = Object.keys(scores as Record<string, number>).length;
-    const scoreVsPar   = (courseHoles as Array<{ hole: number; par: number }>).length > 0
+    const scoreVsPar   = (courseHoles as { hole: number; par: number }[]).length > 0
       ? Object.entries(scores as Record<string, number>).reduce((acc, [holeStr, score]) => {
           const holeNum = parseInt(holeStr, 10);
-          const holeData = (courseHoles as Array<{ hole: number; par: number }>).find(h => h.hole === holeNum);
+          const holeData = (courseHoles as { hole: number; par: number }[]).find(h => h.hole === holeNum);
           return holeData ? acc + (score - holeData.par) : acc;
         }, 0)
       : 0;
@@ -161,9 +161,9 @@ HOW YOU SPEAK:
 TOOLS:
 You have access to tools. Use them only when the player explicitly asks — "show me the hole", "find my ball", "log my score", "record my swing", etc. Never use a tool unprompted. When you use a tool, still speak a brief acknowledgment (1 short sentence).
 
-${(topObservations as Array<{ content: string }>).length > 0
+${(topObservations as { content: string }[]).length > 0
   ? `WHAT YOU KNOW PRIVATELY ABOUT THIS PLAYER (never reference directly — just let it inform your advice):
-${(topObservations as Array<{ content: string }>).map(o => '- ' + o.content).join('\n')}`
+${(topObservations as { content: string }[]).map(o => '- ' + o.content).join('\n')}`
   : ''}
 
 ${roundsTogether === 0
@@ -175,16 +175,16 @@ ${roundsTogether === 0
 
 ${goal ? `${firstName || 'The player'}'s goal is: ${goal}. Reference this when relevant — especially after good holes or when they are close to achieving it. Never mention it constantly. Just let it inform your perspective on the round.` : ''}
 
-${(recentHeroMoments as Array<{ hole: number; club: string; courseName: string; kevinSaid: string }>).length > 0
-  ? `HERO MOMENTS YOU SAVED TOGETHER:\n${(recentHeroMoments as Array<{ hole: number; club: string; courseName: string; kevinSaid: string }>).map(m =>
+${(recentHeroMoments as { hole: number; club: string; courseName: string; kevinSaid: string }[]).length > 0
+  ? `HERO MOMENTS YOU SAVED TOGETHER:\n${(recentHeroMoments as { hole: number; club: string; courseName: string; kevinSaid: string }[]).map(m =>
       '- Hole ' + m.hole + ' with ' + m.club + (m.courseName ? ' at ' + m.courseName : '')
     ).join('\n')}\nReference one of these if ${firstName || 'the player'} needs a confidence boost. Use sparingly — once per round maximum.`
   : ''}
 
 ${personalBest ? `Personal best round: ${personalBest}. Acknowledge briefly when the round tracks toward it — once, then move on.` : ''}
 
-${(recentCageSessions as Array<{ club: string; shots: number; dominantMiss: string | null; rootCause: string | null; summary: string | null; date: string }>).length > 0
-  ? `RECENT PRACTICE SESSIONS:\n${(recentCageSessions as Array<{ club: string; shots: number; dominantMiss: string | null; rootCause: string | null; summary: string | null; date: string }>).map(s =>
+${(recentCageSessions as { club: string; shots: number; dominantMiss: string | null; rootCause: string | null; summary: string | null; date: string }[]).length > 0
+  ? `RECENT PRACTICE SESSIONS:\n${(recentCageSessions as { club: string; shots: number; dominantMiss: string | null; rootCause: string | null; summary: string | null; date: string }[]).map(s =>
       s.date + ' — ' + s.club + ' (' + s.shots + ' shots)' +
       (s.dominantMiss ? ', tending to ' + s.dominantMiss : '') +
       (s.rootCause ? '. Root cause: ' + s.rootCause : '') +

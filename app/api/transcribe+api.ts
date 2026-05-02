@@ -6,7 +6,7 @@ const openai = new OpenAI({
 
 export async function POST(request: Request) {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const formData = (await request.formData()) as any;
     const audio = formData.get('audio') as File | null;
     const language = (formData.get('language') as string | null) ?? 'en';

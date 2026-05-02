@@ -51,7 +51,7 @@ class VisionRequestController {
     return this.currentRequest !== null;
   }
 
-  beginNew(): AbortSignal {
+  beginNew(): AbortController {
     if (this.currentRequest) {
       this.currentRequest.abort();
       try { Sentry.addBreadcrumb({ category: 'vision', level: 'info', message: 'cancel_replace' }); } catch {}
@@ -60,7 +60,7 @@ class VisionRequestController {
     const ctrl = new AbortController();
     this.currentRequest = ctrl;
     this.notify(true);
-    return ctrl.signal;
+    return ctrl;
   }
 
   end(ctrl: AbortController | null): void {
@@ -94,10 +94,10 @@ export async function analyzeLie(
   // Lie analysis tap is a shot-intent signal — bump GPS to active.
   try { bumpToActive('lie_analysis'); } catch {}
 
-  // Cancel any in-flight vision request and start a new one.
-  const signal = visionController.beginNew();
-  // Track our controller so we can clear it cleanly on resolve/reject.
-  const myController = (visionController as unknown as { currentRequest: AbortController }).currentRequest;
+  // Cancel any in-flight vision request and start a new one. The
+  // controller returned here is OUR controller; visionController.end(it)
+  // is a no-op if a newer request has since claimed the slot.
+  const myController = visionController.beginNew();
 
   try {
     const timeoutId = setTimeout(() => myController.abort(), REQUEST_TIMEOUT_MS);
@@ -109,7 +109,7 @@ export async function analyzeLie(
         image_media_type: imageMediaType,
         context,
       }),
-      signal,
+      signal: myController.signal,
     }).finally(() => clearTimeout(timeoutId));
 
     if (res.status === 413) return { kind: 'too_large' };

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, TextInput } from 'react-native';
-import {
+import { Modal, TextInput ,
   View,
   Text,
   ScrollView,
@@ -8,6 +7,7 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';

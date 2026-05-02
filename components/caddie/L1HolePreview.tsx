@@ -7,16 +7,16 @@ import { refreshFix, getLastFix } from '../../services/smartFinderService';
 import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 import { getHoleThumbnailUrl } from '../../services/mapboxImagery';
 
-const REFRESH_MS = 4_000;
-const DEFAULT_W = 320;
-const DEFAULT_H = 300;
-
 // Curated screenshot fallback for local courses Tim has playtested. The
 // Palms set is bundled today; Lakes and Rancho California maps are
 // registered as empty so dropping `assets/courses/lakes/hole-XX.jpg` /
 // `assets/courses/rancho-california/hole-XX.jpg` files later picks them
 // up without further code changes (just add the require() entries here).
 import { LOCAL_COURSE_IMAGES, getLocalHoleImage } from '../../data/localCourseImages';
+
+const REFRESH_MS = 4_000;
+const DEFAULT_W = 320;
+const DEFAULT_H = 300;
 
 /**
  * L1 (Quiet) hole preview — a glanceable top-down sketch of the current hole

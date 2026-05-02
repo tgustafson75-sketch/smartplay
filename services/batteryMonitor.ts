@@ -105,16 +105,19 @@ export function initBatteryMonitor(): void {
     return;
   }
 
+  const BatteryMod = Battery; // capture the verified-non-null reference
   void (async () => {
     try {
-      const lvl = await Battery!.getBatteryLevelAsync();
+      if (typeof BatteryMod.getBatteryLevelAsync !== 'function') return;
+      const lvl = await BatteryMod.getBatteryLevelAsync();
       state = { ...state, level: lvl };
       emit();
       if (lvl <= PROMPT_THRESHOLD) evaluatePrompt(lvl);
     } catch {}
   })();
 
-  const sub = Battery.addBatteryLevelListener(({ batteryLevel }) => {
+  if (typeof BatteryMod.addBatteryLevelListener !== 'function') return;
+  const sub = BatteryMod.addBatteryLevelListener(({ batteryLevel }: { batteryLevel: number }) => {
     state = { ...state, level: batteryLevel };
     emit();
     evaluatePrompt(batteryLevel);

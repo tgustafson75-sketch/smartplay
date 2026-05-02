@@ -37,13 +37,16 @@ let unsubRemotePlay: { remove(): void } | null = null;
 let unsubRemotePause: { remove(): void } | null = null;
 
 // Lazy-load track-player so unit tests / web builds don't blow up.
-// Pre-beta — additionally verify the native bridge constants are present.
-// In Expo Go (or any build without the native module installed),
-// `Capability.Play` is undefined because it derives from a native constant.
-// Passing undefined values to `updateOptions({capabilities})` surfaced as a
-// visible "capability of play" error when the user started a round.
+// Pre-beta — verify the native bridge constants are present too. In Expo
+// Go (or any build without the native module installed), `Capability.Play`
+// is undefined because it derives from a native constant; passing
+// undefined into `updateOptions({capabilities})` surfaced as a visible
+// "capability of play" error when the user started a round.
+//
+// Don't sticky-cache failure (no `TrackPlayer = false`): a hot-reload
+// after a fresh dev-client install would otherwise stay disabled until
+// the next full app launch.
 function loadTrackPlayer(): boolean {
-  if (TrackPlayer === false) return false; // previously failed-bail
   if (TrackPlayer) return true;
   try {
     const mod = require('react-native-track-player');
@@ -51,8 +54,8 @@ function loadTrackPlayer(): boolean {
     const cap = mod.Capability;
     const evt = mod.Event;
     if (!tp || !cap || cap.Play == null || cap.Pause == null || !evt) {
-      console.log('[mediaKeyBridge] track-player loaded but native bridge missing — disabling');
-      TrackPlayer = false;
+      // Don't latch — let the next call retry in case a hot-reload picks
+      // up a freshly-installed native module.
       return false;
     }
     TrackPlayer = tp;
@@ -61,7 +64,6 @@ function loadTrackPlayer(): boolean {
     return true;
   } catch (e) {
     console.log('[mediaKeyBridge] track-player load failed (expected in Expo Go):', e);
-    TrackPlayer = false;
     return false;
   }
 }
