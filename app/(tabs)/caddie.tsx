@@ -59,7 +59,7 @@ import { getFirstToolHint } from '../../services/voiceOnboardingService';
 import KevinHelpButton from '../../components/KevinHelpButton';
 import ScorecardChip from '../../components/caddie/ScorecardChip';
 import AppIcon, { type IconName } from '../../components/AppIcon';
-import PhotoCaptureButton from '../../components/caddie/PhotoCaptureButton';
+import * as ImagePicker from 'expo-image-picker';
 import VocabBanner from '../../components/VocabBanner';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
 import { canAccess, trialDaysLeft } from '../../services/featureAccess';
@@ -1542,25 +1542,14 @@ export default function CaddieTab() {
           {/* Phase R — quick scorecard glance */}
           <ScorecardChip />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, flexShrink: 0 }}>
-          {/* SmartFinder quick-launch — visible on every trust level. Lives in
-              the top-right header so taps never overlap Kevin's avatar tap
-              area (which fires the mic). hitSlop kept tight to the button. */}
-          {canAccess('smartfinder', subscription_status) && (
-            <TouchableOpacity
-              style={styles.smartFinderBtn}
-              onPress={() => router.push('/smartfinder' as never)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityRole="button"
-              accessibilityLabel="Open SmartFinder rangefinder"
-            >
-              {/* Same icon + color as the SmartFinder entry in the tools menu */}
-              <Ionicons name="locate-outline" size={18} color="#00C896" />
-            </TouchableOpacity>
-          )}
-          {/* Phase R — round memory photo capture. Hidden at L1 so the
-              only camera affordance on the Quiet screen is the
-              lie-analysis camera on the right edge (no duplicates). */}
-          {trustLevel !== 1 && <PhotoCaptureButton />}
+          {/* SmartFinder quick-launch removed from the top nav — the
+              SmartFinder card already renders on the side at L1/L2/L3
+              (in-round) and as the L4 reticle, so the duplicate top-nav
+              icon was redundant. SmartFinder is still reachable via the
+              ••• tools menu. */}
+          {/* Phase R round photo capture moved to the ••• tools menu so
+              the top nav doesn't show two camera icons (lie-analysis
+              camera on the right edge is the primary in-round affordance). */}
           <TouchableOpacity
             style={styles.navBtn}
             onPress={() => setShowMoreMenu(true)}
@@ -1759,11 +1748,11 @@ export default function CaddieTab() {
               borderRadius: 28,
               backgroundColor: 'rgba(13, 36, 24, 0.85)',
               borderWidth: 1.5,
-              borderColor: '#F5A623',
+              borderColor: '#00C896',
               alignItems: 'center',
               justifyContent: 'center',
               zIndex: 14,
-              shadowColor: '#F5A623',
+              shadowColor: '#00C896',
               shadowOffset: { width: 0, height: 0 },
               shadowOpacity: 0.55,
               shadowRadius: 8,
@@ -1773,7 +1762,7 @@ export default function CaddieTab() {
             accessibilityLabel="Open SmartFinder · long-press to expand inline"
           >
             <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
-              <View style={{ position: 'absolute', width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: '#F5A623' }} />
+              <View style={{ position: 'absolute', width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: '#00C896' }} />
               <View style={{ position: 'absolute', width: 18, height: 1.5, backgroundColor: '#ffffff' }} />
               <View style={{ position: 'absolute', width: 1.5, height: 18, backgroundColor: '#ffffff' }} />
             </View>
@@ -2334,6 +2323,27 @@ export default function CaddieTab() {
               { icon: 'telescope-outline',   label: 'SmartVision',      sub: 'Analyze the hole',         action: () => { setShowMoreMenu(false); openSmartVision(); } },
               { icon: 'locate-outline',      label: 'SmartFinder',      sub: 'Tap-to-lock rangefinder',  action: () => { setShowMoreMenu(false); if (!canAccess('smartfinder', subscription_status)) { void triggerPaywall('smartfinder', () => router.push('/paywall' as never)); return; } router.push('/smartfinder' as never); } },
               { icon: 'warning-outline',     label: 'Penalty Stroke',   sub: 'Water · OB · Lost ball',   action: () => { if (isRoundActive) addPenalty(currentHole); setShowMoreMenu(false); } },
+              ...(isRoundActive ? [{
+                icon: 'camera-outline' as IconName, label: 'Capture Photo', sub: 'Add a memory to this round',
+                action: async () => {
+                  setShowMoreMenu(false);
+                  try {
+                    const perm = await ImagePicker.requestCameraPermissionsAsync();
+                    if (!perm.granted) {
+                      Alert.alert('Camera permission needed', 'Allow camera access to capture round photos.');
+                      return;
+                    }
+                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    const result = await ImagePicker.launchCameraAsync({
+                      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                      quality: 0.7, allowsEditing: false,
+                    });
+                    if (result.canceled || !result.assets[0]?.uri) return;
+                    useRoundStore.getState().addRoundPhoto(result.assets[0].uri);
+                    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  } catch (e) { console.log('[capture-photo] error', e); }
+                },
+              }] : []),
               ...(isRoundActive ? [{
                 icon: 'flag-outline' as IconName, label: 'End Round',   sub: 'Finish and get summary',   action: async () => { setShowMoreMenu(false); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {}); clearShotPending(); endRound(); await generateRoundSummary(); },
               }] : []),
