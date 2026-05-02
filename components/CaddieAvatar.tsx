@@ -217,6 +217,10 @@ interface CaddieAvatarProps {
   emotion?: string | null;
   fillMode?: 'cover' | 'contain';
   isThinking?: boolean;
+  /** Phase R Component 14 — idle breathing animation intensity per
+   *  Trust Spectrum level. L1 = none (Kevin not visible), L2 subtle,
+   *  L3 standard, L4 most pronounced. Defaults to 3 (standard). */
+  trustLevel?: 1 | 2 | 3 | 4;
 }
 
 // ─── COMPONENT ────────────────────────────
@@ -233,6 +237,7 @@ export default function CaddieAvatar({
   emotion,
   fillMode,
   isThinking = false,
+  trustLevel = 3,
 }: CaddieAvatarProps) {
   const fill = fillMode ?? 'contain';
   const { width: W, height: H } = useWindowDimensions();
@@ -259,15 +264,16 @@ export default function CaddieAvatar({
     : getAvatarKey(effectiveEmotion, isOnCourse, isCageMode);
 
   // ── Animation refs ──────────────────────
-  const breatheAnim  = useRef(new Animated.Value(1)).current;
-  const glowAnim     = useRef(new Animated.Value(0)).current;
-  const nodAnim      = useRef(new Animated.Value(0)).current;
-  const scanAnim     = useRef(new Animated.Value(0)).current;
-  const hudFlash     = useRef(new Animated.Value(1)).current;
-  const responseFade = useRef(new Animated.Value(1)).current;
-  const idleHintAnim = useRef(new Animated.Value(0)).current;
-  const driftX       = useRef(new Animated.Value(0)).current;
-  const driftY       = useRef(new Animated.Value(0)).current;
+  const breatheAnim    = useRef(new Animated.Value(1)).current;
+  const breatheTransY  = useRef(new Animated.Value(0)).current;
+  const glowAnim       = useRef(new Animated.Value(0)).current;
+  const nodAnim        = useRef(new Animated.Value(0)).current;
+  const scanAnim       = useRef(new Animated.Value(0)).current;
+  const hudFlash       = useRef(new Animated.Value(1)).current;
+  const responseFade   = useRef(new Animated.Value(1)).current;
+  const idleHintAnim   = useRef(new Animated.Value(0)).current;
+  const driftX         = useRef(new Animated.Value(0)).current;
+  const driftY         = useRef(new Animated.Value(0)).current;
 
   // ── Crossfade state ─────────────────────
   const [backSource,  setBackSource]  = useState<ImageSourcePropType>(targetSource);
@@ -377,27 +383,46 @@ export default function CaddieAvatar({
   const [displayedText, setDisplayedText] = useState(displayText);
   const isFirstRender = useRef(true);
 
-  // ── Breathing — always runs ─────────────
+  // ── Phase R Component 14 — Idle breathing ─────────────
+  // Lifelike resting respiration (~15 breaths/min). Trust-level intensity:
+  //   L2 subtle (1% scale, 1px translate) · L3 standard (1.5%, 2px) · L4 most (2%, 2px)
+  // Pauses during speech / thinking / listening so existing Phase F glow
+  // and pulse animations own those state cues. Resumes smoothly on idle.
+  // L1 hides Kevin entirely — animation never visible there.
   useEffect(() => {
+    const isIdle = voiceState === 'idle' && !isThinking;
+    const intensity =
+      trustLevel === 4 ? { scale: 1.020, translate: -2 } :
+      trustLevel === 3 ? { scale: 1.015, translate: -2 } :
+                         { scale: 1.010, translate: -1 };  // L2 (and L1 fallback)
+
+    if (!isIdle) {
+      // Settle to resting position when not idle; the active-state cues
+      // (glow / pulse / badge) take over the visual focus.
+      Animated.parallel([
+        Animated.timing(breatheAnim,   { toValue: 1, duration: 400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(breatheTransY, { toValue: 0, duration: 400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]).start();
+      return;
+    }
+
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(breatheAnim, {
-          toValue: 1.015,
-          duration: 3200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(breatheAnim, {
-          toValue: 1.0,
-          duration: 3200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
+        // Inhale — 1.8s, scale up + slight upward translate
+        Animated.parallel([
+          Animated.timing(breatheAnim,   { toValue: intensity.scale,    duration: 1800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(breatheTransY, { toValue: intensity.translate, duration: 1800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ]),
+        // Exhale — 2.2s, scale + translate return
+        Animated.parallel([
+          Animated.timing(breatheAnim,   { toValue: 1, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(breatheTransY, { toValue: 0, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ]),
       ])
     );
     loop.start();
     return () => loop.stop();
-  }, []);
+  }, [voiceState, isThinking, trustLevel]);
 
   // ── Micro-drift on front layer ──────────
   useEffect(() => {
@@ -582,17 +607,19 @@ export default function CaddieAvatar({
     { label: 'PLAYS', value: hud.playsLike !== null ? String(hud.playsLike) : '—' },
   ];
 
-  // Back layer: breathing + nod only
+  // Back layer: breathing (scale + translateY) + nod
   const backTransform = [
     { scale: 0.85 },
     { scale: breatheAnim },
+    { translateY: breatheTransY },
     { translateY: nodAnim },
   ];
 
-  // Front layer: breathing + nod + micro-drift
+  // Front layer: breathing (scale + translateY) + nod + micro-drift
   const frontTransform = [
     { scale: 0.85 },
     { scale: breatheAnim },
+    { translateY: breatheTransY },
     { translateY: nodAnim },
     { translateX: driftX },
     { translateY: driftY },

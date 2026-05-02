@@ -1010,6 +1010,7 @@ export default function CaddieTab() {
                   emotion={kevinEmotion}
                   fillMode="cover"
                   isThinking={kevinThinking}
+                  trustLevel={trustLevel as 1 | 2 | 3 | 4}
                 />
               </View>
               <View
@@ -1049,6 +1050,7 @@ export default function CaddieTab() {
                 emotion={kevinEmotion}
                 fillMode="cover"
                 isThinking={kevinThinking}
+                trustLevel={trustLevel as 1 | 2 | 3 | 4}
               />
             </View>
             <View
@@ -1085,6 +1087,7 @@ export default function CaddieTab() {
             emotion={kevinEmotion}
             fillMode="cover"
             isThinking={kevinThinking}
+            trustLevel={trustLevel as 1 | 2 | 3 | 4}
           />
         </View>
       )}
@@ -1113,6 +1116,7 @@ export default function CaddieTab() {
             emotion={kevinEmotion}
             fillMode="cover"
             isThinking={kevinThinking}
+            trustLevel={trustLevel as 1 | 2 | 3 | 4}
           />
         </View>
       )}
@@ -1187,7 +1191,7 @@ export default function CaddieTab() {
           )}
           {/* Phase R — quick scorecard glance */}
           <ScorecardChip />
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, flexShrink: 0 }}>
           {/* SmartFinder quick-launch — visible on every trust level. Lives in
               the top-right header so taps never overlap Kevin's avatar tap
               area (which fires the mic). hitSlop kept tight to the button. */}
@@ -1973,14 +1977,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   smartFinderBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 1.5,
     borderColor: '#00C896',
     backgroundColor: 'rgba(0,200,150,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   bubble: {
     position: 'absolute',

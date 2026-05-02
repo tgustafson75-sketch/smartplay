@@ -26,6 +26,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { searchCourses, getCourse } from '../../services/golfCourseApi';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { getCourseImageryUrl } from '../../services/mapboxImagery';
+import { toggle as toggleListening } from '../../services/listeningSession';
 import PALMS_IMAGES from '../../data/palmsImages';
 import AppIcon from '../../components/AppIcon';
 import type { Course } from '../../types/course';
@@ -223,11 +224,17 @@ export default function PlayTab() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Banner */}
+      {/* Banner — logo doubles as Kevin: tap to open listening session */}
       <View style={styles.banner}>
-        <View style={styles.bannerLogoWrap}>
+        <TouchableOpacity
+          style={styles.bannerLogoWrap}
+          onPress={() => { void toggleListening(); }}
+          accessibilityRole="button"
+          accessibilityLabel="Talk to Kevin"
+          activeOpacity={0.85}
+        >
           <Image source={require('../../assets/avatars/smartplay_caddie_badge.png')} style={styles.bannerLogo} />
-        </View>
+        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.bannerTitle}>
             <Text style={{ color: '#00C896' }}>SmartPlay</Text>
@@ -249,7 +256,7 @@ export default function PlayTab() {
             onPress={() => router.push('/smartfinder' as never)}
             accessibilityLabel="Open SmartFinder"
           >
-            <AppIcon name="locate" size={20} color="#F5A623" />
+            <AppIcon name="locate-outline" size={20} color="#00C896" />
           </TouchableOpacity>
         </View>
 
@@ -390,15 +397,15 @@ export default function PlayTab() {
               <View style={styles.actionRow}>
                 <TouchableOpacity style={[styles.actionBtn, styles.actionBtnPrimary]} onPress={handleStartRound}>
                   <AppIcon name="flag" size={14} color="#0d1a0d" />
-                  <Text style={styles.actionBtnPrimaryText}>Start Round</Text>
+                  <Text style={styles.actionBtnPrimaryText}>Start</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionBtn} onPress={handleHoleMap}>
                   <AppIcon name="map-outline" size={14} color="#00C896" />
-                  <Text style={styles.actionBtnText}>Hole Map</Text>
+                  <Text style={styles.actionBtnText}>View</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionBtn} onPress={handleRangeBook}>
                   <AppIcon name="book-outline" size={14} color="#00C896" />
-                  <Text style={styles.actionBtnText}>Range Book</Text>
+                  <Text style={styles.actionBtnText}>Log</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -434,9 +441,9 @@ const styles = StyleSheet.create({
   h1Sub: { color: '#6b7d72', fontSize: 12, marginTop: 2 },
   scopeBtn: {
     width: 40, height: 40, borderRadius: 8,
-    borderWidth: 1.5, borderColor: '#F5A623',
+    borderWidth: 1.5, borderColor: '#00C896',
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(245,166,35,0.08)',
+    backgroundColor: 'rgba(0,200,150,0.10)',
   },
 
   sectionLabel: {
@@ -496,14 +503,17 @@ const styles = StyleSheet.create({
   selectedSub: { color: '#9ca3af', fontSize: 12, marginTop: 2 },
   selectedStats: { color: '#6b7d72', fontSize: 12, marginTop: 4 },
 
-  actionRow: { flexDirection: 'row', gap: 8 },
+  // Single-line three-button row — short labels (Start / View / Log) keep
+  // the row tight even on Fold-closed (~344px) without wrapping.
+  actionRow: { flexDirection: 'row', gap: 6, flexWrap: 'nowrap' },
   actionBtn: {
-    flex: 1, flexDirection: 'row', gap: 6,
+    flex: 1, flexDirection: 'row', gap: 4,
     backgroundColor: 'transparent', borderColor: '#00C896', borderWidth: 1,
-    paddingVertical: 12, borderRadius: 24,
+    paddingVertical: 10, paddingHorizontal: 4, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center',
+    minWidth: 0,
   },
   actionBtnPrimary: { backgroundColor: '#00C896', borderColor: '#00C896' },
-  actionBtnText: { color: '#00C896', fontSize: 13, fontWeight: '800' },
-  actionBtnPrimaryText: { color: '#0d1a0d', fontSize: 13, fontWeight: '900' },
+  actionBtnText: { color: '#00C896', fontSize: 12, fontWeight: '800' },
+  actionBtnPrimaryText: { color: '#0d1a0d', fontSize: 12, fontWeight: '900' },
 });
