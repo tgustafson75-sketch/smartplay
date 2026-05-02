@@ -15,7 +15,7 @@
  * API results in the closest-local section so Tim's home course is one tap.
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet,
   Image, ActivityIndicator, type ImageSourcePropType,
@@ -78,6 +78,9 @@ export default function PlayTab() {
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<CourseSummary[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
+  // Distinguish "haven't searched yet" from "searched and got zero results".
+  const [hasSearched, setHasSearched] = useState(false);
+  const lastQueryRef = useRef<string>('');
 
   const [recentCourses, setRecentCourses] = useState<CourseSummary[]>([]);
   const [selected, setSelected] = useState<Course | null>(null);
@@ -122,13 +125,20 @@ export default function PlayTab() {
     ...recentCourses.filter(r => !LOCAL_COURSES.some(l => l.id === r.id)),
   ];
 
-  const onSearch = useCallback(async () => {
-    if (query.trim().length < 3) return;
+  const runSearch = useCallback(async (q: string) => {
+    const trimmed = q.trim();
+    if (trimmed.length < 3) return;
+    // Skip the network call if this exact query is already in flight or
+    // was the last completed search — prevents the debounce from re-firing
+    // for trailing whitespace / cursor moves.
+    if (lastQueryRef.current === trimmed && searching) return;
+    lastQueryRef.current = trimmed;
     setSearching(true);
     setSearchError(null);
     setResults([]);
+    setHasSearched(true);
     try {
-      const found = await searchCourses(query.trim());
+      const found = await searchCourses(trimmed);
       const mapped: CourseSummary[] = found
         .filter(r => !r._error)
         .map(r => ({
@@ -140,12 +150,39 @@ export default function PlayTab() {
         }));
       setResults(mapped);
       const err = found.find(r => r._error);
-      if (err && mapped.length === 0) setSearchError(err._error ?? 'No matches found.');
+      if (err && mapped.length === 0) setSearchError(err._error ?? 'Search unavailable.');
     } catch (e) {
+      console.warn('[play] search failed:', e);
       setSearchError(e instanceof Error ? e.message : 'Search failed.');
     } finally {
       setSearching(false);
     }
+  }, [searching]);
+
+  // Submit handler: same path as the debounce but bypasses the timer.
+  const onSearch = useCallback(() => { void runSearch(query); }, [runSearch, query]);
+
+  // Bug fix — root cause was failure mode (a): no debounced effect, so
+  // typing without pressing Enter or tapping the Search button ran no
+  // network call at all. The user perceived 'no results' because the
+  // request was never made.
+  // Debounce 300ms after the last keystroke, only when query is >= 3 chars.
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 3) {
+      // Reset results + searched flag so the empty-state copy reverts to the
+      // 'type to search' hint instead of 'no courses found for ...'.
+      if (hasSearched) {
+        setResults([]);
+        setHasSearched(false);
+        setSearchError(null);
+        lastQueryRef.current = '';
+      }
+      return;
+    }
+    const id = setTimeout(() => { void runSearch(trimmed); }, 300);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
   const selectSummary = useCallback(async (s: CourseSummary) => {
@@ -364,10 +401,28 @@ export default function PlayTab() {
           </TouchableOpacity>
         </View>
 
-        {searching && <Text style={styles.statusText}>Searching…</Text>}
-        {searchError && <Text style={styles.statusErr}>{searchError}</Text>}
-        {!searching && !searchError && results.length === 0 && query.length === 0 && (
-          <Text style={styles.statusText}>Enter search term and press button to find courses or facilities.</Text>
+        {searching && (
+          <View style={styles.statusRow}>
+            <ActivityIndicator color="#00C896" size="small" />
+            <Text style={styles.statusText}>Searching…</Text>
+          </View>
+        )}
+        {!searching && searchError && <Text style={styles.statusErr}>{searchError}</Text>}
+        {/* Min-length hint — fires only when the user has started typing
+            but hasn't reached the 3-char threshold the API requires. */}
+        {!searching && !searchError && query.length > 0 && query.trim().length < 3 && (
+          <Text style={styles.statusText}>Type at least 3 letters to search.</Text>
+        )}
+        {/* Pre-search hint — only when input is genuinely empty. */}
+        {!searching && !searchError && results.length === 0 && query.length === 0 && !hasSearched && (
+          <Text style={styles.statusText}>Type a course or city name to search.</Text>
+        )}
+        {/* Post-search empty results — distinct from the pre-search hint
+            so the user knows the request actually ran. */}
+        {!searching && !searchError && hasSearched && results.length === 0 && query.trim().length >= 3 && (
+          <Text style={styles.statusText}>
+            No courses found for &quot;{query.trim()}&quot;. Try a different name.
+          </Text>
         )}
 
         {results.map(r => (
@@ -623,6 +678,7 @@ const styles = StyleSheet.create({
 
   statusText: { color: '#6b7d72', fontSize: 12, paddingHorizontal: 16, paddingTop: 10 },
   statusErr: { color: '#fbbf24', fontSize: 12, paddingHorizontal: 16, paddingTop: 10 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 10 },
 
   selectedCard: {
     marginHorizontal: 16, padding: 12,

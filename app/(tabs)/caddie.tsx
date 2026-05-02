@@ -1331,7 +1331,7 @@ export default function CaddieTab() {
               position: 'absolute',
               top: insets.top + 92,
               left: 16, right: 80,
-              height: 140,
+              height: 100,
               borderRadius: 12,
               borderWidth: 1.5,
               borderColor: '#00C896',
@@ -1341,7 +1341,7 @@ export default function CaddieTab() {
             }}
             pointerEvents="box-none"
           >
-            <L1HolePreview onOpenSmartVision={openSmartVision} width={W - 96} height={140} />
+            <L1HolePreview onOpenSmartVision={openSmartVision} width={W - 96} height={100} />
           </View>
           <View
             style={{
