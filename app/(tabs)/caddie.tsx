@@ -1399,24 +1399,18 @@ export default function CaddieTab() {
                   backgroundColor: 'rgba(13, 36, 24, 0.92)',
                   borderRadius: 14,
                   borderWidth: 1.5,
-                  borderColor: '#F5A623',
+                  borderColor: '#00C896',
                   paddingHorizontal: 14,
                   paddingVertical: 10,
-                  shadowColor: '#F5A623',
+                  shadowColor: '#00C896',
                   shadowOffset: { width: 0, height: 0 },
-                  shadowOpacity: 0.65,
+                  shadowOpacity: 0.5,
                   shadowRadius: 10,
                   elevation: 8,
                   height: cardH,
                 }}
                 pointerEvents="box-none"
               >
-                {/* Scope corner ticks — match SmartFinder card. */}
-                <View pointerEvents="none" style={{ position: 'absolute', top: 4, left: 4, width: 12, height: 12, borderColor: '#F5A623', borderTopWidth: 2, borderLeftWidth: 2 }} />
-                <View pointerEvents="none" style={{ position: 'absolute', top: 4, right: 4, width: 12, height: 12, borderColor: '#F5A623', borderTopWidth: 2, borderRightWidth: 2 }} />
-                <View pointerEvents="none" style={{ position: 'absolute', bottom: 4, left: 4, width: 12, height: 12, borderColor: '#F5A623', borderBottomWidth: 2, borderLeftWidth: 2 }} />
-                <View pointerEvents="none" style={{ position: 'absolute', bottom: 4, right: 4, width: 12, height: 12, borderColor: '#F5A623', borderBottomWidth: 2, borderRightWidth: 2 }} />
-
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <Text style={{ color: '#00C896', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 }}>
                     SMARTVISION{isRoundActive ? ` · HOLE ${currentHole}` : ''}
