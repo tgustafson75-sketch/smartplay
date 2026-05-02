@@ -1,3 +1,4 @@
+import { Linking } from 'react-native';
 import { speak, stopSpeaking, isSpeaking, captureUtterance, playLocalFile } from './voiceService';
 import { getDialog } from './dialogEngine';
 import { getTrustLevel } from './trustLevelService';
@@ -10,6 +11,32 @@ import { routeQuery } from './responseRouter';
 import { getClipForCategory } from './fillerLibrary';
 import { getActiveSurface } from './activeSurfaceRegistry';
 import type { AppContext } from '../types/voiceIntent';
+
+// ─── External URL allowlist ───────────────────────────────────────────────────
+// Audit P1 follow-up: server tool_use responses can include open_url actions.
+// Internal routes (starting with '/') are dispatched via router.push as before.
+// External (http(s)://) URLs go through isAllowedExternalUrl first to prevent
+// open-redirect via a compromised / malformed server response.
+const ALLOWED_HOSTS = [
+  'smartplaycaddie.com',
+  'support.smartplaycaddie.com',
+  'apps.apple.com',
+  'play.google.com',
+  'golfcourseapi.com',
+];
+
+function isAllowedExternalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return false;
+    const host = parsed.hostname.toLowerCase();
+    return ALLOWED_HOSTS.some(
+      allowed => host === allowed || host.endsWith(`.${allowed}`)
+    );
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Phase O — Listening session orchestrator.
@@ -198,16 +225,32 @@ async function openSession() {
         }));
         await speak(result.voice_response, settings.voiceGender, settings.language, apiUrl);
       }
-      // Phase R/S — dispatch tool_action.open_url for in-app navigation from
-      // voice handlers (e.g. swing library jumps, future SmartVision opens).
+      // Phase R/S — dispatch tool_action.open_url. Internal routes (e.g.
+      // swing library jumps, SmartVision opens) go through router.push as
+      // before. External URLs (http/https) are allowlisted to prevent
+      // open-redirect through a compromised / malformed server response.
       const ta = result.tool_action;
       if (ta && (ta as { type?: string }).type === 'open_url') {
         const url = (ta as { type: 'open_url'; url: string }).url;
-        try {
-          const router = require('expo-router').router;
-          router.push(url);
-        } catch (e) {
-          console.log('[listeningSession] nav failed', e);
+        if (typeof url !== 'string' || url.length === 0) {
+          console.warn('[listeningSession] tool_action.open_url missing url');
+        } else if (url.startsWith('/')) {
+          try {
+            const router = require('expo-router').router;
+            router.push(url);
+          } catch (e) {
+            console.log('[listeningSession] nav failed', e);
+          }
+        } else if (url.startsWith('http://') || url.startsWith('https://')) {
+          if (isAllowedExternalUrl(url)) {
+            void Linking.openURL(url).catch((e) => {
+              console.log('[listeningSession] external open failed', e);
+            });
+          } else {
+            console.warn('[listeningSession] Rejected non-allowlisted URL:', url);
+          }
+        } else {
+          console.warn('[listeningSession] Rejected unsupported URL scheme:', url);
         }
       }
     }
