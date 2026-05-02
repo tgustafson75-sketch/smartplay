@@ -27,7 +27,8 @@ export type CoachSituation =
   | 'drill_detail_intro'
   | 'primary_issue_summary_terse'
   | 'primary_issue_summary_standard'
-  | 'primary_issue_summary_engaged';
+  | 'primary_issue_summary_engaged'
+  | 'earbud_open';
 
 const TEMPLATES: Record<CoachSituation, string[]> = {
   recap_intro: [
@@ -135,6 +136,13 @@ const TEMPLATES: Record<CoachSituation, string[]> = {
   primary_issue_summary_engaged: [
     "Alright, what I'm seeing: {name}. {mechanical} Here's the cue — {feel}",
     "Let me walk you through it. {name}. {mechanical} Try this — {feel}",
+  ],
+
+  // Phase O — earbud tap-to-talk opener (Coach register, on Practice surfaces).
+  earbud_open: [
+    "What are you working on?",
+    "What's the focus?",
+    "What do you want to dial in?",
   ],
 };
 

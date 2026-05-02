@@ -30,7 +30,8 @@ export type CaddieSituation =
   | 'safety_call'
   | 'aggressive_call'
   | 'lie_low_confidence'
-  | 'goal_aware_addendum';
+  | 'goal_aware_addendum'
+  | 'earbud_open';
 
 const TEMPLATES: Record<CaddieSituation, string[]> = {
   shot_prompt: [
@@ -106,6 +107,16 @@ const TEMPLATES: Record<CaddieSituation, string[]> = {
     "Alright, {situation} Here's what I'd do — {advice}",
     "Okay, taking a look. {situation} {advice} That's the play.",
     "Let me walk you through this. {situation} {advice}",
+  ],
+
+  // Phase O — earbud tap-to-talk opener (Caddie register, in-round).
+  // Real-caddie phrasing — not "How can I help you?" or "Listening…".
+  earbud_open: [
+    "What are you seeing?",
+    "What are you thinking?",
+    "What's the play?",
+    "Talk to me.",
+    "What's on your mind?",
   ],
 
   // Goal-aware addendum — only spoken when the API returns a goal_aware_note

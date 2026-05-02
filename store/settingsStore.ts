@@ -26,6 +26,9 @@ interface SettingsState {
 
   tutorialsSeen: Record<string, boolean>;
   fillerEnabled: boolean;
+  // Phase O — earbud tap-to-talk control
+  earbudTapToTalk: boolean;
+  voiceOnPhoneSpeaker: boolean;
 
   // ─── ACTIONS ────────────────────────────
 
@@ -48,6 +51,8 @@ interface SettingsState {
   markTutorialSeen: (key: string) => void;
   resetTutorials: () => void;
   setFillerEnabled: (v: boolean) => void;
+  setEarbudTapToTalk: (v: boolean) => void;
+  setVoiceOnPhoneSpeaker: (v: boolean) => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -73,6 +78,8 @@ export const useSettingsStore = create<SettingsState>()(
       distance_unit: 'yards' as const,
       tutorialsSeen: {},
       fillerEnabled: true,
+      earbudTapToTalk: true,
+      voiceOnPhoneSpeaker: false,
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
       setVoiceGender: (g) => set({ voiceGender: g }),
@@ -94,6 +101,8 @@ export const useSettingsStore = create<SettingsState>()(
         set(s => ({ tutorialsSeen: { ...s.tutorialsSeen, [key]: true } })),
       resetTutorials: () => set({ tutorialsSeen: {} }),
       setFillerEnabled: (v) => set({ fillerEnabled: v }),
+      setEarbudTapToTalk: (v) => set({ earbudTapToTalk: v }),
+      setVoiceOnPhoneSpeaker: (v) => set({ voiceOnPhoneSpeaker: v }),
     }),
     {
       name: 'settings-store-v2',
@@ -115,6 +124,8 @@ export const useSettingsStore = create<SettingsState>()(
         distance_unit: s.distance_unit,
         tutorialsSeen: s.tutorialsSeen,
         fillerEnabled: s.fillerEnabled,
+        earbudTapToTalk: s.earbudTapToTalk,
+        voiceOnPhoneSpeaker: s.voiceOnPhoneSpeaker,
         // watchConnected / glassesConnected not persisted — rechecked on mount
       }),
     },

@@ -205,3 +205,15 @@ The hole-shot-map UI lives at `components/recap/HoleShotMap.tsx` and the route a
 | `golfCourseApi.ts` | Course search, hole geometry, course context summaries. |
 | `planStorage.ts` | Persisted hole plans and round recaps (AsyncStorage). |
 | `rulesEngine.ts` | Rules-of-golf decisions for penalty UX. |
+
+
+## Phase O — Earbud Tap-to-Talk
+
+| File | Purpose | Role |
+|---|---|---|
+| `audioRoutingService.ts` | Tracks output route (phone speaker vs wired vs Bluetooth). expo-av polling-based best-effort detector; returns `unknown` until a native event listener ships. Listening session uses it to suppress TTS on phone speaker unless user opts in. | Infra |
+| `earbudControl.ts` | Event-bus shape for earbud media-key taps. `notifyEarbudTap()` is the single entry point — fired today by the on-screen `TapToTalkButton` fallback; will be fired by a native iOS MPRemoteCommandCenter / Android MediaSession detector once that ships, with no consumer-site changes required. | Infra |
+| `listeningSession.ts` | Single-tap listening session orchestrator. State machine (`idle → opening → listening → thinking → responding`). Picks a role-aware (Caddie if round active, Coach otherwise) and trust-aware opener via `dialogEngine` (`earbud_open` template; L1 returns terse `"Yeah?"`), captures an utterance, routes through the existing `/api/voice-intent` classifier, executes the matched handler, speaks the response. Re-tap at any phase closes the session. | Caddie + Coach |
+
+**Phase O scope.** The native cross-platform key-event detector (iOS `MPRemoteCommandCenter`, Android `MediaSession`) is intentionally NOT in this phase — Expo managed workflow does not expose that bridge without a custom dev-client module. The orchestration, audio routing, opener templates, settings (`earbudTapToTalk`, `voiceOnPhoneSpeaker`), and on-screen Tap-to-Talk fallback button on the Caddie home are all live. When the native detector lands, the only required change is calling `notifyEarbudTap()` from its callback.
+

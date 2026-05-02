@@ -15,6 +15,8 @@ import CageSessionOverlay from '../../components/CageSessionOverlay';
 import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
 import { getDialog } from '../../services/dialogEngine';
 import { useRelationshipStore } from '../../store/relationshipStore';
+import { useRoundStore } from '../../store/roundStore';
+import { generatePatternInsights } from '../../services/patternDetection';
 
 // ─── DRILL DATA ────────────────────────────
 
@@ -188,6 +190,8 @@ export default function SwingLab() {
   const { watchConnected } = useSettingsStore();
   const { firstName } = usePlayerProfileStore();
   const { roundsTogether } = useRelationshipStore();
+  const recentShots = useRoundStore(s => s.shots);
+  const roundHistory = useRoundStore(s => s.roundHistory);
   const [activeEnv, setActiveEnv] = useState<DrillEnv | 'all'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [cageActive, setCageActive] = useState(false);
@@ -201,15 +205,39 @@ export default function SwingLab() {
     }
   }, [drillIdParam]);
 
-  // Phase I — Coach intro + drill suggestion (rotates per render via dialogEngine).
-  // For new users with no rounds: welcome variant; otherwise the returning variant.
-  // Drill suggestion is generic today; pattern-aware variant lights up when
-  // pattern detection feeds in (1.x).
+  // Phase I + I.5 — Coach intro + drill suggestion. Pattern-aware variant
+  // fires when accumulated shot data shows a clear miss tendency
+  // (right-miss → Gate Drill, etc.). Falls back to the generic random
+  // suggestion when no clear pattern exists.
   const coachIntroBody = React.useMemo(() => {
     const introKey = roundsTogether === 0 ? 'swinglab_home_intro' : 'swinglab_home_intro_returning';
     const intro = getDialog('coach', introKey, { name: firstName ?? 'there' });
-    const suggested = DRILLS[Math.floor(Math.random() * DRILLS.length)];
-    const suggestion = getDialog('coach', 'drill_suggestion_generic', { drill: suggested.title });
+
+    // Pattern-aware drill suggestion. Uses last completed round if available,
+    // else current in-flight round shots.
+    const lastRound = roundHistory[roundHistory.length - 1];
+    const shotsForPattern = (lastRound?.shots ?? recentShots ?? []).slice(-30);
+    const patternInsights = generatePatternInsights(shotsForPattern);
+    const tendency = patternInsights.raw_stats.miss_tendency_overall;
+
+    let suggestedDrill: typeof DRILLS[number] | undefined;
+    let patternPhrase: string | null = null;
+    if (tendency === 'right' || tendency === 'left') {
+      // Gate Drill addresses both directional misses.
+      suggestedDrill = DRILLS.find(d => d.id === 'gate');
+      patternPhrase = `that ${tendency} miss`;
+    }
+
+    if (suggestedDrill && patternPhrase) {
+      const suggestion = getDialog('coach', 'drill_suggestion_with_pattern', {
+        drill: suggestedDrill.title,
+        pattern: patternPhrase,
+      });
+      return `${intro} ${suggestion}`;
+    }
+
+    const generic = DRILLS[Math.floor(Math.random() * DRILLS.length)];
+    const suggestion = getDialog('coach', 'drill_suggestion_generic', { drill: generic.title });
     return `${intro} ${suggestion}`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

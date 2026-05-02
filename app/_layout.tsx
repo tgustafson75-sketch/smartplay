@@ -7,6 +7,9 @@ import { SmartVisionProvider } from '../contexts/SmartVisionContext';
 import { KevinPresenceProvider } from '../contexts/KevinPresenceContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { useSettingsStore } from '../store/settingsStore';
+import { initListeningSession } from '../services/listeningSession';
+import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
 
 // TODO (Wednesday MacBook setup): add EXPO_PUBLIC_SENTRY_DSN + Sentry org/project to eas.json,
 // then remove SENTRY_DISABLE_AUTO_UPLOAD=true from eas.json build profiles.
@@ -39,6 +42,16 @@ function AppNavigator() {
         setSubscriptionStatus('expired');
       }
     }
+  }, []);
+
+  // Phase O — boot earbud listening session bus, honoring user setting
+  useEffect(() => {
+    initListeningSession();
+    const unsub = useSettingsStore.subscribe((s) => {
+      setEarbudEnabled(s.earbudTapToTalk);
+    });
+    setEarbudEnabled(useSettingsStore.getState().earbudTapToTalk);
+    return () => { unsub(); };
   }, []);
 
   return (

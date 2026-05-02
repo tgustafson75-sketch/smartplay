@@ -56,6 +56,7 @@ import L1HolePreview from '../../components/caddie/L1HolePreview';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
 import WhatCanISayChip from '../../components/WhatCanISayChip';
 import KevinHelpButton from '../../components/KevinHelpButton';
+import TapToTalkButton from '../../components/TapToTalkButton';
 import VocabBanner from '../../components/VocabBanner';
 import { kevinText as kevinTextStyle } from '../../styles/typography';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
@@ -1220,6 +1221,12 @@ export default function CaddieTab() {
           <KevinHelpButton surface="caddie" />
         </View>
       )}
+
+      {/* Phase O — Tap to Talk fallback button (visible until native earbud media-key
+          detector ships). Honors earbudTapToTalk setting via the component itself. */}
+      <View style={{ position: 'absolute', bottom: insets.bottom + 90, left: 0, right: 0, zIndex: 14 }} pointerEvents="box-none">
+        <TapToTalkButton />
+      </View>
 
       {/* VOCAB BANNER — fires once after the user crosses the voice-shot threshold */}
       <View style={{ position: 'absolute', top: insets.top + 100, left: 0, right: 0, zIndex: 12 }} pointerEvents="box-none">

@@ -36,6 +36,10 @@ export default function Settings() {
     distance_unit,
     theme_preference,
     fillerEnabled,
+    earbudTapToTalk,
+    voiceOnPhoneSpeaker,
+    setEarbudTapToTalk,
+    setVoiceOnPhoneSpeaker,
     setVoiceEnabled,
     setVoiceGender,
     setLanguage,
@@ -362,6 +366,18 @@ export default function Settings() {
             sub="Kevin listens automatically. Just talk."
             value={autoListenEnabled}
             onValueChange={setAutoListenEnabled}
+          />
+          <ToggleRow
+            label="Earbud Tap-to-Talk"
+            sub="Single-tap your earbuds to open Kevin's listening"
+            value={earbudTapToTalk}
+            onValueChange={setEarbudTapToTalk}
+          />
+          <ToggleRow
+            label="Voice on Phone Speaker"
+            sub="Allow Kevin's voice when no earbuds are connected"
+            value={voiceOnPhoneSpeaker}
+            onValueChange={setVoiceOnPhoneSpeaker}
           />
         </View>
 

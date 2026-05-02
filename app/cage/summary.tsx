@@ -53,6 +53,29 @@ export default function CageSummary() {
   const shots = session?.shots ?? [];
   const pattern = analyzeSession(shots, session?.club ?? '');
 
+  // Phase K.5 refinement — speak the primary issue analysis when it lands,
+  // using verbosity-keyed templates per trust level. L1 stays silent (terse
+  // text card only); L2/L3/L4 auto-play TTS at increasing engagement.
+  useEffect(() => {
+    if (!primaryIssue || !voiceEnabled || trustLevel === 1) return;
+    const verbosityKey =
+      trustLevel === 4 ? 'primary_issue_summary_engaged' :
+      trustLevel === 3 ? 'primary_issue_summary_standard' :
+      'primary_issue_summary_standard';
+    // (L2 also gets standard — the difference between L2/L3 here is delivery
+    // pacing rather than content; tunable in a future K.5.5 if needed.)
+    const text = getDialog('coach', verbosityKey, {
+      name: primaryIssue.name,
+      mechanical: primaryIssue.mechanical_breakdown,
+      feel: primaryIssue.feel_cue,
+    });
+    setTimeout(async () => {
+      await configureAudioForSpeech();
+      await speak(text, voiceGender, language, apiUrl);
+    }, 800);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primaryIssue]);
+
   // Phase K — pose-detection pipeline. K.5: parallelized in pairs (chunks of
   // 2) so wall-clock drops from N×4s sequential to (N/2)×4s while still
   // passing prior_issues context-window between chunks.

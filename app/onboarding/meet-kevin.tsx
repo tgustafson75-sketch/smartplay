@@ -137,6 +137,9 @@ export default function MeetKevin() {
 
         <Text style={[styles.heading, { color: colors.accent }]}>MEET KEVIN</Text>
         <Text style={[styles.message, { color: colors.text_primary }]}>{KEVIN_INTRO}</Text>
+        <Text style={[styles.message, { color: colors.text_muted, fontSize: 13, marginTop: 8 }]}>
+          Tip: with earbuds connected, a single tap opens Kevin's listening hands-free.
+        </Text>
 
         {kevinResponse ? (
           <Text style={[styles.kevinResponse, { color: colors.text_primary }]}>
