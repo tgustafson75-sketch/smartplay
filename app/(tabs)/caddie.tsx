@@ -1219,9 +1219,10 @@ export default function CaddieTab() {
         </View>
       )}
 
-      {/* "?" help button — to the right of Kevin, vertically near the avatar
-          midline so it doesn't fight the WindArrow (top-right) or any face area. */}
-      {trustLevel !== 1 && (
+      {/* "?" help button — visible at L2 and L3 only. L1 has no Kevin
+          presence to ask about; L4 users are past discovery (Tutorials in
+          Tools menu covers anyone who wants a refresher). */}
+      {(trustLevel === 2 || trustLevel === 3) && (
         <View style={{ position: 'absolute', top: insets.top + 240, right: 12, zIndex: 13 }}>
           <KevinHelpButton surface="caddie" />
         </View>
@@ -1816,6 +1817,15 @@ export default function CaddieTab() {
                 label: voiceEnabled ? 'Voice On' : 'Voice Off',
                 sub: "Toggle Kevin's voice",
                 action: () => setVoiceEnabled(!voiceEnabled),
+              },
+              {
+                icon: '📚',
+                label: 'Tutorials',
+                sub: 'How each tool works',
+                action: () => {
+                  setShowMoreMenu(false);
+                  router.push('/tutorials' as never);
+                },
               },
               {
                 icon: '⚙️',
