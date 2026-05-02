@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Modal, TextInput } from 'react-native';
 import {
   View,
   Text,
@@ -47,7 +48,9 @@ export default function CageIndex() {
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
 
-  const { startSession, cameraAlignment, sessionHistory } = useCageStore();
+  const { startSession, cameraAlignment, sessionHistory, setDistanceCalibration } = useCageStore();
+  const [calibrationOpen, setCalibrationOpen] = useState(false);
+  const [calibrationInput, setCalibrationInput] = useState('');
   const { watchConnected } = useSettingsStore();
   const { confidenceByClub } = useRelationshipStore();
 
@@ -101,17 +104,29 @@ export default function CageIndex() {
                 {cameraAlignment?.locked ? 'Camera Ready ✓' : 'Camera Not Set'}
               </Text>
               <Text style={styles.cameraSub}>
-                {cameraAlignment?.locked
-                  ? 'SwingLab ready'
-                  : 'Optional — tap to set up'}
+                {cameraAlignment?.distance_yards != null
+                  ? `Calibrated to ${cameraAlignment.distance_yards} yards`
+                  : cameraAlignment?.locked
+                    ? 'SwingLab ready · distance not calibrated'
+                    : 'Optional — tap to set up'}
               </Text>
             </View>
             <TouchableOpacity
               style={styles.cameraSetBtn}
-              onPress={() => router.push('/(tabs)/swinglab' as never)}
+              onPress={() => {
+                // Phase J — open distance calibration modal. Pre-populate
+                // with the existing value if one exists so re-opening is
+                // an "adjust" rather than "set fresh."
+                setCalibrationInput(
+                  cameraAlignment?.distance_yards != null
+                    ? String(cameraAlignment.distance_yards)
+                    : '',
+                );
+                setCalibrationOpen(true);
+              }}
             >
               <Text style={styles.cameraSetText}>
-                {cameraAlignment?.locked ? 'Adjust' : 'Set Up'}
+                {cameraAlignment?.distance_yards != null ? 'Adjust' : 'Set Up'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -187,9 +202,74 @@ export default function CageIndex() {
         </TouchableOpacity>
 
       </ScrollView>
+
+      {/* Phase J — Distance calibration modal. Walk to a reference target
+           in the cage, type the yardage, save. One-time per cage; re-open
+           to adjust. Calibration powers acoustic ball speed reference, future
+           pose-distance corrections (K), and CV target sizing (L). */}
+      <Modal
+        visible={calibrationOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCalibrationOpen(false)}
+      >
+        <TouchableOpacity activeOpacity={1} style={calStyles.scrim} onPress={() => setCalibrationOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={calStyles.card}>
+            <Text style={calStyles.title}>CAGE DISTANCE</Text>
+            <Text style={calStyles.body}>
+              Walk to a reference target in your cage and tell me how far it is from your hitting position.
+            </Text>
+            <Text style={calStyles.label}>Yards</Text>
+            <TextInput
+              style={calStyles.input}
+              value={calibrationInput}
+              onChangeText={setCalibrationInput}
+              keyboardType="number-pad"
+              placeholder="e.g. 8"
+              placeholderTextColor="#4b5563"
+              autoFocus
+            />
+            <View style={calStyles.actions}>
+              <TouchableOpacity onPress={() => setCalibrationOpen(false)} style={calStyles.btn}>
+                <Text style={calStyles.btnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  const yards = parseInt(calibrationInput, 10);
+                  if (yards > 0 && yards < 200) {
+                    setDistanceCalibration(yards);
+                    setCalibrationOpen(false);
+                  }
+                }}
+                style={[calStyles.btn, calStyles.btnPrimary]}
+              >
+                <Text style={[calStyles.btnText, calStyles.btnTextPrimary]}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
+
+const calStyles = StyleSheet.create({
+  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  card: { backgroundColor: '#0d2418', borderRadius: 14, borderWidth: 1, borderColor: '#1e3a28', padding: 18, width: '100%', maxWidth: 380 },
+  title: { color: '#00C896', fontSize: 11, fontWeight: '800', letterSpacing: 1.4, marginBottom: 10 },
+  body: { color: '#e8f5e9', fontSize: 13, lineHeight: 19, marginBottom: 16 },
+  label: { color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 6 },
+  input: {
+    backgroundColor: '#0a1e12', borderWidth: 1, borderColor: '#1e3a28', borderRadius: 10,
+    color: '#ffffff', fontSize: 22, fontWeight: '800',
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  actions: { flexDirection: 'row', gap: 8, marginTop: 16 },
+  btn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: '#1e3a28', borderRadius: 10, backgroundColor: '#0a1e12' },
+  btnPrimary: { borderColor: '#00C896', backgroundColor: '#003d20' },
+  btnText: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
+  btnTextPrimary: { color: '#00C896' },
+});
 
 const styles = StyleSheet.create({
   container: {

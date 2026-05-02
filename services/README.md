@@ -141,6 +141,19 @@ Infrastructure services that don't belong to any single mode (`utils/geoDistance
 | `app/arena/index.tsx` | KevinCoachBox at top of Arena landing with `arena_intro`. Uses `psychologist` accent for the gameplay register. | Coach (Psychologist-leaning) |
 
 **Contained-presence pattern.** Distinct from Caddie home's Trust-Spectrum continuous-scaling presence. Practice surfaces use a dismissible card so Kevin can step back when the user wants quiet practice — re-engaging next visit without permanent dismissal. Future Practice surfaces (Phase J Cage v2 Lite completion, Phase K GolFix overlay, Phase L Arena CV scoring) plug into the same pattern.
+
+## Phase J — Cage v2 Lite
+
+| File | Purpose | Role |
+|---|---|---|
+| `store/cageStore.ts` | Extended `CageSession` with reserved `primary_issue` and `drill_recommendation` fields (Phase K populates). Extended `CameraAlignment` with `distance_yards` + `cage_id`. New `setDistanceCalibration(yards, cageId?)` action. | Coach (Infra) |
+| `services/acousticBallSpeed.ts` | Stubbed acoustic ball speed (option b per spec). `estimateBallSpeed(club)` returns club-typical mph with `confidence: 0.3, source: 'club_typical_stub'`. `measureBallSpeedAcoustic(...)` reserved for the real DSP detector — signature stable so consumer code can swap without rewrite. | Coach (Infra) |
+| `components/swinglab/PrimaryIssueCard.tsx` | Reserved-slot card from Addendum 4 spec. Placeholder mode when `issue` prop is null (today, always); populated mode renders category icon + title + severity chip + occurrence count + mechanical breakdown + feel cue. | Coach |
+| `components/swinglab/DrillCard.tsx` | Paired drill recommendation card. Placeholder mode when null; populated mode shows drill name + Coach-voice reason + "Open Drill" CTA routing to `/swinglab`. Phase K populates with the relevant drill_id. | Coach |
+| `app/cage/index.tsx` | Camera setup card now opens a distance-calibration modal: walk to reference target, type yardage, save. Calibration persists per cage via `setDistanceCalibration()`; subsequent sessions skip setup. | Coach |
+| `app/cage/summary.tsx` | PrimaryIssueCard + DrillCard mounted between the existing Phase I KevinCoachBox and the existing shot grid. Cards render placeholders today; light up automatically when Phase K populates `session.primary_issue` / `session.drill_recommendation`. | Coach |
+| `app/cage/session.tsx` | Phase I.5 follow-up — KevinCoachBox in `minimized` mode renders during active recording (silent ambient indicator). Re-expands at the post-session review. | Coach |
+| `services/intents/queryStatusHandler.ts` + `api/voice-intent.ts` | Two new query topics — `end_session` (ends active Cage Session and routes to summary) and `next_focus` (summarizes Phase K's Primary Issue if populated, honest placeholder otherwise). Both work off-round (Practice context). | Caddie (entry) → Coach (data) |
 | `courseGeometryService.ts` | Course geometry fetch and cache (mem + AsyncStorage, weekly refresh). Returns per-hole tee/green coordinates and reserved fairway/green-outline arrays for richer future sources. | Infra (Caddie + Coach consume) |
 | `roles/caddieRole.ts` | Re-export hub for Caddie-register services. No implementation. | Caddie |
 | `roles/coachRole.ts` | Re-export hub for Coach-register services and recap surfaces. No implementation. | Coach |

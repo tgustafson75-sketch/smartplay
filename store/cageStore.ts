@@ -42,6 +42,29 @@ export interface CageSession {
   dominantMiss: string | null;
   rootCause: string | null;
   summary: string | null;
+  // Phase J — reserved for Phase K (pose detection / issue identification).
+  // Phase J ships these always-null; cards render placeholder copy until
+  // Phase K populates them.
+  primary_issue?: PrimaryIssue | null;
+  drill_recommendation?: DrillRecommendation | null;
+}
+
+export interface PrimaryIssue {
+  issue_id: string;
+  name: string;
+  category: 'club_face' | 'swing_path' | 'attack_angle' | 'tempo' | 'setup' | 'other';
+  severity: 'minor' | 'moderate' | 'significant';
+  occurrence_count: number;
+  visual_reference_path: string | null;
+  mechanical_breakdown: string;
+  feel_cue: string;
+  detected_in_shots: string[];
+}
+
+export interface DrillRecommendation {
+  drill_id: string;       // links to existing SwingLab drill library by id
+  drill_name: string;
+  reason: string;         // Kevin's Coach voice explaining the recommendation
 }
 
 export interface CameraAlignment {
@@ -49,6 +72,11 @@ export interface CameraAlignment {
   targetX: number;
   targetY: number;
   lockedAt: number | null;
+  // Phase J — distance calibration (per cage; first calibration sticks for
+  // the user's home cage). Powers acoustic ball speed reference distance,
+  // future pose-distance corrections (K), and CV target sizing (L).
+  distance_yards?: number | null;
+  cage_id?: string | null;        // user-assigned tag; defaults to "home"
 }
 
 // ─── STATE ────────────────────────────────
@@ -75,6 +103,9 @@ interface CageState {
   }) => void;
   setCameraAlignment: (x: number, y: number) => void;
   clearCameraAlignment: () => void;
+  /** Phase J — set the distance calibration for the current cage. Pass yards.
+   *  Optional cage_id defaults to 'home' when omitted. */
+  setDistanceCalibration: (yards: number, cageId?: string) => void;
   getClubProfile: (club: string) => CageState['clubProfiles'][string] | null;
   updateShotLabels: (sessionId: string, shotId: string, labels: ReviewLabels, transcript: string) => void;
 }
@@ -127,11 +158,33 @@ export const useCageStore = create<CageState>()(
         }),
 
       setCameraAlignment: (x, y) =>
-        set({
-          cameraAlignment: { locked: true, targetX: x, targetY: y, lockedAt: Date.now() },
-        }),
+        set(s => ({
+          cameraAlignment: {
+            locked: true,
+            targetX: x,
+            targetY: y,
+            lockedAt: Date.now(),
+            // Preserve any existing calibration when re-aiming.
+            distance_yards: s.cameraAlignment?.distance_yards ?? null,
+            cage_id: s.cameraAlignment?.cage_id ?? null,
+          },
+        })),
 
       clearCameraAlignment: () => set({ cameraAlignment: null }),
+
+      setDistanceCalibration: (yards, cageId) =>
+        set(s => ({
+          cameraAlignment: {
+            // If no alignment yet, create one with neutral aim coords —
+            // distance can be calibrated independently of fine aim lock.
+            locked: s.cameraAlignment?.locked ?? false,
+            targetX: s.cameraAlignment?.targetX ?? 0.5,
+            targetY: s.cameraAlignment?.targetY ?? 0.5,
+            lockedAt: s.cameraAlignment?.lockedAt ?? null,
+            distance_yards: yards,
+            cage_id: cageId ?? s.cameraAlignment?.cage_id ?? 'home',
+          },
+        })),
 
       getClubProfile: (club) => get().clubProfiles[club] ?? null,
 

@@ -14,6 +14,7 @@ import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
 import {
   analyzeSession,
   getKevinShotResponse,
@@ -255,6 +256,11 @@ export default function CageSession() {
             )}
           </View>
         </View>
+
+        {/* Phase I.5 — Kevin minimized to ambient indicator during active
+             recording. Silent in foreground; the box re-expands at the
+             post-session review screen. */}
+        <KevinCoachBox body="" minimized />
 
         {/* PATTERN BAR */}
         {shots.length >= 3 && (

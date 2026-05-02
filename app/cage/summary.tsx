@@ -17,6 +17,8 @@ import { usePointsStore } from '../../store/pointsStore';
 import { analyzeSession } from '../../services/patternEngine';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
+import PrimaryIssueCard from '../../components/swinglab/PrimaryIssueCard';
+import DrillCard from '../../components/swinglab/DrillCard';
 import { getDialog } from '../../services/dialogEngine';
 
 export default function CageSummary() {
@@ -97,6 +99,17 @@ export default function CageSummary() {
           body={getDialog('coach', 'cage_session_review_intro')}
           accent="coach"
         />
+
+        {/* Phase J — Primary Issue + Drill recommendation cards. Reserved
+             slots: render placeholder copy when the underlying fields on
+             session.primary_issue / session.drill_recommendation are null
+             (today, always — Phase K populates them). When Phase K ships,
+             these cards render real analysis automatically. */}
+        <PrimaryIssueCard
+          issue={session.primary_issue ?? null}
+          totalShots={session.shots.length}
+        />
+        <DrillCard recommendation={session.drill_recommendation ?? null} />
 
         {/* KEVIN DEBRIEF */}
         <View style={styles.debriefCard}>

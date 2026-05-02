@@ -50,7 +50,7 @@ export const queryStatusHandler: IntentHandler = {
     const topic = String(intent.parameters.query_topic ?? '').toLowerCase();
     const round = useRoundStore.getState();
 
-    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like' || topic === 'green_front' || topic === 'green_back' || topic === 'green_middle')) {
+    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like' || topic === 'green_front' || topic === 'green_back' || topic === 'green_middle') /* end_session and next_focus deliberately allowed off-round */) {
       return {
         success: true,
         voice_response: 'You\'re not in a round yet. Want to start one?',
@@ -291,6 +291,74 @@ export const queryStatusHandler: IntentHandler = {
           side_effects: ['query:distance_to_green'],
           follow_up_needed: false,
         };
+      }
+
+      case 'end_session': {
+        // Phase J — voice trigger to end the active Cage Session. Reads cage
+        // store directly to avoid circular import. If no active session,
+        // gracefully decline.
+        try {
+          const { useCageStore } = await import('../../store/cageStore');
+          const cage = useCageStore.getState();
+          if (!cage.activeSession) {
+            return {
+              success: true,
+              voice_response: "No session running — nothing to end.",
+              side_effects: ['cage:end_session:no_active'],
+              follow_up_needed: false,
+            };
+          }
+          cage.endSession({ dominantMiss: null, rootCause: null, summary: null });
+          const { router } = await import('expo-router');
+          router.push('/cage/summary' as never);
+          return {
+            success: true,
+            voice_response: "Session ended. Let me take a look.",
+            side_effects: ['cage:end_session'],
+            follow_up_needed: false,
+          };
+        } catch (err) {
+          console.log('[queryStatusHandler] end_session failed:', err);
+          return {
+            success: false,
+            voice_response: "Couldn't end the session.",
+            side_effects: ['cage:end_session:error'],
+            follow_up_needed: false,
+          };
+        }
+      }
+
+      case 'next_focus': {
+        // Phase J — "what should I work on". If a Phase K Primary Issue is
+        // populated on the most recent session, summarize it. Otherwise
+        // honest placeholder.
+        try {
+          const { useCageStore } = await import('../../store/cageStore');
+          const cage = useCageStore.getState();
+          const last = cage.sessionHistory[cage.sessionHistory.length - 1];
+          if (last?.primary_issue) {
+            const issue = last.primary_issue;
+            return {
+              success: true,
+              voice_response: `${issue.name}. ${issue.feel_cue}`,
+              side_effects: ['cage:next_focus'],
+              follow_up_needed: false,
+            };
+          }
+          return {
+            success: true,
+            voice_response: "Analysis is coming soon — try the drills section in the meantime.",
+            side_effects: ['cage:next_focus:placeholder'],
+            follow_up_needed: false,
+          };
+        } catch {
+          return {
+            success: true,
+            voice_response: "Analysis is coming soon.",
+            side_effects: ['cage:next_focus:error'],
+            follow_up_needed: false,
+          };
+        }
       }
 
       case 'green_front':

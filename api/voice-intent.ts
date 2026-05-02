@@ -25,7 +25,7 @@ Available intents:
    - "should I lay up" / "should I play safe here" -> { tool_name: "lie_analysis", play_intent: "conservative" }
 
 2. query_status — User wants information about current state.
-   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "shot_distance" | "hole_progress" | "distance_to_green" | "wind" | "conditions" | "plays_like" | "green_front" | "green_back" | "green_middle", target_yards?: number }
+   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "shot_distance" | "hole_progress" | "distance_to_green" | "wind" | "conditions" | "plays_like" | "green_front" | "green_back" | "green_middle" | "end_session" | "next_focus", target_yards?: number }
    Examples:
    - "what's my score" -> { query_topic: "score" }
    - "what hole am I on" -> { query_topic: "hole" }
@@ -38,6 +38,8 @@ Available intents:
    - "plays like" alone -> { query_topic: "plays_like" }
    - "plays like 152" / "what does 165 play like" / "how does 140 play" -> { query_topic: "plays_like", target_yards: 152 } (extract the integer when stated)
    - "how far to the front" / "yardage to the front of the green" / "how far is the front" -> { query_topic: "green_front" }
+   - "end session" / "Kevin end session" / "stop the session" -> { query_topic: "end_session" }
+   - "what should I work on" / "what's the takeaway" / "what did I do wrong" -> { query_topic: "next_focus" }
    - "how far to the back" / "yardage to the back of the green" -> { query_topic: "green_back" }
    - "how far to the middle" / "middle of the green" -> { query_topic: "green_middle" }
 
