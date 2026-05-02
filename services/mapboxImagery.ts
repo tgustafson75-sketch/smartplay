@@ -183,3 +183,72 @@ export async function clearImageryCache(): Promise<void> {
   // glob, so we no-op here for now. The OS cache directory gets cleared
   // by the system periodically, which is acceptable for v1.0.
 }
+
+/**
+ * Course-wide aerial — single Mapbox tile sized to span the bounding box
+ * of all hole geometries. Used as the hero thumbnail on Course Detail
+ * before a round starts. Returns null if Mapbox isn't configured or no
+ * hole has usable coordinates.
+ */
+export type CourseImageryInput = {
+  courseId: string | null;
+  holes: Array<{ tee: { lat: number; lng: number } | null; green: { lat: number; lng: number } | null }>;
+};
+
+export function getCourseImageryUrl(
+  input: CourseImageryInput,
+  width = 800,
+  height = 400,
+): string | null {
+  if (!MAPBOX_TOKEN) return null;
+  // Collect all valid coords
+  const coords: Array<{ lat: number; lng: number }> = [];
+  for (const h of input.holes) {
+    if (h.tee) coords.push(h.tee);
+    if (h.green) coords.push(h.green);
+  }
+  if (coords.length === 0) return null;
+
+  // Bounding box
+  const lats = coords.map(c => c.lat);
+  const lngs = coords.map(c => c.lng);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const center = { lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2 };
+
+  // Auto-zoom from bbox span. Most courses span ~0.01-0.02 degrees.
+  // Mapbox zoom: each level halves the visible area. Tuned so a typical
+  // 18-hole layout fills the frame at zoom 14-15.
+  const span = Math.max(maxLat - minLat, maxLng - minLng);
+  const zoom =
+    span < 0.005 ? 16 :
+    span < 0.012 ? 15 :
+    span < 0.025 ? 14 :
+    span < 0.05  ? 13 : 12;
+
+  const w = Math.min(width, 1280);
+  const h = Math.min(height, 1280);
+  return (
+    `https://api.mapbox.com/styles/v1/${MAPBOX_STYLE}/static/` +
+    `${center.lng.toFixed(6)},${center.lat.toFixed(6)},` +
+    `${zoom},0/` +
+    `${w}x${h}` +
+    `?access_token=${MAPBOX_TOKEN}` +
+    `&attribution=false&logo=false`
+  );
+}
+
+/**
+ * Tiny per-hole thumbnail for the Course Detail modal's hole-by-hole list.
+ * Same projection as getHoleImageryUrl but at a smaller size — keeps cost
+ * to one tile per hole regardless of how many users browse the modal.
+ */
+export function getHoleThumbnailUrl(
+  input: HoleImageryInput,
+  width = 160,
+  height = 100,
+): string | null {
+  return getHoleImageryUrl(input, { width, height });
+}
