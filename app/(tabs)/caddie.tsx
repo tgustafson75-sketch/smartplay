@@ -52,6 +52,7 @@ import { playsLikeDistance } from '../../utils/playsLike';
 import SmartFinderCard from '../../components/smartfinder/SmartFinderCard';
 import { useTrustLevelStore, TRUST_LEVEL_META, type TrustLevel } from '../../store/trustLevelStore';
 import KevinAvatar, { type AvatarState } from '../../components/kevin/KevinAvatar';
+import L1HolePreview from '../../components/caddie/L1HolePreview';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
 import WhatCanISayChip from '../../components/WhatCanISayChip';
 import KevinHelpButton from '../../components/KevinHelpButton';
@@ -1137,6 +1138,31 @@ export default function CaddieTab() {
           pointerEvents="box-none"
         >
           <SmartFinderCard />
+        </View>
+      )}
+
+      {/* L1 QUIET — fixed logo + hole preview block above the SmartFinder card.
+           L1-only; other levels are unaffected. Position is anchored from the
+           bottom so it sits cleanly above the SmartFinder card without
+           overlapping it or any other Caddie-home element. */}
+      {trustLevel === 1 && (
+        <View
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 240 + insets.bottom,
+            alignItems: 'center',
+            zIndex: 7,
+          }}
+          pointerEvents="box-none"
+        >
+          <Image
+            source={require('../../assets/avatars/smartplay_caddie_badge.png')}
+            style={{ width: 76, height: 76, marginBottom: 10 }}
+            resizeMode="contain"
+          />
+          <L1HolePreview />
         </View>
       )}
 
