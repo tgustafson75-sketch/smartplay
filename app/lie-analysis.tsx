@@ -13,6 +13,7 @@ import { analyzeLie, type LieAnalysisResult, type LieAnalysis } from '../service
 import { speak, stopSpeaking } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
 import { getDialog } from '../services/dialogEngine';
+import { useTrustLevelStore } from '../store/trustLevelStore';
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
@@ -45,10 +46,16 @@ export default function LieAnalysisScreen() {
   const [speaking, setSpeaking] = useState(false);
 
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
+  const trustLevel = useTrustLevelStore(s => s.level);
 
   const speakAnalysis = useCallback(async (a: LieAnalysis) => {
     if (!voiceEnabled) return;
-    const summary = getDialog('caddie', 'lie_analysis_summary', {
+    // Phase H v2 — pick verbosity by trust level.
+    const summaryKey =
+      trustLevel === 1 ? 'lie_analysis_summary_terse'
+      : trustLevel === 4 ? 'lie_analysis_summary_engaged'
+      : 'lie_analysis_summary';
+    const summary = getDialog('caddie', summaryKey, {
       situation: a.situation_description,
       advice: a.tactical_advice,
     });
@@ -58,14 +65,17 @@ export default function LieAnalysisScreen() {
     const closer = a.conservative_call
       ? ' ' + getDialog('caddie', 'safety_call')
       : '';
-    const text = (summary + clubLine + closer).trim();
+    const goalLine = a.goal_aware_note
+      ? ' ' + getDialog('caddie', 'goal_aware_addendum', { note: a.goal_aware_note })
+      : '';
+    const text = (summary + clubLine + closer + goalLine).trim();
     setSpeaking(true);
     try {
       await speak(text, voiceGender, language, apiUrl);
     } finally {
       setSpeaking(false);
     }
-  }, [voiceEnabled, voiceGender, language]);
+  }, [voiceEnabled, voiceGender, language, trustLevel]);
 
   const runAnalysis = useCallback(async (uri: string) => {
     setPhase('analyzing');

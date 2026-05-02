@@ -3,6 +3,9 @@ import { getCachedWeather, fetchWeatherAt, type WeatherSnapshot } from './weathe
 import { getGreenCentroid } from './shotLocationService';
 import { refreshFix, getLastFix } from './smartFinderService';
 import { haversineYards } from '../utils/geoDistance';
+import { getTrustLevel } from './trustLevelService';
+import type { TrustLevel } from '../store/trustLevelStore';
+import { ROUND_MODE_LABELS } from '../types/patterns';
 
 /**
  * Phase H — bundles the context the lie-analysis vision endpoint uses to
@@ -33,6 +36,12 @@ export type LieAnalysisContext = {
   last_shot: { club: string | null; outcome: string | null; direction: string | null } | null;
   lie_hint: string | null;
   play_intent: PlayIntent;
+  // Phase H v2 — goal/mode + trust level for goal-aware, level-aware analysis.
+  goal: string | null;            // e.g. "Break 90"
+  mode_label: string | null;      // human-readable mode ("Break 90", "Free Play", etc.)
+  current_total_strokes: number | null;
+  holes_played: number | null;
+  trust_level: TrustLevel;
 };
 
 export async function bundleLieAnalysisContext(playIntent: PlayIntent = null): Promise<LieAnalysisContext> {
@@ -76,6 +85,13 @@ export async function bundleLieAnalysisContext(playIntent: PlayIntent = null): P
     ? (LIE_KEYWORDS.find(k => last.raw_utterance!.toLowerCase().includes(k)) ?? null)
     : null;
 
+  // Phase H v2 — goal/mode bundling. The vision prompt uses these to
+  // factor the player's score target into the recommendation.
+  const goal = round.isRoundActive ? (round.goal ?? null) : null;
+  const mode_label = round.isRoundActive ? (ROUND_MODE_LABELS[round.mode] ?? null) : null;
+  const current_total_strokes = round.isRoundActive ? round.getTotalScore() : null;
+  const holes_played = round.isRoundActive ? round.getHolesPlayed() : null;
+
   return {
     current_hole: currentHole,
     par,
@@ -84,5 +100,10 @@ export async function bundleLieAnalysisContext(playIntent: PlayIntent = null): P
     last_shot,
     lie_hint,
     play_intent: playIntent,
+    goal,
+    mode_label,
+    current_total_strokes,
+    holes_played,
+    trust_level: getTrustLevel(),
   };
 }

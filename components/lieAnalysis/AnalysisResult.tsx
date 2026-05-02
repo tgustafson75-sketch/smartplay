@@ -62,6 +62,13 @@ export default function AnalysisResult({
             <Text style={styles.altText}>{analysis.alternative_play}</Text>
           </View>
         )}
+
+        {analysis.goal_aware_note && (
+          <View style={styles.goalBlock}>
+            <Text style={styles.goalLabel}>FOR YOUR GOAL</Text>
+            <Text style={styles.goalText}>{analysis.goal_aware_note}</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.actions}>
@@ -81,7 +88,7 @@ export default function AnalysisResult({
 
 const styles = StyleSheet.create({
   scroll: { padding: 16, paddingBottom: 32 },
-  thumb: { width: '100%', height: 180, borderRadius: 12, marginBottom: 14 },
+  thumb: { width: '100%', aspectRatio: 4 / 3, borderRadius: 12, marginBottom: 14 },
   card: {
     backgroundColor: '#0d2418',
     borderRadius: 14,
@@ -113,6 +120,12 @@ const styles = StyleSheet.create({
   altBlock: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#1e3a28' },
   altLabel: { color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginBottom: 6 },
   altText: { color: '#9ca3af', fontSize: 13, lineHeight: 19 },
+  goalBlock: {
+    marginTop: 14, paddingTop: 14,
+    borderTopWidth: 1, borderTopColor: '#1e3a28',
+  },
+  goalLabel: { color: '#F5A623', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginBottom: 6 },
+  goalText: { color: '#e8f5e9', fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
   actions: { flexDirection: 'row', gap: 8, marginTop: 16 },
   actionBtn: {
     flex: 1, paddingVertical: 12, alignItems: 'center',

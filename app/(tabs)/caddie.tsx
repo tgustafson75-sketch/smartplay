@@ -1252,38 +1252,57 @@ export default function CaddieTab() {
         </View>
       )}
 
-      {/* LIE ANALYSIS camera icon — bottom-right corner of content area.
-           Tappable on any Trust Spectrum level during an active round. Sits
-           above the SmartFinder card on L1/L2/L3 (card top ~240+insets.bottom),
-           and above the L4 SmartFinder reticle button. */}
-      {isRoundActive && (
-        <TouchableOpacity
-          onPress={() => router.push('/lie-analysis' as never)}
-          style={{
-            position: 'absolute',
-            right: 12,
-            bottom: 280 + insets.bottom,
-            width: 48,
-            height: 48,
-            borderRadius: 24,
-            backgroundColor: 'rgba(13, 36, 24, 0.85)',
-            borderWidth: 1.5,
-            borderColor: '#00C896',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 14,
-            shadowColor: '#00C896',
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.55,
-            shadowRadius: 8,
-            elevation: 6,
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Open Lie Analysis"
-        >
-          <Ionicons name="camera" size={22} color="#00C896" />
-        </TouchableOpacity>
-      )}
+      {/* LIE ANALYSIS camera icon — placement varies by Trust Spectrum level.
+           Spec (Phase H v2):
+             L1 — paired with the SmartVision card at the top.
+             L2 — adjacent to the ? help button on the right side.
+             L3 — visible near Kevin / SmartFinder area.
+             L4 — smaller, LEFT of the yellow SmartFinder reticle (which sits
+                  at right: 12, bottom: 200 + insets.bottom). Voice is primary.
+           Banner / Kevin avatar / yellow SmartFinder tappable / wind label /
+           BREAK 90 badge / detail bar all unchanged across these moves. */}
+      {isRoundActive && (() => {
+        const baseStyle = {
+          position: 'absolute' as const,
+          backgroundColor: 'rgba(13, 36, 24, 0.85)',
+          borderWidth: 1.5,
+          borderColor: '#00C896',
+          alignItems: 'center' as const,
+          justifyContent: 'center' as const,
+          shadowColor: '#00C896',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.55,
+          shadowRadius: 8,
+          elevation: 6,
+        };
+        // Per-level position + size
+        const placements: Record<number, { top?: number; right?: number; bottom?: number; left?: number; size: number; zIndex: number }> = {
+          1: { top: insets.top + 60, right: 12, size: 44, zIndex: 14 },
+          2: { top: insets.top + 290, right: 12, size: 44, zIndex: 14 },
+          3: { top: insets.top + 290, right: 12, size: 44, zIndex: 14 },
+          4: { right: 76, bottom: 200 + insets.bottom, size: 40, zIndex: 14 },
+        };
+        const p = placements[trustLevel] ?? placements[2];
+        return (
+          <TouchableOpacity
+            onPress={() => router.push('/lie-analysis' as never)}
+            style={[baseStyle, {
+              ...(p.top != null && { top: p.top }),
+              ...(p.right != null && { right: p.right }),
+              ...(p.bottom != null && { bottom: p.bottom }),
+              ...(p.left != null && { left: p.left }),
+              width: p.size,
+              height: p.size,
+              borderRadius: p.size / 2,
+              zIndex: p.zIndex,
+            }]}
+            accessibilityRole="button"
+            accessibilityLabel="Open Lie Analysis"
+          >
+            <Ionicons name="camera" size={Math.round(p.size * 0.46)} color="#00C896" />
+          </TouchableOpacity>
+        );
+      })()}
 
       {/* L4 SmartFinder ICON — replaces the embedded card at L4. Sits on the
            right edge, vertically centered around the data strip area, so it

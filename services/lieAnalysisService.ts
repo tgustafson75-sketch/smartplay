@@ -17,6 +17,8 @@ export type LieAnalysis = {
   confidence_level: 'high' | 'medium' | 'low';
   conservative_call: boolean;
   follow_up_question?: string | null;
+  // Phase H v2 — populated only when goal context affected the call.
+  goal_aware_note?: string | null;
 };
 
 export type LieAnalysisResult =

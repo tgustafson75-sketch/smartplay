@@ -24,10 +24,13 @@ export type CaddieSituation =
   | 'no_data_apology'
   | 'help_intro'
   | 'lie_analysis_summary'
+  | 'lie_analysis_summary_terse'
+  | 'lie_analysis_summary_engaged'
   | 'club_recommendation'
   | 'safety_call'
   | 'aggressive_call'
-  | 'lie_low_confidence';
+  | 'lie_low_confidence'
+  | 'goal_aware_addendum';
 
 const TEMPLATES: Record<CaddieSituation, string[]> = {
   shot_prompt: [
@@ -88,9 +91,30 @@ const TEMPLATES: Record<CaddieSituation, string[]> = {
   // with the API's situation/advice/club/alternative fields. Engine picks
   // the variation; client interpolates {variables}. Future Tank-character
   // variants can be added alongside without rewriting this surface.
+  // Three verbosity variants per Trust Spectrum level — the screen picks
+  // which key to call based on getTrustLevel(): L1 → terse, L2/L3 → standard,
+  // L4 → engaged.
   lie_analysis_summary: [
     "{situation} {advice}",
     "Looks like {situation} {advice}",
+  ],
+  lie_analysis_summary_terse: [
+    "{advice}",
+    "Here's the play: {advice}",
+  ],
+  lie_analysis_summary_engaged: [
+    "Alright, {situation} Here's what I'd do — {advice}",
+    "Okay, taking a look. {situation} {advice} That's the play.",
+    "Let me walk you through this. {situation} {advice}",
+  ],
+
+  // Goal-aware addendum — only spoken when the API returns a goal_aware_note
+  // (i.e., the score state actually shifted the recommendation). Templates
+  // wrap the API's note text without restating it verbatim.
+  goal_aware_addendum: [
+    "{note}",
+    "And — {note}",
+    "Worth noting: {note}",
   ],
 
   club_recommendation: [

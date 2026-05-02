@@ -32,6 +32,9 @@ type AnalysisResponse = {
   confidence_level: 'high' | 'medium' | 'low';
   conservative_call: boolean;
   follow_up_question?: string | null;
+  // Phase H v2 — populated only when goal context affected the call.
+  // Short note Mike reads as "with your buffer toward 89, this is the play".
+  goal_aware_note?: string | null;
 };
 
 const SYSTEM_PROMPT = `${KEVIN_CHARACTER_SPEC}
@@ -59,7 +62,8 @@ Output ONLY a JSON object with this exact shape:
   "alternative_play": "<one short sentence describing the safer or more aggressive alternative if you'd want to mention one, else null>",
   "confidence_level": "high" | "medium" | "low",
   "conservative_call": true | false,
-  "follow_up_question": "<a single short clarifying question if the photo is genuinely too dark/blurry to read, else null>"
+  "follow_up_question": "<a single short clarifying question if the photo is genuinely too dark/blurry to read, else null>",
+  "goal_aware_note": "<short note ONLY if the player's score goal/mode meaningfully affected your call, else null. Examples: 'with your buffer toward 89, this is play-it-safe' / 'on pace for break 80, no need to force this' / 'down a few — measured aggression is fine'. Stay specific to their actual score state. Skip when goal is Free Play or unset.>"
 }
 
 Rules:
@@ -67,6 +71,7 @@ Rules:
 - Real caddie phrasing only. Short. Confident. Specific to what's actually in the photo.
 - If the lie is gnarly enough that smart play is "punch out", say so plainly.
 - If photo is too dark/blurry, set confidence_level: "low" and provide follow_up_question instead of guessing.
+- Goal-awareness: when a Goal or Mode is set with score state, factor it into the call honestly. A 5-stroke buffer toward the target = more conservative. On the bubble = play the percentages. Well off pace = aggressive only when the line genuinely warrants it. Free Play / no goal = ignore goal context. The goal_aware_note appears only when the goal context actually shifts the recommendation.
 - Output ONLY valid JSON. No code fences, no preamble, no commentary.`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -110,6 +115,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (ctx.lie_hint) contextLines.push(`Lie hint from last log: ${String(ctx.lie_hint)}`);
     if (ctx.play_intent === 'aggressive') contextLines.push('Player is leaning aggressive — they want to know if going for it is on.');
     if (ctx.play_intent === 'conservative') contextLines.push('Player is leaning conservative — they want to know if laying up is the right call.');
+    // Phase H v2 — goal/mode context for goal-aware recommendations
+    const modeLabel = ctx.mode_label ? String(ctx.mode_label) : null;
+    if (modeLabel && modeLabel !== 'Free Play') {
+      const totalStrokes = ctx.current_total_strokes != null ? Number(ctx.current_total_strokes) : null;
+      const holesPlayed = ctx.holes_played != null ? Number(ctx.holes_played) : null;
+      const scoreLine = (totalStrokes != null && holesPlayed != null)
+        ? `Score so far: ${totalStrokes} strokes through ${holesPlayed} holes.`
+        : '';
+      contextLines.push(`Mode: ${modeLabel}. ${scoreLine}`.trim());
+    }
+    if (ctx.goal) contextLines.push(`Player's stated goal: ${String(ctx.goal)}`);
+    if (ctx.trust_level != null) {
+      const lvl = Number(ctx.trust_level);
+      const verbosity = lvl === 1 ? 'terse — single recommendation, minimal preamble'
+                      : lvl === 4 ? 'engaged and conversational — speak like you\'re right there'
+                      : 'standard caddie voice';
+      contextLines.push(`Verbosity: ${verbosity}.`);
+    }
 
     const userText = contextLines.length > 0
       ? `Context:\n${contextLines.join('\n')}\n\nWhat do you see, and what should they do?`
