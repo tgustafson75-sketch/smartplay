@@ -1280,8 +1280,8 @@ export default function CaddieTab() {
         />
       </Animated.View>
 
-      {/* PENALTY QUICK-TAP — floats above the shot strip during active rounds */}
-      {isRoundActive && (
+      {/* PENALTY QUICK-TAP — only visible when the scoring tool is open. */}
+      {isRoundActive && showShotCard && (
         <TouchableOpacity
           style={[styles.penaltyQuickBtn, { bottom: 96 + insets.bottom }]}
           onPress={() => { addPenalty(currentHole); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); }}
