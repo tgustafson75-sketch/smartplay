@@ -1136,7 +1136,8 @@ export default function CaddieTab() {
         <Animated.View
           style={[styles.bubble, { bottom: 144 + insets.bottom, opacity: responseFade }]}
         >
-          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+          {/* Backdrop deliberately almost-transparent so Kevin's face shows through.
+              Text legibility is preserved by the textShadow on bubbleText. */}
           <View style={[StyleSheet.absoluteFill, styles.bubbleTint]} />
           <Text style={styles.bubbleText} numberOfLines={3}>
             {shownText}
@@ -1681,7 +1682,7 @@ const styles = StyleSheet.create({
     right: 24,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(30, 58, 40, 0.5)',
+    borderColor: 'rgba(30, 58, 40, 0.25)',
     paddingVertical: 12,
     paddingHorizontal: 20,
     overflow: 'hidden',
@@ -1690,15 +1691,18 @@ const styles = StyleSheet.create({
   },
   bubbleTint: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(13, 26, 13, 0.72)',
+    backgroundColor: 'rgba(0, 0, 0, 0.18)',
   },
   bubbleText: {
     fontSize: 17,
-    fontWeight: '500',
+    fontWeight: '600',
     fontStyle: 'italic',
     color: '#ffffff',
     textAlign: 'center',
     lineHeight: 24,
+    textShadowColor: 'rgba(0, 0, 0, 0.95)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   modeBadge: {
     paddingHorizontal: 10,
