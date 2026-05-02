@@ -53,7 +53,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const body = req.body as RecapRequest;
+    const raw = (req.body ?? {}) as Partial<RecapRequest>;
+
+    if (!Array.isArray(raw.holes) || raw.holes.length === 0) {
+      return res.status(400).json({ error: 'holes[] (non-empty array of hole summaries) required' });
+    }
+    if (typeof raw.course_name !== 'string' || !raw.course_name.trim()) {
+      return res.status(400).json({ error: 'course_name (string) required' });
+    }
+
+    const body = raw as RecapRequest;
+    if (!Array.isArray(body.pattern_insights)) body.pattern_insights = [];
 
     const modeLabel: Record<string, string> = {
       break_100: 'Break 100',

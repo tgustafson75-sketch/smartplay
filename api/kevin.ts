@@ -198,7 +198,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const body = req.body;
+    const body = req.body ?? {};
+
+    if (typeof body.message !== 'string' || !body.message.trim()) {
+      return res.status(400).json({ error: 'message (non-empty string) required' });
+    }
 
     if (body.message === '__ping__') {
       return res.status(200).json({ text: 'ok', audioBase64: null, toolAction: null });
