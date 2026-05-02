@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RangefinderLock } from '../types/smartfinder';
 
-export type SmartFinderMode = 'standard' | 'target' | 'map';
+export type SmartFinderMode = 'standard' | 'target' | 'map' | 'putt';
 
 interface SmartFinderState {
   // Transient — not persisted. AR lock from the legacy camera mode.

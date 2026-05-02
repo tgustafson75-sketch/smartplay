@@ -64,6 +64,12 @@ export default function SmartFinderCard() {
       activeOpacity={0.85}
       style={styles.card}
     >
+      {/* Rangefinder-scope styling — yellow corner ticks + glowing border. */}
+      <View pointerEvents="none" style={[styles.tick, styles.tickTL]} />
+      <View pointerEvents="none" style={[styles.tick, styles.tickTR]} />
+      <View pointerEvents="none" style={[styles.tick, styles.tickBL]} />
+      <View pointerEvents="none" style={[styles.tick, styles.tickBR]} />
+
       <View style={styles.header}>
         <Text style={styles.holeLabel}>HOLE {yards.hole_number}</Text>
         <GPSQuality reading={gps} />
@@ -99,11 +105,28 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: 'rgba(13, 36, 24, 0.92)',
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#1e3a28',
+    borderWidth: 1.5,
+    borderColor: '#F5A623',
     paddingHorizontal: 14,
     paddingVertical: 10,
+    // Glow — render as shadow on iOS, elevation tint on Android. The yellow
+    // shadow on a dark Caddie-home background reads as a subtle scope glow.
+    shadowColor: '#F5A623',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.65,
+    shadowRadius: 10,
+    elevation: 8,
   },
+  tick: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    borderColor: '#F5A623',
+  },
+  tickTL: { top: 4, left: 4, borderTopWidth: 2, borderLeftWidth: 2 },
+  tickTR: { top: 4, right: 4, borderTopWidth: 2, borderRightWidth: 2 },
+  tickBL: { bottom: 4, left: 4, borderBottomWidth: 2, borderLeftWidth: 2 },
+  tickBR: { bottom: 4, right: 4, borderBottomWidth: 2, borderRightWidth: 2 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',

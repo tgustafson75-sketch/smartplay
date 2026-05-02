@@ -11,6 +11,7 @@ const ITEMS: { mode: SmartFinderMode; label: string }[] = [
   { mode: 'standard', label: 'Standard' },
   { mode: 'target', label: 'Target' },
   { mode: 'map', label: 'Map' },
+  { mode: 'putt', label: 'Putt' },
 ];
 
 /**
