@@ -43,3 +43,9 @@ app-example
 /ios
 /android
 .expo-tunnel-qr.png
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
