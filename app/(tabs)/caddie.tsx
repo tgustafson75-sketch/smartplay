@@ -1335,50 +1335,69 @@ export default function CaddieTab() {
         </View>
       )}
       {trustLevel === 1 && (
-        // L1 Quiet — locked design. Kevin DOES NOT show. Just the
-        // SmartPlay Caddie badge in the upper-left corner; tapping it
-        // triggers the mic. KevinAvatar wraps the badge image so the
-        // liveliness ring still pulses for idle/listening/speaking state
-        // without rendering a face. The lie-analysis camera lives on
-        // the right edge via the placements block below; no other tiles
-        // or cards belong on the L1 screen.
-        <View style={{ position: 'absolute', top: insets.top + 60, left: 16, zIndex: 12 }}>
-          <TouchableOpacity
-            onPress={handleMicPress}
-            accessibilityRole="button"
-            accessibilityLabel="Talk to Kevin (Quiet Mode)"
-          >
-            <Animated.View style={{ position: 'relative', opacity: quietPulse }}>
-              <KevinAvatar
-                state={kevinAvatarState}
-                presenceLevel={1}
-                sizeOverride={72}
-              >
-                <Image
-                  source={require('../../assets/avatars/smartplay_caddie_badge.png')}
-                  style={{ width: 64, height: 64 }}
-                  resizeMode="contain"
+        <>
+          {/* L1 Quiet — locked design. Kevin's face does NOT show.
+              The SmartPlay Caddie badge in the upper-left is the mic
+              tap target (KevinAvatar wraps it for the liveliness ring).
+              The lie-analysis camera lives on the right edge via the
+              placements block below. SmartVision (L1HolePreview) and
+              SmartFinder cards stack in the body so the player has
+              hole context without Kevin's face on screen. */}
+          <View style={{ position: 'absolute', top: insets.top + 60, left: 16, zIndex: 12 }}>
+            <TouchableOpacity
+              onPress={handleMicPress}
+              accessibilityRole="button"
+              accessibilityLabel="Talk to Kevin (Quiet Mode)"
+            >
+              <Animated.View style={{ position: 'relative', opacity: quietPulse }}>
+                <KevinAvatar
+                  state={kevinAvatarState}
+                  presenceLevel={1}
+                  sizeOverride={72}
+                >
+                  <Image
+                    source={require('../../assets/avatars/smartplay_caddie_badge.png')}
+                    style={{ width: 64, height: 64 }}
+                    resizeMode="contain"
+                  />
+                </KevinAvatar>
+                {/* Quiet/saver dot on the badge. Gray = quiet (Kevin
+                    intentionally silent); orange = battery saver. */}
+                <View
+                  style={{
+                    position: 'absolute',
+                    bottom: 2,
+                    right: 2,
+                    width: 14,
+                    height: 14,
+                    borderRadius: 7,
+                    backgroundColor: saverActive ? '#F5A623' : '#6b7280',
+                    borderWidth: 2,
+                    borderColor: '#060f09',
+                  }}
                 />
-              </KevinAvatar>
-              {/* Quiet/saver dot on the badge. Gray = quiet (Kevin
-                  intentionally silent); orange = battery saver. Distinct
-                  from the amber thinking pulse on the liveliness ring. */}
-              <View
-                style={{
-                  position: 'absolute',
-                  bottom: 2,
-                  right: 2,
-                  width: 14,
-                  height: 14,
-                  borderRadius: 7,
-                  backgroundColor: saverActive ? '#F5A623' : '#6b7280',
-                  borderWidth: 2,
-                  borderColor: '#060f09',
-                }}
-              />
-            </Animated.View>
-          </TouchableOpacity>
-        </View>
+              </Animated.View>
+            </TouchableOpacity>
+          </View>
+
+          {/* L1 Quiet — SmartVision card. Centered horizontally below
+              the badge row. Tappable to open SmartVision for the
+              current hole; pre-round it shows the default Palms hole 1
+              preview. */}
+          <View
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: insets.top + 150,
+              alignItems: 'center',
+              zIndex: 7,
+            }}
+            pointerEvents="box-none"
+          >
+            <L1HolePreview onOpenSmartVision={openSmartVision} />
+          </View>
+        </>
       )}
 
       {/* TOP BANNER — SmartPlay Caddie wordmark across the very top, always
@@ -1509,10 +1528,11 @@ export default function CaddieTab() {
         </View>
       )}
 
-      {/* SMARTFINDER CARD — Phase D-2 embedded rangefinder. Hidden at L1
-           (Quiet — only the badge + camera show) and L4 (Full — collapses
-           to a right-side reticle). */}
-      {isRoundActive && trustLevel !== 4 && trustLevel !== 1 && (
+      {/* SMARTFINDER CARD — Phase D-2 embedded rangefinder. Hidden at
+           L4 (Full — collapses to a right-side reticle). At L1 Quiet
+           the card renders both pre-round and in-round so the player
+           keeps hole / yardage context without Kevin's face on screen. */}
+      {((isRoundActive && trustLevel !== 4) || trustLevel === 1) && (
         <View
           style={{ position: 'absolute', left: 16, right: 16, bottom: 130 + insets.bottom, zIndex: 8 }}
           pointerEvents="box-none"
@@ -1546,7 +1566,7 @@ export default function CaddieTab() {
         };
         // Per-level position + size
         const placements: Record<number, { top?: number; right?: number; bottom?: number; left?: number; size: number; zIndex: number }> = {
-          1: { top: insets.top + 60, right: 12, size: 44, zIndex: 14 },
+          1: { top: Math.round(H / 2) - 22, right: 12, size: 44, zIndex: 14 },
           2: { top: insets.top + 290, right: 12, size: 44, zIndex: 14 },
           3: { top: insets.top + 290, right: 12, size: 44, zIndex: 14 },
           4: { right: 12, bottom: 136 + insets.bottom, size: 56, zIndex: 14 },
