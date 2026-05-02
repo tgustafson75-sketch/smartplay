@@ -22,7 +22,7 @@
     "@sentry/react-native": "~7.2.0",
     "expo": "~54.0.33",
     "expo-av": "~16.0.8",
-    "expo-battery": "^55.0.13",
+    "expo-battery": "~10.0.8",
     "expo-blur": "~15.0.8",
     "expo-camera": "~17.0.10",
     "expo-constants": "~18.0.13",
@@ -31,7 +31,7 @@
     "expo-haptics": "~15.0.8",
     "expo-image": "~3.0.11",
     "expo-image-manipulator": "~14.0.8",
-    "expo-image-picker": "^55.0.19",
+    "expo-image-picker": "~17.0.11",
     "expo-keep-awake": "~15.0.8",
     "expo-linear-gradient": "~15.0.8",
     "expo-linking": "~8.0.11",
@@ -44,7 +44,7 @@
     "expo-status-bar": "~3.0.9",
     "expo-symbols": "~1.0.8",
     "expo-system-ui": "~6.0.9",
-    "expo-video-thumbnails": "^55.0.14",
+    "expo-video-thumbnails": "~10.0.8",
     "expo-web-browser": "~15.0.10",
     "formidable": "^3.5.4",
     "openai": "^6.34.0",
@@ -70,5 +70,13 @@
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": ["react-native-track-player"],
+        "listUnknownPackages": false
+      }
+    }
+  }
 }
