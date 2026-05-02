@@ -973,7 +973,9 @@ export default function CaddieTab() {
         // L2 Companion split. Fold-open (wide) → side-by-side. Fold-closed
         // (narrow) → stacked vertically, both full width. Wind arrow allowed
         // to overlay freely; its zIndex (11) sits above these cells (6).
-        const isWide = W >= 600;
+        // Threshold 540 catches Fold-open (~673px) reliably while keeping
+        // typical phone widths (~390-430px) in the stacked layout.
+        const isWide = W >= 540;
         const cellTop = insets.top + 100;
         if (isWide) {
           const cellW = (W - 36) / 2;
@@ -1011,9 +1013,11 @@ export default function CaddieTab() {
             </>
           );
         }
-        // Stacked layout for narrow / Fold-closed.
+        // Stacked layout for narrow / Fold-closed. Cells shrunk to 180 tall
+        // so the SmartVision card's bottom edge doesn't overlap the
+        // SmartFinder card (which sits at bottom: 130 + insets.bottom).
         const cellW = W - 24;
-        const cellH = 220;
+        const cellH = 180;
         const gap = 10;
         return (
           <>
