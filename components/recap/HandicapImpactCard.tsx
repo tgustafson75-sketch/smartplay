@@ -13,6 +13,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
 import AppIcon from '../AppIcon';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -40,6 +41,7 @@ const CONFIDENCE_LABELS: Record<IndexConfidence, string> = {
 };
 
 export default function HandicapImpactCard({ roundId }: { roundId: string | null }) {
+  const router = useRouter();
   const handicapIndex = usePlayerProfileStore(s => s.handicap_index);
   const recentDifferentials = usePlayerProfileStore(s => s.recent_differentials);
   const pushDifferential = usePlayerProfileStore(s => s.pushDifferential);
@@ -78,7 +80,34 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
     });
   }, [handicapIndex, round, courseHoles, recentDifferentials]);
 
-  if (handicapIndex == null) return null;
+  // Sim-report gap #4 — when the player hasn't set their Handicap Index
+  // yet, render a small invitation card instead of hiding the surface.
+  // Mike-style users never discover the handicap features otherwise.
+  if (handicapIndex == null) {
+    if (dismissed) return null;
+    return (
+      <View style={[styles.card, styles.cardSetup]}>
+        <View style={styles.headerRow}>
+          <AppIcon name="stats-chart-outline" size={18} color="#00C896" />
+          <Text style={styles.headerTitle}>Track Your Index</Text>
+        </View>
+        <Text style={styles.impact}>
+          Set your Handicap Index once and SmartPlay tracks it automatically after each round — Score Differential, Course Handicap, the works.
+        </Text>
+        <View style={styles.ctaRow}>
+          <TouchableOpacity
+            style={[styles.cta, styles.ctaPrimary]}
+            onPress={() => router.push('/settings' as never)}
+          >
+            <Text style={styles.ctaPrimaryText}>Set Index</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.cta} onPress={() => setDismissed(true)}>
+            <Text style={styles.ctaText}>Not now</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
   if (!round || !result) return null;
   if (dismissed) return null;
 
@@ -163,6 +192,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d1a0d', borderColor: '#1e3a28', borderWidth: 1,
     borderRadius: 14,
   },
+  cardSetup: { borderColor: '#00C896', backgroundColor: '#0d2418' },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   headerTitle: { color: '#00C896', fontSize: 12, fontWeight: '800', letterSpacing: 1.4 },
   statsRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 },

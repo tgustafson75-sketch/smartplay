@@ -14,6 +14,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { speak, stopSpeaking, configureAudioForSpeech } from '../../services/voiceService';
 import { generateBriefing } from '../../services/briefingGenerator';
 import { checkContent } from '../../services/contentGuardrail';
@@ -32,6 +33,7 @@ export default function BriefingScreen() {
   const { firstName, handicap, goal, dominantMiss } = usePlayerProfileStore();
   const { roundsTogether } = useRelationshipStore();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
+  const trustLevel = useTrustLevelStore(s => s.level);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
   const [phase, setPhase] = useState<Phase>('thinking');
@@ -129,7 +131,10 @@ export default function BriefingScreen() {
         setPhase('speaking');
         Animated.timing(textFade, { toValue: 1, duration: 400, useNativeDriver: true }).start();
 
-        if (voiceEnabled) {
+        // Sim-report G6 — auto-speak honors the Quiet contract. At L1 the
+        // user gets to read the briefing on screen (text already rendered
+        // above) and tap-skip; Kevin doesn't speak unsolicited.
+        if (voiceEnabled && trustLevel !== 1) {
           await configureAudioForSpeech();
           await speak(text, voiceGender, language, apiUrl);
           // Phase A.4: first-tee hint for first-round users — appended once
