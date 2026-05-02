@@ -1380,28 +1380,35 @@ export default function CaddieTab() {
             </TouchableOpacity>
           </View>
 
-          {/* L1 Quiet — SmartVision card wrapped to match the SmartFinder
-              card chrome (yellow border, dark green fill, scope glow,
-              corner ticks) so the two cards read as a matching pair. */}
+          {/* L1 Quiet — SmartVision card. Green border, no scope ticks
+              (those belong to SmartFinder). Card stretches from below the
+              badge area to just above the SmartFinder card so the hole
+              preview gets real estate. */}
           {(() => {
+            const cardTop = insets.top + 150;
+            // SmartFinder card sits at bottom: 130 + insets.bottom and is
+            // ~120px tall; leave an 8px gap so the two cards never touch.
+            const smartFinderTopApprox = H - (130 + insets.bottom) - 120;
+            const cardH = Math.max(180, smartFinderTopApprox - cardTop - 8);
             const cardW = W - 32;
-            const cardH = 200;
+            const headerH = 26;
             const innerW = cardW - 28;
-            const innerH = cardH - 44;
+            const innerH = cardH - headerH - 16;
             return (
               <View
                 style={{
                   position: 'absolute',
                   left: 16,
                   right: 16,
-                  top: insets.top + 150,
+                  top: cardTop,
                   zIndex: 7,
                   backgroundColor: 'rgba(13, 36, 24, 0.92)',
                   borderRadius: 14,
                   borderWidth: 1.5,
                   borderColor: '#00C896',
                   paddingHorizontal: 14,
-                  paddingVertical: 10,
+                  paddingTop: 8,
+                  paddingBottom: 8,
                   shadowColor: '#00C896',
                   shadowOffset: { width: 0, height: 0 },
                   shadowOpacity: 0.5,
@@ -1411,12 +1418,12 @@ export default function CaddieTab() {
                 }}
                 pointerEvents="box-none"
               >
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: headerH }}>
                   <Text style={{ color: '#00C896', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 }}>
                     SMARTVISION{isRoundActive ? ` · HOLE ${currentHole}` : ''}
                   </Text>
                 </View>
-                <View style={{ alignSelf: 'center', borderRadius: 8, overflow: 'hidden' }}>
+                <View style={{ alignSelf: 'center', borderRadius: 8, overflow: 'hidden', width: innerW, height: innerH }}>
                   <L1HolePreview onOpenSmartVision={openSmartVision} width={innerW} height={innerH} />
                 </View>
               </View>
