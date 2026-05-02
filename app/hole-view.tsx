@@ -32,7 +32,7 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRoundStore } from '../store/roundStore';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSmartVision } from '../contexts/SmartVisionContext';
-import PALMS_IMAGES from '../data/palmsImages';
+import { getHoleImageryUrl, isMapboxConfigured } from '../services/mapboxImagery';
 import {
   getLandmarksForHole,
   resolveCourseKey,
@@ -280,15 +280,33 @@ export default function HoleView() {
 
   const gpsWatchRef = useRef<Location.LocationSubscription | null>(null);
 
-  // ── Image source resolution ────────────
-  const bundledImage = courseName.toLowerCase().includes('palms')
-    ? (PALMS_IMAGES[hole] ?? null)
-    : null;
+  // ── Image source resolution (Phase S — Mapbox primary, Google Maps fallback) ──
+  // Mapbox: course-agnostic, single PNG per hole, cacheable, free tier
+  // covers v1.0 beta. If MAPBOX token isn't configured yet, fall through
+  // to Google Maps so SmartVision keeps working during the migration.
+  // Phase S removed the hardcoded Palms screenshot path entirely.
 
   const getSatelliteUrl = useCallback((): string | null => {
-    if (!mapsKey) return null;
     if (Math.abs(middleLat) < 0.01 || Math.abs(middleLng) < 0.01) return null;
+
     const hasTee = Math.abs(teeLat) > 0.01 && Math.abs(teeLng) > 0.01;
+
+    // Try Mapbox first
+    const mapboxUrl = getHoleImageryUrl(
+      {
+        courseId: null,
+        holeNumber: hole,
+        par,
+        yardage: distance,
+        tee: hasTee ? { lat: teeLat, lng: teeLng } : null,
+        green: { lat: middleLat, lng: middleLng },
+      },
+      { width: 600, height: 500 },
+    );
+    if (mapboxUrl) return mapboxUrl;
+
+    // Google Maps fallback (legacy)
+    if (!mapsKey) return null;
     let centerLat = middleLat;
     let centerLng = middleLng;
     let heading = 0;
@@ -307,22 +325,23 @@ export default function HoleView() {
       (heading > 0 ? '&heading=' + heading : '') +
       '&key=' + mapsKey
     );
-  }, [mapsKey, middleLat, middleLng, teeLat, teeLng, distance, par]);
+  }, [mapsKey, middleLat, middleLng, teeLat, teeLng, distance, par, hole]);
 
   const satelliteUrl = getSatelliteUrl();
 
-  type DisplayType = 'bundled' | 'satellite' | 'none';
-  const displayType: DisplayType =
-    bundledImage ? 'bundled'
-    : satelliteUrl ? 'satellite'
-    : 'none';
+  // Phase S — 'bundled' kept in the union but no longer produced. The
+  // hardcoded Palms screenshot path was removed; SmartVision now relies
+  // entirely on satellite imagery (Mapbox primary, Google Maps fallback).
+  // The dead 'bundled' branches below are kept as no-ops to minimize
+  // diff surface; a follow-up cleanup can prune them.
+  type DisplayType = 'satellite' | 'none' | 'bundled';
+  // Cast widens the union past TS narrowing so the dead 'bundled' branches
+  // below compile cleanly during the migration window.
+  const displayType: DisplayType = (satelliteUrl ? 'satellite' : 'none') as DisplayType;
 
-  const IMAGE_HEIGHT = displayType === 'bundled' ? IMAGE_HEIGHT_BUNDLED : IMAGE_HEIGHT_SAT;
+  const IMAGE_HEIGHT = IMAGE_HEIGHT_SAT;
 
-  const imageSource =
-    displayType === 'bundled' ? bundledImage
-    : displayType === 'satellite' ? { uri: satelliteUrl! }
-    : null;
+  const imageSource = satelliteUrl ? { uri: satelliteUrl } : null;
 
   // ── Yards per pixel (bundled only) ─────
   const yardsPerPixel = distance / (IMAGE_HEIGHT_BUNDLED * 0.80 || 1);

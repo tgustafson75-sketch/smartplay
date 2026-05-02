@@ -510,6 +510,61 @@ export const queryStatusHandler: IntentHandler = {
         };
       }
 
+      // Phase S — carry feasibility check ("can I carry the bunker")
+      case 'carry_check': {
+        const hazardPhrase = String(intent.parameters.hazard_phrase ?? '').toLowerCase();
+        if (!round.isRoundActive || !round.activeCourseId) {
+          return {
+            success: true,
+            voice_response: "I'd need an active round and course geometry to call that.",
+            side_effects: ['query:carry_no_context'],
+            follow_up_needed: false,
+          };
+        }
+        // Defer the heavy lookup to the carry-check service so we don't pull
+        // all of courseGeometry into the handler module top-level imports.
+        const { canPlayerCarry } = await import('../smartVisionOverlay');
+        const { getHoleGeometry } = await import('../courseGeometryService');
+        const geom = getHoleGeometry(round.activeCourseId, round.currentHole);
+        if (!geom || !geom.tee) {
+          return {
+            success: true,
+            voice_response: "I don't have geometry for this hole.",
+            side_effects: ['query:carry_no_geometry'],
+            follow_up_needed: false,
+          };
+        }
+        const matchedHazard = geom.hazards.find(h =>
+          h.location && (
+            (hazardPhrase && h.label.toLowerCase().includes(hazardPhrase)) ||
+            (!hazardPhrase && true)
+          )
+        );
+        if (!matchedHazard?.location) {
+          return {
+            success: true,
+            voice_response: hazardPhrase
+              ? `I don't see a ${hazardPhrase} mapped on this hole.`
+              : "I don't have hazard positions for this hole.",
+            side_effects: ['query:carry_no_hazard_match'],
+            follow_up_needed: false,
+          };
+        }
+        // Use player's typical driver yardage from accumulated patterns; fallback
+        // 230y if nothing observed yet.
+        const driverYards = 230; // TODO: read from accumulated club distances when wired
+        const result = canPlayerCarry(geom.tee, matchedHazard.location, driverYards);
+        const voice = result.in_range
+          ? `Yeah — about ${result.carry_yards} yards to clear it. You've got ${result.margin_yards} to spare with driver.`
+          : `Pushing it — ${result.carry_yards} yards to carry, you're about ${Math.abs(result.margin_yards)} short with driver. Lay-up's the play.`;
+        return {
+          success: true,
+          voice_response: voice,
+          side_effects: [`query:carry:${matchedHazard.label}`],
+          follow_up_needed: false,
+        };
+      }
+
       // Phase R — swing library lookup ("look at last Tuesday's swing")
       case 'look_at_swing': {
         const phrase = String(intent.parameters.swing_phrase ?? '');

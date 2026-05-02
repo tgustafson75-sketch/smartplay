@@ -198,6 +198,18 @@ async function openSession() {
         }));
         await speak(result.voice_response, settings.voiceGender, settings.language, apiUrl);
       }
+      // Phase R/S — dispatch tool_action.open_url for in-app navigation from
+      // voice handlers (e.g. swing library jumps, future SmartVision opens).
+      const ta = result.tool_action;
+      if (ta && (ta as { type?: string }).type === 'open_url') {
+        const url = (ta as { type: 'open_url'; url: string }).url;
+        try {
+          const router = require('expo-router').router;
+          router.push(url);
+        } catch (e) {
+          console.log('[listeningSession] nav failed', e);
+        }
+      }
     }
   } catch (e) {
     console.log('[listeningSession] respond failed', e);

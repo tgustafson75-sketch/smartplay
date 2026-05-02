@@ -227,6 +227,24 @@ The hole-shot-map UI lives at `components/recap/HoleShotMap.tsx` and the route a
 
 **Audio safety hardening (Phase O.5).** `services/voiceService.ts` `speak()` now consults `voiceEnabled` + audio route + `voiceOnPhoneSpeaker` at the top of every call. Closes the audit-flagged blast leaks at `app/hole-view.tsx` (SmartVision) and `services/conversationalLoggingOrchestrator.ts` (shot-prompt) without touching their callsites — single source of truth.
 
+## Phase S — SmartVision Generalized
+
+| File | Purpose | Role |
+|---|---|---|
+| `mapboxImagery.ts` | Mapbox Static Images URL builder + lazy file-system cache. `getHoleImageryUrl()` returns the remote URL for a hole's bounding box (auto-zoom by hole length, auto-bearing tee→green). `fetchHoleImagery()` returns the cached file URI when present. `prefetchHoles()` warms the cache during round prep. Returns `null` when `EXPO_PUBLIC_MAPBOX_TOKEN` is unset — caller falls through to a secondary provider. | Coach (Infra) |
+| `smartVisionOverlay.ts` | Pure-logic strategic overlay layers — yardage rings, danger-carry detection per player driver distance, lay-up suggestion, landing zone target, tap-to-target distance, carry feasibility check. `projectToTilePixels()` provides the inverse Web Mercator projection so SVG overlay markers land on the correct pixels of the rendered tile. Course-agnostic — works on any course where Phase Q (`courseGeometryService`) provides geometry. | Caddie + Coach |
+| `components/smartvision/HoleView.tsx` | The Mapbox + SVG composite component. Renders Mapbox tile as substrate, paints 5 SVG overlay layers (geometry, yardage rings, recent shots, target marker, Kevin annotations). `TouchableWithoutFeedback` over imagery converts taps to lat/lng via inverse projection; annotation taps open a strategic-detail modal. Reusable component — current `app/hole-view.tsx` keeps its existing surface and uses the same Mapbox URL builder. | Caddie + Coach |
+
+**Phase S migration.** Removed `data/palmsImages.ts` and the 18 `assets/courses/palms/hole-*.jpg` screenshots. Removed Palms-specific bundled fallback in `app/hole-view.tsx` and `components/caddie/L1HolePreview.tsx`. SmartVision is now course-agnostic globally — any course with valid GPS coordinates produces an aerial view via Mapbox.
+
+**Phase S provider strategy.** Mapbox is primary. If `EXPO_PUBLIC_MAPBOX_TOKEN` is unset (during Tim's account setup window), `app/hole-view.tsx` automatically falls through to the legacy Google Maps Static API (`EXPO_PUBLIC_GOOGLE_MAPS_KEY`). When neither is configured, the surface shows the "no imagery" graceful state. Once Tim sets the Mapbox token in Vercel env vars, every consumer transitions silently with no code change.
+
+**Phase S cost projection.** Mapbox Static Images: 50,000 free tile loads/month. Each hole view = 1 tile fetch (cached after first request). 18 holes/round = 18 first-time fetches. **Free tier headroom: ~2,777 first-time-rounds/month.** Cached replays are zero-cost. Beta usage stays well under the ceiling. v1.0 public launch projection: needs ongoing monitoring; paid tier is $0.30 per 1,000 additional tile loads (sub-$50/month even at 200K rounds).
+
+**Phase S voice query.** `carry_check` — "Can I carry the bunker?" / "Can I clear the trees?" matches the hazard noun against the active hole's geometry, computes carry distance from tee, compares against player's typical driver yardage (currently hardcoded 230y placeholder; reads accumulated club distances when that wire lands).
+
+**Phase S deferred.** Curated premium imagery, 3D rendering, real-time conditions imagery, official-pin positions, AR overlay, drone footage, GolfNow imagery licensing. All 1.x or 2.x. Mapbox + SVG strategic overlay is the v1.0 substrate.
+
 ## Phase R — SwingLab Video Upload + v1.0 Refinement Bundle
 
 | File | Purpose | Role |
