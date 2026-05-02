@@ -195,8 +195,9 @@ export default function SwingLab() {
   const roundHistory = useRoundStore(s => s.roundHistory);
   const [activeEnv, setActiveEnv] = useState<DrillEnv | 'all'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  // Phase R polish — drill list collapsed by default; tap header to expand.
+  // Phase R polish — drill list + practice tools collapsed by default.
   const [drillsOpen, setDrillsOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [cageActive, setCageActive] = useState(false);
 
   // Phase J.5 deep-link — when arriving with ?drill_id=X (from DrillCard's
@@ -295,47 +296,59 @@ export default function SwingLab() {
              default at L2/L3/L4. Hidden at L1. Dismissible per-session. */}
         <KevinCoachBox body={coachIntroBody} accent="coach" />
 
-        {/* Cage Session CTA */}
+        {/* Practice Tools — single collapsible card holds the 5 actions
+            (Cage Session / Upload / Library / Cage Mode / Arena). Default
+            collapsed so SwingLab reads as a clean stack on small screens.
+            Expanded: compact icon-row list. */}
         <TouchableOpacity
-          style={styles.cageSessionBtn}
-          onPress={() => setCageActive(true)}
-          activeOpacity={0.8}
+          style={styles.toolsCardHeader}
+          onPress={() => setToolsOpen(o => !o)}
+          activeOpacity={0.85}
         >
-          <View style={styles.cageSessionIconWrap}>
-            <AppIcon name="videocam" size={24} color="#00C896" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.drillsCardTitle}>Practice Tools</Text>
+            <Text style={styles.drillsCardSub}>Cage · Upload · Library · Arena</Text>
           </View>
-          <View style={styles.cageSessionText}>
-            <Text style={styles.cageSessionLabel}>Start Cage Session</Text>
-            <Text style={styles.cageSessionSub}>
-              Record continuously · Auto-detect swings · Review later
-            </Text>
-          </View>
-          <AppIcon name="chevron-forward" size={20} color="#2563eb" />
+          <AppIcon name={toolsOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#00C896" />
         </TouchableOpacity>
 
-        {/* Phase R — Upload Swing + My Swing Library */}
-        <View style={styles.phaseRRow}>
-          <TouchableOpacity
-            style={styles.phaseRBtn}
-            onPress={() => router.push('/swinglab/upload' as never)}
-            activeOpacity={0.8}
-          >
-            <AppIcon name="cloud-upload-outline" size={22} color="#00C896" />
-            <Text style={styles.phaseRLabel}>Upload Swing</Text>
-            <Text style={styles.phaseRSub}>From phone library</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.phaseRBtn}
-            onPress={() => router.push('/swinglab/library' as never)}
-            activeOpacity={0.8}
-          >
-            <AppIcon name="library-outline" size={22} color="#00C896" />
-            <Text style={styles.phaseRLabel}>My Swing Library</Text>
-            <Text style={styles.phaseRSub}>Browse + replay</Text>
-          </TouchableOpacity>
-        </View>
+        {toolsOpen && (
+          <View style={styles.toolsList}>
+            <ToolRow
+              icon="videocam"
+              label="Start Cage Session"
+              sub="Record · auto-detect · review"
+              onPress={() => setCageActive(true)}
+            />
+            <ToolRow
+              icon="cloud-upload-outline"
+              label="Upload Swing"
+              sub="From phone library"
+              onPress={() => router.push('/swinglab/upload' as never)}
+            />
+            <ToolRow
+              icon="library-outline"
+              label="My Swing Library"
+              sub="Browse + replay"
+              onPress={() => router.push('/swinglab/library' as never)}
+            />
+            <ToolRow
+              icon="golf-outline"
+              label="Cage Mode"
+              sub="Shot analysis + video"
+              onPress={() => router.push('/cage' as never)}
+            />
+            <ToolRow
+              icon="trophy-outline"
+              label="Arena"
+              sub="Target games + scoring"
+              onPress={() => router.push('/arena' as never)}
+              accent="#F5A623"
+            />
+          </View>
+        )}
 
-        {/* Watch banner */}
+        {/* Watch banner — kept inline since it's a status indicator, not a button. */}
         {watchConnected && (
           <View style={styles.watchBanner}>
             <AppIcon name="watch-outline" size={18} color="#60a5fa" />
@@ -344,31 +357,6 @@ export default function SwingLab() {
             </Text>
           </View>
         )}
-
-        {/* Quick Access */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Quick Access</Text>
-        </View>
-        <View style={styles.quickRow}>
-          <TouchableOpacity
-            style={[styles.quickCard, styles.quickCage]}
-            onPress={() => router.push('/cage')}
-            activeOpacity={0.75}
-          >
-            <AppIcon name="golf-outline" size={26} color="#00C896" />
-            <Text style={styles.quickLabel}>Cage Mode</Text>
-            <Text style={styles.quickDesc}>Shot analysis + video</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.quickCard, styles.quickArena]}
-            onPress={() => router.push('/arena')}
-            activeOpacity={0.75}
-          >
-            <AppIcon name="trophy-outline" size={26} color="#F5A623" />
-            <Text style={styles.quickLabel}>Arena</Text>
-            <Text style={styles.quickDesc}>Target games + scoring</Text>
-          </TouchableOpacity>
-        </View>
 
         {/* Drills — entire list lives inside a single collapsible card so the
             SwingLab home reads as a tight stack, not a wall of buttons.
@@ -453,6 +441,25 @@ export default function SwingLab() {
         <View style={styles.bottomPad} />
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+// ─── PRACTICE TOOLS ROW ───────────────────
+
+function ToolRow({
+  icon, label, sub, onPress, accent = '#00C896',
+}: { icon: import('../../components/AppIcon').IconName; label: string; sub: string; onPress: () => void; accent?: string }) {
+  return (
+    <TouchableOpacity style={styles.toolRow} onPress={onPress} activeOpacity={0.8}>
+      <View style={[styles.toolRowIcon, accent !== '#00C896' && { backgroundColor: accent + '1A' }]}>
+        <AppIcon name={icon} size={20} color={accent} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.toolRowLabel}>{label}</Text>
+        <Text style={styles.toolRowSub}>{sub}</Text>
+      </View>
+      <AppIcon name="chevron-forward" size={18} color="#6b7280" />
+    </TouchableOpacity>
   );
 }
 
@@ -702,13 +709,36 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
 
-  // Drills collapsible header
+  // Drills + Tools collapsible headers (shared visual style)
   drillsCardHeader: {
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: 16, marginTop: 16, marginBottom: 8,
     backgroundColor: '#0d1a0d', borderColor: '#1e3a28', borderWidth: 1,
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
   },
+  toolsCardHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: 16, marginTop: 12, marginBottom: 8,
+    backgroundColor: '#0d1a0d', borderColor: '#1e3a28', borderWidth: 1,
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
+  },
+  toolsList: {
+    marginHorizontal: 16, marginBottom: 8,
+    backgroundColor: '#0d1a0d', borderColor: '#1e3a28', borderWidth: 1,
+    borderRadius: 12, padding: 4,
+  },
+  toolRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 10, paddingHorizontal: 10, gap: 12,
+    borderRadius: 8,
+  },
+  toolRowIcon: {
+    width: 36, height: 36, borderRadius: 8,
+    backgroundColor: 'rgba(0,200,150,0.10)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  toolRowLabel: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  toolRowSub: { color: '#6b7280', fontSize: 11, marginTop: 1 },
   drillsCardTitle: { color: '#fff', fontSize: 16, fontWeight: '900' },
   drillsCardSub: { color: '#6b7280', fontSize: 12, marginTop: 2 },
 

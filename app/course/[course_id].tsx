@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import CourseDetailBanner from '../../components/course/CourseDetailBanner';
 import HoleGuide from '../../components/course/HoleGuide';
 import HolePhotosGrid from '../../components/course/HolePhotosGrid';
-import { getCourse } from '../../services/golfCourseApi';
+import { getCourse, searchCourses } from '../../services/golfCourseApi';
 import { fetchCourseContent, getCachedContent, type CourseContent } from '../../services/courseContentService';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { getCourseImageryUrl, getHoleThumbnailUrl } from '../../services/mapboxImagery';
@@ -49,15 +49,43 @@ export default function CourseDetailScreen() {
   useEffect(() => {
     let cancelled = false;
     if (!course_id) return;
-    getCourse(course_id).then(c => {
-      if (!cancelled) {
-        setCourse(c);
-        setLoading(false);
+    void (async () => {
+      // Resolve local: prefix (synthetic id used by the Play tab's curated
+      // CLOSEST LOCAL COURSES) → real API course id via name search.
+      let realId = course_id;
+      if (course_id.startsWith('local:')) {
+        const slug = course_id.slice('local:'.length);
+        const friendly =
+          slug === 'palms' ? 'Menifee Lakes Palms' :
+          slug === 'lakes' ? 'Menifee Lakes Lakes' :
+          slug === 'rancho-california' ? 'Rancho California Golf Club' :
+          slug;
+        try {
+          const found = await searchCourses(friendly);
+          const real = found.find(r => !r._error);
+          if (real?.id) realId = real.id;
+        } catch (e) {
+          console.log('[course-detail] local resolve failed:', e);
+        }
       }
-    });
-    fetchCourseGeometry(course_id)
-      .then(() => { if (!cancelled) setGeometryReady(true); })
-      .catch(err => console.log('[course-detail] geometry warm failed:', err));
+      try {
+        const c = await getCourse(realId);
+        if (!cancelled) {
+          setCourse(c);
+          setLoading(false);
+        }
+      } catch (e) {
+        console.log('[course-detail] getCourse failed:', e);
+        if (!cancelled) setLoading(false);
+      }
+      try {
+        await fetchCourseGeometry(realId);
+        if (!cancelled) setGeometryReady(true);
+      } catch (e) {
+        console.log('[course-detail] geometry warm failed:', e);
+        if (!cancelled) setGeometryReady(true); // unblock the hero placeholder
+      }
+    })();
     return () => { cancelled = true; };
   }, [course_id]);
 
@@ -78,12 +106,17 @@ export default function CourseDetailScreen() {
       rating: tee.course_rating,
       slope: tee.slope_rating,
       holes: tee.holes.map(h => ({ hole_number: h.hole_number, par: h.par, yardage: h.yardage })),
-    }).then(c => {
-      if (!cancelled) {
-        setContent(c);
-        setContentLoading(false);
-      }
-    });
+    })
+      .then(c => {
+        if (!cancelled) {
+          setContent(c);
+          setContentLoading(false);
+        }
+      })
+      .catch(e => {
+        console.log('[course-detail] content fetch failed:', e);
+        if (!cancelled) setContentLoading(false);
+      });
     return () => { cancelled = true; };
   }, [course]);
 
