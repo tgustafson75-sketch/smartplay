@@ -7,8 +7,8 @@ import { refreshFix, getLastFix } from '../../services/smartFinderService';
 import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 
 const REFRESH_MS = 4_000;
-const W = 320;
-const H = 300;
+const DEFAULT_W = 320;
+const DEFAULT_H = 300;
 
 // Static require map for local-course hole images. The bundler needs literal
 // require() calls, so this map is the registration site for any local-course
@@ -57,9 +57,15 @@ function localHoleImageFor(courseName: string | null, holeNumber: number): Image
 type Props = {
   /** Tap handler — opens the full SmartVision tool for the current hole. */
   onOpenSmartVision?: () => void;
+  /** Optional width override (default 320). */
+  width?: number;
+  /** Optional height override (default 300). */
+  height?: number;
 };
 
-export default function L1HolePreview({ onOpenSmartVision }: Props) {
+export default function L1HolePreview({ onOpenSmartVision, width, height }: Props) {
+  const W = width ?? DEFAULT_W;
+  const H = height ?? DEFAULT_H;
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const currentHole = useRoundStore(s => s.currentHole);
   const activeCourseId = useRoundStore(s => s.activeCourseId);
@@ -110,10 +116,12 @@ export default function L1HolePreview({ onOpenSmartVision }: Props) {
     </TouchableOpacity>
   );
 
+  const wrapDims = { width: W, height: H };
+
   if (!isRoundActive) {
     return (
       <SmartVisionTap>
-        <View style={[styles.wrap, styles.placeholder]}>
+        <View style={[styles.wrap, wrapDims, styles.placeholder]}>
           <Text style={styles.placeholderText}>SMARTVISION</Text>
           <Text style={styles.placeholderSub}>Start a round to see the hole.</Text>
         </View>
@@ -128,7 +136,7 @@ export default function L1HolePreview({ onOpenSmartVision }: Props) {
     if (localImg) {
       return (
         <SmartVisionTap>
-          <ImageBackground source={localImg} style={styles.wrap} imageStyle={styles.imgRadius} resizeMode="cover">
+          <ImageBackground source={localImg} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
             <View style={styles.imageOverlay}>
               <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
             </View>
@@ -138,7 +146,7 @@ export default function L1HolePreview({ onOpenSmartVision }: Props) {
     }
     return (
       <SmartVisionTap>
-        <View style={[styles.wrap, styles.placeholder]}>
+        <View style={[styles.wrap, wrapDims, styles.placeholder]}>
           <Text style={styles.placeholderText}>HOLE {currentHole}</Text>
           <Text style={styles.placeholderSub}>Hole geometry unavailable.</Text>
         </View>
@@ -174,7 +182,7 @@ export default function L1HolePreview({ onOpenSmartVision }: Props) {
 
   return (
     <SmartVisionTap>
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, wrapDims]}>
       <Svg width={W} height={H}>
         <Rect x={0} y={0} width={W} height={H} rx={10} fill="#0a1f12" />
         {/* Centerline */}
@@ -210,8 +218,6 @@ export default function L1HolePreview({ onOpenSmartVision }: Props) {
 
 const styles = StyleSheet.create({
   wrap: {
-    width: W,
-    height: H,
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: '#0a1f12',
