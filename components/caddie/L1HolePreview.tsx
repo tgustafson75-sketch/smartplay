@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ImageBackground, StyleSheet, type ImageSourcePropType } from 'react-native';
+import { View, Text, TouchableOpacity, ImageBackground, StyleSheet, type ImageSourcePropType } from 'react-native';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
 import { useRoundStore } from '../../store/roundStore';
 import { getHoleGeometry, fetchCourseGeometry, type HoleGeometry } from '../../services/courseGeometryService';
@@ -8,7 +8,7 @@ import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 
 const REFRESH_MS = 4_000;
 const W = 320;
-const H = 220;
+const H = 300;
 
 // Static require map for local-course hole images. The bundler needs literal
 // require() calls, so this map is the registration site for any local-course
@@ -54,7 +54,12 @@ function localHoleImageFor(courseName: string | null, holeNumber: number): Image
  * today). Sizing is fixed so the L1 block doesn't reflow when geometry
  * resolves.
  */
-export default function L1HolePreview() {
+type Props = {
+  /** Tap handler — opens the full SmartVision tool for the current hole. */
+  onOpenSmartVision?: () => void;
+};
+
+export default function L1HolePreview({ onOpenSmartVision }: Props) {
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const currentHole = useRoundStore(s => s.currentHole);
   const activeCourseId = useRoundStore(s => s.activeCourseId);
@@ -88,12 +93,31 @@ export default function L1HolePreview() {
     return () => { cancelled = true; clearInterval(id); };
   }, [isRoundActive]);
 
+  // The preview is wrapped in a tappable that launches the full SmartVision
+  // tool for the current hole. Body content varies by data availability.
+  const SmartVisionTap: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <TouchableOpacity
+      onPress={onOpenSmartVision}
+      activeOpacity={onOpenSmartVision ? 0.85 : 1}
+      disabled={!onOpenSmartVision}
+      accessibilityRole="button"
+      accessibilityLabel="Open SmartVision for this hole"
+    >
+      {children}
+      <View style={styles.svHint} pointerEvents="none">
+        <Text style={styles.svHintText}>SMARTVISION ↗</Text>
+      </View>
+    </TouchableOpacity>
+  );
+
   if (!isRoundActive) {
     return (
-      <View style={[styles.wrap, styles.placeholder]}>
-        <Text style={styles.placeholderText}>HOLE PREVIEW</Text>
-        <Text style={styles.placeholderSub}>Start a round to see the hole.</Text>
-      </View>
+      <SmartVisionTap>
+        <View style={[styles.wrap, styles.placeholder]}>
+          <Text style={styles.placeholderText}>SMARTVISION</Text>
+          <Text style={styles.placeholderSub}>Start a round to see the hole.</Text>
+        </View>
+      </SmartVisionTap>
     );
   }
 
@@ -103,18 +127,22 @@ export default function L1HolePreview() {
     const localImg = localHoleImageFor(activeCourse, currentHole);
     if (localImg) {
       return (
-        <ImageBackground source={localImg} style={styles.wrap} imageStyle={styles.imgRadius} resizeMode="cover">
-          <View style={styles.imageOverlay}>
-            <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
-          </View>
-        </ImageBackground>
+        <SmartVisionTap>
+          <ImageBackground source={localImg} style={styles.wrap} imageStyle={styles.imgRadius} resizeMode="cover">
+            <View style={styles.imageOverlay}>
+              <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
+            </View>
+          </ImageBackground>
+        </SmartVisionTap>
       );
     }
     return (
-      <View style={[styles.wrap, styles.placeholder]}>
-        <Text style={styles.placeholderText}>HOLE {currentHole}</Text>
-        <Text style={styles.placeholderSub}>Hole geometry unavailable.</Text>
-      </View>
+      <SmartVisionTap>
+        <View style={[styles.wrap, styles.placeholder]}>
+          <Text style={styles.placeholderText}>HOLE {currentHole}</Text>
+          <Text style={styles.placeholderSub}>Hole geometry unavailable.</Text>
+        </View>
+      </SmartVisionTap>
     );
   }
 
@@ -145,6 +173,7 @@ export default function L1HolePreview() {
   const playerPos = playerProj ? project(playerProj.x, playerProj.y) : null;
 
   return (
+    <SmartVisionTap>
     <View style={styles.wrap}>
       <Svg width={W} height={H}>
         <Rect x={0} y={0} width={W} height={H} rx={10} fill="#0a1f12" />
@@ -175,6 +204,7 @@ export default function L1HolePreview() {
         </SvgText>
       </Svg>
     </View>
+    </SmartVisionTap>
   );
 }
 
@@ -206,4 +236,16 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   imageHoleLabel: { color: '#ffffff', fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
+  svHint: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(0,200,150,0.18)',
+    borderWidth: 1,
+    borderColor: '#00C896',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  svHintText: { color: '#00C896', fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
 });

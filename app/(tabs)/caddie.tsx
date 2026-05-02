@@ -1142,22 +1142,23 @@ export default function CaddieTab() {
         </View>
       )}
 
-      {/* L1 QUIET — fixed hole-preview block above the SmartFinder card.
-           L1-only; other levels are unaffected. Logo removed per Tim — the
-           preview is now the sole content of this block (and is bigger). */}
+      {/* L1 QUIET — fixed SmartVision-tap preview above the SmartFinder card.
+           L1-only; other levels are unaffected. Bumped further up the screen
+           (bottom 260+ vs 230) to leave clear space between this card and the
+           SmartFinder card below it. */}
       {trustLevel === 1 && (
         <View
           style={{
             position: 'absolute',
             left: 0,
             right: 0,
-            bottom: 230 + insets.bottom,
+            bottom: 260 + insets.bottom,
             alignItems: 'center',
             zIndex: 7,
           }}
           pointerEvents="box-none"
         >
-          <L1HolePreview />
+          <L1HolePreview onOpenSmartVision={openSmartVision} />
         </View>
       )}
 
