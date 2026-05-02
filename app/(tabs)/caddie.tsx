@@ -1423,8 +1423,14 @@ export default function CaddieTab() {
         pointerEvents="none"
       >
         <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-          <Text style={styles.brandName}>SmartPlay</Text>
-          <Text style={styles.brandSub}> Caddie</Text>
+          {trustLevel === 1 ? (
+            <Text style={styles.brandSub}>Caddie</Text>
+          ) : (
+            <>
+              <Text style={styles.brandName}>SmartPlay</Text>
+              <Text style={styles.brandSub}> Caddie</Text>
+            </>
+          )}
         </View>
       </View>
 

@@ -85,9 +85,6 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
       accessibilityLabel="Open SmartVision for this hole"
     >
       {children}
-      <View style={styles.svHint} pointerEvents="none">
-        <Text style={styles.svHintText}>SMARTVISION ↗</Text>
-      </View>
     </TouchableOpacity>
   );
 
