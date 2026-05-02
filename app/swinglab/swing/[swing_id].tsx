@@ -10,13 +10,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator,
+  ActivityIndicator, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Video, ResizeMode, type AVPlaybackStatus, type AVPlaybackStatusSuccess } from 'expo-av';
 import { useTheme } from '../../../contexts/ThemeContext';
-import { getSession } from '../../../services/swingLibrary';
+import { useCageStore, type AnalysisStatus } from '../../../store/cageStore';
 import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, stopSpeaking, configureAudioForSpeech } from '../../../services/voiceService';
@@ -25,15 +25,32 @@ import DrillCard from '../../../components/swinglab/DrillCard';
 
 type AudioSource = 'coach' | 'kevin';
 
+// Phase V — copy the user sees while Phase K is running. Maps the analysis
+// lifecycle stages to honest, plain-language status.
+const STATUS_COPY: Record<AnalysisStatus, string> = {
+  pending:           'Kevin is reviewing your swing…',
+  analyzing_frames:  'Extracting frames…',
+  analyzing_pose:    'Watching the swing…',
+  analyzing_pattern: 'Identifying patterns…',
+  ok:                'Analysis complete.',
+  failed:            "I had trouble watching this one.",
+};
+
 export default function SwingDetail() {
   const router = useRouter();
   const { colors } = useTheme();
   const { swing_id } = useLocalSearchParams<{ swing_id: string }>();
   const trustLevel = useTrustLevelStore(s => s.level);
-  const { voiceGender, language } = useSettingsStore();
+  const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
 
-  const session = swing_id ? getSession(swing_id) : null;
+  // Phase V — subscribe via the store selector so the surface re-renders
+  // when Phase K transitions analysis_status / populates primary_issue.
+  // The previous static getSession() call returned a snapshot and never
+  // updated past the initial mount.
+  const session = useCageStore(s =>
+    swing_id ? s.sessionHistory.find(x => x.id === swing_id) ?? null : null,
+  );
   const shot = session?.shots[0];
 
   const videoRef = useRef<Video>(null);
@@ -64,6 +81,32 @@ export default function SwingDetail() {
     }
     return () => { void stopSpeaking(); };
   }, [audioSource, session?.primary_issue, apiUrl, voiceGender, language]);
+
+  // Phase V — automatic Kevin voice when analysis FIRST completes for this
+  // session. Fires once per swing_id transition into 'ok' so the player
+  // gets the coach-delivered result without toggling. Skipped at Quiet
+  // (banner-only) trust and when voiceEnabled=false. Also drives a subtle
+  // entry animation for the analysis cards.
+  const cardsFade = useRef(new Animated.Value(0)).current;
+  const spokenForRef = useRef<string | null>(null);
+  const analysisStatus: AnalysisStatus = session?.analysis_status ?? 'pending';
+  useEffect(() => {
+    if (analysisStatus === 'ok') {
+      Animated.timing(cardsFade, { toValue: 1, duration: 420, useNativeDriver: true }).start();
+    }
+    if (analysisStatus !== 'ok') return;
+    if (!session?.primary_issue || !swing_id) return;
+    if (spokenForRef.current === swing_id) return;
+    spokenForRef.current = swing_id;
+    if (!voiceEnabled || trustLevel === 1) return;
+    const issue = session.primary_issue;
+    const text = `Okay, I watched it. Your primary issue is ${issue.name.toLowerCase()}. ${issue.mechanical_breakdown} ${issue.feel_cue}`;
+    void (async () => {
+      await configureAudioForSpeech();
+      await speak(text, voiceGender, language, apiUrl);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisStatus, swing_id, session?.primary_issue?.issue_id]);
 
   const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;
@@ -156,18 +199,44 @@ export default function SwingDetail() {
           </View>
         )}
 
-        {/* Phase K analysis cards */}
+        {/* Phase V — analysis processing / failure / done */}
         <View style={{ marginTop: 16 }}>
-          {!session.primary_issue && (
+          {analysisStatus !== 'ok' && analysisStatus !== 'failed' && (
             <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <ActivityIndicator color={colors.accent} />
-              <Text style={[styles.analyzingText, { color: colors.text_muted }]}>
-                Analyzing your swing… this can take a moment.
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.analyzingText, { color: colors.text_primary }]}>
+                  {STATUS_COPY[analysisStatus]}
+                </Text>
+                <Text style={[styles.analyzingSub, { color: colors.text_muted }]}>
+                  About 60 seconds. You can stay on this screen.
+                </Text>
+              </View>
             </View>
           )}
-          <PrimaryIssueCard issue={session.primary_issue ?? null} totalShots={session.shots.length} />
-          <DrillCard recommendation={session.drill_recommendation ?? null} />
+
+          {analysisStatus === 'failed' && (
+            <View style={[styles.failedCard, { backgroundColor: colors.surface, borderColor: '#ef4444' }]}>
+              <Text style={[styles.failedTitle, { color: '#ef4444' }]}>Couldn&apos;t analyze this one</Text>
+              <Text style={[styles.failedBody, { color: colors.text_primary }]}>
+                {session.analysis_error ?? "I had trouble watching this one — could be lighting, angle, or video quality."}
+                {' '}Try uploading from a different angle if you can.
+              </Text>
+              <TouchableOpacity
+                style={[styles.failedBtn, { borderColor: colors.accent }]}
+                onPress={() => router.replace('/swinglab/upload' as never)}
+              >
+                <Text style={[styles.failedBtnText, { color: colors.accent }]}>Upload another swing</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {analysisStatus === 'ok' && (
+            <Animated.View style={{ opacity: cardsFade }}>
+              <PrimaryIssueCard issue={session.primary_issue ?? null} totalShots={session.shots.length} />
+              <DrillCard recommendation={session.drill_recommendation ?? null} />
+            </Animated.View>
+          )}
         </View>
 
         {/* Metadata */}
@@ -224,5 +293,18 @@ const styles = StyleSheet.create({
     marginHorizontal: 16, padding: 16, borderRadius: 14, borderWidth: 1,
     flexDirection: 'row', alignItems: 'center', gap: 12,
   },
-  analyzingText: { fontSize: 13, marginLeft: 10 },
+  analyzingText: { fontSize: 14, fontWeight: '700' },
+  analyzingSub: { fontSize: 12, marginTop: 4 },
+  failedCard: {
+    marginHorizontal: 16, padding: 16, borderRadius: 14, borderWidth: 1,
+    gap: 8,
+  },
+  failedTitle: { fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
+  failedBody: { fontSize: 14, lineHeight: 20 },
+  failedBtn: {
+    marginTop: 8, alignSelf: 'flex-start',
+    paddingVertical: 10, paddingHorizontal: 14,
+    borderRadius: 10, borderWidth: 1.5,
+  },
+  failedBtnText: { fontSize: 13, fontWeight: '800' },
 });

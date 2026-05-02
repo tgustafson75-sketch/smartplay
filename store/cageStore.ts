@@ -68,7 +68,21 @@ export interface CageSession {
   // with upload metadata so it browses uniformly in the swing library.
   source?: SwingSource;
   upload?: UploadMetadata | null;
+  // Phase V — analysis lifecycle visibility. Pending = queued, the
+  // analyzing_* stages mirror Phase K's pose/classify pipeline so the
+  // user sees real progress, ok = analysis finished cleanly, failed =
+  // pipeline errored and we need to surface honest copy.
+  analysis_status?: AnalysisStatus;
+  analysis_error?: string | null;
 }
+
+export type AnalysisStatus =
+  | 'pending'
+  | 'analyzing_frames'
+  | 'analyzing_pose'
+  | 'analyzing_pattern'
+  | 'ok'
+  | 'failed';
 
 export interface PrimaryIssue {
   issue_id: string;
@@ -136,6 +150,9 @@ interface CageState {
    *  by the live cage post-session pipeline (already in app/cage/summary.tsx)
    *  and by the upload analysis pipeline. */
   setSessionAnalysis: (sessionId: string, primary_issue: PrimaryIssue | null, drill_recommendation: DrillRecommendation | null) => void;
+  /** Phase V — track analysis lifecycle so the swing detail surface can
+   *  show real progress and surface failures honestly. */
+  setSessionAnalysisStatus: (sessionId: string, status: AnalysisStatus, error?: string | null) => void;
   /** Phase R — store frame timestamps for issue temporal alignment. */
   setShotIssueTimestamps: (sessionId: string, shotId: string, timestamps_sec: number[]) => void;
   /** Phase R — delete a session from the library. */
@@ -246,6 +263,8 @@ export const useCageStore = create<CageState>()(
           summary: null,
           source: 'uploaded_video',
           upload,
+          analysis_status: 'pending',
+          analysis_error: null,
         };
         set(s => ({ sessionHistory: [...s.sessionHistory, session].slice(-50) }));
         return sessionId;
@@ -254,7 +273,21 @@ export const useCageStore = create<CageState>()(
       setSessionAnalysis: (sessionId, primary_issue, drill_recommendation) =>
         set(s => ({
           sessionHistory: s.sessionHistory.map(session =>
-            session.id !== sessionId ? session : { ...session, primary_issue, drill_recommendation }
+            session.id !== sessionId ? session : {
+              ...session, primary_issue, drill_recommendation,
+              analysis_status: 'ok' as AnalysisStatus, analysis_error: null,
+            }
+          ),
+        })),
+
+      setSessionAnalysisStatus: (sessionId, status, error) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              analysis_status: status,
+              analysis_error: error ?? session.analysis_error ?? null,
+            }
           ),
         })),
 

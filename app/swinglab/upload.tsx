@@ -16,6 +16,8 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
 import { pickVideo, probeVideo, ingestVideoFromPick, MAX_FILE_SIZE_MB } from '../../services/videoUpload';
 import type { SwingTag } from '../../store/cageStore';
+import { useSettingsStore } from '../../store/settingsStore';
+import { speak, configureAudioForSpeech } from '../../services/voiceService';
 
 const CLUBS = ['Driver', '3W', '5W', 'Hybrid', '4i', '5i', '6i', '7i', '8i', '9i', 'PW', 'GW', 'SW', 'LW', 'Putter'];
 const TAGS: { id: SwingTag; label: string }[] = [
@@ -29,6 +31,8 @@ const TAGS: { id: SwingTag; label: string }[] = [
 export default function UploadSwing() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { voiceEnabled, voiceGender, language } = useSettingsStore();
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
 
   const [step, setStep] = useState<'pick' | 'metadata' | 'saving'>('pick');
   const [uri, setUri] = useState<string | null>(null);
@@ -64,10 +68,17 @@ export default function UploadSwing() {
       uri, club, notes: notes.trim() || null, swinger: swinger.trim() || 'Me',
       tag, has_audio: hasAudio, duration_sec: durationSec,
     });
-    Alert.alert('Added to library', "Kevin's analyzing it now. Check My Swing Library in a moment.", [
-      { text: 'View now', onPress: () => router.replace(`/swinglab/swing/${sessionId}` as never) },
-      { text: 'Done', onPress: () => router.replace('/(tabs)/swinglab') },
-    ]);
+    // Phase V — Kevin acknowledges the upload immediately and we navigate
+    // straight to the swing detail surface. Feels like submitting work to
+    // a coach who starts watching, not "uploaded successfully, navigate
+    // somewhere if you want to check on it later".
+    if (voiceEnabled) {
+      void (async () => {
+        await configureAudioForSpeech();
+        await speak("Got your video. Let me take a look.", voiceGender, language, apiUrl);
+      })();
+    }
+    router.replace(`/swinglab/swing/${sessionId}` as never);
   };
 
   return (

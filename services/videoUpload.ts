@@ -86,37 +86,71 @@ export async function probeVideo(uri: string): Promise<{ has_audio: boolean; dur
 /**
  * Run Phase K analysis on a freshly-ingested upload session. Parallel to
  * the post-cage-session flow in app/cage/summary.tsx.
+ *
+ * Phase V — emits analysis-status transitions throughout so the swing
+ * detail surface can render real progress copy and surface failures.
  */
 export async function runPhaseKOnSession(sessionId: string): Promise<{
   primary_issue: PrimaryIssue | null;
   drill_recommendation: DrillRecommendation | null;
 }> {
-  const session = useCageStore.getState().sessionHistory.find(s => s.id === sessionId);
+  const store = useCageStore.getState();
+  const session = store.sessionHistory.find(s => s.id === sessionId);
   if (!session) return { primary_issue: null, drill_recommendation: null };
 
   const swings = session.shots.filter(s => s.clipUri);
-  const results: { swing_id: string; analysis: import('./poseDetection').SwingAnalysis }[] = [];
-
-  for (const [i, swing] of swings.entries()) {
-    if (!swing.clipUri) continue;
-    const r = await analyzeSwing(swing.clipUri, {
-      club: swing.club,
-      swing_number: i + 1,
-      prior_issues: results.slice(-3).map(x => x.analysis.detected_issue),
-    });
-    if (r.kind === 'ok') {
-      results.push({ swing_id: swing.id, analysis: r.analysis });
-      // Phase R — persist the sampled frame timestamps so the swing detail
-      // surface can render tappable anchors on the detected issue.
-      useCageStore.getState().setShotIssueTimestamps(sessionId, swing.id, r.frame_timestamps_sec);
-    }
+  if (swings.length === 0) {
+    store.setSessionAnalysisStatus(sessionId, 'failed', 'No usable swing in the upload.');
+    return { primary_issue: null, drill_recommendation: null };
   }
 
-  const primary_issue = classifySession(results);
-  const drill_recommendation = primary_issue ? recommendDrill(primary_issue.issue_id as never) : null;
+  try {
+    store.setSessionAnalysisStatus(sessionId, 'analyzing_frames');
+    // Brief yield so the UI can render the new stage label before we hit
+    // the (potentially blocking) analyze call.
+    await new Promise(r => setTimeout(r, 50));
 
-  useCageStore.getState().setSessionAnalysis(sessionId, primary_issue, drill_recommendation);
-  return { primary_issue, drill_recommendation };
+    const results: { swing_id: string; analysis: import('./poseDetection').SwingAnalysis }[] = [];
+
+    store.setSessionAnalysisStatus(sessionId, 'analyzing_pose');
+    for (const [i, swing] of swings.entries()) {
+      if (!swing.clipUri) continue;
+      const r = await analyzeSwing(swing.clipUri, {
+        club: swing.club,
+        swing_number: i + 1,
+        prior_issues: results.slice(-3).map(x => x.analysis.detected_issue),
+      });
+      if (r.kind === 'ok') {
+        results.push({ swing_id: swing.id, analysis: r.analysis });
+        useCageStore.getState().setShotIssueTimestamps(sessionId, swing.id, r.frame_timestamps_sec);
+      }
+    }
+
+    if (results.length === 0) {
+      // analyzeSwing returned non-ok for every swing. This is the canonical
+      // "I couldn't see the swing" path — bad lighting, wrong angle, etc.
+      useCageStore.getState().setSessionAnalysisStatus(
+        sessionId, 'failed',
+        "I had trouble watching this one — could be lighting, angle, or video quality.",
+      );
+      return { primary_issue: null, drill_recommendation: null };
+    }
+
+    useCageStore.getState().setSessionAnalysisStatus(sessionId, 'analyzing_pattern');
+    const primary_issue = classifySession(results);
+    const drill_recommendation = primary_issue ? recommendDrill(primary_issue.issue_id as never) : null;
+
+    useCageStore.getState().setSessionAnalysis(sessionId, primary_issue, drill_recommendation);
+    return { primary_issue, drill_recommendation };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.log('[videoUpload] Phase K error', msg);
+    useCageStore.getState().setSessionAnalysisStatus(
+      sessionId, 'failed',
+      "I had trouble watching this one — could be lighting, angle, or video quality.",
+    );
+    return { primary_issue: null, drill_recommendation: null };
+  }
 }
 
 /**
