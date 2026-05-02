@@ -1081,7 +1081,18 @@ export default function CaddieTab() {
         </View>
       )}
       {trustLevel === 4 && (
-        <View style={{ position: 'absolute', top: -70, left: 0, width: W, height: avatarFrameHeight }}>
+        // L4 Full — Fold-open keeps the explicit 9:16 frame nudged up.
+        // Fold-closed fills the entire space above the data strip so Kevin
+        // isn't pushed off the top. Overlay icons (wind, ?, SmartFinder
+        // reticle) all keep their existing absolute positions and zIndex
+        // ordering above the avatar.
+        <View
+          style={
+            W >= 540
+              ? { position: 'absolute', top: -70, left: 0, width: W, height: avatarFrameHeight }
+              : { position: 'absolute', top: 0, left: 0, right: 0, bottom: 130 + insets.bottom }
+          }
+        >
           <CaddieAvatar
             gender={voiceGender === 'female' ? 'female' : 'male'}
             isOnCourse={isRoundActive}
