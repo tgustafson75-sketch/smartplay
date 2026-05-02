@@ -50,7 +50,7 @@ import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
 import SmartFinderCard from '../../components/smartfinder/SmartFinderCard';
-import { useTrustLevelStore } from '../../store/trustLevelStore';
+import { useTrustLevelStore, TRUST_LEVEL_META, type TrustLevel } from '../../store/trustLevelStore';
 import KevinAvatar, { type AvatarState } from '../../components/kevin/KevinAvatar';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
 import WhatCanISayChip from '../../components/WhatCanISayChip';
@@ -77,6 +77,7 @@ export default function CaddieTab() {
   const insets = useSafeAreaInsets();
   const { pre_course_id } = useLocalSearchParams<{ pre_course_id?: string }>();
   const trustLevel = useTrustLevelStore(s => s.level);
+  const setTrustLevel = useTrustLevelStore(s => s.setLevel);
 
   // Phase F — kevinAvatarState derived below after voiceState/kevinThinking
   // are declared. Consumed by L1's mic-button KevinAvatar wrapping.
@@ -1553,7 +1554,22 @@ export default function CaddieTab() {
             <View style={styles.handle} />
             <Text style={styles.moreTitle}>Tools</Text>
 
+            <ScrollView
+              style={styles.moreScroll}
+              contentContainerStyle={styles.moreScrollContent}
+              showsVerticalScrollIndicator
+            >
+
             {([
+              {
+                icon: '🎚️',
+                label: `Kevin's Presence: ${TRUST_LEVEL_META[trustLevel].label}`,
+                sub: `${TRUST_LEVEL_META[trustLevel].one_liner} · Tap to cycle`,
+                action: () => {
+                  const next = (((trustLevel) % 4) + 1) as TrustLevel;
+                  setTrustLevel(next);
+                },
+              },
               {
                 icon: '🏌️',
                 label: 'Practice',
@@ -1654,6 +1670,7 @@ export default function CaddieTab() {
                 </View>
               </TouchableOpacity>
             ))}
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -1823,10 +1840,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a1a0a',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 24,
     borderTopWidth: 1,
     borderTopColor: '#1e3a28',
+    maxHeight: '85%',
+  },
+  moreScroll: {
+    flexGrow: 0,
+  },
+  moreScrollContent: {
+    paddingBottom: 24,
   },
   handle: {
     width: 40,
