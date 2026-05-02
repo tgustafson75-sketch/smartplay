@@ -188,6 +188,10 @@ function AppNavigator() {
           options={{ animation: 'slide_from_bottom' }}
         />
         <Stack.Screen
+          name="swinglab/cage-drill"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
+        <Stack.Screen
           name="cage-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />

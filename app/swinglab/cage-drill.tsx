@@ -1,0 +1,594 @@
+/**
+ * Cage Drill — full-screen capture + analyze flow.
+ *
+ * State machine:
+ *   SETUP → CHECKING → READY | NOT_READY
+ *                    └ NOT_READY auto-reverts to SETUP after 2s
+ *           READY → RECORDING (12s) → UPLOADING → RESULT | ERROR
+ *           ERROR → "Try Again" → SETUP
+ *           RESULT → "Swing Again" → SETUP
+ *
+ * Capture: 1080p / 30fps / audio / single .mp4 in FileSystem.cacheDirectory.
+ * Auto-stop at 12s OR on user stop tap.
+ *
+ * Bullseye visibility check is the gate before recording can start. The
+ * still-frame upload to /api/cage/check-bullseye decides READY vs NOT_READY.
+ *
+ * Kevin badge (top-left, taps to listening) and ••• menu (top-right) stay
+ * visible at all times so the player can pull Kevin in or exit cleanly.
+ *
+ * Layout adapts to Z Fold open / closed via useWindowDimensions aspect ratio.
+ */
+
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
+  Modal, ScrollView, Image, useWindowDimensions, Animated,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
+import {
+  checkBullseye,
+  analyzeCageVideo,
+  isMockMode,
+  type CageAnalyzeResponse,
+} from '../../services/cageApi';
+import { toggle as toggleListening } from '../../services/listeningSession';
+import { useSettingsStore } from '../../store/settingsStore';
+
+type Phase =
+  | 'SETUP'
+  | 'CHECKING'
+  | 'READY'
+  | 'NOT_READY'
+  | 'RECORDING'
+  | 'UPLOADING'
+  | 'RESULT'
+  | 'ERROR';
+
+const RECORDING_MAX_SECONDS = 12;
+
+const KEVIN_CAPTION: Partial<Record<Phase, string>> = {
+  SETUP:     'Position your camera so the bullseye is in the frame.',
+  CHECKING:  'Looking for the target…',
+  READY:     'Locked in. Ready when you are.',
+  NOT_READY: "I can't see the target. Step left a bit.",
+  RECORDING: 'Swing when ready.',
+  UPLOADING: 'Lemme take a look at that one…',
+  RESULT:    "Here's what I saw.",
+  ERROR:     'Something went sideways on my end.',
+};
+
+export default function CageDrillScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width: W, height: H } = useWindowDimensions();
+  const aspect = H / W;
+  // Z Fold open ≈ 8:9 → aspect ~1.13. Closed phone ≈ 9:21 → aspect ~2.33.
+  // Standard phone ≈ 9:19.5 → aspect ~2.17.
+  const isFoldOpen = aspect < 1.5;
+
+  const [camPerm, requestCamPerm] = useCameraPermissions();
+  const [micPerm, requestMicPerm] = useMicrophonePermissions();
+
+  const cameraRef = useRef<CameraView>(null);
+  const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordCountdownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notReadyRevertRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [phase, setPhase] = useState<Phase>('SETUP');
+  const [recordedSeconds, setRecordedSeconds] = useState(0);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [result, setResult] = useState<CageAnalyzeResponse | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const { voiceEnabled: _voiceEnabled } = useSettingsStore();
+
+  // ── Permissions ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!camPerm?.granted) void requestCamPerm();
+    if (!micPerm?.granted) void requestMicPerm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Cleanup on unmount ──────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+      if (recordCountdownRef.current) clearTimeout(recordCountdownRef.current);
+      if (notReadyRevertRef.current) clearTimeout(notReadyRevertRef.current);
+    };
+  }, []);
+
+  // ── NOT_READY auto-revert to SETUP after 2s ─────────────────────────
+  useEffect(() => {
+    if (phase !== 'NOT_READY') return;
+    if (notReadyRevertRef.current) clearTimeout(notReadyRevertRef.current);
+    notReadyRevertRef.current = setTimeout(() => setPhase('SETUP'), 2000);
+    return () => {
+      if (notReadyRevertRef.current) {
+        clearTimeout(notReadyRevertRef.current);
+        notReadyRevertRef.current = null;
+      }
+    };
+  }, [phase]);
+
+  // ── State transitions ───────────────────────────────────────────────
+
+  const handleCheckPosition = useCallback(async () => {
+    if (!cameraRef.current) return;
+    setPhase('CHECKING');
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.5, base64: true, skipProcessing: true,
+      });
+      const b64 = photo?.base64 ?? '';
+      if (!b64) {
+        setErrorMessage('Could not capture preview frame.');
+        setPhase('ERROR');
+        return;
+      }
+      const res = await checkBullseye(b64);
+      if (res.kind !== 'ok') {
+        setErrorMessage(res.kind === 'no_network' ? 'No network. Try again.' : res.message);
+        setPhase('ERROR');
+        return;
+      }
+      if (res.data.detected && res.data.canvas_visible) {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setPhase('READY');
+      } else {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setPhase('NOT_READY');
+      }
+    } catch (e) {
+      setErrorMessage(e instanceof Error ? e.message : String(e));
+      setPhase('ERROR');
+    }
+  }, []);
+
+  const handleStartRecording = useCallback(async () => {
+    if (!cameraRef.current) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setRecordedSeconds(0);
+    setPhase('RECORDING');
+
+    // Tick countdown
+    const startedAt = Date.now();
+    recordTimerRef.current = setInterval(() => {
+      const s = Math.floor((Date.now() - startedAt) / 1000);
+      setRecordedSeconds(s);
+    }, 100);
+
+    // Auto-stop at 12s
+    recordCountdownRef.current = setTimeout(() => {
+      void stopRecordingAndUpload();
+    }, RECORDING_MAX_SECONDS * 1000);
+
+    try {
+      // expo-camera v17: recordAsync resolves with { uri } when stopped.
+      recordingPromiseRef.current = cameraRef.current.recordAsync({
+        maxDuration: RECORDING_MAX_SECONDS,
+      }) as Promise<{ uri: string } | undefined>;
+    } catch (e) {
+      setErrorMessage(e instanceof Error ? e.message : String(e));
+      setPhase('ERROR');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const stopRecordingAndUpload = useCallback(async () => {
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+    if (recordCountdownRef.current) {
+      clearTimeout(recordCountdownRef.current);
+      recordCountdownRef.current = null;
+    }
+
+    setPhase('UPLOADING');
+
+    try {
+      cameraRef.current?.stopRecording();
+      const recorded = await recordingPromiseRef.current;
+      recordingPromiseRef.current = null;
+      const sourceUri = recorded?.uri;
+      if (!sourceUri) {
+        setErrorMessage('Recording produced no file.');
+        setPhase('ERROR');
+        return;
+      }
+
+      // Move to a stable cache path so the camera's temp file doesn't
+      // get evicted before upload completes.
+      const cacheDir = FileSystem.cacheDirectory ?? '';
+      const cachedUri = `${cacheDir}cage_drill_${Date.now()}.mp4`;
+      try {
+        await FileSystem.copyAsync({ from: sourceUri, to: cachedUri });
+      } catch {
+        // Fall through with the original uri if copy fails.
+      }
+      const uploadUri = (await FileSystem.getInfoAsync(cachedUri)).exists ? cachedUri : sourceUri;
+
+      const res = await analyzeCageVideo(uploadUri);
+
+      // Best-effort delete of the local cache file regardless of outcome.
+      try { await FileSystem.deleteAsync(cachedUri, { idempotent: true }); } catch {}
+
+      if (res.kind !== 'ok') {
+        setErrorMessage(res.kind === 'no_network' ? 'Upload failed — no network. Try again.' : res.message);
+        setPhase('ERROR');
+        return;
+      }
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setResult(res.data);
+      setPhase('RESULT');
+    } catch (e) {
+      setErrorMessage(e instanceof Error ? e.message : String(e));
+      setPhase('ERROR');
+    }
+  }, []);
+
+  const handleSwingAgain = useCallback(() => {
+    setResult(null);
+    setErrorMessage(null);
+    setRecordedSeconds(0);
+    setPhase('SETUP');
+  }, []);
+
+  const handleTryAgain = useCallback(() => {
+    setErrorMessage(null);
+    setRecordedSeconds(0);
+    setPhase('SETUP');
+  }, []);
+
+  const onBadgeTap = useCallback(() => {
+    void toggleListening();
+  }, []);
+
+  // ── Caption pulse on phase change ───────────────────────────────────
+  const captionFade = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    captionFade.setValue(0);
+    Animated.timing(captionFade, { toValue: 1, duration: 280, useNativeDriver: true }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  // ── Permission gates ────────────────────────────────────────────────
+  if (!camPerm) return <SafeAreaView style={styles.container}><ActivityIndicator color="#00C896" style={{ marginTop: 80 }} /></SafeAreaView>;
+  if (!camPerm.granted) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <Header insets={insets} onBack={() => router.back()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
+        <View style={styles.permWrap}>
+          <Text style={styles.permTitle}>Camera permission needed</Text>
+          <Text style={styles.permBody}>Cage Drill records your swing to score your strikes.</Text>
+          <TouchableOpacity style={styles.primaryBtn} onPress={() => void requestCamPerm()}>
+            <Text style={styles.primaryBtnText}>Allow Camera</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────
+  const cameraVisible = phase === 'SETUP' || phase === 'CHECKING' || phase === 'READY' || phase === 'NOT_READY' || phase === 'RECORDING';
+
+  return (
+    <View style={styles.container}>
+      {cameraVisible && (
+        <CameraView
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          facing="back"
+          mode={phase === 'RECORDING' ? 'video' : 'picture'}
+          videoQuality="1080p"
+        />
+      )}
+
+      {/* Dim overlay so chrome reads on bright camera frames. */}
+      {cameraVisible && <View style={styles.cameraDim} pointerEvents="none" />}
+
+      <Header insets={insets} onBack={() => router.back()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
+
+      {/* Kevin caption — always visible, fades on phase change. */}
+      <Animated.View
+        style={[
+          styles.captionWrap,
+          { top: insets.top + 76, opacity: captionFade },
+          isFoldOpen && { left: 96, right: 96 },
+        ]}
+        pointerEvents="none"
+      >
+        <Text style={styles.caption}>{KEVIN_CAPTION[phase] ?? ''}</Text>
+        {isMockMode() && <Text style={styles.mockHint}>MOCK MODE</Text>}
+      </Animated.View>
+
+      {/* RECORDING — large countdown + stop button. */}
+      {phase === 'RECORDING' && (
+        <View style={[styles.recordingWrap, { paddingBottom: insets.bottom + 32 }]} pointerEvents="box-none">
+          <View style={styles.countdownCard}>
+            <Text style={styles.countdownNum}>{Math.max(0, RECORDING_MAX_SECONDS - recordedSeconds)}</Text>
+            <Text style={styles.countdownLabel}>SECONDS LEFT</Text>
+          </View>
+          <TouchableOpacity style={styles.stopBtn} onPress={() => void stopRecordingAndUpload()}>
+            <View style={styles.stopSquare} />
+            <Text style={styles.stopText}>STOP</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* SETUP / READY / NOT_READY — bottom CTAs. */}
+      {(phase === 'SETUP' || phase === 'READY' || phase === 'NOT_READY' || phase === 'CHECKING') && (
+        <View style={[styles.ctaWrap, { paddingBottom: insets.bottom + 32 }]} pointerEvents="box-none">
+          {phase === 'CHECKING' ? (
+            <View style={styles.checkingCard}>
+              <ActivityIndicator color="#00C896" />
+              <Text style={styles.checkingText}>Checking position…</Text>
+            </View>
+          ) : phase === 'READY' ? (
+            <TouchableOpacity style={[styles.primaryBtn, styles.recordBtn]} onPress={handleStartRecording} activeOpacity={0.85}>
+              <View style={styles.recordDot} />
+              <Text style={styles.primaryBtnText}>Start Recording</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.primaryBtn, phase === 'NOT_READY' && styles.primaryBtnDisabled]}
+              onPress={handleCheckPosition}
+              disabled={phase === 'NOT_READY'}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="scan-outline" size={20} color="#0d1a0d" />
+              <Text style={styles.primaryBtnText}>Check Position</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {/* UPLOADING — full-card overlay with filler caption + spinner. */}
+      {phase === 'UPLOADING' && (
+        <View style={styles.fullOverlay}>
+          <View style={styles.uploadCard}>
+            <ActivityIndicator size="large" color="#00C896" />
+            <Text style={styles.uploadText}>{KEVIN_CAPTION.UPLOADING}</Text>
+          </View>
+        </View>
+      )}
+
+      {/* RESULT — scrollable monospace JSON card + Swing Again. */}
+      {phase === 'RESULT' && result && (
+        <SafeAreaView style={styles.resultContainer} edges={['top', 'bottom']}>
+          <Header insets={insets} onBack={() => router.back()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
+          <View style={styles.resultHeader}>
+            <Text style={styles.resultTitle}>features.json</Text>
+          </View>
+          <ScrollView style={styles.resultScroll} contentContainerStyle={styles.resultScrollContent}>
+            <View style={styles.jsonCard}>
+              <Text style={styles.jsonText}>{JSON.stringify(result, null, 2)}</Text>
+            </View>
+          </ScrollView>
+          <View style={[styles.ctaWrap, { paddingBottom: insets.bottom + 24, position: 'relative' }]} pointerEvents="box-none">
+            <TouchableOpacity style={styles.primaryBtn} onPress={handleSwingAgain} activeOpacity={0.85}>
+              <Ionicons name="refresh" size={18} color="#0d1a0d" />
+              <Text style={styles.primaryBtnText}>Swing Again</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      )}
+
+      {/* ERROR — message + Try Again. */}
+      {phase === 'ERROR' && (
+        <SafeAreaView style={styles.resultContainer} edges={['top', 'bottom']}>
+          <Header insets={insets} onBack={() => router.back()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
+          <View style={styles.errorWrap}>
+            <Ionicons name="alert-circle-outline" size={36} color="#ef4444" />
+            <Text style={styles.errorTitle}>{KEVIN_CAPTION.ERROR}</Text>
+            <Text style={styles.errorBody}>{errorMessage ?? 'Unknown error.'}</Text>
+            <TouchableOpacity style={styles.primaryBtn} onPress={handleTryAgain} activeOpacity={0.85}>
+              <Text style={styles.primaryBtnText}>Try Again</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      )}
+
+      {/* ••• action sheet — minimal local menu so the affordance is real. */}
+      <Modal transparent visible={moreOpen} animationType="fade" onRequestClose={() => setMoreOpen(false)}>
+        <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={() => setMoreOpen(false)}>
+          <View style={[styles.menuSheet, { paddingTop: insets.top + 60, paddingRight: 12 }]}>
+            <View style={styles.menuCard}>
+              <MenuItem
+                icon="settings-outline"
+                label="Settings"
+                onPress={() => { setMoreOpen(false); router.push('/settings' as never); }}
+              />
+              <MenuItem
+                icon="library-outline"
+                label="My Swing Library"
+                onPress={() => { setMoreOpen(false); router.push('/swinglab/library' as never); }}
+              />
+              <MenuItem
+                icon="close-circle-outline"
+                label="Close"
+                onPress={() => { setMoreOpen(false); router.back(); }}
+              />
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </View>
+  );
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────
+
+function Header({
+  insets, onBack, onMore, onBadge,
+}: {
+  insets: { top: number };
+  onBack: () => void;
+  onMore: () => void;
+  onBadge: () => void;
+}) {
+  return (
+    <View style={[styles.header, { top: insets.top + 8 }]} pointerEvents="box-none">
+      <TouchableOpacity onPress={onBadge} style={styles.badgeBtn} accessibilityLabel="Talk to Kevin">
+        <Image
+          source={require('../../assets/avatars/smartplay_caddie_badge.png')}
+          style={styles.badgeImg}
+          resizeMode="contain"
+        />
+      </TouchableOpacity>
+      <View style={styles.headerCenter}>
+        <Text style={styles.headerTitle}>Cage Drill</Text>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 4 }}>
+        <TouchableOpacity onPress={onBack} style={styles.iconBtn} accessibilityLabel="Back">
+          <Ionicons name="chevron-back" size={22} color="#9ca3af" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onMore} style={styles.iconBtn} accessibilityLabel="More options">
+          <Ionicons name="ellipsis-horizontal" size={22} color="#9ca3af" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+function MenuItem({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
+      <Ionicons name={icon} size={18} color="#00C896" />
+      <Text style={styles.menuLabel}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#060f09' },
+  cameraDim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(6, 15, 9, 0.18)' },
+
+  header: {
+    position: 'absolute', left: 12, right: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    zIndex: 30,
+  },
+  badgeBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    borderWidth: 1.5, borderColor: '#00C896',
+    backgroundColor: 'rgba(6, 15, 9, 0.65)',
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  badgeImg: { width: 30, height: 30 },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerTitle: { color: '#ffffff', fontSize: 14, fontWeight: '900', letterSpacing: 1.4 },
+  iconBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(6, 15, 9, 0.65)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  captionWrap: { position: 'absolute', left: 16, right: 16, alignItems: 'center', zIndex: 25 },
+  caption: {
+    color: '#ffffff', fontSize: 15, fontWeight: '600',
+    textAlign: 'center', lineHeight: 21,
+    backgroundColor: 'rgba(6, 15, 9, 0.72)',
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
+    borderWidth: 1, borderColor: 'rgba(0, 200, 150, 0.35)',
+  },
+  mockHint: {
+    color: '#fbbf24', fontSize: 10, fontWeight: '900', letterSpacing: 1.4,
+    marginTop: 6,
+  },
+
+  ctaWrap: {
+    position: 'absolute', left: 16, right: 16, bottom: 0,
+    alignItems: 'center', gap: 10, zIndex: 25,
+  },
+  primaryBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#00C896', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 24,
+    minWidth: 220,
+  },
+  primaryBtnDisabled: { opacity: 0.45 },
+  primaryBtnText: { color: '#0d1a0d', fontSize: 15, fontWeight: '900' },
+
+  recordBtn: { backgroundColor: '#ef4444' },
+  recordDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#ffffff' },
+
+  checkingCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: 'rgba(6, 15, 9, 0.85)', borderColor: '#00C896', borderWidth: 1,
+    borderRadius: 12, paddingVertical: 12, paddingHorizontal: 18,
+  },
+  checkingText: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
+
+  recordingWrap: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    alignItems: 'center', gap: 18, zIndex: 25,
+  },
+  countdownCard: {
+    backgroundColor: 'rgba(6, 15, 9, 0.85)', borderColor: '#ef4444', borderWidth: 2,
+    borderRadius: 18, paddingVertical: 14, paddingHorizontal: 28, alignItems: 'center',
+  },
+  countdownNum: { color: '#ffffff', fontSize: 56, fontWeight: '900', fontVariant: ['tabular-nums'], lineHeight: 62 },
+  countdownLabel: { color: '#9ca3af', fontSize: 10, fontWeight: '900', letterSpacing: 1.6, marginTop: 2 },
+  stopBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#ef4444', paddingVertical: 14, paddingHorizontal: 28,
+    borderRadius: 32,
+  },
+  stopSquare: { width: 14, height: 14, backgroundColor: '#ffffff' },
+  stopText: { color: '#ffffff', fontSize: 14, fontWeight: '900', letterSpacing: 1.2 },
+
+  fullOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(6, 15, 9, 0.92)',
+    alignItems: 'center', justifyContent: 'center', zIndex: 40,
+  },
+  uploadCard: {
+    backgroundColor: '#0d1a0d', borderColor: '#1e3a28', borderWidth: 1,
+    borderRadius: 16, padding: 28, alignItems: 'center', gap: 16, maxWidth: 340,
+  },
+  uploadText: { color: '#ffffff', fontSize: 15, fontWeight: '600', textAlign: 'center', lineHeight: 21 },
+
+  resultContainer: { ...StyleSheet.absoluteFillObject, backgroundColor: '#060f09', zIndex: 45 },
+  resultHeader: { paddingHorizontal: 16, paddingTop: 70, paddingBottom: 8 },
+  resultTitle: { color: '#00C896', fontSize: 12, fontWeight: '900', letterSpacing: 1.6 },
+  resultScroll: { flex: 1 },
+  resultScrollContent: { paddingHorizontal: 16, paddingBottom: 100 },
+  jsonCard: {
+    backgroundColor: '#0d1a0d', borderColor: '#1e3a28', borderWidth: 1,
+    borderRadius: 12, padding: 14,
+  },
+  jsonText: { color: '#e5e7eb', fontSize: 12, fontFamily: 'monospace', lineHeight: 18 },
+
+  errorWrap: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 24, gap: 12,
+  },
+  errorTitle: { color: '#ef4444', fontSize: 16, fontWeight: '800', textAlign: 'center' },
+  errorBody: { color: '#d1d5db', fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 12 },
+
+  permWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
+  permTitle: { color: '#ffffff', fontSize: 18, fontWeight: '900' },
+  permBody: { color: '#9ca3af', fontSize: 14, textAlign: 'center', marginBottom: 12 },
+
+  menuBackdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.4)' },
+  menuSheet: { alignItems: 'flex-end' },
+  menuCard: {
+    backgroundColor: '#0d1a0d', borderColor: '#1e3a28', borderWidth: 1,
+    borderRadius: 14, padding: 6, minWidth: 200,
+  },
+  menuItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 12, paddingVertical: 12,
+  },
+  menuLabel: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
+});

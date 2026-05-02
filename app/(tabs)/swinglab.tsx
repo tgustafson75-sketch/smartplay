@@ -334,6 +334,12 @@ export default function SwingLab() {
               onPress={() => router.push('/swinglab/space-scan' as never)}
             />
             <ToolRow
+              icon="radio-button-on-outline"
+              label="Cage Drill"
+              sub="12-second capture · bullseye scoring"
+              onPress={() => router.push('/swinglab/cage-drill' as never)}
+            />
+            <ToolRow
               icon="library-outline"
               label="My Swing Library"
               sub="Browse + replay"
