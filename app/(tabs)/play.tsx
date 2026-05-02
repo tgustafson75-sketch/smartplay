@@ -23,6 +23,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useRoundStore } from '../../store/roundStore';
+import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse } from '../../services/golfCourseApi';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { getCourseImageryUrl } from '../../services/mapboxImagery';
@@ -61,6 +62,16 @@ export default function PlayTab() {
   const router = useRouter();
   const recentCourseIds = useRoundStore(s => s.recentCourseIds);
   const activeCourseId = useRoundStore(s => s.activeCourseId);
+
+  // Pre-beta — legacy round factors restored to the Play tab so the user
+  // picks strategy + mental + format BEFORE the round fires. The Play tab
+  // hands these to roundStore via setPendingStartFactors; Caddie reads
+  // them when consuming the pendingStartCourseId signal.
+  const [setupMode, setSetupMode] = useState<RoundMode>('free_play');
+  const [setupNineHole, setSetupNineHole] = useState(false);
+  const [setupCompetition, setSetupCompetition] = useState(false);
+  const [setupMental, setSetupMental] = useState<'fresh' | 'neutral' | 'tense'>('neutral');
+  const [setupNotes, setSetupNotes] = useState('');
 
   const [searchKind, setSearchKind] = useState<SearchKind>('courses');
   const [query, setQuery] = useState('');
@@ -202,10 +213,16 @@ export default function PlayTab() {
 
   const handleStartRound = () => {
     if (!selected) return;
-    // Phase Q.5b — set the pending-start signal in roundStore so the
-    // Caddie tab's subscriber consumes it on every push (Tabs navigator
-    // doesn't reliably propagate route params across tab switches, which
-    // was the root cause of the prior "start round loop broken" bug).
+    // Pre-beta — push the chosen play factors alongside the course id so
+    // Caddie's runStartRound launches with the user's strategy / mental /
+    // format selection instead of the bare 'free_play' default.
+    useRoundStore.getState().setPendingStartFactors({
+      mode: setupMode,
+      nineHole: setupNineHole,
+      isCompetition: setupCompetition,
+      mentalState: setupMental,
+      notes: setupNotes,
+    });
     useRoundStore.getState().setPendingStartCourse(selected.id);
     router.push('/(tabs)/caddie' as never);
   };
@@ -409,10 +426,6 @@ export default function PlayTab() {
               </View>
 
               <View style={styles.actionRow}>
-                <TouchableOpacity style={[styles.actionBtn, styles.actionBtnPrimary]} onPress={handleStartRound}>
-                  <AppIcon name="flag" size={14} color="#0d1a0d" />
-                  <Text style={styles.actionBtnPrimaryText}>Start</Text>
-                </TouchableOpacity>
                 <TouchableOpacity style={styles.actionBtn} onPress={handleHoleMap}>
                   <AppIcon name="map-outline" size={14} color="#00C896" />
                   <Text style={styles.actionBtnText}>View</Text>
@@ -423,6 +436,79 @@ export default function PlayTab() {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* Pre-beta — legacy round factors. STRATEGY (mode), FORMAT
+                (nine-hole + competition), MENTAL state, NOTES. Picked
+                BEFORE the round fires so Kevin briefing + caddie brain
+                have the player's intent in hand. */}
+            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>STRATEGY</Text>
+            <View style={styles.factorGrid}>
+              {(Object.keys(ROUND_MODE_CARDS) as RoundMode[]).map(m => {
+                const active = setupMode === m;
+                return (
+                  <TouchableOpacity
+                    key={m}
+                    style={[styles.factorCard, active && styles.factorCardActive]}
+                    onPress={() => setSetupMode(m)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.factorTitle, active && styles.factorTitleActive]}>{ROUND_MODE_CARDS[m].title}</Text>
+                    <Text style={styles.factorSub} numberOfLines={2}>{ROUND_MODE_CARDS[m].description}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>MENTAL</Text>
+            <View style={styles.factorRow}>
+              {(['fresh', 'neutral', 'tense'] as const).map(m => {
+                const active = setupMental === m;
+                return (
+                  <TouchableOpacity
+                    key={m}
+                    style={[styles.chip, active && styles.chipActive]}
+                    onPress={() => setSetupMental(m)}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{m.charAt(0).toUpperCase() + m.slice(1)}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>FORMAT</Text>
+            <View style={styles.factorRow}>
+              <TouchableOpacity
+                style={[styles.chip, setupNineHole && styles.chipActive]}
+                onPress={() => setSetupNineHole(v => !v)}
+              >
+                <Text style={[styles.chipText, setupNineHole && styles.chipTextActive]}>9-Hole</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.chip, setupCompetition && styles.chipActive]}
+                onPress={() => setSetupCompetition(v => !v)}
+              >
+                <Text style={[styles.chipText, setupCompetition && styles.chipTextActive]}>Competition</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>NOTES (optional)</Text>
+            <TextInput
+              style={styles.notesInput}
+              value={setupNotes}
+              onChangeText={setSetupNotes}
+              placeholder="Anything Kevin should know going into this round?"
+              placeholderTextColor="#3a5a40"
+              multiline
+            />
+
+            <TouchableOpacity
+              style={[styles.actionBtnPrimary, styles.startBigBtn]}
+              onPress={handleStartRound}
+              activeOpacity={0.88}
+            >
+              <AppIcon name="flag" size={16} color="#0d1a0d" />
+              <Text style={styles.actionBtnPrimaryText}>Start Round</Text>
+            </TouchableOpacity>
           </>
         )}
 
@@ -463,6 +549,39 @@ const styles = StyleSheet.create({
   sectionLabel: {
     color: '#6b7d72', fontSize: 11, fontWeight: '700',
     letterSpacing: 1.6, paddingHorizontal: 16, marginTop: 16, marginBottom: 8,
+  },
+  factorGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8,
+    paddingHorizontal: 16,
+  },
+  factorCard: {
+    width: '48%', backgroundColor: '#0d1a0d',
+    borderRadius: 12, borderWidth: 1, borderColor: '#1e3a28',
+    padding: 12, gap: 4,
+  },
+  factorCardActive: { borderColor: '#00C896', backgroundColor: '#0d2418' },
+  factorTitle: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  factorTitleActive: { color: '#00C896' },
+  factorSub: { color: '#6b7d72', fontSize: 11, lineHeight: 15 },
+  factorRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, flexWrap: 'wrap' },
+  chip: {
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 20, borderWidth: 1, borderColor: '#1e3a28',
+    backgroundColor: '#0d1a0d',
+  },
+  chipActive: { borderColor: '#00C896', backgroundColor: '#0d2418' },
+  chipText: { color: '#9ca3af', fontSize: 12, fontWeight: '700' },
+  chipTextActive: { color: '#00C896' },
+  notesInput: {
+    marginHorizontal: 16, marginTop: 4,
+    backgroundColor: '#0d1a0d', borderColor: '#1e3a28', borderWidth: 1,
+    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
+    color: '#fff', fontSize: 13, minHeight: 56, textAlignVertical: 'top',
+  },
+  startBigBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, marginHorizontal: 16, marginTop: 18,
+    paddingVertical: 14, borderRadius: 12,
   },
   localList: { paddingHorizontal: 16, gap: 6 },
   localRow: {

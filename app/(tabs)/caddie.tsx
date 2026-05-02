@@ -190,11 +190,15 @@ export default function CaddieTab() {
       setSelectedPickedCourse(picked);
       const fn = runStartRoundRef.current;
       if (fn) {
+        // Pre-beta — consume factors set by the Play tab. Falls back to
+        // sensible defaults if the deep-link entry skipped the picker.
+        const factors = useRoundStore.getState().pendingStartFactors;
+        useRoundStore.getState().setPendingStartFactors(null);
         await fn(picked, {
-          nineHole: false,
-          isCompetition: false,
-          notes: '',
-          mode: 'free_play',
+          nineHole: factors?.nineHole ?? false,
+          isCompetition: factors?.isCompetition ?? false,
+          notes: factors?.notes ?? '',
+          mode: factors?.mode ?? 'free_play',
           ghostRoundId: null,
         });
       }

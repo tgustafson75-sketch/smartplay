@@ -194,6 +194,24 @@ interface RoundState {
    *  for Caddie tab to consume on focus. Set then auto-cleared. */
   pendingStartCourseId: string | null;
   setPendingStartCourse: (id: string | null) => void;
+  /** Pre-beta — pending round factors set on the Play tab alongside the
+   *  course pick. Caddie reads these when consuming the pendingStart
+   *  signal so the round launches with the user's strategy/mental/format
+   *  selection instead of bare defaults. */
+  pendingStartFactors: {
+    mode: RoundMode;
+    nineHole: boolean;
+    isCompetition: boolean;
+    mentalState: string;
+    notes: string;
+  } | null;
+  setPendingStartFactors: (f: {
+    mode: RoundMode;
+    nineHole: boolean;
+    isCompetition: boolean;
+    mentalState: string;
+    notes: string;
+  } | null) => void;
   setCurrentHole: (hole: number) => void;
   setCurrentYardage: (yards: number | null) => void;
   setClub: (club: string) => void;
@@ -384,6 +402,8 @@ export const useRoundStore = create<RoundState>()(
 
       pendingStartCourseId: null,
       setPendingStartCourse: (id) => set({ pendingStartCourseId: id }),
+      pendingStartFactors: null,
+      setPendingStartFactors: (f) => set({ pendingStartFactors: f }),
 
       addRoundPhoto: (uri) =>
         set(s => {
