@@ -84,7 +84,16 @@ export default function SmartFinderCard() {
         <Divider />
         <Cell label="BACK" value={yards.back} />
       </View>
-      <Text style={styles.tapHint}>Tap for SmartFinder →</Text>
+      {/* Sim-report gap 1 — when GPS is solid but the course's green
+          coords aren't loaded, dashes alone leave the player guessing.
+          Honest hint explains WHY and offers the tap-to-target alternative. */}
+      {isRoundActive && yards.middle == null && gps.level !== 'none' ? (
+        <Text style={styles.emptyHint}>
+          Course doesn&apos;t have green coords — tap to drop a target instead.
+        </Text>
+      ) : (
+        <Text style={styles.tapHint}>Tap for SmartFinder →</Text>
+      )}
     </TouchableOpacity>
   );
 }
@@ -159,5 +168,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textAlign: 'right',
     marginTop: 6,
+  },
+  emptyHint: {
+    color: '#9ca3af',
+    fontSize: 11,
+    lineHeight: 15,
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
 });

@@ -65,6 +65,7 @@ import CaddieDataStrip from '../../components/CaddieDataStrip';
 import { canAccess, trialDaysLeft } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
 import { subscribeBattery } from '../../services/batteryMonitor';
+import { noteAudioActivity } from '../../services/audioLifecycle';
 import {
   shouldFireProactive,
   markProactiveFired,
@@ -316,6 +317,7 @@ export default function CaddieTab() {
             dominantMiss: usePlayerProfileStore.getState().dominantMiss ?? null,
             firstName: usePlayerProfileStore.getState().firstName || '',
             mode: storeNow.mode,
+            trustLevel: useTrustLevelStore.getState().level,
           });
           if (trigger) {
             markProactiveFired(trigger.id);
@@ -397,6 +399,23 @@ export default function CaddieTab() {
   // Pre-beta — battery-saver state for the L1 badge dot color.
   const [saverActive, setSaverActive] = useState(false);
   useEffect(() => subscribeBattery((s) => setSaverActive(s.saverActive)), []);
+
+  // Sim-report gap 3 — L4 long-press on the SmartFinder reticle expands
+  // the embedded SmartFinderCard inline (instead of forcing a full-screen
+  // route push). Tap-anywhere on the overlay collapses it. Long-press
+  // again toggles closed.
+  const [l4FinderExpanded, setL4FinderExpanded] = useState(false);
+  useEffect(() => {
+    if (trustLevel !== 4) setL4FinderExpanded(false);
+  }, [trustLevel]);
+
+  // Sim-report gap 2 — pre-warm audio engine when entering Quiet (L1) so
+  // the first mic tap doesn't pay the ~200ms cold→warm cost. Fires once
+  // per L1 entry; the audioLifecycle 90s idle timer still sweeps it back
+  // to cold if the user never taps.
+  useEffect(() => {
+    if (trustLevel === 1) noteAudioActivity('l1_badge_visible');
+  }, [trustLevel]);
 
   // Pre-beta — Discrete Mode badge pulse. Brief opacity dip + restore
   // when the user enters Quiet, so the mute dot landing reads as an
@@ -1115,6 +1134,7 @@ export default function CaddieTab() {
         dominantMiss: dominantMiss ?? null,
         firstName: firstName || '',
         mode: storeNow.mode,
+        trustLevel,
       });
       if (proactiveTrigger) {
         markProactiveFired(proactiveTrigger.id);
@@ -1636,43 +1656,57 @@ export default function CaddieTab() {
         );
       })()}
 
-      {/* L4 SmartFinder ICON — replaces the embedded card at L4. Sits on the
-           right edge, vertically centered around the data strip area, so it
-           doesn't intercept taps on Kevin's avatar (which fills the screen
-           at L4). Tap routes to /smartfinder. */}
+      {/* L4 SmartFinder ICON — replaces the embedded card at L4. Sits on
+           the right edge. Tap routes to /smartfinder; sim-report gap 3:
+           long-press toggles an inline expanded SmartFinderCard overlay
+           so the player can read yardages without leaving the L4 screen. */}
       {isRoundActive && trustLevel === 4 && (
-        <TouchableOpacity
-          onPress={() => router.push('/smartfinder' as never)}
-          style={{
-            position: 'absolute',
-            right: 12,
-            bottom: 200 + insets.bottom,
-            width: 56,
-            height: 56,
-            borderRadius: 28,
-            backgroundColor: 'rgba(13, 36, 24, 0.85)',
-            borderWidth: 1.5,
-            borderColor: '#F5A623',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 14,
-            shadowColor: '#F5A623',
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.55,
-            shadowRadius: 8,
-            elevation: 6,
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Open SmartFinder"
-        >
-          {/* Legacy SmartFinder reticle: white horizontal + vertical line through
-               a yellow ring. Same primitives as the camera-AR reticle. */}
-          <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
-            <View style={{ position: 'absolute', width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: '#F5A623' }} />
-            <View style={{ position: 'absolute', width: 18, height: 1.5, backgroundColor: '#ffffff' }} />
-            <View style={{ position: 'absolute', width: 1.5, height: 18, backgroundColor: '#ffffff' }} />
-          </View>
-        </TouchableOpacity>
+        <>
+          <TouchableOpacity
+            onPress={() => router.push('/smartfinder' as never)}
+            onLongPress={() => setL4FinderExpanded(v => !v)}
+            delayLongPress={400}
+            style={{
+              position: 'absolute',
+              right: 12,
+              bottom: 200 + insets.bottom,
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              backgroundColor: 'rgba(13, 36, 24, 0.85)',
+              borderWidth: 1.5,
+              borderColor: '#F5A623',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 14,
+              shadowColor: '#F5A623',
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: 0.55,
+              shadowRadius: 8,
+              elevation: 6,
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Open SmartFinder · long-press to expand inline"
+          >
+            <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ position: 'absolute', width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: '#F5A623' }} />
+              <View style={{ position: 'absolute', width: 18, height: 1.5, backgroundColor: '#ffffff' }} />
+              <View style={{ position: 'absolute', width: 1.5, height: 18, backgroundColor: '#ffffff' }} />
+            </View>
+          </TouchableOpacity>
+          {l4FinderExpanded && (
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={() => setL4FinderExpanded(false)}
+              style={{
+                position: 'absolute', left: 16, right: 80,
+                bottom: 200 + insets.bottom, zIndex: 13,
+              }}
+            >
+              <SmartFinderCard />
+            </TouchableOpacity>
+          )}
+        </>
       )}
 
       {/* L1 SmartVision card is now rendered inside the L1 Quiet block

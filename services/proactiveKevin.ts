@@ -21,15 +21,25 @@ interface TriggerContext {
   dominantMiss: string | null;
   firstName: string;
   mode: string;
+  /** Sim-report gap 5 — Trust Spectrum dampens proactive cadence at L2
+   *  Companion (player wants Kevin available, not chatty). L1 is silent
+   *  by separate gating; L3/L4 inherit the standard cadence. Optional;
+   *  call sites pass when known and we default to L3 standard. */
+  trustLevel?: 1 | 2 | 3 | 4;
 }
 
 const lastFiredAt: Partial<Record<ProactiveTriggerType, number>> = {};
 const GLOBAL_DEBOUNCE_MS = 2 * 60 * 1000;
+// Sim-report gap 5 — L2 Companion debounce is 2× the standard so the
+// player gets meaningfully fewer mid-round bumps. Devon's complaint:
+// triggers landing right before his shot.
+const L2_DEBOUNCE_MS = 4 * 60 * 1000;
 let lastAnyFiredAt = 0;
 
 export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | null {
   const now = Date.now();
-  if (now - lastAnyFiredAt < GLOBAL_DEBOUNCE_MS) return null;
+  const debounce = ctx.trustLevel === 2 ? L2_DEBOUNCE_MS : GLOBAL_DEBOUNCE_MS;
+  if (now - lastAnyFiredAt < debounce) return null;
 
   const name = ctx.firstName || 'you';
 
