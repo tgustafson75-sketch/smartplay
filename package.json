@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "build": "expo export --platform web",
-    "vercel-build": "expo export --platform web"
+    "vercel-build": "expo export --platform web",
+    "generate:greetings": "node scripts/generate-kevin-greetings.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
