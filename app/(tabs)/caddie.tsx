@@ -2381,6 +2381,28 @@ export default function CaddieTab() {
               { icon: voiceEnabled ? 'volume-high-outline' : 'volume-mute-outline', label: voiceEnabled ? 'Voice On' : 'Voice Off',  sub: "Toggle Kevin's voice", action: () => setVoiceEnabled(!voiceEnabled) },
               { icon: 'library-outline',     label: 'Tutorials',        sub: 'How each tool works',      action: () => { setShowMoreMenu(false); router.push('/tutorials' as never); } },
               { icon: 'book-outline',        label: 'Rules & Handicap', sub: 'Quick reference + WHS calculator', action: () => { setShowMoreMenu(false); router.push('/reference' as never); } },
+              // Phase V.7+ — user-initiated GPS recalibration. Drops the
+              // current subscription + cached fix, pulls a single Highest-
+              // accuracy fix, restarts the watch in active mode. Useful when
+              // yardages feel off (under trees, by water, after backgrounding).
+              { icon: 'compass-outline',     label: 'GPS Calibration',  sub: 'Refresh signal & accuracy', action: async () => {
+                  setShowMoreMenu(false);
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                  Alert.alert('GPS', 'Recalibrating…');
+                  try {
+                    const gps = await import('../../services/gpsManager');
+                    const fix = await gps.recalibrateGps();
+                    if (fix) {
+                      const acc = fix.accuracy_m != null ? `~${Math.round(fix.accuracy_m)}m` : 'unknown';
+                      Alert.alert('GPS', `Locked. Accuracy ${acc}.`);
+                    } else {
+                      Alert.alert('GPS', "Couldn't get a fresh fix. Step into the open and try again.");
+                    }
+                  } catch (e) {
+                    console.log('[gps-calibration] error', e);
+                    Alert.alert('GPS', 'Calibration failed. Try again in a moment.');
+                  }
+                } },
               { icon: 'logo-youtube',        label: 'YouTube Channel',  sub: '@smartplaycaddie',         action: () => { Linking.openURL('https://youtube.com/@smartplaycaddie').catch(() => {}); setShowMoreMenu(false); } },
               { icon: 'settings-outline',    label: 'Settings',         sub: 'App preferences',          action: () => { setShowMoreMenu(false); router.push('/settings' as never); } },
             ]) as { icon: IconName; label: string; sub: string; action: () => void | Promise<void> }[]).map(item => (

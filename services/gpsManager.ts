@@ -226,3 +226,68 @@ export function setBatterySaverFloor(floor: GpsMode | null): void {
     setMode('walking', 'battery_saver_floor');
   }
 }
+
+/**
+ * Phase V.7+ — user-initiated GPS recalibration. Drops the current
+ * subscription + cached fix, re-requests permission (in case it was
+ * revoked), pulls a single Highest-accuracy fix to seed `lastFix`, then
+ * restarts the watch in 'active' mode for the next 60s so subsequent
+ * fixes converge fast. Returns the new fix (or null on failure) so the
+ * caller can show user-facing feedback ("Locked, accuracy ~Xm").
+ */
+export async function recalibrateGps(): Promise<GpsFix | null> {
+  breadcrumb('manager_recalibrate_start');
+  // Tear down current watch + cache so stale tower-triangulation fixes
+  // can't bleed into the recalibrated state.
+  if (subscription) {
+    try { subscription.remove(); } catch {}
+    subscription = null;
+  }
+  lastFix = null;
+
+  try {
+    const perm = await Location.requestForegroundPermissionsAsync();
+    if (!perm.granted) {
+      breadcrumb('manager_recalibrate_no_permission');
+      return null;
+    }
+    // Pull a single high-accuracy fix immediately so the UI has something
+    // to show instead of "Locking GPS…" while the watch warms up.
+    const pos = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Highest,
+    });
+    const fresh: GpsFix = {
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+      accuracy_m: pos.coords.accuracy ?? null,
+      speed: pos.coords.speed ?? null,
+      timestamp: pos.timestamp,
+    };
+    lastFix = fresh;
+    lastMotionAt = Date.now();
+    // Bump to active so the restarted watch ticks at 1Hz/BestForNavigation
+    // for the 60s convergence window.
+    lastActiveBumpAt = Date.now();
+    lastBumpReason = 'recalibrate';
+    lastBumpAt = lastActiveBumpAt;
+    mode = 'active';
+    await startWatchInternal();
+    if (!evalTimer) evalTimer = setInterval(evaluateMode, 5_000);
+    // Notify subscribers immediately so on-screen yardages refresh.
+    for (const cb of subscribers) {
+      try { cb(fresh); } catch {}
+    }
+    breadcrumb('manager_recalibrate_ok', {
+      accuracy_m: fresh.accuracy_m,
+    });
+    return fresh;
+  } catch (err) {
+    console.log('[gps] recalibrate error:', err);
+    breadcrumb('manager_recalibrate_error', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    // Try to leave something running even on failure.
+    try { await startWatchInternal(); } catch {}
+    return null;
+  }
+}
