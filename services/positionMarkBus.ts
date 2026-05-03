@@ -86,11 +86,7 @@ export async function forceMarkPosition(): Promise<MarkResult> {
     };
 
     lastMark = mark;
-    console.log('[mark]', JSON.stringify({
-      hole: mark.hole_at_mark,
-      accuracy_m: mark.accuracy_m,
-      subscriber_count: listeners.size,
-    }));
+    console.log(`[path2:round] mark hole=${mark.hole_at_mark} accuracy=${mark.accuracy_m} subscribers=${listeners.size}`);
 
     for (const cb of listeners) {
       try { cb(mark); } catch (e) {

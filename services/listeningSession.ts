@@ -111,6 +111,7 @@ async function openSession() {
   state = 'opening';
   const settings = useSettingsStore.getState();
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  console.log(`[path4:voice] tap_open trust=${getTrustLevel()}`);
 
   // Audio routing safety: if route is the phone speaker AND the user hasn't
   // opted into "Voice on phone speaker", suppress TTS — show text instead.
@@ -310,6 +311,7 @@ async function openSession() {
 }
 
 function closeSession() {
+  console.log('[path4:voice] close');
   // Stop any in-flight TTS
   if (isSpeaking()) {
     void stopSpeaking().catch(() => {});

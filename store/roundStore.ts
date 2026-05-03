@@ -308,6 +308,7 @@ export const useRoundStore = create<RoundState>()(
           roundNumber: prev.roundNumber + 1,
           active_ghost: null,
         });
+        console.log(`[path2:round] start course=${course} holes=${holes.length} courseId=${courseId ?? 'none'}`);
       },
 
       setActiveCourseId: (id) => set({ activeCourseId: id }),
@@ -398,6 +399,9 @@ export const useRoundStore = create<RoundState>()(
           isRoundActive: false,
           roundHistory: [...state.roundHistory, record],
         }));
+        const total = Object.values(s.scores).reduce((a, b) => a + b, 0);
+        const holesPlayed = Object.keys(s.scores).length;
+        console.log(`[path2:round] end totalScore=${total} holesPlayed=${holesPlayed}`);
       },
 
       pendingStartCourseId: null,
@@ -429,6 +433,9 @@ export const useRoundStore = create<RoundState>()(
         }
         const holeData = state.courseHoles.find(h => h.hole === hole);
         set({ currentHole: hole, currentYardage: holeData?.distance ?? null });
+        if (prevHole !== hole) {
+          console.log(`[path2:round] hole transition prev=${prevHole} next=${hole}`);
+        }
         // Notify holeDetection of manual override so its sustained-position
         // window doesn't immediately race against the user's pick.
         try {

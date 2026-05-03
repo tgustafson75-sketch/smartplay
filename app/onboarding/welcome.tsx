@@ -42,6 +42,7 @@ export default function OnboardingWelcome() {
   const avatarScale = useRef(new Animated.Value(0.85)).current;
 
   useEffect(() => {
+    console.log('[path1:onboard] welcome shown');
     Animated.parallel([
       Animated.timing(fadeIn, { toValue: 1, duration: 800, useNativeDriver: true }),
       Animated.spring(avatarScale, { toValue: 1, friction: 6, useNativeDriver: true }),

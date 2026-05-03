@@ -136,6 +136,7 @@ export default function CageDrillScreen() {
 
   const handleCheckPosition = useCallback(async () => {
     if (!cameraRef.current) return;
+    console.log('[path3:cage] check_position requested');
     setPhase('CHECKING');
     try {
       const photo = await cameraRef.current.takePictureAsync({

@@ -43,6 +43,7 @@ export default function MeetKevin() {
   const avatarScale = useRef(new Animated.Value(0.9)).current;
 
   useEffect(() => {
+    console.log('[path1:onboard] meet-kevin shown');
     Animated.parallel([
       Animated.timing(fadeIn, { toValue: 1, duration: 700, useNativeDriver: true }),
       Animated.spring(avatarScale, { toValue: 1, friction: 6, useNativeDriver: true }),
@@ -55,6 +56,7 @@ export default function MeetKevin() {
 
   const finishToCaddie = () => {
     if (voiceEnabled) generateLibrary(apiUrl, voiceGender, language).catch(() => {});
+    console.log('[path1:onboard] complete -> caddie');
     router.replace('/(tabs)/caddie' as never);
   };
 
