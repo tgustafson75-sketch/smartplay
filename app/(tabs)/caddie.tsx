@@ -1344,7 +1344,7 @@ export default function CaddieTab() {
         }
         // Stacked layout for narrow / Fold-closed. Cells shrunk to 180 tall
         // so the SmartVision card's bottom edge doesn't overlap the
-        // SmartFinder card (which sits at bottom: 68 + insets.bottom).
+        // SmartFinder card (which sits at bottom: 64 + insets.bottom).
         const cellW = W - 24;
         // Phase AR — bumped from 180 to 220 (each cell) so the stacked
         // narrow layout fills more of the available vertical space and
@@ -1449,7 +1449,7 @@ export default function CaddieTab() {
           style={
             W >= 540
               ? { position: 'absolute', top: -70, left: 0, width: W, height: avatarFrameHeight }
-              : { position: 'absolute', top: 60, left: 0, right: 0, bottom: 68 + insets.bottom }
+              : { position: 'absolute', top: 60, left: 0, right: 0, bottom: 64 + insets.bottom }
           }
         >
           <CaddieAvatar
@@ -1526,8 +1526,11 @@ export default function CaddieTab() {
               minimal instead of empty middle-third real-estate. */}
           {(() => {
             const cardTop = insets.top + 220;
-            const smartFinderTopApprox = H - (68 + insets.bottom) - 120;
-            const cardH = Math.max(160, smartFinderTopApprox - cardTop - 4);
+            // SmartFinder now anchored at bottom: 64 + insets.bottom (tight
+            // to tab bar). Keep 12px gap above SmartFinder so the two
+            // cards are visually separated, not crowded.
+            const smartFinderTopApprox = H - (64 + insets.bottom) - 120;
+            const cardH = Math.max(160, smartFinderTopApprox - cardTop - 12);
             const cardW = W - 32;
             const headerH = 26;
             const innerW = cardW - 28;
@@ -1759,7 +1762,7 @@ export default function CaddieTab() {
            keeps hole / yardage context without Kevin's face on screen. */}
       {((isRoundActive && trustLevel !== 4) || trustLevel === 1) && (
         <View
-          style={{ position: 'absolute', left: 16, right: 16, bottom: 68 + insets.bottom, zIndex: 8 }}
+          style={{ position: 'absolute', left: 16, right: 16, bottom: 64 + insets.bottom, zIndex: 8 }}
           pointerEvents="box-none"
         >
           <SmartFinderCard />
