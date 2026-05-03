@@ -1555,9 +1555,18 @@ export default function CaddieTab() {
         </View>
       </View>
 
-      {/* TOP NAV — sits below the SmartPlay banner. Free Play (mode badge)
-           is now stacked above the right-side tools button rather than
-           occupying the centered spot. */}
+      {/* TOP NAV — sits below the SmartPlay banner.
+           Phase AD — right column now anchors Tool ••• at the TOP of the
+           stack so the locked top-right semantic position is never obscured
+           by the Free Play (mode) badge or ScorecardChip pills that stack
+           BELOW it during an active round. Previously Tool was the last
+           child and got pushed downward into the avatar/SmartVision area
+           (cellTop = insets.top + 100), making the tap target overlap and
+           the menu effectively unreachable at L2 mid-round.
+           Parent alignItems flipped from 'center' to 'flex-start' so the
+           three columns (back, placeholder, right) all align at the top
+           edge of the bar — Tool stays pinned at insets.top+38, pills
+           extend downward without crossing into the avatar zone. */}
       <View style={[styles.topNav, { top: insets.top + 38 }]}>
         <TouchableOpacity
           style={styles.navBtn}
@@ -1570,26 +1579,7 @@ export default function CaddieTab() {
         <View style={styles.modeBadgePlaceholder} />
 
         <View style={{ alignItems: 'flex-end' }}>
-          {isRoundActive && (
-            <TouchableOpacity
-              style={[styles.modeBadge, { marginBottom: 4 }]}
-              onPress={handleChangeModePress}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Text style={styles.modeBadgeText}>{ROUND_MODE_LABELS[mode]}</Text>
-            </TouchableOpacity>
-          )}
-          {/* Phase R — quick scorecard glance */}
-          <ScorecardChip />
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, flexShrink: 0 }}>
-          {/* SmartFinder quick-launch removed from the top nav — the
-              SmartFinder card already renders on the side at L1/L2/L3
-              (in-round) and as the L4 reticle, so the duplicate top-nav
-              icon was redundant. SmartFinder is still reachable via the
-              ••• tools menu. */}
-          {/* Phase R round photo capture moved to the ••• tools menu so
-              the top nav doesn't show two camera icons (lie-analysis
-              camera on the right edge is the primary in-round affordance). */}
+          {/* Tool ••• — top of the right column. Permanent top-right anchor. */}
           <TouchableOpacity
             style={styles.navBtn}
             onPress={() => setShowMoreMenu(true)}
@@ -1597,7 +1587,17 @@ export default function CaddieTab() {
           >
             <Ionicons name="ellipsis-horizontal" size={24} color="#6b7d72" />
           </TouchableOpacity>
-        </View>
+          {isRoundActive && (
+            <TouchableOpacity
+              style={[styles.modeBadge, { marginTop: 4 }]}
+              onPress={handleChangeModePress}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.modeBadgeText}>{ROUND_MODE_LABELS[mode]}</Text>
+            </TouchableOpacity>
+          )}
+          {/* Phase R — quick scorecard glance, stacks below Tool + Free Play */}
+          <ScorecardChip />
         </View>
       </View>
 
@@ -2461,7 +2461,10 @@ const styles = StyleSheet.create({
     right: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    // Phase AD — was 'center'; now flex-start so the right column stack
+    // (Tool / Free Play / Score) extends downward without re-centering and
+    // pushing Tool into the avatar zone below.
+    alignItems: 'flex-start',
     zIndex: 20,
   },
   navBtn: {
