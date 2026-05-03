@@ -20,6 +20,7 @@ import { useCageStore, type AnalysisStatus } from '../../../store/cageStore';
 import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, stopSpeaking, configureAudioForSpeech } from '../../../services/voiceService';
+import { runPhaseKOnSession } from '../../../services/videoUpload';
 import PrimaryIssueCard from '../../../components/swinglab/PrimaryIssueCard';
 import DrillCard from '../../../components/swinglab/DrillCard';
 
@@ -136,6 +137,20 @@ export default function SwingDetail() {
   const hasAudio = session.upload?.has_audio === true;
   const issueTimestamps = shot.detected_issue_timestamps_sec ?? [];
 
+  // Phase V.7 — Re-run Phase K on this session with the post-V.6 pipeline.
+  // Status transitions inside runPhaseKOnSession drive the existing analyzing
+  // card automatically. Reset spokenForRef so Kevin re-narrates on completion.
+  const reanalyzing =
+    analysisStatus === 'analyzing_frames' ||
+    analysisStatus === 'analyzing_pose' ||
+    analysisStatus === 'analyzing_pattern' ||
+    analysisStatus === 'pending';
+  const onReanalyze = () => {
+    if (!swing_id || reanalyzing) return;
+    spokenForRef.current = null;
+    void runPhaseKOnSession(swing_id);
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -220,14 +235,21 @@ export default function SwingDetail() {
               <Text style={[styles.failedTitle, { color: '#ef4444' }]}>Couldn&apos;t analyze this one</Text>
               <Text style={[styles.failedBody, { color: colors.text_primary }]}>
                 {session.analysis_error ?? "I had trouble watching this one — could be lighting, angle, or video quality."}
-                {' '}Try uploading from a different angle if you can.
               </Text>
-              <TouchableOpacity
-                style={[styles.failedBtn, { borderColor: colors.accent }]}
-                onPress={() => router.replace('/swinglab/upload' as never)}
-              >
-                <Text style={[styles.failedBtnText, { color: colors.accent }]}>Upload another swing</Text>
-              </TouchableOpacity>
+              <View style={styles.failedBtnRow}>
+                <TouchableOpacity
+                  style={[styles.failedBtn, { borderColor: colors.accent }]}
+                  onPress={onReanalyze}
+                >
+                  <Text style={[styles.failedBtnText, { color: colors.accent }]}>Try again with new analysis</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.failedBtn, { borderColor: colors.border }]}
+                  onPress={() => router.replace('/swinglab/upload' as never)}
+                >
+                  <Text style={[styles.failedBtnText, { color: colors.text_muted }]}>Upload another</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
 
@@ -235,6 +257,13 @@ export default function SwingDetail() {
             <Animated.View style={{ opacity: cardsFade }}>
               <PrimaryIssueCard issue={session.primary_issue ?? null} totalShots={session.shots.length} />
               <DrillCard recommendation={session.drill_recommendation ?? null} />
+              <TouchableOpacity
+                style={[styles.reanalyzeBtn, { borderColor: colors.border }]}
+                onPress={onReanalyze}
+                disabled={reanalyzing}
+              >
+                <Text style={[styles.reanalyzeText, { color: colors.text_muted }]}>Re-analyze with latest</Text>
+              </TouchableOpacity>
             </Animated.View>
           )}
         </View>
@@ -301,10 +330,17 @@ const styles = StyleSheet.create({
   },
   failedTitle: { fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
   failedBody: { fontSize: 14, lineHeight: 20 },
+  failedBtnRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 8 },
   failedBtn: {
-    marginTop: 8, alignSelf: 'flex-start',
     paddingVertical: 10, paddingHorizontal: 14,
     borderRadius: 10, borderWidth: 1.5,
   },
   failedBtnText: { fontSize: 13, fontWeight: '800' },
+  reanalyzeBtn: {
+    marginHorizontal: 16, marginTop: 12,
+    paddingVertical: 10, paddingHorizontal: 14,
+    borderRadius: 10, borderWidth: 1,
+    alignSelf: 'flex-start',
+  },
+  reanalyzeText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
 });
