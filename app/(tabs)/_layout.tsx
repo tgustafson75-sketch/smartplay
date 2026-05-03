@@ -61,8 +61,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="caddie"
         options={{
+          // Phase AE follow-up — distinct icons per tab so users can read
+          // them at a glance. Outlined when inactive, filled when focused
+          // (the focused color flip to accent green is what makes the
+          // active tab obvious). Previously Play and SwingLab both used
+          // 'golf' which made the row read as duplicates.
           tabBarIcon: ({ focused }) => (
-            <TabIcon iconName="mic" label="Caddie" focused={focused} />
+            <TabIcon iconName={focused ? 'mic' : 'mic-outline'} label="Caddie" focused={focused} />
           ),
         }}
       />
@@ -70,7 +75,7 @@ export default function TabLayout() {
         name="play"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon iconName="golf" label="Play" focused={focused} />
+            <TabIcon iconName={focused ? 'golf' : 'golf-outline'} label="Play" focused={focused} />
           ),
         }}
       />
@@ -79,7 +84,7 @@ export default function TabLayout() {
         options={{
           tabBarIcon: ({ focused }) => (
             <TabIcon
-              iconName="flag"
+              iconName={focused ? 'flag' : 'flag-outline'}
               label="Score"
               focused={focused}
               showDot={isRoundActive}
@@ -91,7 +96,11 @@ export default function TabLayout() {
         name="swinglab"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon iconName="golf" label="SwingLab" focused={focused} />
+            // videocam matches the swing-video analysis function used
+            // throughout SwingLab + cage flows. Distinct from Play's golf.
+            // Label shortened "SwingLab" → "Swing" so it doesn't truncate
+            // / wrap on Fold closed (5 tabs across ~285px).
+            <TabIcon iconName={focused ? 'videocam' : 'videocam-outline'} label="Swing" focused={focused} />
           ),
         }}
       />
@@ -99,7 +108,7 @@ export default function TabLayout() {
         name="dashboard"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon iconName="stats-chart" label="Stats" focused={focused} />
+            <TabIcon iconName={focused ? 'stats-chart' : 'stats-chart-outline'} label="Stats" focused={focused} />
           ),
         }}
       />
