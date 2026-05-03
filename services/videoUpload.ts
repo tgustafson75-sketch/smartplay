@@ -16,12 +16,20 @@
 
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useCageStore, type UploadMetadata, type SwingTag, type PrimaryIssue, type DrillRecommendation } from '../store/cageStore';
 import { analyzeSwing } from './poseDetection';
 import { classifySession } from './swingIssueClassifier';
 import { recommendDrill } from './drillRecommendation';
 
 export const MAX_FILE_SIZE_MB = 200;
+
+// Phase V.6 diagnostic — single grep target for the full pipeline trace:
+//   adb logcat | grep V6-DIAG
+const V6 = (msg: string, data?: Record<string, unknown>): void => {
+  if (data) console.log('[V6-DIAG] ' + msg + ' ' + JSON.stringify(data));
+  else console.log('[V6-DIAG] ' + msg);
+};
 
 export type PickResult =
   | { kind: 'ok'; uri: string; durationMillis?: number | null; fileSize?: number | null }
@@ -94,31 +102,77 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
   primary_issue: PrimaryIssue | null;
   drill_recommendation: DrillRecommendation | null;
 }> {
+  V6('STAGE 0 — runPhaseKOnSession enter', { sessionId });
   const store = useCageStore.getState();
   const session = store.sessionHistory.find(s => s.id === sessionId);
-  if (!session) return { primary_issue: null, drill_recommendation: null };
+  if (!session) {
+    V6('STAGE 0 ABORT — session not in store', { sessionId });
+    return { primary_issue: null, drill_recommendation: null };
+  }
 
   const swings = session.shots.filter(s => s.clipUri);
+  V6('STAGE 0 — session loaded', {
+    source: session.source ?? 'live_cage',
+    club: session.club,
+    shotCount: session.shots.length,
+    usableShotCount: swings.length,
+    uploadDurationSec: session.upload?.duration_sec ?? null,
+    uploadHasAudio: session.upload?.has_audio ?? null,
+    uploadNotes: session.upload?.notes ?? null,
+  });
+
+  // Probe filesystem for the actual file size so we can rule out size /
+  // codec / corruption issues at the entry boundary.
+  for (const [i, swing] of swings.entries()) {
+    if (!swing.clipUri) continue;
+    try {
+      const info = await FileSystem.getInfoAsync(swing.clipUri);
+      V6('STAGE 0 — clip ' + i + ' file info', {
+        exists: info.exists,
+        size: info.exists ? (info as { size?: number }).size ?? null : null,
+        uri_tail: swing.clipUri.slice(-60),
+      });
+    } catch (e) {
+      V6('STAGE 0 — clip ' + i + ' file probe failed', { error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   if (swings.length === 0) {
+    V6('STAGE 6 FINAL — failed: no usable swings');
     store.setSessionAnalysisStatus(sessionId, 'failed', 'No usable swing in the upload.');
     return { primary_issue: null, drill_recommendation: null };
   }
 
   try {
     store.setSessionAnalysisStatus(sessionId, 'analyzing_frames');
-    // Brief yield so the UI can render the new stage label before we hit
-    // the (potentially blocking) analyze call.
     await new Promise(r => setTimeout(r, 50));
 
     const results: { swing_id: string; analysis: import('./poseDetection').SwingAnalysis }[] = [];
+    const perSwingOutcomes: Array<{ swing_id: string; kind: string; detail?: string }> = [];
 
     store.setSessionAnalysisStatus(sessionId, 'analyzing_pose');
     for (const [i, swing] of swings.entries()) {
       if (!swing.clipUri) continue;
+      V6('STAGE 2-3 — analyzeSwing call', { index: i, club: swing.club });
       const r = await analyzeSwing(swing.clipUri, {
         club: swing.club,
         swing_number: i + 1,
         prior_issues: results.slice(-3).map(x => x.analysis.detected_issue),
+      });
+      V6('STAGE 4 — analyzeSwing returned', {
+        index: i,
+        kind: r.kind,
+        detected_issue: r.kind === 'ok' ? r.analysis.detected_issue : null,
+        severity: r.kind === 'ok' ? r.analysis.severity : null,
+        confidence: r.kind === 'ok' ? r.analysis.confidence : null,
+        observation: r.kind === 'ok' ? r.analysis.observation : null,
+        follow_up_question: r.kind === 'ok' ? (r.analysis.follow_up_question ?? null) : null,
+        error: r.kind === 'error' ? r.message : null,
+      });
+      perSwingOutcomes.push({
+        swing_id: swing.id,
+        kind: r.kind,
+        detail: r.kind === 'error' ? r.message : (r.kind === 'ok' ? r.analysis.detected_issue : undefined),
       });
       if (r.kind === 'ok') {
         results.push({ swing_id: swing.id, analysis: r.analysis });
@@ -126,9 +180,14 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       }
     }
 
+    V6('STAGE 4 SUMMARY — per-swing outcomes', {
+      totalSwings: swings.length,
+      successful: results.length,
+      perSwing: perSwingOutcomes,
+    });
+
     if (results.length === 0) {
-      // analyzeSwing returned non-ok for every swing. This is the canonical
-      // "I couldn't see the swing" path — bad lighting, wrong angle, etc.
+      V6('STAGE 6 FINAL — failed: zero usable analyses across all swings (frame extraction or vision API failed for every clip)');
       useCageStore.getState().setSessionAnalysisStatus(
         sessionId, 'failed',
         "I had trouble watching this one — could be lighting, angle, or video quality.",
@@ -137,14 +196,31 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     }
 
     useCageStore.getState().setSessionAnalysisStatus(sessionId, 'analyzing_pattern');
+    V6('STAGE 5 — classifySession call', { resultsCount: results.length });
     const primary_issue = classifySession(results);
+    V6('STAGE 5 — classifySession returned', {
+      primary_issue_id: primary_issue?.issue_id ?? null,
+      primary_issue_name: primary_issue?.name ?? null,
+      severity: primary_issue?.severity ?? null,
+      confidence: primary_issue?.confidence ?? null,
+      occurrence_count: primary_issue?.occurrence_count ?? null,
+      reason_if_null: primary_issue ? null : (results.length === 1
+        ? 'single swing returned detected_issue=none'
+        : 'multi-swing: no usable consensus AND no fallback (all analyses returned none)'),
+    });
+
     const drill_recommendation = primary_issue ? recommendDrill(primary_issue.issue_id as never) : null;
+    V6('STAGE 6 FINAL — ok', {
+      primary_issue_id: primary_issue?.issue_id ?? null,
+      drill_id: drill_recommendation?.drill_id ?? null,
+      ui_status: 'ok',
+    });
 
     useCageStore.getState().setSessionAnalysis(sessionId, primary_issue, drill_recommendation);
     return { primary_issue, drill_recommendation };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.log('[videoUpload] Phase K error', msg);
+    V6('STAGE 6 FINAL — failed: pipeline threw', { error: msg, stack: e instanceof Error ? (e.stack ?? '').split('\n').slice(0, 5).join(' | ') : null });
     useCageStore.getState().setSessionAnalysisStatus(
       sessionId, 'failed',
       "I had trouble watching this one — could be lighting, angle, or video quality.",

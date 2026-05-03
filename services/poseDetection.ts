@@ -63,6 +63,13 @@ import * as VT from 'expo-video-thumbnails';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Audio } from 'expo-av';
 
+// Phase V.6 diagnostic — single grep target. Filter via:
+//   adb logcat | grep V6-DIAG
+const V6 = (msg: string, data?: Record<string, unknown>): void => {
+  if (data) console.log('[V6-DIAG] ' + msg + ' ' + JSON.stringify(data));
+  else console.log('[V6-DIAG] ' + msg);
+};
+
 const FRAME_TIME_FRACTIONS = [0.05, 0.30, 0.55, 0.80, 0.95];
 const FALLBACK_DURATION_MS = 2000;
 
@@ -79,61 +86,80 @@ async function probeDurationMs(clipUri: string): Promise<number> {
     if (status.isLoaded && status.durationMillis && status.durationMillis > 0) {
       const ms = status.durationMillis;
       await sound.unloadAsync().catch(() => {});
-      console.log('[poseDetection] probe: duration via Audio.Sound = ' + ms + 'ms');
+      V6('STAGE 1 — duration probed via Audio.Sound', { duration_ms: ms });
       return ms;
     }
     await sound.unloadAsync().catch(() => {});
+    V6('STAGE 1 — Audio.Sound loaded but no duration', { isLoaded: status.isLoaded });
   } catch (e) {
-    console.log('[poseDetection] probe: Audio.Sound failed:', e instanceof Error ? e.message : e);
+    V6('STAGE 1 — Audio.Sound failed', { error: e instanceof Error ? e.message : String(e) });
   }
 
   for (const ms of [30_000, 15_000, 8_000, 4_000, 2_000]) {
     try {
       await VT.getThumbnailAsync(clipUri, { time: ms, quality: 0.3 });
-      console.log('[poseDetection] probe: duration via VT >= ' + ms + 'ms');
+      V6('STAGE 1 — duration via VT lower bound', { at_least_ms: ms });
       return ms;
     } catch {
       // Frame extract at that timestamp failed → video is shorter.
     }
   }
-  console.log('[poseDetection] probe: all attempts failed, fallback ' + FALLBACK_DURATION_MS + 'ms');
+  V6('STAGE 1 — duration unknown, fallback', { fallback_ms: FALLBACK_DURATION_MS });
   return FALLBACK_DURATION_MS;
 }
 
 export async function extractKeyFrames(clipUri: string): Promise<Frame[]> {
   if (!clipUri) {
-    console.log('[poseDetection] extractKeyFrames: empty clipUri');
+    V6('STAGE 2 — empty clipUri, no frames');
     return [];
   }
   try {
     const durationMs = await probeDurationMs(clipUri);
-    console.log('[poseDetection] extractKeyFrames start, duration=' + durationMs + 'ms');
+    V6('STAGE 2 — extractKeyFrames start', {
+      duration_ms: durationMs,
+      target_fractions: FRAME_TIME_FRACTIONS,
+    });
+    const perFrameOutcomes: Array<{ idx: number; t_ms: number; ok: boolean; raw_uri_tail?: string; raw_size?: number; b64_kb?: number; error?: string }> = [];
     const frames = await Promise.all(
       FRAME_TIME_FRACTIONS.map(async (t, i) => {
         const timeMs = Math.round(durationMs * t);
         try {
           const r = await VT.getThumbnailAsync(clipUri, { time: timeMs, quality: 0.8 });
+          let rawSize: number | undefined;
+          try {
+            const info = await import('expo-file-system/legacy').then(m => m.getInfoAsync(r.uri));
+            if (info.exists) rawSize = (info as { size?: number }).size ?? undefined;
+          } catch { /* size probe is informational */ }
           const m = await ImageManipulator.manipulateAsync(
             r.uri,
             [{ resize: { width: 1024 } }],
             { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG, base64: true },
           );
           if (!m.base64) {
-            console.log('[poseDetection] frame ' + i + ' (t=' + timeMs + 'ms): no base64 from manipulator');
+            perFrameOutcomes.push({ idx: i, t_ms: timeMs, ok: false, raw_uri_tail: r.uri.slice(-30), raw_size: rawSize, error: 'manipulator returned no base64' });
             return null;
           }
+          perFrameOutcomes.push({
+            idx: i, t_ms: timeMs, ok: true,
+            raw_uri_tail: r.uri.slice(-30), raw_size: rawSize,
+            b64_kb: Math.round(m.base64.length / 1024),
+          });
           return { b64: m.base64, media_type: 'image/jpeg', time_sec: timeMs / 1000 };
         } catch (err) {
-          console.log('[poseDetection] frame ' + i + ' (t=' + timeMs + 'ms) failed:', err instanceof Error ? err.message : err);
+          perFrameOutcomes.push({ idx: i, t_ms: timeMs, ok: false, error: err instanceof Error ? err.message : String(err) });
           return null;
         }
       }),
     );
     const valid = frames.filter((f): f is Frame => f !== null);
-    console.log('[poseDetection] extractKeyFrames: ' + valid.length + '/' + FRAME_TIME_FRACTIONS.length + ' frames extracted');
+    V6('STAGE 2 — extractKeyFrames done', {
+      successful: valid.length,
+      attempted: FRAME_TIME_FRACTIONS.length,
+      per_frame: perFrameOutcomes,
+    });
     return valid;
   } catch (e) {
-    console.log('[poseDetection] extractKeyFrames threw:', e);
+    V6('STAGE 2 — extractKeyFrames threw', { error: e instanceof Error ? e.message : String(e) });
     return [];
   }
 }
@@ -149,10 +175,14 @@ export async function analyzeSwing(
   clipUri: string,
   context: { club: string; swing_number: number; prior_issues?: string[] },
 ): Promise<SwingAnalysisResult> {
-  console.log('[poseDetection] analyzeSwing start: club=' + context.club + ' #=' + context.swing_number);
+  V6('STAGE 2 — analyzeSwing enter', {
+    club: context.club,
+    swing_number: context.swing_number,
+    prior_issues_count: context.prior_issues?.length ?? 0,
+  });
   const frames = await extractKeyFrames(clipUri);
   if (frames.length === 0) {
-    console.log('[poseDetection] analyzeSwing → no_frames');
+    V6('STAGE 3 SKIP — no_frames (no usable frames extracted)');
     return { kind: 'no_frames' };
   }
 
@@ -160,25 +190,40 @@ export async function analyzeSwing(
   try {
     const wireFrames = frames.map(({ b64, media_type }) => ({ b64, media_type }));
     const totalKB = Math.round(wireFrames.reduce((acc, f) => acc + f.b64.length, 0) / 1024);
-    console.log('[poseDetection] POST /api/swing-analysis ' + wireFrames.length + ' frames (~' + totalKB + ' KB)');
+    V6('STAGE 3 — POST /api/swing-analysis', {
+      frames_count: wireFrames.length,
+      total_payload_kb: totalKB,
+      api_base: apiUrl,
+    });
+    const t0 = Date.now();
     const res = await fetch(`${apiUrl}/api/swing-analysis`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ frames: wireFrames, context }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-    console.log('[poseDetection] /api/swing-analysis status=' + res.status);
+    const elapsedMs = Date.now() - t0;
+    V6('STAGE 4 — /api/swing-analysis response', {
+      status: res.status,
+      elapsed_ms: elapsedMs,
+    });
     if (!res.ok) {
       const body = await res.text().catch(() => '<unreadable>');
-      console.log('[poseDetection] non-ok body:', body.slice(0, 200));
+      V6('STAGE 4 — non-ok response body', { body_head: body.slice(0, 300) });
       return { kind: 'error', message: 'Server returned ' + res.status };
     }
     const data = (await res.json()) as SwingAnalysis;
-    console.log('[poseDetection] analysis: detected=' + data.detected_issue + ' severity=' + data.severity + ' conf=' + data.confidence);
+    V6('STAGE 4 — analysis parsed', {
+      detected_issue: data.detected_issue,
+      severity: data.severity,
+      confidence: data.confidence,
+      observation_head: (data.observation ?? '').slice(0, 200),
+      follow_up_question: data.follow_up_question ?? null,
+    });
     return { kind: 'ok', analysis: data, frame_timestamps_sec: frames.map(f => f.time_sec) };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.log('[poseDetection] analyzeSwing fetch error:', msg);
+    V6('STAGE 4 — fetch threw', { error: msg });
     if (/network|abort|timeout|fetch/i.test(msg)) return { kind: 'no_network' };
     return { kind: 'error', message: msg };
   }
