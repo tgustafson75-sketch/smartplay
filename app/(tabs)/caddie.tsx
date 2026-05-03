@@ -1318,7 +1318,7 @@ export default function CaddieTab() {
         }
         // Stacked layout for narrow / Fold-closed. Cells shrunk to 180 tall
         // so the SmartVision card's bottom edge doesn't overlap the
-        // SmartFinder card (which sits at bottom: 190 + insets.bottom).
+        // SmartFinder card (which sits at bottom: 68 + insets.bottom).
         const cellW = W - 24;
         const cellH = 180;
         const gap = 10;
@@ -1419,7 +1419,7 @@ export default function CaddieTab() {
           style={
             W >= 540
               ? { position: 'absolute', top: -70, left: 0, width: W, height: avatarFrameHeight }
-              : { position: 'absolute', top: 60, left: 0, right: 0, bottom: 190 + insets.bottom }
+              : { position: 'absolute', top: 60, left: 0, right: 0, bottom: 68 + insets.bottom }
           }
         >
           <CaddieAvatar
@@ -1490,9 +1490,9 @@ export default function CaddieTab() {
               preview gets real estate. */}
           {(() => {
             const cardTop = insets.top + 150;
-            // SmartFinder card sits at bottom: 190 + insets.bottom and is
+            // SmartFinder card sits at bottom: 68 + insets.bottom and is
             // ~120px tall; leave an 8px gap so the two cards never touch.
-            const smartFinderTopApprox = H - (190 + insets.bottom) - 120;
+            const smartFinderTopApprox = H - (68 + insets.bottom) - 120;
             const cardH = Math.max(180, smartFinderTopApprox - cardTop - 8);
             const cardW = W - 32;
             const headerH = 26;
@@ -1659,7 +1659,7 @@ export default function CaddieTab() {
            keeps hole / yardage context without Kevin's face on screen. */}
       {((isRoundActive && trustLevel !== 4) || trustLevel === 1) && (
         <View
-          style={{ position: 'absolute', left: 16, right: 16, bottom: 190 + insets.bottom, zIndex: 8 }}
+          style={{ position: 'absolute', left: 16, right: 16, bottom: 68 + insets.bottom, zIndex: 8 }}
           pointerEvents="box-none"
         >
           <SmartFinderCard />
