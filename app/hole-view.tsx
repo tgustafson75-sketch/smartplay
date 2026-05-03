@@ -671,10 +671,18 @@ export default function HoleView() {
   // ── RENDER ─────────────────────────────
 
   // Shared: hole image section (same in portrait and landscape)
+  // Phase Y — claim the responder unconditionally on every touch so vertical
+  // drags inside the image don't bubble up and scroll the parent ScrollView.
+  // The marker PanResponders (T/target/pin) are children and win first via
+  // RN's deepest-responder-first negotiation, so dragging a marker still
+  // works. handleImageTap no-ops outside measure-mode + satellite, so the
+  // claim is safe in bundled mode too.
   const holeImagePane = (
     <View
       style={[styles.imageWrapper, { width: IMAGE_WIDTH, height: IMAGE_HEIGHT }]}
-      onStartShouldSetResponder={() => measureMode && displayType === 'satellite'}
+      onStartShouldSetResponder={() => true}
+      onMoveShouldSetResponder={() => true}
+      onResponderTerminationRequest={() => false}
       onResponderRelease={handleImageTap}
     >
           {imageSource ? (

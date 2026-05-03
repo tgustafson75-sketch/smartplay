@@ -45,7 +45,9 @@ import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
 import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
 import { speak, configureAudioForSpeech, captureUtterance } from '../../services/voiceService';
-import { shotDetectionService } from '../../services/shotDetectionService';
+// Phase Y — shotDetectionService lifecycle moved to app/_layout.tsx so it
+// survives tab focus changes. Only the orchestrator's runtime configure()
+// stays here (apiUrl/voice/language can change at any time).
 import { conversationalLoggingOrchestrator } from '../../services/conversationalLoggingOrchestrator';
 import { fetchCourseGeometry } from '../../services/courseGeometryService';
 import WindArrow from '../../components/caddie/WindArrow';
@@ -745,7 +747,12 @@ export default function CaddieTab() {
     _handleMicPress();
   };
 
-  // ── Conversational shot logging — Phase A.2 ──
+  // ── Conversational shot logging — Phase A.2 / Phase Y ──
+  // Phase Y — start/stop now lives in app/_layout.tsx so the lifecycle
+  // survives tab focus changes (briefly leaving the caddie tab no longer
+  // tears down the GPS shot subscription). This effect now only wires the
+  // configure() call (apiUrl/voice/language can change at runtime) and the
+  // fallback callback that needs caddie-screen state.
   useEffect(() => {
     conversationalLoggingOrchestrator.configure({
       apiUrl,
@@ -754,18 +761,7 @@ export default function CaddieTab() {
       captureUtterance: (timeoutMs) => captureUtterance(timeoutMs, apiUrl, language),
       onFallbackToManual: () => setShowShotCard(true),
     });
-    if (isRoundActive) {
-      shotDetectionService.start().catch(() => {});
-      conversationalLoggingOrchestrator.start();
-    } else {
-      conversationalLoggingOrchestrator.stop();
-      shotDetectionService.stop();
-    }
-    return () => {
-      conversationalLoggingOrchestrator.stop();
-      shotDetectionService.stop();
-    };
-  }, [isRoundActive, apiUrl, voiceGender, language]);
+  }, [apiUrl, voiceGender, language]);
 
   // Suspend orchestrator while modals or other voice flows are active.
   useEffect(() => {

@@ -595,6 +595,17 @@ export const useRoundStore = create<RoundState>()(
         return s;
       },
       storage: createJSONStorage(() => AsyncStorage),
+      // Phase Y — explicit hydration signal so subscribers (_layout effects,
+      // shotDetection lifecycle) can wait until rehydration finishes before
+      // capturing initial state. Without this, a fast user tapping Start
+      // Round before AsyncStorage rehydrate resolves loses the
+      // isRoundActive flip — the rehydrated snapshot lands AFTER startRound
+      // and overwrites it back to false. zustand's `persist.hasHydrated()`
+      // is queryable any time; `onFinishHydration` lets us also notify
+      // subscribers that registered before hydration completed.
+      onRehydrateStorage: () => (_state, error) => {
+        if (error) console.log('[roundStore] rehydrate error:', error);
+      },
       partialize: (s) => ({
         isRoundActive: s.isRoundActive,
         mode: s.mode,

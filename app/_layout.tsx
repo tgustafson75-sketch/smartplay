@@ -2,6 +2,7 @@ import { Stack , router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useEffect } from 'react';
+import { Text, View } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 import { SmartVisionProvider } from '../contexts/SmartVisionContext';
 import { KevinPresenceProvider } from '../contexts/KevinPresenceContext';
@@ -16,7 +17,39 @@ import { startHoleDetection, stopHoleDetection, subscribeToHoleDetection } from 
 import { consumeDeferredPaywall } from '../services/paywallGuard';
 import { initAudioLifecycle } from '../services/audioLifecycle';
 import { initBatteryMonitor } from '../services/batteryMonitor';
+import { shotDetectionService } from '../services/shotDetectionService';
+import { conversationalLoggingOrchestrator } from '../services/conversationalLoggingOrchestrator';
 import BatteryPrompt from '../components/battery/BatteryPrompt';
+
+// Phase Y — run `body` only after roundStore rehydration completes. Prevents
+// the rehydration race where a fast user tapping Start Round before
+// AsyncStorage finishes loading sees `isRoundActive` flip true → false (the
+// rehydrated snapshot lands AFTER startRound and overwrites it). All three
+// subscribers in this file initialise `let active = getState().isRoundActive`
+// at effect-mount; without this gate, they'd capture the pre-hydration
+// default (false) and miss the user's startRound() flip when hydration
+// races in afterwards.
+function whenRoundStoreHydrated(body: () => void | (() => void)): () => void {
+  let cleanup: void | (() => void) = undefined;
+  const persistApi = (useRoundStore as unknown as {
+    persist: { hasHydrated: () => boolean; onFinishHydration: (cb: () => void) => () => void };
+  }).persist;
+  if (persistApi.hasHydrated()) {
+    cleanup = body();
+  } else {
+    const unsub = persistApi.onFinishHydration(() => {
+      cleanup = body();
+      unsub();
+    });
+    return () => {
+      unsub();
+      if (typeof cleanup === 'function') cleanup();
+    };
+  }
+  return () => {
+    if (typeof cleanup === 'function') cleanup();
+  };
+}
 
 // TODO (Wednesday MacBook setup): add EXPO_PUBLIC_SENTRY_DSN + Sentry org/project to eas.json,
 // then remove SENTRY_DISABLE_AUTO_UPLOAD=true from eas.json build profiles.
@@ -71,7 +104,9 @@ function AppNavigator() {
   // active, so other media apps (Spotify, podcasts) keep their system
   // controls when SmartPlay isn't the relevant earbud-tap target.
   // Cage and Arena screens activate locally via their own focus effects.
-  useEffect(() => {
+  // Phase Y — gated on roundStore rehydration so the captured `active`
+  // baseline reflects persisted state, not the pre-hydration default.
+  useEffect(() => whenRoundStoreHydrated(() => {
     let active = useRoundStore.getState().isRoundActive;
     if (active) void activateMediaSession();
     const unsub = useRoundStore.subscribe((s) => {
@@ -84,13 +119,14 @@ function AppNavigator() {
       unsub();
       void deactivateMediaSession();
     };
-  }, []);
+  }), []);
 
   // Pre-beta — consume any deferred paywall on cold start AND when an
   // active round transitions to inactive (round finalize). The guard in
   // services/paywallGuard.ts writes the flag whenever a paywall would
   // otherwise have interrupted play.
-  useEffect(() => {
+  // Phase Y — gated on rehydration. Same race fingerprint as media session.
+  useEffect(() => whenRoundStoreHydrated(() => {
     const showIfPending = async () => {
       const deferred = await consumeDeferredPaywall();
       if (!deferred) return;
@@ -106,13 +142,15 @@ function AppNavigator() {
       if (wasActive && !active) void showIfPending();
     });
     return () => { unsub(); };
-  }, []);
+  }), []);
 
   // Phase Q.5b — hole detection polling tied to round-active state.
   // Subscriber routes detected transitions through roundStore.setCurrentHole
   // (which in turn closes the prior hole's last shot end_location via
   // courseGeometryService — Component 3).
-  useEffect(() => {
+  // Phase Y — rehydration-gated; previously this captured `active=false`
+  // pre-hydration and never engaged auto-advance for the round.
+  useEffect(() => whenRoundStoreHydrated(() => {
     const unsubDetect = subscribeToHoleDetection((nextHole) => {
       const round = useRoundStore.getState();
       if (round.currentHole !== nextHole) round.setCurrentHole(nextHole);
@@ -130,12 +168,41 @@ function AppNavigator() {
       unsubRound();
       stopHoleDetection();
     };
-  }, []);
+  }), []);
+
+  // Phase Y — shot detection + conversational logging lifecycle moved here
+  // from app/(tabs)/caddie.tsx so they are independent of which tab is
+  // focused. Previously, briefly leaving the caddie tab tore down the GPS
+  // shot subscription. Same hydration-gated subscriber pattern as above.
+  useEffect(() => whenRoundStoreHydrated(() => {
+    let active = useRoundStore.getState().isRoundActive;
+    const apply = (next: boolean) => {
+      if (next) {
+        shotDetectionService.start().catch(() => {});
+        conversationalLoggingOrchestrator.start();
+      } else {
+        conversationalLoggingOrchestrator.stop();
+        shotDetectionService.stop();
+      }
+    };
+    if (active) apply(true);
+    const unsub = useRoundStore.subscribe((s) => {
+      if (s.isRoundActive === active) return;
+      active = s.isRoundActive;
+      apply(active);
+    });
+    return () => {
+      unsub();
+      conversationalLoggingOrchestrator.stop();
+      shotDetectionService.stop();
+    };
+  }), []);
 
   return (
     <>
       <StatusBar style="auto" />
       <BatteryPrompt />
+      <RoundActiveDevIndicator />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -291,6 +358,40 @@ function AppNavigator() {
         />
       </Stack>
     </>
+  );
+}
+
+// Phase Y — dev-only round-state indicator. Lets Tim verify state is
+// propagating during testing without opening the debug screen. Renders
+// only when __DEV__ is true; production builds drop the component to null.
+function RoundActiveDevIndicator(): React.ReactElement | null {
+  const isRoundActive = useRoundStore(s => s.isRoundActive);
+  const currentHole = useRoundStore(s => s.currentHole);
+  const courseHoles = useRoundStore(s => s.courseHoles);
+  if (!__DEV__) return null;
+  const hydrated = (useRoundStore as unknown as {
+    persist: { hasHydrated: () => boolean };
+  }).persist.hasHydrated();
+  const totalHoles = courseHoles?.length ?? 0;
+  const label = !hydrated
+    ? 'HYDRATING…'
+    : isRoundActive
+      ? `ROUND ACTIVE: hole ${currentHole}${totalHoles ? `/${totalHoles}` : ''}`
+      : 'ROUND IDLE';
+  const bg = !hydrated ? 'rgba(245,166,35,0.85)' : isRoundActive ? 'rgba(0,200,150,0.85)' : 'rgba(107,114,128,0.6)';
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute', top: 4, alignSelf: 'center',
+        paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6,
+        backgroundColor: bg, zIndex: 9999,
+      }}
+    >
+      <Text style={{ fontSize: 10, fontWeight: '900', color: '#fff', letterSpacing: 0.5 }}>
+        {label}
+      </Text>
+    </View>
   );
 }
 
