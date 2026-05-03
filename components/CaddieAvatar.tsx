@@ -652,13 +652,13 @@ export default function CaddieAvatar({
             via translateX so Kevin's face lands at viewport center. */}
         <Animated.Image
           source={backSource}
-          style={[styles.avatarImage, { transform: [{ translateX: -W * 0.18 }, ...backTransform], opacity: backOpacity }]}
+          style={[styles.avatarImage, { transform: [{ translateX: -W * 0.22 }, ...backTransform], opacity: backOpacity }]}
           resizeMode={fill}
         />
 
         <Animated.Image
           source={frontSource}
-          style={[styles.avatarImage, { transform: [{ translateX: -W * 0.18 }, ...frontTransform], opacity: fadeAnim }]}
+          style={[styles.avatarImage, { transform: [{ translateX: -W * 0.22 }, ...frontTransform], opacity: fadeAnim }]}
           resizeMode={fill}
         />
 
