@@ -46,11 +46,17 @@ export default function TabLayout() {
 
   return (
     <Tabs
-      screenOptions={({ route }) => ({
+      // Phase AE — bottom tab bar restored on every route, including
+      // Caddie home. Previously the tabBarStyle for route 'caddie' was
+      // { display: 'none' }, which forced users into the Tool ••• menu
+      // for any tab navigation from the default landing screen. Standing
+      // UI rule: bottom navigation never iterates. Tab bar now renders
+      // across all trust levels and all tabs.
+      screenOptions={{
         headerShown: false,
-        tabBarStyle: route.name === 'caddie' ? { display: 'none' } : sharedTabBarStyle,
+        tabBarStyle: sharedTabBarStyle,
         tabBarShowLabel: false,
-      })}
+      }}
     >
       <Tabs.Screen
         name="caddie"
