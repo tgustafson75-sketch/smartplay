@@ -569,6 +569,9 @@ export default function CaddieTab() {
         par: String(holeData?.par ?? 4),
         distance: String(currentYardage ?? holeData?.distance ?? 150),
         courseName: activeCourse ?? '',
+        // Phase AG followup — courseId enables per-user GPS anchor capture
+        // (override store lookup keyed by courseId+hole).
+        courseId: useRoundStore.getState().activeCourseId ?? '',
         isRoundActive: String(roundActive),
         autoRunVision: 'true',
         teeLat: String(holeData?.teeLat ?? 0),
@@ -2169,6 +2172,7 @@ export default function CaddieTab() {
                         par: String(hd?.par ?? currentPar ?? 4),
                         distance: String(currentYardage ?? hd?.distance ?? 150),
                         courseName: activeCourse ?? '',
+                        courseId: useRoundStore.getState().activeCourseId ?? '',
                         isRoundActive: String(isRoundActive),
                         autoRunVision: 'false',
                         teeLat: String(hd?.teeLat ?? 0),

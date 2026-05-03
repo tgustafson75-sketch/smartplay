@@ -29,6 +29,7 @@ import { File, Paths } from 'expo-file-system';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRoundStore } from '../store/roundStore';
+import { useCourseGeometryOverrideStore } from '../store/courseGeometryOverrideStore';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import PALMS_IMAGES from '../data/palmsImages';
@@ -135,10 +136,21 @@ export default function HoleView() {
   const courseName = String(params.courseName ?? '');
   const isRoundActive = params.isRoundActive === 'true';
   const autoRunVision = params.autoRunVision === 'true';
-  const teeLat = Number(String(params.teeLat ?? '')) || 0;
-  const teeLng = Number(String(params.teeLng ?? '')) || 0;
-  const middleLat = Number(String(params.middleLat ?? '')) || 0;
-  const middleLng = Number(String(params.middleLng ?? '')) || 0;
+  const courseId = String(params.courseId ?? '') || null;
+  const paramTeeLat = Number(String(params.teeLat ?? '')) || 0;
+  const paramTeeLng = Number(String(params.teeLng ?? '')) || 0;
+  const paramMiddleLat = Number(String(params.middleLat ?? '')) || 0;
+  const paramMiddleLng = Number(String(params.middleLng ?? '')) || 0;
+  // Phase AG followup — per-user anchor override store. Tim taps "Anchor
+  // tee" / "Anchor green" mid-round; capture saves current GPS to this
+  // store; subsequent rounds use the captured coords automatically.
+  // Reactive: subscribe to byCourse so re-anchoring re-renders yardage.
+  const overrideAll = useCourseGeometryOverrideStore(s => s.byCourse);
+  const override = courseId ? overrideAll[courseId]?.[hole] : undefined;
+  const teeLat = override?.teeLat ?? paramTeeLat;
+  const teeLng = override?.teeLng ?? paramTeeLng;
+  const middleLat = override?.middleLat ?? paramMiddleLat;
+  const middleLng = override?.middleLng ?? paramMiddleLng;
   const frontYards = Number(String(params.front ?? '')) || 0;
   const backYards = Number(String(params.back ?? '')) || 0;
 
@@ -827,6 +839,52 @@ export default function HoleView() {
             <Text style={styles.btnText}>🌐 3D View</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Phase AG followup — anchor capture row. Only renders during an
+            active round when courseId is known. Two taps build the live
+            yardage data: stand on the tee → tap "Anchor Tee", walk to the
+            green center → tap "Anchor Green". After 18 holes Tim has a
+            complete accurate course geometry that lives in
+            courseGeometryOverrideStore (persisted) and overrides the
+            zero-coord static data automatically. */}
+        {isRoundActive && courseId && (
+          <View style={styles.btnRow}>
+            <TouchableOpacity
+              style={[styles.btn, (override?.teeLat != null && styles.btnActive)]}
+              onPress={async () => {
+                try {
+                  const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+                  useCourseGeometryOverrideStore.getState().anchorTee(
+                    courseId, hole, pos.coords.latitude, pos.coords.longitude,
+                  );
+                } catch (e) {
+                  console.log('[anchor-tee] error', e);
+                }
+              }}
+            >
+              <Text style={[styles.btnText, (override?.teeLat != null && styles.btnTextActive)]}>
+                {override?.teeLat ? '✓ Tee Anchored' : '📍 Anchor Tee'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.btn, (override?.middleLat != null && styles.btnActive)]}
+              onPress={async () => {
+                try {
+                  const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+                  useCourseGeometryOverrideStore.getState().anchorGreen(
+                    courseId, hole, pos.coords.latitude, pos.coords.longitude,
+                  );
+                } catch (e) {
+                  console.log('[anchor-green] error', e);
+                }
+              }}
+            >
+              <Text style={[styles.btnText, (override?.middleLat != null && styles.btnTextActive)]}>
+                {override?.middleLat ? '✓ Green Anchored' : '⛳ Anchor Green'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* PLAN ROW — bundled + round active only */}
         {displayType === 'bundled' && roundActive && markersReady && (

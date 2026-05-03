@@ -286,6 +286,8 @@ export default function PlayTab() {
         par: String(h1?.par ?? 4),
         distance: String(h1?.yardage ?? 0),
         courseName: selected.club_name,
+        // Phase AG followup — courseId enables anchor-capture override.
+        courseId: String(selected.id ?? ''),
         teeLat: String(geom?.tee?.lat ?? 0),
         teeLng: String(geom?.tee?.lng ?? 0),
         middleLat: String(geom?.green?.lat ?? 0),
