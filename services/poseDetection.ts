@@ -70,7 +70,15 @@ const V6 = (msg: string, data?: Record<string, unknown>): void => {
   else console.log('[V6-DIAG] ' + msg);
 };
 
-const FRAME_TIME_FRACTIONS = [0.05, 0.30, 0.55, 0.80, 0.95];
+// Phase AF — re-targeted toward impact zone. Prior fractions
+// [0.05, 0.30, 0.55, 0.80, 0.95] sampled too sparsely around impact (the
+// most diagnostic moment for face/path/attack-angle reads) and the 0.80
+// frame frequently landed past impact on faster swings, leaving the
+// classifier no impact frame to read. New layout: address, mid-backswing,
+// transition, impact, follow-through — three frames clustered around the
+// 60-78% downswing-to-impact window where face angle and contact point
+// are visible.
+const FRAME_TIME_FRACTIONS = [0.08, 0.40, 0.60, 0.75, 0.88];
 const FALLBACK_DURATION_MS = 2000;
 
 export type Frame = { b64: string; media_type: string; time_sec: number };
@@ -209,8 +217,22 @@ export async function analyzeSwing(
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '<unreadable>');
-      V6('STAGE 4 — non-ok response body', { body_head: body.slice(0, 300) });
-      return { kind: 'error', message: 'Server returned ' + res.status };
+      // Phase AF — capture full body (clipped at 800) + status text so the
+      // V6-DIAG trace surfaces upstream error messages (e.g. invalid model
+      // id, key issues, prompt validation failures) instead of just status
+      // codes. Try to extract a JSON error message for cleaner user-facing
+      // copy; fall back to status code.
+      V6('STAGE 4 — non-ok response body', {
+        status: res.status,
+        statusText: res.statusText,
+        body_head: body.slice(0, 800),
+      });
+      let userMsg = 'Server returned ' + res.status;
+      try {
+        const parsed = JSON.parse(body) as { error?: string };
+        if (parsed?.error) userMsg = parsed.error.slice(0, 160);
+      } catch { /* body wasn't JSON */ }
+      return { kind: 'error', message: userMsg };
     }
     const data = (await res.json()) as SwingAnalysis;
     V6('STAGE 4 — analysis parsed', {
