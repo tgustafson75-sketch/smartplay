@@ -111,6 +111,15 @@ export const configureAudioForSpeech =
 
 const SPEAK_TIMEOUT_MS = 30_000;
 
+// Phase V.7 — derive playback timeout from utterance length so longer
+// briefings (~90 words / ~36s of audio) aren't sliced by the 30s cap while
+// short caddie one-liners still fail fast on stuck playback. ~13 chars/sec
+// is a conservative TTS rate; add 8s headroom, clamp [30s, 120s].
+const playbackTimeoutForText = (text: string): number => {
+  const estimatedMs = (text.length / 13) * 1000 + 8_000;
+  return Math.min(120_000, Math.max(30_000, Math.ceil(estimatedMs)));
+};
+
 let currentSound: Audio.Sound | null = null;
 let currentSpeechId = 0;
 let currentAbortController: AbortController | null = null;
@@ -415,7 +424,7 @@ export const speak = async (
             notifySpeaking(false);
           }
           resolve();
-        }, SPEAK_TIMEOUT_MS)
+        }, playbackTimeoutForText(text))
       ),
     ]);
 
