@@ -203,9 +203,30 @@ export const useVoiceCaddie = ({
     fillerEnabled,
   } = useSettingsStore();
 
-  // Load the filler library index into memory on first mount — fast, reads AsyncStorage only.
+  // Load the filler library index into memory on first mount — fast, reads
+  // AsyncStorage only. Phase AB — also fire-and-forget generateLibrary so
+  // existing users whose cache is on a stale voiceHash (e.g. v2) actually
+  // upgrade to v3 on next boot. Without this, the V.6 extension fillers +
+  // context-aware variants only land for new onboarding users; everyone
+  // else keeps hearing the prior pool. generateLibrary internally checks
+  // the hash and no-ops if up to date, so it's safe to call every boot.
+  const _apiUrlForBoot = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const _voiceGenderForBoot = useSettingsStore.getState().voiceGender;
+  const _languageForBoot = useSettingsStore.getState().language;
   useEffect(() => {
-    initFillerLibrary().catch(() => {});
+    void (async () => {
+      try {
+        await initFillerLibrary();
+        if (useSettingsStore.getState().voiceEnabled && _apiUrlForBoot) {
+          const { generateLibrary } = await import('../services/fillerLibrary');
+          void generateLibrary(_apiUrlForBoot, _voiceGenderForBoot, _languageForBoot)
+            .catch(e => console.log('[fillerLibrary] background regen failed', e));
+        }
+      } catch (e) {
+        console.log('[fillerLibrary] init failed', e);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const {

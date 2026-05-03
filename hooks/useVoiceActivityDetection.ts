@@ -3,9 +3,14 @@ import { Platform, Alert } from 'react-native';
 import { Audio } from 'expo-av';
 
 // ─── TUNABLE CONSTANTS ────────────────────
+// Phase AB — SILENCE_DURATION_MS bumped from 1500 → 2800. Natural
+// conversational pauses (thinking, breathing, mid-sentence ellipses)
+// regularly hit 1.5–2.5s; the prior cap finalised the recording on
+// every pause and submitted partial utterances, leaving Kevin stumped.
+// 2.8s leaves enough room for thought without making "I'm done" obvious.
 
 export const SPEECH_THRESHOLD_DB   = -40;
-export const SILENCE_DURATION_MS   = 1500;
+export const SILENCE_DURATION_MS   = 2800;
 export const MIN_SPEECH_DURATION_MS = 500;
 
 // ─── TYPES ────────────────────────────────

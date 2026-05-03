@@ -470,8 +470,14 @@ export default function CaddieTab() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const _holesPlayed = useMemo(() => getHolesPlayed(), [scores]);
 
-  // Derived early so animation effects can reference it
-  const vadEnabled = autoListenEnabled && isRoundActive && appActive;
+  // Derived early so animation effects can reference it.
+  // Phase AB — also gate on voiceState !== 'speaking' so VAD pauses while
+  // Kevin is talking. Otherwise VAD picks up Kevin's TTS as user input
+  // (and a fast 1.5–2.5s silence after Kevin's last word would trigger an
+  // empty submission). VAD restarts naturally once voiceState returns to
+  // 'idle' via the useEffect dep on `vadEnabled` in
+  // useVoiceActivityDetection.
+  const vadEnabled = autoListenEnabled && isRoundActive && appActive && voiceState !== 'speaking';
 
   // ── Keep Vercel warm ────────────────────
   useEffect(() => {
