@@ -209,10 +209,28 @@ async function openSession() {
 
     const handler = voiceCommandRouter.getHandler(intent.intent_type);
     if (handler) {
-      const result = await handler.execute(intent, ctx);
-      // Wait for the filler to finish before the real response so transitions
-      // are clean rather than cut. If no filler fired, this resolves instantly.
+      // Phase V.6 — race the handler against filler completion. If the
+      // handler hasn't resolved by the time the first filler ends, play
+      // an extension filler ('Still working through this...') and re-check.
+      // Up to 2 extensions bridge ~5-8s of additional perceived latency
+      // before the real response. Vision queries can still take ~13s; the
+      // user no longer hears dead silence between 'Let me see...' and the
+      // response.
+      let resultReady = false;
+      const handlerP = handler.execute(intent, ctx)
+        .finally(() => { resultReady = true; });
+
       await fillerP;
+
+      if (ttsAllowed) {
+        for (let i = 0; i < 2 && !resultReady && state === 'responding'; i++) {
+          const ext = getClipForCategory('extension');
+          if (!ext) break;
+          await playLocalFile(ext.audio_path).catch(() => {});
+        }
+      }
+
+      const result = await handlerP;
       const t_response_start = Date.now();
       if (result.voice_response && ttsAllowed) {
         console.log('[ttfa]', JSON.stringify({

@@ -72,4 +72,23 @@ export const FILLER_PHRASES: Array<{ id: string; category: FillerCategory; text:
   { id: 'cas_how_doing',          category: 'casual',         text: 'How you doing?' },
   { id: 'cas_talk',               category: 'casual',         text: 'Talk to me...' },
   { id: 'cas_yeah',               category: 'casual',         text: 'Yeah?' },
+
+  // ─── Phase V.6 — extension fillers ────────────────────────────────────────
+  // Played AFTER the first filler if the real response isn't ready yet.
+  // Sequenced as: opener filler → extension #1 → extension #2 → response.
+  // Bridges 5-8s of perceived latency without exposing the dead silence.
+  { id: 'ext_still_working',      category: 'extension',      text: 'Still working through this...' },
+  { id: 'ext_one_more',           category: 'extension',      text: 'One more second...' },
+  { id: 'ext_okay_here',          category: 'extension',      text: 'Okay, here we go...' },
+  { id: 'ext_almost',             category: 'extension',      text: 'Almost there...' },
+
+  // ─── Phase V.6 — context-aware variants for known query types ─────────────
+  // These extend the existing 'looking' / 'thinking' / 'checking' pools so
+  // round-robin selection within those categories has more variety.
+  { id: 'looking_lie_wind',       category: 'looking',        text: 'Looking at the lie — checking the wind too...' },
+  { id: 'looking_take_in',        category: 'looking',        text: 'Let me take this in...' },
+  { id: 'thinking_interesting',   category: 'thinking',       text: 'Yeah, this is interesting — let me work through it...' },
+  { id: 'thinking_factor',        category: 'thinking',       text: 'Factoring it all in...' },
+  { id: 'checking_pulling',       category: 'checking',       text: 'Pulling the numbers — factoring the wind...' },
+  { id: 'checking_rules_make',    category: 'checking',       text: "Good question — let me make sure I get this right..." },
 ];

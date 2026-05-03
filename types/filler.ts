@@ -9,7 +9,10 @@ export type FillerCategory =
   | 'acknowledging'// conversational opener, no real response yet
   | 'confirming'   // quick acknowledgment of action ("Got it.", "Logged.")
   | 'engaging'     // Coach-mode opener for practice surfaces
-  | 'casual';      // Psychologist-mode between-shot opener
+  | 'casual'       // Psychologist-mode between-shot opener
+  // Phase V.6 — extension fillers played AFTER the first filler when the
+  // real response still isn't ready. Bridges 5-8s of perceived latency.
+  | 'extension';
 
 export interface FillerClip {
   id: string;
