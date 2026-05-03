@@ -55,11 +55,14 @@ export default function SwingDetail() {
   const shot = session?.shots[0];
 
   const videoRef = useRef<Video>(null);
+  // Phase V.7+ — default to Kevin analysis. The has_audio probe in
+  // videoUpload.probeVideo is unreliable (it returns true for any video with
+  // a decoded duration, including silent gym clips), so previously every
+  // upload landed on the coach-audio toggle and Tim heard silence instead
+  // of Kevin. The user can still flip to Coach Audio if a real coach track
+  // is present.
   const [audioSource, setAudioSource] = useState<AudioSource>(
-    // Phase R — default per trust level: L1 prefers coach audio when present;
-    // L2-L4 default to coach audio when present, otherwise Kevin analysis.
-    (session?.upload?.has_audio && trustLevel === 1) ? 'coach' :
-    session?.upload?.has_audio ? 'coach' : 'kevin'
+    trustLevel === 1 && session?.upload?.has_audio ? 'coach' : 'kevin'
   );
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState<number | null>(session?.upload?.duration_sec ?? null);

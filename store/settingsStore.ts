@@ -61,7 +61,7 @@ interface SettingsState {
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       voiceEnabled: true,
       voiceGender: 'male',
       language: 'en',
@@ -86,7 +86,24 @@ export const useSettingsStore = create<SettingsState>()(
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
       setVoiceGender: (g) => set({ voiceGender: g }),
-      setLanguage: (l) => set({ language: l }),
+      setLanguage: (l) => {
+        const prev = get().language;
+        set({ language: l });
+        // Phase V.7+ — invalidate audio caches keyed by language so the user
+        // doesn't hear the prior language's filler clips or a cached briefing
+        // until next app boot. Dynamic require avoids module-load cycles
+        // (settingsStore is imported by both fillerLibrary and briefingGenerator).
+        if (prev !== l) {
+          try {
+            const fillerMod = require('../services/fillerLibrary');
+            void fillerMod.clearLibrary?.().catch?.(() => {});
+          } catch { /* ignore */ }
+          try {
+            const briefMod = require('../services/briefingGenerator');
+            briefMod.clearBriefingCache?.();
+          } catch { /* ignore */ }
+        }
+      },
       setDiscreteMode: (v) => set({ discreteMode: v }),
       setResponseMode: (m) => set({ responseMode: m }),
       setCaddiePersonality: (p) => set({ caddiePersonality: p }),

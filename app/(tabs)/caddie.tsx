@@ -1021,10 +1021,15 @@ export default function CaddieTab() {
 
     if (skip_briefings) {
       const hole1 = useRoundStore.getState().courseHoles.find(h => h.hole === 1);
-      if (hole1 && voiceEnabled) {
+      if (hole1) {
         const msg = 'Hole 1. Par ' + hole1.par + '. ' + hole1.distance + ' yards. Let\'s go.';
         setCaddieResponse(msg);
-        speak(msg, voiceGender, language, apiUrl).catch(() => {});
+        // Phase V.7+ — Quiet (L1) is text-only. Voice only fires at L2+.
+        // Closes the leak where skip-briefings spoke "Hole 1, Par X" even
+        // when the user had set Quiet Mode.
+        if (voiceEnabled && trustLevel !== 1) {
+          speak(msg, voiceGender, language, apiUrl).catch(() => {});
+        }
       }
       return;
     }
@@ -1033,7 +1038,7 @@ export default function CaddieTab() {
   }, [
     subscription_status, router, startRound, roundHistory, setActiveGhost,
     clearActiveGhost, incrementRounds, skip_briefings, voiceEnabled, voiceGender,
-    language, apiUrl,
+    language, apiUrl, trustLevel,
   ]);
 
   // Wire the latest runStartRound into the forward-referenced ref. Done

@@ -207,9 +207,41 @@ export const useRelationshipStore = create<RelationshipState>()(
         })),
 
       getTopObservations: () => {
-        const top = [...get().observations]
-          .sort((a, b) => b.timestamp - a.timestamp)
-          .slice(0, 3);
+        // Phase V.7+ — relevance-aware ranking. Previously sorted by timestamp
+        // alone, which flooded Kevin's prompt with the most recent technical
+        // faults after a cage-heavy week and starved out mental + strength
+        // notes. Now scores each observation on:
+        //   - recency (newer is better, exponential 14-day half-life)
+        //   - novelty (less-used in prior advice is better)
+        // and returns up to 3 slots prioritising type diversity (1 technical
+        // + 1 mental + 1 strength when available) so Kevin always has a
+        // mixed picture instead of three of the same kind.
+        const now = Date.now();
+        const HALF_LIFE_MS = 14 * 24 * 60 * 60 * 1000;
+        const score = (o: Observation): number => {
+          const ageMs = Math.max(0, now - o.timestamp);
+          const recency = Math.pow(0.5, ageMs / HALF_LIFE_MS);
+          const novelty = 1 / (1 + o.usedInAdvice);
+          return recency * novelty;
+        };
+
+        const ranked = [...get().observations].sort((a, b) => score(b) - score(a));
+
+        // Type diversity: take the highest-scoring of each type first, then
+        // fill remaining slots with whatever ranks next.
+        const top: Observation[] = [];
+        const seenTypes = new Set<Observation['type']>();
+        for (const o of ranked) {
+          if (top.length >= 3) break;
+          if (!seenTypes.has(o.type)) {
+            top.push(o);
+            seenTypes.add(o.type);
+          }
+        }
+        for (const o of ranked) {
+          if (top.length >= 3) break;
+          if (!top.find(t => t.id === o.id)) top.push(o);
+        }
 
         if (top.length > 0) {
           set(s => ({

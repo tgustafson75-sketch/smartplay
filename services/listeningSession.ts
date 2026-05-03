@@ -114,9 +114,16 @@ async function openSession() {
 
   // Audio routing safety: if route is the phone speaker AND the user hasn't
   // opted into "Voice on phone speaker", suppress TTS — show text instead.
+  // Phase V.7+ — Quiet (L1) is also a hard suppress for the spoken opener
+  // and any filler. The user gets text-only feedback at L1; voice is only
+  // for L2+. This closes the leak where "Yeah?" played on every earbud tap.
   const route = getCurrentRoute();
   const allowPhoneSpeaker = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
-  const ttsAllowed = settings.voiceEnabled && (route !== 'phone_speaker' || allowPhoneSpeaker);
+  const trustLevel = getTrustLevel();
+  const ttsAllowed =
+    settings.voiceEnabled &&
+    trustLevel !== 1 &&
+    (route !== 'phone_speaker' || allowPhoneSpeaker);
 
   // Phase 1 — speak opener
   const opener = pickOpener();
