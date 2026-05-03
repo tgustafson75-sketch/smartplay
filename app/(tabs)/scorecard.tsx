@@ -1,17 +1,37 @@
-import React, { useState, useRef, useEffect } from 'react';
+/**
+ * Phase Z — Scorecard restoration.
+ *
+ * Single surface for the round's story:
+ *   1. Header with back-to-caddie + share affordances
+ *   2. Course / score summary
+ *   3. Compact all-holes grid (Front 9 stacked over Back 9, no horizontal
+ *      scroll, no Front/Back toggle — both visible at a glance)
+ *   4. Total card (TOTAL · PAR · DIFF)
+ *   5. Club usage summary (count + average distance per club, computed
+ *      from this round's shots)
+ *   6. Kevin's Take — inline recap copy loaded from local archive
+ *   7. Quick-score chips for the current hole
+ *   8. Share via system Share sheet (text scorecard)
+ *
+ * Save is implicit: rounds persist into roundHistory on endRound. The
+ * scorecard simply reflects the persisted state.
+ */
+
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Animated,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  Animated, Share, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useRoundStore } from '../../store/roundStore';
+import { useRelationshipStore } from '../../store/relationshipStore';
+import { useSettingsStore } from '../../store/settingsStore';
+import { loadRecap } from '../../services/planStorage';
+import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
 import AppIcon from '../../components/AppIcon';
 import type { ShotResult } from '../../store/roundStore';
-import { useRelationshipStore } from '../../store/relationshipStore';
+import type { RoundRecap } from '../../types/plan';
 import { dataValue, dataLabel } from '../../styles/typography';
 
 // ─── SCORE COLOR ──────────────────────────
@@ -30,57 +50,99 @@ const getScoreColor = (score: number, par: number): string => {
 // ─── COMPONENT ────────────────────────────
 
 export default function Scorecard() {
-  const {
-    isRoundActive,
-    activeCourse,
-    courseHoles,
-    scores,
-    putts,
-    currentHole,
-    nineHoleMode,
-    isCompetition,
-    setCurrentHole,
-    logScore,
-    logPutts,
-    logShot,
-    getTotalScore,
-    getScoreVsPar,
-    getHolesPlayed,
-  } = useRoundStore();
+  const router = useRouter();
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const { voiceGender, language, voiceEnabled } = useSettingsStore();
 
-  const { heroMoments } = useRelationshipStore();
+  const isRoundActive = useRoundStore(s => s.isRoundActive);
+  const activeCourse = useRoundStore(s => s.activeCourse);
+  const courseHoles = useRoundStore(s => s.courseHoles);
+  const scores = useRoundStore(s => s.scores);
+  const putts = useRoundStore(s => s.putts);
+  const shots = useRoundStore(s => s.shots);
+  const currentHole = useRoundStore(s => s.currentHole);
+  const nineHoleMode = useRoundStore(s => s.nineHoleMode);
+  const isCompetition = useRoundStore(s => s.isCompetition);
+  const currentRoundId = useRoundStore(s => s.currentRoundId);
+  const roundHistory = useRoundStore(s => s.roundHistory);
+  const setCurrentHole = useRoundStore(s => s.setCurrentHole);
+  const logScore = useRoundStore(s => s.logScore);
+  const logPutts = useRoundStore(s => s.logPutts);
+  const logShot = useRoundStore(s => s.logShot);
+  const getTotalScore = useRoundStore(s => s.getTotalScore);
+  const getScoreVsPar = useRoundStore(s => s.getScoreVsPar);
+  const getHolesPlayed = useRoundStore(s => s.getHolesPlayed);
 
-  const [showNine, setShowNine] = useState<'front' | 'back'>('front');
+  const heroMoments = useRelationshipStore(s => s.heroMoments);
 
-  const totalScore = getTotalScore();
-  const scoreVsPar = getScoreVsPar();
-  const holesPlayed = getHolesPlayed();
+  // Phase Z — last completed round in roundHistory becomes the post-round
+  // surface when no round is active. Lets the user return to the scorecard
+  // after end-round to view share/Kevin recap.
+  const lastCompletedRound = useMemo(() => {
+    if (isRoundActive) return null;
+    return roundHistory.length > 0 ? roundHistory[roundHistory.length - 1] : null;
+  }, [isRoundActive, roundHistory]);
 
-  const totalPar = courseHoles
-    .slice(0, nineHoleMode ? 9 : 18)
-    .reduce((a, h) => a + h.par, 0);
+  // Phase Z — allow viewing the active round OR the last completed round.
+  const viewingRoundId = isRoundActive ? currentRoundId : lastCompletedRound?.id ?? null;
+  const viewScores = useMemo(
+    () => (isRoundActive ? scores : (lastCompletedRound?.scores ?? {})),
+    [isRoundActive, scores, lastCompletedRound],
+  );
+  const viewPutts = useMemo(
+    () => (isRoundActive ? putts : (lastCompletedRound?.putts ?? {})),
+    [isRoundActive, putts, lastCompletedRound],
+  );
+  const viewShots = useMemo(
+    () => (isRoundActive ? shots : (lastCompletedRound?.shots ?? [])),
+    [isRoundActive, shots, lastCompletedRound],
+  );
+  const viewCourseName = isRoundActive ? activeCourse : (lastCompletedRound?.courseName ?? null);
+  const viewCourseHoles = isRoundActive
+    ? courseHoles
+    // Reconstruct minimal course-hole shape from the persisted record so the
+    // grid still renders for completed rounds (the persisted record carries
+    // pars/distances enough to display).
+    : (() => {
+        if (!lastCompletedRound) return [];
+        // RoundRecord doesn't always carry full courseHoles; fall back to par 4 / 0 yds
+        // when missing so the grid renders even for legacy records.
+        const total = nineHoleMode ? 9 : 18;
+        return Array.from({ length: total }, (_, i) => ({
+          hole: i + 1,
+          par: 4,
+          distance: 0,
+          front: 0, back: 0,
+          teeLat: 0, teeLng: 0,
+          middleLat: 0, middleLng: 0,
+          frontLat: 0, frontLng: 0,
+          backLat: 0, backLng: 0,
+          note: '',
+          estimated: false,
+        }));
+      })();
 
-  const displayHoles = nineHoleMode
-    ? courseHoles.slice(0, 9)
-    : showNine === 'front'
-    ? courseHoles.slice(0, 9)
-    : courseHoles.slice(9, 18);
+  const totalScore = isRoundActive
+    ? getTotalScore()
+    : Object.values(viewScores).reduce((a, b) => a + (b as number), 0);
+  const totalPar = viewCourseHoles.slice(0, nineHoleMode ? 9 : 18).reduce((a, h) => a + h.par, 0);
+  const scoreVsPar = isRoundActive ? getScoreVsPar() : totalScore - totalPar;
+  const holesPlayed = isRoundActive ? getHolesPlayed() : Object.keys(viewScores).length;
 
   const nineScore = (start: number, end: number): number => {
     let total = 0;
-    for (let i = start; i <= end; i++) total += scores[i] ?? 0;
+    for (let i = start; i <= end; i++) total += (viewScores as Record<number, number>)[i] ?? 0;
     return total;
   };
-
   const ninePar = (start: number, end: number): number =>
-    courseHoles
+    viewCourseHoles
       .filter(h => h.hole >= start && h.hole <= end)
       .reduce((a, h) => a + h.par, 0);
 
   const frontScore = nineScore(1, 9);
-  const backScore  = nineScore(10, 18);
-  const frontPar   = ninePar(1, 9);
-  const backPar    = ninePar(10, 18);
+  const backScore = nineScore(10, 18);
+  const frontPar = ninePar(1, 9);
+  const backPar = ninePar(10, 18);
 
   const scoreVsParDisplay =
     scoreVsPar === 0 ? 'E'
@@ -92,82 +154,289 @@ export default function Scorecard() {
     : scoreVsPar === 0 ? '#ffffff'
     : '#fbbf24';
 
-  const roundHeroMoments = heroMoments.filter(
-    m => m.courseName === activeCourse
-  ).length;
+  const roundHeroMoments = heroMoments.filter(m => m.courseName === viewCourseName).length;
+  const currentHolePar = viewCourseHoles.find(h => h.hole === currentHole)?.par ?? 4;
 
-  const currentHolePar = courseHoles.find(h => h.hole === currentHole)?.par ?? 4;
-
-  // Animate active hole border color
+  // Animate active hole highlight
   const activeBorderAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(activeBorderAnim, {
-      toValue: 1,
-      duration: 150,
-      useNativeDriver: false,
-    }).start();
+    Animated.timing(activeBorderAnim, { toValue: 1, duration: 150, useNativeDriver: false }).start();
     return () => { activeBorderAnim.setValue(0); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentHole]);
-  const activeBorderColor = activeBorderAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['#1e3a28', '#00C896'],
-  });
+
+  // Phase Z — club usage aggregation across this round's shots.
+  // Voice-logged shots populate club + distance_yards; tap-logged
+  // placeholders have null club so they're filtered out.
+  type ClubAgg = { club: string; count: number; avg: number | null; total: number };
+  const clubUsage: ClubAgg[] = useMemo(() => {
+    const map = new Map<string, { count: number; distSum: number; distCount: number }>();
+    (viewShots as ShotResult[]).forEach(s => {
+      if (!s.club) return;
+      const cur = map.get(s.club) ?? { count: 0, distSum: 0, distCount: 0 };
+      cur.count += 1;
+      const d = (s as ShotResult & { distance_yards?: number | null }).distance_yards;
+      if (typeof d === 'number' && d > 0) {
+        cur.distSum += d;
+        cur.distCount += 1;
+      }
+      map.set(s.club, cur);
+    });
+    return Array.from(map.entries())
+      .map(([club, v]) => ({
+        club,
+        count: v.count,
+        avg: v.distCount > 0 ? Math.round(v.distSum / v.distCount) : null,
+        total: v.distCount,
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [viewShots]);
+
+  // Phase Z — Kevin's Take (recap text). Loaded async from local archive.
+  const [recap, setRecap] = useState<RoundRecap | null>(null);
+  const [recapLoaded, setRecapLoaded] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (!viewingRoundId) { setRecap(null); setRecapLoaded(true); return; }
+    setRecapLoaded(false);
+    void (async () => {
+      try {
+        const r = await loadRecap(viewingRoundId);
+        if (!cancelled) { setRecap(r); setRecapLoaded(true); }
+      } catch {
+        if (!cancelled) { setRecap(null); setRecapLoaded(true); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [viewingRoundId]);
+
+  const onSpeakRecap = useCallback(async () => {
+    if (!recap?.overall_kevin_summary) return;
+    if (isSpeaking()) {
+      void stopSpeaking();
+      setSpeaking(false);
+      return;
+    }
+    setSpeaking(true);
+    try {
+      await speak(recap.overall_kevin_summary, voiceGender, language, apiUrl, { userInitiated: true });
+    } finally {
+      setSpeaking(false);
+    }
+  }, [recap, voiceGender, language, apiUrl]);
+
+  // Phase Z — share via system Share sheet (text representation).
+  // Path A from the spec: text-only for v1.0 ship. Image export = 1.x.
+  const onShare = useCallback(async () => {
+    const lines: string[] = [];
+    lines.push(viewCourseName ?? 'Round');
+    if (isCompetition) lines.push('Competition Round');
+    lines.push('Score ' + (totalScore || '—') + ' (' + scoreVsParDisplay + ' vs par)');
+    lines.push('');
+    const fmtRow = (label: string, vals: (string | number)[]) =>
+      label.padEnd(5, ' ') + ' ' + vals.map(v => String(v).padStart(3, ' ')).join(' ');
+    const sumNine = (start: number, end: number): number => {
+      let total = 0;
+      for (let i = start; i <= end; i++) total += (viewScores as Record<number, number>)[i] ?? 0;
+      return total;
+    };
+    const drawNine = (start: number, end: number, label: 'OUT' | 'IN'): string[] => {
+      const holes = viewCourseHoles.filter(h => h.hole >= start && h.hole <= end);
+      const out: string[] = [];
+      out.push(fmtRow('HOLE', [...holes.map(h => h.hole), label]));
+      out.push(fmtRow('PAR', [...holes.map(h => h.par), holes.reduce((a, h) => a + h.par, 0)]));
+      out.push(fmtRow('SCR', [
+        ...holes.map(h => (viewScores as Record<number, number>)[h.hole] ?? '—'),
+        sumNine(start, end) || '—',
+      ]));
+      return out;
+    };
+    if (!nineHoleMode) {
+      lines.push(...drawNine(1, 9, 'OUT'));
+      lines.push('');
+      lines.push(...drawNine(10, 18, 'IN'));
+      lines.push('');
+      lines.push('TOTAL ' + totalScore);
+    } else {
+      lines.push(...drawNine(1, 9, 'OUT'));
+    }
+    if (clubUsage.length > 0) {
+      lines.push('');
+      lines.push('CLUBS');
+      clubUsage.slice(0, 8).forEach(c => {
+        lines.push('  ' + c.club + '  ×' + c.count + (c.avg ? '  avg ' + c.avg + 'y' : ''));
+      });
+    }
+    if (recap?.overall_kevin_summary) {
+      lines.push('');
+      lines.push('Kevin: ' + recap.overall_kevin_summary);
+    }
+    lines.push('');
+    lines.push('— SmartPlay Caddie');
+    try {
+      await Share.share({
+        title: (viewCourseName ?? 'Round') + ' scorecard',
+        message: lines.join('\n'),
+      });
+    } catch (e) {
+      Alert.alert('Share', 'Could not open share sheet.');
+      console.log('[scorecard] share error', e);
+    }
+  }, [viewCourseName, isCompetition, totalScore, scoreVsParDisplay, nineHoleMode, viewCourseHoles, viewScores, clubUsage, recap]);
 
   const handleQuickScore = (score: number) => {
-    // Create placeholder ShotResults so recap and pattern detection have something
-    // to read for quick-score holes — all marked clean, direction unknown.
     for (let i = 0; i < score; i++) {
       const placeholder: ShotResult = {
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + i,
-        feel: null,
-        direction: null,
-        shape: null,
-        club: null,
-        hole: currentHole,
-        timestamp: Date.now(),
-        acousticContact: null,
-        outcome: 'clean',
-        penalty_strokes: 0,
-        rules_decision: undefined,
+        feel: null, direction: null, shape: null, club: null,
+        hole: currentHole, timestamp: Date.now(), acousticContact: null,
+        outcome: 'clean', penalty_strokes: 0, rules_decision: undefined,
       };
       logShot(placeholder);
     }
     logScore(currentHole, score);
     logPutts(currentHole, 2);
     const maxHole = nineHoleMode ? 9 : 18;
-    if (currentHole < maxHole) {
-      setCurrentHole(currentHole + 1);
-    }
+    if (currentHole < maxHole) setCurrentHole(currentHole + 1);
   };
+
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/caddie' as never);
+  };
+
+  const renderNineGrid = (start: number, end: number, label: 'OUT' | 'IN') => {
+    const holes = viewCourseHoles.filter(h => h.hole >= start && h.hole <= end);
+    const total = end === 9 ? frontScore : backScore;
+    const totalPar9 = end === 9 ? frontPar : backPar;
+    return (
+      <View style={styles.nineGrid}>
+        {/* Hole row */}
+        <View style={styles.gridRow}>
+          <Text style={[styles.cell, styles.cellLabel]}>HOLE</Text>
+          {holes.map(h => (
+            <TouchableOpacity
+              key={h.hole}
+              onPress={() => isRoundActive && setCurrentHole(h.hole)}
+              activeOpacity={isRoundActive ? 0.6 : 1}
+              style={styles.cellWrap}
+            >
+              <Text style={[
+                styles.cell,
+                styles.cellHole,
+                isRoundActive && h.hole === currentHole && styles.cellCurrent,
+              ]}>{h.hole}</Text>
+            </TouchableOpacity>
+          ))}
+          <Text style={[styles.cell, styles.cellTotal]}>{label}</Text>
+        </View>
+        {/* Par row */}
+        <View style={styles.gridRow}>
+          <Text style={[styles.cell, styles.cellLabel]}>PAR</Text>
+          {holes.map(h => (
+            <View key={h.hole} style={styles.cellWrap}>
+              <Text style={[styles.cell, styles.cellPar]}>{h.par}</Text>
+            </View>
+          ))}
+          <Text style={[styles.cell, styles.cellTotal]}>{totalPar9}</Text>
+        </View>
+        {/* Score row */}
+        <View style={styles.gridRow}>
+          <Text style={[styles.cell, styles.cellLabel]}>SCORE</Text>
+          {holes.map(h => {
+            const sc = (viewScores as Record<number, number>)[h.hole] ?? 0;
+            const color = getScoreColor(sc, h.par);
+            return (
+              <TouchableOpacity
+                key={h.hole}
+                onPress={() => isRoundActive && setCurrentHole(h.hole)}
+                activeOpacity={isRoundActive ? 0.6 : 1}
+                style={styles.cellWrap}
+              >
+                {sc > 0 ? (
+                  <View style={[styles.scorePill, { borderColor: color }]}>
+                    <Text style={[styles.scorePillText, { color }]}>{sc}</Text>
+                  </View>
+                ) : (
+                  <Text style={[styles.cell, styles.cellEmpty]}>·</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+          <Text style={[styles.cell, styles.cellTotal, styles.cellTotalScore]}>
+            {total > 0 ? total : '—'}
+          </Text>
+        </View>
+        {/* Putts row (only show if any putts logged) */}
+        {Object.keys(viewPutts).length > 0 && (
+          <View style={styles.gridRow}>
+            <Text style={[styles.cell, styles.cellLabel]}>PUTTS</Text>
+            {holes.map(h => {
+              const p = (viewPutts as Record<number, number>)[h.hole] ?? 0;
+              return (
+                <View key={h.hole} style={styles.cellWrap}>
+                  <Text style={[styles.cell, styles.cellPutts]}>{p > 0 ? p : '·'}</Text>
+                </View>
+              );
+            })}
+            <Text style={[styles.cell, styles.cellTotal]}>
+              {holes.reduce((a, h) => a + ((viewPutts as Record<number, number>)[h.hole] ?? 0), 0) || '—'}
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const hasAnythingToShow = isRoundActive || lastCompletedRound != null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
 
-        {/* HEADER */}
+        {/* HEADER — back + title + share */}
         <View style={styles.header}>
-          <Text style={styles.title}>Scorecard</Text>
-          {isRoundActive && (
-            <View style={styles.liveIndicator}>
-              <Text style={styles.liveText}>● LIVE</Text>
-            </View>
-          )}
+          <TouchableOpacity onPress={goBack} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <AppIcon name="chevron-back" size={26} color="#00C896" />
+          </TouchableOpacity>
+          <View style={styles.titleWrap}>
+            <Text style={styles.title}>Scorecard</Text>
+            {isRoundActive && (
+              <View style={styles.liveIndicator}>
+                <Text style={styles.liveText}>● LIVE</Text>
+              </View>
+            )}
+            {!isRoundActive && lastCompletedRound && (
+              <View style={styles.savedIndicator}>
+                <Text style={styles.savedText}>SAVED</Text>
+              </View>
+            )}
+          </View>
+          <TouchableOpacity
+            onPress={onShare}
+            disabled={!hasAnythingToShow}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <AppIcon
+              name="share-social-outline"
+              size={22}
+              color={hasAnythingToShow ? '#00C896' : '#374151'}
+            />
+          </TouchableOpacity>
         </View>
 
         {/* COURSE NAME */}
-        {activeCourse && (
-          <Text style={styles.courseName}>{activeCourse}</Text>
+        {viewCourseName && (
+          <Text style={styles.courseName}>{viewCourseName}</Text>
         )}
 
         {/* SCORE SUMMARY */}
-        {isRoundActive && (
+        {hasAnythingToShow && (
           <View style={styles.summary}>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>SCORE</Text>
-              <Text style={styles.summaryValue}>
-                {totalScore > 0 ? totalScore : '—'}
-              </Text>
+              <Text style={styles.summaryValue}>{totalScore > 0 ? totalScore : '—'}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
@@ -186,9 +455,7 @@ export default function Scorecard() {
                 <View style={styles.summaryDivider} />
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryLabel}>HERO</Text>
-                  <Text style={[styles.summaryValue, { color: '#F5A623' }]}>
-                    {'★ ' + roundHeroMoments}
-                  </Text>
+                  <Text style={[styles.summaryValue, { color: '#F5A623' }]}>★ {roundHeroMoments}</Text>
                 </View>
               </>
             )}
@@ -196,149 +463,28 @@ export default function Scorecard() {
         )}
 
         {/* NO ROUND STATE */}
-        {!isRoundActive && (
+        {!hasAnythingToShow && (
           <View style={styles.noRound}>
             <Text style={styles.noRoundText}>No active round</Text>
             <Text style={styles.noRoundSub}>Start a round from the Caddie tab</Text>
           </View>
         )}
 
-        {/* 9-HOLE TOGGLE */}
-        {isRoundActive && !nineHoleMode && (
-          <View style={styles.nineToggle}>
-            {(['front', 'back'] as const).map(side => (
-              <TouchableOpacity
-                key={side}
-                style={[styles.nineBtn, showNine === side && styles.nineBtnActive]}
-                onPress={() => setShowNine(side)}
-              >
-                <Text style={[
-                  styles.nineBtnText,
-                  showNine === side && styles.nineBtnTextActive,
-                ]}>
-                  {side === 'front' ? 'Front 9' : 'Back 9'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {/* SCORECARD GRID */}
-        {isRoundActive && courseHoles.length > 0 && (
-          <View style={styles.grid}>
-
-            {/* Column headers */}
-            <View style={styles.gridRow}>
-              <Text style={[styles.gridHeader, styles.gridHoleCol]}>HOLE</Text>
-              <Text style={[styles.gridHeader, styles.gridParCol]}>PAR</Text>
-              <Text style={[styles.gridHeader, styles.gridYardCol]}>YDS</Text>
-              <Text style={[styles.gridHeader, styles.gridScoreCol]}>SCORE</Text>
-              <Text style={[styles.gridHeader, styles.gridPuttCol]}>PUTTS</Text>
-            </View>
-
-            {/* Hole rows */}
-            {displayHoles.map(h => {
-              const score = scores[h.hole] ?? 0;
-              const holePutts = putts[h.hole] ?? 0;
-              const isCurrent = h.hole === currentHole;
-              const hasScore = score > 0;
-              const scoreColor = getScoreColor(score, h.par);
-
-              if (isCurrent) {
-                return (
-                  <Animated.View
-                    key={h.hole}
-                    style={[
-                      styles.gridRow,
-                      styles.gridRowCurrent,
-                      { borderLeftWidth: 2, borderLeftColor: activeBorderColor },
-                    ]}
-                  >
-                    <TouchableOpacity
-                      style={styles.gridRowInner}
-                      onPress={() => setCurrentHole(h.hole)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.gridCell, styles.gridHoleCol, { color: '#00C896', fontWeight: '700' }]}>
-                        {h.hole}
-                      </Text>
-                      <Text style={[styles.gridCell, styles.gridParCol]}>{h.par}</Text>
-                      <Text style={[styles.gridCell, styles.gridYardCol, styles.yardCell]}>
-                        {h.distance}
-                      </Text>
-                      <View style={[styles.gridScoreCol, styles.scoreCellWrapper]}>
-                        {hasScore ? (
-                          <View style={[styles.scoreCircle, { borderColor: scoreColor }]}>
-                            <Text style={[styles.scoreCircleText, { color: scoreColor }]}>
-                              {score}
-                            </Text>
-                          </View>
-                        ) : (
-                          <Text style={styles.noScoreText}>·</Text>
-                        )}
-                      </View>
-                      <Text style={[styles.gridCell, styles.gridPuttCol, styles.puttCell]}>
-                        {holePutts > 0 ? holePutts : '—'}
-                      </Text>
-                    </TouchableOpacity>
-                  </Animated.View>
-                );
-              }
-
-              return (
-                <TouchableOpacity
-                  key={h.hole}
-                  style={styles.gridRow}
-                  onPress={() => setCurrentHole(h.hole)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.gridCell, styles.gridHoleCol]}>{h.hole}</Text>
-                  <Text style={[styles.gridCell, styles.gridParCol]}>{h.par}</Text>
-                  <Text style={[styles.gridCell, styles.gridYardCol, styles.yardCell]}>
-                    {h.distance}
-                  </Text>
-                  <View style={[styles.gridScoreCol, styles.scoreCellWrapper]}>
-                    {hasScore ? (
-                      <View style={[styles.scoreCircle, { borderColor: scoreColor }]}>
-                        <Text style={[styles.scoreCircleText, { color: scoreColor }]}>
-                          {score}
-                        </Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.noScoreText}>—</Text>
-                    )}
-                  </View>
-                  <Text style={[styles.gridCell, styles.gridPuttCol, styles.puttCell]}>
-                    {holePutts > 0 ? holePutts : '—'}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-
-            {/* Nine total row */}
+        {/* ALL-HOLES GRID — Front 9 stacked over Back 9 */}
+        {hasAnythingToShow && viewCourseHoles.length > 0 && (
+          <View style={styles.gridSection}>
+            {renderNineGrid(1, 9, 'OUT')}
             {!nineHoleMode && (
-              <View style={[styles.gridRow, styles.totalRow]}>
-                <Text style={[styles.gridCell, styles.gridHoleCol, styles.totalLabel]}>
-                  {showNine === 'front' ? 'OUT' : 'IN'}
-                </Text>
-                <Text style={[styles.gridCell, styles.gridParCol, styles.totalLabel]}>
-                  {showNine === 'front' ? frontPar : backPar}
-                </Text>
-                <Text style={[styles.gridCell, styles.gridYardCol]} />
-                <Text style={[styles.gridCell, styles.gridScoreCol, styles.totalLabel]}>
-                  {showNine === 'front'
-                    ? (frontScore > 0 ? frontScore : '—')
-                    : (backScore > 0 ? backScore : '—')}
-                </Text>
-                <Text style={[styles.gridCell, styles.gridPuttCol]} />
-              </View>
+              <>
+                <View style={{ height: 8 }} />
+                {renderNineGrid(10, 18, 'IN')}
+              </>
             )}
-
           </View>
         )}
 
-        {/* TOTAL ROW */}
-        {isRoundActive && holesPlayed > 0 && (
+        {/* TOTAL CARD */}
+        {hasAnythingToShow && holesPlayed > 0 && (
           <View style={styles.totalCard}>
             <View style={styles.totalCardItem}>
               <Text style={styles.totalCardLabel}>TOTAL</Text>
@@ -359,12 +505,72 @@ export default function Scorecard() {
           </View>
         )}
 
-        {/* QUICK SCORE CHIPS */}
+        {/* CLUB USAGE SUMMARY */}
+        {hasAnythingToShow && clubUsage.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>CLUB USAGE</Text>
+            <View style={styles.clubGrid}>
+              <View style={[styles.clubRow, styles.clubHeader]}>
+                <Text style={[styles.clubCell, styles.clubColClub, styles.clubHeaderText]}>CLUB</Text>
+                <Text style={[styles.clubCell, styles.clubColCount, styles.clubHeaderText]}>USED</Text>
+                <Text style={[styles.clubCell, styles.clubColAvg, styles.clubHeaderText]}>AVG YDS</Text>
+              </View>
+              {clubUsage.map(c => (
+                <View key={c.club} style={styles.clubRow}>
+                  <Text style={[styles.clubCell, styles.clubColClub]}>{c.club}</Text>
+                  <Text style={[styles.clubCell, styles.clubColCount]}>×{c.count}</Text>
+                  <Text style={[styles.clubCell, styles.clubColAvg, c.avg == null && styles.clubAvgNone]}>
+                    {c.avg != null ? c.avg : '—'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            {clubUsage.every(c => c.avg == null) && (
+              <Text style={styles.sectionHint}>
+                Distance averages appear when shots are voice-logged with yardage.
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* KEVIN'S TAKE — inline recap */}
+        {hasAnythingToShow && recapLoaded && recap?.overall_kevin_summary && (
+          <View style={styles.section}>
+            <View style={styles.kevinHeader}>
+              <Text style={styles.sectionLabel}>KEVIN&apos;S TAKE</Text>
+              {voiceEnabled && (
+                <TouchableOpacity onPress={onSpeakRecap} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <View style={styles.speakBtn}>
+                    <AppIcon
+                      name={speaking ? 'pause' : 'play'}
+                      size={12}
+                      color="#00C896"
+                    />
+                    <Text style={styles.speakBtnText}>{speaking ? 'Stop' : 'Listen'}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            </View>
+            <View style={styles.kevinCard}>
+              <Text style={styles.kevinText}>{recap.overall_kevin_summary}</Text>
+            </View>
+          </View>
+        )}
+        {hasAnythingToShow && recapLoaded && !recap?.overall_kevin_summary && !isRoundActive && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>KEVIN&apos;S TAKE</Text>
+            <View style={styles.kevinCard}>
+              <Text style={styles.kevinPending}>
+                Kevin&apos;s recap will appear here once it finishes generating.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* QUICK SCORE CHIPS — only during active round on unscored hole */}
         {isRoundActive && !scores[currentHole] && (
-          <View style={styles.quickChipsSection}>
-            <Text style={styles.quickChipsLabel}>
-              {'Hole ' + currentHole + ' · Quick Score'}
-            </Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>HOLE {currentHole} · QUICK SCORE</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -399,8 +605,8 @@ export default function Scorecard() {
         )}
 
         {/* COMPETITION BADGE */}
-        {isCompetition && (
-          <View style={[styles.compBadge, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+        {isCompetition && hasAnythingToShow && (
+          <View style={styles.compBadge}>
             <AppIcon name="trophy" size={14} color="#F5A623" />
             <Text style={styles.compBadgeText}>Competition Round</Text>
           </View>
@@ -414,269 +620,182 @@ export default function Scorecard() {
 // ─── STYLES ───────────────────────────────
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#060f09',
-  },
+  container: { flex: 1, backgroundColor: '#060f09' },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 4,
+    paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8,
+    gap: 12,
   },
-  title: {
-    color: '#ffffff',
-    fontSize: 24,
-    fontWeight: '900',
+  titleWrap: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10,
   },
+  title: { color: '#ffffff', fontSize: 22, fontWeight: '900' },
   liveIndicator: {
-    borderWidth: 1,
-    borderColor: '#00C896',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+    borderWidth: 1, borderColor: '#00C896', borderRadius: 12,
+    paddingHorizontal: 8, paddingVertical: 2,
   },
-  liveText: {
-    color: '#00C896',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
+  liveText: { color: '#00C896', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  savedIndicator: {
+    borderWidth: 1, borderColor: '#6b7280', borderRadius: 12,
+    paddingHorizontal: 8, paddingVertical: 2,
   },
+  savedText: { color: '#9ca3af', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+
   courseName: {
-    color: '#6b7280',
-    fontSize: 13,
-    paddingHorizontal: 20,
-    marginBottom: 12,
+    color: '#9ca3af', fontSize: 14, fontWeight: '500',
+    paddingHorizontal: 20, marginBottom: 12,
   },
+
   summary: {
     flexDirection: 'row',
-    marginHorizontal: 16,
-    marginBottom: 12,
-    backgroundColor: '#0d2418',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#1e3a28',
+    marginHorizontal: 16, marginBottom: 12,
+    backgroundColor: '#0d2418', borderRadius: 14,
+    borderWidth: 1, borderColor: '#1e3a28',
     paddingVertical: 14,
   },
-  summaryItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  summaryDivider: {
-    width: 1,
-    backgroundColor: '#1e3a28',
-    marginVertical: 4,
-  },
+  summaryItem: { flex: 1, alignItems: 'center' },
+  summaryDivider: { width: 1, backgroundColor: '#1e3a28', marginVertical: 4 },
   summaryLabel: {
     ...dataLabel,
-    fontSize: 9,
-    letterSpacing: 1.5,
-    marginBottom: 4,
+    fontSize: 9, letterSpacing: 1.5, marginBottom: 4,
   },
-  summaryValue: {
-    ...dataValue,
-    fontSize: 28,
-    fontWeight: '900' as const,
+  summaryValue: { ...dataValue, fontSize: 28, fontWeight: '900' as const },
+
+  noRound: { alignItems: 'center', paddingVertical: 60 },
+  noRoundText: { color: '#9ca3af', fontSize: 16, fontWeight: '600' },
+  noRoundSub: { color: '#6b7280', fontSize: 13, marginTop: 6 },
+
+  // Compact all-holes grid
+  gridSection: {
+    marginHorizontal: 12, marginBottom: 12,
   },
-  noRound: {
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  noRoundText: {
-    color: '#6b7280',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  noRoundSub: {
-    color: '#374151',
-    fontSize: 13,
-    marginTop: 6,
-  },
-  nineToggle: {
-    flexDirection: 'row',
-    marginHorizontal: 16,
-    marginBottom: 8,
-    gap: 6,
-  },
-  nineBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 10,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#1e3a28',
-    backgroundColor: '#060f09',
-  },
-  nineBtnActive: {
-    borderColor: '#00C896',
-    backgroundColor: '#003d20',
-  },
-  nineBtnText: {
-    color: '#6b7280',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  nineBtnTextActive: {
-    color: '#00C896',
-  },
-  grid: {
-    marginHorizontal: 16,
-    borderRadius: 12,
+  nineGrid: {
+    backgroundColor: '#0d1a0d', borderRadius: 12,
+    borderWidth: 1, borderColor: '#1e3a28',
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#1e3a28',
-    marginBottom: 8,
   },
   gridRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 9,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#1e3a28',
-    backgroundColor: '#0d1a0d',
-  },
-  gridRowInner: {
-    flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
   },
-  gridRowCurrent: {
-    backgroundColor: '#0d2418',
-  },
-  gridHeader: {
+  cellWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  cell: { textAlign: 'center', fontSize: 13, color: '#ffffff' },
+  cellLabel: {
     ...dataLabel,
-    textAlign: 'center',
-    fontSize: 9,
+    width: 52, fontSize: 9, letterSpacing: 1, color: '#6b7280',
+    paddingLeft: 8,
   },
-  gridCell: {
-    ...dataValue,
-    fontSize: 15,
-    textAlign: 'center',
+  cellHole: { fontSize: 12, color: '#9ca3af', fontWeight: '700' },
+  cellPar: { fontSize: 12, color: '#9ca3af' },
+  cellPutts: { fontSize: 11, color: '#6b7280' },
+  cellEmpty: { color: '#374151', fontSize: 14 },
+  cellCurrent: { color: '#00C896', fontWeight: '900' },
+  cellTotal: {
+    width: 38, fontSize: 13, fontWeight: '900',
+    color: '#00C896', textAlign: 'center',
   },
-  yardCell: {
-    fontSize: 12,
-    color: '#9ca3af',
-    letterSpacing: 0,
+  cellTotalScore: { fontSize: 14, color: '#ffffff' },
+  scorePill: {
+    minWidth: 26, height: 26, paddingHorizontal: 4,
+    borderRadius: 13, borderWidth: 1.5,
+    alignItems: 'center', justifyContent: 'center',
   },
-  puttCell: {
-    color: '#6b7280',
-    fontSize: 13,
-  },
-  gridHoleCol:  { flex: 1.2 },
-  gridParCol:   { flex: 0.8 },
-  gridYardCol:  { flex: 1.2 },
-  gridScoreCol: { flex: 1.2 },
-  gridPuttCol:  { flex: 0.8 },
-  scoreCellWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scoreCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scoreCircleText: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  noScoreText: {
-    color: '#374151',
-    fontSize: 16,
-  },
-  totalRow: {
-    backgroundColor: '#0d2418',
-  },
-  totalLabel: {
-    color: '#00C896',
-    fontWeight: '800',
-  },
+  scorePillText: { fontSize: 13, fontWeight: '800' },
+
   totalCard: {
     flexDirection: 'row',
-    marginHorizontal: 16,
-    marginBottom: 8,
-    backgroundColor: '#0d2418',
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#00C896',
+    marginHorizontal: 16, marginBottom: 16,
+    backgroundColor: '#0d2418', borderRadius: 12,
+    borderWidth: 1.5, borderColor: '#00C896',
     paddingVertical: 14,
   },
-  totalCardItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  totalCardDivider: {
-    width: 1,
-    backgroundColor: '#1e3a28',
-    marginVertical: 4,
-  },
+  totalCardItem: { flex: 1, alignItems: 'center' },
+  totalCardDivider: { width: 1, backgroundColor: '#1e3a28', marginVertical: 4 },
   totalCardLabel: {
     ...dataLabel,
-    fontSize: 9,
-    letterSpacing: 1.5,
-    marginBottom: 4,
+    fontSize: 9, letterSpacing: 1.5, marginBottom: 4,
   },
-  totalCardValue: {
-    ...dataValue,
-    fontSize: 32,
-    fontWeight: '900' as const,
+  totalCardValue: { ...dataValue, fontSize: 32, fontWeight: '900' as const },
+
+  // Reusable section styling
+  section: { marginHorizontal: 16, marginBottom: 16 },
+  sectionLabel: {
+    color: '#6b7280', fontSize: 10, fontWeight: '800',
+    letterSpacing: 1.5, marginBottom: 8,
   },
-  quickChipsSection: {
-    marginHorizontal: 16,
-    marginBottom: 12,
+  sectionHint: {
+    color: '#6b7280', fontSize: 11, fontStyle: 'italic',
+    marginTop: 8,
   },
-  quickChipsLabel: {
-    color: '#6b7280',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+
+  // Club usage
+  clubGrid: {
+    backgroundColor: '#0d1a0d', borderRadius: 10,
+    borderWidth: 1, borderColor: '#1e3a28',
+    overflow: 'hidden',
+  },
+  clubRow: {
+    flexDirection: 'row',
+    paddingVertical: 10, paddingHorizontal: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#1e3a28',
+    alignItems: 'center',
+  },
+  clubHeader: { backgroundColor: '#0d2418' },
+  clubHeaderText: {
+    ...dataLabel, fontSize: 9, letterSpacing: 1.5, color: '#6b7280',
+  },
+  clubCell: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
+  clubColClub: { flex: 2, textAlign: 'left' },
+  clubColCount: { flex: 1, textAlign: 'center', color: '#9ca3af', fontWeight: '500' },
+  clubColAvg: { flex: 1, textAlign: 'right', color: '#00C896' },
+  clubAvgNone: { color: '#374151', fontWeight: '500' },
+
+  // Kevin's Take
+  kevinHeader: {
+    flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'space-between',
     marginBottom: 8,
   },
-  chipsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingRight: 8,
+  speakBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 12, borderWidth: 1, borderColor: '#00C896',
   },
+  speakBtnText: { color: '#00C896', fontSize: 11, fontWeight: '700' },
+  kevinCard: {
+    backgroundColor: '#0d2418', borderRadius: 12,
+    borderWidth: 1, borderColor: '#1e3a28',
+    padding: 14,
+  },
+  kevinText: { color: '#ffffff', fontSize: 14, lineHeight: 20 },
+  kevinPending: { color: '#6b7280', fontSize: 13, fontStyle: 'italic' },
+
+  // Quick score chips
+  chipsRow: { flexDirection: 'row', gap: 8, paddingRight: 8 },
   chip: {
-    alignItems: 'center',
-    backgroundColor: '#0d2418',
-    borderWidth: 1.5,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    alignItems: 'center', backgroundColor: '#0d2418',
+    borderWidth: 1.5, borderRadius: 12,
+    paddingVertical: 10, paddingHorizontal: 14,
     minWidth: 58,
   },
-  chipScore: {
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: -0.5,
-  },
+  chipScore: { fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
   chipLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    marginTop: 2,
+    fontSize: 10, fontWeight: '700', letterSpacing: 0.5, marginTop: 2,
   },
+
   compBadge: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    backgroundColor: '#1a0a00',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#F5A623',
-    paddingVertical: 10,
-    alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginHorizontal: 16, marginBottom: 16,
+    backgroundColor: '#1a0a00', borderRadius: 10,
+    borderWidth: 1, borderColor: '#F5A623',
+    paddingVertical: 10, paddingHorizontal: 12,
+    justifyContent: 'center',
   },
-  compBadgeText: {
-    color: '#F5A623',
-    fontSize: 13,
-    fontWeight: '700',
-  },
+  compBadgeText: { color: '#F5A623', fontSize: 13, fontWeight: '700' },
 });
