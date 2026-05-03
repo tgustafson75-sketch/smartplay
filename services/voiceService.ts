@@ -3,11 +3,25 @@ import { File, Paths } from 'expo-file-system';
 import { noteAudioActivity } from './audioLifecycle';
 
 // ─── AUDIO MODE MANAGEMENT ────────────────
+// Phase V.7 — serialize setAudioModeAsync calls. Without a queue, rapid
+// recording↔speech swaps (earbud tap during TTS, listening session opener
+// → mic → response) could race the underlying iOS/Android audio singleton
+// and downgrade routing (e.g. drop to phone earpiece mid-utterance).
+
+let audioModeQueue: Promise<void> = Promise.resolve();
+
+const setAudioModeSerial = (mode: Parameters<typeof Audio.setAudioModeAsync>[0]): Promise<void> => {
+  audioModeQueue = audioModeQueue
+    .catch(() => { /* drop prior failure */ })
+    .then(() => Audio.setAudioModeAsync(mode))
+    .then(() => undefined);
+  return audioModeQueue;
+};
 
 export const configureAudioForRecording =
   async (): Promise<void> => {
     try {
-      await Audio.setAudioModeAsync({
+      await setAudioModeSerial({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
         staysActiveInBackground: true,
@@ -121,7 +135,7 @@ export const captureUtterance = async (
 export const configureAudioForSpeech =
   async (): Promise<void> => {
     try {
-      await Audio.setAudioModeAsync({
+      await setAudioModeSerial({
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
         staysActiveInBackground: true,

@@ -21,6 +21,7 @@ import { useCageStore, type UploadMetadata, type SwingTag, type PrimaryIssue, ty
 import { analyzeSwing } from './poseDetection';
 import { classifySession } from './swingIssueClassifier';
 import { recommendDrill } from './drillRecommendation';
+import { processSwingAnalysis } from './relationshipEngine';
 
 export const MAX_FILE_SIZE_MB = 200;
 
@@ -217,6 +218,18 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     });
 
     useCageStore.getState().setSessionAnalysis(sessionId, primary_issue, drill_recommendation);
+
+    // Phase V.7+ — feed the relationship engine so Kevin's brain prompt
+    // accumulates technical observations across uploads. Deduped within
+    // 1h; escalates copy on the 3rd repeat in a week.
+    if (primary_issue) {
+      try {
+        processSwingAnalysis({ club: session.club, primary_issue });
+      } catch (e) {
+        console.log('[videoUpload] relationship engine error', e);
+      }
+    }
+
     return { primary_issue, drill_recommendation };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

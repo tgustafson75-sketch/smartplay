@@ -23,6 +23,7 @@ import { getDialog } from '../../services/dialogEngine';
 import { analyzeSwing, type SwingAnalysis } from '../../services/poseDetection';
 import { classifySession } from '../../services/swingIssueClassifier';
 import { recommendDrill } from '../../services/drillRecommendation';
+import { processSwingAnalysis } from '../../services/relationshipEngine';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import type { PrimaryIssue, DrillRecommendation } from '../../store/cageStore';
 import { activateMediaSession, deactivateMediaSession } from '../../services/mediaKeyBridge';
@@ -127,6 +128,15 @@ export default function CageSummary() {
       // the unified swing library browse.
       if (session) {
         useCageStore.getState().setSessionAnalysis(session.id, issue, drill);
+        // Phase V.7+ — feed Kevin's relationship engine so technical
+        // observations accumulate across cage sessions too.
+        if (issue) {
+          try {
+            processSwingAnalysis({ club: session.club, primary_issue: issue });
+          } catch (e) {
+            console.log('[cage/summary] relationship engine error', e);
+          }
+        }
       }
       setAnalysisStatus('done');
     })();
