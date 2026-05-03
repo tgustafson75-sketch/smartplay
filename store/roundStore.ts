@@ -317,6 +317,7 @@ export const useRoundStore = create<RoundState>()(
           active_ghost: null,
         });
         console.log(`[path2:round] start course=${course} holes=${holes.length} courseId=${courseId ?? 'none'}`);
+        console.log(`[audit:round-active] state=true roundId=${roundId} hole=1 course="${course}"`);
       },
 
       setActiveCourseId: (id) => set({ activeCourseId: id }),
@@ -410,6 +411,7 @@ export const useRoundStore = create<RoundState>()(
         const total = Object.values(s.scores).reduce((a, b) => a + b, 0);
         const holesPlayed = Object.keys(s.scores).length;
         console.log(`[path2:round] end totalScore=${total} holesPlayed=${holesPlayed}`);
+        console.log(`[audit:round-active] state=false holesPlayed=${holesPlayed} totalScore=${total}`);
       },
 
       addRoundInsight: (round_id, course, insight) =>
@@ -451,6 +453,7 @@ export const useRoundStore = create<RoundState>()(
         set({ currentHole: hole, currentYardage: holeData?.distance ?? null });
         if (prevHole !== hole) {
           console.log(`[path2:round] hole transition prev=${prevHole} next=${hole}`);
+          console.log(`[audit:round-active] hole-transition prev=${prevHole} next=${hole} yardage=${holeData?.distance ?? 'null'}`);
         }
         // Notify holeDetection of manual override so its sustained-position
         // window doesn't immediately race against the user's pick.

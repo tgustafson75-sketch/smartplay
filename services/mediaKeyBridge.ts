@@ -121,9 +121,11 @@ export async function activateMediaSession(): Promise<void> {
     const { notifyEarbudTap } = require('./earbudControl') as typeof import('./earbudControl');
 
     unsubRemotePlay = TrackPlayer.addEventListener(Event.RemotePlay, () => {
+      console.log('[audit:earbud] media key fired (RemotePlay/Pause)');
       try { notifyEarbudTap(); } catch (e) { console.log('[mediaKeyBridge] tap fwd err', e); }
     });
     unsubRemotePause = TrackPlayer.addEventListener(Event.RemotePause, () => {
+      console.log('[audit:earbud] media key fired (RemotePlay/Pause)');
       try { notifyEarbudTap(); } catch (e) { console.log('[mediaKeyBridge] tap fwd err', e); }
     });
 

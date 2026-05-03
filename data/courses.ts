@@ -92,12 +92,20 @@ const PALMS_HOLES: CourseHole[] = [
     frontLat: 33.7000427, frontLng: -117.1466085,
     backLat: 33.7000545, backLng: -117.1462671,
     note: '', estimated: false },
-  // HOLE 8 — match suspect (965y walk continuity flag). Verify GPS visually.
-  { hole:  8, par: 4, distance: 349, front: 348, back: 385,
-    teeLat: 33.6923282, teeLng: -117.1486463,
-    middleLat: 33.6893057, middleLng: -117.1483839,
-    frontLat: 33.6894728, frontLng: -117.1484064,
-    backLat: 33.6891689, backLng: -117.1483788,
+  // HOLE 8 — Phase AW estimate. Original OSM matcher cross-pollinated to
+  // a Lakes-side feature (965y walk-continuity flag). Re-estimated by
+  // placing tee 8y from hole 7's verified green centroid and projecting
+  // 349y at bearing 190.5° (the heading from hole 7 toward hole 9's tee
+  // area). Result: tee→green distance = 349y exactly, walk h7→h8 = 9y
+  // (typical course routing). Front/back ±15y from green centroid along
+  // the same bearing axis. Marked estimated:true — visually verify in
+  // SmartVision and hand-correct if Palms hole 8 actually goes a
+  // different direction.
+  { hole:  8, par: 4, distance: 349, front: 334, back: 364,
+    teeLat: 33.6999877, teeLng: -117.1464859,
+    middleLat: 33.6971654, middleLng: -117.1471120,
+    frontLat: 33.6972867, frontLng: -117.1470850,
+    backLat: 33.6970441, backLng: -117.1471390,
     note: '', estimated: true },
   { hole:  9, par: 5, distance: 503, front: 481, back: 515,
     teeLat: 33.6889895, teeLng: -117.1489255,

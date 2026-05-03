@@ -139,6 +139,7 @@ async function openSession() {
 
   // Phase 2 — open mic for utterance
   state = 'listening';
+  console.log('[audit:voice] listening engaged');
   let utterance: string | null = null;
   try {
     const captureP = captureUtterance(8_000, apiUrl, settings.language);
