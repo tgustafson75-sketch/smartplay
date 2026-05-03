@@ -938,11 +938,16 @@ export default function HoleView() {
             <Text style={styles.yardValueCenter}>{centerYards}</Text>
             {/* Phase V.7+ — explicit "Locking GPS" feedback during cold-start
                 so the user knows why "—" is showing instead of assuming it's
-                broken. Replaces silent dash on hole 1 in the parking lot. */}
-            {isRoundActive && !gpsValid && (
+                broken. Phase AG — also surface "course geometry unavailable"
+                when middleLat/Lng are zero (golfcourseapi returns no hole
+                coords; only printed-card distances are usable). */}
+            {isRoundActive && !gpsValid && middleLat !== 0 && middleLng !== 0 && (
               <Text style={styles.gpsWaiting}>Locking GPS…</Text>
             )}
-            {isRoundActive && gpsValid && (
+            {isRoundActive && (middleLat === 0 || middleLng === 0) && (
+              <Text style={styles.gpsWaiting}>No live yardage on this course</Text>
+            )}
+            {isRoundActive && gpsValid && middleLat !== 0 && middleLng !== 0 && (
               <Text style={styles.playsLike}>{'plays like ' + centerYards + ' yds'}</Text>
             )}
           </View>
