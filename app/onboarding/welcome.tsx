@@ -11,10 +11,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSettingsStore } from '../../store/settingsStore';
-import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { speak, stopSpeaking, configureAudioForSpeech } from '../../services/voiceService';
 import { useTrustLevelStore, type TrustLevel } from '../../store/trustLevelStore';
 
-const KEVIN_BADGE = require('../../assets/avatars/smartplay_caddie_badge.png');
+// Phase AJ — swap brand badge for the photoreal Kevin portrait so the
+// character introducing himself is visually present from screen 1.
+const KEVIN_PORTRAIT = require('../../assets/avatars/kevin_portrait.jpg');
 const GREETING =
   "Hey, I'm Kevin. I'm your caddie. I'll be in your bag for every round, every practice session, every time you want to get better. Before we start, I need to know a couple of things about you. Won't take long.";
 
@@ -31,7 +33,11 @@ export default function OnboardingWelcome() {
   // users wait 8-10s to advance. Voice now plays in the background and the
   // user can tap through whenever they're ready. setVoiceDone retained as
   // an indicator for the soft 'Finishing intro…' hint, not a gate.
+  // Phase AJ — added minDisplayDone: a 2.5s gate so the user can't blow
+  // past the screen before the avatar + greeting have a chance to register.
+  // CTA is visible but disabled for the first 2.5 seconds.
   const [voiceDone, setVoiceDone] = useState(false);
+  const [minDisplayDone, setMinDisplayDone] = useState(false);
   const fadeIn = useRef(new Animated.Value(0)).current;
   const avatarScale = useRef(new Animated.Value(0.85)).current;
 
@@ -41,7 +47,8 @@ export default function OnboardingWelcome() {
       Animated.spring(avatarScale, { toValue: 1, friction: 6, useNativeDriver: true }),
     ]).start();
 
-    const timer = setTimeout(async () => {
+    const minDisplayTimer = setTimeout(() => setMinDisplayDone(true), 2500);
+    const voiceTimer = setTimeout(async () => {
       if (voiceEnabled) {
         await configureAudioForSpeech();
         await speak(GREETING, voiceGender, language, apiUrl);
@@ -49,7 +56,13 @@ export default function OnboardingWelcome() {
       setVoiceDone(true);
     }, 600);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(minDisplayTimer);
+      clearTimeout(voiceTimer);
+      // Phase AJ — stop any in-flight voice when the user navigates away
+      // so Kevin doesn't keep talking through the next screen.
+      void stopSpeaking().catch(() => {});
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -72,7 +85,7 @@ export default function OnboardingWelcome() {
         {/* KEVIN AVATAR */}
         <Animated.View style={[styles.avatarWrap, { transform: [{ scale: avatarScale }] }]}>
           <View style={styles.avatarGlow} />
-          <Image source={KEVIN_BADGE} style={styles.avatar} resizeMode="contain" />
+          <Image source={KEVIN_PORTRAIT} style={styles.avatarPhoto} resizeMode="cover" />
         </Animated.View>
 
         {/* GREETING TEXT */}
@@ -104,11 +117,18 @@ export default function OnboardingWelcome() {
           })}
         </View>
 
-        {/* CTA — always tappable; TTS plays in background. */}
+        {/* CTA — gated by minDisplayDone (2.5s) so users can't speed past
+            the intro without it registering. After the gate, voice may still
+            be playing in the background — tap is fine. */}
         <TouchableOpacity
-          style={[styles.btn, { backgroundColor: colors.accent }]}
+          style={[
+            styles.btn,
+            { backgroundColor: colors.accent },
+            !minDisplayDone && styles.btnDisabled,
+          ]}
           onPress={() => router.push('/onboarding/name' as never)}
           activeOpacity={0.85}
+          disabled={!minDisplayDone}
         >
           <Text style={[styles.btnText, { color: '#ffffff' }]}>Let&apos;s go</Text>
         </TouchableOpacity>
@@ -159,6 +179,15 @@ function makeStyles(
     avatar: {
       width: 110,
       height: 110,
+    },
+    avatarPhoto: {
+      // Phase AJ — sized larger than the prior badge so Kevin's face is
+      // legible. Circular crop matches the glow ring.
+      width: 132,
+      height: 132,
+      borderRadius: 66,
+      borderWidth: 2,
+      borderColor: c.accent,
     },
     textBlock: {
       alignItems: 'center',

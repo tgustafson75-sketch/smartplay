@@ -12,14 +12,16 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useVoiceHintsStore } from '../../store/voiceHintsStore';
-import { speak, configureAudioForSpeech, captureUtterance } from '../../services/voiceService';
+import { speak, stopSpeaking, configureAudioForSpeech, captureUtterance } from '../../services/voiceService';
 import { checkMicPermission, PERMISSION_EXPLAINER_TEXT } from '../../services/voicePermissionService';
 import { voiceCommandRouter } from '../../services/intents';
 import type { AppContext } from '../../types/voiceIntent';
 import { generateLibrary } from '../../services/fillerLibrary';
 import { useTrustLevelStore, TRUST_LEVEL_META, type TrustLevel } from '../../store/trustLevelStore';
 
-const KEVIN_BADGE = require('../../assets/avatars/smartplay_caddie_badge.png');
+// Phase AJ — photoreal Kevin portrait so the character introducing
+// himself is actually visible.
+const KEVIN_PORTRAIT = require('../../assets/avatars/kevin_portrait.jpg');
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
 const KEVIN_INTRO = "Hey, I'm Kevin. Talk to me anytime — or tap. Try saying hello.";
@@ -45,6 +47,9 @@ export default function MeetKevin() {
       Animated.timing(fadeIn, { toValue: 1, duration: 700, useNativeDriver: true }),
       Animated.spring(avatarScale, { toValue: 1, friction: 6, useNativeDriver: true }),
     ]).start();
+    // Phase AJ — stop any in-flight Kevin voice on screen exit so it
+    // doesn't trail across the navigation into the next surface.
+    return () => { void stopSpeaking().catch(() => {}); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -133,14 +138,22 @@ export default function MeetKevin() {
 
         <Animated.View style={[styles.avatarWrap, { transform: [{ scale: avatarScale }] }]}>
           <View style={[styles.avatarGlow, { borderColor: colors.accent }]} />
-          <Image source={KEVIN_BADGE} style={styles.avatar} resizeMode="contain" />
+          <Image source={KEVIN_PORTRAIT} style={styles.avatarPhoto} resizeMode="cover" />
         </Animated.View>
 
         <Text style={[styles.heading, { color: colors.accent }]}>MEET KEVIN</Text>
-        <Text style={[styles.message, { color: colors.text_primary }]}>{KEVIN_INTRO}</Text>
-        <Text style={[styles.message, { color: colors.text_muted, fontSize: 13, marginTop: 8 }]}>
-          Tip: with earbuds connected, a single tap opens Kevin&apos;s listening hands-free.
-        </Text>
+        {/* Phase AJ — hide the static intro line once Kevin actually
+            responds, so the user doesn't see two competing message blocks
+            stacked on top of each other (the prior layout left both
+            visible, which was the "messages overlap" symptom). */}
+        {!kevinResponse && (
+          <>
+            <Text style={[styles.message, { color: colors.text_primary }]}>{KEVIN_INTRO}</Text>
+            <Text style={[styles.message, { color: colors.text_muted, fontSize: 13, marginTop: 8 }]}>
+              Tip: with earbuds connected, a single tap opens Kevin&apos;s listening hands-free.
+            </Text>
+          </>
+        )}
 
         {kevinResponse ? (
           <Text style={[styles.kevinResponse, { color: colors.text_primary }]}>
@@ -265,6 +278,15 @@ function makeStyles(
       opacity: 0.4,
     },
     avatar: { width: 120, height: 120 },
+    avatarPhoto: {
+      // Phase AJ — circular crop at 140 so face is bigger than the
+      // 120-square badge it replaced.
+      width: 140,
+      height: 140,
+      borderRadius: 70,
+      borderWidth: 2,
+      borderColor: c.accent,
+    },
     heading: {
       fontSize: 11,
       fontWeight: '800',
