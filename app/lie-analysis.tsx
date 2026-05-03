@@ -175,7 +175,7 @@ export default function LieAnalysisScreen() {
         <View style={styles.permBox}>
           <Text style={styles.permTitle}>Camera Access</Text>
           <Text style={styles.permText}>
-            Lie Analysis needs the camera to look at your shot. The photo never leaves your device except to be analyzed.
+            TightLie needs the camera to look at your shot. The photo never leaves your device except to be analyzed.
           </Text>
           <TouchableOpacity style={styles.permBtn} onPress={requestCameraPermission}>
             <Text style={styles.permBtnText}>Allow Camera</Text>
@@ -199,7 +199,7 @@ export default function LieAnalysisScreen() {
           <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn}>
             <Text style={styles.headerBtnText}>← Back</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Lie Analysis</Text>
+          <Text style={styles.headerTitle}>TightLie</Text>
           <View style={styles.headerBtn} />
         </View>
         <AnalysisResult
@@ -228,7 +228,7 @@ export default function LieAnalysisScreen() {
           <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn}>
             <Text style={styles.headerBtnText}>← Back</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Lie Analysis</Text>
+          <Text style={styles.headerTitle}>TightLie</Text>
           <View style={styles.headerBtn} />
         </View>
         <View style={styles.errorBox}>

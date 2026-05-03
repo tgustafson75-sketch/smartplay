@@ -8,12 +8,17 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   scorecard:   { type: 'navigate', path: '/(tabs)/scorecard' },
   dashboard:   { type: 'navigate', path: '/(tabs)/dashboard' },
   settings:    { type: 'navigate', path: '/settings' },
-  // Phase H — Lie Analysis Tool. Voice triggers ("what should I do here",
-  // "analyze my lie", "what's my play", etc.) classify into open_tool with
-  // tool_name=lie_analysis. The intent's parameters may also carry a
-  // play_intent flag ("aggressive" or "conservative") for the analysis
-  // pipeline to weight the recommendation.
+  // Phase H — Lie analysis camera tool. Phase AS — branded "TightLie"
+  // for users (golf-flavored, recognizable term). Voice triggers
+  // ("open TightLie", "check my lie", "what's the play", "analyze my
+  // lie", "tight lie", etc.) classify into open_tool with
+  // tool_name=lie_analysis (internal name kept; user-facing label
+  // changed). play_intent parameter ("aggressive"/"conservative")
+  // weights the analysis recommendation.
   lie_analysis: { type: 'navigate', path: '/lie-analysis' },
+  // Phase AS — alias so the classifier can also emit tool_name=tightlie
+  // and we route the same place. Both names work end-to-end.
+  tightlie: { type: 'navigate', path: '/lie-analysis' },
 };
 
 const TOOL_LABEL: Record<string, string> = {
@@ -23,7 +28,10 @@ const TOOL_LABEL: Record<string, string> = {
   scorecard:   'your scorecard',
   dashboard:   'your dashboard',
   settings:    'settings',
-  lie_analysis: 'Lie Analysis',
+  // Phase AS — user-facing label is now "TightLie". Internal key stays
+  // lie_analysis to avoid file/route renames.
+  lie_analysis: 'TightLie',
+  tightlie: 'TightLie',
 };
 
 export const openToolHandler: IntentHandler = {
@@ -57,8 +65,9 @@ export const openToolHandler: IntentHandler = {
     if (action.type === 'navigate') {
       try {
         const { router } = await import('expo-router');
-        // Phase H — pass play_intent through as a query param for /lie-analysis
-        if (toolName === 'lie_analysis') {
+        // Phase H — pass play_intent through as a query param for /lie-analysis.
+        // Phase AS — TightLie alias also routes here.
+        if (toolName === 'lie_analysis' || toolName === 'tightlie') {
           const playIntent = String(intent.parameters.play_intent ?? '').toLowerCase();
           const path = (playIntent === 'aggressive' || playIntent === 'conservative')
             ? `${action.path}?intent=${playIntent}`
@@ -72,7 +81,9 @@ export const openToolHandler: IntentHandler = {
       }
       return {
         success: true,
-        voice_response: toolName === 'lie_analysis' ? 'Let me look.' : 'Opening ' + TOOL_LABEL[toolName] + '.',
+        voice_response: (toolName === 'lie_analysis' || toolName === 'tightlie')
+          ? 'Let me look.'
+          : 'Opening ' + TOOL_LABEL[toolName] + '.',
         side_effects: ['navigate:' + action.path],
         follow_up_needed: false,
       };

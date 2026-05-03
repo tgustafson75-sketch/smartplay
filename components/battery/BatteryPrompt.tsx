@@ -33,7 +33,7 @@ export default function BatteryPrompt() {
     if (!bs?.promptVisible) return;
     if (trustLevel === 1 || !voiceEnabled) return;
     void speak(
-      "Phone's at 20%. Want me to slow down lie analysis and stretch the battery?",
+      "Phone's at 20%. Want me to slow down TightLie and stretch the battery?",
       voiceGender, language, apiUrl,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -67,7 +67,7 @@ export default function BatteryPrompt() {
             <Text style={styles.headerTitle}>Battery at 20%</Text>
           </View>
           <Text style={styles.body}>
-            Want me to slow down lie analysis and stretch the battery for the rest of the round?
+            Want me to slow down TightLie and stretch the battery for the rest of the round?
           </Text>
           <View style={styles.row}>
             <TouchableOpacity style={[styles.btn, styles.btnYes]} onPress={acceptBatterySaver}>

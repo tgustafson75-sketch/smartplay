@@ -53,6 +53,20 @@ When shipping a phase, include in the response:
 - TypeScript strict mode. `npx tsc --noEmit` and `npx expo lint` must pass before commit.
 - Build path: `eas build --profile development --platform android`.
 
+## Feature naming
+
+- **TightLie** (Phase AS) — user-facing brand for the lie analysis camera
+  flow ("Phase H" internally). Voice triggers: "open TightLie", "check my
+  lie", "what's the play", "analyze my lie", "tight lie". Internal names
+  (route `/lie-analysis`, API `/api/lie-analysis`, intent
+  `tool_name: 'lie_analysis'`) are unchanged for back-compat. The
+  `tool_name: 'tightlie'` alias also routes to the same flow.
+- **GolfFather** (1.x+ deferred concept, not built) — broader strategic
+  course-management AI: multi-shot planning, hole strategy from tee,
+  what-now post-shot guidance. TightLie answers "what's this shot";
+  GolfFather would answer "what's my game plan." Don't build it. The
+  name is reserved for the evolution path.
+
 ## Honest scope discipline
 
 - Don't add features beyond what the phase requires.

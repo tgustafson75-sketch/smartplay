@@ -1828,7 +1828,7 @@ export default function CaddieTab() {
               zIndex: p.zIndex,
             }]}
             accessibilityRole="button"
-            accessibilityLabel="Open Lie Analysis"
+            accessibilityLabel="Open TightLie"
           >
             <Ionicons name="camera" size={Math.round(p.size * 0.46)} color="#00C896" />
           </TouchableOpacity>

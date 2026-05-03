@@ -213,42 +213,57 @@ export default function GreetingScreen() {
 
   return (
     <TouchableWithoutFeedback onPress={handleSkip} accessibilityLabel="Skip greeting">
-      <View style={[styles.container, styles.centerStack, { backgroundColor: colors.background }]}>
-        {/* Phase AR follow-up — flex centering. Was using absolute
-            positioning with computed left/top + slide-to-badge transform
-            that drifted off-center under load. Now: simple flex column,
-            avatar centered via container alignItems, caption below. */}
-        <Animated.View
-          style={[
-            styles.avatarWrap,
-            {
-              width: avatarSize,
-              height: avatarSize,
-              borderRadius: avatarSize / 2,
-              borderColor: colors.accent,
-              opacity,
-              transform: [{ scale }],
-            },
-          ]}
-        >
-          <Image
-            source={require('../assets/avatars/smartplay_caddie_badge.png')}
-            style={styles.avatarImg}
-            resizeMode="contain"
-          />
-        </Animated.View>
-
-        {greeting ? (
-          <Animated.Text
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {/* Phase AR follow-up v2 — true viewport centering. Earlier version
+            put avatar + caption as siblings in a justifyContent:center
+            parent, which centered them AS A GROUP — pushing the avatar
+            up off screen-center by the caption height. Now the avatar
+            lives in a flex:1 region (truly center-of-viewport) and the
+            caption pins to its own region below. Avatar always centered
+            on every aspect, regardless of caption length. */}
+        <View style={styles.avatarRegion}>
+          <Animated.View
             style={[
-              styles.captionFlex,
-              { color: colors.text_primary, opacity: captionOpacity },
+              styles.avatarWrap,
+              {
+                width: avatarSize,
+                height: avatarSize,
+                borderRadius: avatarSize / 2,
+                borderColor: colors.accent,
+                opacity,
+                transform: [{ scale }],
+              },
             ]}
-            numberOfLines={3}
           >
-            {GREETING_CAPTION[greeting]}
-          </Animated.Text>
-        ) : null}
+            {/* Phase AR follow-up v3 — swapped from
+                smartplay_caddie_badge.png to kevin_portrait.jpg (the
+                actual Kevin face we already use in onboarding). The
+                badge PNG artwork was off-center within its own canvas
+                ("left side of his face in middle of screen"), so even
+                a perfectly-centered container rendered the figure
+                visibly right-of-center. The portrait JPG is centered
+                and is actually Kevin. resizeMode 'cover' fills the
+                circular container edge-to-edge. */}
+            <Image
+              source={require('../assets/avatars/kevin_portrait.jpg')}
+              style={styles.avatarPhoto}
+              resizeMode="cover"
+            />
+          </Animated.View>
+        </View>
+        <View style={styles.captionRegion}>
+          {greeting ? (
+            <Animated.Text
+              style={[
+                styles.captionFlex,
+                { color: colors.text_primary, opacity: captionOpacity },
+              ]}
+              numberOfLines={3}
+            >
+              {GREETING_CAPTION[greeting]}
+            </Animated.Text>
+          ) : null}
+        </View>
       </View>
     </TouchableWithoutFeedback>
   );
@@ -256,10 +271,24 @@ export default function GreetingScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  centerStack: {
+  // Avatar region: flex:1 = takes remaining space, centers content within
+  // it. With caption region below at flex:0 + ~140px height, the avatar
+  // sits roughly at viewport center on every aspect.
+  avatarRegion: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
+  },
+  // Caption region: bottom strip with reserved height. Centers caption
+  // text horizontally; vertical alignment top so the caption sits just
+  // below the avatar even when the text is short.
+  captionRegion: {
+    minHeight: 120,
+    paddingHorizontal: 24,
+    paddingBottom: 48,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
   },
   avatarWrap: {
     borderWidth: 2,
@@ -268,8 +297,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarImg: { width: '88%', height: '88%' },
+  // Phase AR v3 — fills circular container edge-to-edge with the photo
+  avatarPhoto: { width: '100%', height: '100%' },
   captionFlex: {
-    marginTop: 28,
     fontSize: 17,
     fontWeight: '600',
     textAlign: 'center',
