@@ -921,13 +921,21 @@ export default function CaddieTab() {
         preRoundNotes: storeState.roundNotes || null,
         arenaContext,
       })
-        .then(recap => {
+        .then(_recap => {
           setRecapLoading(false);
-          router.push(('/recap/' + recap.round_id) as never);
+          // Phase Z/AA — post-round destination is the Scorecard tab. The
+          // restored scorecard renders Kevin's recap inline + club summary
+          // + share, so users get the round's story in one place. The
+          // standalone /recap/[id] route is still available for deep-dive
+          // hole-by-hole comparison via the Scorecard's recap link.
+          router.replace('/(tabs)/scorecard' as never);
         })
         .catch(() => {
           setRecapLoading(false);
           setCaddieResponse("Round saved. Your recap will be ready next time you open the app — something went sideways on my end.");
+          // Even on recap failure, route to scorecard — the round itself
+          // saved and the user gets the all-holes view + club summary.
+          try { router.replace('/(tabs)/scorecard' as never); } catch {}
         });
     }
   };
@@ -1897,7 +1905,14 @@ export default function CaddieTab() {
           <View style={styles.sheet}>
             <View style={styles.handle} />
             <Text style={styles.sheetTitle}>Start Round</Text>
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              // Phase AA — the Start button at the bottom of this sheet was
+              // getting clipped on shorter aspects (Galaxy Fold closed). Add
+              // bottom padding to clear the system bar + give the CTA room.
+              contentContainerStyle={{ paddingBottom: 80 }}
+            >
 
             <Text style={styles.sheetLabel}>Course</Text>
             <CoursePicker

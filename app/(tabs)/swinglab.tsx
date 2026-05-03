@@ -595,6 +595,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
+    // Phase AA — guarantee bottom cards aren't clipped behind the tab bar
+    // and leave room for content to grow.
+    paddingBottom: 32,
+    flexGrow: 1,
   },
 
   // Header

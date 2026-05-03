@@ -333,7 +333,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#060f09',
   },
   scroll: {
-    paddingBottom: 32,
+    // Phase AA — bigger floor + grow so the last cards on shorter
+    // aspects (Galaxy Fold closed) don't sit behind the tab bar.
+    paddingBottom: 48,
+    flexGrow: 1,
   },
   header: {
     paddingHorizontal: 20,

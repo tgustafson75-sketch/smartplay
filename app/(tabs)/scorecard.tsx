@@ -27,6 +27,7 @@ import { useRouter } from 'expo-router';
 import { useRoundStore } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useTheme } from '../../contexts/ThemeContext';
 import { loadRecap } from '../../services/planStorage';
 import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
 import AppIcon from '../../components/AppIcon';
@@ -53,6 +54,12 @@ export default function Scorecard() {
   const router = useRouter();
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   const { voiceGender, language, voiceEnabled } = useSettingsStore();
+  // Phase AA — themed. The theme tokens override the dark-only style sheet
+  // values for backgrounds, text, and borders so light mode actually shifts.
+  // Brand accents (#00C896 etc.) intentionally stay literal — they map to
+  // the same accent token in both themes.
+  const theme = useTheme();
+  const c = theme.colors;
 
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const activeCourse = useRoundStore(s => s.activeCourse);
@@ -311,7 +318,7 @@ export default function Scorecard() {
     const total = end === 9 ? frontScore : backScore;
     const totalPar9 = end === 9 ? frontPar : backPar;
     return (
-      <View style={styles.nineGrid}>
+      <View style={[styles.nineGrid, { backgroundColor: c.surface, borderColor: c.border }]}>
         {/* Hole row */}
         <View style={styles.gridRow}>
           <Text style={[styles.cell, styles.cellLabel]}>HOLE</Text>
@@ -392,16 +399,16 @@ export default function Scorecard() {
   const hasAnythingToShow = isRoundActive || lastCompletedRound != null;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={['top']}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }} showsVerticalScrollIndicator={false}>
 
         {/* HEADER — back + title + share */}
         <View style={styles.header}>
           <TouchableOpacity onPress={goBack} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <AppIcon name="chevron-back" size={26} color="#00C896" />
+            <AppIcon name="chevron-back" size={26} color={c.accent} />
           </TouchableOpacity>
           <View style={styles.titleWrap}>
-            <Text style={styles.title}>Scorecard</Text>
+            <Text style={[styles.title, { color: c.text_primary }]}>Scorecard</Text>
             {isRoundActive && (
               <View style={styles.liveIndicator}>
                 <Text style={styles.liveText}>● LIVE</Text>
@@ -421,34 +428,34 @@ export default function Scorecard() {
             <AppIcon
               name="share-social-outline"
               size={22}
-              color={hasAnythingToShow ? '#00C896' : '#374151'}
+              color={hasAnythingToShow ? c.accent : c.text_muted}
             />
           </TouchableOpacity>
         </View>
 
         {/* COURSE NAME */}
         {viewCourseName && (
-          <Text style={styles.courseName}>{viewCourseName}</Text>
+          <Text style={[styles.courseName, { color: c.text_muted }]}>{viewCourseName}</Text>
         )}
 
         {/* SCORE SUMMARY */}
         {hasAnythingToShow && (
-          <View style={styles.summary}>
+          <View style={[styles.summary, { backgroundColor: c.surface_elevated, borderColor: c.border }]}>
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>SCORE</Text>
-              <Text style={styles.summaryValue}>{totalScore > 0 ? totalScore : '—'}</Text>
+              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>SCORE</Text>
+              <Text style={[styles.summaryValue, { color: c.text_primary }]}>{totalScore > 0 ? totalScore : '—'}</Text>
             </View>
-            <View style={styles.summaryDivider} />
+            <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>VS PAR</Text>
+              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>VS PAR</Text>
               <Text style={[styles.summaryValue, { color: scoreVsParColor }]}>
                 {holesPlayed > 0 ? scoreVsParDisplay : '—'}
               </Text>
             </View>
-            <View style={styles.summaryDivider} />
+            <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>HOLES</Text>
-              <Text style={styles.summaryValue}>{holesPlayed}</Text>
+              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>HOLES</Text>
+              <Text style={[styles.summaryValue, { color: c.text_primary }]}>{holesPlayed}</Text>
             </View>
             {roundHeroMoments > 0 && (
               <>
@@ -465,8 +472,8 @@ export default function Scorecard() {
         {/* NO ROUND STATE */}
         {!hasAnythingToShow && (
           <View style={styles.noRound}>
-            <Text style={styles.noRoundText}>No active round</Text>
-            <Text style={styles.noRoundSub}>Start a round from the Caddie tab</Text>
+            <Text style={[styles.noRoundText, { color: c.text_muted }]}>No active round</Text>
+            <Text style={[styles.noRoundSub, { color: c.text_muted }]}>Start a round from the Caddie tab</Text>
           </View>
         )}
 
@@ -485,19 +492,19 @@ export default function Scorecard() {
 
         {/* TOTAL CARD */}
         {hasAnythingToShow && holesPlayed > 0 && (
-          <View style={styles.totalCard}>
+          <View style={[styles.totalCard, { backgroundColor: c.surface_elevated }]}>
             <View style={styles.totalCardItem}>
-              <Text style={styles.totalCardLabel}>TOTAL</Text>
-              <Text style={styles.totalCardValue}>{totalScore}</Text>
+              <Text style={[styles.totalCardLabel, { color: c.text_muted }]}>TOTAL</Text>
+              <Text style={[styles.totalCardValue, { color: c.text_primary }]}>{totalScore}</Text>
             </View>
-            <View style={styles.totalCardDivider} />
+            <View style={[styles.totalCardDivider, { backgroundColor: c.border }]} />
             <View style={styles.totalCardItem}>
-              <Text style={styles.totalCardLabel}>PAR</Text>
-              <Text style={styles.totalCardValue}>{totalPar}</Text>
+              <Text style={[styles.totalCardLabel, { color: c.text_muted }]}>PAR</Text>
+              <Text style={[styles.totalCardValue, { color: c.text_primary }]}>{totalPar}</Text>
             </View>
-            <View style={styles.totalCardDivider} />
+            <View style={[styles.totalCardDivider, { backgroundColor: c.border }]} />
             <View style={styles.totalCardItem}>
-              <Text style={styles.totalCardLabel}>DIFF</Text>
+              <Text style={[styles.totalCardLabel, { color: c.text_muted }]}>DIFF</Text>
               <Text style={[styles.totalCardValue, { color: scoreVsParColor }]}>
                 {scoreVsParDisplay}
               </Text>
@@ -508,25 +515,25 @@ export default function Scorecard() {
         {/* CLUB USAGE SUMMARY */}
         {hasAnythingToShow && clubUsage.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>CLUB USAGE</Text>
-            <View style={styles.clubGrid}>
-              <View style={[styles.clubRow, styles.clubHeader]}>
-                <Text style={[styles.clubCell, styles.clubColClub, styles.clubHeaderText]}>CLUB</Text>
-                <Text style={[styles.clubCell, styles.clubColCount, styles.clubHeaderText]}>USED</Text>
-                <Text style={[styles.clubCell, styles.clubColAvg, styles.clubHeaderText]}>AVG YDS</Text>
+            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>CLUB USAGE</Text>
+            <View style={[styles.clubGrid, { backgroundColor: c.surface, borderColor: c.border }]}>
+              <View style={[styles.clubRow, { backgroundColor: c.surface_elevated, borderBottomColor: c.border }]}>
+                <Text style={[styles.clubCell, styles.clubColClub, styles.clubHeaderText, { color: c.text_muted }]}>CLUB</Text>
+                <Text style={[styles.clubCell, styles.clubColCount, styles.clubHeaderText, { color: c.text_muted }]}>USED</Text>
+                <Text style={[styles.clubCell, styles.clubColAvg, styles.clubHeaderText, { color: c.text_muted }]}>AVG YDS</Text>
               </View>
-              {clubUsage.map(c => (
-                <View key={c.club} style={styles.clubRow}>
-                  <Text style={[styles.clubCell, styles.clubColClub]}>{c.club}</Text>
-                  <Text style={[styles.clubCell, styles.clubColCount]}>×{c.count}</Text>
-                  <Text style={[styles.clubCell, styles.clubColAvg, c.avg == null && styles.clubAvgNone]}>
-                    {c.avg != null ? c.avg : '—'}
+              {clubUsage.map(item => (
+                <View key={item.club} style={[styles.clubRow, { borderBottomColor: c.border }]}>
+                  <Text style={[styles.clubCell, styles.clubColClub, { color: c.text_primary }]}>{item.club}</Text>
+                  <Text style={[styles.clubCell, styles.clubColCount, { color: c.text_secondary }]}>×{item.count}</Text>
+                  <Text style={[styles.clubCell, styles.clubColAvg, { color: item.avg != null ? c.accent : c.text_muted }]}>
+                    {item.avg != null ? item.avg : '—'}
                   </Text>
                 </View>
               ))}
             </View>
             {clubUsage.every(c => c.avg == null) && (
-              <Text style={styles.sectionHint}>
+              <Text style={[styles.sectionHint, { color: c.text_muted }]}>
                 Distance averages appear when shots are voice-logged with yardage.
               </Text>
             )}
@@ -537,30 +544,30 @@ export default function Scorecard() {
         {hasAnythingToShow && recapLoaded && recap?.overall_kevin_summary && (
           <View style={styles.section}>
             <View style={styles.kevinHeader}>
-              <Text style={styles.sectionLabel}>KEVIN&apos;S TAKE</Text>
+              <Text style={[styles.sectionLabel, { color: c.text_muted }]}>KEVIN&apos;S TAKE</Text>
               {voiceEnabled && (
                 <TouchableOpacity onPress={onSpeakRecap} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <View style={styles.speakBtn}>
+                  <View style={[styles.speakBtn, { borderColor: c.accent }]}>
                     <AppIcon
                       name={speaking ? 'pause' : 'play'}
                       size={12}
-                      color="#00C896"
+                      color={c.accent}
                     />
-                    <Text style={styles.speakBtnText}>{speaking ? 'Stop' : 'Listen'}</Text>
+                    <Text style={[styles.speakBtnText, { color: c.accent }]}>{speaking ? 'Stop' : 'Listen'}</Text>
                   </View>
                 </TouchableOpacity>
               )}
             </View>
-            <View style={styles.kevinCard}>
-              <Text style={styles.kevinText}>{recap.overall_kevin_summary}</Text>
+            <View style={[styles.kevinCard, { backgroundColor: c.surface_elevated, borderColor: c.border }]}>
+              <Text style={[styles.kevinText, { color: c.text_primary }]}>{recap.overall_kevin_summary}</Text>
             </View>
           </View>
         )}
         {hasAnythingToShow && recapLoaded && !recap?.overall_kevin_summary && !isRoundActive && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>KEVIN&apos;S TAKE</Text>
-            <View style={styles.kevinCard}>
-              <Text style={styles.kevinPending}>
+            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>KEVIN&apos;S TAKE</Text>
+            <View style={[styles.kevinCard, { backgroundColor: c.surface_elevated, borderColor: c.border }]}>
+              <Text style={[styles.kevinPending, { color: c.text_muted }]}>
                 Kevin&apos;s recap will appear here once it finishes generating.
               </Text>
             </View>
@@ -570,7 +577,7 @@ export default function Scorecard() {
         {/* QUICK SCORE CHIPS — only during active round on unscored hole */}
         {isRoundActive && !scores[currentHole] && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>HOLE {currentHole} · QUICK SCORE</Text>
+            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>HOLE {currentHole} · QUICK SCORE</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -591,7 +598,7 @@ export default function Scorecard() {
                 return (
                   <TouchableOpacity
                     key={diff}
-                    style={[styles.chip, { borderColor: color }]}
+                    style={[styles.chip, { borderColor: color, backgroundColor: c.surface_elevated }]}
                     onPress={() => handleQuickScore(score)}
                     activeOpacity={0.75}
                   >

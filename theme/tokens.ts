@@ -82,7 +82,9 @@ export const darkTheme: ThemeTokens = {
     surface_elevated: '#0d2418',
     text_primary:     '#ffffff',
     text_secondary:   '#e8f5e9',
-    text_muted:       '#6b7280',
+    // Phase AA — was '#6b7280' identically in both themes; bumped lighter for
+    // dark mode so muted labels are actually readable against #060f09.
+    text_muted:       '#9ca3af',
     accent:           '#00C896',
     accent_muted:     '#003d20',
     success:          '#00C896',
@@ -105,7 +107,9 @@ export const lightTheme: ThemeTokens = {
     surface_elevated: '#eaf4ef',
     text_primary:     '#0d1a0d',
     text_secondary:   '#374151',
-    text_muted:       '#6b7280',
+    // Phase AA — was '#6b7280'; pushed darker for light mode so muted labels
+    // have real contrast against #f5f9f6 and don't disappear in sunlight.
+    text_muted:       '#4b5563',
     accent:           '#009e7a',
     accent_muted:     '#d0f0e6',
     success:          '#009e7a',
