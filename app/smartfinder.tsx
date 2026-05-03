@@ -308,39 +308,72 @@ function StandardCameraOverlay({
       Alert.alert('Location needed', 'SmartFinder uses your GPS position to calculate distance. Please grant location access in Settings.');
       return;
     }
-    let position: Location.LocationObject;
+    // Phase AH — wrap the whole measure path so any rejection (GPS hang,
+    // math edge case, store mutation throw) surfaces a user-readable
+    // alert instead of an unhandled promise rejection that crashes the
+    // RN bridge or shows a red-screen toast in dev.
     try {
-      position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-    } catch {
-      Alert.alert('GPS unavailable', 'Could not get your position. Try moving to open sky.');
-      return;
+      // Race getCurrentPositionAsync against an 8s timeout so a hung GPS
+      // call doesn't leave the user staring at nothing.
+      let position: Location.LocationObject;
+      try {
+        position = await Promise.race([
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
+          new Promise<Location.LocationObject>((_, reject) =>
+            setTimeout(() => reject(new Error('gps_timeout')), 8000),
+          ),
+        ]);
+      } catch (gpsErr) {
+        const msg = gpsErr instanceof Error ? gpsErr.message : String(gpsErr);
+        if (msg === 'gps_timeout') {
+          Alert.alert('GPS taking too long', "Couldn't get a fresh position in 8 seconds. Step into open sky and try again.");
+        } else {
+          Alert.alert('GPS unavailable', 'Could not get your position. Try moving to open sky.');
+        }
+        return;
+      }
+      const tapY = event.nativeEvent.locationY;
+      const tapYNorm = Math.max(0, Math.min(1, tapY / height));
+      const userPos = {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy ?? 10,
+      };
+      // Defensive: nonsense lat/lng (the 0,0 case Tim hit) → clear msg
+      if (Math.abs(userPos.lat) < 0.01 && Math.abs(userPos.lng) < 0.01) {
+        Alert.alert("Couldn't measure", 'GPS position not ready yet. Wait a moment and try again.');
+        return;
+      }
+      const result = computeDistance({
+        user_position: userPos,
+        compass_heading: headingRef.current,
+        tap_y_normalized: tapYNorm,
+        device_pitch_degrees: pitchRef.current,
+      });
+      const newLock = buildLock({
+        user_position: userPos,
+        compass_heading: headingRef.current,
+        tap_y_normalized: tapYNorm,
+        device_pitch_degrees: pitchRef.current,
+      }, result);
+      useSmartFinderStore.getState().setLock(newLock);
+      setLock({ distance_yards: result.distance_yards, confidence: result.confidence });
+      setCountdown(30);
+      if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+      if (countdownRef.current) clearInterval(countdownRef.current);
+      lockTimerRef.current = setTimeout(clearLock, LOCK_DURATION_MS);
+      let remaining = 30;
+      countdownRef.current = setInterval(() => {
+        remaining -= 1;
+        setCountdown(remaining);
+        if (remaining <= 0 && countdownRef.current) clearInterval(countdownRef.current);
+      }, 1000);
+    } catch (err) {
+      // Phase AH catch-all — never let a measure rejection escape unhandled.
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log('[smartfinder] measure error:', msg);
+      Alert.alert("Couldn't measure", 'Something went wrong reading the tap. Try again, or check your GPS signal.');
     }
-    const tapY = event.nativeEvent.locationY;
-    const tapYNorm = Math.max(0, Math.min(1, tapY / height));
-    const result = computeDistance({
-      user_position: { lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy ?? 10 },
-      compass_heading: headingRef.current,
-      tap_y_normalized: tapYNorm,
-      device_pitch_degrees: pitchRef.current,
-    });
-    const newLock = buildLock({
-      user_position: { lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy ?? 10 },
-      compass_heading: headingRef.current,
-      tap_y_normalized: tapYNorm,
-      device_pitch_degrees: pitchRef.current,
-    }, result);
-    useSmartFinderStore.getState().setLock(newLock);
-    setLock({ distance_yards: result.distance_yards, confidence: result.confidence });
-    setCountdown(30);
-    if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    lockTimerRef.current = setTimeout(clearLock, LOCK_DURATION_MS);
-    let remaining = 30;
-    countdownRef.current = setInterval(() => {
-      remaining -= 1;
-      setCountdown(remaining);
-      if (remaining <= 0 && countdownRef.current) clearInterval(countdownRef.current);
-    }, 1000);
   }, [locationGranted, height, clearLock]);
 
   useEffect(() => () => {
