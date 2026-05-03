@@ -405,12 +405,20 @@ function RoundActiveDevIndicator(): React.ReactElement | null {
     <View
       pointerEvents="none"
       style={{
-        position: 'absolute', top: 4, alignSelf: 'center',
-        paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6,
+        // Phase AR follow-up — moved to bottom-right corner so it doesn't
+        // overlap the system status bar icons OR the SMARTPLAY CADDIE
+        // wordmark. Dev-only indicator should not compete with chrome.
+        // Smaller font and tighter padding so it doesn't dominate any
+        // surface it's overlaid on.
+        position: 'absolute',
+        bottom: 70,
+        right: 8,
+        paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4,
         backgroundColor: bg, zIndex: 9999,
+        opacity: 0.7,
       }}
     >
-      <Text style={{ fontSize: 10, fontWeight: '900', color: '#fff', letterSpacing: 0.5 }}>
+      <Text style={{ fontSize: 8, fontWeight: '900', color: '#fff', letterSpacing: 0.5 }}>
         {label}
       </Text>
     </View>

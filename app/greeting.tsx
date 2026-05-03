@@ -42,14 +42,13 @@ import { GREETING_ASSETS } from '../services/kevinGreetingManifest';
 type Phase = 'ENTERING' | 'SPEAKING' | 'TRANSITIONING' | 'COMPLETE';
 
 const ENTER_DURATION_MS = 300;
-const TRANSITION_DURATION_MS = 400;
-// Top-left badge target — matches the L1 badge anchor in caddie.tsx.
-const BADGE_TARGET_LEFT = 16;
-const BADGE_TARGET_SIZE = 64;
+// Phase AR follow-up — TRANSITION_DURATION_MS / BADGE_TARGET_LEFT /
+// BADGE_TARGET_SIZE removed with the slide-to-badge transition. Greeting
+// now fades out and routes; no slide animation to a target frame.
 
 export default function GreetingScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const _insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { width: W, height: H } = useWindowDimensions();
 
@@ -61,9 +60,8 @@ export default function GreetingScreen() {
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.8)).current;
   const captionOpacity = useRef(new Animated.Value(0)).current;
-  const translateX = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(0)).current;
-  const sizeAnim = useRef(new Animated.Value(1)).current;
+  // Phase AR follow-up — translateX/Y/sizeAnim removed (slide-to-badge
+  // transition dropped; greeting now fades out + router.replace).
 
   const skippedRef = useRef(false);
   const completedRef = useRef(false);
@@ -73,9 +71,7 @@ export default function GreetingScreen() {
   // Avatar dims — 40% of the smaller screen edge, scales for Z Fold.
   const avatarSize = Math.min(W, H) * 0.4;
   // Where the avatar lives at rest (centered) and where it travels to (top-left badge).
-  const finalLeft = BADGE_TARGET_LEFT - (W - avatarSize) / 2;
-  const finalTop = (insets.top + 60) - (H - avatarSize) / 2;
-  const finalScale = BADGE_TARGET_SIZE / avatarSize;
+  // Final-position math removed with the slide-to-badge transition.
 
   // ── Reduce-motion check ────────────────────────────────────────────
   useEffect(() => {
@@ -116,23 +112,19 @@ export default function GreetingScreen() {
   const startTransition = useCallback(() => {
     if (phase === 'TRANSITIONING' || phase === 'COMPLETE') return;
     setPhase('TRANSITIONING');
-    if (reduceMotion) {
-      Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
-        setPhase('COMPLETE');
-        goToCaddie();
-      });
-      return;
-    }
+    // Phase AR follow-up — dropped the slide-to-badge animation. The
+    // translateX/translateY/scale transform was making the avatar appear
+    // mid-flight when the screen was captured/observed mid-transition,
+    // showing as "off-center splash". A simple fade-out → router.replace
+    // is faster, more reliable, and visually cleaner.
     Animated.parallel([
-      Animated.timing(translateX, { toValue: finalLeft, duration: TRANSITION_DURATION_MS, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: finalTop,  duration: TRANSITION_DURATION_MS, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(sizeAnim,    { toValue: finalScale, duration: TRANSITION_DURATION_MS, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0, duration: 250, useNativeDriver: true }),
       Animated.timing(captionOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
     ]).start(() => {
       setPhase('COMPLETE');
       goToCaddie();
     });
-  }, [phase, reduceMotion, finalLeft, finalTop, finalScale, opacity, translateX, translateY, sizeAnim, captionOpacity, goToCaddie]);
+  }, [phase, opacity, captionOpacity, goToCaddie]);
 
   const handleSkip = useCallback(() => {
     if (skippedRef.current) return;
@@ -221,23 +213,21 @@ export default function GreetingScreen() {
 
   return (
     <TouchableWithoutFeedback onPress={handleSkip} accessibilityLabel="Skip greeting">
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, styles.centerStack, { backgroundColor: colors.background }]}>
+        {/* Phase AR follow-up — flex centering. Was using absolute
+            positioning with computed left/top + slide-to-badge transform
+            that drifted off-center under load. Now: simple flex column,
+            avatar centered via container alignItems, caption below. */}
         <Animated.View
           style={[
             styles.avatarWrap,
             {
-              left: (W - avatarSize) / 2,
-              top: (H - avatarSize) / 2,
               width: avatarSize,
               height: avatarSize,
               borderRadius: avatarSize / 2,
               borderColor: colors.accent,
               opacity,
-              transform: [
-                { translateX },
-                { translateY },
-                { scale: Animated.multiply(scale, sizeAnim) },
-              ],
+              transform: [{ scale }],
             },
           ]}
         >
@@ -251,12 +241,8 @@ export default function GreetingScreen() {
         {greeting ? (
           <Animated.Text
             style={[
-              styles.caption,
-              {
-                color: colors.text_primary,
-                opacity: captionOpacity,
-                top: (H - avatarSize) / 2 + avatarSize + 28,
-              },
+              styles.captionFlex,
+              { color: colors.text_primary, opacity: captionOpacity },
             ]}
             numberOfLines={3}
           >
@@ -270,21 +256,24 @@ export default function GreetingScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  centerStack: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
   avatarWrap: {
-    position: 'absolute',
     borderWidth: 2,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarImg: { width: '85%', height: '85%' },
-  caption: {
-    position: 'absolute',
-    left: 24,
-    right: 24,
+  avatarImg: { width: '88%', height: '88%' },
+  captionFlex: {
+    marginTop: 28,
     fontSize: 17,
     fontWeight: '600',
     textAlign: 'center',
     lineHeight: 24,
   },
+  caption: { display: 'none' }, // legacy, replaced by captionFlex
 });

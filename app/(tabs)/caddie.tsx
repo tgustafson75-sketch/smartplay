@@ -1692,15 +1692,16 @@ export default function CaddieTab() {
         </TouchableOpacity>
       )}
 
-      {/* Phase AE follow-up — ScorecardChip moved out of topNav right column
-           to the LEFT side, anchored just above Kevin's avatar cell
-           (cellTop = insets.top + 100 at L2/L3). Returns null pre-round
-           and pre-scoring so it only appears when there's something to
-           show. zIndex 12 keeps it above the avatar cell (zIndex 6). */}
+      {/* Phase AE follow-up — ScorecardChip on the LEFT side.
+           Phase AR follow-up — anchored at top: insets.top + 145 so it
+           sits BELOW the L1 Kevin badge (top + 60 + ~64px badge ≈ +124)
+           rather than colliding with it on the L1 surface. At L2/L3 the
+           avatar cell starts at insets.top + 100 — chip overlays the
+           avatar cell briefly but at zIndex 12 stays tappable. */}
       <View
         style={{
           position: 'absolute',
-          top: insets.top + 70,
+          top: insets.top + 145,
           left: 12,
           zIndex: 12,
         }}
@@ -1738,7 +1739,11 @@ export default function CaddieTab() {
           presence to ask about; L4 users are past discovery (Tutorials in
           Tools menu covers anyone who wants a refresher). */}
       {(trustLevel === 2 || trustLevel === 3) && (
-        <View style={{ position: 'absolute', top: insets.top + 240, right: 12, zIndex: 13 }}>
+        // Phase AR follow-up — moved from top:240 (overlapped Kevin's face
+        // / SmartVision card) to bottom-anchored just above the
+        // lie-analysis camera so the right edge has a coherent action
+        // stack (Help → Camera → SmartFinder card).
+        <View style={{ position: 'absolute', bottom: 252 + insets.bottom, right: 12, zIndex: 13 }}>
           <KevinHelpButton surface="caddie" />
         </View>
       )}
@@ -1798,10 +1803,14 @@ export default function CaddieTab() {
           elevation: 6,
         };
         // Per-level position + size
+        // Phase AR follow-up — anchored to BOTTOM (above the SmartFinder
+        // card) instead of TOP (where they overlapped Kevin's face /
+        // SmartVision card content). bottom: 200 + insets.bottom puts
+        // them ~12px above SmartFinder card top across all aspects.
         const placements: Record<number, { top?: number; right?: number; bottom?: number; left?: number; size: number; zIndex: number }> = {
-          1: { top: Math.round(H / 2) - 22, right: 12, size: 44, zIndex: 14 },
-          2: { top: insets.top + 290, right: 12, size: 44, zIndex: 14 },
-          3: { top: insets.top + 290, right: 12, size: 44, zIndex: 14 },
+          1: { right: 12, bottom: 200 + insets.bottom, size: 44, zIndex: 14 },
+          2: { right: 12, bottom: 200 + insets.bottom, size: 44, zIndex: 14 },
+          3: { right: 12, bottom: 200 + insets.bottom, size: 44, zIndex: 14 },
           4: { right: 12, bottom: 136 + insets.bottom, size: 56, zIndex: 14 },
         };
         const p = placements[trustLevel] ?? placements[2];
