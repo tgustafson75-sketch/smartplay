@@ -43,6 +43,7 @@ import { toggle as toggleListening } from '../../services/listeningSession';
 import { safeBack } from '../../services/safeBack';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import CageOverlay, { type CageOverlayPhase } from '../../components/swinglab/CageOverlay';
 
 type Phase =
   | 'SETUP'
@@ -357,6 +358,14 @@ export default function CageDrillScreen() {
 
       {/* Dim overlay so chrome reads on bright camera frames. */}
       {cameraVisible && <View style={styles.cameraDim} pointerEvents="none" />}
+
+      {/* Phase AM — multi-purpose alignment overlay. Renders only during
+          setup phases; hidden during RECORDING / UPLOADING so the
+          recording UI isn't crowded with the alignment scaffold. Color
+          maps to phase (amber → green when READY, red on NOT_READY). */}
+      {(phase === 'SETUP' || phase === 'CHECKING' || phase === 'READY' || phase === 'NOT_READY') && (
+        <CageOverlay phase={phase as CageOverlayPhase} />
+      )}
 
       <Header insets={insets} onBack={() => safeBack()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
 
