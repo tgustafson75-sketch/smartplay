@@ -451,7 +451,10 @@ export const useVoiceCaddie = ({
       Vibration.vibrate(200);
       return;
     }
-    await speak(text, voiceGender, language, apiUrl);
+    // Phase V.7+ — userInitiated: this speakResponse path always answers a
+    // user-tapped query, so it speaks at L1 too (the L1 badge would be
+    // useless otherwise).
+    await speak(text, voiceGender, language, apiUrl, { userInitiated: true });
   };
 
   // ── PROCESS AUDIO URI (shared by manual + VAD) ────
@@ -597,7 +600,8 @@ export const useVoiceCaddie = ({
       onResponseReceived(kevinResponse.text);
       onVoiceStateChange('speaking');
       if (kevinResponse.audioBase64 && voiceEnabled && !discreteMode) {
-        await speakFromBase64(kevinResponse.audioBase64);
+        // Phase V.7+ — user-initiated reply, plays at L1 too.
+        await speakFromBase64(kevinResponse.audioBase64, { userInitiated: true });
       } else {
         await speakResponse(kevinResponse.text);
       }

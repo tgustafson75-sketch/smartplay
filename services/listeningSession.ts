@@ -255,7 +255,14 @@ async function openSession() {
 
       const result = await handlerP;
       const t_response_start = Date.now();
-      if (result.voice_response && ttsAllowed) {
+      // Phase V.7+ — the response is user-initiated (mic-tap reply), so it
+      // speaks at L1 too via { userInitiated: true }. Opener + filler stay
+      // suppressed at L1 above. Still respect voiceEnabled + phone-speaker
+      // route via isVoiceAllowed inside speak().
+      const responseAllowed =
+        settings.voiceEnabled &&
+        (route !== 'phone_speaker' || allowPhoneSpeaker);
+      if (result.voice_response && responseAllowed) {
         console.log('[ttfa]', JSON.stringify({
           intent: intent.intent_type,
           topic: intent.parameters?.query_topic ?? null,
@@ -264,7 +271,7 @@ async function openSession() {
           filler_start_ms: t_filler_start != null ? t_filler_start - t0 : null,
           response_start_ms: t_response_start - t0,
         }));
-        await speak(result.voice_response, settings.voiceGender, settings.language, apiUrl);
+        await speak(result.voice_response, settings.voiceGender, settings.language, apiUrl, { userInitiated: true });
       }
       // Phase R/S — dispatch tool_action.open_url. Internal routes (e.g.
       // swing library jumps, SmartVision opens) go through router.push as

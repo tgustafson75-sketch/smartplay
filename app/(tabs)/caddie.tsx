@@ -2377,8 +2377,8 @@ export default function CaddieTab() {
               ...(isRoundActive ? [{
                 icon: 'flag-outline' as IconName, label: 'End Round',   sub: 'Finish and get summary',   action: async () => { setShowMoreMenu(false); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {}); clearShotPending(); endRound(); await generateRoundSummary(); },
               }] : []),
-              { icon: 'tv-outline',          label: castMode ? 'Cast Mode On' : 'Cast Mode',     sub: 'Mirror to TV',                  action: () => setCastMode(!castMode) },
-              { icon: voiceEnabled ? 'volume-high-outline' : 'volume-mute-outline', label: voiceEnabled ? 'Voice On' : 'Voice Off',  sub: "Toggle Kevin's voice", action: () => setVoiceEnabled(!voiceEnabled) },
+              { icon: 'tv-outline',          label: castMode ? 'Cast Mode On' : 'Cast Mode',     sub: 'Mirror to TV',                  action: () => { setShowMoreMenu(false); setCastMode(!castMode); } },
+              { icon: voiceEnabled ? 'volume-high-outline' : 'volume-mute-outline', label: voiceEnabled ? 'Voice On' : 'Voice Off',  sub: "Toggle Kevin's voice", action: () => { setShowMoreMenu(false); setVoiceEnabled(!voiceEnabled); } },
               { icon: 'library-outline',     label: 'Tutorials',        sub: 'How each tool works',      action: () => { setShowMoreMenu(false); router.push('/tutorials' as never); } },
               { icon: 'book-outline',        label: 'Rules & Handicap', sub: 'Quick reference + WHS calculator', action: () => { setShowMoreMenu(false); router.push('/reference' as never); } },
               // Phase V.7+ — user-initiated GPS recalibration. Drops the
@@ -2387,8 +2387,9 @@ export default function CaddieTab() {
               // yardages feel off (under trees, by water, after backgrounding).
               { icon: 'compass-outline',     label: 'GPS Calibration',  sub: 'Refresh signal & accuracy', action: async () => {
                   setShowMoreMenu(false);
+                  // Phase V.7+ — haptic confirms the tap; single Alert when
+                  // the result is in (avoids stacked Android alerts).
                   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-                  Alert.alert('GPS', 'Recalibrating…');
                   try {
                     const gps = await import('../../services/gpsManager');
                     const fix = await gps.recalibrateGps();

@@ -173,15 +173,26 @@ const playbackTimeoutForDuration = (durationMs: number | null | undefined): numb
 };
 
 // Phase V.7 — single source of truth for TTS gating. Returns false when
-// voice is disabled or audio is routed to the phone speaker without the
-// user opting into 'Voice on phone speaker'. Used by speak, playLocalFile,
-// and speakFromBase64 so consumers don't need to repeat the policy.
-const isVoiceAllowed = (): boolean => {
+// voice is disabled, audio is routed to the phone speaker without the
+// user opting in, or the user is at L1 Quiet AND this is scripted/proactive
+// speech. L1 still allows USER-INITIATED responses (mic-tap → answer)
+// because the user explicitly invited Kevin to talk. Without that carve-
+// out the L1 badge would be a dead button.
+//
+// Pass { userInitiated: true } from any speak() call that's a direct reply
+// to a user mic-tap or hero-moment confirmation. Default false treats the
+// utterance as scripted (briefing, opener, filler, proactive, summary).
+type SpeakOpts = { userInitiated?: boolean };
+
+const isVoiceAllowed = (opts?: SpeakOpts): boolean => {
   try {
     const settingsMod = require('../store/settingsStore');
     const routingMod = require('./audioRoutingService');
+    const trustMod = require('../store/trustLevelStore');
     const settings = settingsMod.useSettingsStore.getState();
     if (!settings.voiceEnabled) return false;
+    const trustLevel = trustMod.useTrustLevelStore.getState().level;
+    if (trustLevel === 1 && !opts?.userInitiated) return false;
     const route = routingMod.getCurrentRoute();
     if (route === 'phone_speaker' && !settings.voiceOnPhoneSpeaker) return false;
     return true;
@@ -234,10 +245,11 @@ export const isSpeaking = (): boolean => currentSound !== null;
 export const playLocalFile = async (
   uri: string,
   knownDurationMs?: number,
+  opts?: SpeakOpts,
 ): Promise<void> => {
   // Phase V.7 — same Quiet/route guard as speak() so filler clips don't
   // play when voice is disabled or routed to the phone speaker.
-  if (!isVoiceAllowed()) return;
+  if (!isVoiceAllowed(opts)) return;
 
   currentSpeechId++;
   const myId = currentSpeechId;
@@ -311,9 +323,9 @@ export const playLocalFile = async (
 
 // ─── SPEAK FROM BASE64 ────────────────────
 
-export const speakFromBase64 = async (base64: string): Promise<void> => {
+export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise<void> => {
   // Phase V.7 — guard for parity with speak() / playLocalFile.
-  if (!isVoiceAllowed()) return;
+  if (!isVoiceAllowed(opts)) return;
 
   currentSpeechId++;
   const myId = currentSpeechId;
@@ -407,9 +419,10 @@ export const speak = async (
   gender: 'male' | 'female',
   language: 'en' | 'es' | 'zh' = 'en',
   apiUrl: string,
+  opts?: SpeakOpts,
 ): Promise<void> => {
   // Phase V.7 — shared guard (formerly inlined here).
-  if (!isVoiceAllowed()) return;
+  if (!isVoiceAllowed(opts)) return;
 
   // Claim ownership: bump speechId and cancel anything in-flight.
   currentSpeechId++;
