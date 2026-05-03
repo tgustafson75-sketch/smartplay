@@ -8,6 +8,7 @@ import {
   StyleSheet,
   TextInput,
   Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -502,6 +503,29 @@ export default function Settings() {
         {__DEV__ && <DeveloperToolsSection cardStyle={cardStyle} colors={colors} />}
 
         {/* ABOUT */}
+        {/* Phase AI — Help / Support section. Single canonical contact. */}
+        <SectionHeader title="Help" />
+        <View style={cardStyle}>
+          <TouchableOpacity
+            style={styles.aboutRow}
+            onPress={() => {
+              const url = 'mailto:support@smartplaycaddie.com?subject=' +
+                encodeURIComponent('SmartPlay Caddie Support Request');
+              Linking.openURL(url).catch(() => {
+                Alert.alert(
+                  'Email',
+                  'Could not open your email client. Reach support at support@smartplaycaddie.com',
+                );
+              });
+            }}
+          >
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Contact Support</Text>
+            <Text style={[styles.aboutValue, { color: colors.accent }]}>
+              support@smartplaycaddie.com →
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <SectionHeader title="About" />
         <View style={cardStyle}>
           <View style={styles.aboutRow}>
