@@ -190,6 +190,20 @@ export function getClipForCategory(category: FillerCategory): FillerClip | null 
   return pool[idx % pool.length];
 }
 
+// Phase V.7 — fallback used when the library hasn't finished regenerating
+// (e.g. immediately after a voiceHash bump, where the cache is empty for
+// ~30s while clips are TTS-generated). Returns a phrase text from the
+// in-memory FILLER_PHRASES so the caller can speak it via the live TTS
+// pipeline instead of falling silent.
+const fallbackRR: Partial<Record<FillerCategory, number>> = {};
+export function getFallbackTextForCategory(category: FillerCategory): string | null {
+  const pool = FILLER_PHRASES.filter(p => p.category === category);
+  if (pool.length === 0) return null;
+  const idx = fallbackRR[category] ?? 0;
+  fallbackRR[category] = (idx + 1) % pool.length;
+  return pool[idx % pool.length].text;
+}
+
 /**
  * Delete all cached audio files and clear the library index. Used for regeneration
  * after voice settings change, or from the debug screen.

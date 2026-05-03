@@ -27,9 +27,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Audio } from 'expo-av';
 import { Asset } from 'expo-asset';
 import { useTheme } from '../contexts/ThemeContext';
+import { playLocalFile, stopSpeaking } from '../services/voiceService';
 import {
   pickGreeting,
   recordLaunch,
@@ -65,9 +65,10 @@ export default function GreetingScreen() {
   const translateY = useRef(new Animated.Value(0)).current;
   const sizeAnim = useRef(new Animated.Value(1)).current;
 
-  const soundRef = useRef<Audio.Sound | null>(null);
   const skippedRef = useRef(false);
   const completedRef = useRef(false);
+  // Phase V.7 — track auto-advance timers so skip can cancel them.
+  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Avatar dims — 40% of the smaller screen edge, scales for Z Fold.
   const avatarSize = Math.min(W, H) * 0.4;
@@ -136,12 +137,20 @@ export default function GreetingScreen() {
   const handleSkip = useCallback(() => {
     if (skippedRef.current) return;
     skippedRef.current = true;
-    void (async () => {
-      try { await soundRef.current?.stopAsync(); } catch {}
-      try { await soundRef.current?.unloadAsync(); } catch {}
-      soundRef.current = null;
-    })();
+    if (advanceTimerRef.current) {
+      clearTimeout(advanceTimerRef.current);
+      advanceTimerRef.current = null;
+    }
+    void stopSpeaking().catch(() => {});
     startTransition();
+  }, [startTransition]);
+
+  const scheduleAdvance = useCallback((ms: number) => {
+    if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
+    advanceTimerRef.current = setTimeout(() => {
+      advanceTimerRef.current = null;
+      if (!skippedRef.current) startTransition();
+    }, ms);
   }, [startTransition]);
 
   // ── Enter animation + audio kickoff once greeting is picked ────────
@@ -161,58 +170,41 @@ export default function GreetingScreen() {
       Animated.timing(captionOpacity, { toValue: 1, duration: 220, useNativeDriver: true }).start();
     });
 
-    // Kick off audio playback in parallel — caption fades in regardless.
+    // Phase V.7 — route through playLocalFile so the greeting shares the
+    // voiceService singleton (speechId/currentSound). Without this, the next
+    // speak() in caddie.tsx can overlap the tail of the greeting audio.
     void (async () => {
       try {
         const assetMod = GREETING_ASSETS[greeting];
         const asset = Asset.fromModule(assetMod);
         await asset.downloadAsync();
-        // 0-byte placeholder → bail gracefully and let the visual run alone.
-        if (!asset.localUri || (typeof asset.uri === 'string' && asset.uri.length === 0)) {
+        if (!asset.localUri) {
           console.warn('[greeting] asset has no localUri:', greeting);
-          // Auto-advance after a 2s read-the-text moment.
-          setTimeout(() => { if (!skippedRef.current) startTransition(); }, 2000);
+          scheduleAdvance(2000);
           return;
         }
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-        });
-        const { sound, status } = await Audio.Sound.createAsync(
-          { uri: asset.localUri },
-          { shouldPlay: true, volume: 1.0 },
-        );
-        soundRef.current = sound;
-        if (!status.isLoaded || (status.isLoaded && (status.durationMillis ?? 0) === 0)) {
-          // Empty / unloadable file → silent path + 2s read window.
-          try { await sound.unloadAsync(); } catch {}
-          soundRef.current = null;
-          setTimeout(() => { if (!skippedRef.current) startTransition(); }, 2000);
-          return;
-        }
-        sound.setOnPlaybackStatusUpdate((s) => {
-          if (!s.isLoaded) return;
-          if (s.didJustFinish) {
-            try { void sound.unloadAsync(); } catch {}
-            soundRef.current = null;
-            if (!skippedRef.current) startTransition();
-          }
-        });
+        // playLocalFile blocks until the clip finishes (or its duration-derived
+        // timeout fires). It also no-ops silently when voice is disabled, so
+        // race against a 2s minimum to guarantee the caption stays readable
+        // even on a silent greeting path.
+        const minDisplay = new Promise<void>(resolve => setTimeout(resolve, 2000));
+        await Promise.all([playLocalFile(asset.localUri), minDisplay]);
+        if (!skippedRef.current) startTransition();
       } catch (e) {
         console.warn('[greeting] audio playback failed:', e);
-        // Audio is optional. Show the caption for ~2s, then advance.
-        setTimeout(() => { if (!skippedRef.current) startTransition(); }, 2000);
+        scheduleAdvance(2000);
       }
     })();
 
     return () => {
-      // Clean up audio if the screen unmounts mid-playback.
-      const s = soundRef.current;
-      if (s) { void s.stopAsync().catch(() => {}); void s.unloadAsync().catch(() => {}); soundRef.current = null; }
+      if (advanceTimerRef.current) {
+        clearTimeout(advanceTimerRef.current);
+        advanceTimerRef.current = null;
+      }
+      void stopSpeaking().catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [greeting]);
+  }, [greeting, scheduleAdvance]);
 
   // Slow breathing pulse during SPEAKING — opacity 0.94↔1.0 at ~0.45 Hz with
   // sine easing. The previous 0.85↔1.0 / 180ms cycle read as a strobe.

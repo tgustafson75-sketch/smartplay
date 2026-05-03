@@ -64,11 +64,19 @@ export default function SwingDetail() {
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState<number | null>(session?.upload?.duration_sec ?? null);
 
-  // Toggle audio source: muting video for kevin mode, unmuting for coach
+  // Toggle audio source: muting video for kevin mode, unmuting for coach.
+  // Phase V.7 — skip the auto-speak on the *initial* mount; the dedicated
+  // first-completion effect below already narrates once. Without this guard,
+  // mounting with default audioSource='kevin' fired both effects and the
+  // second speak() cancelled the first mid-sentence.
+  const initialAudioMountRef = useRef(true);
   useEffect(() => {
     void videoRef.current?.setIsMutedAsync(audioSource === 'kevin');
+    if (initialAudioMountRef.current) {
+      initialAudioMountRef.current = false;
+      return;
+    }
     if (audioSource === 'kevin') {
-      // Speak the analysis once when switching into kevin mode
       const issue = session?.primary_issue;
       if (issue && apiUrl) {
         const text = `${issue.name}. ${issue.mechanical_breakdown} ${issue.feel_cue}`;
@@ -147,6 +155,12 @@ export default function SwingDetail() {
     analysisStatus === 'pending';
   const onReanalyze = () => {
     if (!swing_id || reanalyzing) return;
+    // Phase V.7 — flip status to 'pending' BEFORE clearing spokenForRef so the
+    // auto-narrate effect can't fire with stale 'ok' status and re-speak the
+    // old primary_issue between the ref clear and the first runPhaseK status
+    // transition. Also stop any in-flight TTS from a prior auto-narration.
+    void stopSpeaking().catch(() => {});
+    useCageStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
     spokenForRef.current = null;
     void runPhaseKOnSession(swing_id);
   };

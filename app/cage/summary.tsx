@@ -149,22 +149,22 @@ export default function CageSummary() {
     const pts = Math.min(session.shots.length * 2, 50);
     addPoints(pts, 'Cage session');
 
+    // Phase V.7 — chain the two utterances so the second can't start while
+    // the first is still speaking (the prior 800ms / 3000ms timer pair raced
+    // on wall-clock and cancelled mid-sentence on short summaries).
     if (voiceEnabled && session.summary) {
-      setTimeout(async () => {
+      const summaryText = session.summary;
+      const improveMsg = pattern.improvement
+        ? "You got better as the session went on. That's how it works."
+        : null;
+      const t = setTimeout(async () => {
         await configureAudioForSpeech();
-        await speak(session.summary ?? '', voiceGender, language, apiUrl);
-      }, 800);
-    }
-
-    if (pattern.improvement) {
-      setTimeout(async () => {
-        const improveMsg =
-          "You got better as the session went on. That's how it works.";
-        if (voiceEnabled) {
-          await configureAudioForSpeech();
+        await speak(summaryText, voiceGender, language, apiUrl);
+        if (improveMsg) {
           await speak(improveMsg, voiceGender, language, apiUrl);
         }
-      }, 3000);
+      }, 800);
+      return () => clearTimeout(t);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

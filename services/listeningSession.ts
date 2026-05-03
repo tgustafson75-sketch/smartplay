@@ -1,5 +1,5 @@
 import { Linking } from 'react-native';
-import { speak, stopSpeaking, isSpeaking, captureUtterance, playLocalFile } from './voiceService';
+import { speak, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture } from './voiceService';
 import { getDialog } from './dialogEngine';
 import { getTrustLevel } from './trustLevelService';
 import { useRoundStore } from '../store/roundStore';
@@ -8,7 +8,7 @@ import { voiceCommandRouter } from './intents';
 import { subscribeEarbudTap } from './earbudControl';
 import { getCurrentRoute } from './audioRoutingService';
 import { routeQuery } from './responseRouter';
-import { getClipForCategory } from './fillerLibrary';
+import { getClipForCategory, getFallbackTextForCategory } from './fillerLibrary';
 import { getActiveSurface } from './activeSurfaceRegistry';
 import type { AppContext } from '../types/voiceIntent';
 
@@ -135,8 +135,9 @@ async function openSession() {
   try {
     const captureP = captureUtterance(8_000, apiUrl, settings.language);
     cancelMic = () => {
-      // captureUtterance doesn't expose a native cancel; the timeout will
-      // fire. We simply stop processing the result if state changes.
+      // Phase V.7 — real cancel via stopCapture; the recording stops
+      // immediately and captureUtterance resolves with null.
+      void stopCapture().catch(() => {});
     };
     utterance = await captureP;
   } catch (e) {
@@ -203,7 +204,16 @@ async function openSession() {
       const clip = getClipForCategory(decision.filler);
       if (clip) {
         t_filler_start = Date.now();
-        fillerP = playLocalFile(clip.audio_path).catch(() => {});
+        fillerP = playLocalFile(clip.audio_path, clip.duration_ms).catch(() => {});
+      } else {
+        // Phase V.7 — local audio cache not ready (e.g. just after a
+        // voiceHash bump). Fall through to live TTS so the user hears a
+        // bridge instead of dead silence between intent and response.
+        const fallbackText = getFallbackTextForCategory(decision.filler);
+        if (fallbackText) {
+          t_filler_start = Date.now();
+          fillerP = speak(fallbackText, settings.voiceGender, settings.language, apiUrl).catch(() => {});
+        }
       }
     }
 
@@ -225,8 +235,14 @@ async function openSession() {
       if (ttsAllowed) {
         for (let i = 0; i < 2 && !resultReady && state === 'responding'; i++) {
           const ext = getClipForCategory('extension');
-          if (!ext) break;
-          await playLocalFile(ext.audio_path).catch(() => {});
+          if (ext) {
+            await playLocalFile(ext.audio_path, ext.duration_ms).catch(() => {});
+          } else {
+            // Phase V.7 — same fallback as primary filler.
+            const extText = getFallbackTextForCategory('extension');
+            if (!extText) break;
+            await speak(extText, settings.voiceGender, settings.language, apiUrl).catch(() => {});
+          }
         }
       }
 
@@ -284,10 +300,12 @@ function closeSession() {
   if (isSpeaking()) {
     void stopSpeaking().catch(() => {});
   }
-  // Cancel mic if listening
+  // Cancel mic if listening (Phase V.7 — now actually stops the recording)
   if (cancelMic) {
     try { cancelMic(); } catch {}
     cancelMic = null;
   }
+  // Belt + suspenders: ensure no orphan recording survives.
+  void stopCapture().catch(() => {});
   state = 'idle';
 }

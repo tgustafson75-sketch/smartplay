@@ -44,14 +44,28 @@ const CAPTURE_RECORDING_OPTIONS: Audio.RecordingOptions = {
 
 /**
  * Record audio for up to {timeoutMs}, transcribe, and return the text.
- * Returns null on permission denial, recording failure, or transcription error.
+ * Returns null on permission denial, recording failure, transcription
+ * error, or external cancellation via {@link stopCapture}.
  */
+let currentRecording: Audio.Recording | null = null;
+let captureCancelled = false;
+
+export const stopCapture = async (): Promise<void> => {
+  captureCancelled = true;
+  const r = currentRecording;
+  currentRecording = null;
+  if (r) {
+    try { await r.stopAndUnloadAsync(); } catch { /* ignore */ }
+  }
+};
+
 export const captureUtterance = async (
   timeoutMs: number,
   apiUrl: string,
   language: 'en' | 'es' | 'zh' = 'en',
 ): Promise<string | null> => {
   let recording: Audio.Recording | null = null;
+  captureCancelled = false;
   try {
     noteAudioActivity('capture');
     const { granted } = await Audio.requestPermissionsAsync();
@@ -59,7 +73,21 @@ export const captureUtterance = async (
     await configureAudioForRecording();
     const r = await Audio.Recording.createAsync(CAPTURE_RECORDING_OPTIONS);
     recording = r.recording;
-    await new Promise(resolve => setTimeout(resolve, timeoutMs));
+    currentRecording = recording;
+
+    // Wait up to timeoutMs OR until stopCapture flips the flag.
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs && !captureCancelled) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    if (captureCancelled) {
+      currentRecording = null;
+      try { await recording.stopAndUnloadAsync(); } catch { /* already stopped */ }
+      return null;
+    }
+
+    currentRecording = null;
     await recording.stopAndUnloadAsync();
     const uri = recording.getURI();
     if (!uri) return null;
@@ -85,6 +113,7 @@ export const captureUtterance = async (
     if (recording) {
       try { await recording.stopAndUnloadAsync(); } catch { /* ignore */ }
     }
+    currentRecording = null;
     return null;
   }
 };
@@ -118,6 +147,34 @@ const SPEAK_TIMEOUT_MS = 30_000;
 const playbackTimeoutForText = (text: string): number => {
   const estimatedMs = (text.length / 13) * 1000 + 8_000;
   return Math.min(120_000, Math.max(30_000, Math.ceil(estimatedMs)));
+};
+
+// Phase V.7 — derive playback timeout from a known clip duration. Used by
+// playLocalFile (filler clips with duration_ms) and speakFromBase64 (after
+// decoding, status.durationMillis is known). Falls back to 30s if duration
+// is unknown.
+const playbackTimeoutForDuration = (durationMs: number | null | undefined): number => {
+  if (!durationMs || durationMs <= 0) return SPEAK_TIMEOUT_MS;
+  return Math.min(120_000, Math.max(5_000, Math.ceil(durationMs + 2_000)));
+};
+
+// Phase V.7 — single source of truth for TTS gating. Returns false when
+// voice is disabled or audio is routed to the phone speaker without the
+// user opting into 'Voice on phone speaker'. Used by speak, playLocalFile,
+// and speakFromBase64 so consumers don't need to repeat the policy.
+const isVoiceAllowed = (): boolean => {
+  try {
+    const settingsMod = require('../store/settingsStore');
+    const routingMod = require('./audioRoutingService');
+    const settings = settingsMod.useSettingsStore.getState();
+    if (!settings.voiceEnabled) return false;
+    const route = routingMod.getCurrentRoute();
+    if (route === 'phone_speaker' && !settings.voiceOnPhoneSpeaker) return false;
+    return true;
+  } catch {
+    // If the guard itself fails, fall through — never block speech on a guard error.
+    return true;
+  }
 };
 
 let currentSound: Audio.Sound | null = null;
@@ -160,7 +217,14 @@ export const isSpeaking = (): boolean => currentSound !== null;
 // Same singleton semantics as speak/speakFromBase64 — naturally cancelled
 // when the real response calls either of those functions.
 
-export const playLocalFile = async (uri: string): Promise<void> => {
+export const playLocalFile = async (
+  uri: string,
+  knownDurationMs?: number,
+): Promise<void> => {
+  // Phase V.7 — same Quiet/route guard as speak() so filler clips don't
+  // play when voice is disabled or routed to the phone speaker.
+  if (!isVoiceAllowed()) return;
+
   currentSpeechId++;
   const myId = currentSpeechId;
 
@@ -180,7 +244,7 @@ export const playLocalFile = async (uri: string): Promise<void> => {
   await configureAudioForSpeech();
 
   try {
-    const { sound } = await Audio.Sound.createAsync(
+    const { sound, status } = await Audio.Sound.createAsync(
       { uri },
       { shouldPlay: true, volume: 1.0 },
     );
@@ -192,11 +256,16 @@ export const playLocalFile = async (uri: string): Promise<void> => {
 
     currentSound = sound;
 
+    // Phase V.7 — prefer the actual decoded duration; fall back to caller-
+    // provided knownDurationMs (e.g. measured at clip-generation time).
+    const measuredMs = status.isLoaded ? status.durationMillis ?? null : null;
+    const timeoutMs = playbackTimeoutForDuration(measuredMs ?? knownDurationMs ?? null);
+
     await Promise.race([
       new Promise<void>((resolve) => {
-        sound.setOnPlaybackStatusUpdate((status) => {
-          if (!status.isLoaded) return;
-          if (status.didJustFinish) {
+        sound.setOnPlaybackStatusUpdate((s) => {
+          if (!s.isLoaded) return;
+          if (s.didJustFinish) {
             sound.unloadAsync().catch(() => {});
             if (myId === currentSpeechId) {
               currentSound = null;
@@ -213,7 +282,7 @@ export const playLocalFile = async (uri: string): Promise<void> => {
             notifySpeaking(false);
           }
           resolve();
-        }, 5_000)
+        }, timeoutMs)
       ),
     ]);
 
@@ -229,6 +298,9 @@ export const playLocalFile = async (uri: string): Promise<void> => {
 // ─── SPEAK FROM BASE64 ────────────────────
 
 export const speakFromBase64 = async (base64: string): Promise<void> => {
+  // Phase V.7 — guard for parity with speak() / playLocalFile.
+  if (!isVoiceAllowed()) return;
+
   currentSpeechId++;
   const myId = currentSpeechId;
 
@@ -260,7 +332,7 @@ export const speakFromBase64 = async (base64: string): Promise<void> => {
 
     if (myId !== currentSpeechId) return;
 
-    const { sound } = await Audio.Sound.createAsync(
+    const { sound, status } = await Audio.Sound.createAsync(
       { uri: audioFile.uri },
       { shouldPlay: true, volume: 1.0 },
     );
@@ -272,11 +344,16 @@ export const speakFromBase64 = async (base64: string): Promise<void> => {
 
     currentSound = sound;
 
+    // Phase V.7 — derive timeout from actual decoded duration so longer
+    // brain responses (60-90 words) aren't sliced by a hard 30s cap.
+    const measuredMs = status.isLoaded ? status.durationMillis ?? null : null;
+    const timeoutMs = playbackTimeoutForDuration(measuredMs);
+
     await Promise.race([
       new Promise<void>((resolve) => {
-        sound.setOnPlaybackStatusUpdate((status) => {
-          if (!status.isLoaded) return;
-          if (status.didJustFinish) {
+        sound.setOnPlaybackStatusUpdate((s) => {
+          if (!s.isLoaded) return;
+          if (s.didJustFinish) {
             sound.unloadAsync().catch(() => {});
             try { audioFile.delete(); } catch {}
             if (myId === currentSpeechId) {
@@ -295,7 +372,7 @@ export const speakFromBase64 = async (base64: string): Promise<void> => {
             notifySpeaking(false);
           }
           resolve();
-        }, SPEAK_TIMEOUT_MS)
+        }, timeoutMs)
       ),
     ]);
 
@@ -317,19 +394,8 @@ export const speak = async (
   language: 'en' | 'es' | 'zh' = 'en',
   apiUrl: string,
 ): Promise<void> => {
-  // Phase O.5 — global TTS safety: respect voiceEnabled + audio-route policy.
-  // Single source of truth so consumer sites don't need to repeat the check.
-  // Lazy require avoids a circular dependency at module load time.
-  try {
-    const settingsMod = require('../store/settingsStore');
-    const routingMod = require('./audioRoutingService');
-    const settings = settingsMod.useSettingsStore.getState();
-    if (!settings.voiceEnabled) return;
-    const route = routingMod.getCurrentRoute();
-    if (route === 'phone_speaker' && !settings.voiceOnPhoneSpeaker) return;
-  } catch {
-    // If the guard itself fails, fall through — never block speech on a guard error.
-  }
+  // Phase V.7 — shared guard (formerly inlined here).
+  if (!isVoiceAllowed()) return;
 
   // Claim ownership: bump speechId and cancel anything in-flight.
   currentSpeechId++;

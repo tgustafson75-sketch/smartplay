@@ -20,12 +20,19 @@ interface BriefingParams {
   patternShiftAlert?: string | null;
 }
 
-// In-memory cache: roundId → briefing text
+// In-memory cache: `${roundId}|${language}` → briefing text. Keyed by
+// language too so a mid-round language change re-fetches in the new tongue
+// instead of returning the stale English text and speaking it with the
+// Spanish/Chinese voice.
 const cache = new Map<string, string>();
+const cacheKey = (roundId: string, language: string): string =>
+  `${roundId}|${language}`;
 
 export function clearBriefingCache(roundId?: string): void {
   if (roundId) {
-    cache.delete(roundId);
+    for (const k of Array.from(cache.keys())) {
+      if (k.startsWith(`${roundId}|`)) cache.delete(k);
+    }
   } else {
     cache.clear();
   }
@@ -34,7 +41,7 @@ export function clearBriefingCache(roundId?: string): void {
 export async function generateBriefing(params: BriefingParams): Promise<string> {
   const { roundId, apiUrl, language = 'en', ...rest } = params;
 
-  const cached = cache.get(roundId);
+  const cached = cache.get(cacheKey(roundId, language));
   if (cached) return cached;
 
   const controller = new AbortController();
@@ -55,7 +62,7 @@ export async function generateBriefing(params: BriefingParams): Promise<string> 
     const text = data.brief?.trim() ?? '';
     if (!text) throw new Error('Empty briefing response');
 
-    cache.set(roundId, text);
+    cache.set(cacheKey(roundId, language), text);
     return text;
   } catch (err) {
     clearTimeout(timeout);
