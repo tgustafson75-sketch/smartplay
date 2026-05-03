@@ -19,6 +19,8 @@ import { initAudioLifecycle } from '../services/audioLifecycle';
 import { initBatteryMonitor } from '../services/batteryMonitor';
 import { shotDetectionService } from '../services/shotDetectionService';
 import { conversationalLoggingOrchestrator } from '../services/conversationalLoggingOrchestrator';
+import { subscribeToMark } from '../services/positionMarkBus';
+import { setMarkedFix } from '../services/smartFinderService';
 import BatteryPrompt from '../components/battery/BatteryPrompt';
 
 // Phase Y — run `body` only after roundStore rehydration completes. Prevents
@@ -169,6 +171,26 @@ function AppNavigator() {
       stopHoleDetection();
     };
   }), []);
+
+  // Phase AL — wire global subscribers to the position Mark bus.
+  // Each consumer that depends on GPS position handles refresh in its
+  // own way; the bus is decoupled so adding a new GPS-dependent
+  // service later is a one-line subscribeToMark() call.
+  useEffect(() => {
+    const unsub = subscribeToMark((mark) => {
+      // SmartFinder: seed lastFix to the marked spot so front/middle/back
+      // yardages reflect the new position immediately instead of waiting
+      // for the next watch tick.
+      setMarkedFix(mark.lat, mark.lng, mark.accuracy_m);
+      // Hole detection: trigger an immediate evaluate by nudging
+      // currentHole to itself (no-op store write that fires the
+      // subscriber chain). The actual hole-recheck happens inside
+      // holeDetection.ts's poll loop on the next tick (~1s).
+      // Future: holeDetection could expose a forceEvaluate() that runs
+      // synchronously when called from this subscriber.
+    });
+    return () => { unsub(); };
+  }, []);
 
   // Phase Y — shot detection + conversational logging lifecycle moved here
   // from app/(tabs)/caddie.tsx so they are independent of which tab is

@@ -68,6 +68,20 @@ export function isSimulatedActive(): boolean {
 }
 
 /**
+ * Phase AL — public seeder used by the position Mark bus. Forces the
+ * cached lastFix to the user-marked coordinates so SmartFinder yardages
+ * (front/middle/back) render against the marked spot immediately,
+ * without waiting for the next watch tick. Subscribed in app/_layout.
+ */
+export function setMarkedFix(lat: number, lng: number, accuracy_m: number | null): void {
+  lastFix = {
+    location: { lat, lng },
+    accuracy_m,
+    timestamp: Date.now(),
+  };
+}
+
+/**
  * Pulls a high-accuracy GPS fix and stores accuracy alongside the location for
  * use by the GPS quality indicator. Returns null on permission denial / failure
  * (callers should show the GPS-weak state).

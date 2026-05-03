@@ -197,6 +197,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       data;
 
     const rawHoles = extractRawHoles(course);
+    // Phase AG diagnostic — log the actual field shape of the FIRST hole
+    // so we can see what an upgraded golfcourseapi tier returns. The
+    // parser at projectHole() looks for teeLat/teeLng, tee_lat/tee_lng,
+    // lat/lng, etc. If the upstream returns coords in a different field
+    // shape (e.g. nested gps object, coordinates array), this log
+    // surfaces the keys so we can extend the parser without guessing.
+    if (rawHoles.length > 0) {
+      const sample = rawHoles[0];
+      const keys = Object.keys(sample);
+      console.log('[course-geometry] sample hole keys:', JSON.stringify(keys));
+      // Also log values for any key that looks coordinate-related.
+      const coordKeys = keys.filter(k => /lat|lng|long|coord|gps|geo|location|tee|green/i.test(k));
+      if (coordKeys.length > 0) {
+        const slice: Record<string, unknown> = {};
+        for (const k of coordKeys) slice[k] = sample[k];
+        console.log('[course-geometry] sample hole coord-like keys:', JSON.stringify(slice).slice(0, 800));
+      }
+    }
     const holes = rawHoles
       .map((h, i) => projectHole(h, i + 1))
       .filter(h => h.hole_number > 0);

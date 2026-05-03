@@ -1602,6 +1602,58 @@ export default function CaddieTab() {
         </View>
       </View>
 
+      {/* Phase AL — Mark button. Yellow accent (capture/action treatment).
+           Renders only during an active round per spec (round-gated also
+           inside forceMarkPosition for safety). Single tap fires fresh
+           GPS read, emits position-marked event to all GPS-dependent
+           services, brief haptic + Alert feedback. Anchored top-right
+           corner BELOW the topNav so it doesn't compete with the Tool
+           ••• button, but is the most prominent action target on the
+           screen. */}
+      {isRoundActive && (
+        <TouchableOpacity
+          style={{
+            position: 'absolute',
+            top: insets.top + 96,
+            right: 16,
+            zIndex: 13,
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            borderRadius: 999,
+            backgroundColor: '#F5A623',
+            shadowColor: '#F5A623',
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.55,
+            shadowRadius: 8,
+            elevation: 6,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+          }}
+          onPress={async () => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+            const mod = await import('../../services/positionMarkBus');
+            const r = await mod.forceMarkPosition();
+            if (r.kind === 'ok') {
+              const acc = r.mark.accuracy_m != null ? `~${Math.round(r.mark.accuracy_m)}m` : '';
+              setCaddieResponse(`Marked${acc ? ' (accuracy ' + acc + ')' : ''}.`);
+            } else if (r.kind === 'no_round') {
+              setCaddieResponse('Start a round first.');
+            } else if (r.kind === 'no_permission') {
+              setCaddieResponse('Location permission needed to mark.');
+            } else {
+              setCaddieResponse("Couldn't mark — GPS not ready.");
+            }
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="location" size={16} color="#1a1a1a" />
+          <Text style={{ color: '#1a1a1a', fontSize: 13, fontWeight: '900', letterSpacing: 0.5 }}>
+            MARK
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {/* Phase AE follow-up — ScorecardChip moved out of topNav right column
            to the LEFT side, anchored just above Kevin's avatar cell
            (cellTop = insets.top + 100 at L2/L3). Returns null pre-round
