@@ -255,8 +255,9 @@ export default function SwingDetail() {
               </Text>
               <View style={styles.failedBtnRow}>
                 <TouchableOpacity
-                  style={[styles.failedBtn, { borderColor: colors.accent }]}
+                  style={[styles.failedBtn, { borderColor: colors.accent, opacity: reanalyzing ? 0.5 : 1 }]}
                   onPress={onReanalyze}
+                  disabled={reanalyzing}
                 >
                   <Text style={[styles.failedBtnText, { color: colors.accent }]}>Try again with new analysis</Text>
                 </TouchableOpacity>
