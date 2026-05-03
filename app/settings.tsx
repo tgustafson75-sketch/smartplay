@@ -40,10 +40,12 @@ export default function Settings() {
     distance_unit,
     theme_preference,
     fillerEnabled,
-    earbudTapToTalk,
+    // Phase AC — earbudTapToTalk + setEarbudTapToTalk intentionally
+    // dropped from this destructure. The toggle is rendered as a disabled
+    // "Coming soon" row because no native media-key listener exists in the
+    // build (track-player was removed; see services/mediaKeyBridge.ts).
     voiceOnPhoneSpeaker,
     kevinGreetingEnabled,
-    setEarbudTapToTalk,
     setVoiceOnPhoneSpeaker,
     setKevinGreetingEnabled,
     setVoiceEnabled,
@@ -118,13 +120,15 @@ export default function Settings() {
     sub,
     value,
     onValueChange,
+    disabled,
   }: {
     label: string;
     sub?: string;
     value: boolean;
     onValueChange: (v: boolean) => void;
+    disabled?: boolean;
   }) => (
-    <View style={rowDivStyle}>
+    <View style={[rowDivStyle, disabled && { opacity: 0.55 }]}>
       <View style={styles.rowText}>
         <Text style={labelStyle}>{label}</Text>
         {sub ? <Text style={subStyle}>{sub}</Text> : null}
@@ -132,6 +136,7 @@ export default function Settings() {
       <Switch
         value={value}
         onValueChange={onValueChange}
+        disabled={disabled}
         trackColor={{ false: colors.border, true: colors.accent }}
         thumbColor="#ffffff"
       />
@@ -392,10 +397,11 @@ export default function Settings() {
             onValueChange={setAutoListenEnabled}
           />
           <ToggleRow
-            label="Earbud Tap-to-Talk"
-            sub="Single-tap your earbuds to open Kevin's listening"
-            value={earbudTapToTalk}
-            onValueChange={setEarbudTapToTalk}
+            label="Earbud Tap-to-Talk · Coming soon"
+            sub="OS-level Bluetooth media-key support is on the roadmap. For now, tap Kevin's badge on the Caddie tab to talk."
+            value={false}
+            onValueChange={() => {}}
+            disabled
           />
           <ToggleRow
             label="Voice on Phone Speaker"

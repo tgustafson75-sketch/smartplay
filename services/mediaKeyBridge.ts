@@ -1,31 +1,30 @@
 /**
- * Phase O.5 — Real Bluetooth media-key event bridge.
+ * Phase O.5 → Phase AC reality check.
  *
- * Closes the Phase O honest gap. Uses react-native-track-player to register
- * a media session that captures hardware play/pause events from connected
- * Bluetooth earbuds (AirPods, Galaxy Buds, etc.). Both RemotePlay and
- * RemotePause events route to a single "tap" signal that fires
- * `notifyEarbudTap()` — the existing Phase O orchestration seam.
+ * STATE TODAY: NO-OP. react-native-track-player was removed (Kotlin /
+ * New-Arch incompatibility with reanimated v4 — see commit 9865fef). The
+ * package isn't in node_modules, so `loadTrackPlayer()` always returns
+ * false and `activateMediaSession()` / `deactivateMediaSession()` silently
+ * exit. No native media-key listener exists in the build.
  *
- * Lifecycle (conflict-handling):
- *   - The media session is registered only while the user is in an active
- *     round OR an active practice surface (Cage Mode setup, PostSessionReview,
- *     Arena landing/runner). Outside those surfaces, we deactivate so that
- *     other media apps (Spotify, podcasts) get the system media controls
- *     unmodified.
- *   - We register a silent "phantom track" because track-player needs an
- *     active queue item to receive remote events. Phantom track is a 1ms
- *     silence file embedded as base64 to avoid asset bundling.
- *   - We never call play() — the track sits paused. The earbud tap is
- *     still received because iOS MPRemoteCommandCenter and Android
- *     MediaSession deliver remote-command callbacks regardless of
- *     playback state, as long as the session is registered.
+ * Consequence: tapping a Bluetooth earbud DOES NOT fire `notifyEarbudTap()`.
+ * The settings toggle is disabled (see app/settings.tsx) and labelled
+ * "Coming soon" until a native listener lands. On-screen tap (Kevin badge
+ * on the Caddie tab → handleMicPress in useVoiceCaddie) is the working
+ * fallback.
  *
- * Native build requirement: react-native-track-player is NOT compatible
- * with Expo Go. Tim must run an EAS dev-client build (`eas build --profile
- * development --platform <ios|android>`) once to pick up the new native
- * module. The TypeScript / orchestration layer here is JS-only and ships
- * over the air.
+ * The orchestration layer (listeningSession.ts) is fully wired — it just
+ * needs a real source. When we ship the native listener (separate phase),
+ * the only required change is calling `notifyEarbudTap()` from its
+ * callback. No consumer-site changes.
+ *
+ * Path forward (deferred to its own phase):
+ *   - Android: write a small Kotlin module that subscribes to MediaSession
+ *     transport controls or registers a MediaButtonReceiver, and call into
+ *     a JS bridge that fires notifyEarbudTap().
+ *   - iOS: MPRemoteCommandCenter.shared().togglePlayPauseCommand
+ *   - Or: revisit react-native-track-player once it ships New-Arch
+ *     support; then this file's loadTrackPlayer() body becomes the wire.
  */
 
 let TrackPlayer: any = null;
