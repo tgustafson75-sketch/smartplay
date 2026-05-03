@@ -30,6 +30,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRoundStore } from '../store/roundStore';
 import { useCourseGeometryOverrideStore } from '../store/courseGeometryOverrideStore';
+import VectorHoleView from '../components/smartvision/VectorHoleView';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import PALMS_IMAGES from '../data/palmsImages';
@@ -360,12 +361,22 @@ export default function HoleView() {
     ? (PALMS_IMAGES[hole] ?? null)
     : null;
 
-  type DisplayType = 'satellite' | 'none' | 'bundled';
+  // Phase AN — when we have real tee + green coords (from anchor capture
+  // or course geometry API), prefer the stylized vector renderer over
+  // satellite/bundled. Vector renders instantly with no network and is
+  // accurate from the data we actually have. Falls through to bundled
+  // (Palms screenshots) or satellite (Mapbox/Google) when coords missing.
+  const hasVectorCoords = Math.abs(teeLat) > 0.01 && Math.abs(teeLng) > 0.01 &&
+                          Math.abs(middleLat) > 0.01 && Math.abs(middleLng) > 0.01;
+
+  type DisplayType = 'satellite' | 'none' | 'bundled' | 'vector';
   const displayType: DisplayType =
-    bundledImage ? 'bundled'
+    hasVectorCoords ? 'vector'
+    : bundledImage ? 'bundled'
     : satelliteUrl ? 'satellite'
     : 'none';
 
+  // Vector and satellite share the same shorter aspect; bundled uses tall.
   const IMAGE_HEIGHT = displayType === 'bundled' ? IMAGE_HEIGHT_BUNDLED : IMAGE_HEIGHT_SAT;
 
   const imageSource =
@@ -703,7 +714,22 @@ export default function HoleView() {
       onResponderTerminationRequest={() => false}
       onResponderRelease={handleImageTap}
     >
-          {imageSource ? (
+          {/* Phase AN — stylized vector renderer. Preferred when tee +
+              green coords are known. No network, instant render. */}
+          {displayType === 'vector' ? (
+            <VectorHoleView
+              hole={hole}
+              par={par}
+              distance={distance}
+              tee={{ lat: teeLat, lng: teeLng }}
+              green={{ lat: middleLat, lng: middleLng }}
+              currentPos={gpsValid && gpsCoords
+                ? { lat: gpsCoords.latitude, lng: gpsCoords.longitude }
+                : null}
+              width={IMAGE_WIDTH}
+              height={IMAGE_HEIGHT}
+            />
+          ) : imageSource ? (
             <Image
               source={imageSource}
               style={styles.holeImage}
