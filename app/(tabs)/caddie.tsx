@@ -1517,13 +1517,17 @@ export default function CaddieTab() {
           {/* L1 Quiet — SmartVision card. Green border, no scope ticks
               (those belong to SmartFinder). Card stretches from below the
               badge area to just above the SmartFinder card so the hole
-              preview gets real estate. */}
+              preview gets real estate.
+              Phase AR follow-up — cardTop bumped insets.top+150 → +220
+              so SmartVision sits lower on screen, closer to SmartFinder
+              (per "too much space between SmartVision and SmartFinder"
+              feedback). Card bottom remains anchored to (SmartFinder top
+              - 4px), so the visual gap between the two cards is now
+              minimal instead of empty middle-third real-estate. */}
           {(() => {
-            const cardTop = insets.top + 150;
-            // SmartFinder card sits at bottom: 68 + insets.bottom and is
-            // ~120px tall; leave an 8px gap so the two cards never touch.
+            const cardTop = insets.top + 220;
             const smartFinderTopApprox = H - (68 + insets.bottom) - 120;
-            const cardH = Math.max(180, smartFinderTopApprox - cardTop - 8);
+            const cardH = Math.max(160, smartFinderTopApprox - cardTop - 4);
             const cardW = W - 32;
             const headerH = 26;
             const innerW = cardW - 28;
@@ -1540,9 +1544,9 @@ export default function CaddieTab() {
                   borderRadius: 14,
                   borderWidth: 1.5,
                   borderColor: '#00C896',
-                  paddingHorizontal: 14,
-                  paddingTop: 8,
-                  paddingBottom: 8,
+                  paddingHorizontal: 12,
+                  paddingTop: 6,
+                  paddingBottom: 4,
                   shadowColor: '#00C896',
                   shadowOffset: { width: 0, height: 0 },
                   shadowOpacity: 0.5,
