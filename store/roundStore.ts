@@ -162,6 +162,10 @@ interface RoundState {
   roundNumber: number;
   roundHistory: RoundRecord[];
   active_ghost: { source_round_id: string; label: string } | null;
+  // Phase AQ — rolling window of synthesized round insights. One-paragraph
+  // Sonnet summary per completed round (what to remember next time at
+  // this course / when similar patterns appear). Last 10 retained.
+  recentInsights: { round_id: string; course: string; insight: string; created_at: number }[];
 
   // ─── ACTIONS ────────────────────────────
 
@@ -188,6 +192,8 @@ interface RoundState {
   getPlanForHole: (holeNumber: number) => HolePlan | null;
 
   endRound: () => void;
+  // Phase AQ — append a synthesized round insight (rolling 10).
+  addRoundInsight: (round_id: string, course: string, insight: string) => void;
   /** Phase R — capture a memory photo at the current hole during an active round. */
   addRoundPhoto: (uri: string) => void;
   /** Phase Q.5b — pending course id signaled by Play tab / Course Detail
@@ -274,6 +280,8 @@ export const useRoundStore = create<RoundState>()(
       roundStartTime: null,
       roundNumber: 0,
       roundHistory: [],
+      // Phase AQ
+      recentInsights: [],
       active_ghost: null,
 
       startRound: (course, holes, options) => {
@@ -403,6 +411,14 @@ export const useRoundStore = create<RoundState>()(
         const holesPlayed = Object.keys(s.scores).length;
         console.log(`[path2:round] end totalScore=${total} holesPlayed=${holesPlayed}`);
       },
+
+      addRoundInsight: (round_id, course, insight) =>
+        set(s => ({
+          recentInsights: [
+            ...s.recentInsights.filter(x => x.round_id !== round_id),
+            { round_id, course, insight, created_at: Date.now() },
+          ].slice(-10),
+        })),
 
       pendingStartCourseId: null,
       setPendingStartCourse: (id) => set({ pendingStartCourseId: id }),
@@ -637,6 +653,7 @@ export const useRoundStore = create<RoundState>()(
         roundNumber: s.roundNumber,
         roundHistory: s.roundHistory,
         active_ghost: s.active_ghost,
+        recentInsights: s.recentInsights,
       }),
     },
   ),

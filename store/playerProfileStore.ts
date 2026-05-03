@@ -31,6 +31,17 @@ interface PlayerProfileState {
   /** Recent score differentials (last 20 retained). Drives Index estimate. */
   recent_differentials: number[];
 
+  // Phase AQ — persistent context fields. Synthesized once per event by
+  // /api/context-synthesis (single Sonnet call) and persisted; injected
+  // into Kevin's runtime system prompts so every reply has user-specific
+  // grounding without per-call latency.
+  /** "About this golfer" — synthesized from onboarding inputs. */
+  kevinContext: string | null;
+  /** Cross-session pattern summary — produced by periodic analysis pass. */
+  persistentPatterns: string | null;
+  /** Timestamp of last pattern synthesis; gates the periodic re-run. */
+  patternsSynthesizedAt: number | null;
+
   // ─── ACTIONS ────────────────────────────
 
   setName: (name: string) => void;
@@ -50,6 +61,9 @@ interface PlayerProfileState {
   setHandicapIndex: (idx: number | null) => void;
   setHandicapGender: (g: 'm' | 'f' | 'x') => void;
   pushDifferential: (diff: number) => void;
+  // Phase AQ
+  setKevinContext: (c: string | null) => void;
+  setPersistentPatterns: (p: string | null) => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -75,6 +89,10 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       handicap_index: null,
       handicap_gender: 'x',
       recent_differentials: [],
+      // Phase AQ defaults
+      kevinContext: null,
+      persistentPatterns: null,
+      patternsSynthesizedAt: null,
 
       setName: (name) =>
         set({ name, firstName: name.split(' ')[0] ?? name }),
@@ -97,6 +115,9 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setHandicapGender: (g) => set({ handicap_gender: g }),
       pushDifferential: (diff) =>
         set(s => ({ recent_differentials: [...s.recent_differentials, diff].slice(-20) })),
+      setKevinContext: (c) => set({ kevinContext: c }),
+      setPersistentPatterns: (p) =>
+        set({ persistentPatterns: p, patternsSynthesizedAt: p ? Date.now() : null }),
     }),
     {
       name: 'player-profile-v2',

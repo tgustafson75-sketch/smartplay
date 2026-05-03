@@ -251,7 +251,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // tone to time of day (groggy AM, calm PM). Optional; falls back to
       // generic if missing.
       clientHour = null,
+      // Phase AQ — persistent context blobs from prior synthesis. Injected
+      // verbatim into system prompt so every reply has user-specific
+      // grounding without per-call latency. Each is a 1-3 paragraph note.
+      kevinContext = null,
+      persistentPatterns = null,
+      recentCageInsights = [],
+      recentRoundInsights = [],
     } = body;
+
+    const _kevinContext: string | null = typeof kevinContext === 'string' && kevinContext.trim() ? kevinContext.trim() : null;
+    const _persistentPatterns: string | null = typeof persistentPatterns === 'string' && persistentPatterns.trim() ? persistentPatterns.trim() : null;
+    type InsightLite = { course?: string; club?: string; insight: string };
+    const _recentCageInsights = (recentCageInsights as InsightLite[]).filter(i => typeof i?.insight === 'string').slice(-3);
+    const _recentRoundInsights = (recentRoundInsights as InsightLite[]).filter(i => typeof i?.insight === 'string').slice(-3);
 
     const _clientHour: number | null = typeof clientHour === 'number' ? clientHour : null;
     const todBlock = _clientHour != null
@@ -358,6 +371,14 @@ ${dominantMiss ? `DOMINANT MISS: ${dominantMiss} — aim them away silently, nev
 ${physicalLimitation ? `PHYSICAL NOTE: ${physicalLimitation} — never suggest movements that aggravate this.` : ''}
 
 ${todBlock}
+
+${_kevinContext ? `ABOUT THIS GOLFER (private; never read aloud — use as background):\n${_kevinContext}` : ''}
+
+${_persistentPatterns ? `EMERGING PATTERNS (private; reference naturally if they fit, never list them):\n${_persistentPatterns}` : ''}
+
+${_recentRoundInsights.length > 0 ? `RECENT ROUND MEMORY (private; reference if same course or matching pattern):\n${_recentRoundInsights.map(r => `- ${r.course ? r.course + ': ' : ''}${r.insight}`).join('\n')}` : ''}
+
+${_recentCageInsights.length > 0 ? `RECENT PRACTICE MEMORY (private; reference naturally if relevant):\n${_recentCageInsights.map(c => `- ${c.club ? c.club + ': ' : ''}${c.insight}`).join('\n')}` : ''}
 
 ${isSpiralRisk || (consecutiveBadHoles as number) >= 3 ? `IMPORTANT: ${consecutiveBadHoles} difficult holes. ONE calm sentence to reset focus. Nothing else.` : ''}
 

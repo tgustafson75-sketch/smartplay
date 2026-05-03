@@ -132,6 +132,10 @@ interface CageState {
     shotCount: number;
   }>;
   cameraAlignment: CameraAlignment | null;
+  // Phase AQ — rolling window of synthesized practice insights. Each entry
+  // is a one-paragraph Sonnet summary of a cage session (what to remember
+  // for next round). Last 5 retained. Injected into pre-round briefing.
+  recentInsights: { session_id: string; club: string; insight: string; created_at: number }[];
 
   // ─── ACTIONS ────────────────────────────
 
@@ -156,6 +160,8 @@ interface CageState {
    *  by the live cage post-session pipeline (already in app/cage/summary.tsx)
    *  and by the upload analysis pipeline. */
   setSessionAnalysis: (sessionId: string, primary_issue: PrimaryIssue | null, drill_recommendation: DrillRecommendation | null) => void;
+  // Phase AQ
+  addCageInsight: (session_id: string, club: string, insight: string) => void;
   /** Phase V — track analysis lifecycle so the swing detail surface can
    *  show real progress and surface failures honestly. */
   setSessionAnalysisStatus: (sessionId: string, status: AnalysisStatus, error?: string | null) => void;
@@ -178,6 +184,8 @@ export const useCageStore = create<CageState>()(
       activeSession: null,
       sessionHistory: [],
       clubProfiles: {},
+      // Phase AQ
+      recentInsights: [],
       cameraAlignment: null,
 
       startSession: (club) =>
@@ -276,6 +284,14 @@ export const useCageStore = create<CageState>()(
         return sessionId;
       },
 
+      addCageInsight: (session_id, club, insight) =>
+        set(s => ({
+          recentInsights: [
+            ...s.recentInsights.filter(x => x.session_id !== session_id),
+            { session_id, club, insight, created_at: Date.now() },
+          ].slice(-5),
+        })),
+
       setSessionAnalysis: (sessionId, primary_issue, drill_recommendation) =>
         set(s => ({
           sessionHistory: s.sessionHistory.map(session =>
@@ -338,6 +354,7 @@ export const useCageStore = create<CageState>()(
         sessionHistory: s.sessionHistory,
         clubProfiles: s.clubProfiles,
         cameraAlignment: s.cameraAlignment,
+        recentInsights: s.recentInsights,
       }),
     },
   ),

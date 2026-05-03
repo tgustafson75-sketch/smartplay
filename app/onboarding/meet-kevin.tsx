@@ -17,6 +17,7 @@ import { checkMicPermission, PERMISSION_EXPLAINER_TEXT } from '../../services/vo
 import { voiceCommandRouter } from '../../services/intents';
 import type { AppContext } from '../../types/voiceIntent';
 import { generateLibrary } from '../../services/fillerLibrary';
+import { synthesizeOnboardingProfile } from '../../services/contextSynthesizer';
 import { useTrustLevelStore, TRUST_LEVEL_META, type TrustLevel } from '../../store/trustLevelStore';
 
 // Phase AJ — photoreal Kevin portrait so the character introducing
@@ -56,6 +57,11 @@ export default function MeetKevin() {
 
   const finishToCaddie = () => {
     if (voiceEnabled) generateLibrary(apiUrl, voiceGender, language).catch(() => {});
+    // Phase AQ — synthesize a Kevin-context note from the user's
+    // onboarding inputs. Fire-and-forget; the result lands in
+    // playerProfileStore.kevinContext and gets injected into every
+    // future Kevin system prompt. Failure is logged, doesn't block nav.
+    void synthesizeOnboardingProfile().catch(() => {});
     console.log('[path1:onboard] complete -> caddie');
     router.replace('/(tabs)/caddie' as never);
   };

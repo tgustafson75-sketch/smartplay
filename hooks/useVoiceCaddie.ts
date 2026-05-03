@@ -447,6 +447,13 @@ export const useVoiceCaddie = ({
           // Phase V.7+ — client local hour (0-23) so Kevin's prompt can
           // match tone to time of day (groggy AM, calm PM). Cheap to send.
           clientHour: new Date().getHours(),
+          // Phase AQ — persistent context blobs from prior synthesis.
+          // Read at call time so any newly-synthesized insights show up
+          // in the next reply without app restart.
+          kevinContext: usePlayerProfileStore.getState().kevinContext,
+          persistentPatterns: usePlayerProfileStore.getState().persistentPatterns,
+          recentCageInsights: useCageStore.getState().recentInsights.slice(-3),
+          recentRoundInsights: useRoundStore.getState().recentInsights.slice(-3),
         }),
       }).finally(() => clearTimeout(timeout));
 

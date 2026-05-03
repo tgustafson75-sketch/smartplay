@@ -22,6 +22,7 @@ import { analyzeSwing } from './poseDetection';
 import { classifySession } from './swingIssueClassifier';
 import { recommendDrill } from './drillRecommendation';
 import { processSwingAnalysis } from './relationshipEngine';
+import { synthesizeCageInsight } from './contextSynthesizer';
 
 export const MAX_FILE_SIZE_MB = 200;
 
@@ -228,6 +229,18 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       } catch (e) {
         console.log('[videoUpload] relationship engine error', e);
       }
+      // Phase AQ — fire-and-forget Sonnet synthesis of a cage-session
+      // memory note. Persists into cageStore.recentInsights, injected
+      // into pre-round briefing so practice meaningfully informs rounds.
+      void synthesizeCageInsight({
+        sessionId,
+        club: session.club,
+        shotCount: session.shots.length,
+        primaryIssueName: primary_issue.name,
+        severity: primary_issue.severity,
+        drillName: drill_recommendation?.drill_name ?? null,
+        dominantMiss: session.dominantMiss ?? null,
+      }).catch(() => {});
     }
 
     return { primary_issue, drill_recommendation };

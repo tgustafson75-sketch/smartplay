@@ -937,6 +937,20 @@ export default function CaddieTab() {
       })
         .then(_recap => {
           setRecapLoading(false);
+          // Phase AQ — synthesize Sonnet round-memory note + check if
+          // periodic pattern pass is due. Fire-and-forget; results land
+          // in roundStore.recentInsights / playerProfileStore.persistentPatterns
+          // and get injected into future Kevin system prompts.
+          void (async () => {
+            try {
+              const ctx = await import('../../services/contextSynthesizer');
+              const lastRound = useRoundStore.getState().roundHistory[useRoundStore.getState().roundHistory.length - 1];
+              if (lastRound) {
+                await ctx.synthesizeRoundInsight(lastRound, patternInsights.insights ?? []);
+              }
+              await ctx.maybeSynthesizePatterns();
+            } catch (e) { console.log('[round-end] context synth error', e); }
+          })();
           // Phase Z/AA — post-round destination is the Scorecard tab. The
           // restored scorecard renders Kevin's recap inline + club summary
           // + share, so users get the round's story in one place. The
