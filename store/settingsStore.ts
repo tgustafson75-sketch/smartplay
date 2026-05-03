@@ -29,6 +29,7 @@ interface SettingsState {
   // Phase O — earbud tap-to-talk control
   earbudTapToTalk: boolean;
   voiceOnPhoneSpeaker: boolean;
+  kevinGreetingEnabled: boolean;
 
   // ─── ACTIONS ────────────────────────────
 
@@ -53,6 +54,7 @@ interface SettingsState {
   setFillerEnabled: (v: boolean) => void;
   setEarbudTapToTalk: (v: boolean) => void;
   setVoiceOnPhoneSpeaker: (v: boolean) => void;
+  setKevinGreetingEnabled: (v: boolean) => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -80,6 +82,7 @@ export const useSettingsStore = create<SettingsState>()(
       fillerEnabled: true,
       earbudTapToTalk: true,
       voiceOnPhoneSpeaker: false,
+      kevinGreetingEnabled: true,
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
       setVoiceGender: (g) => set({ voiceGender: g }),
@@ -103,6 +106,7 @@ export const useSettingsStore = create<SettingsState>()(
       setFillerEnabled: (v) => set({ fillerEnabled: v }),
       setEarbudTapToTalk: (v) => set({ earbudTapToTalk: v }),
       setVoiceOnPhoneSpeaker: (v) => set({ voiceOnPhoneSpeaker: v }),
+      setKevinGreetingEnabled: (v) => set({ kevinGreetingEnabled: v }),
     }),
     {
       name: 'settings-store-v2',
@@ -126,6 +130,7 @@ export const useSettingsStore = create<SettingsState>()(
         fillerEnabled: s.fillerEnabled,
         earbudTapToTalk: s.earbudTapToTalk,
         voiceOnPhoneSpeaker: s.voiceOnPhoneSpeaker,
+        kevinGreetingEnabled: s.kevinGreetingEnabled,
         // watchConnected / glassesConnected not persisted — rechecked on mount
       }),
     },

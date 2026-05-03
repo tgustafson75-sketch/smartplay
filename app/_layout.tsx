@@ -144,6 +144,10 @@ function AppNavigator() {
         }}
       >
         <Stack.Screen name="index" options={{ animation: 'none' }} />
+        <Stack.Screen
+          name="greeting"
+          options={{ animation: 'fade', headerShown: false, gestureEnabled: false }}
+        />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="intro" />
         <Stack.Screen name="auth" />

@@ -42,8 +42,10 @@ export default function Settings() {
     fillerEnabled,
     earbudTapToTalk,
     voiceOnPhoneSpeaker,
+    kevinGreetingEnabled,
     setEarbudTapToTalk,
     setVoiceOnPhoneSpeaker,
+    setKevinGreetingEnabled,
     setVoiceEnabled,
     setVoiceGender,
     setLanguage,
@@ -400,6 +402,17 @@ export default function Settings() {
             sub="Allow Kevin's voice when no earbuds are connected"
             value={voiceOnPhoneSpeaker}
             onValueChange={setVoiceOnPhoneSpeaker}
+          />
+        </View>
+
+        {/* KEVIN */}
+        <SectionHeader title="Kevin" />
+        <View style={cardStyle}>
+          <ToggleRow
+            label="Greet me on launch"
+            sub="Kevin says hello when you open the app"
+            value={kevinGreetingEnabled}
+            onValueChange={setKevinGreetingEnabled}
           />
         </View>
 
