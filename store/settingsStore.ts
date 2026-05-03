@@ -30,6 +30,12 @@ interface SettingsState {
   earbudTapToTalk: boolean;
   voiceOnPhoneSpeaker: boolean;
   kevinGreetingEnabled: boolean;
+  // Phase AW — SmartVision imagery source.
+  // 'curated' = bundled hole screenshots (always works, no GPS required).
+  // 'gps'     = live Mapbox satellite tile + draggable F/M/B markers
+  //             (requires hole geometry with tee+green coords).
+  // 'auto'    = use 'gps' when geometry available, fall back to 'curated'.
+  smartVisionImagery: 'curated' | 'gps' | 'auto';
 
   // ─── ACTIONS ────────────────────────────
 
@@ -55,6 +61,7 @@ interface SettingsState {
   setEarbudTapToTalk: (v: boolean) => void;
   setVoiceOnPhoneSpeaker: (v: boolean) => void;
   setKevinGreetingEnabled: (v: boolean) => void;
+  setSmartVisionImagery: (v: 'curated' | 'gps' | 'auto') => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -83,6 +90,7 @@ export const useSettingsStore = create<SettingsState>()(
       earbudTapToTalk: true,
       voiceOnPhoneSpeaker: false,
       kevinGreetingEnabled: true,
+      smartVisionImagery: 'auto' as const,
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
       setVoiceGender: (g) => set({ voiceGender: g }),
@@ -124,6 +132,7 @@ export const useSettingsStore = create<SettingsState>()(
       setEarbudTapToTalk: (v) => set({ earbudTapToTalk: v }),
       setVoiceOnPhoneSpeaker: (v) => set({ voiceOnPhoneSpeaker: v }),
       setKevinGreetingEnabled: (v) => set({ kevinGreetingEnabled: v }),
+      setSmartVisionImagery: (v) => set({ smartVisionImagery: v }),
     }),
     {
       name: 'settings-store-v2',
@@ -148,6 +157,7 @@ export const useSettingsStore = create<SettingsState>()(
         earbudTapToTalk: s.earbudTapToTalk,
         voiceOnPhoneSpeaker: s.voiceOnPhoneSpeaker,
         kevinGreetingEnabled: s.kevinGreetingEnabled,
+        smartVisionImagery: s.smartVisionImagery,
         // watchConnected / glassesConnected not persisted — rechecked on mount
       }),
     },

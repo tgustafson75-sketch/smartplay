@@ -98,7 +98,16 @@ export default function CaddieTab() {
   // are declared. Consumed by L1's mic-button KevinAvatar wrapping.
   const { width: W, height: H } = useWindowDimensions();
   // Natural 9:16 frame height — shows Kevin's full portrait without over-zoom
-  const avatarFrameHeight = Math.round(W * 16 / 9);
+  // Phase AU.1 — natural 9:16 frame for Kevin (canonical).
+  // Phase AU.2 — capped on wide aspects so Kevin doesn't extend below
+  // the visible viewport on Fold open (Tim: "L4 Kevin way too low and
+  // big"). The cap preserves canonical aspect (cover-mode + 9:16
+  // proportion) up to the maximum height the viewport can show above
+  // the dropdown row + DataStrip + insets. On phones the natural
+  // W·16/9 fits within viewport so the cap doesn't trigger and the
+  // canonical look is preserved.
+  const _avatarMaxH = H - insets.top - insets.bottom - 56 - 160;
+  const avatarFrameHeight = Math.min(Math.round(W * 16 / 9), _avatarMaxH);
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
@@ -561,6 +570,15 @@ export default function CaddieTab() {
 
     const holeData = courseHoles.find(h => h.hole === hole);
 
+    // Phase AV — SmartVision now routes to the dedicated GolfShot-class
+    // screen (app/smartvision.tsx). The legacy hole-view (badge rows,
+    // club selectors) remains available at /hole-view for fallback.
+    router.push('/smartvision' as never);
+    // Reference unused locals so existing destructure stays intact
+    // for the back-compat hole-view payload below if we ever want it.
+    void holeData; void hole; void currentYardage; void roundActive;
+    return;
+    // eslint-disable-next-line no-unreachable
     router.push({
       pathname: '/hole-view',
       params: {
@@ -1379,34 +1397,38 @@ export default function CaddieTab() {
       {trustLevel === 3 && (
         // L3 Active — Kevin takes 2/3 of screen height (80% of that on
         // Fold-open / wide screens, per Tim). Anchored from the bottom so
-        // his lower edge sits just above the SmartFinder card.
+        // his lower edge sits just above the dropdown row.
         <>
-          {/* Sim-report — SmartVision card on L3, both pre-round and
-              in-round. Palms behavior preserved by L1HolePreview's own
-              fallback chain (default Palms image pre-round, Palms hole
-              imagery in-round). New tile fills the empty top region of
-              the L3 layout. */}
+          {/* L3 SmartVision INLAY — Tim: "in bottom left of Kevin box,
+              overlayed, not so big horizontally". Compact 140×100 tile
+              anchored bottom-left of the Kevin avatar zone, zIndex
+              above Kevin so it overlays. */}
           <View
             style={{
               position: 'absolute',
-              top: insets.top + 92,
-              left: 16, right: 80,
+              left: 12,
+              bottom: 158 + insets.bottom,
+              width: 140,
               height: 100,
-              borderRadius: 12,
+              borderRadius: 10,
               borderWidth: 1.5,
               borderColor: '#00C896',
               overflow: 'hidden',
               backgroundColor: '#0d2418',
-              zIndex: 6,
+              zIndex: 12,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.5,
+              shadowRadius: 4,
+              elevation: 8,
             }}
             pointerEvents="box-none"
           >
-            <L1HolePreview onOpenSmartVision={openSmartVision} width={W - 96} height={100} />
+            <L1HolePreview onOpenSmartVision={openSmartVision} width={140} height={100} />
           </View>
-          {/* L3 Kevin avatar — height clamped so the avatar top sits at
-              least 10px below the SmartVision card bottom (insets.top +
-              92 + 100 = insets.top + 192). Bottom anchor 150 + ib clears
-              the green-arrow dropdown (top H − 144 − ib) by 6px. */}
+          {/* L3 Kevin avatar — full L3 zone now that SmartVision is an
+              overlay inlay (not a top card). Top clamp ensures Kevin
+              starts at least below the topNav/banner row. */}
           <View
             style={{
               position: 'absolute',
@@ -1415,7 +1437,7 @@ export default function CaddieTab() {
               bottom: 150 + insets.bottom,
               height: Math.min(
                 Math.round(H * 2 / 3 * (W >= 540 ? 0.8 : 1)),
-                H - (insets.top + 192 + 10) - (150 + insets.bottom),
+                H - (insets.top + 80) - (150 + insets.bottom),
               ),
             }}
           >
@@ -1500,22 +1522,18 @@ export default function CaddieTab() {
               - 4px), so the visual gap between the two cards is now
               minimal instead of empty middle-third real-estate. */}
           {(() => {
-            // L1 SmartVision card. Top locked at insets.top + 80.
-            // Bottom anchored 6px above the green-arrow dropdown row
-            // (dropdown at bottom: 92 + ib, height 52 → top of dropdown
-            // = H − 144 − ib). SmartFinder embedded card removed in
-            // Phase AU, so SmartVision can stretch all the way down.
+            // L1 SmartVision card. Top anchored at insets.top + 80.
+            // Tim: "make box and holeview taller toward the bottom
+            // with clean space above next card." Card extends down
+            // to 24px above the dropdown chevron row (no aspect-ratio
+            // cap on height — fills the available space).
             const cardTop = insets.top + 80;
-            const cardBottom = 150 + insets.bottom;
+            const dropdownTop = H - 144 - insets.bottom;
+            const cardH = Math.max(200, dropdownTop - cardTop - 24);
             const cardW = W - 32;
             const headerH = 26;
             const innerW = cardW - 28;
-            // Computed inner content height matches what flex:1 will
-            // resolve to. L1HolePreview needs an explicit height prop
-            // (it doesn't use parent flex), so we hand it the value.
-            // = viewport - cardTop - cardBottom - paddingTop(6) -
-            //   paddingBottom(4) - headerH(26)
-            const innerH = Math.max(80, H - cardTop - cardBottom - 6 - 4 - headerH);
+            const innerH = Math.max(120, cardH - 6 - 4 - headerH);
             return (
               <View
                 style={{
@@ -1523,7 +1541,7 @@ export default function CaddieTab() {
                   left: 16,
                   right: 16,
                   top: cardTop,
-                  bottom: cardBottom,
+                  height: cardH,
                   zIndex: 7,
                   backgroundColor: 'rgba(13, 36, 24, 0.92)',
                   borderRadius: 14,
@@ -1697,20 +1715,20 @@ export default function CaddieTab() {
       <View
         style={{
           position: 'absolute',
-          top: insets.top + 200,
+          top: insets.top + 160,
           right: 12,
           zIndex: 16,
           width: 56,
           height: 56,
           borderRadius: 28,
-          backgroundColor: 'rgba(13, 36, 24, 0.85)',
+          backgroundColor: 'rgba(13, 28, 56, 0.85)',
           borderWidth: 1.5,
-          borderColor: '#00C896',
+          borderColor: '#3b82f6',
           alignItems: 'center',
           justifyContent: 'center',
-          shadowColor: '#00C896',
+          shadowColor: '#3b82f6',
           shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.4,
+          shadowOpacity: 0.5,
           shadowRadius: 6,
           elevation: 6,
         }}
@@ -1719,7 +1737,7 @@ export default function CaddieTab() {
         {isRoundActive ? (
           <WindArrow weather={caddieWeather} shotBearingDeg={caddieShotBearing} compact />
         ) : (
-          <Ionicons name="navigate" size={22} color="#00C896" />
+          <Ionicons name="navigate" size={22} color="#3b82f6" />
         )}
       </View>
 
