@@ -258,6 +258,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       persistentPatterns = null,
       recentCageInsights = [],
       recentRoundInsights = [],
+      // Phase AR — within-session conversation buffer.
+      conversationTurns = [],
     } = body;
 
     const _kevinContext: string | null = typeof kevinContext === 'string' && kevinContext.trim() ? kevinContext.trim() : null;
@@ -265,6 +267,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     type InsightLite = { course?: string; club?: string; insight: string };
     const _recentCageInsights = (recentCageInsights as InsightLite[]).filter(i => typeof i?.insight === 'string').slice(-3);
     const _recentRoundInsights = (recentRoundInsights as InsightLite[]).filter(i => typeof i?.insight === 'string').slice(-3);
+    type ConvTurn = { role: 'user' | 'kevin'; text: string };
+    const _conversationTurns = (conversationTurns as ConvTurn[]).filter(t => t && (t.role === 'user' || t.role === 'kevin') && typeof t.text === 'string').slice(-6);
 
     const _clientHour: number | null = typeof clientHour === 'number' ? clientHour : null;
     const todBlock = _clientHour != null
@@ -379,6 +383,8 @@ ${_persistentPatterns ? `EMERGING PATTERNS (private; reference naturally if they
 ${_recentRoundInsights.length > 0 ? `RECENT ROUND MEMORY (private; reference if same course or matching pattern):\n${_recentRoundInsights.map(r => `- ${r.course ? r.course + ': ' : ''}${r.insight}`).join('\n')}` : ''}
 
 ${_recentCageInsights.length > 0 ? `RECENT PRACTICE MEMORY (private; reference naturally if relevant):\n${_recentCageInsights.map(c => `- ${c.club ? c.club + ': ' : ''}${c.insight}`).join('\n')}` : ''}
+
+${_conversationTurns.length > 0 ? `RECENT CONVERSATION (last few turns; resolve follow-up questions like "and the wind?" against this):\n${_conversationTurns.map(t => `${t.role === 'user' ? 'Player' : 'You'}: ${t.text}`).join('\n')}` : ''}
 
 ${isSpiralRisk || (consecutiveBadHoles as number) >= 3 ? `IMPORTANT: ${consecutiveBadHoles} difficult holes. ONE calm sentence to reset focus. Nothing else.` : ''}
 

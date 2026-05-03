@@ -50,7 +50,27 @@ export default async function handler(
       courseHoles = [],
       responseMode = 'neutral',
       watchData = null,
+      // Phase AQ — parity with kevin.ts. Persistent context blobs +
+      // rolling per-event insights. Each is a 1-3 paragraph note from a
+      // prior Sonnet synthesis, persisted client-side and injected here
+      // so brain.ts replies are user-specific instead of generic.
+      kevinContext = null,
+      persistentPatterns = null,
+      recentCageInsights = [],
+      recentRoundInsights = [],
+      // Phase AR — within-session conversation buffer (max ~3 user-Kevin
+      // pairs, decays after 60s no activity OR on round/hole change).
+      // Format: [{ role: 'user'|'kevin', text: '...' }]
+      conversationTurns = [],
     } = body;
+
+    const _kevinContext: string | null = typeof kevinContext === 'string' && kevinContext.trim() ? kevinContext.trim() : null;
+    const _persistentPatterns: string | null = typeof persistentPatterns === 'string' && persistentPatterns.trim() ? persistentPatterns.trim() : null;
+    type InsightLite = { course?: string; club?: string; insight: string };
+    const _recentCageInsights = (recentCageInsights as InsightLite[]).filter(i => typeof i?.insight === 'string').slice(-3);
+    const _recentRoundInsights = (recentRoundInsights as InsightLite[]).filter(i => typeof i?.insight === 'string').slice(-3);
+    type ConvTurn = { role: 'user' | 'kevin'; text: string };
+    const _conversationTurns = (conversationTurns as ConvTurn[]).filter(t => t && (t.role === 'user' || t.role === 'kevin') && typeof t.text === 'string').slice(-6);
 
     const totalScore = Object.values(
       scores as Record<string, number>
@@ -162,6 +182,16 @@ Do not read out the numbers as a list. Kevin absorbs the data and speaks to the 
   : ''}
 
 ${todBlock}
+
+${_kevinContext ? `ABOUT THIS GOLFER (private; never read aloud — use as background):\n${_kevinContext}` : ''}
+
+${_persistentPatterns ? `EMERGING PATTERNS (private; reference naturally if they fit, never list them):\n${_persistentPatterns}` : ''}
+
+${_recentRoundInsights.length > 0 ? `RECENT ROUND MEMORY (private; reference if same course or matching pattern):\n${_recentRoundInsights.map(r => `- ${r.course ? r.course + ': ' : ''}${r.insight}`).join('\n')}` : ''}
+
+${_recentCageInsights.length > 0 ? `RECENT PRACTICE MEMORY (private; reference naturally if relevant):\n${_recentCageInsights.map(c => `- ${c.club ? c.club + ': ' : ''}${c.insight}`).join('\n')}` : ''}
+
+${_conversationTurns.length > 0 ? `RECENT CONVERSATION (last few turns; resolve follow-up questions against this):\n${_conversationTurns.map(t => `${t.role === 'user' ? 'Player' : 'You'}: ${t.text}`).join('\n')}` : ''}
 
 ${isSpiralRisk || consecutiveBadHoles >= 3
   ? `IMPORTANT: ${consecutiveBadHoles} difficult holes. ONE calm sentence to reset focus. Nothing else.`

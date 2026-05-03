@@ -1303,7 +1303,11 @@ export default function CaddieTab() {
         const cellTop = insets.top + 100;
         if (isWide) {
           const cellW = (W - 36) / 2;
-          const cellH = 280;
+          // Phase AR — bumped from 280 to 360 so the avatar + SmartVision
+          // cards on L2 wide reach further down toward the SmartFinder
+          // card, shrinking the empty gap between them per Tim's "cards
+          // cleanly separated, minimal space between" feedback.
+          const cellH = 360;
           return (
             <>
               <View
@@ -1342,7 +1346,11 @@ export default function CaddieTab() {
         // so the SmartVision card's bottom edge doesn't overlap the
         // SmartFinder card (which sits at bottom: 68 + insets.bottom).
         const cellW = W - 24;
-        const cellH = 180;
+        // Phase AR — bumped from 180 to 220 (each cell) so the stacked
+        // narrow layout fills more of the available vertical space and
+        // the SmartFinder card below sits closer to the SmartVision
+        // card above instead of floating in dead space.
+        const cellH = 220;
         const gap = 10;
         return (
           <>
@@ -1573,7 +1581,10 @@ export default function CaddieTab() {
       >
         <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
           <Text style={styles.brandName}>SmartPlay</Text>
-          <Text style={styles.brandSub}> Caddie</Text>
+          {/* Phase AR — Caddie word now consumes theme.text_primary so it
+              flips white-on-dark / black-on-light. Was hardcoded white,
+              which washed against the light-mode background. */}
+          <Text style={[styles.brandSub, { color: theme.colors.text_primary }]}> Caddie</Text>
         </View>
       </View>
 
@@ -1636,18 +1647,17 @@ export default function CaddieTab() {
             top: insets.top + 96,
             right: 16,
             zIndex: 13,
-            paddingHorizontal: 14,
-            paddingVertical: 8,
-            borderRadius: 999,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
             backgroundColor: '#F5A623',
             shadowColor: '#F5A623',
             shadowOffset: { width: 0, height: 0 },
             shadowOpacity: 0.55,
             shadowRadius: 8,
             elevation: 6,
-            flexDirection: 'row',
             alignItems: 'center',
-            gap: 6,
+            justifyContent: 'center',
           }}
           onPress={async () => {
             void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -1666,10 +1676,7 @@ export default function CaddieTab() {
           }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="location" size={16} color="#1a1a1a" />
-          <Text style={{ color: '#1a1a1a', fontSize: 13, fontWeight: '900', letterSpacing: 0.5 }}>
-            MARK
-          </Text>
+          <Ionicons name="location" size={20} color="#1a1a1a" />
         </TouchableOpacity>
       )}
 

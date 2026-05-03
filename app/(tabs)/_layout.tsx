@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoundStore } from '../../store/roundStore';
@@ -13,17 +13,19 @@ interface TabIconProps {
   showDot?: boolean;
 }
 
-function TabIcon({ iconName, label, focused, showDot }: TabIconProps) {
+function TabIcon({ iconName, label: _label, focused, showDot }: TabIconProps) {
+  // Phase AR follow-up — labels removed per Tim's "icons only" direction.
+  // The five tabs are recognizable by icon alone (mic / golf / list /
+  // body / stats-chart) and removing labels gives more room on Fold
+  // closed. The label prop is kept for accessibility (announced by
+  // screen readers via accessibilityLabel below) but not rendered.
   return (
-    <View style={styles.tabItem}>
+    <View style={styles.tabItem} accessibilityLabel={_label}>
       <Ionicons
         name={iconName}
-        size={22}
+        size={26}
         color={focused ? '#00C896' : '#6b7d72'}
       />
-      <Text style={[styles.tabLabel, focused && styles.tabLabelFocused]}>
-        {label}
-      </Text>
       {showDot && (
         <View style={[styles.tabDot, focused ? styles.tabDotFocused : styles.tabDotLive]} />
       )}
@@ -83,8 +85,9 @@ export default function TabLayout() {
         name="scorecard"
         options={{
           tabBarIcon: ({ focused }) => (
+            // list = lined-paper scorecard look, more literal than 'flag'
             <TabIcon
-              iconName={focused ? 'flag' : 'flag-outline'}
+              iconName={focused ? 'list' : 'list-outline'}
               label="Score"
               focused={focused}
               showDot={isRoundActive}
@@ -96,11 +99,8 @@ export default function TabLayout() {
         name="swinglab"
         options={{
           tabBarIcon: ({ focused }) => (
-            // videocam matches the swing-video analysis function used
-            // throughout SwingLab + cage flows. Distinct from Play's golf.
-            // Label shortened "SwingLab" → "Swing" so it doesn't truncate
-            // / wrap on Fold closed (5 tabs across ~285px).
-            <TabIcon iconName={focused ? 'videocam' : 'videocam-outline'} label="Swing" focused={focused} />
+            // body = golfer silhouette, more literal "swing" than videocam
+            <TabIcon iconName={focused ? 'body' : 'body-outline'} label="Swing" focused={focused} />
           ),
         }}
       />

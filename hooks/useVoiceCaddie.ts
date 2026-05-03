@@ -27,6 +27,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 import { useCageStore } from '../store/cageStore';
+import { getRecentTurns, recordUserTurn, recordKevinTurn } from '../services/conversationState';
 import { useWatchStore } from '../store/watchStore';
 import { VoiceState } from '../components/CaddieAvatar';
 import { getCourse as getApiCourse, courseSummaryForContext } from '../services/golfCourseApi';
@@ -454,6 +455,11 @@ export const useVoiceCaddie = ({
           persistentPatterns: usePlayerProfileStore.getState().persistentPatterns,
           recentCageInsights: useCageStore.getState().recentInsights.slice(-3),
           recentRoundInsights: useRoundStore.getState().recentInsights.slice(-3),
+          // Phase AR — within-session conversation buffer for follow-up
+          // resolution ("and the wind?" → Kevin knows you mean wind for
+          // the prior shot). Cleared after 60s of no activity OR on
+          // round/hole change.
+          conversationTurns: getRecentTurns().map(t => ({ role: t.role, text: t.text })),
         }),
       }).finally(() => clearTimeout(timeout));
 
@@ -524,6 +530,11 @@ export const useVoiceCaddie = ({
         isProcessingRef.current = false;
         return;
       }
+
+      // Phase AR — record user turn into the conversation buffer so any
+      // follow-up reply that flows out of this query has the prior turn
+      // available in its context.
+      recordUserTurn(transcript);
 
       const bypass = checkBypasses(transcript);
 
@@ -634,6 +645,9 @@ export const useVoiceCaddie = ({
       };
       if (kevinResponse.toolAction) onToolAction?.(kevinResponse.toolAction);
       onResponseReceived(kevinResponse.text);
+      // Phase AR — record Kevin's reply so the next user follow-up has it
+      // available as conversational antecedent.
+      recordKevinTurn(kevinResponse.text);
       onVoiceStateChange('speaking');
       if (kevinResponse.audioBase64 && voiceEnabled && !discreteMode) {
         // Phase V.7+ — user-initiated reply, plays at L1 too.
