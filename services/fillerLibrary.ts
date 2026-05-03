@@ -19,9 +19,10 @@ const rrCounters: Partial<Record<FillerCategory, number>> = {};
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function voiceHash(gender: string, language: string): string {
-  // v2 = Phase P expansion (looking, thinking, checking, analyzing,
-  // acknowledging, confirming, engaging, casual). Bump forces regeneration.
-  return `${gender}_${language}_v2`;
+  // v3 = Phase V.6 extension fillers + context-aware variants. Without the
+  // bump, those new entries fall through as inert text and the user hears
+  // the prior pool. Bump forces regeneration of the local audio cache.
+  return `${gender}_${language}_v3`;
 }
 
 function clipFile(id: string): File {

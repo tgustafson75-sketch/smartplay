@@ -214,12 +214,13 @@ export default function GreetingScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [greeting]);
 
-  // Subtle pulse during SPEAKING — opacity 0.85↔1.0 at ~3 Hz. Skipped when reduce-motion.
+  // Slow breathing pulse during SPEAKING — opacity 0.94↔1.0 at ~0.45 Hz with
+  // sine easing. The previous 0.85↔1.0 / 180ms cycle read as a strobe.
   useEffect(() => {
     if (phase !== 'SPEAKING' || reduceMotion) return;
     const loop = Animated.loop(Animated.sequence([
-      Animated.timing(opacity, { toValue: 0.85, duration: 180, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 1.00, duration: 180, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0.94, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1.00, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
     ]));
     loop.start();
     return () => loop.stop();
