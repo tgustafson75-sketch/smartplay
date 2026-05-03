@@ -112,7 +112,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
     paddingTop: 2,
-    minWidth: 60,
+    // Phase AE follow-up — minWidth removed. 5 tabs × 60 = 300px overflowed
+    // Galaxy Fold closed (~285px) and pushed the rightmost tabs off-screen.
+    // Letting the tab system distribute children evenly via flex keeps
+    // every tab visible on narrow aspects.
   },
   tabLabel: {
     color: '#6b7d72',

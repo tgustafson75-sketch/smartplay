@@ -1596,9 +1596,24 @@ export default function CaddieTab() {
               <Text style={styles.modeBadgeText}>{ROUND_MODE_LABELS[mode]}</Text>
             </TouchableOpacity>
           )}
-          {/* Phase R — quick scorecard glance, stacks below Tool + Free Play */}
-          <ScorecardChip />
         </View>
+      </View>
+
+      {/* Phase AE follow-up — ScorecardChip moved out of topNav right column
+           to the LEFT side, anchored just above Kevin's avatar cell
+           (cellTop = insets.top + 100 at L2/L3). Returns null pre-round
+           and pre-scoring so it only appears when there's something to
+           show. zIndex 12 keeps it above the avatar cell (zIndex 6). */}
+      <View
+        style={{
+          position: 'absolute',
+          top: insets.top + 70,
+          left: 12,
+          zIndex: 12,
+        }}
+        pointerEvents="box-none"
+      >
+        <ScorecardChip />
       </View>
 
       {/* TRIAL INDICATOR — only in final 3 days to avoid persistent clutter */}
@@ -2173,7 +2188,16 @@ export default function CaddieTab() {
                 </TouchableOpacity>
               )}
             </View>
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              // Phase AE follow-up — guarantee the green Next Hole / End
+              // Round CTAs at the bottom of this sheet aren't clipped by
+              // the system bar or restored tab bar (sheet renders above
+              // tab bar but the sheet's own bottom padding wasn't enough
+              // on Galaxy Fold closed).
+              contentContainerStyle={{ paddingBottom: 100 }}
+            >
 
             {/* ── Shot logging ── */}
             <Text style={styles.sheetLabel}>Log Shot</Text>
