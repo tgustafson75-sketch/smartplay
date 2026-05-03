@@ -1035,6 +1035,12 @@ export default function CaddieTab() {
 
     incrementRounds();
     resetProactiveState();
+    // Phase V.7+ — the briefing OR the skip-briefings inline message always
+    // covers the round-1 intro. Mark round_start_handoff as already-fired
+    // so the focus-effect proactive trigger doesn't speak a second redundant
+    // intro ("Alright Tim. Course is yours. Let's go.") right on top of it.
+    // Fixes the double-speak glitch on round start.
+    markProactiveFired('round_start_handoff');
     setShowRoundSetup(false);
     setSelectedGhostId(null);
 
