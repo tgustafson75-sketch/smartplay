@@ -111,15 +111,21 @@ export default function HoleView() {
   const IMAGE_WIDTH = isLandscape ? Math.round(W * 0.68) - 4 : W - 24;
   const LANDSCAPE_IMG_H = Math.round(H * 0.88);
 
+  // Phase AE follow-up — image cap reduced so the controls row + measuring
+  // tool aren't pushed off-screen / under the tab bar. Was H*0.40 / 0.82
+  // which forced the page to scroll under the measuring tool. Now the
+  // image takes a controlled portion of the viewport (H*0.42 satellite,
+  // H*0.55 bundled) leaving real estate for the data row that doesn't
+  // require page scrolling.
   // Satellite: Google Maps tiles are 6:5 aspect
   const IMAGE_HEIGHT_SAT = isLandscape ? LANDSCAPE_IMG_H : Math.min(
     Math.round(IMAGE_WIDTH * (500 / 600)),
-    Math.round(H * 0.40),
+    Math.round(H * 0.42),
   );
   // Bundled: our Palms images are 705×1455 (≈2.064 tall)
   const IMAGE_HEIGHT_BUNDLED = isLandscape ? LANDSCAPE_IMG_H : Math.min(
     Math.round(IMAGE_WIDTH * (1455 / 705)),
-    Math.round(H * 0.82),
+    Math.round(H * 0.55),
   );
 
   const params = useLocalSearchParams();
@@ -992,17 +998,29 @@ export default function HoleView() {
           </ScrollView>
         </View>
       ) : (
-        /* ── PORTRAIT: existing vertical scroll ── */
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scroll}
-          scrollEnabled={!isDragging}
-        >
+        // ── PORTRAIT: non-scrolling flex layout ──
+        // Phase AE follow-up — was a ScrollView wrapping image + controls,
+        // which let the page scroll under the measuring tool and made
+        // tap-to-measure unreliable (image moved while tapping). Now the
+        // image pane fills the available vertical space and the controls
+        // row is compact at the bottom in its own scroll region; only the
+        // inner ScrollView can overflow.
+        <View style={[styles.scroll, { flex: 1 }]}>
           {headerRow}
           {modeBadgeRow}
-          {holeImagePane}
-          {controlsPane}
-        </ScrollView>
+          <View style={{ alignItems: 'center', justifyContent: 'flex-start' }}>
+            {holeImagePane}
+          </View>
+          {/* Controls in a constrained region at the bottom; inner scroll
+              handles overflow without moving the image above. */}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: 16 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {controlsPane}
+          </ScrollView>
+        </View>
       )}
       </SafeAreaView>
       <KevinBadge />
