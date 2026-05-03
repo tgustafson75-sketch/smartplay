@@ -30,13 +30,16 @@ export default function ScorecardChip() {
     totalStrokes += scores[h];
   }
 
-  const sign = scoreVsPar > 0 ? '+' : scoreVsPar < 0 ? '' : 'E';
-  const label = `${sign}${scoreVsPar !== 0 ? scoreVsPar : ''} thru ${playedHoles.length}`;
+  // Phase AT — single-circle compact display. "E" / "+3" / "-1" only.
+  // The "thru N" detail is one tap away in the modal.
+  const compactLabel = scoreVsPar === 0
+    ? 'E'
+    : scoreVsPar > 0 ? '+' + scoreVsPar : String(scoreVsPar);
 
   return (
     <>
-      <TouchableOpacity onPress={() => setOpen(true)} style={styles.chip} activeOpacity={0.8}>
-        <Text style={styles.chipText}>{label}</Text>
+      <TouchableOpacity onPress={() => setOpen(true)} style={styles.circle} activeOpacity={0.8}>
+        <Text style={styles.circleText}>{compactLabel}</Text>
       </TouchableOpacity>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -44,7 +47,7 @@ export default function ScorecardChip() {
           <Pressable style={styles.sheet} onPress={() => {}}>
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Scorecard</Text>
-              <Text style={styles.sheetTotal}>{totalStrokes} ({label})</Text>
+              <Text style={styles.sheetTotal}>{totalStrokes} ({compactLabel} thru {playedHoles.length})</Text>
             </View>
             <ScrollView>
               {playedHoles.map(h => {
@@ -75,21 +78,27 @@ export default function ScorecardChip() {
 }
 
 const styles = StyleSheet.create({
-  chip: {
+  // Phase AT — compact single-circle (replaces wider "E thru N" pill).
+  circle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(0,200,150,0.15)',
     borderColor: '#00C896',
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 4,
   },
-  chipText: {
+  circleText: {
     color: '#00C896',
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '900',
     letterSpacing: 0.5,
   },
+  // Legacy (kept temporarily; no consumer):
+  chip: { marginTop: 4 },
+  chipText: { color: '#00C896' },
   backdrop: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center', alignItems: 'center',

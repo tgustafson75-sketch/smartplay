@@ -59,7 +59,8 @@ import { useTrustLevelStore, TRUST_LEVEL_META, type TrustLevel } from '../../sto
 import KevinAvatar, { type AvatarState } from '../../components/kevin/KevinAvatar';
 import L1HolePreview from '../../components/caddie/L1HolePreview';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
-import KevinHelpButton from '../../components/KevinHelpButton';
+// Phase AT — KevinHelpButton import removed; ? button no longer rendered
+// on caddie home (Tutorials in Tool menu is the discoverability path).
 import ScorecardChip from '../../components/caddie/ScorecardChip';
 import AppIcon, { type IconName } from '../../components/AppIcon';
 import * as ImagePicker from 'expo-image-picker';
@@ -1738,15 +1739,11 @@ export default function CaddieTab() {
       {/* "?" help button — visible at L2 and L3 only. L1 has no Kevin
           presence to ask about; L4 users are past discovery (Tutorials in
           Tools menu covers anyone who wants a refresher). */}
-      {(trustLevel === 2 || trustLevel === 3) && (
-        // Phase AR follow-up — moved from top:240 (overlapped Kevin's face
-        // / SmartVision card) to bottom-anchored just above the
-        // lie-analysis camera so the right edge has a coherent action
-        // stack (Help → Camera → SmartFinder card).
-        <View style={{ position: 'absolute', bottom: 252 + insets.bottom, right: 12, zIndex: 13 }}>
-          <KevinHelpButton surface="caddie" />
-        </View>
-      )}
+      {/* Phase AT — KevinHelpButton (?) removed from caddie home.
+          Redundant with Tools menu → Tutorials, and was contributing to
+          the right-side button noise per Tim's "too many buttons"
+          feedback. Discoverability: Tutorials surfaces in the ••• Tool
+          menu when needed. */}
 
       {/* Phase O — Tap to Talk fallback button hidden on Caddie home. Tapping
           Kevin's avatar (handleMicPress) already serves the same function;
@@ -1972,7 +1969,9 @@ export default function CaddieTab() {
           targetDirection={targetDirection}
           stroke={currentStroke}
           visible={true}
-          bottomOffset={insets.bottom}
+          // Phase AT — Tim wants the strip as LOW as possible. bottom: 0
+          // pins it to the very bottom edge of the screen.
+          bottomOffset={0}
           onPress={() => setShowShotCard(true)}
         />
       </Animated.View>

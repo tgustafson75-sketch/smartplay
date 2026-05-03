@@ -644,17 +644,21 @@ export default function CaddieAvatar({
         onPress={onTap}
         activeOpacity={0.97}
       >
-        {/* Layer 1a — Back (fading out) */}
+        {/* Phase AT — Kevin recompose. Source portraits have the subject
+            offset right-of-center within the JPG canvas (face occupies
+            the right half). With resizeMode='cover' RN center-crops, so
+            the visible result is Kevin shifted right with green dead
+            space on the left. Shift the image left by ~12% of width
+            via translateX so Kevin's face lands at viewport center. */}
         <Animated.Image
           source={backSource}
-          style={[styles.avatarImage, { transform: backTransform, opacity: backOpacity }]}
+          style={[styles.avatarImage, { transform: [{ translateX: -W * 0.18 }, ...backTransform], opacity: backOpacity }]}
           resizeMode={fill}
         />
 
-        {/* Layer 1b — Front (fading in), with micro-drift */}
         <Animated.Image
           source={frontSource}
-          style={[styles.avatarImage, { transform: frontTransform, opacity: fadeAnim }]}
+          style={[styles.avatarImage, { transform: [{ translateX: -W * 0.18 }, ...frontTransform], opacity: fadeAnim }]}
           resizeMode={fill}
         />
 
