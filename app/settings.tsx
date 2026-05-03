@@ -446,7 +446,7 @@ export default function Settings() {
           />
           <ToggleRow
             label="High Contrast"
-            sub="Increased text contrast"
+            sub="Pure black/white backgrounds + stronger borders for sunlight readability"
             value={highContrast}
             onValueChange={setHighContrast}
           />

@@ -42,6 +42,7 @@ import { useGhostStore } from '../../store/ghostStore';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
 import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
 import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
 import { speak, configureAudioForSpeech, captureUtterance } from '../../services/voiceService';
@@ -87,6 +88,10 @@ export default function CaddieTab() {
   const { pre_course_id, _t: preCourseNonce } = useLocalSearchParams<{ pre_course_id?: string; _t?: string }>();
   const trustLevel = useTrustLevelStore(s => s.level);
   const setTrustLevel = useTrustLevelStore(s => s.setLevel);
+  // Phase AP — themed container background so theme + high-contrast toggles
+  // produce immediate, visible change on the home tab. Brand accent and
+  // L2/L3 avatar treatments stay literal (intentional brand consistency).
+  const theme = useTheme();
 
   // Phase F — kevinAvatarState derived below after voiceState/kevinThinking
   // are declared. Consumed by L1's mic-button KevinAvatar wrapping.
@@ -1266,7 +1271,7 @@ export default function CaddieTab() {
 
   // ── RENDER ───────────────────────────────
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
 
       {/* KEVIN — Phase E Trust Spectrum gating.
            L2 path is byte-identical to the locked elite Kevin layout (the

@@ -122,3 +122,49 @@ export const lightTheme: ThemeTokens = {
   typography,
   radii,
 };
+
+// ─── High-contrast variants ─────────────────────────────────────────────────
+// Phase AP — applied as an overlay on top of the base dark/light theme when
+// the user enables High Contrast in settings. Pure-black/pure-white field
+// with stronger borders for readability in bright sunlight or for users
+// who need max contrast. Brand accent colors stay consistent — they
+// already pass contrast against both backgrounds.
+
+export const darkHighContrast: Partial<ThemeTokens['colors']> = {
+  background:       '#000000',
+  surface:          '#0a0a0a',
+  surface_elevated: '#141414',
+  text_primary:     '#ffffff',
+  text_secondary:   '#f5f5f5',
+  text_muted:       '#cfcfcf',
+  border:           '#4a4a4a',
+};
+
+export const lightHighContrast: Partial<ThemeTokens['colors']> = {
+  background:       '#ffffff',
+  surface:          '#ffffff',
+  surface_elevated: '#f0f0f0',
+  text_primary:     '#000000',
+  text_secondary:   '#1a1a1a',
+  text_muted:       '#3a3a3a',
+  border:           '#1a1a1a',
+};
+
+/**
+ * Compose a base theme with the appropriate high-contrast layer when
+ * enabled. Brand accent colors (accent, accent_muted, warning, error,
+ * success) are NOT overridden — they pass contrast against both modes
+ * and stay consistent for brand recognition.
+ */
+export function composeTheme(
+  base: ThemeTokens,
+  isDark: boolean,
+  highContrast: boolean,
+): ThemeTokens {
+  if (!highContrast) return base;
+  const overlay = isDark ? darkHighContrast : lightHighContrast;
+  return {
+    ...base,
+    colors: { ...base.colors, ...overlay },
+  };
+}
