@@ -429,7 +429,14 @@ export const useVoiceCaddie = ({
         }),
       }).finally(() => clearTimeout(timeout));
 
-      if (!res.ok) return { text: 'Sorry, lost you for a moment. Try again.', audioBase64: null, toolAction: null };
+      if (!res.ok) {
+        // Phase V.7+ — short haptic so Tim feels the network blip even if
+        // he's not looking at the screen. Bubble text + speakResponse local
+        // TTS still show/play; this just adds a tactile "something went
+        // wrong" signal he can sense without glancing down.
+        try { Vibration.vibrate(120); } catch {}
+        return { text: 'Sorry, lost you for a moment. Try again.', audioBase64: null, toolAction: null };
+      }
       const data = await res.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null };
       return {
         text:        data.text       ?? 'Got nothing back from the brain. Try again.',
@@ -439,6 +446,7 @@ export const useVoiceCaddie = ({
 
     } catch (err) {
       console.log('[voice] brain error:', err);
+      try { Vibration.vibrate(120); } catch {}
       return { text: 'Hit a snag on my end. Try again.', audioBase64: null, toolAction: null };
     }
   };

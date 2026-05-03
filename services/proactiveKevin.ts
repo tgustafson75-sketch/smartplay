@@ -84,9 +84,12 @@ export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | nul
     }
   }
 
-  // rough_streak_3 — three consecutive doubles or worse
+  // rough_streak_3 — three consecutive doubles or worse. Cooldown halved
+  // from 8min to 4min — when score variance is collapsing fast, single-fire
+  // means Kevin goes silent the very next hole if it's also a triple. The
+  // worst competitive moment shouldn't be the silent one.
   if (ctx.recentScores.length >= 3 && ctx.recentScores.slice(-3).every(v => v >= 2)) {
-    const cooldown = 8 * 60 * 1000;
+    const cooldown = 4 * 60 * 1000;
     if (!lastFiredAt.rough_streak_3 || now - (lastFiredAt.rough_streak_3 ?? 0) > cooldown) {
       // Phase V.7+ — ghost-aware harder reset.
       const ghostBehind = ctx.ghostDelta != null && ctx.ghostDelta < 0;
@@ -100,13 +103,17 @@ export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | nul
     }
   }
 
-  // ghost_lead_swing — ghost is ahead by exactly 1
-  if (ctx.ghostDelta === 1 && ctx.holesPlayed >= 3) {
+  // ghost_lead_swing — ghost is ahead by 1 or more (was exact ===1 which
+  // went silent at the very moment Tim needed it most: when past-self had
+  // pulled ahead by 2 or 3 and the gap was actually closeable).
+  if (ctx.ghostDelta != null && ctx.ghostDelta >= 1 && ctx.holesPlayed >= 3) {
     const cooldown = 10 * 60 * 1000;
     if (!lastFiredAt.ghost_lead_swing || now - (lastFiredAt.ghost_lead_swing ?? 0) > cooldown) {
+      const delta = ctx.ghostDelta;
+      const lead = delta === 1 ? 'one' : delta === 2 ? 'two' : `${delta}`;
       return {
         id: 'ghost_lead_swing',
-        message: 'Past you is up by one. This is the moment — swing through it.',
+        message: `Past you is up by ${lead}. This is the moment — swing through it.`,
         is_proactive: true,
       };
     }
