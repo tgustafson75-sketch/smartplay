@@ -1651,12 +1651,17 @@ export default function CaddieTab() {
         <TouchableOpacity
           style={{
             position: 'absolute',
-            top: insets.top + 96,
-            right: 16,
+            // Phase AR — moved up to align with the topNav icon row so
+            // MARK sits with the other right-side icons (Tool ••• at
+            // right: 20, top: insets.top + 38) instead of below them
+            // where it overlapped the wind arrow zone (insets.top + 110).
+            // Right offset 56 puts MARK ~16px left of the Tool button.
+            top: insets.top + 32,
+            right: 56,
             zIndex: 13,
-            width: 44,
-            height: 44,
-            borderRadius: 22,
+            width: 40,
+            height: 40,
+            borderRadius: 20,
             backgroundColor: '#F5A623',
             shadowColor: '#F5A623',
             shadowOffset: { width: 0, height: 0 },
@@ -1683,7 +1688,7 @@ export default function CaddieTab() {
           }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Ionicons name="location" size={20} color="#1a1a1a" />
+          <Ionicons name="location" size={18} color="#1a1a1a" />
         </TouchableOpacity>
       )}
 
