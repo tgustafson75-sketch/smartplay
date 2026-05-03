@@ -77,6 +77,19 @@ export default async function handler(
     };
     const wd = watchData as WatchData | null;
 
+    // Phase V.7+ — time-of-day awareness. Server runs UTC; offset comes from
+    // client when available, falls back to a generic block. Early-AM rounds
+    // get a "minimal words" tone modifier so a sleepy player doesn't fight
+    // chatter on the first holes.
+    const clientHour = typeof body.clientHour === 'number' ? body.clientHour : null;
+    const todBlock = clientHour != null
+      ? clientHour < 8
+        ? "TIME OF DAY: Early morning. Player is groggy. Cut your sentences in half. One thought, max."
+        : clientHour >= 20
+        ? "TIME OF DAY: Evening. Player is winding down. Calm register."
+        : ''
+      : '';
+
     const systemPrompt = `
 ${language === 'es' ? 'Responde SIEMPRE en español.' : language === 'zh' ? '请始终用中文回复。' : ''}
 
@@ -147,6 +160,8 @@ Use this data silently to inform tempo and transition advice.
 If player asks about their swing or tempo reference this naturally.
 Do not read out the numbers as a list. Kevin absorbs the data and speaks to the player not at them.`
   : ''}
+
+${todBlock}
 
 ${isSpiralRisk || consecutiveBadHoles >= 3
   ? `IMPORTANT: ${consecutiveBadHoles} difficult holes. ONE calm sentence to reset focus. Nothing else.`

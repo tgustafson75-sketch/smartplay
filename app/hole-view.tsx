@@ -922,6 +922,12 @@ export default function HoleView() {
           <View style={[styles.yardCard, styles.yardCardCenter]}>
             <Text style={styles.yardLabelGreen}>CTR</Text>
             <Text style={styles.yardValueCenter}>{centerYards}</Text>
+            {/* Phase V.7+ — explicit "Locking GPS" feedback during cold-start
+                so the user knows why "—" is showing instead of assuming it's
+                broken. Replaces silent dash on hole 1 in the parking lot. */}
+            {isRoundActive && !gpsValid && (
+              <Text style={styles.gpsWaiting}>Locking GPS…</Text>
+            )}
             {isRoundActive && gpsValid && (
               <Text style={styles.playsLike}>{'plays like ' + centerYards + ' yds'}</Text>
             )}
@@ -1242,6 +1248,7 @@ const styles = StyleSheet.create({
   yardValue: { color: '#ffffff', fontSize: 26, fontWeight: '700' },
   yardValueCenter: { color: '#ffffff', fontSize: 38, fontWeight: '900' },
   playsLike: { color: '#F5A623', fontSize: 11, marginTop: 3 },
+  gpsWaiting: { color: '#9ca3af', fontSize: 11, marginTop: 3, fontStyle: 'italic' },
   // Plan row
   planRow: {
     flexDirection: 'row', alignItems: 'center',

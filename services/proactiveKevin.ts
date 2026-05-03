@@ -70,9 +70,15 @@ export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | nul
   if (ctx.recentScores.length >= 3 && ctx.recentScores.slice(-3).every(v => v >= 1)) {
     const cooldown = 8 * 60 * 1000;
     if (!lastFiredAt.miss_streak_3 || now - (lastFiredAt.miss_streak_3 ?? 0) > cooldown) {
+      // Phase V.7+ — ghost-aware reset copy. When playing against past-you
+      // and behind, name the ghost so Kevin proves he's tracking both arcs
+      // at once. Generic line otherwise.
+      const ghostBehind = ctx.ghostDelta != null && ctx.ghostDelta < 0;
       return {
         id: 'miss_streak_3',
-        message: 'Forget the last three. One shot at a time — that\'s the whole job right now.',
+        message: ghostBehind
+          ? `Past ${name} got through this stretch. So can current ${name}. One shot.`
+          : 'Forget the last three. One shot at a time — that\'s the whole job right now.',
         is_proactive: true,
       };
     }
@@ -82,9 +88,13 @@ export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | nul
   if (ctx.recentScores.length >= 3 && ctx.recentScores.slice(-3).every(v => v >= 2)) {
     const cooldown = 8 * 60 * 1000;
     if (!lastFiredAt.rough_streak_3 || now - (lastFiredAt.rough_streak_3 ?? 0) > cooldown) {
+      // Phase V.7+ — ghost-aware harder reset.
+      const ghostBehind = ctx.ghostDelta != null && ctx.ghostDelta < 0;
       return {
         id: 'rough_streak_3',
-        message: 'Reset. Just this hole. Nothing before it counts.',
+        message: ghostBehind
+          ? 'Past you saved holes worse than this. Reset. Just this one.'
+          : 'Reset. Just this hole. Nothing before it counts.',
         is_proactive: true,
       };
     }

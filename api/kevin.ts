@@ -247,7 +247,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       smartFinderContext = null,
       penaltyContext = null,
       is_proactive = false,
+      // Phase V.7+ — caller-supplied local hour (0-23) so prompt can match
+      // tone to time of day (groggy AM, calm PM). Optional; falls back to
+      // generic if missing.
+      clientHour = null,
     } = body;
+
+    const _clientHour: number | null = typeof clientHour === 'number' ? clientHour : null;
+    const todBlock = _clientHour != null
+      ? _clientHour < 8
+        ? "TIME OF DAY: Early morning. Player is groggy. Cut your sentences in half. One thought, max."
+        : _clientHour >= 20
+        ? "TIME OF DAY: Evening. Player is winding down. Calm register."
+        : ''
+      : '';
 
     type SmartVisionContext = {
       holeNumber: number | null;
@@ -343,6 +356,8 @@ Tempo: ${wd.averageTempo}:1 | Fault: ${wd.dominantFault || 'none'} | Early trans
 
 ${dominantMiss ? `DOMINANT MISS: ${dominantMiss} — aim them away silently, never say it out loud.` : ''}
 ${physicalLimitation ? `PHYSICAL NOTE: ${physicalLimitation} — never suggest movements that aggravate this.` : ''}
+
+${todBlock}
 
 ${isSpiralRisk || (consecutiveBadHoles as number) >= 3 ? `IMPORTANT: ${consecutiveBadHoles} difficult holes. ONE calm sentence to reset focus. Nothing else.` : ''}
 

@@ -18,6 +18,15 @@ interface BriefingParams {
   teeName?: string | null;
   // Phase U — meaningful drift across recent rounds (from detectPatternShift)
   patternShiftAlert?: string | null;
+  // Phase V.7+ — last 1-3 cage sessions so the first-tee briefing can
+  // reference recent practice ("let's see if Tuesday's driver work holds up")
+  // instead of starting cold every round.
+  recentCageSessions?: Array<{
+    club: string;
+    dominantMiss: string | null;
+    rootCause: string | null;
+    date: string;
+  }>;
 }
 
 // In-memory cache: `${roundId}|${language}` → briefing text. Keyed by

@@ -423,6 +423,9 @@ export const useVoiceCaddie = ({
                 swingCount: watchSummary.swings.length,
               }
             : null,
+          // Phase V.7+ — client local hour (0-23) so Kevin's prompt can
+          // match tone to time of day (groggy AM, calm PM). Cheap to send.
+          clientHour: new Date().getHours(),
         }),
       }).finally(() => clearTimeout(timeout));
 

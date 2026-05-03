@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
+import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { speak, stopSpeaking, configureAudioForSpeech } from '../../services/voiceService';
@@ -108,6 +109,21 @@ export default function BriefingScreen() {
         dominantMiss: profileState.dominantMiss as 'left' | 'right' | 'straight' | null,
       });
 
+      // Phase V.7+ — last 3 cage sessions so the first-tee briefing can
+      // reference recent practice naturally instead of starting cold.
+      const recentCageSessions = useCageStore.getState()
+        .sessionHistory
+        .slice(-3)
+        .reverse()
+        .map(s => ({
+          club: s.club,
+          dominantMiss: s.dominantMiss ?? null,
+          rootCause: s.rootCause ?? null,
+          date: new Date(s.date).toLocaleDateString('en-US', {
+            weekday: 'short', month: 'short', day: 'numeric',
+          }),
+        }));
+
       try {
         const rawText = await generateBriefing({
           roundId: currentRoundId ?? 'unknown',
@@ -122,6 +138,7 @@ export default function BriefingScreen() {
           roundsTogether,
           apiUrl,
           language,
+          recentCageSessions,
         });
 
         if (cancelled) return;

@@ -1002,6 +1002,25 @@ export default function CaddieTab() {
       fetchCourseGeometry(courseId).catch(err => console.log('[caddie] geometry warm failed:', err));
     }
 
+    // Phase V.7+ — pre-warm GPS at round start so the foreground permission
+    // prompt fires NOW (in the parking lot, not on hole 1 mid-shot) and the
+    // first GPS fix is already cached by the time the user looks at hole-view
+    // yardage. Idempotent — gpsManager.start is a no-op if already running.
+    void (async () => {
+      try {
+        const Location = await import('expo-location');
+        const perm = await Location.requestForegroundPermissionsAsync();
+        if (!perm.granted) {
+          console.log('[caddie] location permission not granted at round start');
+          return;
+        }
+        const gps = await import('../../services/gpsManager');
+        await gps.startGpsManager();
+      } catch (e) {
+        console.log('[caddie] gps prewarm failed:', e);
+      }
+    })();
+
     if (opts.ghostRoundId) {
       const ghostRecord = roundHistory.find(r => r.id === opts.ghostRoundId);
       if (ghostRecord) {

@@ -33,6 +33,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Phase U — meaningful pattern shift across recent rounds (computed
       // client-side via services/patternDetection.detectPatternShift).
       patternShiftAlert = null,
+      // Phase V.7+ — last 1-3 cage sessions so the briefing can name what
+      // the player was working on at practice ("let's see if Tuesday's
+      // driver work holds up"). Quietly omitted when empty.
+      recentCageSessions = [],
     } = req.body;
 
     const name = String(playerName || '').trim();
@@ -48,6 +52,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       : '';
     const patternShiftBlock = patternShiftAlert
       ? `Pattern shift across recent rounds: ${patternShiftAlert}. Mention this briefly so the user heads onto the course aware of the trend.`
+      : '';
+    type CageSessionLite = { club: string; dominantMiss: string | null; rootCause: string | null; date: string };
+    const cageBlock = (recentCageSessions as CageSessionLite[]).length > 0
+      ? `Recent cage practice (factor in silently — reference at most one of these naturally if it actually fits the round ahead, never list them):\n${(recentCageSessions as CageSessionLite[]).map(s =>
+          `- ${s.date}: ${s.club}${s.dominantMiss ? ', tending ' + s.dominantMiss : ''}${s.rootCause ? '. ' + s.rootCause : ''}`
+        ).join('\n')}`
       : '';
 
     const systemPrompt = `${KEVIN_CHARACTER_SPEC}
@@ -79,6 +89,7 @@ ${insightsBlock}
 ${ghostBlock}
 ${handicapBlock}
 ${patternShiftBlock}
+${cageBlock}
 
 Give the pre-round briefing now.`;
 
