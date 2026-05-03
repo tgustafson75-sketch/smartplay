@@ -94,6 +94,12 @@ export interface PrimaryIssue {
   mechanical_breakdown: string;
   feel_cue: string;
   detected_in_shots: string[];
+  /** Phase V.6 — confidence in the primary issue call. Surfaces 'low' when
+   *  the upload pipeline produced a tentative read from a single hard-to-
+   *  read swing; the consumer prefixes mechanical_breakdown with a caveat
+   *  to keep the honesty bar intact. Optional for back-compat with existing
+   *  multi-swing classifications. */
+  confidence?: 'high' | 'medium' | 'low';
 }
 
 export interface DrillRecommendation {

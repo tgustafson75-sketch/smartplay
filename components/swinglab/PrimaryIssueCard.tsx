@@ -56,6 +56,15 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
     );
   }
 
+  // Phase V.6 — tentative-read caveat. When the upload pipeline produced
+  // a single-swing or fallback classification with low confidence, prefix
+  // the mechanical breakdown so the player understands the read isn't a
+  // multi-swing consensus.
+  const isTentative = issue.confidence === 'low';
+  const breakdown = isTentative
+    ? "Tentative read — your swing was hard to read clearly, but " + lowercaseFirst(issue.mechanical_breakdown)
+    : issue.mechanical_breakdown;
+
   return (
     <View style={[styles.card, { borderColor: SEVERITY_COLOR[issue.severity] }]}>
       <View style={styles.headerRow}>
@@ -64,6 +73,7 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
           <Text style={styles.title}>{issue.name}</Text>
           <Text style={styles.occurrence}>
             Detected in {issue.occurrence_count} of {totalShots} swings
+            {isTentative ? ' · tentative' : ''}
           </Text>
         </View>
         <View style={[styles.severityChip, { borderColor: SEVERITY_COLOR[issue.severity] }]}>
@@ -76,7 +86,7 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
       <View style={styles.divider} />
 
       <Text style={styles.sectionLabel}>WHAT&apos;S HAPPENING</Text>
-      <Text style={styles.body}>{issue.mechanical_breakdown}</Text>
+      <Text style={styles.body}>{breakdown}</Text>
 
       <Text style={[styles.sectionLabel, styles.feelLabel]}>FEEL CUE</Text>
       <View style={styles.feelBox}>
@@ -84,6 +94,11 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
       </View>
     </View>
   );
+}
+
+function lowercaseFirst(s: string): string {
+  if (!s) return s;
+  return s.charAt(0).toLowerCase() + s.slice(1);
 }
 
 const styles = StyleSheet.create({

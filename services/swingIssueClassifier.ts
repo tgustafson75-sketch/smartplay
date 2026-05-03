@@ -98,18 +98,56 @@ const SEVERITY_WEIGHT: Record<SwingAnalysis['severity'], number> = {
   significant: 3,
 };
 
+// Phase J / live cage thresholds — tuned for multi-swing sessions where
+// pattern consensus matters. Single-swing UPLOADS skip these and use the
+// single-swing branch below.
 const MIN_SESSION_SWINGS_FOR_PRIMARY = 3;
 const MIN_OCCURRENCES_FOR_PRIMARY = 2;
 
 /**
  * Roll up a session's per-swing analyses into one PrimaryIssue (or null).
+ *
+ * Phase V.6 — branched logic:
+ *   - **Single-swing context** (upload flow, swingAnalyses.length === 1):
+ *     surface a tentative result whenever the analysis isn't 'none'. Tag
+ *     the resulting PrimaryIssue with the analysis's confidence so the
+ *     consumer can prefix a 'tentative read' caveat for low-confidence.
+ *     Fixes the upload bug where single uploads always returned null
+ *     because MIN_SESSION_SWINGS=3 and MIN_OCCURRENCES=2 could never be
+ *     met by a single swing.
+ *   - **Multi-swing context** (live cage session): keep prior pattern
+ *     consensus thresholds. If consensus fails, fall back to the highest-
+ *     severity non-none swing as a 'low'-confidence primary issue rather
+ *     than returning null — better than 'no clear issue' when we DO have
+ *     a useful read. Honesty bar preserved via confidence='low'.
  */
 export function classifySession(
   swingAnalyses: { swing_id: string; analysis: SwingAnalysis }[],
 ): PrimaryIssue | null {
-  if (swingAnalyses.length < MIN_SESSION_SWINGS_FOR_PRIMARY) return null;
+  if (swingAnalyses.length === 0) return null;
+  console.log('[classifier] enter, swings=' + swingAnalyses.length);
 
-  // Tally per-issue weighted score, ignoring low-confidence + 'none'.
+  // ── Single-swing branch (uploads). One read, one decision. ─────────
+  if (swingAnalyses.length === 1) {
+    const only = swingAnalyses[0];
+    console.log('[classifier] single: detected=' + only.analysis.detected_issue + ' conf=' + only.analysis.confidence);
+    if (only.analysis.detected_issue === 'none') return null;
+    const voice = ISSUE_COACH_VOICE[only.analysis.detected_issue];
+    return {
+      issue_id: only.analysis.detected_issue,
+      name: ISSUE_DISPLAY_NAME[only.analysis.detected_issue],
+      category: ISSUE_CATEGORY[only.analysis.detected_issue],
+      severity: only.analysis.severity === 'none' ? 'minor' : only.analysis.severity,
+      occurrence_count: 1,
+      visual_reference_path: null,
+      mechanical_breakdown: voice.mechanical,
+      feel_cue: voice.feel,
+      detected_in_shots: [only.swing_id],
+      confidence: only.analysis.confidence,
+    };
+  }
+
+  // ── Multi-swing branch. Pattern consensus across non-low / non-none. ─
   const tally: Record<string, { score: number; count: number; severity: SwingAnalysis['severity']; swing_ids: string[] }> = {};
   for (const { swing_id, analysis } of swingAnalyses) {
     if (analysis.confidence === 'low') continue;
@@ -119,7 +157,6 @@ export function classifySession(
     slot.score += SEVERITY_WEIGHT[analysis.severity];
     slot.count += 1;
     slot.swing_ids.push(swing_id);
-    // Track the highest severity observed for this issue
     if (SEVERITY_WEIGHT[analysis.severity] > SEVERITY_WEIGHT[slot.severity]) {
       slot.severity = analysis.severity;
     }
@@ -131,18 +168,48 @@ export function classifySession(
     .sort((a, b) => b.score - a.score);
 
   const top = ranked[0];
-  if (!top || top.count < MIN_OCCURRENCES_FOR_PRIMARY) return null;
+  console.log('[classifier] multi: consensus top=' + (top?.issue ?? 'none') + ' count=' + (top?.count ?? 0));
 
-  const voice = ISSUE_COACH_VOICE[top.issue];
+  if (top && swingAnalyses.length >= MIN_SESSION_SWINGS_FOR_PRIMARY && top.count >= MIN_OCCURRENCES_FOR_PRIMARY) {
+    const voice = ISSUE_COACH_VOICE[top.issue];
+    return {
+      issue_id: top.issue,
+      name: ISSUE_DISPLAY_NAME[top.issue],
+      category: ISSUE_CATEGORY[top.issue],
+      severity: top.severity === 'none' ? 'minor' : top.severity,
+      occurrence_count: top.count,
+      visual_reference_path: null,
+      mechanical_breakdown: voice.mechanical,
+      feel_cue: voice.feel,
+      detected_in_shots: top.swing_ids,
+      confidence: 'high',
+    };
+  }
+
+  // ── Fallback: consensus didn't hit thresholds, but at least one swing
+  // had a usable read. Surface the most severe non-none swing as a
+  // low-confidence primary so the user gets a tentative read instead of
+  // 'no clear issue'.
+  const usable = swingAnalyses
+    .filter(s => s.analysis.detected_issue !== 'none')
+    .sort((a, b) => SEVERITY_WEIGHT[b.analysis.severity] - SEVERITY_WEIGHT[a.analysis.severity]);
+  if (usable.length === 0) {
+    console.log('[classifier] no usable swings — returning null');
+    return null;
+  }
+  const fallback = usable[0];
+  console.log('[classifier] tentative fallback: ' + fallback.analysis.detected_issue);
+  const voice = ISSUE_COACH_VOICE[fallback.analysis.detected_issue];
   return {
-    issue_id: top.issue,
-    name: ISSUE_DISPLAY_NAME[top.issue],
-    category: ISSUE_CATEGORY[top.issue],
-    severity: top.severity === 'none' ? 'minor' : top.severity,
-    occurrence_count: top.count,
-    visual_reference_path: null,  // Visual assets pending; PrimaryIssueCard renders text-only
+    issue_id: fallback.analysis.detected_issue,
+    name: ISSUE_DISPLAY_NAME[fallback.analysis.detected_issue],
+    category: ISSUE_CATEGORY[fallback.analysis.detected_issue],
+    severity: fallback.analysis.severity === 'none' ? 'minor' : fallback.analysis.severity,
+    occurrence_count: 1,
+    visual_reference_path: null,
     mechanical_breakdown: voice.mechanical,
     feel_cue: voice.feel,
-    detected_in_shots: top.swing_ids,
+    detected_in_shots: [fallback.swing_id],
+    confidence: 'low',
   };
 }
