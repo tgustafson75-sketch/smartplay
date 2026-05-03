@@ -246,6 +246,29 @@ export default function CaddieAvatar({
   const aspectRatio = H / W;
   const isFolded = aspectRatio > 1.6;
 
+  // ╔══════════════════════════════════════════════════════════════╗
+  // ║  LOCKED: Kevin photoreal portrait layout (Phase AU)          ║
+  // ║  Canonical reference: commit 19165fb (2026-04-26 12:43 PDT)  ║
+  // ║  "Fix Caddie screen: avatar framing..."                      ║
+  // ║                                                              ║
+  // ║  Kevin renders via plain resizeMode='cover' on a natural     ║
+  // ║  9:16 frame (W × W·16/9) anchored top:0 left:0 by the        ║
+  // ║  parent in app/(tabs)/caddie.tsx. NO horizontal shift, NO    ║
+  // ║  vertical shift, NO scale multiplier, NO aspect-ratio        ║
+  // ║  branches at this layer. Cover-mode + the 9:16 parent frame  ║
+  // ║  is what produces the canonical composition on every device. ║
+  // ║                                                              ║
+  // ║  Earlier Phase-AT iteration added a recompose pipeline       ║
+  // ║  (PORTRAIT_OFFSET_F, baseShiftFraction, kevinShiftFraction,  ║
+  // ║  kevinShiftYFraction, kevinScaleMul, PORTRAIT_EXTRA_SHIFT)   ║
+  // ║  that drifted Kevin user-left on Fold open and clipped his   ║
+  // ║  hat. Removed in Phase AU. DO NOT reintroduce.               ║
+  // ║                                                              ║
+  // ║  If Kevin appears off-center on a new device, the fix is to  ║
+  // ║  audit the PARENT container in caddie.tsx (frame size,       ║
+  // ║  position) — NOT to add transforms here.                     ║
+  // ╚══════════════════════════════════════════════════════════════╝
+
   const controlsHeight = 180;
   const availableHeight = H - insets.top - insets.bottom - controlsHeight;
 
@@ -262,6 +285,8 @@ export default function CaddieAvatar({
   const effectiveKey: AvatarKey = gender === 'female'
     ? 'kevin_idle'
     : getAvatarKey(effectiveEmotion, isOnCourse, isCageMode);
+
+  // Phase AU — recompose pipeline removed. See LOCK comment above.
 
   // ── Animation refs ──────────────────────
   const breatheAnim    = useRef(new Animated.Value(1)).current;
@@ -617,17 +642,18 @@ export default function CaddieAvatar({
     { label: 'PLAYS', value: hud.playsLike !== null ? String(hud.playsLike) : '—' },
   ];
 
-  // Back layer: breathing (scale + translateY) + nod
+  // === LOCKED: Kevin photoreal portrait transforms ===
+  // Canonical from commit 19165fb (2026-04-26 12:43 PDT).
+  // DO NOT add static scale, translate, or aspect-ratio branches here.
+  // Animated values (breath, nod, drift) only.
+  // ===================================================
   const backTransform = [
-    { scale: 0.85 },
     { scale: breatheAnim },
     { translateY: breatheTransY },
     { translateY: nodAnim },
   ];
 
-  // Front layer: breathing (scale + translateY) + nod + micro-drift
   const frontTransform = [
-    { scale: 0.85 },
     { scale: breatheAnim },
     { translateY: breatheTransY },
     { translateY: nodAnim },
@@ -650,15 +676,20 @@ export default function CaddieAvatar({
             the visible result is Kevin shifted right with green dead
             space on the left. Shift the image left by ~12% of width
             via translateX so Kevin's face lands at viewport center. */}
+        {/* === LOCKED: Kevin photoreal portrait — canonical render ===
+            Plain cover-mode crossfade. NO static top/left/transform
+            offsets. Composition is controlled entirely by the parent
+            container's frame size in caddie.tsx (canonical: full W ×
+            W·16/9 anchored top:0 left:0). =========================== */}
         <Animated.Image
           source={backSource}
-          style={[styles.avatarImage, { transform: [{ translateX: -W * 0.22 }, ...backTransform], opacity: backOpacity }]}
+          style={[styles.avatarImage, { transform: backTransform, opacity: backOpacity }]}
           resizeMode={fill}
         />
 
         <Animated.Image
           source={frontSource}
-          style={[styles.avatarImage, { transform: [{ translateX: -W * 0.22 }, ...frontTransform], opacity: fadeAnim }]}
+          style={[styles.avatarImage, { transform: frontTransform, opacity: fadeAnim }]}
           resizeMode={fill}
         />
 

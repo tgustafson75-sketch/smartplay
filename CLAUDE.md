@@ -67,6 +67,41 @@ When shipping a phase, include in the response:
   GolfFather would answer "what's my game plan." Don't build it. The
   name is reserved for the evolution path.
 
+## Locked elements (Phase AU)
+
+Some UI elements are **canonically locked** — their layout was approved at a
+specific commit and any divergence is a regression, not an improvement. Phases
+that touch surfaces containing locked elements MUST verify the locked element
+is unchanged before reporting the phase complete.
+
+### Kevin photoreal portrait — LOCKED
+- **Canonical reference**: commit `19165fb` (2026-04-26 12:43 PDT — "Fix
+  Caddie screen: avatar framing, greeting bubble position, safe area").
+- **Container** (`app/(tabs)/caddie.tsx`, L4 trustLevel block):
+  `{ position: 'absolute', top: 0, left: 0, width: W, height: avatarFrameHeight }`
+  where `avatarFrameHeight = Math.round(W * 16 / 9)`. Single rule for every
+  aspect (Fold closed, Fold open, standard phones). NO aspect-ratio branches,
+  NO `top: -70` nudges, NO `insets.top + N` anchors.
+- **Render** (`components/CaddieAvatar.tsx`): plain cover-mode crossfade,
+  transforms = breath + nod + drift only. NO static scale, translate, or
+  per-portrait recompose pipeline. Composition is controlled entirely by the
+  parent container's frame size — not by transforms inside CaddieAvatar.
+- **If Kevin appears off-center on a new device**: audit the parent container
+  in `caddie.tsx` (frame size, position). DO NOT add transforms in
+  CaddieAvatar to compensate. Move the OTHER element, not Kevin.
+- **Drift cause history**: Phase AT iteratively added a recompose pipeline
+  (`PORTRAIT_OFFSET_F`, `baseShiftFraction`, `kevinShiftFraction`,
+  `kevinShiftYFraction`, `kevinScaleMul`, `PORTRAIT_EXTRA_SHIFT`) that
+  drifted Kevin user-left on Fold open and clipped his hat. Removed in
+  Phase AU.
+- **Phase completion checklist for any Caddie-home work**:
+  - [ ] Kevin's container in `caddie.tsx` matches canonical (single rule, no
+        aspect branches)
+  - [ ] CaddieAvatar transforms unchanged (breath/nod/drift only)
+  - [ ] Kevin renders identically on Fold closed, Fold open, standard phones
+  - [ ] Kevin position consistent across L1/L2/L3/L4 trust levels and
+        round-active vs idle
+
 ## Honest scope discipline
 
 - Don't add features beyond what the phase requires.

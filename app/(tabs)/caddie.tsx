@@ -408,23 +408,16 @@ export default function CaddieTab() {
   const [saverActive, setSaverActive] = useState(false);
   useEffect(() => subscribeBattery((s) => setSaverActive(s.saverActive)), []);
 
-  // Sim-report gap 3 — L4 long-press on the SmartFinder reticle expands
-  // the embedded SmartFinderCard inline (instead of forcing a full-screen
-  // route push). Tap-anywhere on the overlay collapses it. Long-press
-  // again toggles closed.
-  const [l4FinderExpanded, setL4FinderExpanded] = useState(false);
-  useEffect(() => {
-    if (trustLevel !== 4) setL4FinderExpanded(false);
-  }, [trustLevel]);
+  // Phase AT follow-up — L4 long-press inline expand for SmartVision
+  // and SmartFinder removed; both icons now live inside the green-arrow
+  // dropdown row and short-tap routes to their full screens.
 
-  // Sim-report — same long-press pattern for SmartVision on L4 so the
-  // player can glance at the hole layout without leaving the full Kevin
-  // screen. Short tap routes to the full /hole-view; long-press toggles
-  // an inline preview.
-  const [l4VisionExpanded, setL4VisionExpanded] = useState(false);
-  useEffect(() => {
-    if (trustLevel !== 4) setL4VisionExpanded(false);
-  }, [trustLevel]);
+  // Phase AU — universal collapsible green dropdown across L1/L2/L3/L4.
+  // Tim: "All levels get the green arrow treatment we did in L4 so all
+  // icons expand horizontally from the right to left." Default collapsed
+  // → shows just the chevron pill; tap expands to reveal the icon row
+  // to the LEFT. Auto-collapses after any action.
+  const [l4ActionsExpanded, setL4ActionsExpanded] = useState(false);
 
   // Sim-report gap 2 — pre-warm audio engine when entering Quiet (L1) so
   // the first mic tap doesn't pay the ~200ms cold→warm cost. Fires once
@@ -1302,13 +1295,13 @@ export default function CaddieTab() {
         // typical phone widths (~390-430px) in the stacked layout.
         const isWide = W >= 540;
         const cellTop = insets.top + 100;
+        // Phase AU — embedded SmartFinder card removed. Cells now only
+        // need to clear the green-arrow dropdown row (bottom: 92 + ib,
+        // height 52 → top at H − 144 − ib) plus a small buffer.
+        const cellMaxBottom = H - (150 + insets.bottom);
         if (isWide) {
           const cellW = (W - 36) / 2;
-          // Phase AR — bumped from 280 to 360 so the avatar + SmartVision
-          // cards on L2 wide reach further down toward the SmartFinder
-          // card, shrinking the empty gap between them per Tim's "cards
-          // cleanly separated, minimal space between" feedback.
-          const cellH = 360;
+          const cellH = Math.min(360, cellMaxBottom - cellTop);
           return (
             <>
               <View
@@ -1343,15 +1336,11 @@ export default function CaddieTab() {
             </>
           );
         }
-        // Stacked layout for narrow / Fold-closed. Cells shrunk to 180 tall
-        // so the SmartVision card's bottom edge doesn't overlap the
-        // SmartFinder card (which sits at bottom: 64 + insets.bottom).
+        // Stacked layout for narrow / Fold-closed. Two cells stacked
+        // with a 10px gap; each cell capped so the bottom of the
+        // bottom cell stays clear of the SmartFinder card.
         const cellW = W - 24;
-        // Phase AR — bumped from 180 to 220 (each cell) so the stacked
-        // narrow layout fills more of the available vertical space and
-        // the SmartFinder card below sits closer to the SmartVision
-        // card above instead of floating in dead space.
-        const cellH = 220;
+        const cellH = Math.min(220, Math.floor((cellMaxBottom - cellTop - 10) / 2));
         const gap = 10;
         return (
           <>
@@ -1414,13 +1403,20 @@ export default function CaddieTab() {
           >
             <L1HolePreview onOpenSmartVision={openSmartVision} width={W - 96} height={100} />
           </View>
+          {/* L3 Kevin avatar — height clamped so the avatar top sits at
+              least 10px below the SmartVision card bottom (insets.top +
+              92 + 100 = insets.top + 192). Bottom anchor 150 + ib clears
+              the green-arrow dropdown (top H − 144 − ib) by 6px. */}
           <View
             style={{
               position: 'absolute',
               left: 0,
               width: W,
-              bottom: 200 + insets.bottom,
-              height: Math.round(H * 2 / 3 * (W >= 540 ? 0.8 : 1)),
+              bottom: 150 + insets.bottom,
+              height: Math.min(
+                Math.round(H * 2 / 3 * (W >= 540 ? 0.8 : 1)),
+                H - (insets.top + 192 + 10) - (150 + insets.bottom),
+              ),
             }}
           >
             <CaddieAvatar
@@ -1441,17 +1437,26 @@ export default function CaddieTab() {
         </>
       )}
       {trustLevel === 4 && (
-        // L4 Full — Fold-open keeps the explicit 9:16 frame nudged up.
-        // Fold-closed fills the entire space above the data strip so Kevin
-        // isn't pushed off the top. Overlay icons (wind, ?, SmartFinder
-        // reticle) all keep their existing absolute positions and zIndex
-        // ordering above the avatar.
+        // ╔══════════════════════════════════════════════════════════╗
+        // ║  LOCKED: Kevin photoreal portrait container (Phase AU)   ║
+        // ║  Canonical: commit 19165fb (2026-04-26 12:43 PDT)        ║
+        // ║                                                          ║
+        // ║  Single rule for every aspect (Fold closed, Fold open,   ║
+        // ║  standard phones): natural 9:16 frame at top: insets.top ║
+        // ║  + 56 (clears the SmartPlay banner row uniformly), left: ║
+        // ║  0, width = W, height = W·16/9. The +56 offset applies   ║
+        // ║  to every aspect — it's NOT an aspect branch.            ║
+        // ║                                                          ║
+        // ║  Cover-mode in CaddieAvatar then frames Kevin canonically║
+        // ║  without over-zoom on any device.                        ║
+        // ║                                                          ║
+        // ║  DO NOT add aspect-ratio branches, top:-70 nudges, or    ║
+        // ║  per-fold offsets here. If a phase needs space above or  ║
+        // ║  below Kevin, add it to the OTHER element, not the Kevin ║
+        // ║  frame. See CLAUDE.md "Locked elements".                 ║
+        // ╚══════════════════════════════════════════════════════════╝
         <View
-          style={
-            W >= 540
-              ? { position: 'absolute', top: -70, left: 0, width: W, height: avatarFrameHeight }
-              : { position: 'absolute', top: 60, left: 0, right: 0, bottom: 64 + insets.bottom }
-          }
+          style={{ position: 'absolute', top: insets.top + 56, left: 0, width: W, height: avatarFrameHeight }}
         >
           <CaddieAvatar
             gender={voiceGender === 'female' ? 'female' : 'male'}
@@ -1478,42 +1483,11 @@ export default function CaddieTab() {
               placements block below. SmartVision (L1HolePreview) and
               SmartFinder cards stack in the body so the player has
               hole context without Kevin's face on screen. */}
-          <View style={{ position: 'absolute', top: insets.top + 60, left: 16, zIndex: 12 }}>
-            <TouchableOpacity
-              onPress={handleMicPress}
-              accessibilityRole="button"
-              accessibilityLabel="Talk to Kevin (Quiet Mode)"
-            >
-              <Animated.View style={{ position: 'relative', opacity: quietPulse }}>
-                <KevinAvatar
-                  state={kevinAvatarState}
-                  presenceLevel={1}
-                  sizeOverride={72}
-                >
-                  <Image
-                    source={require('../../assets/avatars/smartplay_caddie_badge.png')}
-                    style={{ width: 64, height: 64 }}
-                    resizeMode="contain"
-                  />
-                </KevinAvatar>
-                {/* Quiet/saver dot on the badge. Gray = quiet (Kevin
-                    intentionally silent); orange = battery saver. */}
-                <View
-                  style={{
-                    position: 'absolute',
-                    bottom: 2,
-                    right: 2,
-                    width: 14,
-                    height: 14,
-                    borderRadius: 7,
-                    backgroundColor: saverActive ? '#F5A623' : '#6b7280',
-                    borderWidth: 2,
-                    borderColor: '#060f09',
-                  }}
-                />
-              </Animated.View>
-            </TouchableOpacity>
-          </View>
+          {/* Phase AU — L1 standalone SmartPlay badge mic-trigger removed.
+              Voice entry on L1 now lives inside the universal green-arrow
+              dropdown (mic icon, state-aware). Frees the upper-left
+              corner of the Quiet surface per Tim's "move it to the green
+              arrow tools for space" feedback. */}
 
           {/* L1 Quiet — SmartVision card. Green border, no scope ticks
               (those belong to SmartFinder). Card stretches from below the
@@ -1526,16 +1500,22 @@ export default function CaddieTab() {
               - 4px), so the visual gap between the two cards is now
               minimal instead of empty middle-third real-estate. */}
           {(() => {
-            const cardTop = insets.top + 220;
-            // SmartFinder now anchored at bottom: 64 + insets.bottom (tight
-            // to tab bar). Keep 12px gap above SmartFinder so the two
-            // cards are visually separated, not crowded.
-            const smartFinderTopApprox = H - (64 + insets.bottom) - 120;
-            const cardH = Math.max(160, smartFinderTopApprox - cardTop - 12);
+            // L1 SmartVision card. Top locked at insets.top + 80.
+            // Bottom anchored 6px above the green-arrow dropdown row
+            // (dropdown at bottom: 92 + ib, height 52 → top of dropdown
+            // = H − 144 − ib). SmartFinder embedded card removed in
+            // Phase AU, so SmartVision can stretch all the way down.
+            const cardTop = insets.top + 80;
+            const cardBottom = 150 + insets.bottom;
             const cardW = W - 32;
             const headerH = 26;
             const innerW = cardW - 28;
-            const innerH = cardH - headerH - 16;
+            // Computed inner content height matches what flex:1 will
+            // resolve to. L1HolePreview needs an explicit height prop
+            // (it doesn't use parent flex), so we hand it the value.
+            // = viewport - cardTop - cardBottom - paddingTop(6) -
+            //   paddingBottom(4) - headerH(26)
+            const innerH = Math.max(80, H - cardTop - cardBottom - 6 - 4 - headerH);
             return (
               <View
                 style={{
@@ -1543,6 +1523,7 @@ export default function CaddieTab() {
                   left: 16,
                   right: 16,
                   top: cardTop,
+                  bottom: cardBottom,
                   zIndex: 7,
                   backgroundColor: 'rgba(13, 36, 24, 0.92)',
                   borderRadius: 14,
@@ -1556,7 +1537,6 @@ export default function CaddieTab() {
                   shadowOpacity: 0.5,
                   shadowRadius: 10,
                   elevation: 8,
-                  height: cardH,
                 }}
                 pointerEvents="box-none"
               >
@@ -1620,7 +1600,10 @@ export default function CaddieTab() {
         <View style={styles.modeBadgePlaceholder} />
 
         <View style={{ alignItems: 'flex-end' }}>
-          {/* Tool ••• — top of the right column. Permanent top-right anchor. */}
+          {/* Tool ••• — ALWAYS visible in upper right (Tim: "Make sure
+              tools pill is ALWAYS in upper right"). At L4 the green-arrow
+              dropdown also contains a Tools entry as a convenience, but
+              this corner pill remains the canonical anchor. */}
           <TouchableOpacity
             style={styles.navBtn}
             onPress={() => setShowMoreMenu(true)}
@@ -1628,15 +1611,10 @@ export default function CaddieTab() {
           >
             <Ionicons name="ellipsis-horizontal" size={24} color="#6b7d72" />
           </TouchableOpacity>
-          {isRoundActive && (
-            <TouchableOpacity
-              style={[styles.modeBadge, { marginTop: 4 }]}
-              onPress={handleChangeModePress}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Text style={styles.modeBadgeText}>{ROUND_MODE_LABELS[mode]}</Text>
-            </TouchableOpacity>
-          )}
+          {/* Phase AT follow-up — FREE PLAY mode badge removed from main
+              view per Tim "we can see that in upper right tools dropdown".
+              Mode is still displayed (and editable) in the Tools dropdown
+              status row. */}
         </View>
       </View>
 
@@ -1648,50 +1626,9 @@ export default function CaddieTab() {
            corner BELOW the topNav so it doesn't compete with the Tool
            ••• button, but is the most prominent action target on the
            screen. */}
-      {isRoundActive && (
-        <TouchableOpacity
-          style={{
-            position: 'absolute',
-            // Phase AR — moved up to align with the topNav icon row so
-            // MARK sits with the other right-side icons (Tool ••• at
-            // right: 20, top: insets.top + 38) instead of below them
-            // where it overlapped the wind arrow zone (insets.top + 110).
-            // Right offset 56 puts MARK ~16px left of the Tool button.
-            top: insets.top + 32,
-            right: 56,
-            zIndex: 13,
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            backgroundColor: '#F5A623',
-            shadowColor: '#F5A623',
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.55,
-            shadowRadius: 8,
-            elevation: 6,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          onPress={async () => {
-            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            const mod = await import('../../services/positionMarkBus');
-            const r = await mod.forceMarkPosition();
-            if (r.kind === 'ok') {
-              const acc = r.mark.accuracy_m != null ? `~${Math.round(r.mark.accuracy_m)}m` : '';
-              setCaddieResponse(`Marked${acc ? ' (accuracy ' + acc + ')' : ''}.`);
-            } else if (r.kind === 'no_round') {
-              setCaddieResponse('Start a round first.');
-            } else if (r.kind === 'no_permission') {
-              setCaddieResponse('Location permission needed to mark.');
-            } else {
-              setCaddieResponse("Couldn't mark — GPS not ready.");
-            }
-          }}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="location" size={18} color="#1a1a1a" />
-        </TouchableOpacity>
-      )}
+      {/* Phase AU — standalone MARK button removed at all trust levels.
+          MARK now lives exclusively inside the universal green-arrow
+          dropdown (rendered later in this file). */}
 
       {/* Phase AE follow-up — ScorecardChip on the LEFT side.
            Phase AR follow-up — anchored at top: insets.top + 145 so it
@@ -1699,17 +1636,9 @@ export default function CaddieTab() {
            rather than colliding with it on the L1 surface. At L2/L3 the
            avatar cell starts at insets.top + 100 — chip overlays the
            avatar cell briefly but at zIndex 12 stays tappable. */}
-      <View
-        style={{
-          position: 'absolute',
-          top: insets.top + 145,
-          left: 12,
-          zIndex: 12,
-        }}
-        pointerEvents="box-none"
-      >
-        <ScorecardChip />
-      </View>
+      {/* Phase AU — standalone ScorecardChip removed at all trust
+          levels. Score lives exclusively inside the universal
+          green-arrow dropdown. */}
 
       {/* TRIAL INDICATOR — only in final 3 days to avoid persistent clutter */}
       {subscription_status === 'trial' && daysLeft !== null && daysLeft <= 3 && (
@@ -1757,24 +1686,53 @@ export default function CaddieTab() {
       </View>
 
       {/* WIND ARROW — Caddie-mode wind indicator, only during active rounds */}
-      {isRoundActive && (
-        <View style={{ position: 'absolute', top: insets.top + (trustLevel === 4 ? 145 : 110), right: 12, zIndex: 11 }} pointerEvents="none">
+      {/* Phase AU — WindArrow wrapped in a clean circular badge that
+          overlays any card/Kevin/cell beneath it. zIndex 16 +
+          pointerEvents 'none' so touches pass through.
+          Top: insets.top + 200 sits below the SmartVision header +
+          hole number graphic (Tim: "put windage circle below hole
+          number that shows on SmartVision"). Pre-round renders a
+          static N-pointing arrow placeholder so the circle's purpose
+          is visible without weather data. */}
+      <View
+        style={{
+          position: 'absolute',
+          top: insets.top + 200,
+          right: 12,
+          zIndex: 16,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: 'rgba(13, 36, 24, 0.85)',
+          borderWidth: 1.5,
+          borderColor: '#00C896',
+          alignItems: 'center',
+          justifyContent: 'center',
+          shadowColor: '#00C896',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.4,
+          shadowRadius: 6,
+          elevation: 6,
+        }}
+        pointerEvents="none"
+      >
+        {isRoundActive ? (
           <WindArrow weather={caddieWeather} shotBearingDeg={caddieShotBearing} compact />
-        </View>
-      )}
+        ) : (
+          <Ionicons name="navigate" size={22} color="#00C896" />
+        )}
+      </View>
 
       {/* SMARTFINDER CARD — Phase D-2 embedded rangefinder. Hidden at
            L4 (Full — collapses to a right-side reticle). At L1 Quiet
            the card renders both pre-round and in-round so the player
            keeps hole / yardage context without Kevin's face on screen. */}
-      {((isRoundActive && trustLevel !== 4) || trustLevel === 1) && (
-        <View
-          style={{ position: 'absolute', left: 16, right: 16, bottom: 64 + insets.bottom, zIndex: 8 }}
-          pointerEvents="box-none"
-        >
-          <SmartFinderCard />
-        </View>
-      )}
+      {/* Phase AU — embedded SmartFinder card removed at all trust
+          levels. SmartFinder is now accessed via the SmartFinder icon
+          inside the universal green-arrow dropdown (which routes to
+          the full /smartfinder screen). Frees the bottom-third of the
+          Caddie home so SmartVision can stretch down to the dropdown
+          row, eliminating the previous L1/L2/L3 card overlap class. */}
 
       {/* LIE ANALYSIS camera icon — placement varies by Trust Spectrum level.
            Spec (Phase H v2):
@@ -1785,156 +1743,218 @@ export default function CaddieTab() {
                   at right: 12, bottom: 200 + insets.bottom). Voice is primary.
            Banner / Kevin avatar / yellow SmartFinder tappable / wind label /
            BREAK 90 badge / detail bar all unchanged across these moves. */}
-      {isRoundActive && (() => {
-        const baseStyle = {
-          position: 'absolute' as const,
-          backgroundColor: 'rgba(13, 36, 24, 0.85)',
-          borderWidth: 1.5,
-          borderColor: '#00C896',
-          alignItems: 'center' as const,
-          justifyContent: 'center' as const,
-          shadowColor: '#00C896',
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.55,
-          shadowRadius: 8,
-          elevation: 6,
-        };
-        // Per-level position + size
-        // Phase AR follow-up — anchored to BOTTOM (above the SmartFinder
-        // card) instead of TOP (where they overlapped Kevin's face /
-        // SmartVision card content). bottom: 200 + insets.bottom puts
-        // them ~12px above SmartFinder card top across all aspects.
-        const placements: Record<number, { top?: number; right?: number; bottom?: number; left?: number; size: number; zIndex: number }> = {
-          1: { right: 12, bottom: 200 + insets.bottom, size: 44, zIndex: 14 },
-          2: { right: 12, bottom: 200 + insets.bottom, size: 44, zIndex: 14 },
-          3: { right: 12, bottom: 200 + insets.bottom, size: 44, zIndex: 14 },
-          4: { right: 12, bottom: 136 + insets.bottom, size: 56, zIndex: 14 },
-        };
-        const p = placements[trustLevel] ?? placements[2];
-        return (
-          <TouchableOpacity
-            onPress={() => router.push('/lie-analysis' as never)}
-            style={[baseStyle, {
-              ...(p.top != null && { top: p.top }),
-              ...(p.right != null && { right: p.right }),
-              ...(p.bottom != null && { bottom: p.bottom }),
-              ...(p.left != null && { left: p.left }),
-              width: p.size,
-              height: p.size,
-              borderRadius: p.size / 2,
-              zIndex: p.zIndex,
-            }]}
-            accessibilityRole="button"
-            accessibilityLabel="Open TightLie"
-          >
-            <Ionicons name="camera" size={Math.round(p.size * 0.46)} color="#00C896" />
-          </TouchableOpacity>
-        );
-      })()}
+      {/* Phase AT — at L4, the camera + Mark + Tool live in a horizontal
+          action row across the bottom (rendered separately below) so the
+          per-button scattered placements are skipped here. */}
+      {/* Phase AU — standalone TightLie camera button removed at all
+          trust levels. TightLie now lives exclusively inside the
+          universal green-arrow dropdown. */}
 
-      {/* L4 SmartVision ICON — telescope affordance to open hole-view
-           or peek inline. Sits above the lie-analysis camera (which is
-           at insets.top + 60 → mid-right via placements; SmartVision lives
-           on the LEFT edge so they don't crowd each other). */}
-      {trustLevel === 4 && (
-        <>
+      {/* Phase AT follow-up — L4 standalone SmartVision telescope removed.
+          SmartVision now lives inside the green-arrow dropdown row. */}
+
+      {/* Phase AU — universal green dropdown across L1/L2/L3/L4.
+          Default = just a chevron pill on the right; tap to expand
+          LEFT into the row of contextual round icons (Scorecard /
+          SmartVision / SmartFinder / MARK / TightLie / Tools).
+          Position bottom: 92 + insets.bottom keeps it above DataStrip. */}
+      {isRoundActive && (
+        <View
+          style={{
+            position: 'absolute',
+            bottom: 92 + insets.bottom,
+            left: 12, right: 12,
+            zIndex: 15,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 10,
+          }}
+          pointerEvents="box-none"
+        >
+          {l4ActionsExpanded && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ alignItems: 'center', gap: 10, paddingRight: 4 }}
+              style={{ flexGrow: 0, flexShrink: 1 }}
+            >
+              {/* Caddie mic — actual mic button (not a shortcut). Tapping
+                  toggles listen/stop directly via handleMicPress. Icon
+                  reflects voiceState: mic (idle) / stop (listening) /
+                  ellipsis (thinking) / volume-high (speaking). Dropdown
+                  stays open while voice is active so the user sees the
+                  state change. */}
+              <TouchableOpacity
+                onPress={() => handleMicPress()}
+                style={{
+                  width: 48, height: 48, borderRadius: 24,
+                  backgroundColor: voiceState === 'listening' ? '#00C896' : 'rgba(13, 36, 24, 0.92)',
+                  borderWidth: 1.5,
+                  borderColor: voiceState === 'thinking' || kevinThinking ? '#F5A623' : '#00C896',
+                  alignItems: 'center', justifyContent: 'center',
+                  shadowColor: voiceState === 'thinking' || kevinThinking ? '#F5A623' : '#00C896',
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.6, shadowRadius: 8, elevation: 6,
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  voiceState === 'listening' ? 'Stop listening' :
+                  voiceState === 'thinking' ? 'Kevin is thinking' :
+                  voiceState === 'speaking' ? 'Kevin is speaking' :
+                  'Talk to Kevin'
+                }
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons
+                  name={
+                    voiceState === 'listening' ? 'stop' :
+                    voiceState === 'thinking' || kevinThinking ? 'ellipsis-horizontal' :
+                    voiceState === 'speaking' ? 'volume-high' :
+                    'mic'
+                  }
+                  size={22}
+                  color={voiceState === 'listening' ? '#04140c' : '#00C896'}
+                />
+              </TouchableOpacity>
+
+              {/* Scorecard pill — same compact circle used elsewhere. */}
+              <View pointerEvents="box-none" style={{ alignItems: 'center', justifyContent: 'center' }}>
+                <ScorecardChip />
+              </View>
+
+              {/* SmartVision telescope */}
+              <TouchableOpacity
+                onPress={() => {
+                  setL4ActionsExpanded(false);
+                  openSmartVision();
+                }}
+                style={{
+                  width: 48, height: 48, borderRadius: 24,
+                  backgroundColor: 'rgba(13, 36, 24, 0.92)',
+                  borderWidth: 1.5, borderColor: '#00C896',
+                  alignItems: 'center', justifyContent: 'center',
+                  shadowColor: '#00C896', shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.55, shadowRadius: 8, elevation: 6,
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Open SmartVision"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="telescope-outline" size={22} color="#00C896" />
+              </TouchableOpacity>
+
+              {/* SmartFinder rangefinder reticle */}
+              <TouchableOpacity
+                onPress={() => {
+                  setL4ActionsExpanded(false);
+                  router.push('/smartfinder' as never);
+                }}
+                style={{
+                  width: 48, height: 48, borderRadius: 24,
+                  backgroundColor: 'rgba(13, 36, 24, 0.92)',
+                  borderWidth: 1.5, borderColor: '#00C896',
+                  alignItems: 'center', justifyContent: 'center',
+                  shadowColor: '#00C896', shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.55, shadowRadius: 8, elevation: 6,
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Open SmartFinder"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <View style={{ width: 26, height: 26, alignItems: 'center', justifyContent: 'center' }}>
+                  <View style={{ position: 'absolute', width: 26, height: 26, borderRadius: 13, borderWidth: 1.5, borderColor: '#00C896' }} />
+                  <View style={{ position: 'absolute', width: 16, height: 1.5, backgroundColor: '#ffffff' }} />
+                  <View style={{ position: 'absolute', width: 1.5, height: 16, backgroundColor: '#ffffff' }} />
+                </View>
+              </TouchableOpacity>
+
+              {/* MARK */}
+              <TouchableOpacity
+                onPress={async () => {
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                  setL4ActionsExpanded(false);
+                  const mod = await import('../../services/positionMarkBus');
+                  const r = await mod.forceMarkPosition();
+                  if (r.kind === 'ok') {
+                    const acc = r.mark.accuracy_m != null ? `~${Math.round(r.mark.accuracy_m)}m` : '';
+                    setCaddieResponse(`Marked${acc ? ' (accuracy ' + acc + ')' : ''}.`);
+                  } else if (r.kind === 'no_round') setCaddieResponse('Start a round first.');
+                  else if (r.kind === 'no_permission') setCaddieResponse('Location permission needed to mark.');
+                  else setCaddieResponse("Couldn't mark — GPS not ready.");
+                }}
+                style={{
+                  width: 48, height: 48, borderRadius: 24,
+                  backgroundColor: '#F5A623',
+                  alignItems: 'center', justifyContent: 'center',
+                  shadowColor: '#F5A623', shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.6, shadowRadius: 8, elevation: 6,
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Mark position"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="location" size={20} color="#1a1a1a" />
+              </TouchableOpacity>
+
+              {/* TightLie camera */}
+              <TouchableOpacity
+                onPress={() => {
+                  setL4ActionsExpanded(false);
+                  router.push('/lie-analysis' as never);
+                }}
+                style={{
+                  width: 48, height: 48, borderRadius: 24,
+                  backgroundColor: 'rgba(13, 36, 24, 0.92)',
+                  borderWidth: 1.5, borderColor: '#00C896',
+                  alignItems: 'center', justifyContent: 'center',
+                  shadowColor: '#00C896', shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.55, shadowRadius: 8, elevation: 6,
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Open TightLie"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="camera" size={22} color="#00C896" />
+              </TouchableOpacity>
+
+              {/* Phase AU — Tools (•••) removed from inside the dropdown.
+                  The upper-right corner pill is the canonical Tools
+                  anchor; duplicating it here was the "duplicated tools
+                  pill shortcut" Tim flagged. */}
+            </ScrollView>
+          )}
+
+          {/* Single green dropdown chevron — always visible at L4.
+              Chevron-back when collapsed (hints at "more →" expanding
+              left); chevron-forward when expanded (hints "collapse"). */}
           <TouchableOpacity
-            onPress={openSmartVision}
-            onLongPress={() => setL4VisionExpanded(v => !v)}
-            delayLongPress={400}
+            onPress={() => {
+              void Haptics.selectionAsync().catch(() => {});
+              setL4ActionsExpanded(v => !v);
+            }}
             style={{
-              position: 'absolute',
-              left: 12,
-              top: insets.top + 100,
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              backgroundColor: 'rgba(13, 36, 24, 0.85)',
-              borderWidth: 1.5,
-              borderColor: '#00C896',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 14,
-              shadowColor: '#00C896',
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: 0.55,
-              shadowRadius: 8,
-              elevation: 6,
+              width: 52, height: 52, borderRadius: 26,
+              backgroundColor: '#00C896',
+              alignItems: 'center', justifyContent: 'center',
+              shadowColor: '#00C896', shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: 0.65, shadowRadius: 10, elevation: 8,
             }}
             accessibilityRole="button"
-            accessibilityLabel="Open SmartVision · long-press to peek inline"
+            accessibilityLabel={l4ActionsExpanded ? 'Collapse actions' : 'Expand actions'}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="telescope-outline" size={20} color="#00C896" />
+            <Ionicons
+              name={l4ActionsExpanded ? 'chevron-forward' : 'chevron-back'}
+              size={26}
+              color="#04140c"
+            />
           </TouchableOpacity>
-          {l4VisionExpanded && (
-            <TouchableOpacity
-              activeOpacity={1}
-              onPress={() => setL4VisionExpanded(false)}
-              style={{
-                position: 'absolute', left: 64, right: 16,
-                top: insets.top + 100, height: 160, zIndex: 13,
-                borderRadius: 12, overflow: 'hidden',
-                borderWidth: 1.5, borderColor: '#00C896', backgroundColor: '#0d2418',
-              }}
-            >
-              <L1HolePreview onOpenSmartVision={openSmartVision} width={W - 80} height={160} />
-            </TouchableOpacity>
-          )}
-        </>
+        </View>
       )}
 
-      {/* L4 SmartFinder ICON — replaces the embedded card at L4. Sits on
-           the right edge. Tap routes to /smartfinder; sim-report gap 3:
-           long-press toggles an inline expanded SmartFinderCard overlay
-           so the player can read yardages without leaving the L4 screen. */}
-      {isRoundActive && trustLevel === 4 && (
-        <>
-          <TouchableOpacity
-            onPress={() => router.push('/smartfinder' as never)}
-            onLongPress={() => setL4FinderExpanded(v => !v)}
-            delayLongPress={400}
-            style={{
-              position: 'absolute',
-              right: 12,
-              bottom: 200 + insets.bottom,
-              width: 56,
-              height: 56,
-              borderRadius: 28,
-              backgroundColor: 'rgba(13, 36, 24, 0.85)',
-              borderWidth: 1.5,
-              borderColor: '#00C896',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 14,
-              shadowColor: '#00C896',
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: 0.55,
-              shadowRadius: 8,
-              elevation: 6,
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Open SmartFinder · long-press to expand inline"
-          >
-            <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
-              <View style={{ position: 'absolute', width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: '#00C896' }} />
-              <View style={{ position: 'absolute', width: 18, height: 1.5, backgroundColor: '#ffffff' }} />
-              <View style={{ position: 'absolute', width: 1.5, height: 18, backgroundColor: '#ffffff' }} />
-            </View>
-          </TouchableOpacity>
-          {l4FinderExpanded && (
-            <TouchableOpacity
-              activeOpacity={1}
-              onPress={() => setL4FinderExpanded(false)}
-              style={{
-                position: 'absolute', left: 16, right: 80,
-                bottom: 200 + insets.bottom, zIndex: 13,
-              }}
-            >
-              <SmartFinderCard />
-            </TouchableOpacity>
-          )}
-        </>
-      )}
+      {/* Phase AT follow-up — L4 standalone SmartFinder reticle removed.
+          SmartFinder now lives inside the green-arrow dropdown row. */}
 
       {/* L1 SmartVision card is now rendered inside the L1 Quiet block
            above (stacked under Kevin's tile). This previous standalone
