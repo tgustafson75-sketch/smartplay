@@ -2284,22 +2284,39 @@ export default function Caddie() {
 
 
         {/* ── Hole / Shots / Putts Steppers ──────────────────────────────────── */}
-        <View style={s.stepperRow}>
-            <View style={s.stepperCard}>
-              <Text style={s.stepperLabel}>HOLE</Text>
-              <View style={s.stepperControls}>
-                <Pressable style={s.stepperBtn} onPress={() => { const h = Math.max(1, currentHole - 1); setCurrentHole(h); try { Haptics.selectionAsync(); } catch {} }}>
-                  <MCIcon name="minus" size={16} color={Palette.positiveFaint} />
-                </Pressable>
-                <Text style={s.stepperValue}>{currentHole}</Text>
-                <Pressable style={s.stepperBtn} onPress={() => { const h = Math.min(18, currentHole + 1); setCurrentHole(h); try { Haptics.selectionAsync(); } catch {} }}>
-                  <MCIcon name="plus" size={16} color={Palette.positiveFaint} />
-                </Pressable>
-              </View>
-              <Text style={s.stepperSub}>Par {holePar}</Text>
-            </View>
+        {/* Thin hole-nav card: '<  Menifee Lakes - Hole 1  >'  with par underneath. */}
+        <View style={s.holeNavCard}>
+          <Pressable
+            onPress={() => { const h = Math.max(1, currentHole - 1); setCurrentHole(h); try { Haptics.selectionAsync(); } catch {} }}
+            disabled={currentHole <= 1}
+            hitSlop={10}
+            style={[s.holeNavArrowBtn, currentHole <= 1 && { opacity: 0.3 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Previous hole"
+          >
+            <MCIcon name="chevron-left" size={22} color={Palette.positiveFaint} />
+          </Pressable>
 
-            <View style={s.stepperDivider} />
+          <View style={s.holeNavCenter}>
+            <Text style={s.holeNavTitle} numberOfLines={1} ellipsizeMode="tail">
+              {activeCourse} <Text style={s.holeNavTitleSep}>·</Text> Hole {currentHole}
+            </Text>
+            <Text style={s.holeNavSub}>Par {holePar}</Text>
+          </View>
+
+          <Pressable
+            onPress={() => { const h = Math.min(18, currentHole + 1); setCurrentHole(h); try { Haptics.selectionAsync(); } catch {} }}
+            disabled={currentHole >= 18}
+            hitSlop={10}
+            style={[s.holeNavArrowBtn, currentHole >= 18 && { opacity: 0.3 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Next hole"
+          >
+            <MCIcon name="chevron-right" size={22} color={Palette.positiveFaint} />
+          </Pressable>
+        </View>
+
+        <View style={s.stepperRow}>
 
             <View style={s.stepperCard}>
               <Text style={s.stepperLabel}>SHOTS</Text>
@@ -3193,6 +3210,47 @@ const s = StyleSheet.create({
   playerTabActive:     { backgroundColor: Palette.bgActive, borderColor: Palette.borderActive },
   playerTabText:       { color: Palette.textSub, fontSize: Type.body, fontWeight: Type.semibold },
   playerTabTextActive: { color: Palette.positiveFaint, fontWeight: Type.bold },
+
+  // Thin hole-nav card — '<  Course · Hole N  >' with par underneath.
+  holeNavCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Palette.cardBg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    marginBottom: 8,
+  },
+  holeNavArrowBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  holeNavCenter: {
+    flex: 1,
+    alignItems: 'center',
+    minWidth: 0,
+  },
+  holeNavTitle: {
+    color: Palette.textPrimary,
+    fontSize: 15,
+    fontWeight: Type.bold,
+    letterSpacing: 0.2,
+  },
+  holeNavTitleSep: {
+    color: Palette.muted,
+    fontWeight: Type.regular,
+  },
+  holeNavSub: {
+    color: Palette.muted,
+    fontSize: 11,
+    fontWeight: Type.semibold,
+    marginTop: 1,
+    letterSpacing: 0.4,
+  },
 
   // Hole + Score steppers
   stepperRow: {
