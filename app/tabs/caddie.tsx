@@ -1232,7 +1232,12 @@ export default function Caddie() {
         (Constants as any)?.manifest?.debuggerHost;
       const fallbackHost = expoHostRaw?.split(':')?.[0];
       const fallbackPort = expoHostRaw?.split(':')?.[1] ?? '8081';
-      const fallbackUrl = fallbackHost ? `http://${fallbackHost}:${fallbackPort}/api/vision` : null;
+      // LAN fallback only makes sense in dev — in a production EAS build there
+      // is no Metro server on the local network, and even attempting the call
+      // adds latency and a guaranteed network error to the request chain.
+      const fallbackUrl = __DEV__ && fallbackHost
+        ? `http://${fallbackHost}:${fallbackPort}/api/vision`
+        : null;
       const primaryUrl = `${getApiBaseUrl()}/api/vision`;
       const endpointCandidates = [primaryUrl, fallbackUrl].filter(
         (u, i, arr): u is string => Boolean(u) && arr.indexOf(u as string) === i

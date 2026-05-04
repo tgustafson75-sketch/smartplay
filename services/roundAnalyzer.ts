@@ -6,6 +6,7 @@
 import type { Shot } from '../store/roundStore';
 import type { AiRoundInsight } from '../app/api/analyze-round+api';
 import { useAiProfileStore } from '../store/aiProfileStore';
+import { getApiBaseUrl } from '../utils/apiUrl';
 
 /** Tallies directional miss results from a set of shots. */
 export function getMissStats(shots: Shot[]): { left: number; right: number; center: number } {
@@ -31,7 +32,10 @@ export async function analyzeRoundInBackground(shots: Shot[]): Promise<void> {
     // 15-second hard timeout — never blocks the UI
     const timer = setTimeout(() => controller.abort(), 15_000);
 
-    const res = await fetch('/api/analyze-round', {
+    // Use the resolved API base URL — on a native EAS build a relative
+    // path resolves against the device, not the Vercel deployment, and
+    // the call silently 404s.
+    const res = await fetch(`${getApiBaseUrl()}/api/analyze-round`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ shots }),

@@ -4,8 +4,10 @@ import { Audio } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { setDoc, getDoc, doc } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, db } from '../lib/firebase';
 import { useUserStore } from '../store/userStore';
+import { usePlayerProfileStore } from '../store/playerProfileStore';
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -15,6 +17,8 @@ export default function AuthScreen() {
   const setLastName = useUserStore((s) => s.setLastName);
   const setDisplayName = useUserStore((s) => s.setDisplayName);
   const setHandicap = useUserStore((s) => s.setHandicap);
+  const setOnboardingComplete = useUserStore((s) => s.setOnboardingComplete);
+  const setProfileComplete = usePlayerProfileStore((s) => s.setProfileComplete);
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
@@ -75,6 +79,9 @@ export default function AuthScreen() {
         setDisplayName(chosenDisplay);
         setName(chosenDisplay);
         setHandicap(hcp);
+        // merge:true so v2 never clobbers fields the production v3 app may
+        // have written to this same shared Firestore document. v2 only adds
+        // the bootstrap fields it owns.
         await setDoc(doc(db, 'users', cred.user.uid), {
           firstName: firstName.trim(),
           lastName: lastName.trim(),
@@ -82,10 +89,13 @@ export default function AuthScreen() {
           name: chosenDisplay,
           email: email.trim(),
           handicap: hcp,
-        });
+        }, { merge: true });
         setIsGuest(false);
+        setOnboardingComplete(true);
+        setProfileComplete(true);
+        void AsyncStorage.multiSet([['introSeen', '1'], ['intro_completed', '1']]);
         void playLoginSound();
-        router.replace('/onboarding' as any);
+        router.replace('/tabs/caddie' as any);
         return;
       } else {
         const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
@@ -98,7 +108,7 @@ export default function AuthScreen() {
       }
       setIsGuest(false);
       void playLoginSound();
-      router.replace('/(tabs)/play');
+      router.replace('/tabs/caddie');
     } catch (e: any) {
       const code: string = e?.code ?? '';
       if (code === 'auth/email-already-in-use') setError('That email is already registered. Try logging in.');
@@ -114,7 +124,7 @@ export default function AuthScreen() {
   const continueAsGuest = () => {
     setIsGuest(true);
     void playLoginSound();
-    router.replace('/profile-setup');
+    router.replace('/tabs/caddie');
   };
 
   return (
@@ -216,7 +226,7 @@ export default function AuthScreen() {
       </TouchableOpacity>
 
       <TouchableOpacity
-        onPress={() => { setIsGuest(true); void playLoginSound(); router.replace('/(tabs)/play'); }}
+        onPress={() => { setIsGuest(true); void playLoginSound(); router.replace('/tabs/caddie'); }}
         style={{ marginTop: 8, paddingVertical: 6 }}
       >
         <Text style={styles.skipAllText}>Skip all intake questions →</Text>
