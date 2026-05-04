@@ -349,6 +349,15 @@ export default function SmartVisionScreen() {
     return { front: null as number | null, middle: null as number | null, back: null as number | null };
   }, [projection, targetPx, geometry, courseHoles, holeIndex]);
 
+  // Carry distance — yards from tee to current yellow target. Surfaces
+  // as a visible measure label next to the yellow marker so users
+  // immediately see it as a measure tool, not just a draggable dot.
+  const carryYards = useMemo(() => {
+    if (!projection || !targetPx || !geometry?.tee) return null;
+    const targetGeo = pixelsToLatLng(targetPx, projection.center, projection.zoom, projection.bearing);
+    return Math.round(haversineYards(targetGeo.lat, targetGeo.lng, geometry.tee.lat, geometry.tee.lng));
+  }, [projection, targetPx, geometry]);
+
   // ── Drag handler for yellow target ──────────────────────────────
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -459,13 +468,41 @@ export default function SmartVisionScreen() {
           />
         )}
         {targetScreen && (
-          <Marker
-            kind="Y"
-            x={targetScreen.x}
-            y={targetScreen.y - insets.top - TOP_BAR_H}
-            draggable
-            onDrag={onTargetDrag}
-          />
+          <>
+            <Marker
+              kind="Y"
+              x={targetScreen.x}
+              y={targetScreen.y - insets.top - TOP_BAR_H}
+              draggable
+              onDrag={onTargetDrag}
+            />
+            {/* Measure label — floats above-right of the yellow marker so
+                the marker reads as a measure tool, not just a dot. Shows
+                carry yards from tee + yards to pin (middle of green). */}
+            {carryYards != null && yardages.middle != null && (
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.measureLabel,
+                  {
+                    left: targetScreen.x + 28,
+                    top: targetScreen.y - insets.top - TOP_BAR_H - 30,
+                  },
+                ]}
+              >
+                <Text style={styles.measureLabelTop}>{carryYards}y carry</Text>
+                <Text style={styles.measureLabelBot}>{yardages.middle}y to pin</Text>
+              </View>
+            )}
+          </>
+        )}
+
+        {/* First-time hint when measure tool is available */}
+        {targetScreen && carryYards != null && (
+          <View pointerEvents="none" style={styles.measureHint}>
+            <Ionicons name="hand-left-outline" size={12} color="#facc15" />
+            <Text style={styles.measureHintText}>Drag yellow Y to measure</Text>
+          </View>
         )}
       </View>
 
@@ -528,6 +565,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5, shadowRadius: 4, elevation: 6,
   },
   markerText: { fontWeight: '900', letterSpacing: 0.5 },
+  measureLabel: {
+    position: 'absolute',
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    borderWidth: 1, borderColor: '#facc15',
+    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
+    minWidth: 92,
+  },
+  measureLabelTop: {
+    color: '#facc15', fontSize: 12, fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
+  measureLabelBot: {
+    color: '#ffffff', fontSize: 11, fontWeight: '700',
+    fontVariant: ['tabular-nums'], marginTop: 1,
+  },
+  measureHint: {
+    position: 'absolute',
+    top: 12, left: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderWidth: 1, borderColor: 'rgba(250,204,21,0.5)',
+    borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6,
+  },
+  measureHintText: {
+    color: '#facc15', fontSize: 11, fontWeight: '700', letterSpacing: 0.3,
+  },
   bottomPanel: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#000000',
