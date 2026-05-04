@@ -31,11 +31,14 @@ import {
 } from '../services/VoiceEngine';
 import { startSTT, stopSTT } from '../services/sttService';
 import { getAIResponse } from '../services/aiService';
+import { getCaddieResponseV2 } from '../services/caddieBrainV2';
 import { setGlobalGender } from '../services/voiceService';
 import { useVoiceStore } from '../store/voiceStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { parseVoiceCommand } from '../services/voiceCommandParser';
+import { USE_CADDIE_V2 } from '../constants/caddieConfig';
 import { useSituationalContext } from './useSituationalContext';
+import { COURSE_GPS } from '../features/courses/data/courseGPS';
 import {
   VoiceIntelligence,
   autoSpeak as viAutoSpeak,
@@ -48,6 +51,14 @@ import {
 } from '../services/VoiceIntelligence';
 
 export { PRIORITY };
+
+/** Look up the booking URL for a course by name — falls back to golfnow.com */
+const getCourseBookingUrl = (courseName: string): string => {
+  const entry = COURSE_GPS.find(
+    (c) => c.name.toLowerCase() === courseName.toLowerCase()
+  );
+  return entry?.bookingUrl ?? 'https://www.golfnow.com';
+};
 
 export const useVoiceCaddie = () => {
   const silenceTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -67,6 +78,16 @@ export const useVoiceCaddie = () => {
   const setBrightMode   = useSettingsStore((s) => s.setBrightMode);
   const setResponseMode = useSettingsStore((s) => s.setResponseMode);
   const responseMode    = useSettingsStore((s) => s.responseMode);
+  const discreteMode    = useSettingsStore((s) => s.discreteMode);
+
+  // Sync the local genderPrefRef with the persisted settingsStore voiceGender.
+  // Without this the ref defaults to 'male' and the user's Female/Serena
+  // toggle in the tools menu never reaches this hook's speakJob calls — they
+  // stayed Kevin while the avatar swapped to Serena.
+  const persistedVoiceGender = useSettingsStore((s) => s.voiceGender) as 'male' | 'female';
+  if (genderPrefRef.current !== persistedVoiceGender) {
+    genderPrefRef.current = persistedVoiceGender;
+  }
 
   /** Call this whenever quietMode or voiceEnabled changes. */
   const setMuted = (quietMode: boolean, voiceEnabled: boolean): void => {
@@ -142,6 +163,8 @@ export const useVoiceCaddie = () => {
   const FRUSTRATION_WORDS = [
     'terrible', 'awful', 'bad', 'hate', 'what am i doing',
     "can't hit", 'useless', 'garbage',
+    "isn't working", 'not working', 'give up',
+    'frustrated', 'hopeless', 'never', 'done',
   ];
 
   const detectFrustration = (text: string): boolean =>
@@ -183,7 +206,6 @@ export const useVoiceCaddie = () => {
       )
       .replace(/([^.!?,])\s*$/, '$1.');
   };
-
   /** Returns a miss-pattern reply if transcript asks about misses, null otherwise. */
   const getMissPatternReply = (text: string): string | null => {
     const lower = text.toLowerCase();
@@ -219,12 +241,120 @@ export const useVoiceCaddie = () => {
     void guardedSpeak(finalText, PRIORITY.STRATEGY);
   };
 
+  // ── Dual V1/V2 caddie handler ────────────────────────────────────────────
+  /**
+   * handleUserInput — Routes transcript through V1 or V2 caddie brain.
+   *
+   * V2 (rule-based):
+   *   - Synchronous, instant responses
+   *   - Handles special signals: __START_CAMERA__, __SHOW_OVERLAY__
+   *   - No AI calls, fully deterministic
+   *
+   * V1 (AI-powered):
+   *   - Async OpenAI integration via aiService
+   *   - Frustration + pattern detection
+   *   - Situational context adjustment
+   */
+  const handleUserInput = async (
+    input: string,
+    inputContext?: Record<string, any>,
+  ): Promise<void> => {
+    if (USE_CADDIE_V2) {
+      // ── V2 Path: Rule-based, synchronous caddie brain ────────────────────
+      const shots = inputContext?.shots || [];
+      const setPracticeSession = inputContext?.setPracticeSession;
+      const response = getCaddieResponseV2(
+        input,
+        inputContext ?? {},
+        shots,
+        setPracticeSession
+      );
+
+      console.log('V2 RESPONSE:', response);
+
+      // Handle special signals from V2
+      if (response === '__START_CAMERA__') {
+        if (inputContext?.onStartCameraRecording) {
+          inputContext.onStartCameraRecording();
+        }
+        const reply = 'Got it.';
+        setCaddieResponse(reply);
+        await guardedSpeak(reply, PRIORITY.STRATEGY);
+        return;
+      }
+
+      if (response === '__SHOW_OVERLAY__') {
+        if (inputContext?.onShowOverlay) {
+          inputContext.onShowOverlay();
+        }
+        const reply = 'Here you go.';
+        setCaddieResponse(reply);
+        await guardedSpeak(reply, PRIORITY.STRATEGY);
+        return;
+      }
+
+      // Normal V2 response — speak directly
+      setCaddieResponse(response);
+      await guardedSpeak(response, PRIORITY.STRATEGY);
+      return;
+    }
+
+    // ── V1 Path: AI-powered caddie (fallback) ────────────────────────────
+  // Preserve legacy behavior when V2 is disabled.
+    const frustrationReply = input ? getFrustrationReply(input) : null;
+    const missReply        = input ? getMissPatternReply(input) : null;
+    // Tee time intent detection — handled before AI to give instant response
+    const lowerInput = input.toLowerCase();
+    const isTeeTimeIntent =
+      lowerInput.includes('tee time') ||
+      lowerInput.includes('book a tee') ||
+      lowerInput.includes('book tee') ||
+      lowerInput.includes('reserve a tee') ||
+      lowerInput.includes('make a reservation') ||
+      lowerInput.includes('schedule a round') ||
+      lowerInput.includes('book a round');
+
+    let response: string;
+    if (isTeeTimeIntent) {
+      const courseName = (inputContext as any)?.activeCourse ?? '';
+      const url = getCourseBookingUrl(courseName);
+      const spokenResponse = `Opening tee times for ${courseName || 'your course'}. Booking page coming right up.`;
+      const finalText = addAcknowledgement(humanizeText(spokenResponse));
+      setCaddieResponse(finalText);
+      await VoiceController.speak(finalText, setVoiceState, genderPrefRef.current as unknown as null);
+      try {
+        const { openBrowserAsync } = await import('expo-web-browser');
+        await openBrowserAsync(url);
+      } catch {
+        // Browser unavailable — caddie already spoke.
+      }
+      return;
+    } else if (frustrationReply) {
+      response = frustrationReply;
+    } else if (missReply) {
+      response = missReply;
+    } else {
+      response = await getAIResponse(input, inputContext ?? {}, responseMode);
+    }
+
+    // Apply situational context adjustment (pressure-aware tone) — modifies string only
+    const adjustedResponse = adjustForContext(response);
+    const finalText = input.trim()
+      ? addAcknowledgement(humanizeText(adjustedResponse))
+      : humanizeText(adjustedResponse);
+    setCaddieResponse(finalText);
+
+    // Preserve legacy V1 speaking path.
+    await VoiceController.speak(finalText, setVoiceState, genderPrefRef.current as unknown as null);
+  };
+
   // ── 4. Proactive Coaching ─────────────────────────────────────────────────
   // Natural 1.2s delay after hole change — deliberate pacing, not a race condition.
   const proactiveCoachNextRef = useRef(2 + Math.floor(Math.random() * 2)); // 2 or 3
 
   const proactiveCoach = (hole: number) => {
     if (hole < 2) return;
+    if (discreteMode) return; // suppress proactive cues in discrete mode
     if ((hole - 1) % proactiveCoachNextRef.current !== 0) return;
     proactiveCoachNextRef.current = 2 + Math.floor(Math.random() * 2);
     const cue = pick('proactive', PROACTIVE_CUES);
@@ -280,7 +410,7 @@ export const useVoiceCaddie = () => {
         return;
       }
 
-      // ── Yardage query — bypass AI entirely, answer instantly ─────────────
+        // ── Yardage query — bypass AI entirely, answer instantly ─────────────
       if (transcript) {
         const t = transcript.toLowerCase();
         const isYardageQuery = (
@@ -294,9 +424,8 @@ export const useVoiceCaddie = () => {
         if (isYardageQuery && context?.distance) {
           const yards = Math.round(Number(context.distance));
           const reply = `${yards} yards.`;
-          setVoiceState('SPEAKING');
           setCaddieResponse(reply);
-          await VoiceController.speak(reply, setVoiceState, genderPrefRef.current as unknown as null);
+          await guardedSpeak(reply, PRIORITY.STRATEGY);
           return;
         }
 
@@ -310,9 +439,8 @@ export const useVoiceCaddie = () => {
         );
         if (isClubQuery && context?.club) {
           const reply = `${context.club}.`;
-          setVoiceState('SPEAKING');
           setCaddieResponse(reply);
-          await VoiceController.speak(reply, setVoiceState, genderPrefRef.current as unknown as null);
+          await guardedSpeak(reply, PRIORITY.STRATEGY);
           return;
         }
 
@@ -326,11 +454,44 @@ export const useVoiceCaddie = () => {
         );
         if (isMarkShot) {
           const reply = 'Shot marked.';
-          setVoiceState('SPEAKING');
           setCaddieResponse(reply);
           // Notify caller via context so UI can also call handleMarkShot
           if (context?.onMarkShot) (context.onMarkShot as () => void)();
-          await VoiceController.speak(reply, setVoiceState, genderPrefRef.current as unknown as null);
+          await guardedSpeak(reply, PRIORITY.STRATEGY);
+          return;
+        }
+
+        const isSmartVisionCommand = (
+          t.includes('smartvision') ||
+          t.includes('smart vision') ||
+          t.includes('smart view') ||
+          t.includes('hole view') ||
+          t.includes('open vision') ||
+          t.includes('show vision')
+        );
+        const openSmartVision =
+          context?.onOpenSmartVision ?? context?.onStartVideo ?? context?.onShowMap;
+        if (USE_CADDIE_V2 && isSmartVisionCommand && typeof openSmartVision === 'function') {
+          const reply = 'Opening SmartVision.';
+          setCaddieResponse(reply);
+          (openSmartVision as () => void)();
+          await guardedSpeak(reply, PRIORITY.STRATEGY);
+          return;
+        }
+
+        const isSmartMotionCommand = (
+          t.includes('smartmotion') ||
+          t.includes('smart motion') ||
+          t.includes('swing lab') ||
+          t.includes('open swing lab') ||
+          t.includes('open smart motion') ||
+          t.includes('show smart motion')
+        );
+        if (USE_CADDIE_V2 && isSmartMotionCommand && typeof context?.onOpenSmartMotion === 'function') {
+          const reply = 'Opening SmartMotion.';
+          setCaddieResponse(reply);
+          (context.onOpenSmartMotion as () => void)();
+          await guardedSpeak(reply, PRIORITY.STRATEGY);
           return;
         }
       }
@@ -339,7 +500,6 @@ export const useVoiceCaddie = () => {
       if (transcript) {
         const command = parseVoiceCommand(transcript);
         if (command !== null) {
-          setVoiceState('SPEAKING');
           let confirmMsg = '';
           switch (command) {
             case 'bright':
@@ -365,7 +525,7 @@ export const useVoiceCaddie = () => {
               break;
           }
           setCaddieResponse(confirmMsg);
-          await VoiceController.speak(confirmMsg, setVoiceState, genderPrefRef.current as unknown as null);
+          await guardedSpeak(confirmMsg, PRIORITY.STRATEGY);
           return;
         }
       }
@@ -375,25 +535,13 @@ export const useVoiceCaddie = () => {
       console.log('[VoiceEngine] VOICE PROCESSING');
       console.log(`[useVoiceCaddie] AI INPUT: "${transcript ?? '(context-only)'}"`);
 
-      const frustrationReply = transcript ? getFrustrationReply(transcript) : null;
-      const missReply        = transcript ? getMissPatternReply(transcript) : null;
+      // Route through V1/V2 handler
+      await handleUserInput(transcript ?? '', context);
 
-      let response: string;
-      if (frustrationReply) {
-        response = frustrationReply;
-      } else if (missReply) {
-        response = missReply;
-      } else {
-        response = await getAIResponse(transcript ?? '', context ?? {}, responseMode);
+      // Hard safety: if speech is dropped/blocked, never leave UI stuck in PROCESSING.
+      if (useVoiceStore.getState().voiceState === 'PROCESSING') {
+        setVoiceState('IDLE');
       }
-
-      // Apply situational context adjustment (pressure-aware tone) — modifies string only
-      const adjustedResponse = adjustForContext(response);
-      const finalText = addAcknowledgement(humanizeText(adjustedResponse));
-      setCaddieResponse(finalText);
-
-      // SPEAKING phase — VoiceController.speak uses CRITICAL priority
-      await VoiceController.speak(finalText, setVoiceState, genderPrefRef.current as unknown as null);
 
     } catch (e) {
       console.error('[useVoiceCaddie] pipeline error:', e);
@@ -412,17 +560,17 @@ export const useVoiceCaddie = () => {
 
   /** Speak once on app launch or round start. OK to call on every render — fires only once. */
   const speakIntro = async (trigger: 'app' | 'round' = 'app') => {
+    if (discreteMode) return;
     const msg = getIntroMessage(trigger);
     if (!msg) return;
     if (!viShouldSpeak(msg, PRIORITY.AMBIENT)) return;
     const didSpeak = await guardedSpeak(msg, PRIORITY.AMBIENT);
-    // Only record if actually spoken (VoiceEngine confirmed playback)
-    // guardedSpeak returns void — use canSpeak check above as the record gate
     viRecord(msg, PRIORITY.AMBIENT);
   };
 
   /** Speak pre-shot distance advice. Respects cooldown — safe to call on GPS updates. */
   const speakPreShot = async (ctx: { distance: number; club?: string }) => {
+    if (discreteMode) return;
     const msg = getPreShotMessage(ctx);
     if (!msg) return;
     if (!viShouldSpeak(msg, PRIORITY.STRATEGY)) return;
@@ -453,6 +601,7 @@ export const useVoiceCaddie = () => {
 
     // ── Respond + coaching ──
     respond,
+    handleUserInput,
     getTempoCue,
     checkMissPattern,
     getFrustrationReply,

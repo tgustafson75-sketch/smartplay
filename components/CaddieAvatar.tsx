@@ -341,7 +341,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#060f09',
   },
   avatarFrame: {
-    width: W,
+    // Use 100% of parent width (capped to the device width as a defensive max)
+    // so the frame fits inside its container — including narrow viewports
+    // like the Galaxy Z Fold cover screen, where width:W (the device width)
+    // overflowed the ScrollView's horizontal padding and pushed Serena right.
+    width: '100%',
+    maxWidth: W,
+    alignSelf: 'center',
     height: AVATAR_HEIGHT,
     overflow: 'hidden',
     backgroundColor: '#060f09',

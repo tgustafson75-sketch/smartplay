@@ -5,12 +5,13 @@
  *   Web   : blob → URL.createObjectURL → Audio.Sound
  *   Native: ArrayBuffer → base64 → data:audio/mpeg;base64,… → Audio.Sound
  *
- * IMPORTANT: expo-speech is NOT used here. All TTS output goes through
- * ElevenLabs only. Route all calls via core/voice/VoiceManager.ts.
+ * Primary TTS: ElevenLabs. Falls back to expo-speech when no API key is set.
+ * Route all calls via core/voice/VoiceManager.ts.
  */
 
 import { Audio } from 'expo-av';
 import { Platform } from 'react-native';
+import * as Speech from 'expo-speech';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -43,6 +44,30 @@ export const setGlobalGender = (gender) => {
 
 /** Read the current global gender. */
 export const getGlobalGender = () => _globalGender;
+
+export const configureAudioForSpeech = async () => {
+  try {
+    await Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      allowsRecordingIOS: false,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    });
+  } catch {}
+};
+
+export const configureAudioForRecording = async () => {
+  try {
+    await Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      allowsRecordingIOS: true,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: false,
+      playThroughEarpieceAndroid: false,
+    });
+  } catch {}
+};
 
 // ---------------------------------------------------------------------------
 // Internal state
@@ -119,7 +144,16 @@ export const speak = async (text, gender = null) => {
     const voiceId = VOICES[activeGender] ?? VOICES.male;
 
     if (!IS_VALID_API_KEY) {
-      console.error('[voiceService] No valid ElevenLabs API key. Set EXPO_PUBLIC_ELEVENLABS_API_KEY in .env. Voice disabled.');
+      console.warn('[voiceService] No ElevenLabs key — falling back to system TTS.');
+      await new Promise((resolve) => {
+        Speech.speak(text, {
+          language: 'en-US',
+          rate: 0.92,
+          pitch: activeGender === 'female' ? 1.1 : 0.9,
+          onDone: resolve,
+          onError: resolve,
+        });
+      });
       return;
     }
 
@@ -181,7 +215,20 @@ export const speak = async (text, gender = null) => {
           } catch (fallbackErr) {
             if (fallbackErr.name === 'AbortError') return;
             console.error('[voiceService] All ElevenLabs voices failed:', fallbackErr?.message ?? fallbackErr);
-            // Voice silent-fails — no expo-speech fallback (ElevenLabs is the only output path)
+            // Last-resort: device-native TTS via expo-speech so the caddie never
+            // goes fully silent. Pitch nudged so female still sounds different
+            // than male even on the system voice.
+            try {
+              await new Promise((resolve) => {
+                Speech.speak(text, {
+                  language: 'en-US',
+                  rate: 0.92,
+                  pitch: activeGender === 'female' ? 1.1 : 0.9,
+                  onDone: resolve,
+                  onError: resolve,
+                });
+              });
+            } catch {/* ignore — already best-effort */}
             return;
           }
         }
@@ -197,7 +244,7 @@ export const speak = async (text, gender = null) => {
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: false,   // restore A2DP — BT earbuds play at full quality
       playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
+      staysActiveInBackground: true,
       shouldDuckAndroid: true,
       playThroughEarpieceAndroid: false,  // route to BT headset / loudspeaker, not earpiece
     });
@@ -227,7 +274,7 @@ export const speak = async (text, gender = null) => {
 
   } catch (error) {
     if (error?.name === 'AbortError') return;
-    console.error('[ELEVEN ERROR]', error?.message ?? error);
+    console.log('[ELEVEN ERROR]', error?.message ?? error);
   } finally {
     _fetchAbortCtrl = null;
     if (_currentSound) {
@@ -265,5 +312,13 @@ export const stopSpeaking = async () => {
 // ---------------------------------------------------------------------------
 // Convenience shortcuts
 // ---------------------------------------------------------------------------
-export const speakMale   = (text) => speak(text, 'male');
-export const speakFemale = (text) => speak(text, 'female');
+export const speakMale   = (text) => {
+  // DISABLED: legacy voice output (migrated to V2)
+  // return speak(text, 'male');
+  return undefined;
+};
+export const speakFemale = (text) => {
+  // DISABLED: legacy voice output (migrated to V2)
+  // return speak(text, 'female');
+  return undefined;
+};
