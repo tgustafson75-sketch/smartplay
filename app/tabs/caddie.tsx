@@ -2239,7 +2239,7 @@ export default function Caddie() {
             hole={currentHole}
             par={holePar}
             yards={displayDistance ?? null}
-            wind={`${wind.speed} mph ${wind.direction}`}
+            wind={wind}
             playsLike={effectiveDistance ?? null}
             openingPrompt={openingPrompt}
             caddieResponse={caddieResponse || caddieMsg || currentAdvice}

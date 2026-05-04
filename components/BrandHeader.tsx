@@ -7,7 +7,7 @@
  * Optional `rightSlot` renders a right-aligned element (e.g. tools pill).
  */
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, useWindowDimensions } from "react-native";
 import { useTheme, Spacing } from "../theme/brand";
 import CaddieMicButton from "./CaddieMicButton";
 
@@ -18,18 +18,24 @@ interface BrandHeaderProps {
 
 export default function BrandHeader({ rightSlot }: BrandHeaderProps) {
   const theme = useTheme();
+  const { width } = useWindowDimensions();
+  const compact = width < 390;
+  const ultraCompact = width < 360;
+
   return (
-    <View style={[styles.container, { borderBottomColor: theme.divider, backgroundColor: theme.background }]}>
+    <View style={[styles.container, ultraCompact && styles.containerUltraCompact, { borderBottomColor: theme.divider, backgroundColor: theme.background }]}>
       {/* Logo as live caddie mic */}
-      <CaddieMicButton size={44} showLabel={false} />
+      <CaddieMicButton size={ultraCompact ? 34 : compact ? 40 : 44} showLabel={false} />
 
       {/* Wordmark + tagline */}
       <View style={styles.text}>
-        <Text style={styles.wordmark}>
+        <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.wordmark, compact && styles.wordmarkCompact, ultraCompact && styles.wordmarkUltraCompact]}>
           <Text style={{ color: theme.accentSoft }}>SmartPlay</Text>
-          <Text style={{ color: theme.textPrimary }}> Caddie</Text>
+          <Text style={{ color: '#ffffff' }}> Caddie</Text>
         </Text>
-        <Text style={[styles.tagline, { color: theme.textSecondary }]}>REAL-TIME CADDIE INTELLIGENCE</Text>
+        {!ultraCompact && (
+          <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.tagline, compact && styles.taglineCompact, { color: theme.textSecondary }]}>REAL-TIME CADDIE INTELLIGENCE</Text>
+        )}
       </View>
 
       {/* Right slot — spacer fills remaining room, slot renders flush right */}
@@ -52,8 +58,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  containerUltraCompact: {
+    paddingHorizontal: 10,
+    gap: 6,
+  },
 
   text: {
+    flex: 1,
+    minWidth: 0,
     gap: 2,
   },
   wordmark: {
@@ -62,10 +74,23 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     lineHeight: 20,
   },
+  wordmarkCompact: {
+    fontSize: 16,
+    letterSpacing: 1.1,
+  },
+  wordmarkUltraCompact: {
+    fontSize: 13,
+    letterSpacing: 0.2,
+    lineHeight: 16,
+  },
   tagline: {
     fontSize: 9,
     fontWeight: "600" as const,
     letterSpacing: 2,
     textTransform: "uppercase",
+  },
+  taglineCompact: {
+    fontSize: 8,
+    letterSpacing: 1.5,
   },
 });

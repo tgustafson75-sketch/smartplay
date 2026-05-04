@@ -95,7 +95,7 @@ interface CaddieAvatarProps {
   hole: number | null;
   par: number | null;
   yards: number | null;
-  wind: string | null;
+  wind: { speed: number; direction: 'head' | 'tail' | 'left' | 'right' } | null;
   playsLike: number | null;
   openingPrompt: string;
   caddieResponse: string;
@@ -206,7 +206,9 @@ export default function CaddieAvatar({
       value: yards !== null
         ? String(yards) : '—' },
     { label: 'WIND',
-      value: wind ?? '—' },
+      value: wind
+        ? `${wind.direction === 'head' ? '↓' : wind.direction === 'tail' ? '↑' : wind.direction === 'left' ? '→' : '←'}${wind.speed}`
+        : '—' },
     { label: 'PLAYS',
       value: playsLike !== null
         ? String(playsLike) : '—' },
