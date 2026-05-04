@@ -21,6 +21,7 @@ import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, stopSpeaking, configureAudioForSpeech } from '../../../services/voiceService';
 import { runPhaseKOnSession } from '../../../services/videoUpload';
+import { uploadLog } from '../../../services/uploadDiagnostic';
 import PrimaryIssueCard from '../../../components/swinglab/PrimaryIssueCard';
 import DrillCard from '../../../components/swinglab/DrillCard';
 
@@ -102,6 +103,24 @@ export default function SwingDetail() {
   const cardsFade = useRef(new Animated.Value(0)).current;
   const spokenForRef = useRef<string | null>(null);
   const analysisStatus: AnalysisStatus = session?.analysis_status ?? 'pending';
+
+  // Phase BQ — emit [upload:ui-render] on every analysis_status transition
+  // so the empirical trace shows whether the UI ever sees the result the
+  // pipeline stored. Includes the full status so a "stuck on
+  // analyzing_pose" failure is visible in logs instead of inferred.
+  const lastRenderStatus = useRef<AnalysisStatus | null>(null);
+  useEffect(() => {
+    if (!swing_id) return;
+    if (lastRenderStatus.current === analysisStatus) return;
+    lastRenderStatus.current = analysisStatus;
+    uploadLog('ui-render', {
+      analysis_status: analysisStatus,
+      has_primary_issue: !!session?.primary_issue,
+      has_drill: !!session?.drill_recommendation,
+      analysis_error: session?.analysis_error ?? null,
+    }, swing_id);
+  }, [analysisStatus, swing_id, session?.primary_issue, session?.drill_recommendation, session?.analysis_error]);
+
   useEffect(() => {
     if (analysisStatus === 'ok') {
       Animated.timing(cardsFade, { toValue: 1, duration: 420, useNativeDriver: true }).start();
@@ -162,6 +181,7 @@ export default function SwingDetail() {
     // auto-narrate effect can't fire with stale 'ok' status and re-speak the
     // old primary_issue between the ref clear and the first runPhaseK status
     // transition. Also stop any in-flight TTS from a prior auto-narration.
+    uploadLog('reanalyze-start', { from_status: analysisStatus }, swing_id);
     void stopSpeaking().catch(() => {});
     useCageStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
     spokenForRef.current = null;

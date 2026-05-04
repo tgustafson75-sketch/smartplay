@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
 import { pickVideo, probeVideo, ingestVideoFromPick, MAX_FILE_SIZE_MB } from '../../services/videoUpload';
+import { uploadLog } from '../../services/uploadDiagnostic';
 import type { SwingTag } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
@@ -64,6 +65,7 @@ export default function UploadSwing() {
   const onSave = () => {
     if (!uri) return;
     setStep('saving');
+    uploadLog('save-tap', { club, has_audio: hasAudio, duration_sec: durationSec });
     const sessionId = ingestVideoFromPick({
       uri, club, notes: notes.trim() || null, swinger: swinger.trim() || 'Me',
       tag, has_audio: hasAudio, duration_sec: durationSec,

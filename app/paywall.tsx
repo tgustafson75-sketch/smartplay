@@ -84,7 +84,9 @@ export default function PaywallScreen() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
           <Image
-            source={require('../assets/avatars/kevin_portrait.jpg')}
+            source={voiceGender === 'female'
+              ? require('../assets/avatars/serena_portrait.jpg')
+              : require('../assets/avatars/kevin_portrait.jpg')}
             style={styles.avatar}
             resizeMode="cover"
           />

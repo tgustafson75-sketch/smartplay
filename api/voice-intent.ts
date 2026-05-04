@@ -134,6 +134,29 @@ Available intents:
    wants_card: true ONLY if user said "show me", "card", "card me", "visually", "on screen", or similar visual-display request. Default false (voice response).
    DO NOT match a tactical single-club question. "What club here?" / "What's the wind?" / "How far?" are NOT in_round_diagnostic — they have no pattern AND no reasoning verb.
 
+13. club_change — User is in a cage practice session and is announcing a club switch.
+   parameters: { club_phrase: string }
+   Examples:
+   - "switching to 6-iron" -> { club_phrase: "6-iron" }
+   - "going to pitching wedge" -> { club_phrase: "pitching wedge" }
+   - "now I'm on driver" -> { club_phrase: "driver" }
+   - "I'll grab the 8 iron" -> { club_phrase: "8 iron" }
+   - "switch to my 5 wood" -> { club_phrase: "5 wood" }
+   - "going driver" -> { club_phrase: "driver" }
+   - "I'm hitting the gap wedge now" -> { club_phrase: "gap wedge" }
+   club_phrase: pass the verbatim club name the user said. The handler parses it.
+   ONLY match when the user names a specific club AND signals a switch ("switching to", "going to", "now I'm on", "I'll grab", "I'm hitting", or just "going [club]").
+   Bare "wedge" / "switching clubs" without specifying which is fine — the handler asks "which one".
+
+14. club_query — User is in a cage session asking which club they're currently on.
+   parameters: {}
+   Examples: "what club am I on", "what's my current club", "which club am I hitting", "what am I on"
+
+15. club_menu — User wants the manual club picker UI to open during a cage session.
+   parameters: {}
+   Examples: "show clubs", "club menu", "switch club", "change club", "open the club picker"
+   Use this when the user wants to PICK from a list (vs club_change which already names a specific club).
+
 7. unknown — Cannot determine intent.
    parameters: {}
    Set follow_up_question to a brief clarifying question Kevin could ask.
@@ -142,7 +165,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null

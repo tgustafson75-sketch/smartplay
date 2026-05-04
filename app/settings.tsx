@@ -47,6 +47,8 @@ export default function Settings() {
     // build (track-player was removed; see services/mediaKeyBridge.ts).
     voiceOnPhoneSpeaker,
     kevinGreetingEnabled,
+    cageAutoClubDetection,
+    setCageAutoClubDetection,
     setVoiceOnPhoneSpeaker,
     setKevinGreetingEnabled,
     setVoiceEnabled,
@@ -409,6 +411,17 @@ export default function Settings() {
             sub="Allow Kevin's voice when no earbuds are connected"
             value={voiceOnPhoneSpeaker}
             onValueChange={setVoiceOnPhoneSpeaker}
+          />
+        </View>
+
+        {/* PRACTICE — Phase BL */}
+        <SectionHeader title="Practice" />
+        <View style={cardStyle}>
+          <ToggleRow
+            label="Auto Club Detection"
+            sub={'Show the camera button in cage sessions to read the number stamped on a club’s sole. Voice ("switching to 6-iron") and the manual picker still work either way.'}
+            value={cageAutoClubDetection}
+            onValueChange={setCageAutoClubDetection}
           />
         </View>
 

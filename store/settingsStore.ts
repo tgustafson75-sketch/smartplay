@@ -43,6 +43,12 @@ interface SettingsState {
   // back to 'live' fires a fresh GPS read (synthetic Mark) so the
   // current position re-anchors the live yardages.
   yardageMode: 'live' | 'preround';
+  // Phase BL — auto club recognition during cage practice. When true,
+  // the cage session shows the "ID club" camera button and accepts
+  // voice intents like "switching to 6-iron". When false, only the
+  // manual tap-grid picker is exposed. Voice intents still parse the
+  // utterance but show the manual picker instead of registering.
+  cageAutoClubDetection: boolean;
 
   // ─── ACTIONS ────────────────────────────
 
@@ -70,6 +76,8 @@ interface SettingsState {
   setKevinGreetingEnabled: (v: boolean) => void;
   setSmartVisionImagery: (v: 'curated' | 'gps' | 'auto') => void;
   setYardageMode: (v: 'live' | 'preround') => void;
+  // Phase BL
+  setCageAutoClubDetection: (v: boolean) => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -100,6 +108,7 @@ export const useSettingsStore = create<SettingsState>()(
       kevinGreetingEnabled: true,
       smartVisionImagery: 'auto' as const,
       yardageMode: 'live' as const,
+      cageAutoClubDetection: true,
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
       setVoiceGender: (g) => set({ voiceGender: g }),
@@ -159,6 +168,7 @@ export const useSettingsStore = create<SettingsState>()(
           })();
         }
       },
+      setCageAutoClubDetection: (v) => set({ cageAutoClubDetection: v }),
     }),
     {
       name: 'settings-store-v2',
@@ -185,6 +195,7 @@ export const useSettingsStore = create<SettingsState>()(
         kevinGreetingEnabled: s.kevinGreetingEnabled,
         smartVisionImagery: s.smartVisionImagery,
         yardageMode: s.yardageMode,
+        cageAutoClubDetection: s.cageAutoClubDetection,
         // watchConnected / glassesConnected not persisted — rechecked on mount
       }),
     },

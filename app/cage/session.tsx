@@ -6,7 +6,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
+  Modal,
+  Alert,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -29,6 +32,30 @@ import { useWatchStore } from '../../store/watchStore';
 import { simulateSwing, getKevinTempoLine } from '../../services/watchService';
 import { setSuppressed as setEarbudSuppressed } from '../../services/earbudControl';
 import AppIcon from '../../components/AppIcon';
+import { recognizeClubFromUri, clubLabel } from '../../services/clubRecognition';
+import { track } from '../../services/analytics';
+
+// Phase BL — manual picker grid. Values match the legacy CLUBS list in
+// app/cage/index.tsx and the ClubId catalog in services/clubRecognition.ts.
+const CLUB_PICKER: { label: string; value: string }[] = [
+  { label: 'Driver', value: 'DR' },
+  { label: '3 Wood', value: '3W' },
+  { label: '5 Wood', value: '5W' },
+  { label: '7 Wood', value: '7W' },
+  { label: '3 Hybrid', value: '3H' },
+  { label: '4 Hybrid', value: '4H' },
+  { label: '5 Hybrid', value: '5H' },
+  { label: '4 Iron', value: '4I' },
+  { label: '5 Iron', value: '5I' },
+  { label: '6 Iron', value: '6I' },
+  { label: '7 Iron', value: '7I' },
+  { label: '8 Iron', value: '8I' },
+  { label: '9 Iron', value: '9I' },
+  { label: 'PW', value: 'PW' },
+  { label: 'GW', value: 'GW' },
+  { label: 'SW', value: 'SW' },
+  { label: 'LW', value: 'LW' },
+];
 
 const FEEL_OPTIONS = [
   { label: 'Flush',  value: 'flush', color: '#00C896', emoji: '🎯' },
@@ -54,11 +81,12 @@ export default function CageSession() {
   const router = useRouter();
   const _params = useLocalSearchParams();
 
-  const { activeSession, addShot, endSession } = useCageStore();
-  const { voiceGender, voiceEnabled, language } = useSettingsStore();
+  const { activeSession, addShot, endSession, setActiveClub, clubMenuOpen, setClubMenuOpen } = useCageStore();
+  const { voiceGender, voiceEnabled, language, cageAutoClubDetection } = useSettingsStore();
   const { isConnected: watchConnected, recordSwing: recordWatchSwing } = useWatchStore();
   const { addObservation, updateClubConfidence } = useRelationshipStore();
   const { dominantMiss: _dominantMiss } = usePlayerProfileStore();
+  const [identifyingClub, setIdentifyingClub] = useState(false);
 
   const [selectedFeel, setSelectedFeel] = useState<string | null>(null);
   const [selectedShape, setSelectedShape] = useState<string | null>(null);
@@ -69,7 +97,9 @@ export default function CageSession() {
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
-  const club = activeSession?.club ?? '7I';
+  // Phase BL — currentClub reflects mid-session switches; falls back to the
+  // session's initial club for legacy sessions without segments.
+  const club = activeSession?.currentClub ?? activeSession?.club ?? '7I';
   const shots = activeSession?.shots ?? [];
 
   useEffect(() => {
@@ -114,6 +144,109 @@ export default function CageSession() {
         useNativeDriver: true,
       }),
     ]).start();
+  };
+
+  // Phase BL — register the new club, fire confidence-aware Kevin/Serena
+  // ack, and close the manual picker if it was open. Used by all three
+  // trigger paths (manual / vision / voice → comes through setActiveClub).
+  const applyClubSwitch = async (
+    club_id: string,
+    source: 'manual' | 'voice' | 'vision',
+    confidence?: 'high' | 'medium' | 'low',
+  ) => {
+    if (!activeSession) return;
+    if (activeSession.currentClub === club_id) {
+      setClubMenuOpen(false);
+      return;
+    }
+    setActiveClub(club_id, source, confidence);
+    setClubMenuOpen(false);
+
+    if (voiceEnabled) {
+      const ack = source === 'vision' && confidence === 'medium'
+        ? `Looks like ${clubLabel(club_id)}.`
+        : `Got it, ${clubLabel(club_id)}.`;
+      try {
+        setIsKevinSpeaking(true);
+        await configureAudioForSpeech();
+        await speak(ack, voiceGender, language, apiUrl);
+      } catch {
+        // ignore TTS failures — the visual switch already happened
+      } finally {
+        setIsKevinSpeaking(false);
+      }
+    }
+  };
+
+  // Phase BL — primary photo path. User taps "Identify Club", camera
+  // opens, snaps the club sole, vision reads the stamped number, three-tier
+  // confidence routes to auto-register / confirm prompt / manual fallback.
+  const handleIdentifyClub = async () => {
+    if (!activeSession || identifyingClub) return;
+
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Camera permission needed', 'Allow camera access to identify clubs by their sole stamp.');
+      return;
+    }
+
+    setIdentifyingClub(true);
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.7,
+        allowsEditing: false,
+        exif: false,
+      });
+      if (result.canceled || !result.assets?.[0]?.uri) {
+        track('club_recognition_cancelled', {});
+        return;
+      }
+
+      const outcome = await recognizeClubFromUri(result.assets[0].uri, apiUrl);
+
+      if (outcome.kind !== 'ok') {
+        Alert.alert(
+          "Couldn't read the club",
+          'Pick it from the list and try the camera again next time.',
+          [{ text: 'OK', onPress: () => setClubMenuOpen(true) }],
+        );
+        return;
+      }
+
+      if (outcome.club_id === 'unknown' || outcome.confidence === 'low') {
+        track('club_recognition_low_confidence', { club_id: outcome.club_id });
+        Alert.alert(
+          "Couldn't read the club",
+          'Pick it from the list — better lighting or angle next time.',
+          [{ text: 'OK', onPress: () => setClubMenuOpen(true) }],
+        );
+        return;
+      }
+
+      if (outcome.confidence === 'medium') {
+        Alert.alert(
+          'Looks like ' + clubLabel(outcome.club_id),
+          outcome.reasoning || 'Confirm or pick a different one.',
+          [
+            { text: 'Different club', onPress: () => setClubMenuOpen(true) },
+            { text: 'Yes, ' + clubLabel(outcome.club_id), onPress: () => applyClubSwitch(outcome.club_id, 'vision', 'medium') },
+          ],
+        );
+        return;
+      }
+
+      // High confidence — auto-register
+      await applyClubSwitch(outcome.club_id, 'vision', 'high');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      track('club_recognition_exception', { message: msg });
+      Alert.alert('Something went wrong', "Pick the club from the list and we'll try again next time.", [
+        { text: 'OK', onPress: () => setClubMenuOpen(true) },
+      ]);
+    } finally {
+      setIdentifyingClub(false);
+    }
   };
 
   const handleLogShot = async () => {
@@ -254,8 +387,28 @@ export default function CageSession() {
           </TouchableOpacity>
 
           <View style={styles.headerCenter}>
-            <Text style={styles.title}>{club}</Text>
-            <Text style={styles.shotCount}>{shots.length + ' shots'}</Text>
+            {/* Phase BL — tap to open manual picker; long-press disabled in
+                 favor of the explicit camera button below to keep gestures
+                 obvious for one-handed cage use. */}
+            <TouchableOpacity onPress={() => setClubMenuOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 16, right: 16 }}>
+              <Text style={styles.title}>{club}</Text>
+            </TouchableOpacity>
+            <View style={styles.headerSubRow}>
+              <Text style={styles.shotCount}>{shots.length + ' shots'}</Text>
+              {cageAutoClubDetection && (
+                <TouchableOpacity
+                  onPress={handleIdentifyClub}
+                  disabled={identifyingClub}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={styles.identifyBtn}
+                >
+                  <AppIcon name="camera-outline" size={12} color={identifyingClub ? '#6b7280' : '#00C896'} />
+                  <Text style={[styles.identifyBtnText, identifyingClub && { color: '#6b7280' }]}>
+                    {identifyingClub ? 'Reading…' : 'ID club'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
           <View style={styles.headerRight}>
@@ -463,6 +616,42 @@ export default function CageSession() {
         )}
 
       </ScrollView>
+
+      {/* Phase BL — manual club picker. Always-accessible tertiary fallback
+           for the auto-recognition flow. Opened by header tap, vision low-
+           confidence, or the "show clubs" voice intent. */}
+      <Modal
+        visible={clubMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setClubMenuOpen(false)}
+      >
+        <View style={styles.pickerBackdrop}>
+          <View style={styles.pickerSheet}>
+            <Text style={styles.pickerTitle}>Switch Club</Text>
+            <Text style={styles.pickerSub}>Tap to switch — new shots will tag this club.</Text>
+            <View style={styles.pickerGrid}>
+              {CLUB_PICKER.map(c => {
+                const active = c.value === club;
+                return (
+                  <TouchableOpacity
+                    key={c.value}
+                    style={[styles.pickerBtn, active && styles.pickerBtnActive]}
+                    onPress={() => applyClubSwitch(c.value, 'manual')}
+                  >
+                    <Text style={[styles.pickerBtnText, active && styles.pickerBtnTextActive]}>
+                      {c.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity style={styles.pickerCancel} onPress={() => setClubMenuOpen(false)}>
+              <Text style={styles.pickerCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -500,6 +689,97 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 12,
     marginTop: 1,
+  },
+  // Phase BL — header sub-row + identify-club button
+  headerSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 2,
+  },
+  identifyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    backgroundColor: '#0a1a0a',
+  },
+  identifyBtnText: {
+    color: '#00C896',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  // Phase BL — manual picker modal
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  pickerSheet: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#0d1a0d',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    padding: 20,
+  },
+  pickerTitle: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  pickerSub: {
+    color: '#6b7280',
+    fontSize: 12,
+    marginBottom: 16,
+  },
+  pickerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  pickerBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    backgroundColor: '#060f09',
+    minWidth: 76,
+    alignItems: 'center',
+  },
+  pickerBtnActive: {
+    borderColor: '#00C896',
+    backgroundColor: '#003d20',
+  },
+  pickerBtnText: {
+    color: '#e8f5e9',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  pickerBtnTextActive: {
+    color: '#00C896',
+  },
+  pickerCancel: {
+    marginTop: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#1e3a28',
+  },
+  pickerCancelText: {
+    color: '#6b7280',
+    fontSize: 14,
+    fontWeight: '700',
   },
   headerRight: {
     flexDirection: 'row',

@@ -5,8 +5,8 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Linking,
 } from 'react-native';
+import { openYouTubeSearch } from '../../services/youtubeLinks';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -321,11 +321,17 @@ export default function SwingLab() {
               sub="Record · auto-detect · review"
               onPress={() => setCageActive(true)}
             />
+            {/* Phase BR Component 14 — Upload Swing entry was the source of
+                empirical failures (users uploading instructional videos to
+                a biomechanics pipeline). Redirected to the tutorial flow.
+                Legacy biomech sessions still re-analyze from My Swing
+                Library; live cage recordings keep their own Phase K +
+                U1-fallback pipeline. */}
             <ToolRow
               icon="cloud-upload-outline"
-              label="Upload Swing"
-              sub="From phone library"
-              onPress={() => router.push('/swinglab/upload' as never)}
+              label="Add Tutorial"
+              sub="Capture a coaching lesson Kevin uses on course"
+              onPress={() => router.push('/swinglab/tutorial-upload' as never)}
             />
             <ToolRow
               icon="scan-outline"
@@ -344,6 +350,12 @@ export default function SwingLab() {
               label="My Swing Library"
               sub="Browse + replay"
               onPress={() => router.push('/swinglab/library' as never)}
+            />
+            <ToolRow
+              icon="school-outline"
+              label="Tutorials"
+              sub="Capture coaching lessons Kevin uses on course"
+              onPress={() => router.push('/swinglab/tutorials' as never)}
             />
             <ToolRow
               icon="golf-outline"
@@ -447,8 +459,7 @@ export default function SwingLab() {
                 // YouTube search surfaces top-ranked short instructional videos.
                 // Tim picks from the results — keeps the link evergreen, no
                 // hardcoded URL that can rot.
-                const q = encodeURIComponent('golf full swing setup tutorial 2 minutes');
-                Linking.openURL(`https://www.youtube.com/results?search_query=${q}`).catch(() => {});
+                void openYouTubeSearch('golf full swing setup tutorial 2 minutes');
               }}
             >
               <AppIcon name="logo-youtube" size={14} color="#ef4444" />
@@ -464,8 +475,7 @@ export default function SwingLab() {
             <TouchableOpacity
               style={styles.demoBtn}
               onPress={() => {
-                const q = encodeURIComponent('golf putting setup tutorial 2 minutes');
-                Linking.openURL(`https://www.youtube.com/results?search_query=${q}`).catch(() => {});
+                void openYouTubeSearch('golf putting setup tutorial 2 minutes');
               }}
             >
               <AppIcon name="logo-youtube" size={14} color="#ef4444" />

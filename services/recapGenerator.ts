@@ -116,6 +116,10 @@ export async function generateRecap(
       recent_sessions: Array<{ reason: string; points: number; date: string }>;
       most_recent_date?: string | null;
     } | null;
+    // Phase BR Component 9 — active tutorial practice context, pre-formatted
+    // by services/tutorialContext.buildFullPracticeContext. Optional; null
+    // when no tutorials are flagged active.
+    practiceContext?: string | null;
   },
 ): Promise<RoundRecap> {
   const { courseName, courseId, mode, startedAt, endedAt, totalScore, scoreVsPar, scores, plans, shots, courseHoles } = round;
@@ -176,6 +180,9 @@ export async function generateRecap(
         pre_round_notes: round.preRoundNotes ?? null,
         // Phase V: Arena practice context
         arena_context: round.arenaContext ?? null,
+        // Phase BR: active tutorial practice context (caller passes the
+        // pre-formatted string from buildFullPracticeContext).
+        practice_context: round.practiceContext ?? null,
       }),
     }).finally(() => clearTimeout(timeout));
 

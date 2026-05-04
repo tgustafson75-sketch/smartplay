@@ -18,11 +18,12 @@ import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useCageStore, type UploadMetadata, type SwingTag, type PrimaryIssue, type DrillRecommendation } from '../store/cageStore';
-import { analyzeSwing } from './poseDetection';
+import { analyzeSwing, analyzeSwingTentative } from './poseDetection';
 import { classifySession } from './swingIssueClassifier';
 import { recommendDrill } from './drillRecommendation';
 import { processSwingAnalysis } from './relationshipEngine';
 import { synthesizeCageInsight } from './contextSynthesizer';
+import { uploadLog, uploadAdoptSessionKey, uploadResetTiming } from './uploadDiagnostic';
 
 export const MAX_FILE_SIZE_MB = 200;
 
@@ -41,9 +42,14 @@ export type PickResult =
 
 /** Open the system video picker. */
 export async function pickVideo(): Promise<PickResult> {
+  uploadResetTiming();
+  uploadLog('capture-start');
   try {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return { kind: 'permission_denied' };
+    if (!perm.granted) {
+      uploadLog('capture-end', { status: 'failed', reason: 'permission_denied' });
+      return { kind: 'permission_denied' };
+    }
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Videos,
@@ -52,15 +58,28 @@ export async function pickVideo(): Promise<PickResult> {
       videoExportPreset: ImagePicker.VideoExportPreset.Passthrough,
     });
 
-    if (result.canceled) return { kind: 'cancelled' };
+    if (result.canceled) {
+      uploadLog('capture-end', { status: 'cancelled' });
+      return { kind: 'cancelled' };
+    }
     const asset = result.assets[0];
-    if (!asset?.uri) return { kind: 'error', message: 'Picker returned no URI' };
+    if (!asset?.uri) {
+      uploadLog('capture-end', { status: 'failed', reason: 'no_uri' });
+      return { kind: 'error', message: 'Picker returned no URI' };
+    }
 
     const sizeMB = asset.fileSize ? asset.fileSize / 1_000_000 : null;
     if (sizeMB != null && sizeMB > MAX_FILE_SIZE_MB) {
+      uploadLog('capture-end', { status: 'failed', reason: 'oversize', size_mb: sizeMB });
       return { kind: 'error', message: `Video is ${sizeMB.toFixed(0)}MB — over the ${MAX_FILE_SIZE_MB}MB cap.` };
     }
 
+    uploadLog('capture-end', {
+      status: 'ok',
+      size_mb: sizeMB,
+      duration_ms: asset.duration ?? null,
+      uri_tail: asset.uri.slice(-40),
+    });
     return {
       kind: 'ok',
       uri: asset.uri,
@@ -68,12 +87,15 @@ export async function pickVideo(): Promise<PickResult> {
       fileSize: asset.fileSize ?? null,
     };
   } catch (e) {
-    return { kind: 'error', message: e instanceof Error ? e.message : String(e) };
+    const msg = e instanceof Error ? e.message : String(e);
+    uploadLog('capture-end', { status: 'failed', reason: 'exception', message: msg });
+    return { kind: 'error', message: msg };
   }
 }
 
 /** Probe a video for audio presence + duration via expo-av. Best-effort. */
 export async function probeVideo(uri: string): Promise<{ has_audio: boolean; duration_sec: number | null }> {
+  uploadLog('preprocess-start', { uri_tail: uri.slice(-40) });
   try {
     const { sound, status } = await Audio.Sound.createAsync({ uri }, { shouldPlay: false });
     let duration_sec: number | null = null;
@@ -87,8 +109,11 @@ export async function probeVideo(uri: string): Promise<{ has_audio: boolean; dur
       has_audio = duration_sec != null && duration_sec > 0;
     }
     await sound.unloadAsync().catch(() => {});
+    uploadLog('preprocess-complete', { status: 'ok', has_audio, duration_sec });
     return { has_audio, duration_sec };
-  } catch {
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    uploadLog('preprocess-complete', { status: 'failed', message: msg });
     return { has_audio: false, duration_sec: null };
   }
 }
@@ -104,10 +129,12 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
   primary_issue: PrimaryIssue | null;
   drill_recommendation: DrillRecommendation | null;
 }> {
+  uploadLog('phase-k-enter', { session_id: sessionId }, sessionId);
   V6('STAGE 0 — runPhaseKOnSession enter', { sessionId });
   const store = useCageStore.getState();
   const session = store.sessionHistory.find(s => s.id === sessionId);
   if (!session) {
+    uploadLog('phase-k-abort', { status: 'failed', reason: 'session_not_in_store' }, sessionId);
     V6('STAGE 0 ABORT — session not in store', { sessionId });
     return { primary_issue: null, drill_recommendation: null };
   }
@@ -140,6 +167,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
   }
 
   if (swings.length === 0) {
+    uploadLog('phase-k-no-swings', { status: 'failed', reason: 'no_usable_swings' }, sessionId);
     V6('STAGE 6 FINAL — failed: no usable swings');
     store.setSessionAnalysisStatus(sessionId, 'failed', 'No usable swing in the upload.');
     return { primary_issue: null, drill_recommendation: null };
@@ -153,14 +181,24 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     const perSwingOutcomes: Array<{ swing_id: string; kind: string; detail?: string }> = [];
 
     store.setSessionAnalysisStatus(sessionId, 'analyzing_pose');
+    uploadLog('pose-detection-start', { swings_to_analyze: swings.length }, sessionId);
     for (const [i, swing] of swings.entries()) {
       if (!swing.clipUri) continue;
+      uploadLog('frame-analysis-start', { index: i, club: swing.club }, sessionId);
       V6('STAGE 2-3 — analyzeSwing call', { index: i, club: swing.club });
       const r = await analyzeSwing(swing.clipUri, {
         club: swing.club,
         swing_number: i + 1,
         prior_issues: results.slice(-3).map(x => x.analysis.detected_issue),
       });
+      uploadLog('frame-analysis-complete', {
+        index: i,
+        kind: r.kind,
+        status: r.kind === 'ok' ? 'ok' : 'failed',
+        detected_issue: r.kind === 'ok' ? r.analysis.detected_issue : null,
+        confidence: r.kind === 'ok' ? r.analysis.confidence : null,
+        message: r.kind === 'error' ? r.message : (r.kind === 'no_network' ? 'no_network' : (r.kind === 'no_frames' ? 'no_frames' : null)),
+      }, sessionId);
       V6('STAGE 4 — analyzeSwing returned', {
         index: i,
         kind: r.kind,
@@ -188,16 +226,107 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       perSwing: perSwingOutcomes,
     });
 
+    uploadLog('pose-detection-complete', {
+      status: results.length > 0 ? 'ok' : 'failed',
+      successful: results.length,
+      attempted: swings.length,
+    }, sessionId);
+
     if (results.length === 0) {
-      V6('STAGE 6 FINAL — failed: zero usable analyses across all swings (frame extraction or vision API failed for every clip)');
-      useCageStore.getState().setSessionAnalysisStatus(
-        sessionId, 'failed',
-        "I had trouble watching this one — could be lighting, angle, or video quality.",
-      );
+      // Phase U1 — heuristic-fallback path. Before declaring full failure,
+      // try a single-frame tentative observation. The user gets a useful
+      // tentative read with an honest "low confidence" caveat instead of a
+      // generic "couldn't analyze". The fallback fires on whichever swing
+      // we have a clipUri for; for an uploaded video that's always the
+      // single ingested swing. Live-cage sessions with multiple swings
+      // pick the first.
+      const failureKinds = perSwingOutcomes.map(o => o.kind);
+      uploadLog('phase-k-zero-results', {
+        reason: 'every_swing_failed_primary_analysis',
+        failure_kinds: failureKinds,
+      }, sessionId);
+      V6('STAGE 6 — primary failed, attempting heuristic fallback', {
+        failure_kinds: failureKinds,
+        swings_to_retry: swings.length,
+      });
+
+      const firstSwingWithClip = swings.find(s => s.clipUri);
+      if (firstSwingWithClip?.clipUri) {
+        uploadLog('tentative-fallback-start', {
+          swing_id: firstSwingWithClip.id,
+        }, sessionId);
+        const tentative = await analyzeSwingTentative(firstSwingWithClip.clipUri, {
+          club: firstSwingWithClip.club,
+          swing_number: 1,
+        });
+        uploadLog('tentative-fallback-complete', {
+          kind: tentative.kind,
+          status: tentative.kind === 'ok' ? 'ok' : 'failed',
+          observation_head: tentative.kind === 'ok'
+            ? (tentative.analysis.observation ?? '').slice(0, 200)
+            : null,
+          message: tentative.kind === 'error' ? tentative.message
+            : tentative.kind === 'no_network' ? 'no_network'
+            : tentative.kind === 'no_frames' ? 'no_frames'
+            : null,
+        }, sessionId);
+
+        if (tentative.kind === 'ok') {
+          // Synthesise a tentative PrimaryIssue. The PrimaryIssueCard's
+          // Phase V.6 branch already prefixes "Tentative read — your swing
+          // was hard to read clearly, but ..." when confidence === 'low'.
+          // Use the relaxed Sonnet observation as the mechanical_breakdown
+          // and a recovery hint as feel_cue.
+          const tentativeIssue: PrimaryIssue = {
+            issue_id: 'tentative_read',
+            name: 'Tentative observation',
+            category: 'other',
+            severity: 'minor',
+            occurrence_count: 1,
+            visual_reference_path: null,
+            mechanical_breakdown: tentative.analysis.observation || 'I could see the swing but not clearly enough to call a specific tendency.',
+            feel_cue: tentative.analysis.follow_up_question
+              || 'Try a clearer recording — wider angle, better lighting — for a full analysis.',
+            detected_in_shots: [firstSwingWithClip.id],
+            confidence: 'low',
+          };
+          useCageStore.getState().setSessionAnalysis(sessionId, tentativeIssue, null);
+          uploadLog('result-store', {
+            status: 'ok',
+            primary_issue_id: tentativeIssue.issue_id,
+            drill_id: null,
+            via: 'tentative_fallback',
+          }, sessionId);
+          V6('STAGE 6 FINAL — tentative ok', {
+            observation_head: tentative.analysis.observation.slice(0, 200),
+          });
+          return { primary_issue: tentativeIssue, drill_recommendation: null };
+        }
+      }
+
+      // Tentative also failed — surface stage-specific copy so the user
+      // knows what to try next, instead of a generic "trouble watching".
+      const allNoFrames = failureKinds.every(k => k === 'no_frames');
+      const allNoNetwork = failureKinds.every(k => k === 'no_network');
+      const allError = failureKinds.every(k => k === 'error');
+      const message = allNoFrames
+        ? "Couldn't read the frames — try a clearer recording with better lighting and a wider angle."
+        : allNoNetwork
+        ? "Lost connection to the analyzer. Check your network and try Re-analyze."
+        : allError
+        ? "The analyzer hit a snag. Try Re-analyze, or report this if it keeps happening."
+        : "Couldn't analyze this swing — try a clearer recording or check your connection, then Re-analyze.";
+
+      V6('STAGE 6 FINAL — failed: zero usable analyses + tentative failed', {
+        failure_kinds: failureKinds,
+        message,
+      });
+      useCageStore.getState().setSessionAnalysisStatus(sessionId, 'failed', message);
       return { primary_issue: null, drill_recommendation: null };
     }
 
     useCageStore.getState().setSessionAnalysisStatus(sessionId, 'analyzing_pattern');
+    uploadLog('classifier-start', { results_count: results.length }, sessionId);
     V6('STAGE 5 — classifySession call', { resultsCount: results.length });
     const primary_issue = classifySession(results);
     V6('STAGE 5 — classifySession returned', {
@@ -211,6 +340,13 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         : 'multi-swing: no usable consensus AND no fallback (all analyses returned none)'),
     });
 
+    uploadLog('classifier-complete', {
+      status: 'ok',
+      primary_issue_id: primary_issue?.issue_id ?? null,
+      severity: primary_issue?.severity ?? null,
+      confidence: primary_issue?.confidence ?? null,
+    }, sessionId);
+
     const drill_recommendation = primary_issue ? recommendDrill(primary_issue.issue_id as never) : null;
     V6('STAGE 6 FINAL — ok', {
       primary_issue_id: primary_issue?.issue_id ?? null,
@@ -219,6 +355,11 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     });
 
     useCageStore.getState().setSessionAnalysis(sessionId, primary_issue, drill_recommendation);
+    uploadLog('result-store', {
+      status: 'ok',
+      primary_issue_id: primary_issue?.issue_id ?? null,
+      drill_id: drill_recommendation?.drill_id ?? null,
+    }, sessionId);
 
     // Phase V.7+ — feed the relationship engine so Kevin's brain prompt
     // accumulates technical observations across uploads. Deduped within
@@ -246,6 +387,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     return { primary_issue, drill_recommendation };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    uploadLog('phase-k-throw', { status: 'failed', message: msg }, sessionId);
     V6('STAGE 6 FINAL — failed: pipeline threw', { error: msg, stack: e instanceof Error ? (e.stack ?? '').split('\n').slice(0, 5).join(' | ') : null });
     useCageStore.getState().setSessionAnalysisStatus(
       sessionId, 'failed',
@@ -283,7 +425,23 @@ export function ingestVideoFromPick(args: {
     club: args.club,
     upload,
   });
+  uploadLog('storage-local', {
+    status: 'ok',
+    session_id: sessionId,
+    club: args.club,
+    has_audio: upload.has_audio,
+    duration_sec: upload.duration_sec,
+  });
+  // Promote the pre-session timing key to a session-keyed one so the
+  // analysis-trigger / pose-detection / ui-render markers all share a
+  // continuous elapsed-total clock from pickVideo through to UI render.
+  uploadAdoptSessionKey(sessionId);
+  uploadLog('analysis-trigger', { session_id: sessionId }, sessionId);
   // Fire-and-forget Phase K. Errors logged, don't block ingest UX.
-  void runPhaseKOnSession(sessionId).catch(e => console.log('[videoUpload] Phase K error', e));
+  void runPhaseKOnSession(sessionId).catch(e => {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.log('[videoUpload] Phase K error', e);
+    uploadLog('analysis-trigger-throw', { status: 'failed', message: msg }, sessionId);
+  });
   return sessionId;
 }

@@ -46,6 +46,34 @@ type SwingAnalysisResponse = {
   follow_up_question?: string | null;  // when frames were too poor to read
 };
 
+// Phase BL/U1 — Tentative observation mode. Used by the upload pipeline
+// fallback path when the primary 5-frame full-analysis call returns no
+// usable results (no_frames / no_network / error / classifier null).
+// The relaxed prompt asks for general descriptive observation only —
+// tempo, balance, contact appearance — without claiming specific
+// biomechanical faults. Always returns confidence: 'low' and
+// detected_issue: 'none' (the client treats this distinctly and
+// surfaces it as a tentative read with retry suggestion).
+const TENTATIVE_PROMPT = `You are looking at 1-2 frames from a golf swing video that was uploaded for analysis. The full-analysis pipeline could not produce a confident swing-fault read for these frames (lighting, angle, blur, or partial visibility). Your job is to give the player ONE useful tentative observation about what you can see — without claiming a specific biomechanical fault.
+
+Output ONLY a JSON object:
+{
+  "detected_issue": "none",
+  "severity": "none",
+  "confidence": "low",
+  "observation": "<one short sentence describing what is visible — tempo, balance, contact appearance, posture — written conversationally as Kevin would say it>",
+  "follow_up_question": "<short suggestion for a clearer recording, e.g. 'Try a wider angle from the front so I can see your hips' OR null when the frames are workable enough that a clearer recording isn't the priority>"
+}
+
+Rules:
+- detected_issue must be "none". Do NOT pick a canonical issue. The full pipeline already failed to confirm one — naming a specific fault here would be a false read.
+- severity must be "none". Same reason.
+- confidence must be "low". Surfaces the tentative-read prefix in the UI.
+- observation: a single helpful sentence about what IS visible. Examples: "Your tempo looks smooth through the back, but I lost you at the top." / "Balance looks centered at address, hard to tell at impact." / "I can see contact, but the angle's clipping your hands."
+- follow_up_question: when the recording is plainly fixable (bad angle, darkness), suggest the fix. Otherwise null.
+- Never fabricate specifics. Only what's actually observable.
+- Output ONLY valid JSON. No code fences, no preamble.`;
+
 const SYSTEM_PROMPT = `You are a swing analyst looking at golf-swing frames captured during a Cage Session. The player wants honest swing-fault classification, not encouragement.
 
 You will see 1-5 frames from a single swing. Identify the most prominent tendency you can see and return it with appropriate confidence. Use the confidence scale to express uncertainty — a low-confidence tendency is more useful than 'none', because the player can confirm or rule it out.
@@ -111,14 +139,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const ctx = (body.context ?? {}) as Record<string, unknown>;
+    const mode = (body.mode === 'tentative' ? 'tentative' : 'analysis') as 'analysis' | 'tentative';
     const ctxLines: string[] = [];
     if (ctx.club) ctxLines.push(`Club: ${ctx.club}`);
     if (ctx.swing_number != null) ctxLines.push(`Swing ${ctx.swing_number} of session`);
     if (ctx.prior_issues && Array.isArray(ctx.prior_issues) && ctx.prior_issues.length > 0) {
       ctxLines.push(`Prior swings showed: ${(ctx.prior_issues as string[]).join(', ')}`);
     }
-    const userText = (ctxLines.length > 0 ? ctxLines.join('\n') + '\n\n' : '') +
-      `Look at the ${frames.length} frame${frames.length === 1 ? '' : 's'} from this swing. Classify the primary fault, return JSON.`;
+    const userText = mode === 'tentative'
+      ? (ctxLines.length > 0 ? ctxLines.join('\n') + '\n\n' : '') +
+        `These ${frames.length} frame${frames.length === 1 ? '' : 's'} are from a swing where the full-analysis pipeline could not confirm a fault. Give a tentative observation only — no canonical fault claim. Return JSON per the schema.`
+      : (ctxLines.length > 0 ? ctxLines.join('\n') + '\n\n' : '') +
+        `Look at the ${frames.length} frame${frames.length === 1 ? '' : 's'} from this swing. Classify the primary fault, return JSON.`;
 
     const userContent = [
       ...frames.map(f => ({
@@ -136,7 +168,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       model: 'claude-sonnet-4-6',
       max_tokens: 400,
       temperature: 0.2,
-      system: SYSTEM_PROMPT,
+      system: mode === 'tentative' ? TENTATIVE_PROMPT : SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userContent }],
     });
 
@@ -164,6 +196,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       parsed.confidence = 'low';
     }
     if (typeof parsed.observation !== 'string') parsed.observation = '';
+
+    // Phase BL/U1 — tentative mode forcibly normalises detected_issue and
+    // severity so a creative model response can't accidentally produce a
+    // canonical-fault claim from the relaxed prompt.
+    if (mode === 'tentative') {
+      parsed.detected_issue = 'none';
+      parsed.severity = 'none';
+      parsed.confidence = 'low';
+    }
 
     return res.status(200).json(parsed);
   } catch (e) {

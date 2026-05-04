@@ -28,6 +28,7 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 import { useCageStore } from '../store/cageStore';
 import { getRecentTurns, recordUserTurn, recordKevinTurn } from '../services/conversationState';
+import { buildFullPracticeContext } from '../services/tutorialContext';
 import { useWatchStore } from '../store/watchStore';
 import { VoiceState } from '../components/CaddieAvatar';
 import { getCourse as getApiCourse, courseSummaryForContext } from '../services/golfCourseApi';
@@ -453,6 +454,9 @@ export const useVoiceCaddie = ({
           // in the next reply without app restart.
           kevinContext: usePlayerProfileStore.getState().kevinContext,
           persistentPatterns: usePlayerProfileStore.getState().persistentPatterns,
+          // Phase BR — active practice context from tutorialStore. Null
+          // when no tutorials are flagged active. Capped at 3 active.
+          practice_context: buildFullPracticeContext(),
           recentCageInsights: useCageStore.getState().recentInsights.slice(-3),
           recentRoundInsights: useRoundStore.getState().recentInsights.slice(-3),
           // Phase AR — within-session conversation buffer for follow-up

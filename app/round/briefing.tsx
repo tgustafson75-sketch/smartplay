@@ -205,7 +205,9 @@ export default function BriefingScreen() {
         ]}
       >
         <Image
-          source={require('../../assets/avatars/kevin_portrait.jpg')}
+          source={voiceGender === 'female'
+            ? require('../../assets/avatars/serena_portrait.jpg')
+            : require('../../assets/avatars/kevin_portrait.jpg')}
           style={styles.avatar}
           resizeMode="cover"
         />

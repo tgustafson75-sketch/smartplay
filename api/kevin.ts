@@ -272,10 +272,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Phase BH — recent shots from active round, used by in-round
       // diagnostic Coach to ground reasoning in actual observed shots.
       recentShots = [],
+      // Phase BR — active practice context. Pre-formatted by the client
+      // (services/tutorialContext.ts buildFullPracticeContext). Multi-line
+      // string when one or more tutorials are active, null otherwise.
+      // Capped at 3 active tutorials so token budget stays bounded.
+      practice_context = null,
     } = body;
 
     const _kevinContext: string | null = typeof kevinContext === 'string' && kevinContext.trim() ? kevinContext.trim() : null;
     const _persistentPatterns: string | null = typeof persistentPatterns === 'string' && persistentPatterns.trim() ? persistentPatterns.trim() : null;
+    const _practiceContext: string | null = typeof practice_context === 'string' && practice_context.trim() ? practice_context.trim() : null;
     type InsightLite = { course?: string; club?: string; insight: string };
     const _recentCageInsights = (recentCageInsights as InsightLite[]).filter(i => typeof i?.insight === 'string').slice(-3);
     const _recentRoundInsights = (recentRoundInsights as InsightLite[]).filter(i => typeof i?.insight === 'string').slice(-3);
@@ -454,6 +460,8 @@ ${todBlock}
 ${_kevinContext ? `ABOUT THIS GOLFER (private; never read aloud — use as background):\n${_kevinContext}` : ''}
 
 ${_persistentPatterns ? `EMERGING PATTERNS (private; reference naturally if they fit, never list them):\n${_persistentPatterns}` : ''}
+
+${_practiceContext ? `${_practiceContext}\n\nUse the practice context to shape advice on relevant clubs / situations. Reinforce the player's current learning when shots match. Do not introduce a competing swing thought during a shot that already calls for a practiced technique.` : ''}
 
 ${_recentRoundInsights.length > 0 ? `RECENT ROUND MEMORY (private; reference if same course or matching pattern):\n${_recentRoundInsights.map(r => `- ${r.course ? r.course + ': ' : ''}${r.insight}`).join('\n')}` : ''}
 

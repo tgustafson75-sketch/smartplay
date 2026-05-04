@@ -44,7 +44,13 @@ export type SwingAnalysisResult =
   | { kind: 'no_network' }
   | { kind: 'error'; message: string };
 
-const REQUEST_TIMEOUT_MS = 30_000;
+// Phase U1 — lowered from 30s to 15s. The heuristic-fallback path
+// (analyzeSwingTentative) fires when the primary call returns no_network /
+// no_frames / error, so users no longer wait the full timeout before
+// seeing some output. 15s is still generous for a 5-frame Anthropic
+// vision call (typical: 4-9s on stable network).
+const REQUEST_TIMEOUT_MS = 15_000;
+const TENTATIVE_TIMEOUT_MS = 15_000;
 
 /**
  * Sample 5 key frames from a swing clip via expo-video-thumbnails. Each
@@ -246,6 +252,118 @@ export async function analyzeSwing(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     V6('STAGE 4 — fetch threw', { error: msg });
+    if (/network|abort|timeout|fetch/i.test(msg)) return { kind: 'no_network' };
+    return { kind: 'error', message: msg };
+  }
+}
+
+/**
+ * Phase U1 — Heuristic-fallback path.
+ *
+ * Used by `runPhaseKOnSession` when the primary 5-frame full-analysis call
+ * returns no usable result (every swing kind is no_frames / no_network /
+ * error / detected_issue 'none'). Re-extracts a single frame from a
+ * different time fraction (mid-clip, where pose is most likely visible
+ * even on partial captures) and POSTs to /api/swing-analysis with
+ * `mode: 'tentative'`. The server returns a tentative observation with
+ * confidence 'low' and detected_issue 'none' — the consumer renders it
+ * as a "Tentative read" PrimaryIssue rather than a full failure.
+ *
+ * This path returns the SAME tagged-union shape as analyzeSwing so the
+ * caller can branch uniformly. A successful tentative result has
+ * `kind: 'ok'` with `analysis.confidence === 'low'` and
+ * `analysis.detected_issue === 'none'`.
+ */
+export async function analyzeSwingTentative(
+  clipUri: string,
+  context: { club: string; swing_number: number },
+): Promise<SwingAnalysisResult> {
+  V6('TENTATIVE STAGE 0 — analyzeSwingTentative enter', {
+    club: context.club,
+    swing_number: context.swing_number,
+  });
+
+  // Try a different time fraction than the primary path used. Primary
+  // sampled at [0.08, 0.40, 0.60, 0.75, 0.88]. Mid-clip (0.50) is offset
+  // from those and most likely to have a visible figure even on partial
+  // captures. Fall back to 0.30 if 0.50 fails.
+  const FALLBACK_FRACTIONS = [0.5, 0.3, 0.7];
+  let frame: Frame | null = null;
+  let durationMs = FALLBACK_DURATION_MS;
+  try {
+    durationMs = await probeDurationMs(clipUri);
+  } catch {
+    /* duration probe is best-effort; fall through to default */
+  }
+
+  for (const t of FALLBACK_FRACTIONS) {
+    const timeMs = Math.round(durationMs * t);
+    try {
+      const r = await VT.getThumbnailAsync(clipUri, { time: timeMs, quality: 0.8 });
+      const m = await ImageManipulator.manipulateAsync(
+        r.uri,
+        [{ resize: { width: 1024 } }],
+        { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      );
+      if (m.base64) {
+        frame = { b64: m.base64, media_type: 'image/jpeg', time_sec: timeMs / 1000 };
+        V6('TENTATIVE STAGE 2 — single-frame extracted', {
+          fraction: t,
+          time_ms: timeMs,
+          b64_kb: Math.round(m.base64.length / 1024),
+        });
+        break;
+      }
+    } catch (err) {
+      V6('TENTATIVE STAGE 2 — fraction failed', {
+        fraction: t,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  if (!frame) {
+    V6('TENTATIVE STAGE 2 — no_frames after all fallback fractions');
+    return { kind: 'no_frames' };
+  }
+
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  try {
+    V6('TENTATIVE STAGE 3 — POST /api/swing-analysis (tentative mode)', {
+      total_payload_kb: Math.round(frame.b64.length / 1024),
+    });
+    const t0 = Date.now();
+    const res = await fetch(`${apiUrl}/api/swing-analysis`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        frames: [{ b64: frame.b64, media_type: frame.media_type }],
+        context,
+        mode: 'tentative',
+      }),
+      signal: AbortSignal.timeout(TENTATIVE_TIMEOUT_MS),
+    });
+    const elapsedMs = Date.now() - t0;
+    V6('TENTATIVE STAGE 4 — response', { status: res.status, elapsed_ms: elapsedMs });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '<unreadable>');
+      let userMsg = 'Server returned ' + res.status;
+      try {
+        const parsed = JSON.parse(body) as { error?: string };
+        if (parsed?.error) userMsg = parsed.error.slice(0, 160);
+      } catch { /* not JSON */ }
+      return { kind: 'error', message: userMsg };
+    }
+    const data = (await res.json()) as SwingAnalysis;
+    V6('TENTATIVE STAGE 4 — parsed', {
+      detected_issue: data.detected_issue,
+      confidence: data.confidence,
+      observation_head: (data.observation ?? '').slice(0, 200),
+    });
+    return { kind: 'ok', analysis: data, frame_timestamps_sec: [frame.time_sec] };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    V6('TENTATIVE STAGE 4 — fetch threw', { error: msg });
     if (/network|abort|timeout|fetch/i.test(msg)) return { kind: 'no_network' };
     return { kind: 'error', message: msg };
   }

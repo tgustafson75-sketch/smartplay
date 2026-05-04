@@ -37,6 +37,27 @@ export interface CageShot {
   detected_issue_timestamps_sec?: number[];
 }
 
+// Phase BL — how the active club was identified for a given segment.
+//   session_start: initial club picked at the start of the session
+//   manual:        user tapped the manual selector
+//   voice:         user said "switching to <club>"
+//   vision:        camera read the number stamped on the club sole
+export type ClubSwitchSource = 'session_start' | 'manual' | 'voice' | 'vision';
+
+// Phase BL — one entry per club segment within a cage session. The user
+// can switch clubs mid-session; each segment records when the switch
+// happened, which shots belong to it, and how the switch was triggered.
+// Old sessions without segments still render correctly (consumers fall
+// back to CageSession.club + the full shots list).
+export interface ClubSegment {
+  club_id: string;
+  startedAt: number;
+  endedAt: number | null;
+  shot_ids: string[];
+  source: ClubSwitchSource;
+  confidence?: 'high' | 'medium' | 'low';
+}
+
 export type SwingSource = 'live_cage' | 'uploaded_video';
 export type SwingTag = 'range' | 'cage' | 'indoor' | 'course' | 'other';
 
@@ -53,8 +74,21 @@ export interface UploadMetadata {
 export interface CageSession {
   id: string;
   date: number;
+  /** Initial club at session start. Existing field — back-compat. New
+   *  consumers prefer `currentClub` for the live read and `clubSegments`
+   *  for historical analysis. */
   club: string;
   shots: CageShot[];
+  /** Phase BL — club currently being hit. Defaults to `club` for sessions
+   *  predating BL. Updated when the user switches via vision / voice /
+   *  manual selector. New shots are auto-tagged with this value. */
+  currentClub?: string;
+  /** Phase BL — historical record of club switches in this session.
+   *  First segment opens at startSession with source: 'session_start'.
+   *  Each switch closes the prior segment and opens a new one. Old
+   *  sessions without segments still render — consumers fall back to
+   *  treating the entire session as a single segment of `club`. */
+  clubSegments?: ClubSegment[];
   dominantMiss: string | null;
   rootCause: string | null;
   summary: string | null;
@@ -136,10 +170,27 @@ interface CageState {
   // is a one-paragraph Sonnet summary of a cage session (what to remember
   // for next round). Last 5 retained. Injected into pre-round briefing.
   recentInsights: { session_id: string; club: string; insight: string; created_at: number }[];
+  // Phase BL — UI signal: when true, the active cage session screen
+  // shows the manual club picker modal. Set by the club_menu voice
+  // intent and by the on-screen "switch club" tap target. Reset when
+  // the user picks a club or cancels. NOT persisted.
+  clubMenuOpen: boolean;
 
   // ─── ACTIONS ────────────────────────────
 
   startSession: (club: string) => void;
+  /** Phase BL — switch the active club mid-session. Closes the current
+   *  segment (sets endedAt) and opens a new one. New shots are auto-tagged
+   *  with the new club. Pass `source` so analytics can distinguish vision
+   *  vs voice vs manual recognition rates over time. */
+  setActiveClub: (
+    club_id: string,
+    source: ClubSwitchSource,
+    confidence?: 'high' | 'medium' | 'low',
+  ) => void;
+  /** Phase BL — toggle the manual club picker modal in the active cage
+   *  session screen. */
+  setClubMenuOpen: (open: boolean) => void;
   addShot: (shot: Omit<CageShot, 'id' | 'timestamp'>) => void;
   endSession: (summary: {
     dominantMiss: string | null;
@@ -187,6 +238,8 @@ export const useCageStore = create<CageState>()(
       // Phase AQ
       recentInsights: [],
       cameraAlignment: null,
+      // Phase BL
+      clubMenuOpen: false,
 
       startSession: (club) =>
         set({
@@ -194,6 +247,14 @@ export const useCageStore = create<CageState>()(
             id: `${Date.now()}_cage`,
             date: Date.now(),
             club,
+            currentClub: club,
+            clubSegments: [{
+              club_id: club,
+              startedAt: Date.now(),
+              endedAt: null,
+              shot_ids: [],
+              source: 'session_start',
+            }],
             shots: [],
             dominantMiss: null,
             rootCause: null,
@@ -201,16 +262,69 @@ export const useCageStore = create<CageState>()(
           },
         }),
 
-      addShot: (shot) =>
+      setClubMenuOpen: (open) => set({ clubMenuOpen: open }),
+
+      setActiveClub: (club_id, source, confidence) =>
         set(s => {
           if (!s.activeSession) return s;
+          const now = Date.now();
+          // No-op if the user re-selected the club they're already on.
+          if (s.activeSession.currentClub === club_id) return s;
+
+          const prev = s.activeSession.clubSegments ?? [];
+          const closed = prev.map((seg, i) =>
+            i === prev.length - 1 && seg.endedAt === null
+              ? { ...seg, endedAt: now }
+              : seg
+          );
+          const next: ClubSegment = {
+            club_id,
+            startedAt: now,
+            endedAt: null,
+            shot_ids: [],
+            source,
+            ...(confidence ? { confidence } : {}),
+          };
           return {
             activeSession: {
               ...s.activeSession,
-              shots: [
-                ...s.activeSession.shots,
-                { ...shot, id: `${Date.now()}_shot`, timestamp: Date.now() },
-              ],
+              currentClub: club_id,
+              clubSegments: [...closed, next],
+            },
+          };
+        }),
+
+      addShot: (shot) =>
+        set(s => {
+          if (!s.activeSession) return s;
+          // Phase BL — auto-tag with currentClub when set, falling back
+          // to the session's initial club for back-compat with the legacy
+          // single-club flow. The shot's own .club still wins if the
+          // caller explicitly passed one (preserves test/manual paths).
+          const inferredClub =
+            shot.club || s.activeSession.currentClub || s.activeSession.club;
+          const newShot: CageShot = {
+            ...shot,
+            club: inferredClub,
+            id: `${Date.now()}_shot`,
+            timestamp: Date.now(),
+          };
+
+          // Append shot id to the open (endedAt:null) segment if any.
+          const segments = s.activeSession.clubSegments;
+          const updatedSegments = segments
+            ? segments.map((seg, i) =>
+                i === segments.length - 1 && seg.endedAt === null
+                  ? { ...seg, shot_ids: [...seg.shot_ids, newShot.id] }
+                  : seg
+              )
+            : segments;
+
+          return {
+            activeSession: {
+              ...s.activeSession,
+              shots: [...s.activeSession.shots, newShot],
+              ...(updatedSegments ? { clubSegments: updatedSegments } : {}),
             },
           };
         }),
@@ -218,7 +332,24 @@ export const useCageStore = create<CageState>()(
       endSession: (summary) =>
         set(s => {
           if (!s.activeSession) return s;
-          const completed: CageSession = { ...s.activeSession, ...summary };
+          // Phase BL — close the still-open club segment on session end so
+          // post-session analytics can compute per-club practice durations
+          // without special-casing the final segment.
+          const now = Date.now();
+          const segments = s.activeSession.clubSegments;
+          const closedSegments = segments
+            ? segments.map((seg, i) =>
+                i === segments.length - 1 && seg.endedAt === null
+                  ? { ...seg, endedAt: now }
+                  : seg
+              )
+            : segments;
+
+          const completed: CageSession = {
+            ...s.activeSession,
+            ...summary,
+            ...(closedSegments ? { clubSegments: closedSegments } : {}),
+          };
           return {
             activeSession: null,
             sessionHistory: [...s.sessionHistory, completed].slice(-50),

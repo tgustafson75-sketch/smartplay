@@ -11,6 +11,7 @@ import { routeQuery } from './responseRouter';
 import { getClipForCategory, getFallbackTextForCategory } from './fillerLibrary';
 import { getActiveSurface } from './activeSurfaceRegistry';
 import type { AppContext } from '../types/voiceIntent';
+import { buildFullPracticeContext } from './tutorialContext';
 
 // ─── External URL allowlist ───────────────────────────────────────────────────
 // Audit P1 follow-up: server tool_use responses can include open_url actions.
@@ -252,6 +253,7 @@ async function openSession() {
           recentShots: round.shots.slice(-10),
           kevinContext: profile.kevinContext ?? null,
           persistentPatterns: profile.persistentPatterns ?? null,
+          practice_context: buildFullPracticeContext(),
           register: 'coach',
           inRoundDiagnostic: true,
         };

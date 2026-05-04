@@ -7,6 +7,7 @@ import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useKevinPresence } from '../contexts/KevinPresenceContext';
 import type { ToolAction } from '../app/api/kevin+api';
+import { buildFullPracticeContext } from '../services/tutorialContext';
 
 export type { ToolAction };
 
@@ -82,6 +83,8 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
           scores,
           courseHoles,
           register, // Phase BA
+          // Phase BR — active practice context from tutorialStore.
+          practice_context: buildFullPracticeContext(),
         }),
       }).finally(() => clearTimeout(timeout));
 

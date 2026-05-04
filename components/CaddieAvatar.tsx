@@ -41,9 +41,35 @@ const AVATARS = {
 
 type AvatarKey = keyof typeof AVATARS;
 
-const SERENA = {
-  course: require('../assets/avatars/serena_portrait.jpg') as ImageSourcePropType,
-  dark:   require('../assets/avatars/serena_dark.jpg')    as ImageSourcePropType,
+// Serena counterparts for the same emotion keys. Until per-emotion Serena
+// PNGs exist (Tim generates via chatly.ai when scoping permits), most
+// emotional states fall back to the studio portrait. The high-res
+// caddie-nod covers the "with you" CALM cluster (idle/listening/nod/
+// mentorship/supportive). Replace individual entries as new Serena
+// assets land — keys mirror AVATARS so swap is one-line per emotion.
+const SERENA_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
+  kevin_course:        require('../assets/avatars/serena_portrait.jpg'),
+  kevin_dark:          require('../assets/avatars/serena_dark.jpg'),
+  kevin_nod:           require('../assets/avatars/serena-caddie-nod-001.png'),
+  kevin_idle:          require('../assets/avatars/serena-caddie-nod-001.png'),
+  kevin_listening:     require('../assets/avatars/serena-caddie-nod-001.png'),
+  kevin_mentorship:    require('../assets/avatars/serena-caddie-nod-001.png'),
+  kevin_supportive:    require('../assets/avatars/serena-caddie-nod-001.png'),
+  kevin_explaining:    require('../assets/avatars/serena-studio-portrait-001.png'),
+  kevin_focused:       require('../assets/avatars/serena-studio-portrait-001.png'),
+  kevin_determined:    require('../assets/avatars/serena-studio-portrait-001.png'),
+  kevin_pensive:       require('../assets/avatars/serena-studio-portrait-001.png'),
+  kevin_inquisitive:   require('../assets/avatars/serena-studio-portrait-001.png'),
+  kevin_humble:        require('../assets/avatars/serena-studio-portrait-001.png'),
+  kevin_happy:         require('../assets/avatars/serena-studio-portrait-001.png'),
+  kevin_enthusiastic:  require('../assets/avatars/serena-studio-portrait-001.png'),
+  kevin_surprised:     require('../assets/avatars/serena-studio-portrait-001.png'),
+  kevin_celebrating:   require('../assets/avatars/serena-studio-portrait-001.png'),
+  kevin_confident:     require('../assets/avatars/serena-studio-portrait-001.png'),
+  kevin_gameface:      require('../assets/avatars/serena-studio-portrait-001.png'),
+  kevin_curious:       require('../assets/avatars/serena-studio-portrait-001.png'),
+  kevin_wincing:       require('../assets/avatars/serena-studio-portrait-001.png'),
+  kevin_self_critical: require('../assets/avatars/serena-studio-portrait-001.png'),
 };
 
 // ─── EMOTION → KEY MAP ────────────────────
@@ -174,10 +200,8 @@ function computeSource(
   isOnCourse: boolean,
   isCageMode: boolean,
 ): ImageSourcePropType {
-  if (gender === 'female') {
-    return (isCageMode || !isOnCourse) ? SERENA.dark : SERENA.course;
-  }
-  return AVATARS[getAvatarKey(emotion, isOnCourse, isCageMode)];
+  const key = getAvatarKey(emotion, isOnCourse, isCageMode);
+  return gender === 'female' ? SERENA_AVATARS[key] : AVATARS[key];
 }
 
 // voiceState → emotion used when no explicit emotion prop is passed

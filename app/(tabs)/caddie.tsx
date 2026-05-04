@@ -14,7 +14,6 @@ import {
   ScrollView,
   useWindowDimensions,
   TextInput,
-  Linking,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,9 +33,11 @@ import { getCourseList, getCourse } from '../../data/courses';
 import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
 import StartRoundCourseCard from '../../components/course/StartRoundCourseCard';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
+import { openYouTubeChannel } from '../../services/youtubeLinks';
 import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types/patterns';
 import { getCourse as getApiCourse, courseToHoles } from '../../services/golfCourseApi';
 import { generateRecap } from '../../services/recapGenerator';
+import { buildFullPracticeContext } from '../../services/tutorialContext';
 import { generatePatternInsights } from '../../services/patternDetection';
 import { useGhostStore } from '../../store/ghostStore';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
@@ -56,7 +57,11 @@ import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
 import SmartFinderCard from '../../components/smartfinder/SmartFinderCard';
 import { useTrustLevelStore, TRUST_LEVEL_META, type TrustLevel } from '../../store/trustLevelStore';
-import KevinAvatar, { type AvatarState } from '../../components/kevin/KevinAvatar';
+// Phase U2 — KevinAvatar import removed. The L1 SmartPlay-badge mic-trigger
+// it used to wrap was deleted in Phase AU; the import sat as orphan dead
+// code with no JSX consumer. The component file itself is preserved for
+// future re-use (see services/README.md). If a surface needs the
+// liveliness ring again, re-import here from '../../components/kevin/KevinAvatar'.
 import L1HolePreview from '../../components/caddie/L1HolePreview';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
 // Phase AT — KevinHelpButton import removed; ? button no longer rendered
@@ -94,8 +99,10 @@ export default function CaddieTab() {
   // L2/L3 avatar treatments stay literal (intentional brand consistency).
   const theme = useTheme();
 
-  // Phase F — kevinAvatarState derived below after voiceState/kevinThinking
-  // are declared. Consumed by L1's mic-button KevinAvatar wrapping.
+  // Phase F — kevinAvatarState was derived below from voiceState/kevinThinking
+  // for L1's mic-button KevinAvatar wrapping. Phase U2 removed the
+  // declaration alongside the orphaned KevinAvatar import (Phase AU killed
+  // L1's standalone badge mic-trigger, leaving this state unused).
   const { width: W, height: H } = useWindowDimensions();
   // Natural 9:16 frame height — shows Kevin's full portrait without over-zoom
   // Phase AU.1 — natural 9:16 frame for Kevin (canonical).
@@ -647,12 +654,8 @@ export default function CaddieTab() {
   // ── Kevin programmatic hook ──────────────
   const { isThinking: kevinThinking } = useKevin();
 
-  // Phase F — Kevin liveliness state derived from existing voice/think signals.
-  const kevinAvatarState: AvatarState =
-    kevinThinking ? 'thinking'
-    : voiceState === 'listening' ? 'listening'
-    : voiceState === 'speaking' ? 'speaking'
-    : 'idle';
+  // Phase U2 — kevinAvatarState removed (dead code; see Phase F comment
+  // above). Re-derive here if a future surface uses KevinAvatar again.
 
   // ── Tool action handler ──────────────────
   const handleToolAction = useCallback((action: ToolAction) => {
@@ -989,6 +992,11 @@ export default function CaddieTab() {
         cageContext,
         preRoundNotes: storeState.roundNotes || null,
         arenaContext,
+        // Phase BR Component 9 — active tutorial practice context.
+        // buildFullPracticeContext returns null when no tutorials are
+        // flagged active; api/recap.ts skips the practice block in that
+        // case, so pre-BR rounds without tutorials are unchanged.
+        practiceContext: buildFullPracticeContext(),
       })
         .then(_recap => {
           setRecapLoading(false);
@@ -1550,12 +1558,13 @@ export default function CaddieTab() {
       {trustLevel === 1 && (
         <>
           {/* L1 Quiet — locked design. Kevin's face does NOT show.
-              The SmartPlay Caddie badge in the upper-left is the mic
-              tap target (KevinAvatar wraps it for the liveliness ring).
-              The lie-analysis camera lives on the right edge via the
-              placements block below. SmartVision (L1HolePreview) and
-              SmartFinder cards stack in the body so the player has
-              hole context without Kevin's face on screen. */}
+              Voice entry on L1 lives in the universal green-arrow
+              dropdown (mic icon, state-aware) — see the Phase AU note
+              just below. The lie-analysis camera lives on the right
+              edge via the placements block below. SmartVision
+              (L1HolePreview) and SmartFinder cards stack in the body
+              so the player has hole context without Kevin's face on
+              screen. */}
           {/* Phase AU — L1 standalone SmartPlay badge mic-trigger removed.
               Voice entry on L1 now lives inside the universal green-arrow
               dropdown (mic icon, state-aware). Frees the upper-left
@@ -2646,7 +2655,7 @@ export default function CaddieTab() {
                     Alert.alert('GPS', 'Calibration failed. Try again in a moment.');
                   }
                 } },
-              { icon: 'logo-youtube',        label: 'YouTube Channel',  sub: '@smartplaycaddie',         action: () => { Linking.openURL('https://youtube.com/@smartplaycaddie').catch(() => {}); setShowMoreMenu(false); } },
+              { icon: 'logo-youtube',        label: 'YouTube Channel',  sub: '@smartplaycaddie',         action: () => { void openYouTubeChannel('@smartplaycaddie'); setShowMoreMenu(false); } },
               { icon: 'settings-outline',    label: 'Settings',         sub: 'App preferences',          action: () => { setShowMoreMenu(false); router.push('/settings' as never); } },
             ]) as { icon: IconName; label: string; sub: string; action: () => void | Promise<void> }[]).map(item => (
               <TouchableOpacity

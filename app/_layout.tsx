@@ -277,6 +277,18 @@ function AppNavigator() {
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
+          name="swinglab/tutorials"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="swinglab/tutorial-upload"
+          options={{ animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen
+          name="swinglab/tutorial/[id]"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
           name="swinglab/space-scan"
           options={{ animation: 'slide_from_bottom' }}
         />

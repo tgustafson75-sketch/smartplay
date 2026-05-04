@@ -84,6 +84,10 @@ interface RecapRequest {
   pre_round_notes?: string | null;
   // Phase V Component 2: Arena practice context
   arena_context?: ArenaContext | null;
+  // Phase BR Component 9 — active tutorial / practice context. Pre-formatted
+  // by services/tutorialContext.buildFullPracticeContext on the client side.
+  // Multi-line string when ≥1 tutorials are active, null otherwise.
+  practice_context?: string | null;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -153,10 +157,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       arenaBlock = `\nRecent Arena practice (last 14 days, ${a.recent_sessions_count} session${a.recent_sessions_count > 1 ? 's' : ''}):\n  ${sessionsLine}\n  Connection logic: only mention Arena work if today's pattern signals genuinely correlate (e.g. distance-control Skills work + tighter approach dispersion).`;
     }
 
+    // Phase BR Component 9 — active tutorial practice context. Inject the
+    // pre-formatted block so the recap can reinforce when shots applied
+    // the practiced techniques (or honestly call out drift). Same honesty
+    // bar as cage context: only cite when round signals support it.
+    const practiceBlock = body.practice_context && body.practice_context.trim()
+      ? `\n${body.practice_context.trim()}\n\nReinforcement logic for the recap: where round shots clearly applied a practiced technique, name the connection ("on those wedge approaches, you stayed low through impact like Marc's been teaching"). Where the round shows the player reverted to old patterns on the practiced clubs/situations, call it out honestly ("wedge approaches went back to the steeper attack — worth refocusing next round"). Don't fabricate connections; only cite when the shot data supports it.`
+      : '';
+
     const userMessage = `Recap for ${body.player_name || 'the player'} at ${body.course_name}.
 Mode: ${modeLabel[body.mode] ?? body.mode}
 Total: ${body.total_score} (${body.score_vs_par >= 0 ? '+' : ''}${body.score_vs_par}) over ${body.holes_played} holes
-${patternBlock}${cageBlock}${arenaBlock}${notesBlock}
+${patternBlock}${cageBlock}${arenaBlock}${notesBlock}${practiceBlock}
 
 ${holesBlock}
 

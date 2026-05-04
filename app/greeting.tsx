@@ -29,6 +29,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Asset } from 'expo-asset';
 import { useTheme } from '../contexts/ThemeContext';
+import { useSettingsStore } from '../store/settingsStore';
 import { playLocalFile, stopSpeaking } from '../services/voiceService';
 import {
   pickGreeting,
@@ -50,6 +51,7 @@ export default function GreetingScreen() {
   const router = useRouter();
   const _insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const voiceGender = useSettingsStore(s => s.voiceGender);
   const { width: W, height: H } = useWindowDimensions();
 
   const [phase, setPhase] = useState<Phase>('ENTERING');
@@ -245,7 +247,9 @@ export default function GreetingScreen() {
                 and is actually Kevin. resizeMode 'cover' fills the
                 circular container edge-to-edge. */}
             <Image
-              source={require('../assets/avatars/kevin_portrait.jpg')}
+              source={voiceGender === 'female'
+                ? require('../assets/avatars/serena_portrait.jpg')
+                : require('../assets/avatars/kevin_portrait.jpg')}
               style={styles.avatarPhoto}
               resizeMode="cover"
             />
