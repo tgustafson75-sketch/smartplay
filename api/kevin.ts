@@ -264,6 +264,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Drives a tone-distinct system-prompt block so Kevin sounds different
       // on cage (Coach) vs course (Caddie) vs arena/recap (Psychologist).
       register = 'caddie',
+      // Phase BH — when true (along with register='coach'), use the in-round
+      // diagnostic Coach sub-prompt: ~30-45s reasoning across multiple shots,
+      // distinguishes "try this round" vs "work on after", admits uncertainty
+      // with "without seeing it..." hedge.
+      inRoundDiagnostic = false,
+      // Phase BH — recent shots from active round, used by in-round
+      // diagnostic Coach to ground reasoning in actual observed shots.
+      recentShots = [],
     } = body;
 
     const _kevinContext: string | null = typeof kevinContext === 'string' && kevinContext.trim() ? kevinContext.trim() : null;
@@ -311,7 +319,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // distinct voice character. The base "HOW YOU SPEAK" rules are
     // additive (length, no lecturing, no app-speak); the register
     // block on top tells Kevin which mode he's in for this exchange.
-    const registerBlock = register === 'coach'
+    const registerBlock = register === 'coach' && inRoundDiagnostic
+      ? `VOICE REGISTER (IN-ROUND DIAGNOSTIC COACH):
+You are in IN-ROUND COACH mode — the player is mid-round and described a
+multi-shot pattern. They want you to REASON through likely causes, not
+just give a tactical answer. Your voice shifts:
+- Acknowledge the pattern in one sentence ("yeah, that's a face issue
+  showing up between clubs").
+- Reason through 2-3 most likely causes — not exhaustive. Pick the most
+  probable based on what they described and what you know about their
+  game (handicap, missType, recent shots).
+- Distinguish CLEARLY between (a) "try this round" — one tactical
+  adjustment they can apply on the next tee — and (b) "worth working
+  on after" — a swing thing for the cage / next practice.
+- HONEST UNCERTAINTY: open with "without seeing it, my best guess is..."
+  or "I'm reasoning from what you described, so take this as a
+  hypothesis." A real coach hedges when he can't see the swing.
+- Concise enough to listen to between shots. ~30-45 seconds spoken
+  (about 80-110 words). Don't ramble.
+- No drill names or in-depth swing thoughts — this isn't the cage.
+  Save the deep work for the post-round / next session.
+- Frame: "walking with the player between holes, thinking out loud
+  about what their swing might be doing today."`
+      : register === 'coach'
       ? `VOICE REGISTER (COACH):
 You are in COACH mode — the player is at the cage / swing review / drill
 detail surface. Your voice shifts:
@@ -567,6 +597,22 @@ You are Kevin. Not an app. Not an AI. A relationship built over ${roundsTogether
 
     const baseMessage = String(message ?? '');
 
+    // Phase BH — when in-round diagnostic, prepend recent shots so Coach
+    // can reason about actual observed shots (clubs, outcomes), not just
+    // the user's verbal pattern description.
+    type ShotLite = { hole?: number; club?: string | null; shape?: string | null; direction?: string | null; outcome?: string | null; distance_yards?: number | null };
+    const shotsArr = Array.isArray(recentShots) ? recentShots as ShotLite[] : [];
+    const recentShotsBlock = inRoundDiagnostic && shotsArr.length > 0
+      ? `[RECENT SHOTS THIS ROUND — most recent last]
+${shotsArr.slice(-10).map((s, i) => {
+  const idx = shotsArr.length - shotsArr.slice(-10).length + i + 1;
+  return `${idx}. hole ${s.hole ?? '?'}: ${s.club ?? 'club ?'}${s.shape ? ', ' + s.shape : ''}${s.direction ? ' ' + s.direction : ''}${s.outcome ? ' (' + s.outcome + ')' : ''}${s.distance_yards != null ? ' — ' + s.distance_yards + 'y' : ''}`;
+}).join('\n')}
+[/RECENT SHOTS]
+
+`
+      : '';
+
     const userMessage = sv
       ? `[SMARTVISION OPEN]
 Hole ${sv.holeNumber ?? '?'}, par ${sv.par ?? '?'}
@@ -576,10 +622,11 @@ ${sv.analysisText ? 'SmartVision analysis: ' + sv.analysisText : ''}
 [/SMARTVISION OPEN]
 
 ${baseMessage}`
-      : baseMessage;
+      : `${recentShotsBlock}${baseMessage}`;
 
-    // SmartVision-open requests are always tactical — we have the numbers, deliver the read
-    const tier = sv ? 'TACTICAL' : await classifyQuestion(baseMessage);
+    // SmartVision-open requests are always tactical — we have the numbers, deliver the read.
+    // Phase BH — in-round diagnostic always Sonnet (reasoning across patterns).
+    const tier = sv ? 'TACTICAL' : inRoundDiagnostic ? 'CONVERSATIONAL' : await classifyQuestion(baseMessage);
     const model = tier === 'TACTICAL' ? 'claude-haiku-4-5' : 'claude-sonnet-4-5';
 
     console.log(`[kevin] tier=${tier} model=${model} q="${userMessage.slice(0, 60)}"`);

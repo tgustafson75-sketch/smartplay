@@ -94,6 +94,19 @@ export function routeQuery(intent_type: string, ctx: RouteContext = {}): RouteDe
         filler_threshold_ms: DEFAULT_THRESHOLD_MS,
       };
 
+    case 'in_round_diagnostic':
+      // Phase BH — pattern reasoning during a round. Routes to Sonnet
+      // because the user wants Kevin to genuinely think across multiple
+      // shots, not pull a number from a service. Filler = analyzing
+      // (longer threshold gives Kevin time to reason; extension fillers
+      // bridge if it goes long).
+      return {
+        handler: 'sonnet',
+        priority: 'deep',
+        filler: 'analyzing',
+        filler_threshold_ms: 200,
+      };
+
     case 'unknown':
       // Future: route to /api/kevin Haiku branch. Today: brief acknowledgment.
       return {

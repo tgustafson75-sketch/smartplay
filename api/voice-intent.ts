@@ -117,6 +117,23 @@ Available intents:
    parameters: {}
    Examples: "Kevin come back", "Kevin speak up", "Kevin talk to me", "Kevin un-quiet", "back to normal"
 
+12. in_round_diagnostic — User is mid-round and asking Kevin to REASON about a multi-shot pattern. Distinct from a tactical question ("what club here?") because it asks WHY something is happening across multiple shots / clubs / patterns.
+   parameters: { pattern_text: string, wants_card?: boolean }
+   Trigger requires BOTH:
+   (a) Reference to a pattern: multiple shot types, multiple clubs, "irons vs driver", "long clubs vs short clubs", "every drive", "all my approaches", "today", a comparison, etc.
+   (b) Explicit reasoning verb: "why", "what's wrong", "what's likely", "what's going on", "what's the (likely) reason", "what's happening", "what could be causing".
+   Examples:
+   - "irons are flushing but driver is going right hard, what's wrong?" -> { pattern_text: "irons flushing, driver going right hard", wants_card: false }
+   - "I keep slicing my long clubs but my wedges are fine, why?" -> { pattern_text: "slicing long clubs, wedges fine", wants_card: false }
+   - "my contact is solid but I'm pulling everything left, what's likely?" -> { pattern_text: "solid contact, pulling left", wants_card: false }
+   - "what's going on with my swing today?" -> { pattern_text: "swing today", wants_card: false }
+   - "irons going flush, baby fade, but driver is going left to right hard, what is the most likely reason?" -> { pattern_text: "irons flushing baby fade, driver hard left-to-right", wants_card: false }
+   - "show me what's wrong with my driver and irons today" -> { pattern_text: "driver and irons today", wants_card: true }
+   - "card me on this — irons solid, driver leaking right" -> { pattern_text: "irons solid, driver leaking right", wants_card: true }
+   pattern_text: brief verbatim summary of the pattern the user described.
+   wants_card: true ONLY if user said "show me", "card", "card me", "visually", "on screen", or similar visual-display request. Default false (voice response).
+   DO NOT match a tactical single-club question. "What club here?" / "What's the wind?" / "How far?" are NOT in_round_diagnostic — they have no pattern AND no reasoning verb.
+
 7. unknown — Cannot determine intent.
    parameters: {}
    Set follow_up_question to a brief clarifying question Kevin could ask.
@@ -125,7 +142,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null

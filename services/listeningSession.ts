@@ -226,6 +226,66 @@ async function openSession() {
       }
     }
 
+    // Phase BH — in-round diagnostic Coach. When the user describes a
+    // multi-shot pattern and asks "why", route to /api/kevin Sonnet with
+    // register='coach' override + inRoundDiagnostic flag. The Coach
+    // prompt sub-branch returns ~30-45s of pattern reasoning.
+    if (intent.intent_type === 'in_round_diagnostic' && round.isRoundActive) {
+      const patternText = (intent.parameters?.pattern_text as string | undefined) ?? utterance;
+      const wantsCard = intent.parameters?.wants_card === true;
+      try {
+        const profile = require('../store/playerProfileStore').usePlayerProfileStore.getState();
+        const settingsStore = require('../store/settingsStore').useSettingsStore.getState();
+        const apiUrlBody = {
+          message: patternText,
+          language: settingsStore.language ?? 'en',
+          playerName: profile.name ?? '',
+          firstName: profile.firstName ?? '',
+          handicap: profile.handicap ?? 18,
+          dominantMiss: profile.dominantMiss ?? null,
+          missType: profile.missType ?? null,
+          experienceContext: profile.experienceContext ?? null,
+          isRoundActive: true,
+          currentHole: round.currentHole,
+          activeCourse: round.activeCourse,
+          courseHoles: round.courseHoles,
+          recentShots: round.shots.slice(-10),
+          kevinContext: profile.kevinContext ?? null,
+          persistentPatterns: profile.persistentPatterns ?? null,
+          register: 'coach',
+          inRoundDiagnostic: true,
+        };
+        await fillerP;
+        const r = await fetch(`${apiUrl}/api/kevin`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(apiUrlBody),
+        });
+        if (r.ok) {
+          const j = await r.json() as { text?: string; audioBase64?: string };
+          if (j.text && ttsAllowed) {
+            await speak(j.text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true });
+          }
+          // If user wanted card, push to the new diagnostic-card screen
+          // with the reasoning text as a param so it can render +
+          // re-play audio without re-querying Sonnet.
+          if (wantsCard && j.text) {
+            try {
+              const router = require('expo-router').router;
+              router.push({
+                pathname: '/diagnostic-card',
+                params: { pattern: patternText, reasoning: j.text },
+              });
+            } catch (e) { console.log('[listeningSession] diagnostic-card nav failed', e); }
+          }
+        }
+      } catch (e) {
+        console.log('[listeningSession] in_round_diagnostic failed', e);
+      }
+      state = 'idle';
+      return;
+    }
+
     const handler = voiceCommandRouter.getHandler(intent.intent_type);
     if (handler) {
       // Phase V.6 — race the handler against filler completion. If the
