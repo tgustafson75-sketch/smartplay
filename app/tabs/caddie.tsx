@@ -2509,7 +2509,7 @@ export default function Caddie() {
         {/* -- CADDIE CARD � unified strategy + response + actions ----------- */}
         <View style={s.caddieCard}>
           {/* a) Strategy text */}
-          <Text style={s.caddieStrategyText} numberOfLines={3}>
+          <Text style={s.caddieStrategyText} numberOfLines={3} ellipsizeMode="tail">
             {currentAdvice}
           </Text>
 
@@ -2522,7 +2522,7 @@ export default function Caddie() {
 
           {/* c) Caddie response � ALWAYS VISIBLE */}
           {caddieResponse ? (
-            <Text style={s.caddieResponseText}>{caddieResponse}</Text>
+            <Text style={s.caddieResponseText} numberOfLines={4} ellipsizeMode="tail">{caddieResponse}</Text>
           ) : (
             <Text style={s.smartToolsTitle}>
               <Text style={s.smartToolsSmart}>Smart</Text>
@@ -3352,6 +3352,11 @@ const s = StyleSheet.create({
     padding: 12,
     marginBottom: 10,
     gap: 8,
+    // Force the card to size to its container; long advice/response text
+    // gets clipped by overflow:hidden + numberOfLines on each Text child below.
+    width: '100%',
+    alignSelf: 'stretch',
+    overflow: 'hidden',
   },
   caddieStrategyText: { color: Palette.textPrimary, fontSize: Type.sm, lineHeight: 20, fontWeight: Type.semibold },
   pointsBadge: {
@@ -3385,7 +3390,7 @@ const s = StyleSheet.create({
     letterSpacing: 0.25,
   },
   caddieVoiceState: { color: Palette.positive, fontSize: Type.xs, fontWeight: Type.bold },
-  caddieActionsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  caddieActionsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   caddieActionsRowCompact: { gap: 6 },
   caddieActionsRowUltraCompact: { gap: 4 },
   caddieActionBtn: {
@@ -3413,7 +3418,7 @@ const s = StyleSheet.create({
     paddingVertical: 5,
     gap: 3,
   },
-  caddieActionLabel: { fontSize: Type.sm, fontWeight: Type.bold },
+  caddieActionLabel: { fontSize: Type.sm, fontWeight: Type.bold, flexShrink: 1, minWidth: 0 },
   caddieActionLabelCompact: {
     fontSize: 11,
     lineHeight: 13,
