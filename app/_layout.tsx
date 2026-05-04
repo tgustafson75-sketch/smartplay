@@ -22,7 +22,22 @@ import { shouldShowTutorial } from '../screens/TutorialScreen';
 // Without this, the native okhttp client throws java.io.IOException:
 // "Failed to load remote host" when the probe is blocked or the network is
 // unavailable, which surfaces as an uncaught red-screen error in Expo Go.
-NetInfo.configure({ reachabilityShouldRun: () => false });
+//
+// `reachabilityShouldRun: false` alone is not enough on every Expo Go build
+// because the native module still attempts the probe. Pointing the URL at a
+// localhost endpoint that returns 204 (or the local Metro server) ensures
+// any retained native probe call fails fast and silently rather than throwing
+// java.io.IOException on the JS thread.
+NetInfo.configure({
+  reachabilityShouldRun: () => false,
+  // Fall-through guards in case Android still attempts a probe before JS gates it.
+  reachabilityUrl: 'http://localhost:8082/',
+  reachabilityTest: async () => false,
+  reachabilityLongTimeout: 60_000,
+  reachabilityShortTimeout: 5_000,
+  reachabilityRequestTimeout: 1_000,
+  useNativeReachability: false,
+});
 
 SplashScreen.preventAutoHideAsync();
 
