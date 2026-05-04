@@ -36,8 +36,11 @@ interface Props {
 
 const SCREEN_WIDTH    = Dimensions.get('window').width;
 const COLLAPSED_WIDTH = 48;
-// Expanded uses the full screen width minus the parent's 16px horizontal padding.
-const EXPANDED_WIDTH  = Math.max(320, SCREEN_WIDTH - 32);
+// Expanded width must never exceed the on-screen container. The Caddie tab's
+// ScrollView uses 12-16px horizontal padding (depending on breakpoint), so
+// reserve 24px each side worst-case. Cap at 320px on roomy phones so the
+// chevron stays close to the avatar's right edge instead of stretching.
+const EXPANDED_WIDTH  = Math.min(320, SCREEN_WIDTH - 48);
 const ANIM_DURATION   = 220;
 
 export default function CaddieToolsStrip({
