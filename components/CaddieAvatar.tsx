@@ -232,7 +232,9 @@ export default function CaddieAvatar({
           resizeMode="cover"
         />
 
-        {/* Layer 2 — Caddie portrait */}
+        {/* Layer 2 — Caddie portrait
+            Serena's framing sits a touch higher in the source asset, so nudge
+            her down ~8% so the head lands in the same vertical band Kevin uses. */}
         <Animated.Image
           source={avatarSource}
           style={[
@@ -240,7 +242,7 @@ export default function CaddieAvatar({
               position: 'absolute',
               width: '100%',
               height: '130%',
-              top: '-15%',
+              top: gender === 'female' ? '-7%' : '-15%',
               left: 0,
               right: 0,
               transform: [{ scale: breatheAnim }],
