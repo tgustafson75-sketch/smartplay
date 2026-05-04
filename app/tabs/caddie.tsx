@@ -1891,6 +1891,21 @@ export default function Caddie() {
   return (
     <SafeAreaView style={s.root} edges={['top', 'left', 'right']}>
       <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+        {/* Tools pill — opens the tools/options menu (voice, end round, profile, settings, etc.). */}
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 4 }}>
+          <Pressable
+            onPress={() => setShowToolsMenu((v) => !v)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={showToolsMenu ? 'Close tools menu' : 'Open tools menu'}
+            style={[s.toolsPill, showToolsMenu && s.toolsPillActive]}
+          >
+            {[0,1,2].map((i) => (
+              <View key={i} style={[s.dot, showToolsMenu && s.dotActive]} />
+            ))}
+          </Pressable>
+        </View>
+
         <CaddieAvatar
           gender={voiceGender === 'female' ? 'female' : 'male'}
           isOnCourse={isRoundActive}
