@@ -298,8 +298,34 @@ export default function Scorecard() {
         </View>
         <View style={styles.holeRight}>
           {hasScore ? (
-            <View style={[styles.scorePill, { backgroundColor: fill }]}>
-              <Text style={styles.scorePillText}>{score}</Text>
+            // Phase AY — inline +/- edit on logged scores. Tap minus to
+            // decrement (floor 1), plus to increment. Edits use logScore
+            // directly so they propagate everywhere a score is read.
+            // Only enabled during an active round (post-round records
+            // are read-only — we'd corrupt history otherwise).
+            <View style={styles.scoreEditRow}>
+              {isRoundActive && (
+                <TouchableOpacity
+                  onPress={(e) => { e.stopPropagation?.(); if (score > 1) logScore(h.hole, score - 1); }}
+                  style={styles.scoreStep}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
+                  disabled={score <= 1}
+                >
+                  <Text style={[styles.scoreStepText, { color: score <= 1 ? c.text_muted : c.text_primary, opacity: score <= 1 ? 0.4 : 1 }]}>−</Text>
+                </TouchableOpacity>
+              )}
+              <View style={[styles.scorePill, { backgroundColor: fill }]}>
+                <Text style={styles.scorePillText}>{score}</Text>
+              </View>
+              {isRoundActive && (
+                <TouchableOpacity
+                  onPress={(e) => { e.stopPropagation?.(); logScore(h.hole, score + 1); }}
+                  style={styles.scoreStep}
+                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+                >
+                  <Text style={[styles.scoreStepText, { color: c.text_primary }]}>+</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : isCurrent ? (
             <Text style={[styles.tapToScore, { color: c.accent }]}>Tap to score ↓</Text>
@@ -592,6 +618,16 @@ const styles = StyleSheet.create({
   scorePillText: {
     color: '#ffffff', fontSize: 17, fontWeight: '900',
   },
+  scoreEditRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+  },
+  scoreStep: {
+    width: 28, height: 28, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+  },
+  scoreStepText: { fontSize: 18, fontWeight: '900', lineHeight: 20 },
   scoreEmpty: { fontSize: 18, fontWeight: '700' },
   tapToScore: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
 

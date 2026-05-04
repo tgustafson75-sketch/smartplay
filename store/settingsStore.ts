@@ -36,6 +36,13 @@ interface SettingsState {
   //             (requires hole geometry with tee+green coords).
   // 'auto'    = use 'gps' when geometry available, fall back to 'curated'.
   smartVisionImagery: 'curated' | 'gps' | 'auto';
+  // Phase AY — yardage source. 'live' uses GPS-driven calculations.
+  // 'preround' uses static courseHoles values (good for planning before
+  // Start Round, or as a manual fallback if GPS gets stale and the user
+  // wants to fall back to the scorecard's nominal numbers). Toggling
+  // back to 'live' fires a fresh GPS read (synthetic Mark) so the
+  // current position re-anchors the live yardages.
+  yardageMode: 'live' | 'preround';
 
   // ─── ACTIONS ────────────────────────────
 
@@ -62,6 +69,7 @@ interface SettingsState {
   setVoiceOnPhoneSpeaker: (v: boolean) => void;
   setKevinGreetingEnabled: (v: boolean) => void;
   setSmartVisionImagery: (v: 'curated' | 'gps' | 'auto') => void;
+  setYardageMode: (v: 'live' | 'preround') => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -91,6 +99,7 @@ export const useSettingsStore = create<SettingsState>()(
       voiceOnPhoneSpeaker: false,
       kevinGreetingEnabled: true,
       smartVisionImagery: 'auto' as const,
+      yardageMode: 'live' as const,
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
       setVoiceGender: (g) => set({ voiceGender: g }),
@@ -133,6 +142,23 @@ export const useSettingsStore = create<SettingsState>()(
       setVoiceOnPhoneSpeaker: (v) => set({ voiceOnPhoneSpeaker: v }),
       setKevinGreetingEnabled: (v) => set({ kevinGreetingEnabled: v }),
       setSmartVisionImagery: (v) => set({ smartVisionImagery: v }),
+      setYardageMode: (v) => {
+        const prev = get().yardageMode;
+        set({ yardageMode: v });
+        // When flipping back to 'live', fire a fresh GPS read so live
+        // yardages re-anchor to the user's actual position. Acts as a
+        // manual fallback for the Mark button when GPS goes stale.
+        if (prev === 'preround' && v === 'live') {
+          (async () => {
+            try {
+              const sf = await import('../services/smartFinderService');
+              await sf.refreshFix();
+              const bus = await import('../services/positionMarkBus');
+              await bus.forceMarkPosition().catch(() => {});
+            } catch (e) { console.log('[settings] yardageMode live refresh failed:', e); }
+          })();
+        }
+      },
     }),
     {
       name: 'settings-store-v2',
@@ -158,6 +184,7 @@ export const useSettingsStore = create<SettingsState>()(
         voiceOnPhoneSpeaker: s.voiceOnPhoneSpeaker,
         kevinGreetingEnabled: s.kevinGreetingEnabled,
         smartVisionImagery: s.smartVisionImagery,
+        yardageMode: s.yardageMode,
         // watchConnected / glassesConnected not persisted — rechecked on mount
       }),
     },

@@ -274,11 +274,44 @@ export default function CaddieTab() {
   // CaddieDataStrip playsLike prop. Falls back to actual yardage when weather is
   // unavailable so the user never sees a placeholder, just the unadjusted number.
   const { weather: caddieWeather, shotBearingDeg: caddieShotBearing } = useCurrentWeather();
+  // Phase AY — yardageMode setting drives whether the data strip shows
+  // GPS-driven (live) or static (preround/scorecard) yardage. Live mode
+  // queries getGreenYardagesSync against the most recent GPS fix; if no
+  // fix yet, falls back to static so the strip never renders "—".
+  const yardageMode = useSettingsStore(s => s.yardageMode);
+  const setYardageMode = useSettingsStore(s => s.setYardageMode);
+  // markTick increments on every position-mark event (subscribed below)
+  // so liveYardage recomputes when fresh GPS data arrives.
+  const [markTick, setMarkTick] = useState(0);
+  useEffect(() => {
+    let active = true;
+    let unsub: (() => void) | null = null;
+    void (async () => {
+      try {
+        const bus = await import('../../services/positionMarkBus');
+        if (!active) return;
+        unsub = bus.subscribeToMark(() => setMarkTick(t => t + 1));
+      } catch (e) { console.log('[caddie] mark bus subscribe failed:', e); }
+    })();
+    return () => { active = false; if (unsub) unsub(); };
+  }, []);
+  const liveYardage = useMemo(() => {
+    if (yardageMode !== 'live' || !isRoundActive) return null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getGreenYardagesSync } = require('../../services/smartFinderService');
+      const y = getGreenYardagesSync(currentHole);
+      return y?.middle ?? null;
+    } catch { return null; }
+  }, [yardageMode, isRoundActive, currentHole, markTick]);
+
+  const displayYardage = liveYardage ?? currentYardage;
+
   const playsLikeYardage = useMemo(() => {
-    if (currentYardage == null) return currentYardage;
-    if (!caddieWeather) return currentYardage;
-    return playsLikeDistance(currentYardage, caddieWeather, caddieShotBearing).plays_like_yards;
-  }, [currentYardage, caddieWeather, caddieShotBearing]);
+    if (displayYardage == null) return displayYardage;
+    if (!caddieWeather) return displayYardage;
+    return playsLikeDistance(displayYardage, caddieWeather, caddieShotBearing).plays_like_yards;
+  }, [displayYardage, caddieWeather, caddieShotBearing]);
 
   const {
     voiceGender,
@@ -1060,6 +1093,14 @@ export default function CaddieTab() {
         }
         const gps = await import('../../services/gpsManager');
         await gps.startGpsManager();
+        // Phase AY — fire a fresh fix + propagate immediately so all
+        // hole-1 yardage displays (SmartFinder, DataStrip plays-like)
+        // reflect the player's actual position at Start Round. Acts
+        // like a synthetic Mark event without persisting it.
+        const sf = await import('../../services/smartFinderService');
+        await sf.refreshFix();
+        const bus = await import('../../services/positionMarkBus');
+        await bus.forceMarkPosition().catch(() => {});
       } catch (e) {
         console.log('[caddie] gps prewarm failed:', e);
       }
@@ -2001,7 +2042,7 @@ export default function CaddieTab() {
         pointerEvents={isRoundActive ? 'box-none' : 'none'}
       >
         <CaddieDataStrip
-          yardage={currentYardage}
+          yardage={displayYardage}
           playsLike={playsLikeYardage}
           hole={{ current: currentHole, total: totalHoles }}
           targetDirection={targetDirection}
@@ -2519,6 +2560,16 @@ export default function CaddieTab() {
             >
 
             {(([
+              // Phase AY — Live / Pre-round yardage toggle. Switching to
+              // 'live' fires a fresh GPS read (acts as a Mark backup if
+              // the regular Mark didn't refresh things). 'preround' shows
+              // static scorecard yardages (planning, or when GPS is
+              // unreliable). Pinned to the top so it's always reachable
+              // mid-round if the data strip's middle yardage looks stale.
+              { icon: yardageMode === 'live' ? 'navigate-circle' as IconName : 'navigate-circle-outline' as IconName,
+                label: `Yardage: ${yardageMode === 'live' ? 'LIVE (GPS)' : 'PRE-ROUND (static)'}`,
+                sub: yardageMode === 'live' ? 'Tap to switch to scorecard yardages' : 'Tap to refresh GPS and go live',
+                action: () => { setYardageMode(yardageMode === 'live' ? 'preround' : 'live'); } },
               // Pre-beta — Discrete Mode quick-toggle. First entry by design:
               // when a player needs Kevin silent right now (quiet group, on a
               // tee, etc.), the action must be the very first thing in the

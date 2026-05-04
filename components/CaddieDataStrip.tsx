@@ -145,11 +145,12 @@ export default function CaddieDataStrip({
   if (!isMounted) return null;
 
   // ── GRID LAYOUT (WIDE mode) ──────────────
+  // Phase AY — YARDS removed (lives on SmartVision now).
   if (stripLayout === 'grid') {
     const row1 = [
       { label: 'HOLE',  value: `${hole.current}/${hole.total}`, dotIdx: 0 },
-      { label: 'YARDS', value: yardage   != null ? String(yardage)   : '—', dotIdx: 1 },
-      { label: 'PLAYS', value: playsLike != null ? String(playsLike) : '—', dotIdx: null },
+      { label: 'PLAYS', value: playsLike != null ? String(playsLike) : '—', dotIdx: 1 },
+      null,
     ];
     const row2 = [
       { label: 'TARGET', value: targetDirection, dotIdx: 2 },
@@ -174,17 +175,21 @@ export default function CaddieDataStrip({
           <View style={[StyleSheet.absoluteFill, styles.tintOverlay]} />
 
           <View style={styles.gridRow}>
-            {row1.map((c, _i) => (
-              <React.Fragment key={c.label}>
-                <View style={styles.gridCell}>
-                  <Text style={styles.cellLabel}>{c.label}</Text>
-                  <Text style={[styles.cellValue, { fontSize: 16 }]}>{c.value}</Text>
-                </View>
-                {c.dotIdx !== null && (
-                  <Animated.View style={[styles.dot, { opacity: dotAnims[c.dotIdx] }]} />
-                )}
-              </React.Fragment>
-            ))}
+            {row1.map((c, i) =>
+              c === null ? (
+                <View key={i} style={styles.gridCell} />
+              ) : (
+                <React.Fragment key={c.label}>
+                  <View style={styles.gridCell}>
+                    <Text style={styles.cellLabel}>{c.label}</Text>
+                    <Text style={[styles.cellValue, { fontSize: 22 }]}>{c.value}</Text>
+                  </View>
+                  {c.dotIdx !== null && (
+                    <Animated.View style={[styles.dot, { opacity: dotAnims[c.dotIdx] }]} />
+                  )}
+                </React.Fragment>
+              )
+            )}
           </View>
 
           <View style={[styles.gridRow, styles.gridRowBorder]}>
@@ -195,7 +200,7 @@ export default function CaddieDataStrip({
                 <React.Fragment key={c.label}>
                   <View style={styles.gridCell}>
                     <Text style={styles.cellLabel}>{c.label}</Text>
-                    <Text style={[styles.cellValue, { fontSize: c.label === 'TARGET' ? 12 : 16 }]}>
+                    <Text style={[styles.cellValue, { fontSize: c.label === 'TARGET' ? 14 : 22 }]}>
                       {c.value}
                     </Text>
                   </View>
@@ -219,12 +224,14 @@ export default function CaddieDataStrip({
   }
 
   // ── HORIZONTAL LAYOUT (portrait, default) ─
+  // Phase AY — YARDS column removed (hole-stated yardage now lives on
+  // SmartVision). Remaining 4 cells get a larger font since they have
+  // more horizontal room.
   const cells = [
-    { label: 'HOLE',   value: `${hole.current}/${hole.total}`,      fontSize: 15 },
-    { label: 'YARDS',  value: yardage   != null ? String(yardage)   : '—', fontSize: 15 },
-    { label: 'PLAYS',  value: playsLike != null ? String(playsLike) : '—', fontSize: 15 },
-    { label: 'TARGET', value: targetDirection,                        fontSize: 11 },
-    { label: 'STROKE', value: String(stroke),                         fontSize: 15 },
+    { label: 'HOLE',   value: `${hole.current}/${hole.total}`,             fontSize: 20 },
+    { label: 'PLAYS',  value: playsLike != null ? String(playsLike) : '—', fontSize: 20 },
+    { label: 'TARGET', value: targetDirection,                             fontSize: 14 },
+    { label: 'STROKE', value: String(stroke),                              fontSize: 20 },
   ];
 
   return (

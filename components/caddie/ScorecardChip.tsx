@@ -10,11 +10,13 @@ import {
   View, Text, TouchableOpacity, Modal, ScrollView, StyleSheet, Pressable,
 } from 'react-native';
 import { useRoundStore } from '../../store/roundStore';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function ScorecardChip() {
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const scores = useRoundStore(s => s.scores);
   const courseHoles = useRoundStore(s => s.courseHoles);
+  const logScore = useRoundStore(s => s.logScore);
   const [open, setOpen] = useState(false);
 
   if (!isRoundActive) return null;
@@ -58,11 +60,30 @@ export default function ScorecardChip() {
                   <View key={h} style={styles.row}>
                     <Text style={styles.rowHole}>Hole {h}</Text>
                     <Text style={styles.rowPar}>Par {par}</Text>
-                    <Text style={[
-                      styles.rowScore,
-                      v > 0 && { color: '#fbbf24' },
-                      v < 0 && { color: '#34d399' },
-                    ]}>{s}</Text>
+                    {/* Phase AY — inline +/- edit on prior holes. Same
+                        logScore wiring as the Score tab so edits propagate. */}
+                    <View style={styles.rowEdit}>
+                      <TouchableOpacity
+                        onPress={() => { if (s > 1) logScore(h, s - 1); }}
+                        disabled={s <= 1}
+                        style={styles.rowStep}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 4 }}
+                      >
+                        <Ionicons name="remove" size={14} color={s <= 1 ? '#374151' : '#ffffff'} />
+                      </TouchableOpacity>
+                      <Text style={[
+                        styles.rowScore,
+                        v > 0 && { color: '#fbbf24' },
+                        v < 0 && { color: '#34d399' },
+                      ]}>{s}</Text>
+                      <TouchableOpacity
+                        onPress={() => logScore(h, s + 1)}
+                        style={styles.rowStep}
+                        hitSlop={{ top: 6, bottom: 6, left: 4, right: 6 }}
+                      >
+                        <Ionicons name="add" size={14} color="#ffffff" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 );
               })}
@@ -117,7 +138,14 @@ const styles = StyleSheet.create({
   },
   rowHole: { color: '#fff', fontSize: 14, fontWeight: '600', flex: 1 },
   rowPar: { color: '#6b7280', fontSize: 13, width: 60, textAlign: 'center' },
-  rowScore: { color: '#fff', fontSize: 16, fontWeight: '800', width: 50, textAlign: 'right' },
+  rowScore: { color: '#fff', fontSize: 16, fontWeight: '800', width: 30, textAlign: 'center' },
+  rowEdit: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  rowStep: {
+    width: 26, height: 26, borderRadius: 13,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+  },
   closeBtn: { marginTop: 12, paddingVertical: 10, alignItems: 'center', backgroundColor: '#1e3a28', borderRadius: 10 },
   closeText: { color: '#fff', fontWeight: '700' },
 });
