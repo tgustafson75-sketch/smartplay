@@ -508,7 +508,7 @@ export default function Scorecard() {
       {/* Rangefinder FAB — bottom-right (removed duplicate, see Animated.View below) */}
       <SplitLayout
         left={
-          <ScrollView contentContainerStyle={[styles.list, { paddingHorizontal: layout.hPad, paddingBottom: tabBarHeight + 8 }]} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={[styles.list, { paddingHorizontal: layout.screenW < 340 ? 4 : layout.hPad, paddingBottom: tabBarHeight + 8 }]} showsVerticalScrollIndicator={false}>
 
         {/* ── 4-player tab bar ── */}
         <View style={styles.playerTabsRow}>
