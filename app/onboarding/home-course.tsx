@@ -37,7 +37,9 @@ export default function OnboardingHomeCourse() {
 
   const handleContinue = () => {
     if (selected) setHomeCourse(selected.name);
-    router.push('/onboarding/ready' as never);
+    // Phase BB — route through about-game screen before /ready so we
+    // capture handicap + miss tendency + experience context for Kevin.
+    router.push('/onboarding/about-game' as never);
   };
 
   const styles = useMemo(() => makeStyles(colors, spacing, radii), [colors, spacing, radii]);

@@ -40,7 +40,9 @@ async function callSynthesis(
   }
 }
 
-/** Component 1 — synthesize onboarding profile. Call after onboarding completes. */
+/** Component 1 — synthesize onboarding profile. Call after onboarding completes.
+ *  Phase BB — now includes missType + experienceContext + default_mode for
+ *  meaningfully personalized day-1 kevinContext. */
 export async function synthesizeOnboardingProfile(): Promise<void> {
   const profile = usePlayerProfileStore.getState();
   const summary = await callSynthesis('onboarding', {
@@ -48,6 +50,9 @@ export async function synthesizeOnboardingProfile(): Promise<void> {
     handicap: profile.handicap,
     goal: profile.goal,
     dominantMiss: profile.dominantMiss,
+    missType: profile.missType,
+    experienceContext: profile.experienceContext,
+    defaultMode: profile.default_mode,
     physicalLimitation: profile.physicalLimitation,
     homeCourse: profile.homeCourse,
     personalBest: profile.personalBest,

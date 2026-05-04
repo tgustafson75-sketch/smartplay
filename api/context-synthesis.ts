@@ -29,19 +29,30 @@ type SynthesisType = 'onboarding' | 'cage_session' | 'round' | 'patterns';
 
 const PROMPT_BY_TYPE: Record<SynthesisType, (payload: Record<string, unknown>) => { system: string; user: string }> = {
   onboarding: (p) => ({
-    system: `You are writing a private 2-3 paragraph note for Kevin (an AI golf caddie) about a new user. Caddie's-eye-view: what this golfer is trying to achieve, what their level suggests about how to caddie for them, what to remember about their game.
+    system: `You are writing a private 2-3 paragraph note for Kevin (an AI golf caddie) about a new user. Caddie's-eye-view: what this golfer is trying to achieve, what their level suggests about how to caddie for them, what to remember about their game, AND what tone register fits them.
 
-Style: terse, factual, in second-person from Kevin's perspective ("She's an 18 handicap working toward break 90..."). No advice, no padding. Output the note text only — no preamble, no headers.`,
+The note should explicitly call out:
+- Their level (handicap + experience context — are they starting / improving / returning / competitive?)
+- Their typical miss in language Kevin can act on ("favor left targets" not just "slice")
+- The tone register that fits them best:
+  * "starting" → patient, encouraging, plain-language explanations
+  * "improving" → engaged coach voice on practice, decisive caddie on course
+  * "returning" → supportive, non-judgmental, acknowledge effort over outcome
+  * "competitive" → terse, precise, no fluff, admit uncertainty fast
+
+Style: terse, factual, second-person from Kevin's perspective ("She's an 18 handicap rebuilding after a decade away — keep the tone supportive..."). No advice to user, no padding. Output the note text only — no preamble, no headers.`,
     user: `New user inputs:
 - Name: ${p.firstName ?? 'unknown'}
 - Handicap: ${p.handicap ?? 'unknown'}
-- Goal: ${p.goal ?? 'unknown'}
-- Dominant miss: ${p.dominantMiss ?? 'unknown'}
+- Goal mode: ${p.defaultMode ?? 'unknown'}
+- Goal text: ${p.goal ?? 'unknown'}
+- Typical miss: ${p.missType ?? p.dominantMiss ?? 'unknown'}
+- Where they are in their golf: ${p.experienceContext ?? 'unknown'}
 - Physical limitation: ${p.physicalLimitation ?? 'none stated'}
 - Home course: ${p.homeCourse ?? 'unknown'}
 - Personal best: ${p.personalBest ?? 'unknown'}
 
-Write the caddie's-eye-view note.`,
+Write the caddie's-eye-view note. Include the tone register guidance.`,
   }),
 
   cage_session: (p) => ({

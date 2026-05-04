@@ -39,6 +39,27 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25_000);
 
+      // Phase BA — register selection from active surface. Maps the
+      // tracked surface to one of three role registers so the API can
+      // build a tone-distinct system prompt:
+      //   caddie      → on-course tactical voice
+      //   coach       → cage / swing review reflective voice
+      //   psychologist→ between-shots / arena / recap supportive voice
+      // Falls back to caddie when no surface is registered.
+      let register: 'caddie' | 'coach' | 'psychologist' = 'caddie';
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { getActiveSurface } = require('../services/activeSurfaceRegistry');
+        const surface = getActiveSurface();
+        if (surface === 'cage' || surface === 'swing_library' || surface === 'swing_detail') {
+          register = 'coach';
+        } else if (surface === 'arena' || surface === 'recap') {
+          register = 'psychologist';
+        } else {
+          register = 'caddie';
+        }
+      } catch { /* default caddie */ }
+
       const res = await fetch(API_URL + '/api/kevin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -60,6 +81,7 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
           club,
           scores,
           courseHoles,
+          register, // Phase BA
         }),
       }).finally(() => clearTimeout(timeout));
 

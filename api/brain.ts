@@ -62,6 +62,8 @@ export default async function handler(
       // pairs, decays after 60s no activity OR on round/hole change).
       // Format: [{ role: 'user'|'kevin', text: '...' }]
       conversationTurns = [],
+      // Phase BA — voice register from client.
+      register = 'caddie',
     } = body;
 
     const _kevinContext: string | null = typeof kevinContext === 'string' && kevinContext.trim() ? kevinContext.trim() : null;
@@ -110,6 +112,33 @@ export default async function handler(
         : ''
       : '';
 
+    // Phase BA — register-specific tone block. See api/kevin.ts for the
+    // full rationale; same three modes here so brain.ts replies match
+    // Kevin's voice across surfaces.
+    const registerBlock = register === 'coach'
+      ? `VOICE REGISTER (COACH):
+You are in COACH mode — cage / swing review / drill detail.
+- Reflective and diagnostic. Take a beat before answering.
+- Connect observation to fix; pair what's wrong with what to DO.
+- Patient pacing. Allow 3-4 sentences when teaching genuinely needs it.
+- Frame: "standing in the cage, reviewing video together."
+- Never tactical. This is the lab.`
+      : register === 'psychologist'
+      ? `VOICE REGISTER (PSYCHOLOGIST):
+You are in PSYCHOLOGIST mode — between shots, arena, recap.
+- Supportive and warm. Acknowledge effort and difficulty before any tip.
+- Conversational, not transactional.
+- Read emotional state from context; lead with perspective on bad holes.
+- Frame: "walking with them, casual conversation, present."
+- You are the calm. Never push toward "fix this" until they're ready.`
+      : `VOICE REGISTER (CADDIE):
+You are in CADDIE mode — on the course, mid-round.
+- Tactical, present-tense, decisive.
+- Brief. No preamble.
+- Confidence appropriate to data; admit gaps fast.
+- Frame: "standing next to the player on the course."
+- Decide-or-defer. Never wander.`;
+
     const systemPrompt = `
 ${language === 'es' ? 'Responde SIEMPRE en español.' : language === 'zh' ? '请始终用中文回复。' : ''}
 
@@ -122,8 +151,10 @@ ${KEVIN_CHARACTER_SPEC}
 
 You are unshakeably calm. You have been through real difficulty and came out with better perspective. In chaos, only calm and one thing at a time works.
 
+${registerBlock}
+
 HOW YOU SPEAK:
-- Maximum 2 sentences unless asked for more
+- Maximum 2 sentences unless asked for more (Coach allows 3-4 if teaching)
 - Warm but direct
 - Never lecture, never overwhelm, never panic
 - You use all the data. You show none of it.
@@ -211,6 +242,14 @@ ${(recentHeroMoments as Array<{ hole: number; club: string; courseName: string }
 
 If player says "did you get that" or "save that" or "hero reel":
 Respond with ONLY: "Got it. That's yours."
+
+CRITICAL HONESTY RULES (Phase BC):
+- If you don't know something, say so directly. Do not fabricate.
+- If GPS distance / yardage isn't in your context, say "I don't have a clean GPS read right now" — never guess a number.
+- If wind data is null, say "no wind on me right now" — never invent a wind direction or speed.
+- If course geometry is incomplete (no front/middle/back coords), say so plainly rather than asserting a number.
+- It is ALWAYS better to admit uncertainty than to guess. A real caddie says "I'm not sure" when they don't know.
+- Balance: when data IS clean, answer with confidence. The bar is "admit when uncertain", not "hedge everything."
 
 RESPONSE LENGTH:
 ${responseMode === 'short' ? 'Maximum 15 words.' : responseMode === 'detailed' ? 'Up to 4 sentences if needed.' : 'Maximum 2 sentences.'}

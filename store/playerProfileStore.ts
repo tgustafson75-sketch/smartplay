@@ -11,6 +11,15 @@ interface PlayerProfileState {
   firstName: string;
   handicap: number;
   dominantMiss: 'left' | 'right' | 'straight' | null;
+  // Phase BB — broader miss-type taxonomy for richer Kevin grounding.
+  // Coexists with dominantMiss (which is direction-only). missType
+  // captures the swing fault flavor too. Both stay populated; Kevin
+  // can use whichever fits the moment.
+  missType: 'slice' | 'hook' | 'thin' | 'fat' | 'pull' | 'push' | 'varies' | null;
+  // Phase BB — where the user is in their golf journey. Drives Kevin's
+  // tone calibration on day-1 (returning golfer needs more support;
+  // competitive needs precision; just-starting needs encouragement).
+  experienceContext: 'starting' | 'improving' | 'returning' | 'competitive' | null;
   physicalLimitation: string | null;
   goal: string | null;
   personalBest: number | null;
@@ -47,6 +56,8 @@ interface PlayerProfileState {
   setName: (name: string) => void;
   setHandicap: (hcp: number) => void;
   setDominantMiss: (miss: 'left' | 'right' | 'straight' | null) => void;
+  setMissType: (m: 'slice' | 'hook' | 'thin' | 'fat' | 'pull' | 'push' | 'varies' | null) => void;
+  setExperienceContext: (e: 'starting' | 'improving' | 'returning' | 'competitive' | null) => void;
   setPhysicalLimitation: (limitation: string | null) => void;
   setGoal: (goal: string | null) => void;
   setPersonalBest: (score: number | null) => void;
@@ -75,6 +86,8 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       firstName: '',
       handicap: 18,
       dominantMiss: null,
+      missType: null,
+      experienceContext: null,
       physicalLimitation: null,
       goal: null,
       personalBest: null,
@@ -98,6 +111,18 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
         set({ name, firstName: name.split(' ')[0] ?? name }),
       setHandicap: (hcp) => set({ handicap: hcp }),
       setDominantMiss: (miss) => set({ dominantMiss: miss }),
+      setMissType: (m) => {
+        // Auto-derive directional dominantMiss from missType so older
+        // code paths keying on dominantMiss keep working.
+        const dirMap: Record<string, 'left' | 'right' | 'straight' | null> = {
+          slice: 'right', push: 'right',
+          hook: 'left', pull: 'left',
+          thin: null, fat: null, varies: null,
+        };
+        const derived = m ? dirMap[m] ?? null : null;
+        set(s => ({ missType: m, dominantMiss: derived ?? s.dominantMiss }));
+      },
+      setExperienceContext: (e) => set({ experienceContext: e }),
       setPhysicalLimitation: (l) => set({ physicalLimitation: l }),
       setGoal: (goal) => set({ goal }),
       setPersonalBest: (score) => set({ personalBest: score }),
