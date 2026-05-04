@@ -173,8 +173,16 @@ function Marker({ kind, x, y, draggable, onDrag, onDragEnd }: {
   const responder = useMemo(() => {
     if (!draggable) return null;
     return PanResponder.create({
+      // Capture aggressively so the marker wins the gesture race against
+      // any parent ScrollView / Pressable / canvas View. Capture-phase
+      // handlers run before child phase so this marker takes the touch
+      // even if a parent thinks it should respond.
       onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
       onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => { /* explicit grant for clarity */ },
       onPanResponderMove: (_e, g) => {
         if (onDrag) onDrag(g.dx, g.dy);
       },
@@ -189,7 +197,6 @@ function Marker({ kind, x, y, draggable, onDrag, onDragEnd }: {
 
   return (
     <View
-      // hitSlop expands the touch target without inflating the visual
       style={[
         styles.marker,
         {
@@ -200,9 +207,11 @@ function Marker({ kind, x, y, draggable, onDrag, onDragEnd }: {
           borderRadius: s.size / 2,
           backgroundColor: s.bg,
           borderColor: s.ring,
+          zIndex: draggable ? 30 : 20,
+          elevation: draggable ? 12 : 8,
         },
       ]}
-      hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+      hitSlop={{ top: 24, bottom: 24, left: 24, right: 24 }}
       {...(responder ? responder.panHandlers : {})}
     >
       <Text style={[styles.markerText, { color: s.text, fontSize: s.size * 0.42 }]}>{kind}</Text>
@@ -222,6 +231,9 @@ export default function SmartVisionScreen() {
   const courseHoles = useRoundStore(s => s.courseHoles);
   const currentHole = useRoundStore(s => s.currentHole);
   const totalHoles = courseHoles.length || 18;
+  const addOrUpdatePlan = useRoundStore(s => s.addOrUpdatePlan);
+  const existingPlan = useRoundStore(s => s.plans.find(p => p.hole_number === currentHole));
+  const [savedFlash, setSavedFlash] = useState(false);
 
   const imageryMode = useSettingsStore(s => s.smartVisionImagery);
   const setImageryMode = useSettingsStore(s => s.setSmartVisionImagery);
@@ -314,86 +326,129 @@ export default function SmartVisionScreen() {
     return { center, bearing, zoom };
   }, [geometry]);
 
-  // Marker pixel positions (image-relative; +y = up the hole = north of bearing)
-  const teePx = useMemo(() => {
-    if (!projection || !geometry?.tee) return null;
-    return projectToPixels(geometry.tee, projection.center, projection.zoom, projection.bearing);
-  }, [projection, geometry?.tee]);
+  // Marker positions in CANVAS-LOCAL pixel coordinates (top-left origin,
+  // x increases right, y increases DOWN).
+  //
+  // Defaults: tee at bottom-center (50% W, 85% H — typical tee position
+  // on a golf hole image), pin at top-center on the green (50% W, 15% H).
+  // Yellow defaults to the midpoint of the tee→pin segment.
+  //
+  // GPS projection from Mapbox tiles dropped — kept producing off-screen
+  // and overlapping markers from rotation/aspect mismatches between the
+  // rendered tile and the projection math. Static layout is reliable;
+  // user drags markers wherever they want.
+  const teeCanvas = useMemo(() => ({ x: imageW / 2, y: imageH * 0.85 }), [imageW, imageH]);
+  const pinDefaultCanvas = useMemo(() => ({ x: imageW / 2, y: imageH * 0.15 }), [imageW, imageH]);
 
-  const pinDefaultPx = useMemo(() => {
-    if (!projection || !geometry?.green) return null;
-    return projectToPixels(geometry.green, projection.center, projection.zoom, projection.bearing);
-  }, [projection, geometry?.green]);
+  // Pin override (user-dragged) — stored in canvas coords.
   const pinOverride = pinByHole[holeIndex];
-  const pinPx = pinOverride ?? pinDefaultPx;
+  const pinCanvas = pinOverride ?? pinDefaultCanvas;
+
+  // Pixel-relative (+y up) versions for legacy yardage interpolation.
+  const teePx = useMemo(() => ({ x: teeCanvas.x - imageW / 2, y: imageH / 2 - teeCanvas.y }), [teeCanvas, imageW, imageH]);
+  const pinPx = useMemo(() => ({ x: pinCanvas.x - imageW / 2, y: imageH / 2 - pinCanvas.y }), [pinCanvas, imageW, imageH]);
+
+  // Bounds clamper used in drag handlers — keep markers visible.
+  const clampToCanvas = useCallback((p: { x: number; y: number }) => ({
+    x: Math.max(8, Math.min(imageW - 8, p.x)),
+    y: Math.max(8, Math.min(imageH - 8, p.y)),
+  }), [imageW, imageH]);
+
+  // Make GPS-mode no-op for yardages too (always pixel interpolation).
+  const usingGpsTile = false;
 
   // Yellow target — defaults to midpoint of tee→pin if no override set.
+  // Stored in CANVAS coords (top-left origin, y down) for direct render.
   const targetOverride = targetByHole[holeIndex];
-  const targetPx = useMemo(() => {
+  const targetCanvas = useMemo(() => {
     if (targetOverride) return targetOverride;
-    if (teePx && pinPx) return { x: (teePx.x + pinPx.x) / 2, y: (teePx.y + pinPx.y) / 2 };
-    return null;
-  }, [targetOverride, teePx, pinPx]);
+    return { x: (teeCanvas.x + pinCanvas.x) / 2, y: (teeCanvas.y + pinCanvas.y) / 2 };
+  }, [targetOverride, teeCanvas, pinCanvas]);
+  // Pixel-relative (+y up) version for the legacy yardage interpolation.
+  const targetPx = useMemo(() => ({
+    x: targetCanvas.x - imageW / 2,
+    y: imageH / 2 - targetCanvas.y,
+  }), [targetCanvas, imageW, imageH]);
 
   // Convert image-relative pixel (with +y up) to absolute screen pixel
-  // for rendering. Image is rendered at top-left = (0, TOP_BAR_H + insets.top)
-  // and the projection's "image center" maps to (imageW/2, TOP_BAR_H + insets.top + imageH/2).
-  const toScreen = useCallback((p: { x: number; y: number }) => ({
-    x: imageW / 2 + p.x,
-    y: insets.top + TOP_BAR_H + imageH / 2 - p.y, // negate y because screen-y goes DOWN
-  }), [imageW, imageH, insets.top]);
+  // (toScreen helper removed — markers + line now render directly in
+  // canvas-local coords, no screen-coord conversion needed.)
 
   // Live yardages from yellow target → green's F (front edge), MIDDLE
   // (= the user-positioned PIN), B (back edge). Tim's spec: pin moves
-  // → middle yardage updates. Front and back stay tied to the green
-  // polygon edges.
+  // → middle yardage updates. Three modes:
+  //   1) GPS geometry available → real haversine math, all 3 numbers live.
+  //   2) No geometry but tee/pin pixel positions known (curated mode) →
+  //      pixel-axis interpolation against bundled courseHoles distance.
+  //      Y position along tee→pin axis maps proportionally to yardage.
+  //   3) Neither → static bundled values.
   const yardages = useMemo(() => {
-    if (projection && targetPx && geometry) {
-      const targetGeo = pixelsToLatLng(targetPx, projection.center, projection.zoom, projection.bearing);
-      const pinGeo = pinPx ? pixelsToLatLng(pinPx, projection.center, projection.zoom, projection.bearing) : geometry.green;
+    if (usingGpsTile && targetPx && geometry && pinPx) {
+      const targetGeo = pixelsToLatLng(targetPx, projection!.center, projection!.zoom, projection!.bearing);
+      const pinGeo = pixelsToLatLng(pinPx, projection!.center, projection!.zoom, projection!.bearing);
       const front = geometry.green_front ? Math.round(haversineYards(targetGeo.lat, targetGeo.lng, geometry.green_front.lat, geometry.green_front.lng)) : null;
-      const middle = pinGeo ? Math.round(haversineYards(targetGeo.lat, targetGeo.lng, pinGeo.lat, pinGeo.lng)) : null;
+      const middle = Math.round(haversineYards(targetGeo.lat, targetGeo.lng, pinGeo.lat, pinGeo.lng));
       const back = geometry.green_back ? Math.round(haversineYards(targetGeo.lat, targetGeo.lng, geometry.green_back.lat, geometry.green_back.lng)) : null;
       return { front, middle, back };
     }
-    // Fallback: bundled courseHoles values (static, from data/courses.ts).
     const h = courseHoles.find(x => x.hole === holeIndex);
+    if (h && targetPx && teePx && pinPx) {
+      // Pixel-axis interpolation against bundled hole distance. Used
+      // whenever we're on the curated image (non-GPS tile), so dragging
+      // Y/P actually moves the yardage numbers.
+      const totalSpan = pinPx.y - teePx.y; // image-y +up, pin > tee
+      const targetSpan = targetPx.y - teePx.y;
+      const progress = totalSpan === 0 ? 0.5 : Math.max(0, Math.min(1, targetSpan / totalSpan));
+      const total = h.distance;
+      const middleYd = Math.round((1 - progress) * total);
+      const greenDepth = (h.back - h.front) / 2;
+      return { front: Math.max(0, middleYd - greenDepth), middle: middleYd, back: middleYd + greenDepth };
+    }
     if (h) return { front: h.front ?? null, middle: h.distance ?? null, back: h.back ?? null };
     return { front: null as number | null, middle: null as number | null, back: null as number | null };
-  }, [projection, targetPx, pinPx, geometry, courseHoles, holeIndex]);
+  }, [usingGpsTile, projection, targetPx, pinPx, teePx, geometry, courseHoles, holeIndex]);
 
-  // Carry distance — yards from tee to current yellow target. Surfaces
-  // as a visible measure label next to the yellow marker so users
-  // immediately see it as a measure tool, not just a draggable dot.
+  // Carry distance — yards from tee to current yellow target. GPS path
+  // uses haversine; pixel-fallback path interpolates against the bundled
+  // hole distance so the carry label still updates in curated mode.
   const carryYards = useMemo(() => {
-    if (!projection || !targetPx || !geometry?.tee) return null;
-    const targetGeo = pixelsToLatLng(targetPx, projection.center, projection.zoom, projection.bearing);
-    return Math.round(haversineYards(targetGeo.lat, targetGeo.lng, geometry.tee.lat, geometry.tee.lng));
-  }, [projection, targetPx, geometry]);
+    if (usingGpsTile && targetPx && geometry?.tee) {
+      const targetGeo = pixelsToLatLng(targetPx, projection!.center, projection!.zoom, projection!.bearing);
+      return Math.round(haversineYards(targetGeo.lat, targetGeo.lng, geometry.tee.lat, geometry.tee.lng));
+    }
+    const h = courseHoles.find(x => x.hole === holeIndex);
+    if (h && targetPx && teePx && pinPx) {
+      const totalSpan = pinPx.y - teePx.y;
+      const targetSpan = targetPx.y - teePx.y;
+      const progress = totalSpan === 0 ? 0.5 : Math.max(0, Math.min(1, targetSpan / totalSpan));
+      return Math.round(progress * h.distance);
+    }
+    return null;
+  }, [usingGpsTile, projection, targetPx, teePx, pinPx, geometry, courseHoles, holeIndex]);
 
-  // ── Drag handlers for yellow target + pin ───────────────────────
+  // ── Drag handlers for yellow target + pin (canvas coords) ───────
   const targetDragStartRef = useRef<{ x: number; y: number } | null>(null);
   const pinDragStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const onTargetDrag = useCallback((dx: number, dy: number) => {
-    if (!targetPx) return;
-    if (!targetDragStartRef.current) targetDragStartRef.current = targetPx;
-    const next = {
+    if (!targetCanvas) return;
+    if (!targetDragStartRef.current) targetDragStartRef.current = targetCanvas;
+    const next = clampToCanvas({
       x: targetDragStartRef.current.x + dx,
-      y: targetDragStartRef.current.y - dy, // screen-y is down; our y is up
-    };
+      y: targetDragStartRef.current.y + dy,
+    });
     setTargetByHole(prev => ({ ...prev, [holeIndex]: next }));
-  }, [targetPx, holeIndex]);
+  }, [targetCanvas, holeIndex, clampToCanvas]);
 
   const onPinDrag = useCallback((dx: number, dy: number) => {
-    if (!pinPx) return;
-    if (!pinDragStartRef.current) pinDragStartRef.current = pinPx;
-    const next = {
+    if (!pinCanvas) return;
+    if (!pinDragStartRef.current) pinDragStartRef.current = pinCanvas;
+    const next = clampToCanvas({
       x: pinDragStartRef.current.x + dx,
-      y: pinDragStartRef.current.y - dy,
-    };
+      y: pinDragStartRef.current.y + dy,
+    });
     setPinByHole(prev => ({ ...prev, [holeIndex]: next }));
-  }, [pinPx, holeIndex]);
+  }, [pinCanvas, holeIndex, clampToCanvas]);
 
   // Reset drag refs when hole changes
   useEffect(() => {
@@ -405,10 +460,47 @@ export default function SmartVisionScreen() {
   const goPrev = () => setHoleIndex(i => Math.max(1, i - 1));
   const goNext = () => setHoleIndex(i => Math.min(totalHoles || 18, i + 1));
 
+  // ── Save current marker positions as the hole plan ──────────────
+  // Persists tee/approach(=yellow)/pin marker positions + computed
+  // yardages so the player's pre-round strategy survives across hole
+  // navigation and app restarts. Replaces an existing plan for the
+  // hole if one exists.
+  const onSaveStrategy = useCallback(() => {
+    if (!targetPx || !pinPx || !teePx) return;
+    addOrUpdatePlan({
+      hole_number: holeIndex,
+      markers: {
+        tee:      { x: teePx.x,    y: teePx.y,    club_intent: null, landmark_target: null },
+        approach: { x: targetPx.x, y: targetPx.y, club_intent: null, landmark_target: null },
+        pin:      { x: pinPx.x,    y: pinPx.y,    club_intent: null, landmark_target: null },
+      },
+      computed_yardages: {
+        from_tee_to_approach: carryYards,
+        from_approach_to_pin: yardages.middle,
+        total: yardages.middle != null && carryYards != null ? carryYards + yardages.middle : null,
+      },
+    });
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1400);
+  }, [targetPx, pinPx, teePx, holeIndex, carryYards, yardages.middle, addOrUpdatePlan]);
+
+  // ── Restore saved plan when entering a hole that has one ────────
+  useEffect(() => {
+    if (!existingPlan) return;
+    const m = existingPlan.markers;
+    if (m.approach && targetByHole[holeIndex] === undefined) {
+      setTargetByHole(prev => ({ ...prev, [holeIndex]: { x: m.approach!.x, y: m.approach!.y } }));
+    }
+    if (m.pin && pinByHole[holeIndex] === undefined) {
+      setPinByHole(prev => ({ ...prev, [holeIndex]: { x: m.pin!.x, y: m.pin!.y } }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holeIndex, existingPlan?.id]);
+
   // ── Render ──────────────────────────────────────────────────────
-  const teeScreen = teePx ? toScreen(teePx) : null;
-  const pinScreen = pinPx ? toScreen(pinPx) : null;
-  const targetScreen = targetPx ? toScreen(targetPx) : null;
+  // Canvas-local coords feed both the SVG line and the markers directly.
+  // No more screen↔canvas conversion — the canvas View IS the coordinate
+  // space we render in, so we just use teeCanvas / pinCanvas / targetCanvas.
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -475,98 +567,101 @@ export default function SmartVisionScreen() {
           </View>
         )}
 
-        {/* SVG overlay — line from tee → yellow → pin. Drawn under the
-            markers (markers render after, so they sit on top of the line).
-            Yellow dashed segment shows the carry path; thin solid white
-            segment shows yellow→pin. */}
-        {teeScreen && targetScreen && pinScreen && (
-          <Svg
-            width={imageW}
-            height={imageH}
-            style={StyleSheet.absoluteFill}
+        {/* SVG overlay — line tee → yellow → pin, drawn beneath markers. */}
+        <Svg
+          width={imageW}
+          height={imageH}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        >
+          <SvgLine
+            x1={teeCanvas.x}
+            y1={teeCanvas.y}
+            x2={targetCanvas.x}
+            y2={targetCanvas.y}
+            stroke="#facc15"
+            strokeWidth={3}
+            strokeDasharray="6,4"
+            opacity={0.9}
+          />
+          <SvgLine
+            x1={targetCanvas.x}
+            y1={targetCanvas.y}
+            x2={pinCanvas.x}
+            y2={pinCanvas.y}
+            stroke="#ffffff"
+            strokeWidth={2}
+            opacity={0.75}
+          />
+        </Svg>
+
+        {/* Markers — direct canvas coords. */}
+        <Marker
+          kind="T"
+          x={teeCanvas.x}
+          y={teeCanvas.y}
+          draggable={false}
+        />
+        <Marker
+          kind="P"
+          x={pinCanvas.x}
+          y={pinCanvas.y}
+          draggable
+          onDrag={onPinDrag}
+          onDragEnd={() => { pinDragStartRef.current = null; }}
+        />
+        <Marker
+          kind="Y"
+          x={targetCanvas.x}
+          y={targetCanvas.y}
+          draggable
+          onDrag={onTargetDrag}
+          onDragEnd={() => { targetDragStartRef.current = null; }}
+        />
+
+        {/* Measure label — floats above-right of yellow marker. */}
+        {carryYards != null && yardages.middle != null && (
+          <View
             pointerEvents="none"
+            style={[
+              styles.measureLabel,
+              {
+                left: Math.min(imageW - 100, targetCanvas.x + 28),
+                top: Math.max(8, targetCanvas.y - 30),
+              },
+            ]}
           >
-            <SvgLine
-              x1={teeScreen.x}
-              y1={teeScreen.y - insets.top - TOP_BAR_H}
-              x2={targetScreen.x}
-              y2={targetScreen.y - insets.top - TOP_BAR_H}
-              stroke="#facc15"
-              strokeWidth={3}
-              strokeDasharray="6,4"
-              opacity={0.85}
-            />
-            <SvgLine
-              x1={targetScreen.x}
-              y1={targetScreen.y - insets.top - TOP_BAR_H}
-              x2={pinScreen.x}
-              y2={pinScreen.y - insets.top - TOP_BAR_H}
-              stroke="#ffffff"
-              strokeWidth={2}
-              opacity={0.7}
-            />
-          </Svg>
-        )}
-
-        {/* Markers — rendered absolutely at screen coordinates, then
-            offset back to image-local because they're inside this View
-            (which starts at insets.top + TOP_BAR_H). */}
-        {teeScreen && (
-          <Marker
-            kind="T"
-            x={teeScreen.x}
-            y={teeScreen.y - insets.top - TOP_BAR_H}
-            draggable={false}
-          />
-        )}
-        {pinScreen && (
-          <Marker
-            kind="P"
-            x={pinScreen.x}
-            y={pinScreen.y - insets.top - TOP_BAR_H}
-            draggable
-            onDrag={onPinDrag}
-            onDragEnd={() => { pinDragStartRef.current = null; }}
-          />
-        )}
-        {targetScreen && (
-          <>
-            <Marker
-              kind="Y"
-              x={targetScreen.x}
-              y={targetScreen.y - insets.top - TOP_BAR_H}
-              draggable
-              onDrag={onTargetDrag}
-              onDragEnd={() => { targetDragStartRef.current = null; }}
-            />
-            {/* Measure label — floats above-right of the yellow marker so
-                the marker reads as a measure tool, not just a dot. Shows
-                carry yards from tee + yards to pin (middle of green). */}
-            {carryYards != null && yardages.middle != null && (
-              <View
-                pointerEvents="none"
-                style={[
-                  styles.measureLabel,
-                  {
-                    left: targetScreen.x + 28,
-                    top: targetScreen.y - insets.top - TOP_BAR_H - 30,
-                  },
-                ]}
-              >
-                <Text style={styles.measureLabelTop}>{carryYards}y carry</Text>
-                <Text style={styles.measureLabelBot}>{yardages.middle}y to pin</Text>
-              </View>
-            )}
-          </>
-        )}
-
-        {/* First-time hint when measure tool is available */}
-        {targetScreen && carryYards != null && (
-          <View pointerEvents="none" style={styles.measureHint}>
-            <Ionicons name="hand-left-outline" size={12} color="#facc15" />
-            <Text style={styles.measureHintText}>Drag Y to layup · Drag P to set pin</Text>
+            <Text style={styles.measureLabelTop}>{carryYards}y carry</Text>
+            <Text style={styles.measureLabelBot}>{yardages.middle}y to pin</Text>
           </View>
         )}
+
+        {/* First-time hint */}
+        <View pointerEvents="none" style={styles.measureHint}>
+          <Ionicons name="hand-left-outline" size={12} color="#facc15" />
+          <Text style={styles.measureHintText}>Drag Y to layup · Drag P to set pin</Text>
+        </View>
+
+        {/* Save strategy — right edge of canvas. Persists current marker
+            positions as the hole plan (tee/approach/pin + yardages).
+            Bookmark icon when no saved plan; checkmark + green when
+            saved or just-saved. */}
+        <TouchableOpacity
+          onPress={onSaveStrategy}
+          style={[
+            styles.saveBtn,
+            (savedFlash || existingPlan) && { backgroundColor: '#00C896', borderColor: '#00C896' },
+          ]}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityRole="button"
+          accessibilityLabel="Save strategy"
+        >
+          <Ionicons
+            name={savedFlash ? 'checkmark' : existingPlan ? 'bookmark' : 'bookmark-outline'}
+            size={20}
+            color={savedFlash || existingPlan ? '#04140c' : '#ffffff'}
+          />
+        </TouchableOpacity>
       </View>
 
       {/* Bottom panel — F/M/B yardages from yellow target */}
@@ -653,6 +748,17 @@ const styles = StyleSheet.create({
   },
   measureHintText: {
     color: '#facc15', fontSize: 11, fontWeight: '700', letterSpacing: 0.3,
+  },
+  saveBtn: {
+    position: 'absolute',
+    top: 12, right: 12,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5, shadowRadius: 4, elevation: 8,
+    zIndex: 25,
   },
   bottomPanel: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
