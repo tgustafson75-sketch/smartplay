@@ -2212,9 +2212,9 @@ export default function Caddie() {
         showsVerticalScrollIndicator={false}
       >
 
-        {/* Tools pill (left) opens the tools/options menu — voice, profile, settings, etc.
-            The green-arrow tools strip sits on the opposite (right) side below the avatar. */}
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-start', marginBottom: 4 }}>
+        {/* Brand header — SmartPlay Caddie wordmark + tagline, with the tools pill
+            anchored on the right side of the header. */}
+        <BrandHeader rightSlot={
           <Pressable
             onPress={() => setShowToolsMenu((v) => !v)}
             hitSlop={10}
@@ -2226,35 +2226,37 @@ export default function Caddie() {
               <View key={i} style={[s.dot, showToolsMenu && s.dotActive]} />
             ))}
           </Pressable>
-        </View>
+        } />
 
-        <CaddieAvatar
-          gender={voiceGender === 'female' ? 'female' : 'male'}
-          isOnCourse={isRoundActive}
-          isCageMode={!isRoundActive}
-          voiceState={mappedVoiceState}
-          hole={currentHole}
-          par={holePar}
-          yards={displayDistance ?? null}
-          wind={`${wind.speed} mph ${wind.direction}`}
-          playsLike={effectiveDistance ?? null}
-          openingPrompt={openingPrompt}
-          caddieResponse={caddieResponse || caddieMsg || currentAdvice}
-          onTap={toggleMic}
-        />
-
-        {/* Collapsible quick-tools — all caddie-tab actions live here:
-            SmartFinder / Pointfinder / SmartVision / SwingLab / Round / Shot Card / More. */}
-        <View style={{ marginTop: 8, marginBottom: 8 }}>
-          <CaddieToolsStrip
-            onOpenSmartFinder={openRangefinder}
-            onOpenPointfinder={() => { setPointA(null); setPointB(null); setShowPointRanger(true); }}
-            onOpenSmartVision={openSmartVision}
-            onOpenSwingLab={() => router.push('/tabs/swinglab')}
-            onOpenRound={() => setShowToolsMenu(true)}
-            onOpenShotCard={() => setShowShotCard(true)}
-            onOpenMore={() => setShowMoreMenu(true)}
+        {/* Avatar with the green-arrow tools strip overlaid on its right side.
+            Tools pill is on the opposite (left) side above. */}
+        <View style={{ position: 'relative' }}>
+          <CaddieAvatar
+            gender={voiceGender === 'female' ? 'female' : 'male'}
+            isOnCourse={isRoundActive}
+            isCageMode={!isRoundActive}
+            voiceState={mappedVoiceState}
+            hole={currentHole}
+            par={holePar}
+            yards={displayDistance ?? null}
+            wind={`${wind.speed} mph ${wind.direction}`}
+            playsLike={effectiveDistance ?? null}
+            openingPrompt={openingPrompt}
+            caddieResponse={caddieResponse || caddieMsg || currentAdvice}
+            onTap={toggleMic}
           />
+
+          <View style={{ position: 'absolute', top: 12, right: 0 }}>
+            <CaddieToolsStrip
+              onOpenSmartFinder={openRangefinder}
+              onOpenPointfinder={() => { setPointA(null); setPointB(null); setShowPointRanger(true); }}
+              onOpenSmartVision={openSmartVision}
+              onOpenSwingLab={() => router.push('/tabs/swinglab')}
+              onOpenRound={() => setShowToolsMenu(true)}
+              onOpenShotCard={() => setShowShotCard(true)}
+              onOpenMore={() => setShowMoreMenu(true)}
+            />
+          </View>
         </View>
 
 
