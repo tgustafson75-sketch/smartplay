@@ -350,6 +350,14 @@ export default function Caddie() {
   // Smart hint � show 'caddie' hint once on first mount, 'course' once round starts
   useEffect(() => { showHint('caddie'); }, []);
 
+  // Round setup lives on the Play tab. If the user lands on the Caddie tab
+  // without an active round (cold launch, deep link, etc.), bounce them to Play.
+  useEffect(() => {
+    if (!isRoundActive) {
+      router.replace('/tabs/play');
+    }
+  }, [isRoundActive, router]);
+
   // -- Resume round prompt on app startup -----------------------------------
   useEffect(() => {
     const { isRoundActive: roundActive, activeCourse, currentHole: hole } = useRoundStore.getState();
@@ -1890,63 +1898,6 @@ export default function Caddie() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={s.root} edges={['top', 'left', 'right']}>
-      <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
-        {/* Tools pill — opens the tools/options menu (voice, end round, profile, settings, etc.). */}
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 4 }}>
-          <Pressable
-            onPress={() => setShowToolsMenu((v) => !v)}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel={showToolsMenu ? 'Close tools menu' : 'Open tools menu'}
-            style={[s.toolsPill, showToolsMenu && s.toolsPillActive]}
-          >
-            {[0,1,2].map((i) => (
-              <View key={i} style={[s.dot, showToolsMenu && s.dotActive]} />
-            ))}
-          </Pressable>
-        </View>
-
-        <CaddieAvatar
-          gender={voiceGender === 'female' ? 'female' : 'male'}
-          isOnCourse={isRoundActive}
-          isCageMode={!isRoundActive}
-          voiceState={mappedVoiceState}
-          hole={currentHole}
-          par={holePar}
-          yards={displayDistance ?? null}
-          wind={`${wind.speed} mph ${wind.direction}`}
-          playsLike={effectiveDistance ?? null}
-          openingPrompt={openingPrompt}
-          caddieResponse={caddieResponse || caddieMsg || currentAdvice}
-          onTap={toggleMic}
-        />
-
-        {/* Collapsible quick-tools: SmartFinder / Pointfinder / SmartVision / SwingLab. */}
-        <View style={{ marginTop: 6, marginBottom: 4 }}>
-          <CaddieToolsStrip
-            onOpenSmartFinder={openRangefinder}
-            onOpenPointfinder={() => { setPointA(null); setPointB(null); setShowPointRanger(true); }}
-            onOpenSmartVision={openSmartVision}
-            onOpenSwingLab={() => router.push('/tabs/swinglab')}
-          />
-        </View>
-
-        <View style={s.navRow}>
-          <Pressable style={s.navBtn} onPress={() => setShowToolsMenu(true)}>
-            <Text style={s.navIcon}>⛳</Text>
-            <Text style={s.navLabel}>Round</Text>
-          </Pressable>
-          <Pressable style={s.navBtn} onPress={() => setShowShotCard(true)}>
-            <Text style={s.navIcon}>🏌️</Text>
-            <Text style={s.navLabel}>Shot Card</Text>
-          </Pressable>
-          <Pressable style={s.navBtn} onPress={() => setShowMoreMenu(true)}>
-            <Text style={s.navIcon}>···</Text>
-            <Text style={s.navLabel}>More</Text>
-          </Pressable>
-        </View>
-      </View>
-
       {false && (
         <>
       <BrandHeader rightSlot={
@@ -2261,201 +2212,51 @@ export default function Caddie() {
         showsVerticalScrollIndicator={false}
       >
 
-        {!isRoundActive && (
-          <View style={{ backgroundColor: '#060f09', borderRadius: 16, borderWidth: 1, borderColor: '#123322', padding: 14, marginBottom: 8 }}>
-            <Text style={{ color: '#ffffff', fontSize: 22, fontWeight: '800', marginBottom: 4 }}>Round Setup</Text>
-            <Text style={{ color: 'rgba(255,255,255,0.62)', fontSize: 13, lineHeight: 19, marginBottom: 12 }}>
-              Tell the caddie how to coach{`\n`}you today.
-            </Text>
+        {/* Tools pill (left) opens the tools/options menu — voice, profile, settings, etc.
+            The green-arrow tools strip sits on the opposite (right) side below the avatar. */}
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-start', marginBottom: 4 }}>
+          <Pressable
+            onPress={() => setShowToolsMenu((v) => !v)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={showToolsMenu ? 'Close tools menu' : 'Open tools menu'}
+            style={[s.toolsPill, showToolsMenu && s.toolsPillActive]}
+          >
+            {[0,1,2].map((i) => (
+              <View key={i} style={[s.dot, showToolsMenu && s.dotActive]} />
+            ))}
+          </Pressable>
+        </View>
 
-            {/* Course card */}
-            <View style={{ backgroundColor: '#0b1a13', borderRadius: 14, borderWidth: 1, borderColor: '#1b3d2d', padding: 12, marginBottom: 10 }}>
-              <Text style={{ color: '#7ee4be', fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 4 }}>COURSE</Text>
-              {COURSE_DB.map((c, idx) => {
-                const active = idx === selectedCourseIdx;
-                return (
-                  <View
-                    key={c.id}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      backgroundColor: active ? '#0b2b21' : '#0f2018',
-                      borderWidth: 1,
-                      borderColor: active ? '#00C896' : '#1f3a2e',
-                      borderRadius: 10,
-                      paddingVertical: 7,
-                      paddingLeft: 9,
-                      paddingRight: 6,
-                      marginBottom: 7,
-                    }}
-                  >
-                    <Pressable
-                      onPress={() => {
-                        setSelectedCourseIdxFn(idx);
-                        setActiveCourseInStore(c.name);
-                        setCurrentHole(1);
-                      }}
-                      style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
-                    >
-                      <Image
-                        source={c.thumbnail as ImageSourcePropType}
-                        style={{ width: 36, height: 36, borderRadius: 7, marginRight: 10 }}
-                        resizeMode="cover"
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ color: active ? '#00C896' : '#ffffff', fontSize: 13, fontWeight: '700' }}>{c.name}</Text>
-                        <Text style={{ color: 'rgba(255,255,255,0.62)', fontSize: 11 }}>{c.location} · Rating {c.rating} · Slope {c.slope}</Text>
-                      </View>
-                      {active && <Text style={{ color: '#00C896', fontSize: 14, fontWeight: '800', marginRight: 6 }}>✓</Text>}
-                    </Pressable>
-                    <Pressable
-                      onPress={() => router.push({ pathname: '/course-detail', params: { courseId: c.id } })}
-                      hitSlop={10}
-                      style={{ padding: 5 }}
-                    >
-                      <MCIcon name="information-outline" size={18} color="rgba(0,200,150,0.75)" />
-                    </Pressable>
-                  </View>
-                );
-              })}
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                <Pressable
-                  onPress={() => setNineHoleMode(true)}
-                  style={{ flex: 1, alignItems: 'center', borderRadius: 999, borderWidth: 1, borderColor: nineHoleMode ? '#00C896' : '#2f4f3f', backgroundColor: nineHoleMode ? '#0b2b21' : '#0f2018', paddingVertical: 9 }}
-                >
-                  <Text style={{ color: nineHoleMode ? '#00C896' : 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '700' }}>9 Holes</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setNineHoleMode(false)}
-                  style={{ flex: 1, alignItems: 'center', borderRadius: 999, borderWidth: 1, borderColor: !nineHoleMode ? '#00C896' : '#2f4f3f', backgroundColor: !nineHoleMode ? '#0b2b21' : '#0f2018', paddingVertical: 9 }}
-                >
-                  <Text style={{ color: !nineHoleMode ? '#00C896' : 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '700' }}>18 Holes</Text>
-                </Pressable>
-              </View>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <Pressable
-                  onPress={() => setIsCompetition(false)}
-                  style={{ flex: 1, alignItems: 'center', borderRadius: 999, borderWidth: 1, borderColor: !isCompetition ? '#00C896' : '#2f4f3f', backgroundColor: !isCompetition ? '#0b2b21' : '#0f2018', paddingVertical: 9 }}
-                >
-                  <Text style={{ color: !isCompetition ? '#00C896' : 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '700' }}>Casual</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setIsCompetition(true)}
-                  style={{ flex: 1, alignItems: 'center', borderRadius: 999, borderWidth: 1, borderColor: isCompetition ? '#00C896' : '#2f4f3f', backgroundColor: isCompetition ? '#0b2b21' : '#0f2018', paddingVertical: 9 }}
-                >
-                  <Text style={{ color: isCompetition ? '#00C896' : 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '700' }}>Competition</Text>
-                </Pressable>
-              </View>
-            </View>
+        <CaddieAvatar
+          gender={voiceGender === 'female' ? 'female' : 'male'}
+          isOnCourse={isRoundActive}
+          isCageMode={!isRoundActive}
+          voiceState={mappedVoiceState}
+          hole={currentHole}
+          par={holePar}
+          yards={displayDistance ?? null}
+          wind={`${wind.speed} mph ${wind.direction}`}
+          playsLike={effectiveDistance ?? null}
+          openingPrompt={openingPrompt}
+          caddieResponse={caddieResponse || caddieMsg || currentAdvice}
+          onTap={toggleMic}
+        />
 
-            {/* Mode card */}
-            <View style={{ backgroundColor: '#0b1a13', borderRadius: 14, borderWidth: 1, borderColor: '#1b3d2d', padding: 12, marginBottom: 10 }}>
-              <Text style={{ color: '#7ee4be', fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 8 }}>MODE</Text>
-              {([
-                { key: 'safe', label: 'Safe', desc: 'Protect the scorecard' },
-                { key: 'neutral', label: 'Neutral', desc: 'Play your own game' },
-                { key: 'attack', label: 'Attack', desc: 'Play your best round' },
-              ] as const).map((m) => {
-                const selected = roundModeChoice === m.key;
-                return (
-                  <Pressable
-                    key={m.key}
-                    onPress={() => { setRoundModeChoice(m.key); setStrategyMode(m.key); }}
-                    style={{ borderRadius: 12, borderWidth: 1, borderColor: selected ? '#00C896' : '#2a4336', backgroundColor: selected ? '#0b2b21' : '#0f2018', paddingVertical: 10, paddingHorizontal: 12, marginBottom: 7 }}
-                  >
-                    <Text style={{ color: selected ? '#00C896' : '#ffffff', fontSize: 14, fontWeight: '800' }}>{m.label}</Text>
-                    <Text style={{ color: selected ? 'rgba(0,200,150,0.85)' : 'rgba(255,255,255,0.62)', fontSize: 12, marginTop: 2 }}>{m.desc}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+        {/* Collapsible quick-tools — all caddie-tab actions live here:
+            SmartFinder / Pointfinder / SmartVision / SwingLab / Round / Shot Card / More. */}
+        <View style={{ marginTop: 8, marginBottom: 8 }}>
+          <CaddieToolsStrip
+            onOpenSmartFinder={openRangefinder}
+            onOpenPointfinder={() => { setPointA(null); setPointB(null); setShowPointRanger(true); }}
+            onOpenSmartVision={openSmartVision}
+            onOpenSwingLab={() => router.push('/tabs/swinglab')}
+            onOpenRound={() => setShowToolsMenu(true)}
+            onOpenShotCard={() => setShowShotCard(true)}
+            onOpenMore={() => setShowMoreMenu(true)}
+          />
+        </View>
 
-            {/* Mental state card */}
-            <View style={{ backgroundColor: '#0b1a13', borderRadius: 14, borderWidth: 1, borderColor: '#1b3d2d', padding: 12, marginBottom: 10 }}>
-              <Text style={{ color: '#7ee4be', fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 8 }}>MENTAL STATE</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {([
-                  { key: 'locked', label: 'Locked In', color: '#34d399' },
-                  { key: 'neutral', label: 'Neutral', color: '#7dd3fc' },
-                  { key: 'nervous', label: 'Nervous', color: '#fbbf24' },
-                  { key: 'frustrated', label: 'Frustrated', color: '#f87171' },
-                ] as const).map((m) => {
-                  const selected = mentalState === m.key;
-                  return (
-                    <Pressable
-                      key={m.key}
-                      onPress={() => setMentalState(m.key)}
-                      style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: selected ? m.color : '#2a4336', backgroundColor: selected ? `${m.color}22` : '#0f2018' }}
-                    >
-                      <Text style={{ color: selected ? m.color : 'rgba(255,255,255,0.72)', fontSize: 12, fontWeight: '700' }}>{m.label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Notes card */}
-            <View style={{ backgroundColor: '#0b1a13', borderRadius: 14, borderWidth: 1, borderColor: '#1b3d2d', padding: 12, marginBottom: 12, position: 'relative' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <Text style={{ color: '#7ee4be', fontSize: 11, fontWeight: '700', letterSpacing: 0.8 }}>NOTES FOR CADDIE</Text>
-                <Animated.View style={{ transform: [{ scale: dictationPulse }] }}>
-                <Pressable
-                  onPress={() => { void dictateNote(); }}
-                  style={{ width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: isDictating ? '#ef4444' : '#1f7a5d', backgroundColor: isDictating ? 'rgba(239,68,68,0.18)' : '#0f2018', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <MCIcon
-                    name={isDictating ? 'record-circle' : 'microphone'}
-                    size={16}
-                    color={isDictating ? '#ef4444' : '#00C896'}
-                  />
-                </Pressable>
-                </Animated.View>
-              </View>
-              <TextInput
-                value={roundNotes}
-                onChangeText={setRoundNotes}
-                multiline
-                numberOfLines={isSmall ? 2 : 3}
-                placeholder={'e.g. Working on tempo today.\nAvoid driver. Playing with a client.'}
-                placeholderTextColor="rgba(255,255,255,0.35)"
-                style={{ backgroundColor: '#09150f', borderRadius: 10, borderWidth: 1, borderColor: '#1f3a2e', color: '#ffffff', fontSize: 13, fontWeight: '500', minHeight: isSmall ? 68 : 84, textAlignVertical: 'top', paddingHorizontal: 10, paddingVertical: isSmall ? 8 : 10 }}
-              />
-            </View>
-
-            <Pressable
-              onPress={() => {
-                // Reset prior round state before starting a new one so scores,
-                // putts, penalties, and shots from the previous round don't leak.
-                clearRound();
-                resetCaddieRound();
-                setStrategyMode(roundModeChoice);
-                setCurrentHole(1);
-                setIsRoundActive(true);
-              }}
-              style={s.startRoundBtn}
-            >
-              <Text style={s.startRoundBtnText}>{t('startRound')}</Text>
-            </Pressable>
-
-            <Pressable
-              onPress={openSmartVision}
-              style={{ marginTop: 10, backgroundColor: '#0b1a13', borderRadius: 12, borderWidth: 1, borderColor: '#1b3d2d', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, flexDirection: 'row', gap: 8 }}
-            >
-              <SmartVisionIcon size={16} active />
-              <Text style={{ color: '#7ee4be', fontSize: 14, fontWeight: '800', letterSpacing: 0.2 }}>SmartVision Pre-Round</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setShowStrategyShots(true)}
-              style={{ marginTop: 8, backgroundColor: '#0b1a13', borderRadius: 12, borderWidth: 1, borderColor: '#1b3d2d', alignItems: 'center', justifyContent: 'center', paddingVertical: 11, flexDirection: 'row', gap: 8 }}
-            >
-              <MCIcon name="image-multiple-outline" size={16} color="#7ee4be" />
-              <Text style={{ color: '#7ee4be', fontSize: 14, fontWeight: '700' }}>My Strategy</Text>
-            </Pressable>
-            <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, marginTop: 6, textAlign: 'center' }}>
-              Static planning mode: move targets, inspect hole shape, and build your shot plan before tee-off.
-            </Text>
-          </View>
-        )}
 
         {/* ── Hole / Shots / Putts Steppers ──────────────────────────────────── */}
         <View style={s.stepperRow}>

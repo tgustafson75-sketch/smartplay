@@ -2,19 +2,22 @@
  * CaddieToolsStrip — collapsible horizontal tools row for the Caddie tab.
  *
  * Closed by default: just a chevron pill on the right.
- * Tapping the chevron expands a horizontal row to the left revealing four tools:
+ * Tapping the chevron expands a horizontal row to the left revealing seven tools:
  *   • SmartFinder  → AR rangefinder route (camera-based)
  *   • Pointfinder  → point-to-point GPS measurement modal
  *   • SmartVision  → SmartVision pre-round planner
  *   • SwingLab     → /tabs/swinglab practice tab
+ *   • Round        → tools / round-options menu
+ *   • Shot Card    → shot card modal
+ *   • More         → catch-all more menu
  *
  * Animation is width-only, native-driver false (width interpolation requires
- * the JS driver). All four actions are passed in via props so callers retain
+ * the JS driver). All actions are passed in via props so callers retain
  * full control of side-effects (analytics, voice cues, etc.).
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons as MCIcon } from '@expo/vector-icons';
 import { Palette, Radius } from '../constants/theme';
 import { SmartVisionIcon, SwingLabIcon } from './icons/IconBase';
@@ -26,10 +29,15 @@ interface Props {
   onOpenPointfinder: () => void;
   onOpenSmartVision: () => void;
   onOpenSwingLab:    () => void;
+  onOpenRound:       () => void;
+  onOpenShotCard:    () => void;
+  onOpenMore:        () => void;
 }
 
-const COLLAPSED_WIDTH = 40;
-const EXPANDED_WIDTH  = 264;
+const SCREEN_WIDTH    = Dimensions.get('window').width;
+const COLLAPSED_WIDTH = 48;
+// Expanded uses the full screen width minus the parent's 16px horizontal padding.
+const EXPANDED_WIDTH  = Math.max(320, SCREEN_WIDTH - 32);
 const ANIM_DURATION   = 220;
 
 export default function CaddieToolsStrip({
@@ -37,6 +45,9 @@ export default function CaddieToolsStrip({
   onOpenPointfinder,
   onOpenSmartVision,
   onOpenSwingLab,
+  onOpenRound,
+  onOpenShotCard,
+  onOpenMore,
 }: Props) {
   const [open, setOpen] = useState(false);
   const widthAnim = useRef(new Animated.Value(COLLAPSED_WIDTH)).current;
@@ -64,7 +75,7 @@ export default function CaddieToolsStrip({
               accessibilityLabel="SmartFinder rangefinder"
             >
               <Image source={ICON_RANGEFINDER} style={styles.rangefinderImg} resizeMode="contain" />
-              <Text style={styles.toolLabel}>SmartFinder</Text>
+              <Text style={styles.toolLabel}>Finder</Text>
             </Pressable>
 
             <Pressable
@@ -74,8 +85,8 @@ export default function CaddieToolsStrip({
               accessibilityRole="button"
               accessibilityLabel="Pointfinder point-to-point measurement"
             >
-              <MCIcon name="map-marker-distance" size={14} color={Palette.positive} />
-              <Text style={styles.toolLabel}>Pointfinder</Text>
+              <MCIcon name="map-marker-distance" size={18} color={Palette.positive} />
+              <Text style={styles.toolLabel}>Point</Text>
             </Pressable>
 
             <Pressable
@@ -85,7 +96,7 @@ export default function CaddieToolsStrip({
               accessibilityRole="button"
               accessibilityLabel="SmartVision pre-round planner"
             >
-              <SmartVisionIcon size={14} active />
+              <SmartVisionIcon size={18} active />
               <Text style={styles.toolLabel}>Vision</Text>
             </Pressable>
 
@@ -96,8 +107,41 @@ export default function CaddieToolsStrip({
               accessibilityRole="button"
               accessibilityLabel="SwingLab practice"
             >
-              <SwingLabIcon size={14} active />
+              <SwingLabIcon size={18} active />
               <Text style={styles.toolLabel}>SwingLab</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={onOpenRound}
+              hitSlop={6}
+              style={styles.toolBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Round options"
+            >
+              <MCIcon name="golf" size={18} color={Palette.positive} />
+              <Text style={styles.toolLabel}>Round</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={onOpenShotCard}
+              hitSlop={6}
+              style={styles.toolBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Shot card"
+            >
+              <MCIcon name="card-bulleted-outline" size={18} color={Palette.positive} />
+              <Text style={styles.toolLabel}>Shot</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={onOpenMore}
+              hitSlop={6}
+              style={styles.toolBtn}
+              accessibilityRole="button"
+              accessibilityLabel="More options"
+            >
+              <MCIcon name="dots-horizontal" size={18} color={Palette.positive} />
+              <Text style={styles.toolLabel}>More</Text>
             </Pressable>
           </View>
         )}
@@ -112,8 +156,8 @@ export default function CaddieToolsStrip({
           accessibilityState={{ expanded: open }}
         >
           <MCIcon
-            name={open ? 'chevron-right' : 'chevron-left'}
-            size={20}
+            name={open ? 'chevron-left' : 'chevron-right'}
+            size={26}
             color={Palette.positive}
           />
         </Pressable>
@@ -129,11 +173,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   strip: {
-    height: 36,
+    height: 52,
     borderRadius: Radius.md,
-    backgroundColor: 'rgba(6,15,10,0.85)',
-    borderWidth: 1,
-    borderColor: 'rgba(46,204,113,0.28)',
+    backgroundColor: 'rgba(6,15,10,0.92)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(46,204,113,0.55)',
     flexDirection: 'row',
     alignItems: 'center',
     overflow: 'hidden',
@@ -143,30 +187,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingHorizontal: 6,
-    gap: 2,
+    paddingHorizontal: 4,
+    gap: 0,
   },
   toolBtn: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 4,
+    justifyContent: 'center',
+    gap: 2,
+    paddingHorizontal: 2,
     paddingVertical: 2,
+    minWidth: 38,
   },
   rangefinderImg: {
-    width: 14,
-    height: 14,
+    width: 18,
+    height: 18,
     tintColor: Palette.positive,
   },
   toolLabel: {
     color: '#A7F3D0',
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.2,
   },
   chevronBtn: {
-    width: 36,
-    height: 36,
+    width: 48,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
