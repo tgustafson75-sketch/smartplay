@@ -2506,69 +2506,9 @@ export default function Caddie() {
         </View>
         )}
 
-        {/* -- CADDIE CARD � unified strategy + response + actions ----------- */}
-        <View style={s.caddieCard}>
-          {/* a) Strategy text */}
-          <Text style={s.caddieStrategyText} numberOfLines={3} ellipsizeMode="tail">
-            {currentAdvice}
-          </Text>
-
-          <View style={s.pointsBadge}>
-            <Text style={s.pointsBadgeText}>{totalPoints} pts | {pointsTier}</Text>
-          </View>
-
-          {/* b) Divider */}
-          <View style={s.caddieCardDivider} />
-
-          {/* c) Caddie response � ALWAYS VISIBLE */}
-          {caddieResponse ? (
-            <Text style={s.caddieResponseText} numberOfLines={4} ellipsizeMode="tail">{caddieResponse}</Text>
-          ) : (
-            <Text style={s.smartToolsTitle}>
-              <Text style={s.smartToolsSmart}>Smart</Text>
-              <Text style={s.smartToolsTools}>Tools</Text>
-            </Text>
-          )}
-
-          {/* d) Voice state indicator � hidden when IDLE */}
-          {voiceState !== 'IDLE' && (
-            <Text style={s.caddieVoiceState}>
-              {voiceState === 'LISTENING' ? t('listening')
-               : voiceState === 'PROCESSING' ? t('thinking')
-               : voiceState === 'SPEAKING'   ? t('speaking')
-               : null}
-            </Text>
-          )}
-
-          {/* e) Action buttons row */}
-          <View style={[s.caddieActionsRow, isSmall && s.caddieActionsRowCompact, ultraSmall && s.caddieActionsRowUltraCompact]}>
-            {/* SmartVision */}
-            <Pressable
-              style={[
-                s.caddieActionBtn,
-                isSmall && s.caddieActionBtnCompact,
-                ultraSmall && s.caddieActionBtnUltraCompact,
-                { borderColor: Palette.positive },
-                caddieVisionLoading && { opacity: 0.65 },
-              ]}
-              onPress={openSmartVision}
-              disabled={caddieVisionLoading}
-            >
-              <SmartVisionIcon size={14} active />
-              <Text numberOfLines={ultraSmall ? 1 : 2} style={[s.caddieActionLabel, isSmall && s.caddieActionLabelCompact, ultraSmall && s.caddieActionLabelUltraCompact, { color: Palette.positive }]}>
-                {caddieVisionLoading ? 'Analyzing...' : ultraSmall ? 'Vision' : 'SmartVision'}
-              </Text>
-            </Pressable>
-            {/* SmartMotion */}
-            <Pressable
-              style={[s.caddieActionBtn, isSmall && s.caddieActionBtnCompact, ultraSmall && s.caddieActionBtnUltraCompact, s.caddieActionBtnMotion]}
-              onPress={() => void router.push('/swing-lab')}
-            >
-              <SmartMotionSwingIcon />
-              <Text numberOfLines={ultraSmall ? 1 : 2} style={[s.caddieActionLabel, isSmall && s.caddieActionLabelCompact, ultraSmall && s.caddieActionLabelUltraCompact, s.caddieActionLabelMotion]}>{ultraSmall ? 'Motion' : t('smartMotion')}</Text>
-            </Pressable>
-          </View>
-        </View>
+        {/* Bottom Caddie strategy/response card removed — the strategy text and
+            caddie response are already shown in the avatar HUD overlay above,
+            and SmartVision / SmartMotion live in the green-arrow tools strip. */}
         {/* -- Voice-triggered drill video ---------------------------------- */}
         {voiceDrillVideo && (
           <DrillVideoCard
