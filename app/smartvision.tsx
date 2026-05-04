@@ -44,6 +44,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import Svg, { Line as SvgLine } from 'react-native-svg';
+
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
@@ -158,30 +160,32 @@ const MARKER_STYLE: Record<MarkerKind, { bg: string; ring: string; text: string;
   P: { bg: '#ef4444', ring: '#7f1d1d', text: '#ffffff', size: 36 }, // red pin
 };
 
-function Marker({ kind, x, y, draggable, onDrag }: {
+function Marker({ kind, x, y, draggable, onDrag, onDragEnd }: {
   kind: MarkerKind;
   x: number;
   y: number;
   draggable: boolean;
   onDrag?: (dx: number, dy: number) => void;
+  onDragEnd?: () => void;
 }) {
   const s = MARKER_STYLE[kind];
-  const startRef = useRef({ x: 0, y: 0 });
 
   const responder = useMemo(() => {
     if (!draggable) return null;
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        startRef.current = { x, y };
-      },
       onPanResponderMove: (_e, g) => {
         if (onDrag) onDrag(g.dx, g.dy);
       },
+      onPanResponderRelease: () => {
+        if (onDragEnd) onDragEnd();
+      },
+      onPanResponderTerminate: () => {
+        if (onDragEnd) onDragEnd();
+      },
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draggable, onDrag, x, y]);
+  }, [draggable, onDrag, onDragEnd]);
 
   return (
     <View
@@ -246,6 +250,10 @@ export default function SmartVisionScreen() {
   // to green) on first view of each hole; persists in component memory
   // across hole switches so the user's adjustments aren't lost.
   const [targetByHole, setTargetByHole] = useState<Record<number, { x: number; y: number }>>({});
+  // Per-hole pin override — same shape, but for the red Pin marker which
+  // is now draggable. Defaults to green centroid; user can drag it to
+  // simulate today's pin position (front/middle/back of green).
+  const [pinByHole, setPinByHole] = useState<Record<number, { x: number; y: number }>>({});
 
   // ── Load geometry + imagery for the current hole ────────────────
   // Imagery selection logic:
@@ -312,10 +320,12 @@ export default function SmartVisionScreen() {
     return projectToPixels(geometry.tee, projection.center, projection.zoom, projection.bearing);
   }, [projection, geometry?.tee]);
 
-  const pinPx = useMemo(() => {
+  const pinDefaultPx = useMemo(() => {
     if (!projection || !geometry?.green) return null;
     return projectToPixels(geometry.green, projection.center, projection.zoom, projection.bearing);
   }, [projection, geometry?.green]);
+  const pinOverride = pinByHole[holeIndex];
+  const pinPx = pinOverride ?? pinDefaultPx;
 
   // Yellow target — defaults to midpoint of tee→pin if no override set.
   const targetOverride = targetByHole[holeIndex];
@@ -333,13 +343,16 @@ export default function SmartVisionScreen() {
     y: insets.top + TOP_BAR_H + imageH / 2 - p.y, // negate y because screen-y goes DOWN
   }), [imageW, imageH, insets.top]);
 
-  // Live yardages from yellow target → green's F/M/B (when GPS available),
-  // or static fallback from the bundled courseHoles record when no GPS.
+  // Live yardages from yellow target → green's F (front edge), MIDDLE
+  // (= the user-positioned PIN), B (back edge). Tim's spec: pin moves
+  // → middle yardage updates. Front and back stay tied to the green
+  // polygon edges.
   const yardages = useMemo(() => {
     if (projection && targetPx && geometry) {
       const targetGeo = pixelsToLatLng(targetPx, projection.center, projection.zoom, projection.bearing);
+      const pinGeo = pinPx ? pixelsToLatLng(pinPx, projection.center, projection.zoom, projection.bearing) : geometry.green;
       const front = geometry.green_front ? Math.round(haversineYards(targetGeo.lat, targetGeo.lng, geometry.green_front.lat, geometry.green_front.lng)) : null;
-      const middle = geometry.green ? Math.round(haversineYards(targetGeo.lat, targetGeo.lng, geometry.green.lat, geometry.green.lng)) : null;
+      const middle = pinGeo ? Math.round(haversineYards(targetGeo.lat, targetGeo.lng, pinGeo.lat, pinGeo.lng)) : null;
       const back = geometry.green_back ? Math.round(haversineYards(targetGeo.lat, targetGeo.lng, geometry.green_back.lat, geometry.green_back.lng)) : null;
       return { front, middle, back };
     }
@@ -347,7 +360,7 @@ export default function SmartVisionScreen() {
     const h = courseHoles.find(x => x.hole === holeIndex);
     if (h) return { front: h.front ?? null, middle: h.distance ?? null, back: h.back ?? null };
     return { front: null as number | null, middle: null as number | null, back: null as number | null };
-  }, [projection, targetPx, geometry, courseHoles, holeIndex]);
+  }, [projection, targetPx, pinPx, geometry, courseHoles, holeIndex]);
 
   // Carry distance — yards from tee to current yellow target. Surfaces
   // as a visible measure label next to the yellow marker so users
@@ -358,21 +371,35 @@ export default function SmartVisionScreen() {
     return Math.round(haversineYards(targetGeo.lat, targetGeo.lng, geometry.tee.lat, geometry.tee.lng));
   }, [projection, targetPx, geometry]);
 
-  // ── Drag handler for yellow target ──────────────────────────────
-  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  // ── Drag handlers for yellow target + pin ───────────────────────
+  const targetDragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const pinDragStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const onTargetDrag = useCallback((dx: number, dy: number) => {
     if (!targetPx) return;
-    if (!dragStartRef.current) dragStartRef.current = targetPx;
+    if (!targetDragStartRef.current) targetDragStartRef.current = targetPx;
     const next = {
-      x: dragStartRef.current.x + dx,
-      y: dragStartRef.current.y - dy, // screen-y is down; our y is up
+      x: targetDragStartRef.current.x + dx,
+      y: targetDragStartRef.current.y - dy, // screen-y is down; our y is up
     };
     setTargetByHole(prev => ({ ...prev, [holeIndex]: next }));
   }, [targetPx, holeIndex]);
 
-  // Reset drag start when target settles or hole changes
-  useEffect(() => { dragStartRef.current = null; }, [holeIndex]);
+  const onPinDrag = useCallback((dx: number, dy: number) => {
+    if (!pinPx) return;
+    if (!pinDragStartRef.current) pinDragStartRef.current = pinPx;
+    const next = {
+      x: pinDragStartRef.current.x + dx,
+      y: pinDragStartRef.current.y - dy,
+    };
+    setPinByHole(prev => ({ ...prev, [holeIndex]: next }));
+  }, [pinPx, holeIndex]);
+
+  // Reset drag refs when hole changes
+  useEffect(() => {
+    targetDragStartRef.current = null;
+    pinDragStartRef.current = null;
+  }, [holeIndex]);
 
   // ── Hole nav ────────────────────────────────────────────────────
   const goPrev = () => setHoleIndex(i => Math.max(1, i - 1));
@@ -448,6 +475,39 @@ export default function SmartVisionScreen() {
           </View>
         )}
 
+        {/* SVG overlay — line from tee → yellow → pin. Drawn under the
+            markers (markers render after, so they sit on top of the line).
+            Yellow dashed segment shows the carry path; thin solid white
+            segment shows yellow→pin. */}
+        {teeScreen && targetScreen && pinScreen && (
+          <Svg
+            width={imageW}
+            height={imageH}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          >
+            <SvgLine
+              x1={teeScreen.x}
+              y1={teeScreen.y - insets.top - TOP_BAR_H}
+              x2={targetScreen.x}
+              y2={targetScreen.y - insets.top - TOP_BAR_H}
+              stroke="#facc15"
+              strokeWidth={3}
+              strokeDasharray="6,4"
+              opacity={0.85}
+            />
+            <SvgLine
+              x1={targetScreen.x}
+              y1={targetScreen.y - insets.top - TOP_BAR_H}
+              x2={pinScreen.x}
+              y2={pinScreen.y - insets.top - TOP_BAR_H}
+              stroke="#ffffff"
+              strokeWidth={2}
+              opacity={0.7}
+            />
+          </Svg>
+        )}
+
         {/* Markers — rendered absolutely at screen coordinates, then
             offset back to image-local because they're inside this View
             (which starts at insets.top + TOP_BAR_H). */}
@@ -464,7 +524,9 @@ export default function SmartVisionScreen() {
             kind="P"
             x={pinScreen.x}
             y={pinScreen.y - insets.top - TOP_BAR_H}
-            draggable={false}
+            draggable
+            onDrag={onPinDrag}
+            onDragEnd={() => { pinDragStartRef.current = null; }}
           />
         )}
         {targetScreen && (
@@ -475,6 +537,7 @@ export default function SmartVisionScreen() {
               y={targetScreen.y - insets.top - TOP_BAR_H}
               draggable
               onDrag={onTargetDrag}
+              onDragEnd={() => { targetDragStartRef.current = null; }}
             />
             {/* Measure label — floats above-right of the yellow marker so
                 the marker reads as a measure tool, not just a dot. Shows
@@ -501,7 +564,7 @@ export default function SmartVisionScreen() {
         {targetScreen && carryYards != null && (
           <View pointerEvents="none" style={styles.measureHint}>
             <Ionicons name="hand-left-outline" size={12} color="#facc15" />
-            <Text style={styles.measureHintText}>Drag yellow Y to measure</Text>
+            <Text style={styles.measureHintText}>Drag Y to layup · Drag P to set pin</Text>
           </View>
         )}
       </View>
