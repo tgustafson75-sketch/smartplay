@@ -30,9 +30,9 @@ const AVATARS = {
   male_dark: require(
     '../assets/avatars/kevin_dark.jpg'),
   female: require(
-    '../assets/avatars/serena_course.jpg'),
+    '../assets/avatars/serena_course.png'),
   female_dark: require(
-    '../assets/avatars/serena_dark.jpg'),
+    '../assets/avatars/serena_dark.png'),
 };
 
 const BACKGROUNDS = {
