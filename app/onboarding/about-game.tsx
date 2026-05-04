@@ -50,11 +50,11 @@ const MISS_OPTIONS: { id: MissType; label: string; sub: string }[] = [
   { id: 'fat',    label: 'Fat / Chunk',   sub: 'Hitting behind it' },
   { id: 'pull',   label: 'Pull',          sub: 'Straight left' },
   { id: 'push',   label: 'Push',          sub: 'Straight right' },
-  { id: 'varies', label: "Varies / Don't know", sub: "Some days one, some days another" },
+  { id: 'varies', label: 'Varies / Not sure', sub: 'Some days one, some days another' },
 ];
 
 const EXPERIENCE_OPTIONS: { id: ExperienceContext; label: string; sub: string }[] = [
-  { id: 'starting',    label: 'Just getting started',     sub: "I'm newer to the game" },
+  { id: 'starting',    label: 'Just getting started',     sub: 'Newer to the game' },
   { id: 'improving',   label: 'Improving regularly',      sub: 'I play and practice with a goal in mind' },
   { id: 'returning',   label: 'Getting back to the game', sub: 'Used to play, want to rebuild' },
   { id: 'competitive', label: 'Competitive / serious',    sub: 'Tournaments, single digits, focused' },
@@ -110,7 +110,7 @@ export default function OnboardingAboutGame() {
         <Text style={[styles.prompt, { color: colors.text_primary }]}>{PROMPT}</Text>
 
         {/* Handicap */}
-        <Text style={[styles.section, { color: colors.text_secondary }]}>WHAT'S YOUR HANDICAP?</Text>
+        <Text style={[styles.section, { color: colors.text_secondary }]}>WHAT&apos;S YOUR HANDICAP?</Text>
         <View style={styles.row}>
           <TextInput
             style={[
@@ -137,13 +137,13 @@ export default function OnboardingAboutGame() {
             activeOpacity={0.85}
           >
             <Text style={[styles.unknownChipText, { color: unknownHandicap ? '#ffffff' : colors.text_primary }]}>
-              I don't know
+              I don&apos;t know
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* Miss type */}
-        <Text style={[styles.section, { color: colors.text_secondary, marginTop: spacing.lg }]}>WHAT'S YOUR TYPICAL MISS?</Text>
+        <Text style={[styles.section, { color: colors.text_secondary, marginTop: spacing.lg }]}>WHAT&apos;S YOUR TYPICAL MISS?</Text>
         <View style={styles.optionGrid}>
           {MISS_OPTIONS.map(opt => {
             const sel = miss === opt.id;
@@ -196,7 +196,7 @@ export default function OnboardingAboutGame() {
           <Text style={[styles.btnText, { color: canContinue ? '#ffffff' : colors.text_muted }]}>Continue</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.skip} onPress={handleSkip}>
-          <Text style={[styles.skipText, { color: colors.text_muted }]}>Skip — I'll fill this in later</Text>
+          <Text style={[styles.skipText, { color: colors.text_muted }]}>Skip &mdash; fill this in later</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
