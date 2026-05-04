@@ -232,6 +232,25 @@ export default function SmartVisionScreen() {
   const imageryMode = useSettingsStore(s => s.smartVisionImagery);
   const setImageryMode = useSettingsStore(s => s.setSmartVisionImagery);
 
+  // Phase BG — subscribe to position-mark bus so a Mark event triggers
+  // re-render. Used to invalidate cached imagery and recompute marker
+  // positions if/when this screen later supports live GPS overlays.
+  // Currently SmartVision uses fetched geometry only (no GPS overlay),
+  // but the subscription is in place so adding a "you-are-here" dot
+  // only requires reading getLastFix() in the render.
+  const [markBumpTick, setMarkBumpTick] = useState(0);
+  useEffect(() => {
+    let unsub: (() => void) | null = null;
+    void (async () => {
+      try {
+        const bus = await import('../services/positionMarkBus');
+        unsub = bus.subscribeToMark(() => setMarkBumpTick(t => t + 1));
+      } catch (e) { console.log('[smartvision] mark sub failed', e); }
+    })();
+    return () => { if (unsub) unsub(); };
+  }, []);
+  void markBumpTick; // referenced so React re-renders on tick
+
   // Local hole index — independent of currentHole so the screen acts as
   // a viewer across the whole course without forcing the round to follow.
   const [holeIndex, setHoleIndex] = useState<number>(currentHole || 1);

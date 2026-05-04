@@ -83,6 +83,22 @@ export function noteManualOverride(): void {
 export function startHoleDetection(): void {
   if (pollTimer) return;
   pollTimer = setInterval(() => { void tick(); }, POLL_INTERVAL_MS);
+  // Phase BG — subscribe to position-mark bus so Mark events fire an
+  // immediate tick. Previous behavior waited for the next poll cycle
+  // (up to POLL_INTERVAL_MS), which made Mark feel non-responsive for
+  // hole transitions. The bus subscription closes the gap.
+  if (!markUnsub) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { subscribeToMark } = require('./positionMarkBus');
+      markUnsub = subscribeToMark(() => {
+        console.log('[audit:gps] holeDetection tick triggered by mark event');
+        void tick();
+      });
+    } catch (e) {
+      console.log('[holeDetection] mark bus subscribe failed:', e);
+    }
+  }
   // Fire one immediate tick so we don't wait the first interval.
   void tick();
 }
@@ -93,8 +109,14 @@ export function stopHoleDetection(): void {
     clearInterval(pollTimer);
     pollTimer = null;
   }
+  if (markUnsub) {
+    markUnsub();
+    markUnsub = null;
+  }
   positionHistory.length = 0;
 }
+
+let markUnsub: (() => void) | null = null;
 
 /**
  * Pure-function detector exposed for tests + the simulated GPS harness.

@@ -280,8 +280,11 @@ export default function CaddieTab() {
   // fix yet, falls back to static so the strip never renders "—".
   const yardageMode = useSettingsStore(s => s.yardageMode);
   const setYardageMode = useSettingsStore(s => s.setYardageMode);
-  // markTick increments on every position-mark event (subscribed below)
-  // so liveYardage recomputes when fresh GPS data arrives.
+  // markTick increments on every position-mark event AND every 4s tick
+  // during an active round so liveYardage recomputes both on push (Mark
+  // fires) and pull (organic GPS movement during walking). Phase BG —
+  // before the 4s poll, the data-strip middle yardage was stale until
+  // the user explicitly tapped Mark or changed hole.
   const [markTick, setMarkTick] = useState(0);
   useEffect(() => {
     let active = true;
@@ -295,6 +298,13 @@ export default function CaddieTab() {
     })();
     return () => { active = false; if (unsub) unsub(); };
   }, []);
+  // Phase BG — 4s poll while round active so data-strip yardage refreshes
+  // as the player walks. Cadence matches SmartFinderCard's existing poll.
+  useEffect(() => {
+    if (!isRoundActive) return;
+    const id = setInterval(() => setMarkTick(t => t + 1), 4000);
+    return () => clearInterval(id);
+  }, [isRoundActive]);
   const liveYardage = useMemo(() => {
     if (yardageMode !== 'live' || !isRoundActive) return null;
     try {

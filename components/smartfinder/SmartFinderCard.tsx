@@ -50,9 +50,20 @@ export default function SmartFinderCard() {
     };
     tick();
     const id = setInterval(tick, REFRESH_MS);
+    // Phase BG — also subscribe to position-mark bus so Mark events
+    // refresh yardages immediately instead of waiting up to REFRESH_MS.
+    let markUnsub: (() => void) | null = null;
+    void (async () => {
+      try {
+        const bus = await import('../../services/positionMarkBus');
+        if (cancelled) return;
+        markUnsub = bus.subscribeToMark(() => { void tick(); });
+      } catch (e) { console.log('[SmartFinderCard] mark sub failed', e); }
+    })();
     return () => {
       cancelled = true;
       clearInterval(id);
+      if (markUnsub) markUnsub();
     };
   }, [isRoundActive, currentHole]);
 
