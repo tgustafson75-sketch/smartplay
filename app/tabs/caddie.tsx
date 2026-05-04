@@ -3204,7 +3204,8 @@ const s = StyleSheet.create({
   },
   stepperCard: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 14, paddingHorizontal: 8,
+    paddingVertical: 14, paddingHorizontal: 4,
+    minWidth: 0,
   },
   stepperDivider: { width: 1, backgroundColor: Palette.border, marginVertical: 12 },
   stepperLabel: {
@@ -3212,19 +3213,19 @@ const s = StyleSheet.create({
     fontWeight: Type.bold, letterSpacing: 1.4,
     textTransform: 'uppercase', marginBottom: 8,
   },
-  stepperControls: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  stepperControls: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   stepperBtn: {
-    width: 40, height: 40, borderRadius: 10,
+    width: 32, height: 32, borderRadius: 8,
     backgroundColor: Palette.brandDeep,
     borderWidth: 1.5, borderColor: 'rgba(46,204,113,0.45)',
     justifyContent: 'center', alignItems: 'center',
   },
-  stepperBtnText: { color: Palette.positiveFaint, fontSize: 20, fontWeight: Type.bold, lineHeight: 24 },
+  stepperBtnText: { color: Palette.positiveFaint, fontSize: 18, fontWeight: Type.bold, lineHeight: 22 },
   stepperValue: {
-    color: Palette.textPrimary, fontSize: 28, fontWeight: Type.bold,
-    minWidth: 36, textAlign: 'center' as const,
+    color: Palette.textPrimary, fontSize: 22, fontWeight: Type.bold,
+    minWidth: 24, textAlign: 'center' as const,
   },
-  stepperSub: { color: Palette.muted, fontSize: 11, fontWeight: Type.semibold, marginTop: 5 },
+  stepperSub: { color: Palette.muted, fontSize: 10, fontWeight: Type.semibold, marginTop: 5 },
 
   // Distance card — styled as rangefinder
   distanceCard: {
