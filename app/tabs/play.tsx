@@ -32,15 +32,26 @@ const ICON_RANGEFINDER = require('../../assets/images/icon-rangefinder.png');
 
 type SearchMode = 'courses' | 'facilities';
 
+type GolfApiLocation = {
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  latitude?: number;
+  longitude?: number;
+};
+
 type GolfSearchItem = {
   id?: string | number;
   course_id?: string | number;
   course_name?: string;
+  club_name?: string;
   name?: string;
   city?: string;
   state?: string;
   country?: string;
-  location?: string;
+  // GolfCourseAPI returns `location` as an object; older shapes use a string.
+  location?: string | GolfApiLocation;
 };
 
 const haversineMiles = (aLat: number, aLng: number, bLat: number, bLng: number) => {
@@ -105,11 +116,26 @@ export default function PlaySetupScreen() {
     router.replace('/auth');
   };
 
-  const getResultName = (item: GolfSearchItem) => item.course_name ?? item.name ?? 'Unknown';
+  const getResultName = (item: GolfSearchItem) => {
+    // Prefer course_name; fall back to club_name (more recognizable for most
+    // facilities) and finally a generic name field.
+    return item.course_name ?? item.club_name ?? item.name ?? 'Unknown';
+  };
 
   const getResultLocation = (item: GolfSearchItem) => {
-    const cityState = [item.city, item.state].filter(Boolean).join(', ');
-    return cityState || item.location || item.country || 'Location unavailable';
+    // Top-level city/state takes priority (older shape). Then read from the
+    // structured `location` object the GolfCourseAPI actually returns.
+    const topCityState = [item.city, item.state].filter(Boolean).join(', ');
+    if (topCityState) return topCityState;
+    if (item.location && typeof item.location === 'object') {
+      const loc = item.location;
+      const inner = [loc.city, loc.state].filter(Boolean).join(', ');
+      if (inner) return inner;
+      if (loc.country) return loc.country;
+      if (loc.address) return loc.address;
+    }
+    if (typeof item.location === 'string' && item.location.trim()) return item.location;
+    return item.country ?? 'Location unavailable';
   };
 
   const handleSearch = async (qRaw?: string) => {
@@ -132,9 +158,13 @@ export default function PlaySetupScreen() {
       if (normalized.length === 0) {
         setSearchError('No matches found. Try a nearby city or shorter query.');
       }
-    } catch {
+    } catch (err: any) {
       if (reqId !== searchReqRef.current) return;
-      setSearchError('Search failed. Check API key/network and try again.');
+      if (err?.code === 'NO_API_KEY') {
+        setSearchError('GolfCourse API key not configured. Add EXPO_PUBLIC_GOLF_COURSE_API_KEY to .env and restart Metro.');
+      } else {
+        setSearchError('Search failed. Check your network and try again.');
+      }
       setSearchResults([]);
     } finally {
       if (reqId === searchReqRef.current) setSearchLoading(false);
