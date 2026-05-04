@@ -1918,16 +1918,8 @@ export default function Caddie() {
           playsLike={effectiveDistance ?? null}
           openingPrompt={openingPrompt}
           caddieResponse={caddieResponse || caddieMsg || currentAdvice}
-          onTap={() => { void ask(); }}
+          onTap={toggleMic}
         />
-
-        <Pressable
-          onPress={toggleMic}
-          style={[s.micBtn, mappedVoiceState !== 'idle' && s.micBtnActive]}
-        >
-          <Text style={s.micIcon}>🎙️</Text>
-          <Text style={s.micLabel}>{mappedVoiceState === 'listening' ? 'Listening...' : 'Tap to talk'}</Text>
-        </Pressable>
 
         {/* Collapsible quick-tools: SmartFinder / Pointfinder / SmartVision / SwingLab. */}
         <View style={{ marginTop: 6, marginBottom: 4 }}>
