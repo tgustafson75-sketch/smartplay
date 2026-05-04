@@ -9,10 +9,19 @@ export default function LandingScreen() {
   const profileComplete = usePlayerProfileStore((s) => s.profileComplete);
   const [hasDraft, setHasDraft] = useState(false);
 
-  // Only show "Resume Round" if there's an actual draft in storage
+  // Only show "Resume Round" if there's an actual round in progress.
+  // Reads the zustand-persisted round store (key: round-store-v1) and treats
+  // the round as resumable when it is flagged active OR has logged shots.
   useEffect(() => {
-    AsyncStorage.getItem('draftShots').then((v) => {
-      if (v) { try { setHasDraft((JSON.parse(v) as any[]).length > 0); } catch { /* ignore */ } }
+    AsyncStorage.getItem('round-store-v1').then((v) => {
+      if (!v) return;
+      try {
+        const parsed = JSON.parse(v) as { state?: { isRoundActive?: boolean; shots?: unknown[] } };
+        const state = parsed?.state;
+        const active = !!state?.isRoundActive;
+        const hasShots = Array.isArray(state?.shots) && state!.shots!.length > 0;
+        setHasDraft(active || hasShots);
+      } catch { /* ignore */ }
     });
   }, []);
 
@@ -40,7 +49,7 @@ export default function LandingScreen() {
         {/* Resume round — only shows when a real draft exists */}
         {hasDraft && (
           <Pressable
-            onPress={() => router.push('/(tabs)/play')}
+            onPress={() => router.push('/tabs/play')}
             style={({ pressed }) => [styles.btn, styles.btnResume, pressed && { opacity: 0.85 }]}
           >
             <Text style={[styles.btnText, { color: '#000' }]}>Resume Round</Text>
@@ -49,7 +58,7 @@ export default function LandingScreen() {
 
         {/* Open Caddie — main AI caddie screen */}
         <Pressable
-          onPress={() => { router.push('/(tabs)/caddie'); }}
+          onPress={() => { router.push('/tabs/caddie'); }}
           style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && { opacity: 0.85 }]}
         >
           <Text style={styles.btnText}>Open Caddie</Text>
@@ -57,7 +66,7 @@ export default function LandingScreen() {
 
         {/* Start new round */}
         <Pressable
-          onPress={() => { router.push('/(tabs)/play'); }}
+          onPress={() => { router.push('/tabs/play'); }}
           style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && { opacity: 0.85 }]}
         >
           <Text style={styles.btnText}>Start Round</Text>
@@ -65,7 +74,7 @@ export default function LandingScreen() {
 
         {/* Practice mode */}
         <Pressable
-          onPress={() => router.push('/(tabs)/practice')}
+          onPress={() => router.push('/tabs/swinglab')}
           style={({ pressed }) => [styles.btn, styles.btnSecondary, pressed && { opacity: 0.85 }]}
         >
           <Text style={[styles.btnText, { color: '#ccc' }]}>Practice Mode</Text>

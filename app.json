@@ -1,13 +1,12 @@
 {
   "expo": {
-    "name": "SmartPlayCaddieV2",
+    "name": "SmartPlay Caddie",
     "slug": "SmartPlayCaddieV2",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/logo.png",
     "scheme": "smartplaycaddiev2",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.smartplaycaddie.app",
@@ -16,6 +15,8 @@
         "NSCameraUsageDescription": "SmartPlay uses the camera for the rangefinder and swing video analysis.",
         "NSMicrophoneUsageDescription": "SmartPlay uses the microphone for caddie listening and voice control.",
         "NSLocationWhenInUseUsageDescription": "SmartPlay uses your location to measure accurate golf yardages.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "SmartPlay tracks your location during a round so yardages and auto-hole-progression keep working when your phone screen sleeps.",
+        "UIBackgroundModes": ["location"],
         "NSPhotoLibraryUsageDescription": "SmartPlay saves your swing videos and rangefinder photos to your library.",
         "NSPhotoLibraryAddUsageDescription": "SmartPlay saves your swing videos and rangefinder photos to your library.",
         "NSBluetoothAlwaysUsageDescription": "SmartPlay uses Bluetooth to connect to your Galaxy Watch for yardage display and shot tracking.",
@@ -25,23 +26,24 @@
     "android": {
       "package": "com.tgustafson76.smartplaycaddiev2",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#ffffff",
+        "foregroundImage": "./assets/images/logo-transparent.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_SCAN",
         "android.permission.BLUETOOTH_CONNECT",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
       ]
     },
     "web": {
-      "output": "single",
+      "output": "server",
       "favicon": "./assets/images/favicon.png",
       "name": "SmartPlay Caddie",
       "shortName": "SmartPlay",
@@ -62,7 +64,11 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "SmartPlay uses your location to provide front, middle, and back yardages."
+          "locationWhenInUsePermission": "SmartPlay uses your location to provide front, middle, and back yardages.",
+          "locationAlwaysAndWhenInUsePermission": "SmartPlay keeps your location active during a round so yardages and auto-hole-progression keep working when your phone screen sleeps.",
+          "locationAlwaysPermission": "SmartPlay keeps your location active during a round so yardages and auto-hole-progression keep working when your phone screen sleeps.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       [
@@ -75,7 +81,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/logo-transparent.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -85,7 +91,8 @@
         }
       ],
       "react-native-ble-plx",
-      "expo-speech-recognition"
+      "expo-speech-recognition",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -96,12 +103,6 @@
       "eas": {
         "projectId": "f81c2ac1-db52-4643-8828-481b27d2f376"
       }
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/f81c2ac1-db52-4643-8828-481b27d2f376"
     }
   }
 }
