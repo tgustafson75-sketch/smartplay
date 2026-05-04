@@ -49,7 +49,7 @@ export default function LandingScreen() {
         {/* Resume round — only shows when a real draft exists */}
         {hasDraft && (
           <Pressable
-            onPress={() => router.push('/tabs/play')}
+            onPress={() => router.push('/tabs/caddie')}
             style={({ pressed }) => [styles.btn, styles.btnResume, pressed && { opacity: 0.85 }]}
           >
             <Text style={[styles.btnText, { color: '#000' }]}>Resume Round</Text>

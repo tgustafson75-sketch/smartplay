@@ -69,14 +69,14 @@ export default function TabLayout() {
   const prevActiveRef  = useRef(isRoundActive);
 
   // Phase-driven navigation:
-  //  false → true  : round started  → go to Caddie tab
-  //  true  → false : round ended    → go to Play tab
+  //  false → true  : round started → go to Caddie tab.
+  //  true  → false : round ended   → DO NOT auto-redirect here; the Caddie
+  //                  screen needs to render its post-round summary modal
+  //                  before it lets the user navigate away.
   useEffect(() => {
     const prev = prevActiveRef.current;
     if (!prev && isRoundActive) {
       router.replace('/tabs/caddie');
-    } else if (prev && !isRoundActive) {
-      router.replace('/tabs/play');
     }
     prevActiveRef.current = isRoundActive;
   }, [isRoundActive]);

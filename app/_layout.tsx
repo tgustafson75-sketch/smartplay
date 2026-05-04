@@ -1,33 +1,42 @@
-import { useEffect, useState } from 'react';
-import { ErrorBoundary } from '../components/ErrorBoundary';
+import {
+    Outfit_400Regular,
+    Outfit_500Medium,
+    Outfit_600SemiBold,
+    Outfit_700Bold,
+    Outfit_800ExtraBold,
+    useFonts,
+} from '@expo-google-fonts/outfit';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
-import { Text } from 'react-native';
-import { shouldShowTutorial } from '../screens/TutorialScreen';
-import { onAuthStateChanged } from 'firebase/auth';
-import {
-  useFonts,
-  Outfit_400Regular,
-  Outfit_500Medium,
-  Outfit_600SemiBold,
-  Outfit_700Bold,
-  Outfit_800ExtraBold,
-} from '@expo-google-fonts/outfit';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
+import { onAuthStateChanged } from 'firebase/auth';
+import { useEffect, useState } from 'react';
+import { Text } from 'react-native';
+import 'react-native-reanimated';
+import NetInfo from '@react-native-community/netinfo';
+import { ErrorBoundary } from '../components/ErrorBoundary';
+import { shouldShowTutorial } from '../screens/TutorialScreen';
+
+// Disable NetInfo's default Android reachability probe to clients3.google.com.
+// Without this, the native okhttp client throws java.io.IOException:
+// "Failed to load remote host" when the probe is blocked or the network is
+// unavailable, which surfaces as an uncaught red-screen error in Expo Go.
+NetInfo.configure({ reachabilityShouldRun: () => false });
 
 SplashScreen.preventAutoHideAsync();
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { CaddieProvider } from '../context/CaddieContext';
+import { RoundProvider } from '../context/RoundContext';
+import { useWatchBle } from '../hooks/useWatchBle';
 import { auth } from '../lib/firebase';
-import { useUserStore } from '../store/userStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRoundStore } from '../store/roundStore';
-import { RoundProvider } from '../context/RoundContext';
-import { CaddieProvider } from '../context/CaddieContext';
-import { Audio } from 'expo-av';
-import { useWatchBle } from '../hooks/useWatchBle';
+import { useSettingsStore } from '../store/settingsStore';
+import { useUserStore } from '../store/userStore';
+import { warnExpoGoStartupOnce } from '../utils/expoGoGuard';
+import { setGlobalGender } from '../services/voice';
 
 /**
  * Module-level bridge so other screens (e.g. PlayScreenClean) can
@@ -54,19 +63,45 @@ export default function RootLayout() {
   const profileComplete = usePlayerProfileStore((s) => s.profileComplete);
   const isRoundActive = useRoundStore((s) => s.isRoundActive);
   const [mounted, setMounted] = useState(false);
+  const [fontReady, setFontReady] = useState(false);
 
-  // Galaxy Watch 7 — BLE scan runs for the lifetime of the app
-  useWatchBle();
+  // Warn once when running in Expo Go so unsupported native features are clear.
+  useEffect(() => {
+    warnExpoGoStartupOnce();
+  }, []);
+
+  // Apply the persisted voice gender once at boot so any tab (not just Caddie)
+  // gets the right voice on first launch.
+  useEffect(() => {
+    setGlobalGender(useSettingsStore.getState().voiceGender);
+  }, []);
+
+  // Start BLE scan after initial shell readiness to reduce launch contention.
+  useWatchBle(fontReady);
 
   // ── Bluetooth audio routing ────────────────────────────────────────────────
   useEffect(() => {
-    Audio.setAudioModeAsync({
-      allowsRecordingIOS:         false,
-      playsInSilentModeIOS:       true,
-      staysActiveInBackground:    false,
-      shouldDuckAndroid:          true,
-      playThroughEarpieceAndroid: false,
-    }).catch(() => {});
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { Audio } = await import('expo-av');
+        if (cancelled) return;
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      } catch {
+        // Keep startup resilient if audio setup fails.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Keep BiometricLayoutControls as stable no-ops (biometric disabled for now)
@@ -84,14 +119,30 @@ export default function RootLayout() {
     Outfit_800ExtraBold,
   });
 
-  // Apply Outfit as default font on all Text components and hide splash once ready
+  // Mark fonts ready when loaded (or when there is a load error).
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      if (!(Text as any).defaultProps) (Text as any).defaultProps = {};
-      (Text as any).defaultProps.style = { fontFamily: 'Outfit_400Regular' };
-      SplashScreen.hideAsync();
+      setFontReady(true);
     }
   }, [fontsLoaded, fontError]);
+
+  // Cap splash wait so app shell appears quickly even if web font loading is slow.
+  useEffect(() => {
+    if (fontReady) return;
+    const timeout = setTimeout(() => setFontReady(true), 1200);
+    return () => clearTimeout(timeout);
+  }, [fontReady]);
+
+  // Apply Outfit as default font and hide splash once shell is ready.
+  useEffect(() => {
+    if (fontReady) {
+      if (!(Text as any).defaultProps) (Text as any).defaultProps = {};
+      if (fontsLoaded) {
+        (Text as any).defaultProps.style = { fontFamily: 'Outfit_400Regular' };
+      }
+      SplashScreen.hideAsync();
+    }
+  }, [fontReady, fontsLoaded]);
 
   // Wait one tick for Expo Router's navigator to fully mount
   useEffect(() => { setMounted(true); }, []);
@@ -107,10 +158,10 @@ export default function RootLayout() {
           if (!profileComplete) {
             router.replace('/profile-setup');
           } else if (isRoundActive) {
-            router.replace('/(tabs)/caddie');
+            router.replace('/tabs/caddie');
           } else {
             void shouldShowTutorial().then((show) => {
-              router.replace(show ? '/tutorial' : '/(tabs)/caddie');
+              router.replace(show ? '/tutorial' : '/tabs/caddie');
             });
           }
         }
@@ -118,14 +169,14 @@ export default function RootLayout() {
         // No Firebase user and no guest session — auto-create guest session and go to caddie.
         initGuestSession();
         void shouldShowTutorial().then((show) => {
-          router.replace(show ? '/tutorial' : '/(tabs)/caddie');
+          router.replace(show ? '/tutorial' : '/tabs/caddie');
         });
       }
     });
     return unsubscribe;
   }, [segments, mounted]);
 
-  if (!fontsLoaded && !fontError) return null;
+  if (!fontReady) return null;
 
   return (
     <ErrorBoundary>
@@ -146,7 +197,7 @@ export default function RootLayout() {
         <Stack.Screen name="profile-setup" />
         <Stack.Screen name="settings" />
         <Stack.Screen name="swing-lab" />
-        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="tabs" />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

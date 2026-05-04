@@ -36,6 +36,13 @@ interface Options {
   setCurrentHole: (h: number) => void;
   isRoundActive:  boolean;
   courseData:     Course | null;
+  /**
+   * Stale-GPS flag from the unified GPS hook. When true, `location` still
+   * holds the last good fix but the watch has not received a fresh sample
+   * for STALE_TIMEOUT_MS — auto-advance is paused so a frozen position
+   * inside the green's dwell radius cannot trigger hole progression.
+   */
+  stale?:         boolean;
   /** Called when a new hole is about to start — used to show the toast */
   onHoleAdvance?: (from: number, to: number) => void;
 }
@@ -46,6 +53,7 @@ export function useHoleProgression({
   setCurrentHole,
   isRoundActive,
   courseData,
+  stale = false,
   onHoleAdvance,
 }: Options): void {
   const stateRef      = useRef<ProgressionState>(INITIAL_PROGRESSION);
@@ -73,6 +81,9 @@ export function useHoleProgression({
 
   useEffect(() => {
     if (!isRoundActive || !location || currentHole >= 18) return;
+    // Pause auto-advance while GPS is stale — the location ref may be frozen
+    // inside the dwell radius of the green even though the player has moved.
+    if (stale) return;
 
     // Build hole coords from COURSE_DB
     const holeData = courseData?.holes[currentHole - 1];
@@ -106,7 +117,7 @@ export function useHoleProgression({
       clearTimeout(advTimerRef.current);
       advTimerRef.current = null;
     }
-  }, [location, isRoundActive, currentHole, courseData, advance]);
+  }, [location, isRoundActive, currentHole, courseData, advance, stale]);
 
   // Cleanup on unmount
   useEffect(() => () => {

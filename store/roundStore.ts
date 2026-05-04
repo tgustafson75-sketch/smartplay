@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type ShotResult = 'left' | 'right' | 'center' | 'short' | 'long';
 
@@ -92,9 +94,24 @@ interface RoundState {
   setActivePlayerCount: (count: number) => void;
   setMultiRound: (entries: HoleEntry[]) => void;
   addMultiRoundHole: (entry: HoleEntry) => void;
+  // ── New fields ──────────────────────────────────────────────────────────
+  nineHoleMode: boolean;
+  isCompetition: boolean;
+  roundNotes: string;
+  penaltyLog: { hole: number; strokes: number; reason: string; timestamp: number }[];
+  /** Putts logged per hole — index 0–17 maps to holes 1–18 */
+  holePutts: number[];
+  setNineHoleMode: (enabled: boolean) => void;
+  setIsCompetition: (enabled: boolean) => void;
+  setRoundNotes: (text: string) => void;
+  addPenalty: (entry: { hole: number; strokes: number; reason: string }) => void;
+  clearPenalties: () => void;
+  setPuttForHole: (holeIdx: number, putts: number) => void;
 }
 
-export const useRoundStore = create<RoundState>((set) => ({
+export const useRoundStore = create<RoundState>()(
+  persist(
+    (set) => ({
   scores: Array(18).fill(0),
   currentHole: 1,
   currentPar: 4,
@@ -115,6 +132,11 @@ export const useRoundStore = create<RoundState>((set) => ({
   players: ['You'],
   activePlayerCount: 1,
   multiRound: [],
+  nineHoleMode: false,
+  isCompetition: false,
+  roundNotes: '',
+  penaltyLog: [],
+  holePutts: Array(18).fill(0),
   setScore: (holeIndex, value) =>
     set((state) => {
       const scores = [...state.scores];
@@ -129,7 +151,7 @@ export const useRoundStore = create<RoundState>((set) => ({
   setIsRoundActive: (isRoundActive) => set(() => ({ isRoundActive })),
   setClub: (club) => set(() => ({ club })),
   setTargetDistance: (dist) => set(() => ({ targetDistance: dist })),
-  addShot: (shot) => set((state) => ({ shots: [...state.shots, shot].slice(-50), shotResult: shot.result })),
+  addShot: (shot) => set((state) => ({ shots: [...state.shots, shot].slice(-250), shotResult: shot.result })),
   adjustLastShot: (correction) =>
     set((state) => {
       if (state.shots.length === 0) return {};
@@ -149,7 +171,31 @@ export const useRoundStore = create<RoundState>((set) => ({
       shots[shots.length - 1] = { ...shots[shots.length - 1], frameTag: uri };
       return { shots };
     }),
-  clearRound: () => set(() => ({ shots: [], shotResult: '', aim: 'center', multiRound: [] })),
+  /**
+   * Reset every gameplay field that should NOT carry between rounds.
+   * Note: courseScores is intentionally preserved — it is the per-course
+   * scorecard archive used to restore prior scores when the user reselects
+   * that course. Live scoring state (gridScores, scores, holePutts, penaltyLog,
+   * shots, currentHole, currentPar) is wiped.
+   */
+  clearRound: () => set(() => ({
+    shots:        [],
+    shotResult:   '',
+    aim:          'center',
+    multiRound:   [],
+    holePutts:    Array(18).fill(0),
+    scores:       Array(18).fill(0),
+    gridScores:   EMPTY_GRID(),
+    penaltyLog:   [],
+    currentHole:  1,
+    currentPar:   4,
+  })),
+  setPuttForHole: (holeIdx, putts) =>
+    set((state) => {
+      const h = [...state.holePutts];
+      h[holeIdx] = putts;
+      return { holePutts: h };
+    }),
   setShotResult: (r) => set(() => ({ shotResult: r })),
   setAim: (a) => set(() => ({ aim: a })),
   setActiveCourse: (name) => set(() => ({ activeCourse: name })),
@@ -157,6 +203,9 @@ export const useRoundStore = create<RoundState>((set) => ({
   setCourseHoleScore: (playerIdx, holeIdx, score, courseId) =>
     set((state) => {
       const grid = state.gridScores.map((row) => [...row]);
+      // Defensive: a persisted snapshot from a prior schema may not include
+      // a row for this playerIdx — fill in an empty 18-hole row before writing.
+      if (!grid[playerIdx]) grid[playerIdx] = Array(18).fill(0);
       grid[playerIdx][holeIdx] = score;
       // Keep legacy flat scores[] in sync for player 0
       const scores = playerIdx === 0 ? [...state.scores] : state.scores;
@@ -190,4 +239,44 @@ export const useRoundStore = create<RoundState>((set) => ({
     }
     return { multiRound: [...state.multiRound, entry] };
   }),
-}));
+  setNineHoleMode: (nineHoleMode) => set(() => ({ nineHoleMode })),
+  setIsCompetition: (isCompetition) => set(() => ({ isCompetition })),
+  setRoundNotes: (roundNotes) => set(() => ({ roundNotes })),
+  addPenalty: (entry) =>
+    set((state) => ({
+      penaltyLog: [...state.penaltyLog, { ...entry, timestamp: Date.now() }],
+    })),
+  clearPenalties: () => set(() => ({ penaltyLog: [] })),
+}),
+    {
+      name: 'round-store-v1',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        scores: state.scores,
+        currentHole: state.currentHole,
+        currentPar: state.currentPar,
+        goal: state.goal,
+        goalMode: state.goalMode,
+        strategyMode: state.strategyMode,
+        isRoundActive: state.isRoundActive,
+        club: state.club,
+        shots: state.shots,
+        shotResult: state.shotResult,
+        aim: state.aim,
+        activeCourse: state.activeCourse,
+        selectedCourseIdx: state.selectedCourseIdx,
+        gridScores: state.gridScores,
+        gridPlayerNames: state.gridPlayerNames,
+        courseScores: state.courseScores,
+        players: state.players,
+        activePlayerCount: state.activePlayerCount,
+        multiRound: state.multiRound,
+        nineHoleMode: state.nineHoleMode,
+        isCompetition: state.isCompetition,
+        roundNotes: state.roundNotes,
+        penaltyLog: state.penaltyLog,
+        holePutts: state.holePutts,
+      }),
+    }
+  )
+);

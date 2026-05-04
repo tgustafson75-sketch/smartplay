@@ -830,6 +830,7 @@ export default function Caddie() {
     setCurrentHole,
     isRoundActive,
     courseData:     activeCourseData ?? null,
+    stale:          unifiedGPS.stale,
     onHoleAdvance: (from, to) => {
       if (holeToastTimerRef.current) clearTimeout(holeToastTimerRef.current);
       setHoleAdvanceToast({ from, to });
@@ -1696,18 +1697,24 @@ export default function Caddie() {
       }
     }
 
-    clearRound();
-    resetCaddieRound();
-    setIsRoundActive(false);
-
+    // Capture analysis BEFORE clearing the round so the modal has data to show.
+    // setIsRoundActive(false) is deferred to the modal's onDismiss so the
+    // tabs/_layout redirect doesn't yank us away before the summary mounts.
     if (analysis && newInsights.length > 0) {
       setPostRoundAnalysis(analysis);
       setPostRoundInsights(newInsights);
-      pendingNavRef.current = () => router.replace('/tabs/play');
+      pendingNavRef.current = () => {
+        clearRound();
+        resetCaddieRound();
+        setIsRoundActive(false);
+        router.replace('/tabs/play');
+      };
       setShowPostRound(true);
-      // Tip: replay is ready
       checkAndShow('replay', () => showTip('replay', "Your round is ready to replay and share in Dashboard."));
     } else {
+      clearRound();
+      resetCaddieRound();
+      setIsRoundActive(false);
       router.replace('/tabs/play');
     }
   }, [clearRound, resetCaddieRound, setIsRoundActive, router, addRoundHistory]);
@@ -2007,6 +2014,18 @@ export default function Caddie() {
         onDismiss={() => setShowSaveProgress(false)}
       />
 
+      <PostRoundSummary
+        visible={showPostRound}
+        analysis={postRoundAnalysis}
+        insights={postRoundInsights}
+        onDismiss={() => {
+          setShowPostRound(false);
+          const nav = pendingNavRef.current;
+          pendingNavRef.current = () => {};
+          nav?.();
+        }}
+      />
+
       <Modal
         visible={showStrategyShots}
         transparent
@@ -2125,7 +2144,7 @@ export default function Caddie() {
                     : p.type === 'ob'
                     ? 'Back to the tee - play 3.'
                     : 'Provisional in. Move forward.';
-                  void speakJob(msg, ENGINE_PRIORITY.SHOT, voiceGender);
+                  if (voiceEnabled) void speakJob(msg, ENGINE_PRIORITY.SHOT, voiceGender);
                 }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -2385,6 +2404,10 @@ export default function Caddie() {
 
             <Pressable
               onPress={() => {
+                // Reset prior round state before starting a new one so scores,
+                // putts, penalties, and shots from the previous round don't leak.
+                clearRound();
+                resetCaddieRound();
                 setStrategyMode(roundModeChoice);
                 setCurrentHole(1);
                 setIsRoundActive(true);
