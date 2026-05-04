@@ -650,8 +650,20 @@ const [selectedDrill, setSelectedDrill] = useState<string | null>(null);
       await stopAcousticDetection();
       setAcousticEnabled(false);
     } else {
-      await startAcousticDetection(handleAcousticImpact);
-      setAcousticEnabled(true);
+      // startAcousticDetection now returns false when mic permission is denied
+      // or recording fails to start; reflect that in the UI toggle so users
+      // aren't told the detector is on when it isn't.
+      const ok = await startAcousticDetection(handleAcousticImpact);
+      setAcousticEnabled(!!ok);
+      if (!ok) {
+        try {
+          const { Alert } = await import('react-native');
+          Alert.alert(
+            'Microphone unavailable',
+            'Acoustic shot detection needs microphone access. Enable it in your device settings to use this feature.',
+          );
+        } catch { /* ignore — alert is best-effort */ }
+      }
     }
   }, [acousticEnabled, handleAcousticImpact]);
 
@@ -1459,6 +1471,7 @@ const [selectedDrill, setSelectedDrill] = useState<string | null>(null);
     recDurRef.current = Date.now() - recStartRef.current;
     if (video) {
       setVideoUri(video.uri);
+      setLastVideoUri(video.uri); // wire SmartVision triggers (auto, pattern, manual)
       setSwingLibrary((prev) => [{ uri: video.uri, tempo: 'Manual', time: new Date().toLocaleTimeString() }, ...prev]);
     }
     setRecording(false);
@@ -2121,7 +2134,10 @@ const [selectedDrill, setSelectedDrill] = useState<string | null>(null);
     drillRecStartRef.current = Date.now();
     try {
       const video = await drillCameraRef.current.recordAsync();
-      if (video?.uri) setSharedVideoUri(video.uri);
+      if (video?.uri) {
+        setSharedVideoUri(video.uri);
+        setLastVideoUri(video.uri); // wire SmartVision triggers (auto, pattern, manual)
+      }
     } catch { /* recording cancelled */ } finally {
       setSharedRecording(false);
       drillRecStartRef.current = null;
