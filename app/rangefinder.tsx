@@ -339,8 +339,12 @@ export default function RangefinderScreen() {
         </Pressable>
       )}
 
-      {/* ── QUICK BUTTONS ──────────────────────────────────────────────── */}
-      <View style={[sl.quickBtns, { bottom: insets.bottom + (mode === 'STANDARD' ? 52 : 4) }]}>
+      {/* ── QUICK BUTTONS ────────────────────────────────────────────────
+          STANDARD mode renders the 72px-tall shutter at bottom+24, so the
+          quick buttons must sit above it (bottom+24+72+16 ≈ 112) instead
+          of underneath where the GPS / 'My Position' button was being
+          covered by the camera shutter. */}
+      <View style={[sl.quickBtns, { bottom: insets.bottom + (mode === 'STANDARD' ? 116 : 4) }]}>
         {mode === 'TARGET' && (
           <Pressable style={sl.quickBtn} onPress={() => { setTargetYards(null); if (voiceEnabled) void speakJob(`${middleDisplay ?? ''} yards`, ENGINE_PRIORITY.AMBIENT); }}>
             <Text style={sl.quickBtnText}>⊕ Centre Pin</Text>
