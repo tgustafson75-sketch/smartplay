@@ -37,12 +37,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  PanResponder,
   useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import Svg, { Line as SvgLine } from 'react-native-svg';
 
@@ -165,37 +165,29 @@ function Marker({ kind, x, y, draggable, onDrag, onDragEnd }: {
   x: number;
   y: number;
   draggable: boolean;
-  onDrag?: (dx: number, dy: number) => void;
+  /** Receives absolute translation since gesture start (translationX/Y). */
+  onDrag?: (translationX: number, translationY: number) => void;
   onDragEnd?: () => void;
 }) {
   const s = MARKER_STYLE[kind];
 
-  const responder = useMemo(() => {
-    if (!draggable) return null;
-    return PanResponder.create({
-      // Capture aggressively so the marker wins the gesture race against
-      // any parent ScrollView / Pressable / canvas View. Capture-phase
-      // handlers run before child phase so this marker takes the touch
-      // even if a parent thinks it should respond.
-      onStartShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponderCapture: () => true,
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: () => { /* explicit grant for clarity */ },
-      onPanResponderMove: (_e, g) => {
-        if (onDrag) onDrag(g.dx, g.dy);
-      },
-      onPanResponderRelease: () => {
+  // Using react-native-gesture-handler's Pan gesture (not PanResponder).
+  // GH runs on the native side so it competes correctly with siblings
+  // on Android (SVG, Image) and reliably wins for touches inside this
+  // marker's bounds. runOnJS wraps the JS callbacks so we don't need
+  // Reanimated worklets.
+  const gesture = useMemo(() => {
+    return Gesture.Pan()
+      .runOnJS(true)
+      .onUpdate((e) => {
+        if (onDrag) onDrag(e.translationX, e.translationY);
+      })
+      .onEnd(() => {
         if (onDragEnd) onDragEnd();
-      },
-      onPanResponderTerminate: () => {
-        if (onDragEnd) onDragEnd();
-      },
-    });
-  }, [draggable, onDrag, onDragEnd]);
+      });
+  }, [onDrag, onDragEnd]);
 
-  return (
+  const inner = (
     <View
       style={[
         styles.marker,
@@ -212,11 +204,13 @@ function Marker({ kind, x, y, draggable, onDrag, onDragEnd }: {
         },
       ]}
       hitSlop={{ top: 24, bottom: 24, left: 24, right: 24 }}
-      {...(responder ? responder.panHandlers : {})}
     >
       <Text style={[styles.markerText, { color: s.text, fontSize: s.size * 0.42 }]}>{kind}</Text>
     </View>
   );
+
+  if (!draggable) return inner;
+  return <GestureDetector gesture={gesture}>{inner}</GestureDetector>;
 }
 
 // ─── Screen ──────────────────────────────────────────────────────
@@ -503,7 +497,10 @@ export default function SmartVisionScreen() {
   // space we render in, so we just use teeCanvas / pinCanvas / targetCanvas.
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    // GestureHandlerRootView required at the root of any subtree using
+    // react-native-gesture-handler. App _layout doesn't wrap globally,
+    // so wrap here. Without this, Gesture.Pan callbacks never fire.
+    <GestureHandlerRootView style={[styles.root, { paddingTop: insets.top }]}>
       {/* Top bar — back + hole switcher. Compact, ~56px tall. */}
       <View style={[styles.topBar, { height: TOP_BAR_H }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
@@ -672,7 +669,7 @@ export default function SmartVisionScreen() {
         <View style={styles.divider} />
         <YdCell label="BACK" value={yardages.back} />
       </View>
-    </View>
+    </GestureHandlerRootView>
   );
 }
 
