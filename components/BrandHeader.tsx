@@ -38,13 +38,9 @@ export default function BrandHeader({ rightSlot }: BrandHeaderProps) {
         )}
       </View>
 
-      {/* Right slot — spacer fills remaining room, slot renders flush right */}
-      {rightSlot != null && (
-        <>
-          <View style={{ flex: 1 }} />
-          {rightSlot}
-        </>
-      )}
+      {/* Right slot — text container above already has flex:1, so the slot
+          renders flush right without an extra spacer competing for width. */}
+      {rightSlot}
     </View>
   );
 }

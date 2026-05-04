@@ -358,6 +358,7 @@ export default function Caddie() {
     }
   }, [isRoundActive, router]);
 
+
   // -- Resume round prompt on app startup -----------------------------------
   useEffect(() => {
     const { isRoundActive: roundActive, activeCourse, currentHole: hole } = useRoundStore.getState();
@@ -440,6 +441,18 @@ export default function Caddie() {
       : unifiedGPS.accuracy <= 5  ? 'high'
       : unifiedGPS.accuracy <= 15 ? 'balanced'
       : 'weak';
+
+  // When a round starts, force-refresh GPS so the first hole's yardages,
+  // hole-progression, and SmartFinder readings come from a fresh fix instead
+  // of whatever stale last-known position was sitting in the watch.
+  const prevRoundActiveRef = useRef<boolean>(isRoundActive);
+  useEffect(() => {
+    const prev = prevRoundActiveRef.current;
+    if (!prev && isRoundActive) {
+      void unifiedGPS.retry();
+    }
+    prevRoundActiveRef.current = isRoundActive;
+  }, [isRoundActive, unifiedGPS]);
   const { playSoundTap, playSoundConfirm } = useSmartAudio();
   const [lockedDistance,  setLockedDistance]  = useState<number | null>(null);
 
@@ -1351,7 +1364,17 @@ export default function Caddie() {
       distance: displayDistance ?? 0,
       timestamp: Date.now(),
       hole: currentHole,
+      gpsLat: unifiedGPS.location?.lat,
+      gpsLng: unifiedGPS.location?.lng,
+      yardsBefore: displayDistance ?? undefined,
     });
+
+    // Logging a shot via the result card also bumps the live hole score so
+    // the SHOTS stepper, scorecard, and post-round analysis stay in sync.
+    {
+      const cur = gridScores[activePlayerIdx]?.[currentHole - 1] ?? 0;
+      setCourseHoleScore(activePlayerIdx, currentHole - 1, Math.min(15, cur + 1));
+    }
 
     // Persist learned distance for this club
     if (displayDistance) void updateLearnedDistance(club, displayDistance);
@@ -1506,7 +1529,7 @@ export default function Caddie() {
     } finally {
       isProcessingShotRef.current = false;
     }
-  }, [addShot, addRoundShot, club, aimTarget, displayDistance, currentHole, voiceEnabled, voiceGender, setCaddieMsg, autoShotVision, lastVideoUri, mapSize, ballPosition, targetPosition, caddie.recommendedClub]);
+  }, [addShot, addRoundShot, club, aimTarget, displayDistance, currentHole, voiceEnabled, voiceGender, setCaddieMsg, autoShotVision, lastVideoUri, mapSize, ballPosition, targetPosition, caddie.recommendedClub, gridScores, activePlayerIdx, setCourseHoleScore, unifiedGPS]);
   // -- Mark Shot (voice-first + manual fallback) -------------------------------
   const handleMarkShot = useCallback(async () => {
     // Per-shot double-trigger guard
@@ -2951,23 +2974,8 @@ export default function Caddie() {
           </View>
         )}
 
-        {/* â”€â”€ Advice Card — always visible, max 2 lines â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-        <View style={s.adviceCard}>
-          <View style={s.adviceHeader}>
-            <Text style={s.adviceLabel}>CADDIE</Text>
-            {isSpeaking && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: Palette.positive }} />
-                <Text style={{ color: Palette.positive, fontSize: 14, fontWeight: '600' }}>Speaking</Text>
-              </View>
-            )}
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={[s.adviceText, { flex: 1 }]} numberOfLines={2}>
-              {caddieMsg || (clubRec.reason ?? currentAdvice)}
-            </Text>
-          </View>
-        </View>
+        {/* Bottom CADDIE advice card removed — caddie advice text is shown
+            on the avatar HUD overlay (caddieResponse prop) instead. */}
 
       </ScrollView>
 
@@ -3196,27 +3204,27 @@ const s = StyleSheet.create({
   },
   stepperCard: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 8, paddingHorizontal: 6,
+    paddingVertical: 14, paddingHorizontal: 8,
   },
-  stepperDivider: { width: 1, backgroundColor: Palette.border, marginVertical: 8 },
+  stepperDivider: { width: 1, backgroundColor: Palette.border, marginVertical: 12 },
   stepperLabel: {
-    color: Palette.muted, fontSize: 9,
-    fontWeight: Type.medium, letterSpacing: 1.4,
-    textTransform: 'uppercase', marginBottom: 4,
+    color: Palette.muted, fontSize: 11,
+    fontWeight: Type.bold, letterSpacing: 1.4,
+    textTransform: 'uppercase', marginBottom: 8,
   },
-  stepperControls: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stepperControls: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   stepperBtn: {
-    width: 28, height: 28, borderRadius: 8,
+    width: 40, height: 40, borderRadius: 10,
     backgroundColor: Palette.brandDeep,
-    borderWidth: 1, borderColor: Palette.border,
+    borderWidth: 1.5, borderColor: 'rgba(46,204,113,0.45)',
     justifyContent: 'center', alignItems: 'center',
   },
-  stepperBtnText: { color: Palette.positiveFaint, fontSize: 16, fontWeight: Type.bold, lineHeight: 20 },
+  stepperBtnText: { color: Palette.positiveFaint, fontSize: 20, fontWeight: Type.bold, lineHeight: 24 },
   stepperValue: {
-    color: Palette.textPrimary, fontSize: 22, fontWeight: Type.bold,
-    minWidth: 26, textAlign: 'center' as const,
+    color: Palette.textPrimary, fontSize: 28, fontWeight: Type.bold,
+    minWidth: 36, textAlign: 'center' as const,
   },
-  stepperSub: { color: Palette.muted, fontSize: 10, fontWeight: Type.semibold, marginTop: 3 },
+  stepperSub: { color: Palette.muted, fontSize: 11, fontWeight: Type.semibold, marginTop: 5 },
 
   // Distance card — styled as rangefinder
   distanceCard: {
