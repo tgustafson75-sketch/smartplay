@@ -19,7 +19,7 @@ import Svg, { Path, Circle } from 'react-native-svg';
 import { useRoundStore }     from '../store/roundStore';
 import { useAiProfileStore, buildAiHint } from '../store/aiProfileStore';
 import type { Shot } from '../store/roundStore';
-import { speakJob as _speakJob, PRIORITY as ENGINE_PRIORITY } from '../services/VoiceEngine';
+import { speakJob as _speakJob, PRIORITY as ENGINE_PRIORITY } from '../services/voice';
 import { selectAndSpeak, VOICE_PRIORITY } from '../services/voicePriority';
 
 // ── Types ─────────────────────────────────────────────────────────────────────

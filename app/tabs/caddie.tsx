@@ -21,6 +21,7 @@ import {
 import type { GestureResponderEvent } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import BrandHeader from '../../components/BrandHeader';
+import CaddieToolsStrip from '../../components/CaddieToolsStrip';
 import GlobalMenu from '../../components/GlobalMenu';
 import SaveProgressModal from '../../components/SaveProgressModal';
 import SmartHint from '../../components/SmartHint';
@@ -88,7 +89,7 @@ import { adjustClub } from '../../features/smartCaddie/engine/ClubEngine';
 import { useRoundStore as useCaddieRoundStore, getRoundShotsSnapshot } from '../../features/smartCaddie/hooks/useRoundStore';
 import { buildTodaySwing } from '../../features/smartCaddie/engine/TodaySwing';
 import { combineModels } from '../../features/smartCaddie/engine/CombinedPlayerModel';
-import { speakHoleChange, speakPressureCue, speakCaddieIntro } from '../../features/smartCaddie/hooks/useCaddieVoice';
+import { speakHoleChange, speakPressureCue } from '../../features/smartCaddie/hooks/useCaddieVoice';
 import { useVoiceController } from '../../features/voice/useVoiceController';
 import { VoiceMicButton } from '../../features/voice/VoiceMicButton';
 import { PuttLine } from '../../features/playView/components/PuttLine';
@@ -484,7 +485,6 @@ export default function Caddie() {
   const setBiometricEnabled = useUserStore((s) => s.setBiometricEnabled);
   const [showToolsMenu,   setShowToolsMenu]   = useState(false);
   const [showShotCard, setShowShotCard] = useState(false);
-  const [showRoundSetup, setShowRoundSetup] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [openingPrompt, setOpeningPrompt] = useState('');
   const [showTeeTime,     setShowTeeTime]     = useState(false);
@@ -1024,9 +1024,14 @@ export default function Caddie() {
   const localBias = useMemo(() => deriveLocalBias(shots), [shots]);
 
   const getContextualAdvice = useCallback((): string => {
+    // Bail before invoking the brain when GPS hasn't produced a fix yet —
+    // otherwise buildRecommendation produces "0 yards. Chip..." which is
+    // misleading. Wait until we have a real yardage.
+    const y = displayDistance ?? 0;
+    if (y <= 0) return applyPersonality('Stay smooth and commit.', caddiePersonality);
     try {
       const base = buildRecommendation({
-        yardage:             displayDistance ?? 0,
+        yardage:             y,
         club,
         par:                 holePar,
         holeNumber:          currentHole,
@@ -1041,10 +1046,8 @@ export default function Caddie() {
       });
       return applyPersonality(base, caddiePersonality);
     } catch {
-      // Recommendation engine failed (corrupt profile/memory) � return base yardage string
-      const y = displayDistance ?? 0;
-      const fallback = y > 0 ? `${y} yards. ${club} - commit and stay smooth.` : 'Stay smooth and commit.';
-      return applyPersonality(fallback, caddiePersonality);
+      // Recommendation engine failed (corrupt profile/memory) - return base yardage string
+      return applyPersonality(`${y} yards. ${club} - commit and stay smooth.`, caddiePersonality);
     }
   }, [displayDistance, club, holePar, currentHole, aiProfile, localBias, courseMemory, activeCourse, goalMode, strategyMode, shots.length, caddiePersonality]);
 
@@ -1911,8 +1914,18 @@ export default function Caddie() {
           <Text style={s.micLabel}>{mappedVoiceState === 'listening' ? 'Listening...' : 'Tap to talk'}</Text>
         </Pressable>
 
+        {/* Collapsible quick-tools: SmartFinder / Pointfinder / SmartVision / SwingLab. */}
+        <View style={{ marginTop: 6, marginBottom: 4 }}>
+          <CaddieToolsStrip
+            onOpenSmartFinder={openRangefinder}
+            onOpenPointfinder={() => { setPointA(null); setPointB(null); setShowPointRanger(true); }}
+            onOpenSmartVision={openSmartVision}
+            onOpenSwingLab={() => router.push('/tabs/swinglab')}
+          />
+        </View>
+
         <View style={s.navRow}>
-          <Pressable style={s.navBtn} onPress={() => setShowRoundSetup(true)}>
+          <Pressable style={s.navBtn} onPress={() => setShowToolsMenu(true)}>
             <Text style={s.navIcon}>⛳</Text>
             <Text style={s.navLabel}>Round</Text>
           </Pressable>
@@ -2144,7 +2157,7 @@ export default function Caddie() {
                     : p.type === 'ob'
                     ? 'Back to the tee - play 3.'
                     : 'Provisional in. Move forward.';
-                  if (voiceEnabled) void speakJob(msg, ENGINE_PRIORITY.SHOT, voiceGender);
+                  if (voiceEnabled) void speakJob(msg, ENGINE_PRIORITY.AMBIENT, voiceGender);
                 }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -3275,21 +3288,6 @@ export default function Caddie() {
       </Modal>
 
       <Modal
-        visible={showRoundSetup}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowRoundSetup(false)}
-      >
-        <Pressable style={s.backdrop} onPress={() => setShowRoundSetup(false)}>
-          <View style={s.sheet}>
-            <View style={s.handle} />
-            <Text style={s.moreTitle}>Round Setup</Text>
-            <Text style={s.moreSub}>Open round options from the main panel to set course and mode.</Text>
-          </View>
-        </Pressable>
-      </Modal>
-
-      <Modal
         visible={showMoreMenu}
         transparent
         animationType="fade"
@@ -3568,12 +3566,12 @@ const s = StyleSheet.create({
     borderColor: '#00C896',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 15,
+    paddingVertical: 12,
   },
   startRoundBtnText: {
     color: '#A7F3D0',
-    fontSize: 19,
-    fontWeight: '900',
+    fontSize: 16,
+    fontWeight: '800',
     letterSpacing: 0.25,
   },
   caddieVoiceState: { color: Palette.positive, fontSize: Type.xs, fontWeight: Type.bold },

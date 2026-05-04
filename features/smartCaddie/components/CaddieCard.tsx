@@ -1,18 +1,15 @@
 /**
  * features/smartCaddie/components/CaddieCard.tsx
  *
- * Primary SmartCaddie UI card — shows yardage, caddie advice, and a
- * tappable club selector that pre-populates from the recommender engine.
- * Calls logShot when the user overrides the recommended club so the
- * adaptation engine can learn from repeated preferences.
- *
- * Usage:
- *   <CaddieCard advice={caddie.advice} distance={caddie.distance}
- *               recommendedClub={caddie.recommendedClub} logShot={logShot} />
+ * Consolidated Hole Strategy + Caddie Advice card.
+ * Shows: yardage, caddie advice text, tappable club selector (logs overrides),
+ * pressure/miss bias badges, confidence/style, shot result recording, commit CTA.
+ * All shot data is persisted via logShot + addRoundShot.
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, FlatList, Pressable } from 'react-native';
+import { Palette, Radius } from '../../../constants/theme';
 import { CLUBS } from '../types/club';
 import type { ClubName } from '../types/club';
 import type { TrackedShot, ShotResult } from '../hooks/useShotTracking';
@@ -26,7 +23,7 @@ import type { PredictedMiss } from '../engine/ShotPrediction';
 const RESULTS: ShotResult[] = ['good', 'short', 'long', 'left', 'right'];
 
 const RESULT_COLORS: Record<ShotResult, string> = {
-  good:  '#4ADE80',
+  good:  Palette.positive,
   short: '#FACC15',
   long:  '#FACC15',
   left:  '#F87171',
@@ -38,32 +35,34 @@ interface Props {
   distance:        number;
   recommendedClub: ClubName;
   logShot:         (shot: Omit<TrackedShot, 'timestamp'>) => void;
-  /** Called when user records the outcome of the last shot */
   recordResult?:   (timestamp: number, result: ShotResult) => void;
-  /** Best target yardage from TargetSelector */
   target?:         number;
-  /** Risk score from RiskEngine */
   risk?:           number;
-  /** Today swing status label from TodaySwing (e.g. 'Hitting short') */
   todayStatus?:    string;
-  /** Confidence level from ConfidenceEngine */
   confidence?:     ConfidenceLevel;
-  /** Pressure level from PressureEngine */
   pressure?:       PressureLevel;
-  /** Play style from DecisionModifier */
   style?:          PlayStyle;
-  /** Predicted most likely miss direction from dispersion model */
   predictedMiss?:  PredictedMiss;
+  onCyclePressure?: () => void;
+  effectivePressure?: PressureLevel;
+  miss?: 'right' | 'left' | 'balanced';
+  missLabel?: string;
+  onCycleMiss?: () => void;
+  /** Pass true while the voice caddie is speaking */
+  isSpeaking?: boolean;
 }
 
-export const CaddieCard = ({ advice, distance, recommendedClub, logShot, recordResult, target, risk, todayStatus, confidence, pressure, style, predictedMiss }: Props) => {
+export const CaddieCard = ({
+  advice, distance, recommendedClub, logShot, recordResult,
+  target, risk, todayStatus, confidence, pressure, style, predictedMiss,
+  onCyclePressure, effectivePressure, miss, missLabel, onCycleMiss, isSpeaking,
+}: Props) => {
   const { addRoundShot } = useRoundStore();
   const [selectedClub, setSelectedClub] = useState<ClubName>(recommendedClub);
   const [open, setOpen] = useState(false);
   const [lastTimestamp, setLastTimestamp] = useState<number | null>(null);
   const [resultRecorded, setResultRecorded] = useState(false);
 
-  // Sync recommendation when distance (and thus recommendedClub) changes.
   useEffect(() => {
     setSelectedClub(recommendedClub);
     setLastTimestamp(null);
@@ -79,143 +78,197 @@ export const CaddieCard = ({ advice, distance, recommendedClub, logShot, recordR
     logShot({ recommended: recommendedClub, selected: item, distance });
   };
 
+  const activePressure = effectivePressure ?? pressure;
+
   return (
     <View style={{
-      backgroundColor: '#0B3D2E',
-      padding: 16,
-      borderRadius: 12,
-      marginTop: 10,
+      borderRadius: Radius.lg,
+      borderWidth: 1,
+      borderColor: 'rgba(46,204,113,0.20)',
+      borderLeftWidth: 3,
+      borderLeftColor: Palette.positive,
+      backgroundColor: 'rgba(6,15,10,0.92)',
+      padding: 14,
+      marginTop: 8,
+      overflow: 'hidden',
     }}>
-      {todayStatus && todayStatus !== 'Neutral' && (
-        <View style={{
-          backgroundColor: '#1A3A2A',
-          borderRadius: 6,
-          paddingHorizontal: 10,
-          paddingVertical: 4,
-          marginBottom: 8,
-          alignSelf: 'flex-start',
-          borderLeftWidth: 3,
-          borderLeftColor: todayStatus === 'Hitting long' ? '#FACC15' : '#F87171',
-        }}>
-          <Text style={{ color: '#D1FAE5', fontSize: 12 }}>
-            Today: {todayStatus}
-          </Text>
-        </View>
-      )}
 
-      <Text style={{ color: '#fff', fontSize: 18 }}>
-        {distance} yds
-      </Text>
+      {/* ── Header ── */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
+        <Text style={{ color: Palette.muted, fontSize: 9, fontWeight: '700', letterSpacing: 1.6, textTransform: 'uppercase' }}>
+          HOLE STRATEGY
+        </Text>
+        {isSpeaking && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: Palette.positive }} />
+            <Text style={{ color: Palette.positive, fontSize: 11, fontWeight: '600' }}>Speaking</Text>
+          </View>
+        )}
+      </View>
 
-      <Text style={{ color: '#A5F3C7', fontSize: 16, marginTop: 8 }}>
+      {/* ── Distance + today status badge ── */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+        <Text style={{ color: Palette.textPrimary, fontSize: 20, fontWeight: '800' }}>
+          {distance} yds
+        </Text>
+        {todayStatus && todayStatus !== 'Neutral' && (
+          <View style={{
+            borderRadius: 5, paddingHorizontal: 8, paddingVertical: 3,
+            backgroundColor: 'rgba(250,204,21,0.08)',
+            borderWidth: 1, borderColor: 'rgba(250,204,21,0.28)',
+          }}>
+            <Text style={{ color: '#FACC15', fontSize: 11, fontWeight: '600' }}>
+              Today: {todayStatus}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* ── Caddie advice text ── */}
+      <Text
+        numberOfLines={3}
+        ellipsizeMode="tail"
+        style={{ color: Palette.positive, fontSize: 13, fontWeight: '600', lineHeight: 20, marginBottom: 9 }}
+      >
         {advice}
       </Text>
 
-      {target !== undefined && (
-        <Text style={{ color: '#4ADE80', fontSize: 15, marginTop: 8 }}>
-          Target: {target} yds
-        </Text>
-      )}
-
-      {predictedMiss && predictedMiss !== 'center' && (
-        <Text style={{ color: '#FACC15', fontSize: 13, marginTop: 4 }}>
-          Likely miss: {predictedMiss}
-        </Text>
-      )}
-
-      {risk !== undefined && (
-        <Text style={{ color: getRiskColor(risk), fontSize: 14, marginTop: 4 }}>
-          Risk: {getRiskLabel(risk)}
-        </Text>
-      )}
-
-      {/* ── Confidence + Pressure badges ── */}
-      {(confidence || pressure || style) && (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-          {confidence && confidence !== 'neutral' && (
-            <View style={{
-              backgroundColor: confidence === 'high' ? '#14532D' : '#3B1F1F',
-              borderRadius: 5,
-              paddingHorizontal: 8,
-              paddingVertical: 3,
-            }}>
-              <Text style={{
-                color: confidence === 'high' ? '#4ADE80' : '#F87171',
-                fontSize: 11,
-              }}>
-                Confidence: {confidence}
-              </Text>
-            </View>
+      {/* ── Target / risk / predicted miss ── */}
+      {(target !== undefined || (predictedMiss && predictedMiss !== 'center') || risk !== undefined) && (
+        <View style={{ gap: 2, marginBottom: 9 }}>
+          {target !== undefined && (
+            <Text style={{ color: Palette.accent, fontSize: 12 }}>Target: {target} yds</Text>
           )}
-          {pressure && (
-            <View style={{
-              backgroundColor: pressure === 'high' ? '#3B2A0A' : '#1A3A2A',
-              borderRadius: 5,
-              paddingHorizontal: 8,
-              paddingVertical: 3,
-            }}>
-              <Text style={{
-                color: pressure === 'high' ? '#FACC15' : '#9CA3AF',
-                fontSize: 11,
-              }}>
-                Pressure: {pressure}
-              </Text>
-            </View>
+          {predictedMiss && predictedMiss !== 'center' && (
+            <Text style={{ color: '#FACC15', fontSize: 12 }}>Likely miss: {predictedMiss}</Text>
           )}
-          {style && style !== 'normal' && (
-            <View style={{
-              backgroundColor: '#1E293B',
-              borderRadius: 5,
-              paddingHorizontal: 8,
-              paddingVertical: 3,
-            }}>
-              <Text style={{ color: '#93C5FD', fontSize: 11 }}>
-                {style}
-              </Text>
-            </View>
+          {risk !== undefined && (
+            <Text style={{ color: getRiskColor(risk), fontSize: 12 }}>Risk: {getRiskLabel(risk)}</Text>
           )}
         </View>
       )}
 
+      {/* ── Pressure / Miss / Confidence / Style badges ── */}
+      <View style={{ flexDirection: 'row', gap: 7, marginBottom: 11, flexWrap: 'wrap' }}>
+        {/* Pressure */}
+        <Pressable
+          onPress={onCyclePressure}
+          disabled={!onCyclePressure}
+          style={{
+            flexDirection: 'row', alignItems: 'center', gap: 5,
+            backgroundColor: activePressure === 'high' ? 'rgba(59,42,10,0.85)' : Palette.cardBg,
+            borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5,
+            borderWidth: 1,
+            borderColor: activePressure === 'high' ? '#FACC15' : Palette.border,
+          }}
+        >
+          <Text style={{ fontSize: 12 }}>
+            {activePressure === 'high' ? '🌡️' : '😌'}
+          </Text>
+          <Text style={{ color: activePressure === 'high' ? '#FACC15' : Palette.muted, fontSize: 11, fontWeight: '600' }}>
+            {activePressure === 'high' ? 'High Pressure' : 'Normal'}
+          </Text>
+        </Pressable>
+
+        {/* Miss bias */}
+        <Pressable
+          onPress={onCycleMiss}
+          disabled={!onCycleMiss}
+          style={{
+            flexDirection: 'row', alignItems: 'center', gap: 5,
+            backgroundColor: (miss === 'right' || miss === 'left') ? 'rgba(44,31,10,0.85)' : Palette.cardBg,
+            borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5,
+            borderWidth: 1,
+            borderColor: (miss === 'right' || miss === 'left') ? '#FACC15' : Palette.border,
+          }}
+        >
+          <Text style={{ fontSize: 12 }}>
+            {miss === 'right' ? '➡️' : miss === 'left' ? '⬅️' : '⚖️'}
+          </Text>
+          <Text style={{ color: (miss === 'right' || miss === 'left') ? '#FACC15' : Palette.muted, fontSize: 11, fontWeight: '600' }}>
+            {missLabel ?? (miss === 'right' ? 'Tends Right' : miss === 'left' ? 'Tends Left' : 'Balanced')}
+          </Text>
+        </Pressable>
+
+        {/* Confidence */}
+        {confidence && confidence !== 'neutral' && (
+          <View style={{
+            borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5,
+            backgroundColor: confidence === 'high' ? 'rgba(20,83,45,0.8)' : 'rgba(59,31,31,0.8)',
+            borderWidth: 1,
+            borderColor: confidence === 'high' ? 'rgba(46,204,113,0.35)' : 'rgba(248,113,113,0.35)',
+          }}>
+            <Text style={{ color: confidence === 'high' ? Palette.positive : '#F87171', fontSize: 11, fontWeight: '600' }}>
+              {confidence === 'high' ? 'High Conf' : confidence === 'low' ? 'Low Conf' : 'Med Conf'}
+            </Text>
+          </View>
+        )}
+
+        {/* Play style */}
+        {style && style !== 'normal' && (
+          <View style={{
+            borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5,
+            backgroundColor: 'rgba(30,41,59,0.8)',
+            borderWidth: 1, borderColor: 'rgba(147,197,253,0.28)',
+          }}>
+            <Text style={{ color: '#93C5FD', fontSize: 11, fontWeight: '600' }}>{style}</Text>
+          </View>
+        )}
+      </View>
+
+      {/* ── Club selector ── */}
       <TouchableOpacity
         onPress={() => setOpen((o) => !o)}
         style={{
-          marginTop: 12,
-          padding: 10,
-          backgroundColor: '#14532D',
-          borderRadius: 8,
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          backgroundColor: 'rgba(46,204,113,0.09)',
+          borderRadius: Radius.sm,
+          paddingHorizontal: 13, paddingVertical: 10,
+          borderWidth: 1, borderColor: 'rgba(46,204,113,0.28)',
         }}
       >
-        <Text style={{ color: '#fff', fontSize: 16 }}>
-          Club: {selectedClub}
+        <Text style={{ color: Palette.textPrimary, fontSize: 15, fontWeight: '700' }}>
+          {selectedClub}
         </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {selectedClub !== recommendedClub && (
+            <Text style={{ color: Palette.muted, fontSize: 11 }}>rec: {recommendedClub}</Text>
+          )}
+          <Text style={{ color: Palette.muted, fontSize: 12 }}>{open ? '▲' : '▼'}</Text>
+        </View>
       </TouchableOpacity>
 
       {open && (
         <FlatList
           data={CLUBS as unknown as ClubName[]}
           keyExtractor={(item) => item}
+          style={{ maxHeight: 200, marginTop: 4, borderRadius: Radius.sm, borderWidth: 1, borderColor: Palette.border }}
           renderItem={({ item }) => (
             <TouchableOpacity
               onPress={() => handleClubSelect(item)}
-              style={{ padding: 8 }}
+              style={{
+                paddingHorizontal: 13, paddingVertical: 9,
+                borderBottomWidth: 1, borderBottomColor: Palette.borderSubtle,
+                backgroundColor: item === selectedClub ? Palette.bgActive : 'transparent',
+              }}
             >
               <Text style={{
-                color: item === recommendedClub ? '#4ADE80' : '#fff',
-                fontSize: 15,
+                color: item === recommendedClub ? Palette.positive : Palette.textPrimary,
+                fontSize: 14,
+                fontWeight: item === selectedClub ? '700' : '400',
               }}>
-                {item}
+                {item}{item === recommendedClub ? '  ✓ rec' : ''}
               </Text>
             </TouchableOpacity>
           )}
         />
       )}
 
-      {/* ── Shot result recording ── */}
+      {/* ── Shot result recording (appears after club is selected) ── */}
       {recordResult && lastTimestamp !== null && !resultRecorded && (
-        <View style={{ marginTop: 12 }}>
-          <Text style={{ color: '#9CA3AF', fontSize: 12, marginBottom: 6 }}>
-            How did that shot go?
+        <View style={{ marginTop: 10 }}>
+          <Text style={{ color: Palette.muted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 7 }}>
+            HOW DID THAT GO?
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             {RESULTS.map((r) => (
@@ -233,15 +286,14 @@ export const CaddieCard = ({ advice, distance, recommendedClub, logShot, recordR
                   setResultRecorded(true);
                 }}
                 style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 5,
-                  backgroundColor: '#1A4731',
-                  borderRadius: 6,
+                  paddingHorizontal: 12, paddingVertical: 7,
+                  borderRadius: 7,
                   borderWidth: 1,
                   borderColor: RESULT_COLORS[r],
+                  backgroundColor: 'rgba(0,0,0,0.25)',
                 }}
               >
-                <Text style={{ color: RESULT_COLORS[r], fontSize: 13 }}>
+                <Text style={{ color: RESULT_COLORS[r], fontSize: 13, fontWeight: '600' }}>
                   {r}
                 </Text>
               </TouchableOpacity>
@@ -251,10 +303,15 @@ export const CaddieCard = ({ advice, distance, recommendedClub, logShot, recordR
       )}
 
       {resultRecorded && (
-        <Text style={{ color: '#4ADE80', fontSize: 12, marginTop: 8 }}>
+        <Text style={{ color: Palette.positive, fontSize: 12, marginTop: 8, fontWeight: '600' }}>
           ✓ Shot logged
         </Text>
       )}
+
+      {/* ── Commit CTA ── */}
+      <Text style={{ color: Palette.muted, fontSize: 11, marginTop: 11, fontStyle: 'italic', letterSpacing: 0.2 }}>
+        Commit to your shot. Trust your swing.
+      </Text>
     </View>
   );
 };

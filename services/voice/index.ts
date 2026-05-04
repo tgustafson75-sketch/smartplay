@@ -34,14 +34,16 @@ type VoiceServiceModule = {
   setGlobalGender: (gender: string) => void;
   getGlobalGender: () => string;
   configureAudioForSpeech: () => Promise<void>;
+  configureAudioForRecording: () => Promise<void>;
   speak: (text: string, gender?: string) => Promise<unknown>;
 };
 import * as _voiceService from '../voiceService';
 const _vs = _voiceService as unknown as VoiceServiceModule;
-export const setGlobalGender         = _vs.setGlobalGender;
-export const getGlobalGender         = _vs.getGlobalGender;
-export const configureAudioForSpeech = _vs.configureAudioForSpeech;
-export const speak                   = _vs.speak;
+export const setGlobalGender            = _vs.setGlobalGender;
+export const getGlobalGender            = _vs.getGlobalGender;
+export const configureAudioForSpeech    = _vs.configureAudioForSpeech;
+export const configureAudioForRecording = _vs.configureAudioForRecording;
+export const speak                      = _vs.speak;
 
 export { VoiceTimingController } from '../voiceTimingController';
 

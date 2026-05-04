@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     marginTop: 6,
-    maxWidth: 280,
+    maxWidth: '85%',
   },
   text: {
     color: '#B8EAD4',

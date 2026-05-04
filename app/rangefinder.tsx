@@ -13,7 +13,8 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import * as Location from 'expo-location';
 import Slider from '@react-native-community/slider';
-import { speakJob, PRIORITY as ENGINE_PRIORITY } from '../services/VoiceEngine';
+import { speakJob, PRIORITY as ENGINE_PRIORITY } from '../services/voice';
+import { useSettingsStore } from '../store/settingsStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoundStore } from '../store/roundStore';
 import Svg, { Circle, Line as SvgLine, Rect, Text as SvgText } from 'react-native-svg';
@@ -58,6 +59,7 @@ export default function RangefinderScreen() {
   const currentHole = useRoundStore((s) => s.currentHole);
   const currentPar  = useRoundStore((s) => s.currentPar);
   const scores      = useRoundStore((s) => s.scores);
+  const voiceEnabled = useSettingsStore((s) => s.voiceEnabled);
 
   const baseYardage = parseInt(params.yardage ?? '0', 10) || null;
   const paramHole   = parseInt(params.hole ?? '0', 10)    || currentHole;
@@ -126,14 +128,14 @@ export default function RangefinderScreen() {
     const prev = lastSpokenTargetRef.current;
     if (prev == null || Math.abs(yards - prev) >= 10) {
       lastSpokenTargetRef.current = yards;
-      void speakJob(`${yards} to target. ${bestClub(yards)}.`, ENGINE_PRIORITY.AMBIENT);
+      if (voiceEnabled) void speakJob(`${yards} to target. ${bestClub(yards)}.`, ENGINE_PRIORITY.AMBIENT);
     }
-  }, []);
+  }, [voiceEnabled]);
 
   useEffect(() => {
     setTargetYards(null);
     lastSpokenTargetRef.current = null;
-    if (middleDisplay) void speakJob(`Hole ${paramHole}. ${middleDisplay} yards.`, ENGINE_PRIORITY.STRATEGY);
+    if (middleDisplay) if (voiceEnabled) void speakJob(`Hole ${paramHole}. ${middleDisplay} yards.`, ENGINE_PRIORITY.STRATEGY);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramHole]);
 
@@ -144,8 +146,8 @@ export default function RangefinderScreen() {
     setLockedYards(y);
     flashOpacity.setValue(0.7);
     RNAnimated.timing(flashOpacity, { toValue: 0, duration: 350, useNativeDriver: true }).start();
-    void speakJob(`${y} yards`, ENGINE_PRIORITY.AMBIENT);
-  }, [targetYards, displayYards, flashOpacity]);
+    if (voiceEnabled) void speakJob(`${y} yards`, ENGINE_PRIORITY.AMBIENT);
+  }, [targetYards, displayYards, flashOpacity, voiceEnabled]);
 
   const handleZoomChange = useCallback((val: number) => {
     setZoom(Math.min(((val - 1) / 7) * 0.9, 0.9));
@@ -340,7 +342,7 @@ export default function RangefinderScreen() {
       {/* ── QUICK BUTTONS ──────────────────────────────────────────────── */}
       <View style={[sl.quickBtns, { bottom: insets.bottom + (mode === 'STANDARD' ? 52 : 4) }]}>
         {mode === 'TARGET' && (
-          <Pressable style={sl.quickBtn} onPress={() => { setTargetYards(null); void speakJob(`${middleDisplay ?? ''} yards`, ENGINE_PRIORITY.AMBIENT); }}>
+          <Pressable style={sl.quickBtn} onPress={() => { setTargetYards(null); if (voiceEnabled) void speakJob(`${middleDisplay ?? ''} yards`, ENGINE_PRIORITY.AMBIENT); }}>
             <Text style={sl.quickBtnText}>⊕ Centre Pin</Text>
           </Pressable>
         )}

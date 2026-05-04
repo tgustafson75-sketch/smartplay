@@ -107,11 +107,17 @@ export function PostRoundSummary({ visible, analysis, insights, onDismiss }: Pro
               >
                 <View style={s.insightTop}>
                   <Text style={s.insightEmoji}>{insight.emoji}</Text>
-                  <Text style={[s.insightHeadline, { color: toneColor[insight.tone] }]}>
+                  <Text
+                    numberOfLines={2}
+                    ellipsizeMode="tail"
+                    style={[s.insightHeadline, { color: toneColor[insight.tone] }]}
+                  >
                     {insight.headline}
                   </Text>
                 </View>
-                <Text style={s.insightDetail}>{insight.detail}</Text>
+                <Text numberOfLines={3} ellipsizeMode="tail" style={s.insightDetail}>
+                  {insight.detail}
+                </Text>
               </View>
             ))
           )}
@@ -213,6 +219,8 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flex: 1,
+    minWidth: 0,
   },
   insightEmoji: {
     fontSize: 18,
