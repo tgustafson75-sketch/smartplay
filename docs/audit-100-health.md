@@ -94,9 +94,9 @@ Notable potential duplicates flagged in earlier phases:
 - `tank_studio_portrait_001.png` — duplicate of `tank_portrait.png`. Removed in BZ-v1. ✅
 - `harry_outdoor_portrait_001.png` — duplicate of `harry_portrait.png`. Removed in BZ-v1. ✅
 
-Per-emotion PNGs from Tank zip (30 files) and Harry zip (24 files) — all wired in CaddieAvatar.tsx. No orphans.
+Per-emotion PNGs from Tank zip (30 files) and Harry zip (24 files) wired in CaddieAvatar.tsx.
 
-Other assets (kevin-*.png, serena-*.png, smartplay_caddie_badge.png, kevin_walking.jpg) — pre-existing, audited in U2.
+**Phase 100 F1 empirical update (2026-05-05):** the original "No orphans" claim was wrong. A fresh grep across `*.ts` / `*.tsx` / `*.json` finds 24 PNG/JPG files in `assets/avatars/` with zero references. Not deleted — see `docs/v1.2-deferred.md` "Asset orphan inventory" for the list and disposition rationale. ~5.1 MB of bundle weight that v1.2 cleanup can safely reclaim once Tim confirms which are reserved-for-future vs truly stale.
 
 ## Dependency health
 
