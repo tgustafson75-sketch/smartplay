@@ -40,6 +40,10 @@ interface SettingsState {
   // 'soft' = visual card only, no voice interruption
   // 'off'  = no suggestions, user controls all assignments manually
   caddieSuggestions: 'on' | 'soft' | 'off';
+  // Phase 107 — dev overlay showing live GPS accuracy + mode in the
+  // top-left during round-active. Default false (only Tim turns it on
+  // for the Garmin comparison test).
+  gpsQualityDebugOverlay: boolean;
 
   theme_preference: 'system' | 'light' | 'dark';
   highContrast: boolean;
@@ -92,6 +96,7 @@ interface SettingsState {
   setCaddieForPillar: (pillar: CaddiePillar, p: Persona) => void;
   resetCaddieAssignments: () => void;
   setCaddieSuggestions: (mode: 'on' | 'soft' | 'off') => void;
+  setGpsQualityDebugOverlay: (v: boolean) => void;
   setThemePreference: (p: 'system' | 'light' | 'dark') => void;
   setHighContrast: (v: boolean) => void;
   setBrightMode: (v: boolean) => void;
@@ -127,6 +132,7 @@ export const useSettingsStore = create<SettingsState>()(
       caddiePersonality: 'kevin',
       caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
       caddieSuggestions: 'on' as const,
+      gpsQualityDebugOverlay: false,
       theme_preference: 'system' as const,
       highContrast: false,
       brightMode: false,
@@ -236,6 +242,7 @@ export const useSettingsStore = create<SettingsState>()(
         caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
       }),
       setCaddieSuggestions: (mode) => set({ caddieSuggestions: mode }),
+      setGpsQualityDebugOverlay: (v) => set({ gpsQualityDebugOverlay: v }),
     }),
     {
       name: 'settings-store-v2',
@@ -271,6 +278,7 @@ export const useSettingsStore = create<SettingsState>()(
         caddiePersonality: s.caddiePersonality,
         caddieAssignments: s.caddieAssignments,
         caddieSuggestions: s.caddieSuggestions,
+        gpsQualityDebugOverlay: s.gpsQualityDebugOverlay,
         theme_preference: s.theme_preference,
         highContrast: s.highContrast,
         brightMode: s.brightMode,

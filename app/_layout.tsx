@@ -29,6 +29,7 @@ import { speak as speakHandoff } from '../services/voiceService';
 import { useTeamIntelligenceStore } from '../store/teamIntelligenceStore';
 import { initTeamIntelligenceForSession } from '../services/teamIntelligence';
 import CaddieSuggestionCard from '../components/CaddieSuggestionCard';
+import GpsQualityOverlay from '../components/dev/GpsQualityOverlay';
 
 // Phase Y — run `body` only after roundStore rehydration completes. Prevents
 // the rehydration race where a fast user tapping Start Round before
@@ -352,6 +353,8 @@ function AppNavigator() {
       <BatteryPrompt />
       {/* Phase 106 — caddie team handoff suggestion overlay. */}
       <CaddieSuggestionCard />
+      {/* Phase 107 — GPS quality debug overlay (gated by settings flag). */}
+      <GpsQualityOverlay />
       <RoundActiveDevIndicator />
       <Stack
         screenOptions={{

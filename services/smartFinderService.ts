@@ -1,7 +1,7 @@
 import * as Location from 'expo-location';
 import { useRoundStore, type ShotLocation } from '../store/roundStore';
 import { haversineYards } from '../utils/geoDistance';
-import { getOneShotFix, bumpToActive } from './gpsManager';
+import { getOneShotFix, bumpToActive, subscribe as subscribeGps } from './gpsManager';
 
 /**
  * Phase D-2 — SmartFinder data layer.
@@ -43,6 +43,46 @@ let lastFix: LastFix | null = null;
 // services/simulatedGPS.ts test harness; production code never touches.
 let simulatedActive = false;
 
+// Phase 107 / B1 — listeners notified whenever lastFix changes so consumers
+// can react to live GPS updates (yardage strip auto-refresh while walking).
+type FixChangeListener = (fix: LastFix) => void;
+const fixChangeListeners = new Set<FixChangeListener>();
+
+function notifyFixChange(): void {
+  if (!lastFix) return;
+  for (const cb of fixChangeListeners) {
+    try { cb(lastFix); } catch (e) { console.warn('[smartFinder] fix listener threw:', e); }
+  }
+}
+
+export function subscribeFixChange(cb: FixChangeListener): () => void {
+  fixChangeListeners.add(cb);
+  return () => { fixChangeListeners.delete(cb); };
+}
+
+// Phase 107 / B1 — wire the live gpsManager subscription so yardages
+// auto-update as the player walks. gpsManager publishes 1Hz fixes during
+// active mode and 10s fixes during walking; either way smartFinder's
+// lastFix stays current and consumers see real-time yardages without
+// requiring Mark or screen-open to refresh.
+let gpsUnsub: (() => void) | null = null;
+export function startSmartFinderGpsTracking(): void {
+  if (gpsUnsub) return;
+  gpsUnsub = subscribeGps((fix) => {
+    // Sim override wins.
+    if (simulatedActive) return;
+    lastFix = {
+      location: { lat: fix.lat, lng: fix.lng },
+      accuracy_m: fix.accuracy_m,
+      timestamp: fix.timestamp,
+    };
+    notifyFixChange();
+  });
+}
+export function stopSmartFinderGpsTracking(): void {
+  if (gpsUnsub) { gpsUnsub(); gpsUnsub = null; }
+}
+
 export function getLastFix(): LastFix | null {
   return lastFix;
 }
@@ -79,6 +119,8 @@ export function setMarkedFix(lat: number, lng: number, accuracy_m: number | null
     accuracy_m,
     timestamp: Date.now(),
   };
+  // Phase 107 / B1 — notify subscribers so all yardage consumers refresh.
+  notifyFixChange();
 }
 
 /**
@@ -99,6 +141,7 @@ export async function refreshFix(): Promise<LastFix | null> {
       accuracy_m: fix.accuracy_m ?? null,
       timestamp: fix.timestamp,
     };
+    notifyFixChange();
     return lastFix;
   } catch (e) {
     console.log('[smartFinder] refreshFix failed:', e);

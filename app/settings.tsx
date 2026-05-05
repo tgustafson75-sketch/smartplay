@@ -78,6 +78,9 @@ export default function Settings() {
   // Phase 106 — team handoff suggestions suppression.
   const caddieSuggestions = useSettingsStore(s => s.caddieSuggestions);
   const setCaddieSuggestions = useSettingsStore(s => s.setCaddieSuggestions);
+  // Phase 107 — GPS quality debug overlay toggle.
+  const gpsQualityDebugOverlay = useSettingsStore(s => s.gpsQualityDebugOverlay);
+  const setGpsQualityDebugOverlay = useSettingsStore(s => s.setGpsQualityDebugOverlay);
 
   // Persona-aware display name. Settings labels reference the active caddie
   // by name (Kevin / Serena / Harry / Tank) consistently with the rest of the app.
@@ -388,6 +391,20 @@ export default function Settings() {
           />
           <Text style={[styles.sectionIntro, { color: colors.text_muted, marginTop: 4 }]}>
             When a teammate is better suited, your active caddie can suggest a handoff. &quot;Card only&quot; shows the visual offer without a voice line. &quot;Off&quot; disables suggestions entirely.
+          </Text>
+
+          {/* Phase 107 — GPS quality debug overlay (dev / Tim only by default) */}
+          <PillRow
+            label="GPS quality overlay (dev)  ·  default Off"
+            options={[
+              { label: 'Off', value: 'off' },
+              { label: 'On', value: 'on' },
+            ]}
+            value={gpsQualityDebugOverlay ? 'on' : 'off'}
+            onSelect={(v) => setGpsQualityDebugOverlay(v === 'on')}
+          />
+          <Text style={[styles.sectionIntro, { color: colors.text_muted, marginTop: 4 }]}>
+            Top-left badge during a round showing live accuracy + GPS mode + outlier count. Use during the Garmin comparison test.
           </Text>
         </View>
 

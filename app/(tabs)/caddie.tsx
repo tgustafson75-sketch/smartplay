@@ -347,6 +347,21 @@ export default function CaddieTab() {
     const id = setInterval(() => setMarkTick(t => t + 1), 4000);
     return () => clearInterval(id);
   }, [isRoundActive]);
+  // Phase 107 / B1 — also bump markTick on every smartFinderService fix
+  // change (live GPS push). The 4s poll above stays as a safety net but
+  // this gives sub-second yardage refresh when gps is in active mode.
+  useEffect(() => {
+    let active = true;
+    let unsub: (() => void) | null = null;
+    void (async () => {
+      try {
+        const sf = await import('../../services/smartFinderService');
+        if (!active) return;
+        unsub = sf.subscribeFixChange(() => setMarkTick(t => t + 1));
+      } catch (e) { console.log('[caddie] smartFinder subscribe failed:', e); }
+    })();
+    return () => { active = false; if (unsub) unsub(); };
+  }, []);
   const liveYardage = useMemo(() => {
     if (yardageMode !== 'live' || !isRoundActive) return null;
     try {

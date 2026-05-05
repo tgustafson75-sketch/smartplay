@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import { startGpsManager, subscribe as subscribeGps, stopGpsManager } from './gpsManager';
+import { startSmartFinderGpsTracking, stopSmartFinderGpsTracking } from './smartFinderService';
 
 export interface GPSSample {
   lat: number;
@@ -83,6 +84,9 @@ class ShotDetector {
       // single adaptive subscription (active/walking/stationary modes)
       // instead of a dedicated high-accuracy 2.5s poll. Battery win.
       await startGpsManager();
+      // Phase 107 / B1 — wire smartFinderService.lastFix to live gps
+      // updates so yardages auto-refresh as the player walks. Idempotent.
+      startSmartFinderGpsTracking();
       this.unsubscribeGps = subscribeGps((fix) => {
         this.ingest({
           lat: fix.lat,
@@ -114,6 +118,7 @@ class ShotDetector {
     // Round-end stops the underlying gpsManager too. Other subscribers
     // (smartfinder, hole-view) tear down their watches when leaving the
     // round flow on their own.
+    stopSmartFinderGpsTracking();
     stopGpsManager();
     console.log('[shotDetection] stopped');
   }

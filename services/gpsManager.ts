@@ -36,11 +36,27 @@ const STATIONARY_AFTER  = 90_000;
 const STATIONARY_DELTA  = 5;     // meters
 const CACHE_FRESH_MS    = 10_000;
 
+// Phase 107 / B5 — bumped 'walking' from Balanced → High. Balanced
+// produces ~100m accuracy on Android in practice; High is needed so
+// SmartFinder yardages stay trustworthy between shots while the player
+// is walking (where they're glancing at the data strip to plan the
+// next club). Battery cost is acceptable — round-active is the only
+// time this mode is reached.
 const POLL_CONFIG: Record<GpsMode, { intervalMs: number; accuracy: Location.Accuracy }> = {
   active:     { intervalMs: 1_000,  accuracy: Location.Accuracy.BestForNavigation },
-  walking:    { intervalMs: 10_000, accuracy: Location.Accuracy.Balanced },
+  walking:    { intervalMs: 10_000, accuracy: Location.Accuracy.High },
   stationary: { intervalMs: 20_000, accuracy: Location.Accuracy.Low },
 };
+
+// Phase 107 / B2 — outlier rejection thresholds.
+// accuracy_m worse than this = reading discarded entirely.
+const OUTLIER_ACCURACY_M = 15;
+// position jump > this between consecutive accepted fixes within 5s = impossible
+const OUTLIER_JUMP_M = 50;
+const OUTLIER_JUMP_WINDOW_MS = 5_000;
+
+// Phase 107 / B3 — rolling smoothing: average the most recent N accepted fixes.
+const SMOOTHING_WINDOW = 3;
 
 let subscription: Location.LocationSubscription | null = null;
 let mode: GpsMode = 'walking';
@@ -51,6 +67,11 @@ let lastActiveBumpAt = 0;
 let lastMotionAt = 0;
 let evalTimer: ReturnType<typeof setInterval> | null = null;
 let batterySaverFloor: GpsMode | null = null;
+// Phase 107 / B3 — rolling buffer of accepted fixes. Mark resets it
+// (Mark wants the raw current position, not a smoothed history).
+let smoothingBuffer: GpsFix[] = [];
+// Phase 107 / B2 — track outlier counts for telemetry.
+let outliersDiscarded = 0;
 
 const subscribers = new Set<Subscriber>();
 
@@ -107,19 +128,57 @@ async function startWatchInternal() {
         distanceInterval: 2,
       },
       (loc) => {
-        const fix: GpsFix = {
+        const raw: GpsFix = {
           lat: loc.coords.latitude,
           lng: loc.coords.longitude,
           accuracy_m: loc.coords.accuracy ?? null,
           speed: loc.coords.speed ?? null,
           timestamp: loc.timestamp,
         };
+
+        // Phase 107 / B2 — outlier rejection.
+        // (1) Discard if reported accuracy is worse than threshold.
+        if (raw.accuracy_m != null && raw.accuracy_m > OUTLIER_ACCURACY_M) {
+          outliersDiscarded++;
+          console.log(`[gps:outlier-rejected] accuracy_m=${raw.accuracy_m.toFixed(1)} (>${OUTLIER_ACCURACY_M})`);
+          return;
+        }
+        // (2) Discard if position jumps > 50m within 5s of the last accepted fix.
+        if (lastFix && (raw.timestamp - lastFix.timestamp) < OUTLIER_JUMP_WINDOW_MS) {
+          const jump = haversineMeters(lastFix, raw);
+          if (jump > OUTLIER_JUMP_M) {
+            outliersDiscarded++;
+            console.log(`[gps:outlier-rejected] jump_m=${jump.toFixed(1)} dt_ms=${raw.timestamp - lastFix.timestamp}`);
+            return;
+          }
+        }
+
+        // Phase 107 / B3 — rolling smoothing.
+        // Push raw into the buffer, trim to window, average the buffered fixes.
+        smoothingBuffer.push(raw);
+        if (smoothingBuffer.length > SMOOTHING_WINDOW) smoothingBuffer.shift();
+        const avgLat = smoothingBuffer.reduce((s, f) => s + f.lat, 0) / smoothingBuffer.length;
+        const avgLng = smoothingBuffer.reduce((s, f) => s + f.lng, 0) / smoothingBuffer.length;
+        const fix: GpsFix = {
+          lat: avgLat,
+          lng: avgLng,
+          accuracy_m: raw.accuracy_m,
+          speed: raw.speed,
+          timestamp: raw.timestamp,
+        };
+
+        // Motion tracking + B4: stationary → walking on real motion.
         if (lastFix) {
           const moved = haversineMeters(lastFix, fix);
-          if (moved >= STATIONARY_DELTA) lastMotionAt = Date.now();
+          if (moved >= STATIONARY_DELTA) {
+            lastMotionAt = Date.now();
+            // B4 — auto-recover from stationary on motion.
+            if (mode === 'stationary') setMode('walking', 'motion_resumed');
+          }
         } else {
           lastMotionAt = Date.now();
         }
+
         lastFix = fix;
         for (const cb of subscribers) {
           try { cb(fix); } catch {}
@@ -165,8 +224,20 @@ export function stopGpsManager(): void {
   }
   subscribers.clear();
   lastFix = null;
+  smoothingBuffer = [];
+  outliersDiscarded = 0;
   batterySaverFloor = null;
   breadcrumb('manager_stop');
+}
+
+/** Phase 107 / C2 — runtime stats for the GPS quality debug overlay. */
+export function getGpsStats(): {
+  mode: GpsMode;
+  lastFix: GpsFix | null;
+  outliersDiscarded: number;
+  smoothingBufferSize: number;
+} {
+  return { mode, lastFix, outliersDiscarded, smoothingBufferSize: smoothingBuffer.length };
 }
 
 /** Subscribe to fixes. Returns an unsubscribe fn. */
@@ -180,6 +251,9 @@ export function bumpToActive(reason: string): void {
   lastActiveBumpAt = Date.now();
   lastBumpReason = reason;
   lastBumpAt = lastActiveBumpAt;
+  // Phase 107 / B3 — Mark wants the raw current position, not a smoothed
+  // history. Reset the smoothing buffer so the next fix is unaveraged.
+  smoothingBuffer = [];
   setMode('active', reason);
 }
 
