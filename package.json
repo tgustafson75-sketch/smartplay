@@ -11,7 +11,8 @@
     "lint": "expo lint",
     "build": "expo export --platform web",
     "vercel-build": "expo export --platform web",
-    "generate:greetings": "node scripts/generate-kevin-greetings.mjs"
+    "generate:greetings": "node scripts/generate-kevin-greetings.mjs",
+    "sim": "tsx scripts/simulations/run-sim.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
