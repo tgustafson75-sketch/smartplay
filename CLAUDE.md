@@ -102,6 +102,22 @@ is unchanged before reporting the phase complete.
   - [ ] Kevin position consistent across L1/L2/L3/L4 trust levels and
         round-active vs idle
 
+## Phase 100 conventions
+
+### AbortSignal.timeout polyfill — REQUIRED FIRST IMPORT
+- `services/polyfills.ts` defines `AbortSignal.timeout(ms)` if missing. The Hermes runtime on the Z Fold dev-client predates the static factory, so calls like `fetch(url, { signal: AbortSignal.timeout(6_000) })` throw `TypeError: AbortSignal.timeout is not a function (it is undefined)` without it.
+- The polyfill is imported as the **first line** of `app/_layout.tsx` so it lands before any module-level fetch fires. Do not reorder — every fetch with a timeout depends on it.
+- 12 call sites currently rely on it (weather, course content, course geometry, golf course api, cage upload, pose detection, cv scoring, context synthesis). Adding a new fetch with timeout is fine; do not remove the polyfill import.
+
+### Persona name resolution — `caddiePersonality`, not `voiceGender`
+- `getCaddieName(input)` accepts both `Persona` ('kevin' / 'serena' / 'harry' / 'tank') and `VoiceGender` ('male' / 'female'). When given a `VoiceGender`, it folds male → 'Kevin' (default).
+- **Pass `caddiePersonality` from `useSettingsStore`**, not `voiceGender`. Otherwise Tank and Harry both render as "Kevin" client-side (visible bug for ~30 surfaces).
+- Pronoun computations (`voiceGender === 'female' ? 'She' : 'He'`) keep working with `voiceGender` because Tank/Harry are male — no change needed there.
+- Server-side (`api/*`) routes still receive `voiceGender` in the request body; full server-side persona awareness is tracked as a future fix in `docs/v1.2-deferred.md`.
+
+### Deferred items live in docs/v1.2-deferred.md
+- TODO comments that survive into v1.1 are documented there with location, context, and v1.2 unblock steps. Don't rip out a TODO without checking the deferred doc first — some are intentional placeholders.
+
 ## Honest scope discipline
 
 - Don't add features beyond what the phase requires.

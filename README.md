@@ -1,50 +1,56 @@
-# Welcome to your Expo app 👋
+# SmartPlay Caddie
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A voice-first AI golf caddie. Pick a persona (Kevin, Serena, Harry, Tank), let the app track your round via GPS + voice + audio swing detection, and get on-course advice that actually feels like the named caddie giving it.
 
-## Get started
+## Stack
 
-1. Install dependencies
+- **App:** Expo SDK 54, React Native, expo-router, Zustand (with AsyncStorage persist), Hermes
+- **AI:** Anthropic Claude (Sonnet 4.6 + Haiku 4.5), OpenAI (gpt-4o-mini text + gpt-4o-mini-tts fallback voice)
+- **Voice:** ElevenLabs primary (per-persona voice IDs), OpenAI TTS fallback
+- **Backend:** Vercel-hosted `/api/*` routes (server-side persona-aware system prompts)
+- **Data:** Supabase (per-user persistence), golfcourseapi.com (course geometry)
+- **Build:** EAS Build, Android APK as primary distribution; iOS not yet wired
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Quick start
 
 ```bash
-npm run reset-project
+npm install
+cp .env.local.example .env.local       # fill in API keys (Anthropic, OpenAI, ElevenLabs, etc.)
+npx expo start --dev-client             # default port 8081
+# or:
+npx expo start --dev-client --port 8082 # if 8081 is taken
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Open the dev-client app on the device, **Enter URL manually**, type `<mac-ip>:<port>`. The bundle loads.
 
-## Learn more
+USB-tethered Android shortcut: `adb reverse tcp:8082 tcp:8082` then enter `localhost:8082` in the dev-client.
 
-To learn more about developing your project with Expo, look at the following resources:
+## Verifying anything works
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+The four critical paths each have a MIN VERIFY scenario in [docs/critical-paths.md](docs/critical-paths.md). External beta-readiness requires all four green within 7 days on a real device. See [CLAUDE.md](CLAUDE.md) "Critical Path Verification Gates" for the discipline.
 
-## Join the community
+## Where things live
 
-Join our community of developers creating universal apps.
+- `app/` — Expo Router file-based routes (screens + API endpoints)
+- `services/` — non-React side-effect modules (audio, GPS, voice, telemetry, etc.)
+- `store/` — Zustand stores (13 persisted, 2 are gated in `app/index.tsx` for cold-launch hydration)
+- `components/` — React components (CaddieAvatar, CageSessionOverlay, etc.)
+- `lib/persona.ts` — persona type system + `getCaddieName` / `getCharacterSpec` / pronoun helpers
+- `api/` + `app/api/` — server-side route handlers (deployed to Vercel)
+- `docs/` — phase decisions, audits, critical paths, deferred items. See [docs/INDEX.md](docs/INDEX.md).
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Conventions
+
+[CLAUDE.md](CLAUDE.md) is the source of truth for project conventions. Highlights:
+
+- **Critical Path Verification Gates** — phases that touch PATH 1 / 2 / 3 / 4 must pass MIN VERIFY before they ship
+- **Locked elements** — Kevin's photoreal portrait is canonically locked at commit `19165fb`; do not add transforms in CaddieAvatar to compensate for layout shifts
+- **AbortSignal polyfill** — `services/polyfills.ts` is imported first in `app/_layout.tsx`; do not move
+- **Persona resolution** — pass `caddiePersonality` (not `voiceGender`) to `getCaddieName()`
+- **Honest scope discipline** — don't ship features beyond what the phase requires; don't fake completion
+
+## v1.1 status
+
+In progress per Phase 100. See [docs/audit-100-verdict.md](docs/audit-100-verdict.md) for the current verdict (Foundation / paths / personas / beta-readiness).
+
+Deferred items: [docs/v1.2-deferred.md](docs/v1.2-deferred.md).
