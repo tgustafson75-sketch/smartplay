@@ -45,6 +45,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { getCaddieName } from '../../lib/persona';
 import CageOverlay, { type CageOverlayPhase } from '../../components/swinglab/CageOverlay';
+import { setActiveSurface } from '../../services/activeSurfaceRegistry';
 
 type Phase =
   | 'SETUP'
@@ -110,6 +111,13 @@ export default function CageDrillScreen() {
     if (!camPerm?.granted) void requestCamPerm();
     if (!micPerm?.granted) void requestMicPerm();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Phase 105 — register drills surface so caddieResolver routes the
+  // drills-pillar caddie (Serena by default).
+  useEffect(() => {
+    setActiveSurface('drill_session');
+    return () => { setActiveSurface(null); };
   }, []);
 
   // ── Cleanup on unmount ──────────────────────────────────────────────

@@ -2,6 +2,22 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// ─── Phase 105 — Team Caddie Architecture ─────────────────────────────────────
+
+export type Persona = 'kevin' | 'serena' | 'harry' | 'tank';
+export type CaddiePillar = 'round' | 'cage' | 'drills' | 'play';
+
+// Per-pillar default assignments. The user can override any pillar in Settings.
+// Defaults reflect each caddie's natural fit.
+export const DEFAULT_CADDIE_ASSIGNMENTS: Record<CaddiePillar, Persona> = {
+  round: 'kevin',   // steady conversational companion on the course
+  cage: 'tank',     // intensity + standards in cage practice
+  drills: 'serena', // measured professional for technical drill work
+  play: 'kevin',    // balanced companion for Arena / fun gameplay
+};
+
+export type CaddieAssignments = Record<CaddiePillar, Persona>;
+
 // ─── STATE ────────────────────────────────
 
 interface SettingsState {
@@ -10,7 +26,15 @@ interface SettingsState {
   language: 'en' | 'es' | 'zh';
   discreteMode: boolean;
   responseMode: 'short' | 'neutral' | 'detailed';
-  caddiePersonality: 'kevin' | 'serena' | 'harry' | 'tank';
+  // Phase 105 — single caddiePersonality is preserved as the "current
+  // primary persona" used by surfaces that pre-date the team architecture
+  // (greeting, intro, tools menu cycler). New per-pillar usage should
+  // call getActiveCaddie(pillar) via services/caddieResolver instead.
+  caddiePersonality: Persona;
+  // Phase 105 — per-pillar caddie assignments. Defaults applied on first
+  // launch; existing users with only caddiePersonality migrate at hydrate
+  // (see persist `migrate` callback below).
+  caddieAssignments: CaddieAssignments;
 
   theme_preference: 'system' | 'light' | 'dark';
   highContrast: boolean;
@@ -57,7 +81,11 @@ interface SettingsState {
   setLanguage: (l: 'en' | 'es' | 'zh') => void;
   setDiscreteMode: (v: boolean) => void;
   setResponseMode: (m: 'short' | 'neutral' | 'detailed') => void;
-  setCaddiePersonality: (p: 'kevin' | 'serena' | 'harry' | 'tank') => void;
+  setCaddiePersonality: (p: Persona) => void;
+  // Phase 105 — assign / read per-pillar caddie. setCaddieForPillar updates
+  // one pillar; resetCaddieAssignments restores defaults.
+  setCaddieForPillar: (pillar: CaddiePillar, p: Persona) => void;
+  resetCaddieAssignments: () => void;
   setThemePreference: (p: 'system' | 'light' | 'dark') => void;
   setHighContrast: (v: boolean) => void;
   setBrightMode: (v: boolean) => void;
@@ -91,6 +119,7 @@ export const useSettingsStore = create<SettingsState>()(
       discreteMode: false,
       responseMode: 'neutral',
       caddiePersonality: 'kevin',
+      caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
       theme_preference: 'system' as const,
       highContrast: false,
       brightMode: false,
@@ -192,10 +221,39 @@ export const useSettingsStore = create<SettingsState>()(
         }
       },
       setCageAutoClubDetection: (v) => set({ cageAutoClubDetection: v }),
+      // Phase 105 — per-pillar assignment.
+      setCaddieForPillar: (pillar, p) => set((s) => ({
+        caddieAssignments: { ...s.caddieAssignments, [pillar]: p },
+      })),
+      resetCaddieAssignments: () => set({
+        caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
+      }),
     }),
     {
       name: 'settings-store-v2',
       storage: createJSONStorage(() => AsyncStorage),
+      // Phase 105 — bumped to v3 to add caddieAssignments. v2 (and earlier)
+      // payloads only carry caddiePersonality; the migrate fn seeds all
+      // four pillars to that prior single value so the user's preference
+      // is preserved across the restructure. After migration the user
+      // can customize per pillar in Settings.
+      version: 3,
+      migrate: (persisted, version) => {
+        const p = (persisted ?? {}) as Partial<SettingsState> & {
+          caddiePersonality?: Persona;
+          caddieAssignments?: CaddieAssignments;
+        };
+        if (version < 3 && !p.caddieAssignments) {
+          const prior: Persona = p.caddiePersonality ?? 'kevin';
+          p.caddieAssignments = {
+            round: prior,
+            cage: prior,
+            drills: prior,
+            play: prior,
+          };
+        }
+        return p as SettingsState;
+      },
       partialize: (s) => ({
         voiceEnabled: s.voiceEnabled,
         voiceGender: s.voiceGender,
@@ -203,6 +261,7 @@ export const useSettingsStore = create<SettingsState>()(
         discreteMode: s.discreteMode,
         responseMode: s.responseMode,
         caddiePersonality: s.caddiePersonality,
+        caddieAssignments: s.caddieAssignments,
         theme_preference: s.theme_preference,
         highContrast: s.highContrast,
         brightMode: s.brightMode,

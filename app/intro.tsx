@@ -139,7 +139,7 @@ export default function Intro() {
             <Text style={styles.kevinSays}>
               {'Good to meet you, ' + playerName + '.'}
             </Text>
-            <Text style={styles.kevinSub}>Pick your caddie. You can change later.</Text>
+            <Text style={styles.kevinSub}>You have a team of four caddies. Pick whoever you want greeting you first — we&apos;ll set sensible defaults for the rest of your game (Cage, Drills, Play). Customize anytime in Settings.</Text>
             <View style={styles.caddieGrid}>
               {(['kevin', 'serena', 'harry', 'tank'] as Persona[]).map(p => (
                 <TouchableOpacity

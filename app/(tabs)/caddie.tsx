@@ -52,6 +52,7 @@ import { speak, configureAudioForSpeech, captureUtterance } from '../../services
 // survives tab focus changes. Only the orchestrator's runtime configure()
 // stays here (apiUrl/voice/language can change at any time).
 import { conversationalLoggingOrchestrator } from '../../services/conversationalLoggingOrchestrator';
+import { setActiveSurface } from '../../services/activeSurfaceRegistry';
 import { fetchCourseGeometry } from '../../services/courseGeometryService';
 import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
@@ -421,6 +422,10 @@ export default function CaddieTab() {
   useFocusEffect(
     useCallback(() => {
       setMode('full');
+      // Phase 105 — register active surface so caddieResolver can route
+      // round-pillar caddie selection to voice / brain / avatar paths.
+      // Cleanup runs when this tab loses focus.
+      setActiveSurface('caddie');
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
 
       // Fire round_start_handoff when caddie regains focus with an active round on hole 1
@@ -461,12 +466,14 @@ export default function CaddieTab() {
         return () => {
           clearTimeout(t);
           setMode('badge');
+          setActiveSurface(null);
           ScreenOrientation.unlockAsync();
         };
       }
 
       return () => {
         setMode('badge');
+        setActiveSurface(null);
         ScreenOrientation.unlockAsync();
       };
     // eslint-disable-next-line react-hooks/exhaustive-deps

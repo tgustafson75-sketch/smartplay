@@ -6,7 +6,7 @@
  * prompt explaining the user has to deactivate one first.
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Switch, Alert,
 } from 'react-native';
@@ -17,6 +17,7 @@ import { useTutorialStore, MAX_ACTIVE_TUTORIALS } from '../../../store/tutorialS
 import { clubLabel } from '../../../services/clubRecognition';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { getCaddieName } from '../../../lib/persona';
+import { setActiveSurface } from '../../../services/activeSurfaceRegistry';
 
 export default function TutorialDetail() {
   const router = useRouter();
@@ -27,6 +28,13 @@ export default function TutorialDetail() {
   const setActive = useTutorialStore(s => s.setActive);
   const deleteTutorial = useTutorialStore(s => s.deleteTutorial);
   const caddieName = getCaddieName(useSettingsStore(s => s.caddiePersonality));
+
+  // Phase 105 — register drills surface so caddieResolver routes the
+  // drills-pillar caddie (Serena by default).
+  useEffect(() => {
+    setActiveSurface('drill_detail');
+    return () => { setActiveSurface(null); };
+  }, []);
 
   if (!tutorial) {
     return (

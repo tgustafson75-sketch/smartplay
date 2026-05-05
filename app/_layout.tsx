@@ -23,6 +23,9 @@ import { conversationalLoggingOrchestrator } from '../services/conversationalLog
 import { subscribeToMark } from '../services/positionMarkBus';
 import { setMarkedFix } from '../services/smartFinderService';
 import BatteryPrompt from '../components/battery/BatteryPrompt';
+import { subscribeActiveSurface } from '../services/activeSurfaceRegistry';
+import { getActiveCaddie } from '../services/caddieResolver';
+import { speak as speakHandoff } from '../services/voiceService';
 
 // Phase Y — run `body` only after roundStore rehydration completes. Prevents
 // the rehydration race where a fast user tapping Start Round before
@@ -101,6 +104,62 @@ function AppNavigator() {
     });
     setEarbudEnabled(useSettingsStore.getState().earbudTapToTalk);
     return () => { unsub(); };
+  }, []);
+
+  // Phase 105 — sync caddiePersonality to the active pillar's caddie.
+  // When the user crosses surfaces (e.g. Round → Cage), caddiePersonality
+  // flips to that pillar's assigned caddie. Existing consumers (voice,
+  // brain, avatar) already read caddiePersonality so this routes the
+  // team architecture through every site without per-call-site refactor.
+  // setCaddiePersonality also clears the persona-keyed audio caches so
+  // the user doesn't hear the prior pillar's caddie's filler clips.
+  //
+  // Handoff line: when the active caddie actually changes (not on first
+  // mount), the new caddie says one short in-character line so the user
+  // hears the team handoff explicitly. Suppressed when the change came
+  // from a manual override in Settings (no surface transition).
+  useEffect(() => {
+    const HANDOFF_LINES: Record<string, string> = {
+      kevin: "Hey, ready when you are.",
+      serena: "Serena. Let's get to it.",
+      harry: "Harry here. Let's think this through together.",
+      tank: "Tank here. Let's work.",
+    };
+
+    let firstSync = true;
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+
+    const syncFromSurface = () => {
+      const next = getActiveCaddie();
+      const cur = useSettingsStore.getState().caddiePersonality;
+      if (next === cur) return;
+      useSettingsStore.getState().setCaddiePersonality(next);
+      // Skip the handoff line on the very first sync (cold launch); only
+      // play it on real surface transitions during the session.
+      if (firstSync) { firstSync = false; return; }
+      const settings = useSettingsStore.getState();
+      if (!settings.voiceEnabled || settings.discreteMode) return;
+      const line = HANDOFF_LINES[next];
+      if (!line) return;
+      speakHandoff(line, settings.voiceGender, settings.language, apiUrl, { userInitiated: false }).catch(() => {});
+    };
+
+    const syncFromAssignmentChange = () => {
+      const next = getActiveCaddie();
+      const cur = useSettingsStore.getState().caddiePersonality;
+      if (next === cur) return;
+      // Manual Settings edit — suppress voice handoff (the user was just
+      // tapping a row, no need to talk over them).
+      useSettingsStore.getState().setCaddiePersonality(next);
+    };
+
+    syncFromSurface();
+    const unsub = subscribeActiveSurface(syncFromSurface);
+    const unsubAssign = useSettingsStore.subscribe((s, prev) => {
+      if (s.caddieAssignments === prev.caddieAssignments) return;
+      syncFromAssignmentChange();
+    });
+    return () => { unsub(); unsubAssign(); };
   }, []);
 
   // Phase O.5 — activate the native media session only while a round is

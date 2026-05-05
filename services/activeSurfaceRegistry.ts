@@ -8,16 +8,49 @@
  *
  * Cleaner than threading expo-router state into a non-React function and
  * cheaper than reading the navigation stack from outside React.
+ *
+ * Phase 105 — added `drill_detail` and `drill_session` surface names so
+ * services/caddieResolver can route them to the 'drills' pillar. The
+ * pillar mapping itself lives in caddieResolver.mapSurfaceToPillar so
+ * the registry stays a pure list of surface names.
+ *
+ * Phase 105 — added a transition listener so the voice handoff layer can
+ * react to surface changes (e.g. announce "Tank here" when the user
+ * crosses from a Round-pillar surface into a Cage-pillar surface).
  */
 
-export type ActiveSurface = 'caddie' | 'cage' | 'arena' | 'swing_library' | 'swing_detail' | 'recap' | null;
+export type ActiveSurface =
+  | 'caddie'
+  | 'cage'
+  | 'arena'
+  | 'swing_library'
+  | 'swing_detail'
+  | 'recap'
+  | 'drill_detail'
+  | 'drill_session'
+  | null;
+
+type SurfaceListener = (next: ActiveSurface, prev: ActiveSurface) => void;
 
 let activeSurface: ActiveSurface = null;
+const listeners = new Set<SurfaceListener>();
 
 export function setActiveSurface(s: ActiveSurface): void {
+  const prev = activeSurface;
+  if (prev === s) return;
   activeSurface = s;
+  // Fire listeners outside the assignment so any throw doesn't corrupt state.
+  for (const cb of listeners) {
+    try { cb(s, prev); } catch (e) { console.warn('[activeSurface] listener threw:', e); }
+  }
 }
 
 export function getActiveSurface(): ActiveSurface {
   return activeSurface;
+}
+
+// Phase 105 — subscribe to surface changes. Returns an unsub fn.
+export function subscribeActiveSurface(cb: SurfaceListener): () => void {
+  listeners.add(cb);
+  return () => { listeners.delete(cb); };
 }

@@ -24,6 +24,7 @@ import type { CageSession } from '../types/cage';
 import { useCageStore } from '../store/cageStore';
 import { runPhaseKOnSession } from '../services/videoUpload';
 import { cageLog } from '../services/cageTelemetry';
+import { setActiveSurface } from '../services/activeSurfaceRegistry';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -83,7 +84,13 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
   // Portrait lock — cage recording must be vertical for correct video framing
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-    return () => { ScreenOrientation.unlockAsync(); };
+    // Phase 105 — register cage surface so caddieResolver routes the
+    // cage-pillar caddie (Tank by default) into voice / brain / avatar.
+    setActiveSurface('cage');
+    return () => {
+      setActiveSurface(null);
+      ScreenOrientation.unlockAsync();
+    };
   }, []);
 
   // ─── Permissions ──────────────────────────────────────────────────────────

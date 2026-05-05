@@ -71,6 +71,11 @@ export default function Settings() {
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const setCaddiePersonality = useSettingsStore(s => s.setCaddiePersonality);
 
+  // Phase 105 — per-pillar team assignments.
+  const caddieAssignments = useSettingsStore(s => s.caddieAssignments);
+  const setCaddieForPillar = useSettingsStore(s => s.setCaddieForPillar);
+  const resetCaddieAssignments = useSettingsStore(s => s.resetCaddieAssignments);
+
   // Persona-aware display name. Settings labels reference the active caddie
   // by name (Kevin / Serena / Harry / Tank) consistently with the rest of the app.
   const caddieName = getCaddieName(caddiePersonality);
@@ -308,12 +313,74 @@ export default function Settings() {
 
         </View>
 
-        {/* CADDIE */}
-        <SectionHeader title="Caddie" />
+        {/* CADDIE TEAM — Phase 105 per-pillar assignments */}
+        <SectionHeader title="Caddie Team" />
         <View style={cardStyle}>
+          <Text style={[styles.sectionIntro, { color: colors.text_muted }]}>
+            Four caddies, one team. Each part of your game can have a different caddie. We&apos;ve set sensible defaults — change anything anytime.
+          </Text>
 
           <PillRow
-            label="Your Caddie"
+            label="Round (on-course)  ·  default Kevin"
+            options={[
+              { label: 'Kevin', value: 'kevin' },
+              { label: 'Serena', value: 'serena' },
+              { label: 'Harry', value: 'harry' },
+              { label: 'Tank', value: 'tank' },
+            ]}
+            value={caddieAssignments.round}
+            onSelect={(v) => setCaddieForPillar('round', v as 'kevin' | 'serena' | 'harry' | 'tank')}
+          />
+
+          <PillRow
+            label="Cage Mode  ·  default Tank"
+            options={[
+              { label: 'Tank', value: 'tank' },
+              { label: 'Kevin', value: 'kevin' },
+              { label: 'Serena', value: 'serena' },
+              { label: 'Harry', value: 'harry' },
+            ]}
+            value={caddieAssignments.cage}
+            onSelect={(v) => setCaddieForPillar('cage', v as 'kevin' | 'serena' | 'harry' | 'tank')}
+          />
+
+          <PillRow
+            label="Drills (SwingLab)  ·  default Serena"
+            options={[
+              { label: 'Serena', value: 'serena' },
+              { label: 'Kevin', value: 'kevin' },
+              { label: 'Harry', value: 'harry' },
+              { label: 'Tank', value: 'tank' },
+            ]}
+            value={caddieAssignments.drills}
+            onSelect={(v) => setCaddieForPillar('drills', v as 'kevin' | 'serena' | 'harry' | 'tank')}
+          />
+
+          <PillRow
+            label="Play / Arena  ·  default Kevin"
+            options={[
+              { label: 'Kevin', value: 'kevin' },
+              { label: 'Serena', value: 'serena' },
+              { label: 'Harry', value: 'harry' },
+              { label: 'Tank', value: 'tank' },
+            ]}
+            value={caddieAssignments.play}
+            onSelect={(v) => setCaddieForPillar('play', v as 'kevin' | 'serena' | 'harry' | 'tank')}
+          />
+
+          <TouchableOpacity onPress={resetCaddieAssignments} style={styles.linkBtn}>
+            <Text style={[styles.linkBtnText, { color: colors.accent }]}>Reset to defaults</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* CADDIE — extra controls */}
+        <SectionHeader title={`${caddieName}'s Voice`} />
+        <View style={cardStyle}>
+          <Text style={[styles.sectionIntro, { color: colors.text_muted }]}>
+            Manually override the active caddie (the team auto-selects per pillar — this picks who speaks right now).
+          </Text>
+          <PillRow
+            label="Active Caddie"
             options={[
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
@@ -662,6 +729,22 @@ function DeveloperToolsSection({ cardStyle, colors }: { cardStyle: object[]; col
 // ─── STYLES ───────────────────────────────
 
 const styles = StyleSheet.create({
+  // Phase 105 — caddie team intro + reset link.
+  sectionIntro: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  linkBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    marginTop: 4,
+  },
+  linkBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
   container: {
     flex: 1,
     backgroundColor: '#060f09',
