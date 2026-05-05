@@ -19,8 +19,10 @@ async function handleQuestion(body: Record<string, unknown>): Promise<Record<str
     shape = null,
     club = null,
     voiceGender = 'male',
+    persona = null,
   } = body;
-  const caddieName = getCaddieName(voiceGender as VoiceGender);
+  // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
+  const caddieName = getCaddieName(typeof persona === 'string' ? persona : (voiceGender as VoiceGender));
 
   const shotNum = (clip_index as number) + 1;
   const positionStr = position === 'early' ? 'early in the session' : position === 'late' ? 'late in the session' : 'mid-session';
@@ -116,7 +118,12 @@ Return ONLY valid JSON. No markdown, no explanation.`;
 async function handleVocab(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const transcripts = (body.transcripts as string[]) ?? [];
   const total_reviewed = Number(body.total_reviewed ?? transcripts.length);
-  const caddieName = getCaddieName((body.voiceGender as VoiceGender | undefined) ?? 'male');
+  // Audit 101 / B4 — prefer body.persona; fall back to body.voiceGender for legacy.
+  const caddieName = getCaddieName(
+    typeof body.persona === 'string'
+      ? (body.persona as string)
+      : ((body.voiceGender as VoiceGender | undefined) ?? 'male'),
+  );
 
   if (transcripts.length === 0) {
     return {

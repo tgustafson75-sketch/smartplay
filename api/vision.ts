@@ -24,8 +24,10 @@ export default async function handler(
       courseName,
       dominantMiss = null,
       voiceGender = 'male',
+      persona = null,
     } = req.body;
-    const caddieName = getCaddieName(voiceGender);
+    // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
+    const caddieName = getCaddieName(typeof persona === 'string' ? persona : voiceGender);
 
     console.log('[vision] received:', { mode, hasImage: !!image, hole, par, distance });
 

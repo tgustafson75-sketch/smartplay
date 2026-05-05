@@ -277,12 +277,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // string when one or more tutorials are active, null otherwise.
       // Capped at 3 active tutorials so token budget stays bounded.
       practice_context = null,
-      // Persona — 'male' (Kevin) or 'female' (Serena). Defaults to Kevin.
+      // Persona — preferred 'kevin'|'serena'|'harry'|'tank'. Legacy clients
+      // send only voiceGender ('male'|'female'); supported as fallback.
       voiceGender = 'male',
+      persona = null,
     } = body;
 
-    const caddieName = getCaddieName(voiceGender);
-    const characterSpec = getCharacterSpec(voiceGender);
+    // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
+    const personaInput = (typeof persona === 'string' ? persona : voiceGender);
+    const caddieName = getCaddieName(personaInput);
+    const characterSpec = getCharacterSpec(personaInput);
 
     const _kevinContext: string | null = typeof kevinContext === 'string' && kevinContext.trim() ? kevinContext.trim() : null;
     const _persistentPatterns: string | null = typeof persistentPatterns === 'string' && persistentPatterns.trim() ? persistentPatterns.trim() : null;

@@ -33,10 +33,13 @@ export default async function handler(
       isCompetition = false,
       language = 'en',
       voiceGender = 'male',
+      persona = null,
     } = req.body;
 
-    const caddieName = getCaddieName(voiceGender);
-    const characterSpec = getCharacterSpec(voiceGender);
+    // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
+    const personaInput = (typeof persona === 'string' ? persona : voiceGender);
+    const caddieName = getCaddieName(personaInput);
+    const characterSpec = getCharacterSpec(personaInput);
 
     const cageContext = (recentCageSessions as Array<{ club: string; dominantMiss: string | null; rootCause: string | null }>).length > 0
       ? (recentCageSessions as Array<{ club: string; dominantMiss: string | null; rootCause: string | null }>)

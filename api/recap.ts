@@ -1,10 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
-import { getCaddieName, getCharacterSpec, type VoiceGender } from '../lib/persona';
+import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const buildRecapSystem = (g: VoiceGender) => `${getCharacterSpec(g)}
+// Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
+const buildRecapSystem = (g: Persona | VoiceGender) => `${getCharacterSpec(g)}
 
 You are ${getCaddieName(g)}, summarizing a just-completed round. Your tone is honest and real — not a pep talk.
 
@@ -88,8 +89,10 @@ interface RecapRequest {
   // by services/tutorialContext.buildFullPracticeContext on the client side.
   // Multi-line string when ≥1 tutorials are active, null otherwise.
   practice_context?: string | null;
-  // Persona — 'male' (Kevin) or 'female' (Serena). Defaults to Kevin.
+  // Persona — preferred 'kevin'|'serena'|'harry'|'tank'. Legacy clients
+  // send only voiceGender ('male'|'female'); supported as fallback.
   voiceGender?: VoiceGender;
+  persona?: string;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -181,7 +184,10 @@ Write per-hole summaries and an overall summary. Respond only with valid JSON as
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1200,
-      system: buildRecapSystem(body.voiceGender ?? 'male'),
+      system: buildRecapSystem(
+        // Audit 101 / B4 — prefer body.persona; fall back to voiceGender.
+        (typeof body.persona === 'string' ? body.persona : (body.voiceGender ?? 'male')) as Persona | VoiceGender,
+      ),
       messages: [{ role: 'user', content: userMessage }],
     });
 

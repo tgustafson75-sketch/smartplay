@@ -16,7 +16,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
-import { getCaddieName, getCharacterSpec, type VoiceGender } from '../lib/persona';
+import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -43,7 +43,8 @@ const TOOL: Anthropic.Tool = {
   },
 };
 
-const buildCageSystemPrompt = (g: VoiceGender) => `${getCharacterSpec(g)}
+// Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
+const buildCageSystemPrompt = (g: Persona | VoiceGender) => `${getCharacterSpec(g)}
 
 You are ${getCaddieName(g)}, the user's golf companion. You just watched a single
 practice swing in their backyard cage. You will receive structured features
@@ -87,12 +88,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as { features?: unknown; voiceGender?: VoiceGender };
+    const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as {
+      features?: unknown;
+      voiceGender?: VoiceGender;
+      persona?: string;
+    };
     const features = body?.features;
     if (!features || typeof features !== 'object') {
       return res.status(400).json({ error: 'features (object) required' });
     }
-    const voiceGender: VoiceGender = body.voiceGender ?? 'male';
+    // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
+    const personaInput: Persona | VoiceGender =
+      (typeof body.persona === 'string' ? body.persona : (body.voiceGender ?? 'male')) as Persona | VoiceGender;
 
     console.log('[cage-coach] features received');
 
@@ -105,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       model: 'claude-sonnet-4-6',
       max_tokens: 400,
       temperature: 0.6,
-      system: buildCageSystemPrompt(voiceGender),
+      system: buildCageSystemPrompt(personaInput),
       tools: [TOOL],
       tool_choice: { type: 'tool', name: TOOL_NAME },
       messages: [{ role: 'user', content: userMessage }],

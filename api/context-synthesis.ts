@@ -111,10 +111,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       type?: SynthesisType;
       payload?: Record<string, unknown>;
       voiceGender?: VoiceGender;
+      persona?: string;
     };
     const type = body.type;
     const payload = body.payload ?? {};
-    const caddieName = getCaddieName(body.voiceGender ?? 'male');
+    // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
+    const caddieName = getCaddieName(
+      typeof body.persona === 'string' ? body.persona : (body.voiceGender ?? 'male'),
+    );
 
     if (!type || !PROMPT_BY_TYPE[type]) {
       return res.status(400).json({ error: 'invalid type' });

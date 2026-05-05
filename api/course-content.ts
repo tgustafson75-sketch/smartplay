@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
-import { getCaddieName, getCharacterSpec, type VoiceGender } from '../lib/persona';
+import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -32,7 +32,8 @@ type CourseContent = {
 const cache: Map<string, { content: CourseContent; cached_at: number }> = new Map();
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
 
-const buildSystemPrompt = (g: VoiceGender) => `${getCharacterSpec(g)}
+// Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
+const buildSystemPrompt = (g: Persona | VoiceGender) => `${getCharacterSpec(g)}
 
 You are ${getCaddieName(g)} generating Course Detail content — a thoughtful caddie's preview of a course the player is about to study before they tee off.
 
@@ -77,6 +78,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const slope = typeof body.slope === 'number' ? body.slope : null;
     const holesInput = (body.holes ?? []) as HoleInput[];
     const voiceGender: VoiceGender = (body.voiceGender as VoiceGender | undefined) ?? 'male';
+    // Audit 101 / B4 — prefer body.persona; fall back to voiceGender.
+    const personaInput: Persona | VoiceGender =
+      (typeof body.persona === 'string' ? (body.persona as string) : voiceGender) as Persona | VoiceGender;
 
     if (!courseId || !courseName || !Array.isArray(holesInput) || holesInput.length === 0) {
       return res.status(400).json({ error: 'courseId, courseName, and non-empty holes array required' });
@@ -100,7 +104,7 @@ Generate the JSON.`;
       model: 'claude-sonnet-4-6',
       max_tokens: 2000,
       temperature: 0.7,
-      system: buildSystemPrompt(voiceGender),
+      system: buildSystemPrompt(personaInput),
       messages: [{ role: 'user', content: userPrompt }],
     });
 

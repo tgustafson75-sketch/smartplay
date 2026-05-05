@@ -29,6 +29,7 @@ export async function POST(req: Request) {
       weather = null,
       language = 'en',
       voiceGender = 'male',
+      persona = null,
     } = body as {
       firstName?: string;
       courseName?: string;
@@ -53,9 +54,11 @@ export async function POST(req: Request) {
       weather?: string | null;
       language?: string;
       voiceGender?: VoiceGender;
+      persona?: string | null;
     };
 
-    const caddieName = getCaddieName(voiceGender);
+    // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
+    const caddieName = getCaddieName(typeof persona === 'string' ? persona : voiceGender);
 
     const cageContext =
       recentCageSessions.length > 0

@@ -34,8 +34,10 @@ export default async function handler(
       swingView = 'face-on',
       language = 'en',
       voiceGender = 'male',
+      persona = null,
     } = req.body;
-    const caddieName = getCaddieName(voiceGender);
+    // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
+    const caddieName = getCaddieName(typeof persona === 'string' ? persona : voiceGender);
 
     if (!frameBase64) {
       return res.status(200).json({

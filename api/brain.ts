@@ -64,12 +64,16 @@ export default async function handler(
       conversationTurns = [],
       // Phase BA — voice register from client.
       register = 'caddie',
-      // Persona — 'male' (Kevin) or 'female' (Serena). Defaults to Kevin.
+      // Persona — preferred 'kevin'|'serena'|'harry'|'tank'. Legacy clients
+      // send only voiceGender ('male'|'female'); supported as fallback.
       voiceGender = 'male',
+      persona = null,
     } = body;
 
-    const caddieName = getCaddieName(voiceGender);
-    const characterSpec = getCharacterSpec(voiceGender);
+    // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
+    const personaInput = (typeof persona === 'string' ? persona : voiceGender);
+    const caddieName = getCaddieName(personaInput);
+    const characterSpec = getCharacterSpec(personaInput);
 
     const _kevinContext: string | null = typeof kevinContext === 'string' && kevinContext.trim() ? kevinContext.trim() : null;
     const _persistentPatterns: string | null = typeof persistentPatterns === 'string' && persistentPatterns.trim() ? persistentPatterns.trim() : null;

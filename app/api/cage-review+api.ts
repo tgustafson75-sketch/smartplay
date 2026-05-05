@@ -18,12 +18,14 @@ interface QuestionRequest {
   shape: string | null;
   club: string;
   voiceGender?: VoiceGender;
+  persona?: string | null;
 }
 
 interface ExtractRequest {
   action: 'extract';
   transcript: string;
   voiceGender?: VoiceGender;
+  persona?: string | null;
 }
 
 interface VocabRequest {
@@ -31,6 +33,7 @@ interface VocabRequest {
   transcripts: string[];
   total_reviewed: number;
   voiceGender?: VoiceGender;
+  persona?: string | null;
 }
 
 type RequestBody = QuestionRequest | ExtractRequest | VocabRequest;
@@ -55,7 +58,10 @@ async function handleQuestion(body: QuestionRequest): Promise<Response> {
     body.prior_labels ? `Prior review labels: ${body.prior_labels}` : null,
   ].filter(Boolean).join('. ');
 
-  const caddieName = getCaddieName(body.voiceGender ?? 'male');
+  // Audit 101 / B4 — prefer body.persona; fall back to voiceGender for legacy.
+  const caddieName = getCaddieName(
+    typeof body.persona === 'string' ? body.persona : (body.voiceGender ?? 'male'),
+  );
   const msg = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 80,
@@ -113,7 +119,10 @@ async function handleVocab(body: VocabRequest): Promise<Response> {
     .map((t, i) => `Clip ${i + 1}: "${t}"`)
     .join('\n');
 
-  const caddieName = getCaddieName(body.voiceGender ?? 'male');
+  // Audit 101 / B4 — prefer body.persona; fall back to voiceGender for legacy.
+  const caddieName = getCaddieName(
+    typeof body.persona === 'string' ? body.persona : (body.voiceGender ?? 'male'),
+  );
   const msg = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 500,

@@ -17,8 +17,10 @@ export async function POST(request: Request) {
       courseName,
       dominantMiss = null,
       voiceGender = 'male',
+      persona = null,
     } = body;
-    const caddieName = getCaddieName(voiceGender);
+    // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
+    const caddieName = getCaddieName(typeof persona === 'string' ? persona : voiceGender);
 
     console.log('[vision] received:', {
       mode,

@@ -16,11 +16,12 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
-import { getCaddieName, getCharacterSpec, type VoiceGender } from '../lib/persona';
+import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const buildSystemPrompt = (g: VoiceGender) => `${getCharacterSpec(g)}
+// Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
+const buildSystemPrompt = (g: Persona | VoiceGender) => `${getCharacterSpec(g)}
 
 You are ${getCaddieName(g)} in Coach voice, looking at a photo of the player's practice
 space. They want a 30-second read on the setup before they start hitting.
@@ -104,12 +105,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(413).json({ error: 'Image too large; resize to ~1024px on long edge.' });
     }
     const voiceGender: VoiceGender = (body.voiceGender as VoiceGender | undefined) ?? 'male';
+    // Audit 101 / B4 — prefer body.persona; fall back to voiceGender.
+    const personaInput: Persona | VoiceGender =
+      (typeof body.persona === 'string' ? (body.persona as string) : voiceGender) as Persona | VoiceGender;
 
     const completion = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 800,
       temperature: 0.4,
-      system: buildSystemPrompt(voiceGender),
+      system: buildSystemPrompt(personaInput),
       messages: [
         {
           role: 'user',

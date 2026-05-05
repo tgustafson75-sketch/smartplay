@@ -38,6 +38,7 @@ export async function POST(request: Request) {
       courseHoles = [],
       responseMode = 'neutral',
       voiceGender = 'male',
+      persona = null,
     } = body as {
       message?: string;
       language?: string;
@@ -74,9 +75,11 @@ export async function POST(request: Request) {
       courseHoles?: { hole: number; par: number }[];
       responseMode?: string;
       voiceGender?: VoiceGender;
+      persona?: string | null;
     };
 
-    const caddieName = getCaddieName(voiceGender);
+    // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
+    const caddieName = getCaddieName(typeof persona === 'string' ? persona : voiceGender);
 
     const totalScore = Object.values(scores).reduce(
       (a: number, b: number) => a + b, 0

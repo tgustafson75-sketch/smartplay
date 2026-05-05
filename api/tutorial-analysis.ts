@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
-import { getCaddieName, type VoiceGender } from '../lib/persona';
+import { getCaddieName, type VoiceGender, type Persona } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -43,7 +43,8 @@ type TutorialAnalysisResponse = {
   confidence: 'high' | 'medium' | 'low';
 };
 
-const buildSystemPrompt = (g: VoiceGender) => {
+// Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
+const buildSystemPrompt = (g: Persona | VoiceGender) => {
   const caddieName = getCaddieName(g);
   return `You are extracting structured teaching content from a brief description of a golf instruction video. The player has watched the video and wants the lesson captured so their AI caddie (${caddieName}) can reference it during rounds.
 
@@ -108,6 +109,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'title (string) is required' });
     }
     const voiceGender: VoiceGender = (body.voiceGender as VoiceGender | undefined) ?? 'male';
+    // Audit 101 / B4 — prefer body.persona; fall back to voiceGender.
+    const personaInput: Persona | VoiceGender =
+      (typeof body.persona === 'string' ? (body.persona as string) : voiceGender) as Persona | VoiceGender;
 
     const inputLines: string[] = [];
     inputLines.push(`Title: ${title}`);
@@ -132,7 +136,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       model: 'claude-sonnet-4-6',
       max_tokens: 600,
       temperature: 0.2,
-      system: buildSystemPrompt(voiceGender),
+      system: buildSystemPrompt(personaInput),
       messages: [{ role: 'user', content: userContent }],
     });
 

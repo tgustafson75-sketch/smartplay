@@ -1,10 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
-import { getCaddieName, type VoiceGender } from '../lib/persona';
+import { getCaddieName, type VoiceGender, type Persona } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const buildSystemPrompt = (g: VoiceGender) => {
+// Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
+const buildSystemPrompt = (g: Persona | VoiceGender) => {
   const caddieName = getCaddieName(g);
   return `You are a voice intent parser for SmartPlay Caddie, a golf caddie app. The user is talking to their AI golf caddie ${caddieName}. Parse the user's speech into structured intent.
 
@@ -192,6 +193,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const text = String(body?.text ?? '').trim();
     const context = body?.context ?? {};
     const voiceGender: VoiceGender = (body?.voiceGender as VoiceGender | undefined) ?? 'male';
+    // Audit 101 / B4 — prefer body.persona; fall back to voiceGender.
+    const personaInput: Persona | VoiceGender =
+      (typeof body?.persona === 'string' ? (body.persona as string) : voiceGender) as Persona | VoiceGender;
 
     if (!text) {
       return res.status(200).json({
@@ -213,7 +217,7 @@ Parse the intent. Return JSON only.`;
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 400,
       temperature: 0,
-      system: buildSystemPrompt(voiceGender),
+      system: buildSystemPrompt(personaInput),
       messages: [{ role: 'user', content: userPrompt }],
     });
 

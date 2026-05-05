@@ -37,12 +37,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // the player was working on at practice ("let's see if Tuesday's
       // driver work holds up"). Quietly omitted when empty.
       recentCageSessions = [],
-      // Persona — 'male' (Kevin) or 'female' (Serena). Defaults to Kevin.
+      // Persona — preferred 'kevin'|'serena'|'harry'|'tank'. Legacy clients
+      // send only voiceGender ('male'|'female'); supported as fallback.
       voiceGender = 'male',
+      persona = null,
     } = req.body;
 
-    const caddieName = getCaddieName(voiceGender);
-    const characterSpec = getCharacterSpec(voiceGender);
+    // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
+    const personaInput = (typeof persona === 'string' ? persona : voiceGender);
+    const caddieName = getCaddieName(personaInput);
+    const characterSpec = getCharacterSpec(personaInput);
 
     const name = String(playerName || '').trim();
     const modeDesc = MODE_DESCRIPTIONS[String(mode)] ?? String(mode);

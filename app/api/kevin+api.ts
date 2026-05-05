@@ -89,6 +89,7 @@ export async function POST(request: Request) {
       responseMode = 'neutral',
       watchData = null,
       voiceGender = 'male',
+      persona = null,
     } = body as {
       message?: string;
       language?: string;
@@ -125,9 +126,11 @@ export async function POST(request: Request) {
         earlyTransitionRate: number; averageClubSpeed: number; swingCount: number;
       } | null;
       voiceGender?: VoiceGender;
+      persona?: string | null;
     };
 
-    const caddieName = getCaddieName(voiceGender);
+    // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
+    const caddieName = getCaddieName(typeof persona === 'string' ? persona : voiceGender);
 
     const totalScore   = Object.values(scores as Record<string, number>).reduce((a, b) => a + b, 0);
     const holesPlayed  = Object.keys(scores as Record<string, number>).length;

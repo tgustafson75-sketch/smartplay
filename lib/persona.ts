@@ -38,17 +38,22 @@ const PERSONA_PRONOUNS: Record<Persona, { subject: string; object: string; posse
 // Back-compat: legacy callers that pass 'male' or 'female' are mapped to
 // their default persona (Kevin / Serena), so older code paths keep working
 // without per-call-site changes.
-function resolvePersona(input: Persona | VoiceGender | undefined | null): Persona {
+// Audit 101 / B4 — accept arbitrary strings (callers commonly read from
+// untyped request bodies). Unrecognised strings fall through to 'kevin',
+// matching the legacy default.
+type PersonaInput = Persona | VoiceGender | string | undefined | null;
+
+function resolvePersona(input: PersonaInput): Persona {
   if (input === 'kevin' || input === 'serena' || input === 'harry' || input === 'tank') return input;
   if (input === 'female') return 'serena';
   return 'kevin';
 }
 
-export function getCaddieName(input: Persona | VoiceGender | undefined | null): string {
+export function getCaddieName(input: PersonaInput): string {
   return PERSONA_NAMES[resolvePersona(input)];
 }
 
-export function getCharacterSpec(input: Persona | VoiceGender | undefined | null): string {
+export function getCharacterSpec(input: PersonaInput): string {
   return PERSONA_SPECS[resolvePersona(input)];
 }
 
@@ -56,16 +61,37 @@ export function personaToVoiceGender(p: Persona): VoiceGender {
   return PERSONA_GENDERS[p];
 }
 
-export function getCaddieSubject(input: Persona | VoiceGender | undefined | null): string {
+export function getCaddieSubject(input: PersonaInput): string {
   return PERSONA_PRONOUNS[resolvePersona(input)].subject;
 }
 
-export function getCaddieObject(input: Persona | VoiceGender | undefined | null): string {
+export function getCaddieObject(input: PersonaInput): string {
   return PERSONA_PRONOUNS[resolvePersona(input)].object;
 }
 
-export function getCaddiePossessive(input: Persona | VoiceGender | undefined | null): string {
+export function getCaddiePossessive(input: PersonaInput): string {
   return PERSONA_PRONOUNS[resolvePersona(input)].possessive;
 }
 
 export const ALL_PERSONAS: readonly Persona[] = ['kevin', 'serena', 'harry', 'tank'] as const;
+
+// Audit 101 / B4 — server-side request body persona resolver. Prefer the
+// newer `persona` field; fall back to the legacy `voiceGender` field. This
+// closes the F13 server-side gap where ~20 api/* routes called
+// getCaddieName(voiceGender) and collapsed Tank/Harry to Kevin in their
+// system prompts and responses, even when the client sent persona='tank'.
+export function getCaddieNameFor(body: { persona?: unknown; voiceGender?: unknown } | null | undefined): string {
+  if (!body) return getCaddieName(null);
+  const personaLike = (typeof body.persona === 'string' ? body.persona : body.voiceGender) as
+    Persona | VoiceGender | undefined;
+  return getCaddieName(personaLike);
+}
+
+// Same shape, returns the character spec string. Used by api/* routes that
+// embed the Persona's voice/style spec into the system prompt.
+export function getCharacterSpecFor(body: { persona?: unknown; voiceGender?: unknown } | null | undefined): string {
+  if (!body) return getCharacterSpec(null);
+  const personaLike = (typeof body.persona === 'string' ? body.persona : body.voiceGender) as
+    Persona | VoiceGender | undefined;
+  return getCharacterSpec(personaLike);
+}
