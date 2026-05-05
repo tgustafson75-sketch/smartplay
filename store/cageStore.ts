@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { cageLog } from '../services/cageTelemetry';
 
 // ─── TYPES ────────────────────────────────
 
@@ -247,10 +248,12 @@ export const useCageStore = create<CageState>()(
       // Phase BL
       clubMenuOpen: false,
 
-      startSession: (club) =>
+      startSession: (club) => {
+        const id = `${Date.now()}_cage`;
+        cageLog('zustand-session-start', 'ok', { session_id: id, club });
         set({
           activeSession: {
-            id: `${Date.now()}_cage`,
+            id,
             date: Date.now(),
             club,
             currentClub: club,
@@ -266,7 +269,8 @@ export const useCageStore = create<CageState>()(
             rootCause: null,
             summary: null,
           },
-        }),
+        });
+      },
 
       setClubMenuOpen: (open) => set({ clubMenuOpen: open }),
 
@@ -337,7 +341,11 @@ export const useCageStore = create<CageState>()(
 
       endSession: (summary) =>
         set(s => {
-          if (!s.activeSession) return s;
+          if (!s.activeSession) {
+            cageLog('zustand-session-end', 'fail', { reason: 'no-active-session' });
+            return s;
+          }
+          const sessionId = s.activeSession.id;
           // Phase BL — close the still-open club segment on session end so
           // post-session analytics can compute per-club practice durations
           // without special-casing the final segment.
@@ -356,6 +364,11 @@ export const useCageStore = create<CageState>()(
             ...summary,
             ...(closedSegments ? { clubSegments: closedSegments } : {}),
           };
+          cageLog('zustand-session-end', 'ok', {
+            session_id: sessionId,
+            shot_count: completed.shots.length,
+            history_length: s.sessionHistory.length + 1,
+          });
           return {
             activeSession: null,
             sessionHistory: [...s.sessionHistory, completed].slice(-50),
@@ -397,6 +410,12 @@ export const useCageStore = create<CageState>()(
         const resolvedSource: SwingSource = source ?? 'uploaded_video';
         const idSuffix = resolvedSource === 'live_cage' ? '_cage' : '_upload';
         const sessionId = `${Date.now()}${idSuffix}`;
+        cageLog('ingest-uploaded-swing', 'ok', {
+          session_id: sessionId,
+          source: resolvedSource,
+          club,
+          clipUri_length: clipUri.length,
+        });
         const shotId = `${Date.now()}_${resolvedSource === 'live_cage' ? 'cage' : 'uploaded'}_shot`;
         const session: CageSession = {
           id: sessionId,

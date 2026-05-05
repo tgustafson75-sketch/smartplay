@@ -27,6 +27,7 @@ import { processSwingAnalysis } from '../../services/relationshipEngine';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import type { PrimaryIssue, DrillRecommendation } from '../../store/cageStore';
 import { activateMediaSession, deactivateMediaSession } from '../../services/mediaKeyBridge';
+import { cageLog } from '../../services/cageTelemetry';
 
 export default function CageSummary() {
   const router = useRouter();
@@ -86,11 +87,24 @@ export default function CageSummary() {
     let cancelled = false;
     (async () => {
       const swingsWithClips = session.shots.filter(s => s.clipUri);
+      cageLog('summary-mount', 'ok', {
+        session_id: session.id,
+        shots_total: session.shots.length,
+        shots_with_clip: swingsWithClips.length,
+      });
       if (swingsWithClips.length === 0) {
         if (!cancelled) setAnalysisStatus('no_data');
+        cageLog('summary-phase-k-skip', 'fail', {
+          session_id: session.id,
+          reason: 'no_clipUri_on_shots',
+        });
         return;
       }
       setAnalyzing(true);
+      cageLog('summary-phase-k-start', 'ok', {
+        session_id: session.id,
+        swings_to_analyze: swingsWithClips.length,
+      });
       const results: { swing_id: string; analysis: SwingAnalysis }[] = [];
       let anyNoFrames = false;
       const CHUNK = 2;
@@ -118,12 +132,22 @@ export default function CageSummary() {
       setAnalyzing(false);
       if (results.length === 0) {
         setAnalysisStatus(anyNoFrames ? 'no_frames' : 'no_data');
+        cageLog('summary-phase-k-result', 'fail', {
+          session_id: session.id,
+          reason: anyNoFrames ? 'no_frames' : 'no_data',
+        });
         return;
       }
       const issue = classifySession(results);
       const drill = issue ? recommendDrill(issue.issue_id as never) : null;
       setPrimaryIssue(issue);
       if (drill) setDrillRec(drill);
+      cageLog('summary-phase-k-result', issue ? 'ok' : 'partial', {
+        session_id: session.id,
+        results_count: results.length,
+        primary_issue: issue?.issue_id ?? null,
+        drill_id: drill?.drill_id ?? null,
+      });
       // Phase R — persist analysis onto the session record so it surfaces in
       // the unified swing library browse.
       if (session) {

@@ -18,6 +18,7 @@ import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
 import AppIcon from '../../components/AppIcon';
 import { getDialog } from '../../services/dialogEngine';
 import { getMostRecentSpaceConfiguration, type SpaceConfiguration } from '../../services/spaceAssessment';
+import { cageLog } from '../../services/cageTelemetry';
 
 // Phase I — short club label for the Coach intro template
 const CLUB_LABELS: Record<string, string> = {
@@ -74,9 +75,11 @@ export default function CageIndex() {
 
   const handleStart = () => {
     if (!selectedClub) {
+      cageLog('cage-index-start', 'fail', { reason: 'no-club-selected' });
       Alert.alert('Select a club', 'Pick a club before starting.');
       return;
     }
+    cageLog('cage-index-start', 'ok', { club: selectedClub, route: '/cage/session' });
     startSession(selectedClub);
     router.push('/cage/session' as never);
   };

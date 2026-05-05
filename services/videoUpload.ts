@@ -24,6 +24,7 @@ import { recommendDrill } from './drillRecommendation';
 import { processSwingAnalysis } from './relationshipEngine';
 import { synthesizeCageInsight } from './contextSynthesizer';
 import { uploadLog, uploadAdoptSessionKey, uploadResetTiming } from './uploadDiagnostic';
+import { cageLog } from './cageTelemetry';
 
 export const MAX_FILE_SIZE_MB = 200;
 
@@ -131,11 +132,13 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
 }> {
   uploadLog('phase-k-enter', { session_id: sessionId }, sessionId);
   V6('STAGE 0 — runPhaseKOnSession enter', { sessionId });
+  cageLog('phase-k-enter', 'ok', { session_id: sessionId });
   const store = useCageStore.getState();
   const session = store.sessionHistory.find(s => s.id === sessionId);
   if (!session) {
     uploadLog('phase-k-abort', { status: 'failed', reason: 'session_not_in_store' }, sessionId);
     V6('STAGE 0 ABORT — session not in store', { sessionId });
+    cageLog('phase-k-result', 'fail', { session_id: sessionId, reason: 'session_not_in_store' });
     return { primary_issue: null, drill_recommendation: null };
   }
 
@@ -169,6 +172,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
   if (swings.length === 0) {
     uploadLog('phase-k-no-swings', { status: 'failed', reason: 'no_usable_swings' }, sessionId);
     V6('STAGE 6 FINAL — failed: no usable swings');
+    cageLog('phase-k-result', 'fail', { session_id: sessionId, reason: 'no_usable_swings', shot_count: session.shots.length });
     store.setSessionAnalysisStatus(sessionId, 'failed', 'No usable swing in the upload.');
     return { primary_issue: null, drill_recommendation: null };
   }

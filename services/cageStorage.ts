@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import type { CageSession, CageClip } from '../types/cage';
+import { cageLog } from './cageTelemetry';
 
 function uuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -60,6 +61,7 @@ export async function createSession(): Promise<CageSession> {
   sessions.push(session);
   await writeIndex(sessions);
   _pendingEvents.set(id, []);
+  cageLog('storage-create-session', 'ok', { session_id: id });
   return session;
 }
 
@@ -69,7 +71,10 @@ export async function endSession(
 ): Promise<void> {
   const sessions = await readIndex();
   const idx = sessions.findIndex((s) => s.id === session_id);
-  if (idx === -1) return;
+  if (idx === -1) {
+    cageLog('storage-end-session', 'fail', { session_id, reason: 'not-found-in-index' });
+    return;
+  }
   const now = Date.now();
   sessions[idx].ended_at = now;
   sessions[idx].duration_seconds = Math.round(
@@ -77,6 +82,11 @@ export async function endSession(
   );
   sessions[idx].master_video_path = master_video_path;
   await writeIndex(sessions);
+  cageLog('storage-end-session', 'ok', {
+    session_id,
+    duration_seconds: sessions[idx].duration_seconds,
+    has_master_video: master_video_path.length > 0,
+  });
 }
 
 export function addClipEvent(
@@ -87,6 +97,12 @@ export function addClipEvent(
   const events = _pendingEvents.get(session_id) ?? [];
   events.push({ offset: offset_seconds, method });
   _pendingEvents.set(session_id, events);
+  cageLog('storage-add-clip-event', 'ok', {
+    session_id,
+    method,
+    offset_seconds: Number(offset_seconds.toFixed(2)),
+    pending_count: events.length,
+  });
 }
 
 export async function finalizeClips(
@@ -96,7 +112,10 @@ export async function finalizeClips(
   const events = _pendingEvents.get(session_id) ?? [];
   const sessions = await readIndex();
   const idx = sessions.findIndex((s) => s.id === session_id);
-  if (idx === -1) return;
+  if (idx === -1) {
+    cageLog('storage-finalize-clips', 'fail', { session_id, reason: 'not-found-in-index' });
+    return;
+  }
 
   sessions[idx].clips = events.map((ev) => ({
     id: uuid(),
@@ -112,6 +131,11 @@ export async function finalizeClips(
 
   await writeIndex(sessions);
   _pendingEvents.delete(session_id);
+  cageLog('storage-finalize-clips', 'ok', {
+    session_id,
+    clip_count: events.length,
+    duration_seconds,
+  });
 }
 
 export async function listSessions(): Promise<CageSession[]> {
