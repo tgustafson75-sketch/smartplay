@@ -54,6 +54,7 @@ import { speak, configureAudioForSpeech, captureUtterance } from '../../services
 import { conversationalLoggingOrchestrator } from '../../services/conversationalLoggingOrchestrator';
 import { setActiveSurface } from '../../services/activeSurfaceRegistry';
 import { evaluateRoundProgress } from '../../services/teamIntelligence';
+import QuickLogShotSheet from '../../components/QuickLogShotSheet';
 import { fetchCourseGeometry } from '../../services/courseGeometryService';
 import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
@@ -505,6 +506,8 @@ export default function CaddieTab() {
   const [showShotCard, setShowShotCard] = useState(false);
   const [showRoundSetup, setShowRoundSetup] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  // Phase 109-followup — Quick Log Shot modal visibility.
+  const [quickLogOpen, setQuickLogOpen] = useState(false);
   const [selectedPickedCourse, setSelectedPickedCourse] = useState<PickedCourse | null>(
     { id: 'local:palms', name: 'Palms', fullName: 'Palms Golf Course', isLocal: true },
   );
@@ -2652,6 +2655,9 @@ export default function CaddieTab() {
         </TouchableOpacity>
       </Modal>
 
+      {/* Phase 109-followup — Quick Log Shot tap UI. */}
+      <QuickLogShotSheet visible={quickLogOpen} onClose={() => setQuickLogOpen(false)} />
+
       {/* ── MORE MENU SHEET ─────────────────── */}
       <Modal
         visible={showMoreMenu}
@@ -2723,6 +2729,14 @@ export default function CaddieTab() {
                 sub: trustLevel === 1 ? 'Bring Kevin back to Companion' : "Mute Kevin until I'm ready",
                 action: () => { setShowMoreMenu(false); setTrustLevel(trustLevel === 1 ? 2 : 1); } },
               { icon: 'options-outline',     label: `${getCaddieName(caddiePersonality)}'s Presence: ${TRUST_LEVEL_META[trustLevel].label}`, sub: `${TRUST_LEVEL_META[trustLevel].one_liner} · Tap to cycle`, action: () => { const next = (((trustLevel) % 4) + 1) as TrustLevel; setTrustLevel(next); } },
+              // Phase 109-followup — proactive shot logging without waiting
+              // for auto-detection or voice. Round-active gated.
+              ...(isRoundActive ? [{
+                icon: 'create-outline' as IconName,
+                label: 'Log a shot',
+                sub: 'Pick club + outcome · GPS captured automatically',
+                action: () => { setShowMoreMenu(false); setQuickLogOpen(true); },
+              }] : []),
               // Caddie persona cycler — Kevin → Serena → Harry → Tank → Kevin.
               // Stays in the Tools sheet so the user can swap mid-round
               // without diving into Settings.

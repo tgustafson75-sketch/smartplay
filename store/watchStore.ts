@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPersistStorage } from '../services/ssrSafeStorage';
 
 // ─── TYPES ────────────────────────────────
 
@@ -112,7 +112,7 @@ export const useWatchStore = create<WatchState>()(
     }),
     {
       name: 'watch-store-v1',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPersistStorage()),
       partialize: (s) => ({
         isConnected: s.isConnected,
         deviceName: s.deviceName,

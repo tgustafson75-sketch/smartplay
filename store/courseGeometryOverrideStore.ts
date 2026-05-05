@@ -22,7 +22,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPersistStorage } from '../services/ssrSafeStorage';
 
 export interface HoleAnchor {
   teeLat?: number;
@@ -98,7 +98,7 @@ export const useCourseGeometryOverrideStore = create<OverrideState>()(
     }),
     {
       name: 'course-geometry-overrides-v1',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPersistStorage()),
     },
   ),
 );

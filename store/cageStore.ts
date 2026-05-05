@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPersistStorage } from '../services/ssrSafeStorage';
 import { cageLog } from '../services/cageTelemetry';
 
 // ─── TYPES ────────────────────────────────
@@ -687,7 +687,7 @@ export const useCageStore = create<CageState>()(
     }),
     {
       name: 'cage-store-v1',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPersistStorage()),
       partialize: (s) => ({
         // activeSession NOT persisted — in-flight session lost on crash is acceptable
         sessionHistory: s.sessionHistory,

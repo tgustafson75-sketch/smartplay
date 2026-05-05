@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPersistStorage } from '../services/ssrSafeStorage';
 
 // ─── STATE ────────────────────────────────
 
@@ -146,7 +146,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
     }),
     {
       name: 'player-profile-v2',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPersistStorage()),
     },
   ),
 );

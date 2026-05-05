@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPersistStorage } from '../services/ssrSafeStorage';
 
 // ─── Phase 105 — Team Caddie Architecture ─────────────────────────────────────
 
@@ -246,7 +246,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'settings-store-v2',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPersistStorage()),
       // Phase 105 — bumped to v3 to add caddieAssignments. v2 (and earlier)
       // payloads only carry caddiePersonality; the migrate fn seeds all
       // four pillars to that prior single value so the user's preference

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPersistStorage } from '../services/ssrSafeStorage';
 import type { RoundMode } from '../types/patterns';
 import type { HolePlan } from '../types/plan';
 import type { ShotOutcome } from '../types/shot';
@@ -90,6 +90,11 @@ export interface ShotResult {
   end_location?: ShotLocation | null;
   hole_number?: number;        // alias of `hole`, populated by new code paths for forward-consistency
   shot_in_hole_index?: number; // 1, 2, 3 within a hole
+  // Phase 110-followup — captured video clip from CaptureOverlay (voice
+  // "record this shot"). Back-written by mediaCapture.commitCapture when
+  // the user records a shot on this hole. Optional; null when no clip.
+  clip_uri?: string | null;
+  is_highlight?: boolean;
 }
 
 export interface HoleStats {
@@ -227,6 +232,12 @@ interface RoundState {
   logPutts: (hole: number, putts: number) => void;
   addPenalty: (hole: number) => void;
   logShot: (shot: ShotResult) => void;
+  // Phase 109-followup — edit / delete / bulk-add shots after the fact
+  // (correcting typos, removing accidentally-logged shots, catching up
+  // after forgetting to log several). Each operates on shot.id.
+  editShot: (id: string, patch: Partial<ShotResult>) => void;
+  deleteShot: (id: string) => void;
+  bulkLogShots: (shots: ShotResult[]) => void;
   /**
    * Phase B — Set the end_location of the last shot on `hole` (typically called when the
    * player advances to the next hole; `endLoc` should be the green centroid of `hole`).
@@ -536,6 +547,43 @@ export const useRoundStore = create<RoundState>()(
           return { shots: [...backfilled, enriched] };
         }),
 
+      // Phase 109-followup — edit a previously logged shot. Patch is a
+      // partial ShotResult. Match by id; no-op if id not found.
+      editShot: (id, patch) =>
+        set(s => ({
+          shots: s.shots.map(x => x.id === id ? { ...x, ...patch } : x),
+        })),
+
+      // Phase 109-followup — delete a logged shot by id. Re-numbers the
+      // shot_in_hole_index for remaining shots on that hole so totals
+      // stay consistent.
+      deleteShot: (id) =>
+        set(s => {
+          const target = s.shots.find(x => x.id === id);
+          if (!target) return {};
+          const remaining = s.shots.filter(x => x.id !== id);
+          // Re-number shot_in_hole_index for remaining shots on the same hole.
+          const sameHole = remaining
+            .filter(x => x.hole === target.hole)
+            .sort((a, b) => a.timestamp - b.timestamp);
+          const reindexedById = new Map(
+            sameHole.map((x, i) => [x.id, { ...x, shot_in_hole_index: i + 1 }]),
+          );
+          const renumbered = remaining.map(x =>
+            reindexedById.has(x.id) ? reindexedById.get(x.id)! : x,
+          );
+          return { shots: renumbered };
+        }),
+
+      // Phase 109-followup — bulk-add multiple shots (catch-up flow).
+      // Each shot goes through the same back-fill + index pipeline as
+      // logShot via repeated apply.
+      bulkLogShots: (shots) => {
+        for (const shot of shots) {
+          get().logShot(shot);
+        }
+      },
+
       updateShotWeather: (shotId, weather) =>
         set(s => ({
           shots: s.shots.map(x =>
@@ -620,7 +668,7 @@ export const useRoundStore = create<RoundState>()(
         }
         return s;
       },
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPersistStorage()),
       // Phase Y — explicit hydration signal so subscribers (_layout effects,
       // shotDetection lifecycle) can wait until rehydration finishes before
       // capturing initial state. Without this, a fast user tapping Start

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPersistStorage } from '../services/ssrSafeStorage';
 import type { RangefinderLock } from '../types/smartfinder';
 
 export type SmartFinderMode = 'standard' | 'target' | 'map' | 'putt';
@@ -26,7 +26,7 @@ export const useSmartFinderStore = create<SmartFinderState>()(
     }),
     {
       name: 'smartfinder-store-v1',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPersistStorage()),
       partialize: (s) => ({ mode: s.mode }),
     },
   ),

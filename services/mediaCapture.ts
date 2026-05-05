@@ -154,31 +154,56 @@ export async function requestCapture(req: CaptureRequest): Promise<CapturedMedia
 }
 
 /**
- * Surface (CageSessionOverlay / ShotCaptureOverlay) calls this when the
- * recording finishes to fill in the URI.
+ * Surface (CageSessionOverlay / CaptureOverlay) calls this when the
+ * recording finishes to fill in the URI. Persists to:
+ *   - cageStore.sessionHistory via ingestUploadedSwing (all kinds, with
+ *     tag distinguishing 'cage' vs 'course'). Surfaces in /swinglab/library.
+ *   - roundStore.shots back-reference for kind='shot'/'highlight' during
+ *     an active round (sets clip_uri + is_highlight on the most recent
+ *     shot of the current hole so recap can render the clip with the shot).
  */
 export function commitCapture(id: string, uri: string): void {
   const idx = recentCaptures.findIndex((c) => c.id === id);
-  if (idx >= 0) {
-    recentCaptures[idx] = { ...recentCaptures[idx], uri };
-    // For 'swing' captures, write through to cage swing library so
-    // existing review / Phase K flows pick them up. cage.ingestUploadedSwing
-    // is the canonical entry point for non-live-cage swings.
-    const c = recentCaptures[idx];
-    if (c.kind === 'swing') {
-      try {
-        useCageStore.getState().ingestUploadedSwing({
-          source: 'uploaded_video',
-          clipUri: uri,
-          club: 'unknown',
-          upload: {
-            uploaded_at: c.startedAt,
-            taken_at: c.startedAt,
-            notes: c.raw_utterance ?? null,
-          },
-        });
-      } catch (e) { console.warn('[mediaCapture] cage ingest failed:', e); }
-    }
+  if (idx < 0) return;
+  recentCaptures[idx] = { ...recentCaptures[idx], uri };
+  const c = recentCaptures[idx];
+
+  // Phase 110-followup — write all kinds to the swing library so they
+  // surface in /swinglab/library with a tag for filtering.
+  const tag: 'cage' | 'course' = c.kind === 'swing' ? 'cage' : 'course';
+  try {
+    useCageStore.getState().ingestUploadedSwing({
+      source: 'uploaded_video',
+      clipUri: uri,
+      club: 'unknown',
+      upload: {
+        uploaded_at: c.startedAt,
+        taken_at: c.startedAt,
+        notes: c.raw_utterance ?? null,
+        tag,
+      },
+    });
+  } catch (e) { console.warn('[mediaCapture] cage ingest failed:', e); }
+
+  // Phase 110-followup — back-reference the URI onto the most recent
+  // shot on the current hole for round-side captures during an active
+  // round. Recap can render "shot 3: 7-iron 165 + clip" later.
+  if ((c.kind === 'shot' || c.kind === 'highlight') && c.hole != null) {
+    try {
+      const round = useRoundStore.getState();
+      if (round.isRoundActive) {
+        const shotsOnHole = round.shots
+          .filter((s) => (s.hole_number ?? s.hole) === c.hole)
+          .sort((a, b) => a.timestamp - b.timestamp);
+        const last = shotsOnHole[shotsOnHole.length - 1];
+        if (last && last.id) {
+          round.editShot(last.id, {
+            clip_uri: uri,
+            is_highlight: c.kind === 'highlight',
+          });
+        }
+      }
+    } catch (e) { console.warn('[mediaCapture] round shot back-ref failed:', e); }
   }
 }
 

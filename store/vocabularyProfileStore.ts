@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPersistStorage } from '../services/ssrSafeStorage';
 
 export interface VocabularyEntry {
   phrase: string;            // raw user phrase, lowercased and trimmed
@@ -71,7 +71,7 @@ export const useVocabularyProfileStore = create<VocabularyState>()(
     }),
     {
       name: 'vocabulary-profile-v1',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPersistStorage()),
     },
   ),
 );

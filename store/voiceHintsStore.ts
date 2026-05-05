@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPersistStorage } from '../services/ssrSafeStorage';
 
 /**
  * Tracks one-time voice discovery hints + permission state across app restarts.
@@ -74,7 +74,7 @@ export const useVoiceHintsStore = create<VoiceHintsState>()(
     }),
     {
       name: 'voice-hints-v1',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPersistStorage()),
     },
   ),
 );

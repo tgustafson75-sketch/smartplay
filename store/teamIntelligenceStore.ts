@@ -17,7 +17,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPersistStorage } from '../services/ssrSafeStorage';
 import type { Persona, CaddiePillar } from './settingsStore';
 
 export type SuggestionTrigger =
@@ -147,7 +147,7 @@ export const useTeamIntelligenceStore = create<TeamIntelligenceState>()(
     }),
     {
       name: 'team-intelligence-store-v1',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPersistStorage()),
       // Only persist cross-session state (cooldowns). Session-scoped
       // fields (pending suggestion, this-session counters) start fresh
       // on every cold launch.
