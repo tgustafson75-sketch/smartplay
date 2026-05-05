@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 
 export interface SmartVisionState {
   isOpen: boolean;
@@ -34,8 +34,17 @@ export function SmartVisionProvider({ children }: { children: React.ReactNode })
     setState(prev => ({ ...prev, ...patch }));
   }, []);
 
+  // Audit 101 / W6 — memoize the context value so consumers re-render
+  // only when state or the (stable) setter actually change. Prior code
+  // built a new value object on every Provider render, defeating React's
+  // memoization for downstream consumers.
+  const value = useMemo(
+    () => ({ ...state, setSmartVisionState }),
+    [state, setSmartVisionState],
+  );
+
   return (
-    <SmartVisionContext.Provider value={{ ...state, setSmartVisionState }}>
+    <SmartVisionContext.Provider value={value}>
       {children}
     </SmartVisionContext.Provider>
   );
