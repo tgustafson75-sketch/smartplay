@@ -161,6 +161,20 @@ Available intents:
    Examples: "show clubs", "club menu", "switch club", "change club", "open the club picker"
    Use this when the user wants to PICK from a list (vs club_change which already names a specific club).
 
+16. log_shot — User is on the course logging a shot they just hit. They name the club, optional distance, optional outcome.
+   parameters: { club_phrase: string, distance_yards?: number, outcome_phrase?: string, raw_utterance: string }
+   Examples:
+   - "I hit driver 240 left" -> { club_phrase: "driver", distance_yards: 240, outcome_phrase: "left", raw_utterance: "I hit driver 240 left" }
+   - "hit 7-iron 165 to the green" -> { club_phrase: "7-iron", distance_yards: 165, outcome_phrase: "on the green", raw_utterance: "hit 7-iron 165 to the green" }
+   - "8-iron 150 in the rough" -> { club_phrase: "8-iron", distance_yards: 150, outcome_phrase: "in the rough", raw_utterance: "8-iron 150 in the rough" }
+   - "drove it 260 in the fairway" -> { club_phrase: "driver", distance_yards: 260, outcome_phrase: "in the fairway", raw_utterance: "drove it 260 in the fairway" }
+   - "smoked a 5-iron 200 right" -> { club_phrase: "5-iron", distance_yards: 200, outcome_phrase: "right", raw_utterance: "smoked a 5-iron 200 right" }
+   - "putted it close" -> { club_phrase: "putter", outcome_phrase: "close", raw_utterance: "putted it close" }
+   - "log a shot, 7-iron, 165, on the green" -> { club_phrase: "7-iron", distance_yards: 165, outcome_phrase: "on the green", raw_utterance: "log a shot, 7-iron, 165, on the green" }
+   - "tee shot driver 290" -> { club_phrase: "driver", distance_yards: 290, raw_utterance: "tee shot driver 290" }
+   raw_utterance: pass the verbatim user phrase so the handler can store it for context.
+   ONLY match when the user is reporting a shot they just hit (past tense or present-narrative). DO NOT match generic queries about clubs ("what club here") — those are open_tool / query_status. DO NOT match cage-mode club switches ("switching to 6-iron") — those are club_change.
+
 7. unknown — Cannot determine intent.
    parameters: {}
    Set follow_up_question to a brief clarifying question ${caddieName} could ask.
@@ -169,7 +183,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null

@@ -9,6 +9,7 @@ import { rulesQueryHandler } from './rulesQueryHandler';
 import { handicapQueryHandler } from './handicapQueryHandler';
 import { setTrustQuietHandler, setTrustCompanionHandler } from './setTrustQuietHandler';
 import { clubChangeHandler, clubQueryHandler, clubMenuHandler } from './clubHandler';
+import { logShotHandler } from './logShotHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
 
@@ -25,6 +26,7 @@ voiceCommandRouter.registerHandler(setTrustCompanionHandler);
 voiceCommandRouter.registerHandler(clubChangeHandler);
 voiceCommandRouter.registerHandler(clubQueryHandler);
 voiceCommandRouter.registerHandler(clubMenuHandler);
+voiceCommandRouter.registerHandler(logShotHandler);
 
 export {
   openToolHandler,
@@ -40,4 +42,5 @@ export {
   clubChangeHandler,
   clubQueryHandler,
   clubMenuHandler,
+  logShotHandler,
 };
