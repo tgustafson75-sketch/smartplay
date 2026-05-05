@@ -23,6 +23,11 @@ let state: AudioState = 'cold';
 let lastActivityAt = 0;
 let idleTimer: ReturnType<typeof setInterval> | null = null;
 let appStateSub: { remove: () => void } | null = null;
+// Audit 101 / S1 — store the trust-level subscription unsub so teardown
+// can clean it up. Prior code wired the subscription but never released
+// it; under hot-reload (dev) or redundant init() calls (production
+// restart paths) listeners stacked and all fired on every trust change.
+let trustUnsub: (() => void) | null = null;
 
 function breadcrumb(message: string, data?: Record<string, unknown>) {
   try {
@@ -79,7 +84,9 @@ export function initAudioLifecycle(): void {
   // Trust-level subscription — Quiet forces cold immediately.
   try {
     const trustMod = require('../store/trustLevelStore');
-    trustMod.useTrustLevelStore.subscribe((s: { level: number }) => {
+    // Audit 101 / S1 — Zustand `subscribe` returns the unsub fn; store
+    // it so teardown can release the listener.
+    trustUnsub = trustMod.useTrustLevelStore.subscribe((s: { level: number }) => {
       if (s.level === 1) void goCold('trust_quiet');
     });
   } catch {}
@@ -93,5 +100,9 @@ export function teardownAudioLifecycle(): void {
   if (appStateSub) {
     appStateSub.remove();
     appStateSub = null;
+  }
+  if (trustUnsub) {
+    trustUnsub();
+    trustUnsub = null;
   }
 }
