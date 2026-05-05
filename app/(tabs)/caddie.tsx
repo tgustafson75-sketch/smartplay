@@ -25,6 +25,7 @@ import { useRoundStore } from '../../store/roundStore';
 import type { ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { useShallow } from 'zustand/react/shallow';
 import { getCaddieName, ALL_PERSONAS, type Persona } from '../../lib/persona';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useCageStore } from '../../store/cageStore';
@@ -118,6 +119,11 @@ export default function CaddieTab() {
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
   // ── Stores ──────────────────────────────
+  // Audit 101 / W1 — useShallow subscribes only to the listed fields with
+  // shallow equality. Prior code used `useRoundStore()` which subscribed
+  // to the whole store; ANY field write (per-shot logScore, per-tick
+  // currentYardage updates, etc.) re-rendered the entire caddie.tsx
+  // tree even when only one unrelated field had changed.
   const {
     isRoundActive,
     currentHole,
@@ -125,7 +131,7 @@ export default function CaddieTab() {
     club,
     activeCourse,
     courseHoles,
-    scores,
+    scores: _scores,
     nineHoleMode,
     startRound,
     endRound,
@@ -146,7 +152,35 @@ export default function CaddieTab() {
     shots,
     logShot,
     computeHoleScore,
-  } = useRoundStore();
+  } = useRoundStore(useShallow((s) => ({
+    isRoundActive: s.isRoundActive,
+    currentHole: s.currentHole,
+    currentYardage: s.currentYardage,
+    club: s.club,
+    activeCourse: s.activeCourse,
+    courseHoles: s.courseHoles,
+    scores: s.scores,
+    nineHoleMode: s.nineHoleMode,
+    startRound: s.startRound,
+    endRound: s.endRound,
+    setCurrentHole: s.setCurrentHole,
+    logScore: s.logScore,
+    logPutts: s.logPutts,
+    addPenalty: s.addPenalty,
+    getCurrentPar: s.getCurrentPar,
+    getTotalScore: s.getTotalScore,
+    getHolesPlayed: s.getHolesPlayed,
+    getScoreVsPar: s.getScoreVsPar,
+    mode: s.mode,
+    setCurrentRoundMode: s.setCurrentRoundMode,
+    active_ghost: s.active_ghost,
+    setActiveGhost: s.setActiveGhost,
+    clearActiveGhost: s.clearActiveGhost,
+    roundHistory: s.roundHistory,
+    shots: s.shots,
+    logShot: s.logShot,
+    computeHoleScore: s.computeHoleScore,
+  })));
 
   // Pre-beta — Start Round handoff from the Play tab is a DIRECT launch.
   // The Play tab sets roundStore.pendingStartCourseId when the user taps
@@ -333,6 +367,7 @@ export default function CaddieTab() {
     return playsLikeDistance(displayYardage, caddieWeather, caddieShotBearing).plays_like_yards;
   }, [displayYardage, caddieWeather, caddieShotBearing]);
 
+  // Audit 101 / W1 — useShallow subscriptions (see useRoundStore note above).
   const {
     voiceGender,
     voiceEnabled,
@@ -342,10 +377,28 @@ export default function CaddieTab() {
     autoListenEnabled,
     setVoiceEnabled,
     setCastMode,
-  } = useSettingsStore();
+  } = useSettingsStore(useShallow((s) => ({
+    voiceGender: s.voiceGender,
+    voiceEnabled: s.voiceEnabled,
+    discreteMode: s.discreteMode,
+    castMode: s.castMode,
+    language: s.language,
+    autoListenEnabled: s.autoListenEnabled,
+    setVoiceEnabled: s.setVoiceEnabled,
+    setCastMode: s.setCastMode,
+  })));
 
-  const { firstName, goal, subscription_status, trial_started_at, dominantMiss } = usePlayerProfileStore();
-  const { skip_briefings, proactive_kevin_enabled } = useSettingsStore();
+  const { firstName, goal, subscription_status, trial_started_at, dominantMiss } = usePlayerProfileStore(useShallow((s) => ({
+    firstName: s.firstName,
+    goal: s.goal,
+    subscription_status: s.subscription_status,
+    trial_started_at: s.trial_started_at,
+    dominantMiss: s.dominantMiss,
+  })));
+  const { skip_briefings, proactive_kevin_enabled } = useSettingsStore(useShallow((s) => ({
+    skip_briefings: s.skip_briefings,
+    proactive_kevin_enabled: s.proactive_kevin_enabled,
+  })));
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const setCaddiePersonality = useSettingsStore(s => s.setCaddiePersonality);
   const daysLeft = useMemo(
@@ -526,12 +579,10 @@ export default function CaddieTab() {
 
   const currentPar = getCurrentPar();
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const _totalScore  = useMemo(() => getTotalScore(),  [scores]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const _scoreVsPar  = useMemo(() => getScoreVsPar(),  [scores, courseHoles]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const _holesPlayed = useMemo(() => getHolesPlayed(), [scores]);
+  // Audit 101 / W2 — removed three orphan useMemos (_totalScore, _scoreVsPar,
+  // _holesPlayed) that were unused. They invalidated and recomputed on every
+  // score write because [scores] is a Record (new ref each write), and the
+  // results were never read.
 
   // Derived early so animation effects can reference it.
   // Phase AB — also gate on voiceState !== 'speaking' so VAD pauses while
