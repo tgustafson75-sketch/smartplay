@@ -36,6 +36,30 @@ export interface CageShot {
   // Phase R — frame-level timestamps (seconds into clip) for temporal alignment
   // of detected issues with audio. Populated when Phase K analyzes a clip.
   detected_issue_timestamps_sec?: number[];
+
+  // Phase BW — clip boundaries within a multi-swing master video.
+  // When clipUri is a master video shared across N detection events,
+  // these record the inclusive [start, end] seconds within clipUri so
+  // Phase K samples frames from the swing's window only. Undefined for
+  // legacy single-clip uploads — analyzeSwing falls back to whole-clip
+  // sampling automatically.
+  clipStartSeconds?: number;
+  clipEndSeconds?: number;
+  // Phase BW — original detection offset (seconds since recording start)
+  // and correlation id linking this shot to the cageStorage clip metadata.
+  detectionOffsetSeconds?: number;
+  detectionMethod?: 'audio_transient' | 'manual';
+  correlationId?: string;
+  // Phase BW — per-shot Phase K analysis result. Persisted so the swing
+  // detail review UI can render a per-swing card for multi-swing
+  // sessions instead of only a session-level aggregate. Optional for
+  // back-compat with legacy entries.
+  perShotAnalysis?: {
+    detected_issue: string;
+    severity: 'minor' | 'moderate' | 'significant' | 'none';
+    confidence: 'high' | 'medium' | 'low';
+    observation: string;
+  } | null;
 }
 
 // Phase BL — how the active club was identified for a given segment.
@@ -214,6 +238,36 @@ interface CageState {
     upload: UploadMetadata;
     source?: SwingSource;
   }) => string;
+  /** Phase BW — ingest a live cage session with N detected swings, each
+   *  with its own clip boundaries pointing into the master video.
+   *  Creates one CageSession with N CageShots. Returns the new session
+   *  id. Each shot's clipUri is the master video URI; clipStart/EndSeconds
+   *  + correlationId distinguish them so Phase K can sample the right
+   *  window per swing. */
+  ingestLiveCageSession: (input: {
+    masterVideoPath: string;
+    club: string;
+    upload: UploadMetadata;
+    shots: Array<{
+      correlationId: string;
+      detectionOffsetSeconds: number;
+      clipStartSeconds: number;
+      clipEndSeconds: number;
+      detectionMethod: 'audio_transient' | 'manual';
+    }>;
+  }) => string;
+  /** Phase BW — store the per-shot Phase K analysis result so the review
+   *  UI can render per-swing cards for multi-swing sessions. */
+  setShotAnalysis: (
+    sessionId: string,
+    shotId: string,
+    analysis: {
+      detected_issue: string;
+      severity: 'minor' | 'moderate' | 'significant' | 'none';
+      confidence: 'high' | 'medium' | 'low';
+      observation: string;
+    },
+  ) => void;
   /** Phase R — patch Phase K analysis onto an existing session, used both
    *  by the live cage post-session pipeline (already in app/cage/summary.tsx)
    *  and by the upload analysis pipeline. */
@@ -441,6 +495,62 @@ export const useCageStore = create<CageState>()(
         set(s => ({ sessionHistory: [...s.sessionHistory, session].slice(-50) }));
         return sessionId;
       },
+
+      ingestLiveCageSession: ({ masterVideoPath, club, upload, shots }) => {
+        const sessionId = `${Date.now()}_cage`;
+        cageLog('ingest-live-cage-session', 'ok', {
+          session_id: sessionId,
+          club,
+          shot_count: shots.length,
+          masterVideoPath_length: masterVideoPath.length,
+        });
+        const baseTs = upload.taken_at ?? upload.uploaded_at;
+        const cageShots: CageShot[] = shots.map((evt, i) => ({
+          id: `${sessionId}_shot_${i}`,
+          club,
+          feel: null,
+          shape: null,
+          contact: null,
+          direction: null,
+          timestamp: baseTs + Math.round(evt.detectionOffsetSeconds * 1000),
+          clipUri: masterVideoPath,
+          acousticContact: null,
+          aiAnalysis: null,
+          clipStartSeconds: evt.clipStartSeconds,
+          clipEndSeconds: evt.clipEndSeconds,
+          detectionOffsetSeconds: evt.detectionOffsetSeconds,
+          detectionMethod: evt.detectionMethod,
+          correlationId: evt.correlationId,
+          perShotAnalysis: null,
+        }));
+        const session: CageSession = {
+          id: sessionId,
+          date: baseTs,
+          club,
+          shots: cageShots,
+          dominantMiss: null,
+          rootCause: null,
+          summary: null,
+          source: 'live_cage',
+          upload,
+          analysis_status: 'pending',
+          analysis_error: null,
+        };
+        set(s => ({ sessionHistory: [...s.sessionHistory, session].slice(-50) }));
+        return sessionId;
+      },
+
+      setShotAnalysis: (sessionId, shotId, analysis) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              shots: session.shots.map(shot =>
+                shot.id !== shotId ? shot : { ...shot, perShotAnalysis: analysis },
+              ),
+            },
+          ),
+        })),
 
       addCageInsight: (session_id, club, insight) =>
         set(s => ({

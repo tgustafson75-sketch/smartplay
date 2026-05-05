@@ -122,21 +122,48 @@ async function probeDurationMs(clipUri: string): Promise<number> {
   return FALLBACK_DURATION_MS;
 }
 
-export async function extractKeyFrames(clipUri: string): Promise<Frame[]> {
+/**
+ * Phase BW — accept optional clip boundaries to sample frames from a
+ * sub-window of a multi-swing master video. When boundaries are
+ * provided, fractions apply WITHIN [startSec, endSec] instead of the
+ * whole video. Without boundaries, behavior is unchanged: probe full
+ * duration and sample at fixed fractions of the clip.
+ */
+export async function extractKeyFrames(
+  clipUri: string,
+  boundaries?: { startSec: number; endSec: number },
+): Promise<Frame[]> {
   if (!clipUri) {
     V6('STAGE 2 — empty clipUri, no frames');
     return [];
   }
   try {
-    const durationMs = await probeDurationMs(clipUri);
-    V6('STAGE 2 — extractKeyFrames start', {
-      duration_ms: durationMs,
-      target_fractions: FRAME_TIME_FRACTIONS,
-    });
+    // When boundaries provided, the swing window is known — skip the
+    // whole-clip duration probe and sample within [startSec, endSec].
+    let windowStartMs: number;
+    let windowDurationMs: number;
+    if (boundaries) {
+      windowStartMs = Math.round(boundaries.startSec * 1000);
+      windowDurationMs = Math.round((boundaries.endSec - boundaries.startSec) * 1000);
+      V6('STAGE 2 — extractKeyFrames bounded window', {
+        start_sec: boundaries.startSec,
+        end_sec: boundaries.endSec,
+        window_ms: windowDurationMs,
+        target_fractions: FRAME_TIME_FRACTIONS,
+      });
+    } else {
+      const durationMs = await probeDurationMs(clipUri);
+      windowStartMs = 0;
+      windowDurationMs = durationMs;
+      V6('STAGE 2 — extractKeyFrames whole-clip', {
+        duration_ms: durationMs,
+        target_fractions: FRAME_TIME_FRACTIONS,
+      });
+    }
     const perFrameOutcomes: Array<{ idx: number; t_ms: number; ok: boolean; raw_uri_tail?: string; raw_size?: number; b64_kb?: number; error?: string }> = [];
     const frames = await Promise.all(
       FRAME_TIME_FRACTIONS.map(async (t, i) => {
-        const timeMs = Math.round(durationMs * t);
+        const timeMs = windowStartMs + Math.round(windowDurationMs * t);
         try {
           const r = await VT.getThumbnailAsync(clipUri, { time: timeMs, quality: 0.8 });
           let rawSize: number | undefined;
@@ -169,6 +196,7 @@ export async function extractKeyFrames(clipUri: string): Promise<Frame[]> {
     V6('STAGE 2 — extractKeyFrames done', {
       successful: valid.length,
       attempted: FRAME_TIME_FRACTIONS.length,
+      bounded: boundaries != null,
       per_frame: perFrameOutcomes,
     });
     return valid;
@@ -188,13 +216,17 @@ export async function extractKeyFrames(clipUri: string): Promise<Frame[]> {
 export async function analyzeSwing(
   clipUri: string,
   context: { club: string; swing_number: number; prior_issues?: string[] },
+  boundaries?: { startSec: number; endSec: number },
 ): Promise<SwingAnalysisResult> {
   V6('STAGE 2 — analyzeSwing enter', {
     club: context.club,
     swing_number: context.swing_number,
     prior_issues_count: context.prior_issues?.length ?? 0,
+    bounded: boundaries != null,
+    boundary_start_sec: boundaries?.startSec ?? null,
+    boundary_end_sec: boundaries?.endSec ?? null,
   });
-  const frames = await extractKeyFrames(clipUri);
+  const frames = await extractKeyFrames(clipUri, boundaries);
   if (frames.length === 0) {
     V6('STAGE 3 SKIP — no_frames (no usable frames extracted)');
     return { kind: 'no_frames' };

@@ -17,6 +17,7 @@ import {
   endSession,
   addClipEvent,
   finalizeClips,
+  getSession,
   getSessionDir,
 } from '../services/cageStorage';
 import type { CageSession } from '../types/cage';
@@ -343,26 +344,61 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
     if (masterVideoPath) {
       cageLog('library-bridge-start', 'ok', { source: 'live_cage', clipUri: masterVideoPath });
       try {
-        libraryEntryId = useCageStore.getState().ingestUploadedSwing({
-          clipUri: masterVideoPath,
-          club: 'unknown',
-          upload: {
-            uploaded_at: Date.now(),
-            taken_at: sessionStartRef.current,
-            has_audio: true,
-            duration_sec: durationSeconds,
-            swinger: 'Me',
-            tag: 'cage',
-            notes: `${swingCount} swing${swingCount !== 1 ? 's' : ''} detected`,
-          },
-          source: 'live_cage',
-        });
+        // Phase BW — read finalized clip metadata from cageStorage and
+        // build per-swing CageShots, each with clipBoundaries pointing
+        // into the master video. Phase K then samples frames from the
+        // swing's window only (not the whole 6-minute master). Falls
+        // back to single-shot ingestUploadedSwing if no detections were
+        // recorded (zero-swing recording → keep one CageShot pointing
+        // at the master so the library entry still exists).
+        const storageSession = await getSession(session.id);
+        const clipMetadata = storageSession?.clips ?? [];
+        const upload = {
+          uploaded_at: Date.now(),
+          taken_at: sessionStartRef.current,
+          has_audio: true,
+          duration_sec: durationSeconds,
+          swinger: 'Me' as const,
+          tag: 'cage' as const,
+          notes: `${swingCount} swing${swingCount !== 1 ? 's' : ''} detected`,
+        };
+        if (clipMetadata.length > 0) {
+          libraryEntryId = useCageStore.getState().ingestLiveCageSession({
+            masterVideoPath,
+            club: 'unknown',
+            upload,
+            shots: clipMetadata.map(clip => ({
+              correlationId: clip.id,
+              detectionOffsetSeconds: clip.detected_at_session_offset_seconds,
+              clipStartSeconds: clip.start_time_seconds,
+              clipEndSeconds: clip.end_time_seconds,
+              detectionMethod: clip.detection_method,
+            })),
+          });
+          cageLog('library-bridge', 'ok', {
+            library_entry_id: libraryEntryId,
+            shot_count: clipMetadata.length,
+            mode: 'multi-shot',
+          });
+        } else {
+          // Zero detections — fall back to one shot pointing at the master
+          // so the library still has an entry the user can review.
+          libraryEntryId = useCageStore.getState().ingestUploadedSwing({
+            clipUri: masterVideoPath,
+            club: 'unknown',
+            upload,
+            source: 'live_cage',
+          });
+          cageLog('library-bridge', 'partial', {
+            library_entry_id: libraryEntryId,
+            mode: 'single-shot-fallback',
+            reason: 'no_detections',
+          });
+        }
         console.log(`[CageSession] Bridged to swing library as ${libraryEntryId}`);
-        cageLog('library-bridge', 'ok', { library_entry_id: libraryEntryId });
-        // Fire-and-forget Phase K (BR + U1 fallback already wired in
-        // runPhaseKOnSession). On a multi-swing master video the analysis
-        // may produce a tentative read; user can re-analyze later if a
-        // per-clip extraction phase ships.
+        // Fire-and-forget Phase K. With per-swing clipBoundaries the
+        // analysis runs on each swing's window separately, producing
+        // per-shot results that the review UI surfaces as per-swing cards.
         cageLog('phase-k-invoke', 'ok', { library_entry_id: libraryEntryId, mode: 'background' });
         void runPhaseKOnSession(libraryEntryId).catch(e => {
           console.log('[CageSession] Phase K background error', e);

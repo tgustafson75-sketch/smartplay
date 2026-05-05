@@ -188,13 +188,40 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     uploadLog('pose-detection-start', { swings_to_analyze: swings.length }, sessionId);
     for (const [i, swing] of swings.entries()) {
       if (!swing.clipUri) continue;
-      uploadLog('frame-analysis-start', { index: i, club: swing.club }, sessionId);
-      V6('STAGE 2-3 — analyzeSwing call', { index: i, club: swing.club });
+      // Phase BW — when this shot is part of a multi-swing master video,
+      // pass clipBoundaries so frame extraction samples within the
+      // swing's window only, not the whole master. Legacy single-clip
+      // shots have no boundaries; analyzeSwing falls back to whole-clip
+      // sampling automatically.
+      const boundaries = (
+        typeof swing.clipStartSeconds === 'number' &&
+        typeof swing.clipEndSeconds === 'number'
+      )
+        ? { startSec: swing.clipStartSeconds, endSec: swing.clipEndSeconds }
+        : undefined;
+      uploadLog('frame-analysis-start', {
+        index: i,
+        club: swing.club,
+        bounded: boundaries != null,
+      }, sessionId);
+      V6('STAGE 2-3 — analyzeSwing call', {
+        index: i,
+        club: swing.club,
+        bounded: boundaries != null,
+      });
+      cageLog('phase-k-per-shot-start', 'ok', {
+        session_id: sessionId,
+        shot_id: swing.id,
+        index: i,
+        bounded: boundaries != null,
+        boundary_start_sec: boundaries?.startSec ?? null,
+        boundary_end_sec: boundaries?.endSec ?? null,
+      });
       const r = await analyzeSwing(swing.clipUri, {
         club: swing.club,
         swing_number: i + 1,
         prior_issues: results.slice(-3).map(x => x.analysis.detected_issue),
-      });
+      }, boundaries);
       uploadLog('frame-analysis-complete', {
         index: i,
         kind: r.kind,
@@ -218,9 +245,25 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         kind: r.kind,
         detail: r.kind === 'error' ? r.message : (r.kind === 'ok' ? r.analysis.detected_issue : undefined),
       });
+      cageLog('phase-k-per-shot-result', r.kind === 'ok' ? 'ok' : 'fail', {
+        session_id: sessionId,
+        shot_id: swing.id,
+        index: i,
+        kind: r.kind,
+        detected_issue: r.kind === 'ok' ? r.analysis.detected_issue : null,
+        confidence: r.kind === 'ok' ? r.analysis.confidence : null,
+      });
       if (r.kind === 'ok') {
         results.push({ swing_id: swing.id, analysis: r.analysis });
         useCageStore.getState().setShotIssueTimestamps(sessionId, swing.id, r.frame_timestamps_sec);
+        // Phase BW — persist per-shot analysis so the review UI can render
+        // a per-swing card for multi-swing live cage sessions.
+        useCageStore.getState().setShotAnalysis(sessionId, swing.id, {
+          detected_issue: r.analysis.detected_issue,
+          severity: r.analysis.severity,
+          confidence: r.analysis.confidence,
+          observation: r.analysis.observation,
+        });
       }
     }
 

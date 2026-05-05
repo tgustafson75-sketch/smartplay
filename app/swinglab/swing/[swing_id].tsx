@@ -27,6 +27,14 @@ import DrillCard from '../../../components/swinglab/DrillCard';
 
 type AudioSource = 'coach' | 'kevin';
 
+// Phase BW — short mm:ss formatter for the per-swing list rows.
+function formatMmSs(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const mm = Math.floor(s / 60);
+  const ss = s % 60;
+  return `${mm}:${ss.toString().padStart(2, '0')}`;
+}
+
 // Phase V — copy the user sees while Phase K is running. Maps the analysis
 // lifecycle stages to honest, plain-language status.
 const STATUS_COPY: Record<AnalysisStatus, string> = {
@@ -291,6 +299,53 @@ export default function SwingDetail() {
             </View>
           )}
 
+          {/* Phase BW — per-swing list for multi-swing live cage sessions.
+              Renders when the session has more than one shot AND any shot
+              has per-shot Phase K analysis attached. Each row jumps the
+              video to the swing's start when tapped. Single-shot uploads
+              (legacy + post-BW upload flow) skip this section so the UI
+              stays simple. */}
+          {session.shots.length > 1 &&
+           session.shots.some(s => s.perShotAnalysis || s.clipStartSeconds != null) && (
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.label, { color: colors.text_muted }]}>
+                {session.shots.length} SWINGS · TAP TO JUMP
+              </Text>
+              {session.shots.map((s, idx) => {
+                const start = s.clipStartSeconds ?? 0;
+                const a = s.perShotAnalysis;
+                const issueLabel = a?.detected_issue && a.detected_issue !== 'none'
+                  ? a.detected_issue.replace(/_/g, ' ')
+                  : a
+                    ? 'no clear issue'
+                    : '—';
+                const conf = a?.confidence ?? null;
+                return (
+                  <TouchableOpacity
+                    key={s.id}
+                    onPress={() => void scrubTo(start)}
+                    style={[styles.shotRow, { borderColor: colors.border }]}
+                  >
+                    <Text style={[styles.shotIdx, { color: colors.accent }]}>
+                      {String(idx + 1).padStart(2, '0')}
+                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.shotIssue, { color: colors.text_primary }]} numberOfLines={1}>
+                        {issueLabel}
+                      </Text>
+                      <Text style={[styles.shotMeta, { color: colors.text_muted }]} numberOfLines={1}>
+                        {`${formatMmSs(start)}`}
+                        {conf ? ` · ${conf} conf` : ''}
+                        {s.detectionMethod ? ` · ${s.detectionMethod === 'audio_transient' ? 'auto' : 'manual'}` : ''}
+                      </Text>
+                    </View>
+                    <Text style={[styles.shotChev, { color: colors.text_muted }]}>›</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
           {analysisStatus === 'ok' && (
             <Animated.View style={{ opacity: cardsFade }}>
               <PrimaryIssueCard issue={session.primary_issue ?? null} totalShots={session.shots.length} />
@@ -356,6 +411,19 @@ const styles = StyleSheet.create({
   tsText: { fontSize: 13, fontWeight: '700' },
   tsHint: { fontSize: 11, marginTop: 8 },
   detailLine: { fontSize: 14, marginTop: 6 },
+  // Phase BW — per-swing list rows
+  shotRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 10, paddingHorizontal: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 12,
+  },
+  shotIdx: {
+    fontSize: 13, fontWeight: '900', minWidth: 24,
+  },
+  shotIssue: { fontSize: 14, fontWeight: '600', textTransform: 'capitalize' },
+  shotMeta: { fontSize: 11, marginTop: 2 },
+  shotChev: { fontSize: 22, fontWeight: '300', width: 14, textAlign: 'right' },
   analyzingCard: {
     marginHorizontal: 16, padding: 16, borderRadius: 14, borderWidth: 1,
     flexDirection: 'row', alignItems: 'center', gap: 12,
