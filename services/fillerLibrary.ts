@@ -12,7 +12,12 @@ const CLIP_PREFIX = 'filler_clip_';
 // ─── Module state ─────────────────────────────────────────────────────────────
 
 let library: FillerLibrary | null = null;
-let isGenerating = false;
+// Audit 101 / S2 — replaced `isGenerating: boolean` with an in-flight
+// Promise. Concurrent callers (cold launch + persona switch racing) now
+// share the same generation pass instead of one early-exiting and the
+// other clobbering state mid-flight (TOCTOU race on the dual
+// allFilesExist() checks).
+let inFlight: Promise<void> | null = null;
 // Round-robin counters per category — reset on app restart (acceptable)
 const rrCounters: Partial<Record<FillerCategory, number>> = {};
 
@@ -43,7 +48,15 @@ async function loadFromStorage(): Promise<FillerLibrary | null> {
 }
 
 async function saveToStorage(lib: FillerLibrary): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(lib));
+  // Audit 101 / S5 — caller may continue if storage write fails; we log
+  // and re-throw so generateLibrary can keep the in-memory cache from
+  // diverging from disk (S3 — save-before-flip discipline).
+  try {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(lib));
+  } catch (err) {
+    console.warn('[filler] saveToStorage failed:', err);
+    throw err;
+  }
 }
 
 function allFilesExist(lib: FillerLibrary): boolean {
@@ -71,7 +84,7 @@ export function isLibraryGenerated(): boolean {
 }
 
 export function isLibraryGenerating(): boolean {
-  return isGenerating;
+  return inFlight !== null;
 }
 
 export function getLibraryInfo(): { clipCount: number; generatedAt: number; hash: string } | null {
@@ -92,8 +105,22 @@ export async function generateLibrary(
   persona: Persona,
   language: 'en' | 'es' | 'zh',
 ): Promise<void> {
-  if (isGenerating) return;
+  // Audit 101 / S2 — promise-based mutex: concurrent callers share the
+  // single in-flight generation. Returning the same Promise means second
+  // caller's `await` resolves when the first finishes.
+  if (inFlight) return inFlight;
 
+  inFlight = doGenerate(apiUrl, persona, language).finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
+async function doGenerate(
+  apiUrl: string,
+  persona: Persona,
+  language: 'en' | 'es' | 'zh',
+): Promise<void> {
   const hash = voiceHash(persona, language);
   // Derive gender for the OpenAI fallback in /api/voice (back-compat).
   // ElevenLabs picks by persona directly; gender only matters when
@@ -115,32 +142,36 @@ export async function generateLibrary(
     return;
   }
 
-  isGenerating = true;
   console.log('[filler] generating', FILLER_PHRASES.length, 'clips...');
 
+  // Audit 101 / W3 — parallelize TTS fetches with a concurrency cap.
+  // Prior code processed each phrase serially: ~40 phrases × ~1-2s
+  // ElevenLabs roundtrip = 30-60s observed cold-launch lag on persona
+  // switch. Pool of 4 concurrent fetches cuts this to ~5-10s while
+  // staying well under any per-IP rate limit.
+  const clips = await runWithConcurrency(
+    FILLER_PHRASES,
+    4,
+    (phrase) => generateOneClip(phrase, persona, language, gender, apiUrl),
+  );
+
+  const newLib: FillerLibrary = {
+    clips: clips.filter((c): c is FillerClip => c !== null),
+    generated_at: Date.now(),
+    voice_settings_hash: hash,
+  };
+
+  // Audit 101 / S3 — save BEFORE flipping in-memory. If save throws, the
+  // in-memory cache stays at the prior state, which forces a clean
+  // regeneration on the next call instead of a silent in-mem/persisted
+  // divergence.
   try {
-    // Audit 101 / W3 — parallelize TTS fetches with a concurrency cap.
-    // Prior code processed each phrase serially: ~40 phrases × ~1-2s
-    // ElevenLabs roundtrip = 30-60s observed cold-launch lag on persona
-    // switch. Pool of 4 concurrent fetches cuts this to ~5-10s while
-    // staying well under any per-IP rate limit.
-    const clips = await runWithConcurrency(
-      FILLER_PHRASES,
-      4,
-      (phrase) => generateOneClip(phrase, persona, language, gender, apiUrl),
-    );
-
-    const newLib: FillerLibrary = {
-      clips: clips.filter((c): c is FillerClip => c !== null),
-      generated_at: Date.now(),
-      voice_settings_hash: hash,
-    };
-
-    library = newLib;
     await saveToStorage(newLib);
+    library = newLib;
     console.log('[filler] generation complete:', newLib.clips.length, '/', FILLER_PHRASES.length, 'clips');
-  } finally {
-    isGenerating = false;
+  } catch {
+    // saveToStorage already logged the error; leave `library` untouched
+    // so the next generateLibrary call retries from a clean state.
   }
 }
 

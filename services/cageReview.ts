@@ -16,7 +16,14 @@ async function loadSessions(): Promise<ReviewSession[]> {
 }
 
 async function saveSessions(sessions: ReviewSession[]): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+  // Audit 101 / S5 — wrap AsyncStorage write so quota / OS-denial errors
+  // surface in the log instead of propagating unhandled to fire-and-forget
+  // callers (startReviewSession / updateReviewSession / endReviewSession).
+  try {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+  } catch (err) {
+    console.warn('[cageReview] saveSessions failed:', err);
+  }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────

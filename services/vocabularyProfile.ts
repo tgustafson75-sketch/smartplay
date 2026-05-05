@@ -15,11 +15,21 @@ export async function getCurrentProfile(): Promise<VocabularyProfile | null> {
 }
 
 export async function saveProfile(profile: VocabularyProfile): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+  // Audit 101 / S5 — wrap so quota / OS-denial errors don't propagate
+  // unhandled to fire-and-forget callers.
+  try {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+  } catch (err) {
+    console.warn('[vocabularyProfile] saveProfile failed:', err);
+  }
 }
 
 export async function clearProfile(): Promise<void> {
-  await AsyncStorage.removeItem(STORAGE_KEY);
+  try {
+    await AsyncStorage.removeItem(STORAGE_KEY);
+  } catch (err) {
+    console.warn('[vocabularyProfile] clearProfile failed:', err);
+  }
 }
 
 // ─── Merge ────────────────────────────────────────────────────────────────────
