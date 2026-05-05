@@ -97,7 +97,12 @@ function metersPerPixel(lat: number, zoom: number): number {
  * map underneath, so the bearing axis (tee→green) ends up pointing
  * vertically up in the rendered tile.
  */
-function _projectToPixels(
+// Phase 108 — re-activated. The forward geo→pixel projection is sound;
+// the prior decision to disable was about the inverse (pixel→geo) being
+// unstable when the user dragged near image edges. Forward path is
+// reliable and is what we need to position fixed markers (tee, pin)
+// at their actual rendered positions in the bearing-rotated tile.
+function projectToPixels(
   point: { lat: number; lng: number },
   center: { lat: number; lng: number },
   zoom: number,
@@ -350,8 +355,25 @@ export default function SmartVisionScreen() {
   // and overlapping markers from rotation/aspect mismatches between the
   // rendered tile and the projection math. Static layout is reliable;
   // user drags markers wherever they want.
-  const teeCanvas = useMemo(() => ({ x: imageW / 2, y: imageH * 0.85 }), [imageW, imageH]);
-  const pinDefaultCanvas = useMemo(() => ({ x: imageW / 2, y: imageH * 0.15 }), [imageW, imageH]);
+  // Phase 108 — project tee + pin from actual geometry to canvas pixels
+  // when projection data is available. Falls back to static (50%, 85%) /
+  // (50%, 15%) when geometry is missing (curated bundled image mode or
+  // courses without tee/green coords). Static fallback matches the prior
+  // pre-Phase-108 behaviour exactly for the no-projection path.
+  const teeCanvas = useMemo(() => {
+    if (geometry?.tee && projection) {
+      const off = projectToPixels(geometry.tee, projection.center, projection.zoom, projection.bearing);
+      return { x: imageW / 2 + off.x, y: imageH / 2 - off.y };
+    }
+    return { x: imageW / 2, y: imageH * 0.85 };
+  }, [geometry, projection, imageW, imageH]);
+  const pinDefaultCanvas = useMemo(() => {
+    if (geometry?.green && projection) {
+      const off = projectToPixels(geometry.green, projection.center, projection.zoom, projection.bearing);
+      return { x: imageW / 2 + off.x, y: imageH / 2 - off.y };
+    }
+    return { x: imageW / 2, y: imageH * 0.15 };
+  }, [geometry, projection, imageW, imageH]);
 
   // Pin override (user-dragged) — stored in canvas coords.
   const pinOverride = pinByHole[holeIndex];
