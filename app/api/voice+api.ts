@@ -3,6 +3,8 @@ import { KEVIN_TTS_INSTRUCTIONS } from '../../api/_kevinVoice';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+  timeout: 25_000,
+  maxRetries: 1,
 });
 
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY;

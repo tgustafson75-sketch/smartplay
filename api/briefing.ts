@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName, getCharacterSpec } from '../lib/persona';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
 
 const MODE_DESCRIPTIONS: Record<string, string> = {
   break_100: 'Break 100 — avoid doubles, bogey is success, lay up by default',

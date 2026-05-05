@@ -3,6 +3,8 @@ import { getCaddieName, type VoiceGender } from '../../lib/persona';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+  timeout: 25_000,
+  maxRetries: 1,
 });
 
 export async function POST(req: Request) {
