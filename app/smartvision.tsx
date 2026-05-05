@@ -97,7 +97,7 @@ function metersPerPixel(lat: number, zoom: number): number {
  * map underneath, so the bearing axis (tee→green) ends up pointing
  * vertically up in the rendered tile.
  */
-function projectToPixels(
+function _projectToPixels(
   point: { lat: number; lng: number },
   center: { lat: number; lng: number },
   zoom: number,

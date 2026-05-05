@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   View,
   Text,
-  Image,
   TouchableOpacity,
   StyleSheet,
   Modal,
@@ -56,7 +55,6 @@ import { fetchCourseGeometry } from '../../services/courseGeometryService';
 import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
-import SmartFinderCard from '../../components/smartfinder/SmartFinderCard';
 import { useTrustLevelStore, TRUST_LEVEL_META, type TrustLevel } from '../../store/trustLevelStore';
 // Phase U2 — KevinAvatar import removed. The L1 SmartPlay-badge mic-trigger
 // it used to wrap was deleted in Phase AU; the import sat as orphan dead
@@ -321,6 +319,10 @@ export default function CaddieTab() {
       const y = getGreenYardagesSync(currentHole);
       return y?.middle ?? null;
     } catch { return null; }
+    // markTick listed as a re-render signal: getGreenYardagesSync reads
+    // from a cache the Mark handler writes; without it, the data-strip
+    // middle yardage was stale until next hole change (Phase BG fix).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yardageMode, isRoundActive, currentHole, markTick]);
 
   const displayYardage = liveYardage ?? currentYardage;
@@ -467,7 +469,7 @@ export default function CaddieTab() {
   const responseFade = useRef(new Animated.Value(1)).current;
 
   // Pre-beta — battery-saver state for the L1 badge dot color.
-  const [saverActive, setSaverActive] = useState(false);
+  const [_saverActive, setSaverActive] = useState(false);
   useEffect(() => subscribeBattery((s) => setSaverActive(s.saverActive)), []);
 
   // Phase AT follow-up — L4 long-press inline expand for SmartVision
@@ -1300,7 +1302,7 @@ export default function CaddieTab() {
   };
 
   // ── Mid-round mode change ────────────────
-  const handleChangeModePress = () => {
+  const _handleChangeModePress = () => {
     const options: RoundMode[] = ['break_100', 'break_90', 'break_80', 'free_play'];
     Alert.alert(
       'Change Mode',
