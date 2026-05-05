@@ -6,13 +6,13 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
-import { openYouTubeSearch } from '../../services/youtubeLinks';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
-import AddressSilhouette from '../../components/AddressSilhouette';
 import CageSessionOverlay from '../../components/CageSessionOverlay';
+import PrimaryIssueCard from '../../components/PrimaryIssueCard';
+import { getRankedPrimaryIssues } from '../../services/primaryIssueRanker';
 import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
 import AppIcon from '../../components/AppIcon';
 import { getDialog } from '../../services/dialogEngine';
@@ -447,48 +447,29 @@ export default function SwingLab() {
           </>
         )}
 
-        {/* Setup Guide */}
+        {/* Phase 111 — Primary Issue Cards (replaces the prior Setup Guide
+            silhouette section). Ranked by user's most-frequent detected
+            issue when analysis history exists; static default order
+            otherwise. The first card defaults to Swing Path. */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Setup Guide</Text>
-          <Text style={styles.sectionSub}>Address positions for common shots</Text>
+          <Text style={styles.sectionTitle}>Common Faults</Text>
+          <Text style={styles.sectionSub}>Watch a quick lesson, then practice the fix</Text>
         </View>
-        <View style={styles.silhouetteRow}>
-          <View style={styles.silhouetteCard}>
-            <AddressSilhouette type="face-on" size={140} />
-            <Text style={styles.silhouetteLabel}>Full Swing</Text>
-            <Text style={styles.silhouetteHint}>
-              Feet shoulder-width apart{'\n'}Slight knee flex{'\n'}Spine tilt away from target
-            </Text>
-            <TouchableOpacity
-              style={styles.demoBtn}
-              onPress={() => {
-                // YouTube search surfaces top-ranked short instructional videos.
-                // Tim picks from the results — keeps the link evergreen, no
-                // hardcoded URL that can rot.
-                void openYouTubeSearch('golf full swing setup tutorial 2 minutes');
-              }}
-            >
-              <AppIcon name="logo-youtube" size={14} color="#ef4444" />
-              <Text style={styles.demoBtnText}>Watch Demo</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.silhouetteCard}>
-            <AddressSilhouette type="putting" size={140} />
-            <Text style={styles.silhouetteLabel}>Putting</Text>
-            <Text style={styles.silhouetteHint}>
-              Feet narrower, even{'\n'}Eyes over ball{'\n'}Arms form a triangle
-            </Text>
-            <TouchableOpacity
-              style={styles.demoBtn}
-              onPress={() => {
-                void openYouTubeSearch('golf putting setup tutorial 2 minutes');
-              }}
-            >
-              <AppIcon name="logo-youtube" size={14} color="#ef4444" />
-              <Text style={styles.demoBtnText}>Watch Demo</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        {(() => {
+          const ranked = getRankedPrimaryIssues();
+          // First card gets the personalization badge if the catalog was
+          // re-ordered (i.e. the first entry is NOT the static default
+          // first entry, which is swing_path).
+          const personalizedFirst = ranked.length > 0 && ranked[0].category !== 'swing_path';
+          return ranked.map((entry, idx) => (
+            <PrimaryIssueCard
+              key={entry.category}
+              entry={entry}
+              isPersonalized={personalizedFirst && idx === 0}
+              onTryDrill={(drillId) => router.push(`/swinglab?drill=${drillId}` as never)}
+            />
+          ));
+        })()}
 
         <View style={styles.bottomPad} />
       </ScrollView>
