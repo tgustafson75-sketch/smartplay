@@ -199,6 +199,10 @@ export default function SwingLab() {
   // Phase R polish — drill list + practice tools collapsed by default.
   const [drillsOpen, setDrillsOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  // Phase 111-followup — Common Faults section collapsible per Tim
+  // feedback. Default false so the tab opens compact; user expands to
+  // browse faults.
+  const [faultsOpen, setFaultsOpen] = useState(false);
   const [cageActive, setCageActive] = useState(false);
 
   // Phase J.5 deep-link — when arriving with ?drill_id=X (from DrillCard's
@@ -450,12 +454,22 @@ export default function SwingLab() {
         {/* Phase 111 — Primary Issue Cards (replaces the prior Setup Guide
             silhouette section). Ranked by user's most-frequent detected
             issue when analysis history exists; static default order
-            otherwise. The first card defaults to Swing Path. */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Common Faults</Text>
-          <Text style={styles.sectionSub}>Watch a quick lesson, then practice the fix</Text>
-        </View>
-        {(() => {
+            otherwise. Phase 111-followup: cards are individually
+            collapsible (Tim feedback: "take up too much space"). First
+            card starts expanded so the pattern is discoverable; the
+            section itself is also collapsible at the section header. */}
+        <TouchableOpacity
+          style={styles.drillsCardHeader}
+          onPress={() => setFaultsOpen(o => !o)}
+          activeOpacity={0.85}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.drillsCardTitle}>Common Faults</Text>
+            <Text style={styles.drillsCardSub}>Quick lesson + drill per fault · tap to expand</Text>
+          </View>
+          <AppIcon name={faultsOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#00C896" />
+        </TouchableOpacity>
+        {faultsOpen && (() => {
           const ranked = getRankedPrimaryIssues();
           // First card gets the personalization badge if the catalog was
           // re-ordered (i.e. the first entry is NOT the static default
@@ -466,6 +480,7 @@ export default function SwingLab() {
               key={entry.category}
               entry={entry}
               isPersonalized={personalizedFirst && idx === 0}
+              defaultExpanded={idx === 0}
               onTryDrill={(drillId) => router.push(`/swinglab?drill=${drillId}` as never)}
             />
           ));

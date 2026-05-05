@@ -13,8 +13,9 @@
  * on Fold open via percentage widths set by the parent container.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Linking, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import type { PrimaryIssueEntry } from '../constants/primaryIssueCatalog';
 import { getInstructorVideo } from '../constants/instructorVideos';
@@ -25,12 +26,19 @@ interface Props {
   isPersonalized?: boolean;
   /** When the entry has a related drill, this fires when "Try drill" tapped. */
   onTryDrill?: (drillId: string) => void;
+  /** Phase 111-followup — start expanded vs collapsed. Default false
+   *  (collapsed) so the stack reads as a tight list. */
+  defaultExpanded?: boolean;
 }
 
-export default function PrimaryIssueCard({ entry, isPersonalized, onTryDrill }: Props) {
+export default function PrimaryIssueCard({ entry, isPersonalized, onTryDrill, defaultExpanded = false }: Props) {
   const { colors } = useTheme();
   const video = getInstructorVideo(entry.category);
   const Illustration = entry.Illustration;
+  // Phase 111-followup — collapsibility per Tim feedback ("cards take up
+  // too much space and require too much scrolling"). Collapsed renders
+  // as title + brief one-line + chevron; tap expands to full card.
+  const [expanded, setExpanded] = useState(defaultExpanded);
 
   const onWatch = () => {
     Linking.openURL(video.url).catch(() => {
@@ -41,37 +49,60 @@ export default function PrimaryIssueCard({ entry, isPersonalized, onTryDrill }: 
 
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      <View style={styles.headerRow}>
-        <Text style={[styles.title, { color: colors.text_primary }]}>{entry.title}</Text>
-        {isPersonalized ? (
-          <View style={[styles.badge, { backgroundColor: colors.accent + '22', borderColor: colors.accent }]}>
-            <Text style={[styles.badgeText, { color: colors.accent }]}>From your sessions</Text>
+      <TouchableOpacity
+        style={styles.headerRow}
+        onPress={() => setExpanded(e => !e)}
+        activeOpacity={0.7}
+      >
+        <View style={{ flex: 1 }}>
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, { color: colors.text_primary }]}>{entry.title}</Text>
+            {isPersonalized ? (
+              <View style={[styles.badge, { backgroundColor: colors.accent + '22', borderColor: colors.accent }]}>
+                <Text style={[styles.badgeText, { color: colors.accent }]}>From your sessions</Text>
+              </View>
+            ) : null}
           </View>
-        ) : null}
-      </View>
+          {!expanded ? (
+            <Text style={[styles.bodyShort, { color: colors.text_muted }]} numberOfLines={1}>
+              {entry.description}
+            </Text>
+          ) : null}
+        </View>
+        <Ionicons
+          name={expanded ? 'chevron-up' : 'chevron-down'}
+          size={20}
+          color={colors.text_muted}
+          style={{ marginLeft: 8 }}
+        />
+      </TouchableOpacity>
 
-      <View style={styles.illoWrap}>
-        <Illustration size={220} okColor={colors.accent} warnColor="#ef4444" />
-      </View>
+      {expanded ? (
+        <>
+          <View style={styles.illoWrap}>
+            <Illustration size={220} okColor={colors.accent} warnColor="#ef4444" />
+          </View>
 
-      <Text style={[styles.body, { color: colors.text_primary }]}>{entry.description}</Text>
+          <Text style={[styles.body, { color: colors.text_primary }]}>{entry.description}</Text>
 
-      <View style={styles.actions}>
-        <TouchableOpacity onPress={onWatch} style={[styles.btn, styles.btnPrimary, { backgroundColor: colors.accent }]}>
-          <Text style={styles.btnTextPrimary}>Watch</Text>
-        </TouchableOpacity>
-        <Text style={[styles.attribution, { color: colors.text_muted }]}>
-          {video.title} · {video.instructor}
-        </Text>
-      </View>
+          <View style={styles.actions}>
+            <TouchableOpacity onPress={onWatch} style={[styles.btn, styles.btnPrimary, { backgroundColor: colors.accent }]}>
+              <Text style={styles.btnTextPrimary}>Watch</Text>
+            </TouchableOpacity>
+            <Text style={[styles.attribution, { color: colors.text_muted }]}>
+              {video.title} · {video.instructor}
+            </Text>
+          </View>
 
-      {entry.relatedDrillId && onTryDrill ? (
-        <TouchableOpacity
-          onPress={() => onTryDrill(entry.relatedDrillId as string)}
-          style={[styles.btn, styles.btnSecondary, { borderColor: colors.border }]}
-        >
-          <Text style={[styles.btnTextSecondary, { color: colors.text_primary }]}>Try drill</Text>
-        </TouchableOpacity>
+          {entry.relatedDrillId && onTryDrill ? (
+            <TouchableOpacity
+              onPress={() => onTryDrill(entry.relatedDrillId as string)}
+              style={[styles.btn, styles.btnSecondary, { borderColor: colors.border }]}
+            >
+              <Text style={[styles.btnTextSecondary, { color: colors.text_primary }]}>Try drill</Text>
+            </TouchableOpacity>
+          ) : null}
+        </>
       ) : null}
     </View>
   );
@@ -88,7 +119,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bodyShort: {
+    fontSize: 12,
+    marginTop: 2,
   },
   title: {
     fontSize: 17,
