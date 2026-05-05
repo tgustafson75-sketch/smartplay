@@ -67,6 +67,21 @@ export function subscribeCapture(cb: CaptureListener): () => void {
   return () => { captureListeners.delete(cb); };
 }
 
+/**
+ * Phase 200 / F3 — honest pre-flight check. Returns true only when a
+ * capture surface is actually subscribed AND the requested kind has a
+ * camera path that can drive it. Today CageSessionOverlay subscribes
+ * for 'swing' kind; round-pillar capture surfaces (ShotCaptureOverlay
+ * for 'shot' / 'highlight') are deferred. Voice handlers gate on this
+ * to avoid falsely claiming "Recording" when nothing actually records.
+ */
+export function isCaptureWired(kind: CaptureKind): boolean {
+  if (captureListeners.size === 0) return false;
+  // Conservative: only 'swing' has a known wired surface today
+  // (CageSessionOverlay during an active cage session).
+  return kind === 'swing';
+}
+
 // Recent captures buffer for playback. Persisted indirectly via the
 // round-store shots[] (round captures) and cageStore session library
 // (cage captures). The capture entries here are the in-flight queue

@@ -15,6 +15,7 @@ import {
   buildCaddieAck,
   canCapture,
   getMostRecentCapture,
+  isCaptureWired,
   type CaptureKind,
 } from '../mediaCapture';
 import { track } from '../analytics';
@@ -58,6 +59,23 @@ export const mediaCaptureHandler: IntentHandler = {
     const rawUtterance = String(
       (intent.parameters as { raw_utterance?: unknown }).raw_utterance ?? intent.raw_text ?? '',
     ).trim() || undefined;
+
+    // Phase 200 / F3 mitigation — Phase 110 voice intents fire and the
+    // orchestration boundary routes correctly, but camera surfaces are
+    // wired only for cage 'swing' kind today (round-pillar 'shot' /
+    // 'highlight' surfaces deferred). Tell the user honestly when no
+    // surface picks up the capture instead of falsely acknowledging.
+    if (!isCaptureWired(kind)) {
+      track('media_capture_handler_no_surface', { kind });
+      return {
+        success: false,
+        voice_response: kind === 'swing'
+          ? "Open Cage Mode and I'll capture the swing there."
+          : "Round-side capture isn't wired yet — start a cage session if you want me to record a swing.",
+        side_effects: [`media:capture_no_surface:${kind}`],
+        follow_up_needed: false,
+      };
+    }
 
     try {
       await requestCapture({ kind, raw_utterance: rawUtterance });
