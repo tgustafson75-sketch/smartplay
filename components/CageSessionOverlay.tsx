@@ -25,6 +25,7 @@ import { useCageStore } from '../store/cageStore';
 import { runPhaseKOnSession } from '../services/videoUpload';
 import { cageLog } from '../services/cageTelemetry';
 import { setActiveSurface } from '../services/activeSurfaceRegistry';
+import { evaluateCageEnd } from '../services/teamIntelligence';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -463,6 +464,11 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
     }
 
     if (isMountedRef.current) {
+      // Phase 106 — evaluate cage-end triggers now that the session is
+      // captured. Conservative: this fires the drill-plateau detector
+      // which only triggers if the recent N cage sessions all share
+      // the same primary issue label.
+      try { evaluateCageEnd(); } catch (e) { console.warn('[teamIntelligence] cage-end eval threw:', e); }
       // Hand the LIBRARY entry id to the consumer (not the cageStorage
       // session id) so navigation lands on the swing detail screen which
       // is keyed by sessionHistory[].id.

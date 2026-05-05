@@ -53,6 +53,7 @@ import { speak, configureAudioForSpeech, captureUtterance } from '../../services
 // stays here (apiUrl/voice/language can change at any time).
 import { conversationalLoggingOrchestrator } from '../../services/conversationalLoggingOrchestrator';
 import { setActiveSurface } from '../../services/activeSurfaceRegistry';
+import { evaluateRoundProgress } from '../../services/teamIntelligence';
 import { fetchCourseGeometry } from '../../services/courseGeometryService';
 import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
@@ -585,6 +586,14 @@ export default function CaddieTab() {
   }, [displayText]);
 
   const currentPar = getCurrentPar();
+
+  // Phase 106 — evaluate round-progress triggers when the active hole
+  // changes. Conservative: detector only fires if cumulative score-vs-par
+  // over the most recent N holes crosses a real-spiral threshold.
+  useEffect(() => {
+    if (!isRoundActive) return;
+    try { evaluateRoundProgress(); } catch (e) { console.warn('[teamIntelligence] round-eval threw:', e); }
+  }, [currentHole, isRoundActive]);
 
   // Audit 101 / W2 — removed three orphan useMemos (_totalScore, _scoreVsPar,
   // _holesPlayed) that were unused. They invalidated and recomputed on every

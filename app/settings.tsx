@@ -75,6 +75,9 @@ export default function Settings() {
   const caddieAssignments = useSettingsStore(s => s.caddieAssignments);
   const setCaddieForPillar = useSettingsStore(s => s.setCaddieForPillar);
   const resetCaddieAssignments = useSettingsStore(s => s.resetCaddieAssignments);
+  // Phase 106 — team handoff suggestions suppression.
+  const caddieSuggestions = useSettingsStore(s => s.caddieSuggestions);
+  const setCaddieSuggestions = useSettingsStore(s => s.setCaddieSuggestions);
 
   // Persona-aware display name. Settings labels reference the active caddie
   // by name (Kevin / Serena / Harry / Tank) consistently with the rest of the app.
@@ -371,6 +374,21 @@ export default function Settings() {
           <TouchableOpacity onPress={resetCaddieAssignments} style={styles.linkBtn}>
             <Text style={[styles.linkBtnText, { color: colors.accent }]}>Reset to defaults</Text>
           </TouchableOpacity>
+
+          {/* Phase 106 — caddie team handoff suggestions */}
+          <PillRow
+            label="Team suggestions  ·  default On"
+            options={[
+              { label: 'On', value: 'on' },
+              { label: 'Card only', value: 'soft' },
+              { label: 'Off', value: 'off' },
+            ]}
+            value={caddieSuggestions}
+            onSelect={(v) => setCaddieSuggestions(v as 'on' | 'soft' | 'off')}
+          />
+          <Text style={[styles.sectionIntro, { color: colors.text_muted, marginTop: 4 }]}>
+            When a teammate is better suited, your active caddie can suggest a handoff. &quot;Card only&quot; shows the visual offer without a voice line. &quot;Off&quot; disables suggestions entirely.
+          </Text>
         </View>
 
         {/* CADDIE — extra controls */}

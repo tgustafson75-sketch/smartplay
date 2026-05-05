@@ -9,7 +9,7 @@ import { SmartVisionProvider } from '../contexts/SmartVisionContext';
 import { KevinPresenceProvider } from '../contexts/KevinPresenceContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
-import { useSettingsStore } from '../store/settingsStore';
+import { useSettingsStore, type Persona } from '../store/settingsStore';
 import { useRoundStore } from '../store/roundStore';
 import { initListeningSession } from '../services/listeningSession';
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
@@ -24,8 +24,11 @@ import { subscribeToMark } from '../services/positionMarkBus';
 import { setMarkedFix } from '../services/smartFinderService';
 import BatteryPrompt from '../components/battery/BatteryPrompt';
 import { subscribeActiveSurface } from '../services/activeSurfaceRegistry';
-import { getActiveCaddie } from '../services/caddieResolver';
+import { getActiveCaddie, mapSurfaceToPillar } from '../services/caddieResolver';
 import { speak as speakHandoff } from '../services/voiceService';
+import { useTeamIntelligenceStore } from '../store/teamIntelligenceStore';
+import { initTeamIntelligenceForSession } from '../services/teamIntelligence';
+import CaddieSuggestionCard from '../components/CaddieSuggestionCard';
 
 // Phase Y — run `body` only after roundStore rehydration completes. Prevents
 // the rehydration race where a fast user tapping Start Round before
@@ -94,6 +97,69 @@ function AppNavigator() {
   useEffect(() => {
     initAudioLifecycle();
     initBatteryMonitor();
+  }, []);
+
+  // Phase 106 — boot team intelligence: reset per-session counters and
+  // wire the handoff orchestrator. When a pending suggestion is accepted,
+  // temporarily reassign the suggestion's pillar to the suggested caddie.
+  // When the user leaves that pillar (return condition), revert to the
+  // originally-assigned caddie for that pillar so the handoff doesn't
+  // permanently change the user's preferences.
+  useEffect(() => {
+    initTeamIntelligenceForSession();
+
+    // Track per-pillar overrides made by accepted handoffs so we can
+    // revert when the user leaves that pillar. Map: pillar → original caddie.
+    const handoffOverrides = new Map<string, Persona>();
+
+    const unsubAccept = useTeamIntelligenceStore.subscribe((s, prev) => {
+      // Detect a freshly-accepted suggestion: prev had pendingSuggestion,
+      // current has acceptedHandoffs grown by one with no decline cooldown
+      // bump. The store's acceptPendingSuggestion clears pending and
+      // appends to acceptedHandoffs in one set call, so this comparison is
+      // race-safe.
+      if (s.acceptedHandoffs.length <= prev.acceptedHandoffs.length) return;
+      const acceptedId = s.acceptedHandoffs[s.acceptedHandoffs.length - 1];
+      if (!acceptedId) return;
+      // Find the suggestion that was just accepted (already cleared from
+      // pendingSuggestion). We need its original details from prev.
+      const accepted = prev.pendingSuggestion;
+      if (!accepted || accepted.id !== acceptedId) return;
+
+      // Stash the current assignment so we can revert on return.
+      const assignments = useSettingsStore.getState().caddieAssignments;
+      const originalForPillar = assignments[accepted.pillar];
+      handoffOverrides.set(accepted.pillar, originalForPillar);
+
+      // Apply the override (this triggers _layout's existing pillar →
+      // caddiePersonality sync via the assignment subscription).
+      useSettingsStore.getState().setCaddieForPillar(accepted.pillar, accepted.toPersona);
+
+      // Voice handoff line if not in 'soft' or 'off' suppression mode.
+      const settings = useSettingsStore.getState();
+      if (settings.caddieSuggestions === 'on' && settings.voiceEnabled && !settings.discreteMode) {
+        const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+        const NAME: Record<Persona, string> = { kevin: 'Kevin', serena: 'Serena', harry: 'Harry', tank: 'Tank' };
+        const handoffLine = `Alright — handing off to ${NAME[accepted.toPersona]} for this. ${NAME[accepted.toPersona]} will bring you back when ready.`;
+        speakHandoff(handoffLine, settings.voiceGender, settings.language, apiUrl, { userInitiated: false }).catch(() => {});
+      }
+    });
+
+    // Return condition: when the active surface leaves the pillar where
+    // a handoff was active, revert that pillar's assignment back to the
+    // original caddie (the user's prior preference).
+    const unsubReturn = subscribeActiveSurface((next) => {
+      if (handoffOverrides.size === 0) return;
+      const nextPillar = mapSurfaceToPillar(next);
+      // Any pillar in the override map that isn't the new pillar reverts.
+      for (const [pillar, original] of handoffOverrides.entries()) {
+        if (pillar === nextPillar) continue;
+        useSettingsStore.getState().setCaddieForPillar(pillar as 'round' | 'cage' | 'drills' | 'play', original);
+        handoffOverrides.delete(pillar);
+      }
+    });
+
+    return () => { unsubAccept(); unsubReturn(); };
   }, []);
 
   // Phase O — boot earbud listening session bus, honoring user setting
@@ -284,6 +350,8 @@ function AppNavigator() {
     <>
       <StatusBar style="auto" />
       <BatteryPrompt />
+      {/* Phase 106 — caddie team handoff suggestion overlay. */}
+      <CaddieSuggestionCard />
       <RoundActiveDevIndicator />
       <Stack
         screenOptions={{

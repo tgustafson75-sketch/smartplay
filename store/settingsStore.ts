@@ -35,6 +35,11 @@ interface SettingsState {
   // launch; existing users with only caddiePersonality migrate at hydrate
   // (see persist `migrate` callback below).
   caddieAssignments: CaddieAssignments;
+  // Phase 106 — caddie team handoff suggestions.
+  // 'on'   = caddies offer suggestions verbally + visually (default)
+  // 'soft' = visual card only, no voice interruption
+  // 'off'  = no suggestions, user controls all assignments manually
+  caddieSuggestions: 'on' | 'soft' | 'off';
 
   theme_preference: 'system' | 'light' | 'dark';
   highContrast: boolean;
@@ -86,6 +91,7 @@ interface SettingsState {
   // one pillar; resetCaddieAssignments restores defaults.
   setCaddieForPillar: (pillar: CaddiePillar, p: Persona) => void;
   resetCaddieAssignments: () => void;
+  setCaddieSuggestions: (mode: 'on' | 'soft' | 'off') => void;
   setThemePreference: (p: 'system' | 'light' | 'dark') => void;
   setHighContrast: (v: boolean) => void;
   setBrightMode: (v: boolean) => void;
@@ -120,6 +126,7 @@ export const useSettingsStore = create<SettingsState>()(
       responseMode: 'neutral',
       caddiePersonality: 'kevin',
       caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
+      caddieSuggestions: 'on' as const,
       theme_preference: 'system' as const,
       highContrast: false,
       brightMode: false,
@@ -228,6 +235,7 @@ export const useSettingsStore = create<SettingsState>()(
       resetCaddieAssignments: () => set({
         caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
       }),
+      setCaddieSuggestions: (mode) => set({ caddieSuggestions: mode }),
     }),
     {
       name: 'settings-store-v2',
@@ -262,6 +270,7 @@ export const useSettingsStore = create<SettingsState>()(
         responseMode: s.responseMode,
         caddiePersonality: s.caddiePersonality,
         caddieAssignments: s.caddieAssignments,
+        caddieSuggestions: s.caddieSuggestions,
         theme_preference: s.theme_preference,
         highContrast: s.highContrast,
         brightMode: s.brightMode,
