@@ -181,13 +181,15 @@ Write per-hole summaries and an overall summary. Respond only with valid JSON as
 
     console.log('[recap] generating for', body.course_name, body.mode, body.holes_played, 'holes');
 
+    // Audit 101 / B4 — prefer body.persona; fall back to voiceGender.
+    const personaInput: Persona | VoiceGender =
+      (typeof body.persona === 'string' ? body.persona : (body.voiceGender ?? 'male')) as Persona | VoiceGender;
+    // Audit 101 / W4 — opt the system prompt into Anthropic ephemeral
+    // prompt caching (5-min TTL).
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1200,
-      system: buildRecapSystem(
-        // Audit 101 / B4 — prefer body.persona; fall back to voiceGender.
-        (typeof body.persona === 'string' ? body.persona : (body.voiceGender ?? 'male')) as Persona | VoiceGender,
-      ),
+      system: [{ type: 'text', text: buildRecapSystem(personaInput), cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMessage }],
     });
 

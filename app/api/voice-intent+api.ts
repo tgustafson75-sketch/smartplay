@@ -128,11 +128,12 @@ ${JSON.stringify(context, null, 2)}
 
 Parse the intent. Return JSON only.`;
 
+    // Audit 101 / W4 — Anthropic ephemeral prompt caching (5-min TTL).
     const result = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 400,
       temperature: 0,
-      system: buildSystemPrompt(personaInput),
+      system: [{ type: 'text', text: buildSystemPrompt(personaInput), cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userPrompt }],
     });
 

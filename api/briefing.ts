@@ -102,10 +102,12 @@ ${cageBlock}
 
 Give the pre-round briefing now.`;
 
+    // Audit 101 / W4 — opt the system prompt into Anthropic ephemeral
+    // prompt caching (5-min TTL).
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 200,
-      system: systemPrompt,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMessage }],
     });
 

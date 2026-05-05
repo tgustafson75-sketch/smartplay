@@ -108,11 +108,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `and respond by calling cage_swing_review.\n\n` +
       JSON.stringify(features, null, 2);
 
+    // Audit 101 / W4 — opt the system prompt into Anthropic ephemeral
+    // prompt caching (5-min TTL). Per-swing reviews fire frequently
+    // during a cage session.
     const result = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 400,
       temperature: 0.6,
-      system: buildCageSystemPrompt(personaInput),
+      system: [{ type: 'text', text: buildCageSystemPrompt(personaInput), cache_control: { type: 'ephemeral' } }],
       tools: [TOOL],
       tool_choice: { type: 'tool', name: TOOL_NAME },
       messages: [{ role: 'user', content: userMessage }],

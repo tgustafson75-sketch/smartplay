@@ -244,11 +244,12 @@ Remember: You are ${caddieName}. Not an app. Not an AI assistant. ${caddieName}.
 
     // ── Anthropic call ──────────────────────────────────────────────────────
 
+    // Audit 101 / W4 — Anthropic ephemeral prompt caching (5-min TTL).
     const aiResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 400,
       tools: TOOLS,
-      system: systemPrompt,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: String(message ?? '') }],
     });
 

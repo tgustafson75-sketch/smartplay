@@ -213,11 +213,14 @@ ${JSON.stringify(context, null, 2)}
 
 Parse the intent. Return JSON only.`;
 
+    // Audit 101 / W4 — opt the system prompt into Anthropic ephemeral
+    // prompt caching (5-min TTL). Voice intent fires many times per
+    // round; identical system prompts (same persona) hit the cache.
     const result = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 400,
       temperature: 0,
-      system: buildSystemPrompt(personaInput),
+      system: [{ type: 'text', text: buildSystemPrompt(personaInput), cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userPrompt }],
     });
 

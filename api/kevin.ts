@@ -657,11 +657,17 @@ ${baseMessage}`
     const MAX_TOOL_ROUNDS = 3;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      // Audit 101 / W4 — opt the system prompt into Anthropic ephemeral
+      // prompt caching. Same identical prompt within the 5-minute TTL hits
+      // the cache; cache misses cost the same as before. The system prompt
+      // here is multi-thousand-token; cache hits drop input billing on
+      // repeat /api/kevin calls (typical user pattern: many calls in a
+      // round, all with the same caddieName + characterSpec + register).
       const aiResponse = await anthropic.messages.create({
         model,
         max_tokens: tier === 'TACTICAL' ? 200 : 400,
         tools: TOOLS,
-        system: systemPrompt,
+        system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
         messages,
       });
 

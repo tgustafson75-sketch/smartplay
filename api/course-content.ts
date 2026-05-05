@@ -100,11 +100,13 @@ ${holesInput.map(h => `${h.hole_number}: par ${h.par}, ${h.yardage}y`).join('\n'
 
 Generate the JSON.`;
 
+    // Audit 101 / W4 — opt the system prompt into Anthropic ephemeral
+    // prompt caching (5-min TTL). Course content prompts are large.
     const completion = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 2000,
       temperature: 0.7,
-      system: buildSystemPrompt(personaInput),
+      system: [{ type: 'text', text: buildSystemPrompt(personaInput), cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userPrompt }],
     });
 
