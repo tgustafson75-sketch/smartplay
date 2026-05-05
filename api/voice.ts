@@ -49,11 +49,18 @@ export default async function handler(
   try {
     const { text, gender = 'male', language = 'en', persona = null } = req.body;
 
-    if (!text) {
+    // Audit 101 / B3 — validate text before passing to TTS providers. Without
+    // this, a 10MB string burns ElevenLabs quota; non-strings throw inside
+    // the SDK calls. Cap at 4000 chars (well above any caddie utterance the
+    // app generates — typical max is ~600 chars for full Kevin responses).
+    if (!text || typeof text !== 'string' || text.length === 0) {
       return res.status(400).json({ error: 'No text' });
     }
+    if (text.length > 4000) {
+      return res.status(413).json({ error: 'Text too long', max: 4000 });
+    }
 
-    console.log('[voice] generating:', String(text).slice(0, 50), persona ?? gender);
+    console.log('[voice] generating:', text.slice(0, 50), persona ?? gender);
 
     // Try ElevenLabs first
     if (ELEVENLABS_KEY) {
