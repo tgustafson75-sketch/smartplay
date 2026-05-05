@@ -354,7 +354,12 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
     }
 
     const audioFile = new File(Paths.cache, `kevin_voice_${Date.now()}.mp3`);
-    audioFile.write(bytes);
+    // Audit 101 / S4 — await the write before createAsync. If write returns
+    // a promise (depends on expo-file-system version), unawaited it may not
+    // flush before the playback layer reads the file → empty/truncated audio
+    // → playback timeout clamps short and cuts speech mid-utterance. Plausible
+    // cause of the [voice] speak timeout observed during F1 verification.
+    await Promise.resolve(audioFile.write(bytes));
 
     if (myId !== currentSpeechId) return;
 
@@ -485,7 +490,8 @@ export const speak = async (
 
     const uint8 = new Uint8Array(arrayBuffer);
     const audioFile = new File(Paths.cache, `kevin_voice_${Date.now()}.mp3`);
-    audioFile.write(uint8);
+    // Audit 101 / S4 — await the write (see notes at the base64 path).
+    await Promise.resolve(audioFile.write(uint8));
 
     if (myId !== currentSpeechId) return;
 

@@ -40,10 +40,13 @@ export const analyzeSwingFrame = async (
   language: string,
   apiUrl: string,
 ): Promise<SwingCaptureResult> => {
+  // Audit 101 / S6 — clearTimeout AFTER res.json() completes, not in .finally()
+  // on the fetch. If the server flushes headers fast but the body is slow,
+  // the original `.finally(clearTimeout)` runs before parsing and leaves the
+  // body parse with no timeout protection.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-
     const res = await fetch(apiUrl + '/api/smartmotion', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -59,15 +62,17 @@ export const analyzeSwingFrame = async (
         language,
       }),
       signal: controller.signal,
-    }).finally(() => clearTimeout(timeout));
+    });
 
     const data = await res.json() as { fix?: string; fault?: string | null };
+    clearTimeout(timeout);
     return {
       fix: data.fix ?? 'Set up the camera and try again.',
       fault: data.fault ?? null,
       frameUri: null,
     };
   } catch (err) {
+    clearTimeout(timeout);
     console.log('[swingCapture] API error:', err);
     return {
       fix: 'Could not analyze the swing. Check your connection.',
