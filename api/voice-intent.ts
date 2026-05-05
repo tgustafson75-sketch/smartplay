@@ -175,6 +175,22 @@ Available intents:
    raw_utterance: pass the verbatim user phrase so the handler can store it for context.
    ONLY match when the user is reporting a shot they just hit (past tense or present-narrative). DO NOT match generic queries about clubs ("what club here") — those are open_tool / query_status. DO NOT match cage-mode club switches ("switching to 6-iron") — those are club_change.
 
+17. media_capture — User wants to capture video of an upcoming shot, swing, or moment.
+   parameters: { capture_type: "shot" | "swing" | "highlight", raw_utterance: string }
+   Examples:
+   - "record this shot" / "capture this" / "record my shot" -> { capture_type: "shot" }
+   - "record my swing" / "watch my swing" / "record this swing" -> { capture_type: "swing" }
+   - "watch this" / "look at this" / "check this out" -> { capture_type: "highlight" }
+   capture_type 'shot' = on-course shot capture (~5s). 'swing' = full swing for review (~8s, saves to swing library). 'highlight' = memorable moment, tags for highlight collection.
+   DO NOT match commands that are about playback ("show me video", "replay") — those are media_playback.
+
+18. media_playback — User wants to open or play back captured media.
+   parameters: { playback_action: "open" | "last", raw_utterance: string }
+   Examples:
+   - "open video" / "show me video" / "pull up video" -> { playback_action: "open" }
+   - "play that back" / "show me last shot" / "replay" -> { playback_action: "last" }
+   playback_action 'open' = open the media list (most recent on top). 'last' = play the most recent capture immediately.
+
 7. unknown — Cannot determine intent.
    parameters: {}
    Set follow_up_question to a brief clarifying question ${caddieName} could ask.
@@ -183,7 +199,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "media_capture" | "media_playback" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null
