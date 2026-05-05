@@ -229,6 +229,7 @@ export default function SmartVisionScreen() {
   const courseName = useRoundStore(s => s.activeCourse);
   const courseHoles = useRoundStore(s => s.courseHoles);
   const currentHole = useRoundStore(s => s.currentHole);
+  const isRoundActive = useRoundStore(s => s.isRoundActive);
   const totalHoles = courseHoles.length || 18;
   const addOrUpdatePlan = useRoundStore(s => s.addOrUpdatePlan);
   const existingPlan = useRoundStore(s => s.plans.find(p => p.hole_number === currentHole));
@@ -284,6 +285,13 @@ export default function SmartVisionScreen() {
   // is now draggable. Defaults to green centroid; user can drag it to
   // simulate today's pin position (front/middle/back of green).
   const [pinByHole, setPinByHole] = useState<Record<number, { x: number; y: number }>>({});
+  // Phase 108-followup — per-hole tee override. Matches pinByHole shape.
+  // Lets the user nudge the T marker when course geometry positions it
+  // off the actual tee box (golfcourseapi quality varies by course).
+  // Drag is only enabled when no round is active per Tim's request —
+  // mid-round, the tee marker should reflect the actual tee box and not
+  // be accidentally moved by a fat-finger gesture during play.
+  const [teeByHole, setTeeByHole] = useState<Record<number, { x: number; y: number }>>({});
 
   // ── Load geometry + imagery for the current hole ────────────────
   // Imagery selection logic:
@@ -360,13 +368,17 @@ export default function SmartVisionScreen() {
   // (50%, 15%) when geometry is missing (curated bundled image mode or
   // courses without tee/green coords). Static fallback matches the prior
   // pre-Phase-108 behaviour exactly for the no-projection path.
+  // Phase 108-followup — user override (drag) wins over projection wins
+  // over static fallback.
+  const teeOverride = teeByHole[holeIndex];
   const teeCanvas = useMemo(() => {
+    if (teeOverride) return teeOverride;
     if (geometry?.tee && projection) {
       const off = projectToPixels(geometry.tee, projection.center, projection.zoom, projection.bearing);
       return { x: imageW / 2 + off.x, y: imageH / 2 - off.y };
     }
     return { x: imageW / 2, y: imageH * 0.85 };
-  }, [geometry, projection, imageW, imageH]);
+  }, [teeOverride, geometry, projection, imageW, imageH]);
   const pinDefaultCanvas = useMemo(() => {
     if (geometry?.green && projection) {
       const off = projectToPixels(geometry.green, projection.center, projection.zoom, projection.bearing);
@@ -464,6 +476,8 @@ export default function SmartVisionScreen() {
   // ── Drag handlers for yellow target + pin (canvas coords) ───────
   const targetDragStartRef = useRef<{ x: number; y: number } | null>(null);
   const pinDragStartRef = useRef<{ x: number; y: number } | null>(null);
+  // Phase 108-followup — tee drag start ref.
+  const teeDragStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const onTargetDrag = useCallback((dx: number, dy: number) => {
     if (!targetCanvas) return;
@@ -485,10 +499,22 @@ export default function SmartVisionScreen() {
     setPinByHole(prev => ({ ...prev, [holeIndex]: next }));
   }, [pinCanvas, holeIndex, clampToCanvas]);
 
+  // Phase 108-followup — tee drag handler. Persists per hole into teeByHole.
+  const onTeeDrag = useCallback((dx: number, dy: number) => {
+    if (!teeCanvas) return;
+    if (!teeDragStartRef.current) teeDragStartRef.current = teeCanvas;
+    const next = clampToCanvas({
+      x: teeDragStartRef.current.x + dx,
+      y: teeDragStartRef.current.y + dy,
+    });
+    setTeeByHole(prev => ({ ...prev, [holeIndex]: next }));
+  }, [teeCanvas, holeIndex, clampToCanvas]);
+
   // Reset drag refs when hole changes
   useEffect(() => {
     targetDragStartRef.current = null;
     pinDragStartRef.current = null;
+    teeDragStartRef.current = null;
   }, [holeIndex]);
 
   // ── Hole nav ────────────────────────────────────────────────────
@@ -634,11 +660,17 @@ export default function SmartVisionScreen() {
         </Svg>
 
         {/* Markers — direct canvas coords. */}
+        {/* Phase 108-followup — T marker is draggable when no round is
+            active so the user can compensate for course-geometry tee
+            position errors. Locked during a round to prevent fat-finger
+            adjustments while the player is using the view tactically. */}
         <Marker
           kind="T"
           x={teeCanvas.x}
           y={teeCanvas.y}
-          draggable={false}
+          draggable={!isRoundActive}
+          onDrag={!isRoundActive ? onTeeDrag : undefined}
+          onDragEnd={!isRoundActive ? () => { teeDragStartRef.current = null; } : undefined}
         />
         <Marker
           kind="P"
