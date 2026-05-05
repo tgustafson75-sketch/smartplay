@@ -27,7 +27,7 @@ export default function PaywallScreen() {
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
   const { subscription_status, setSubscriptionStatus: _setSubscriptionStatus } = usePlayerProfileStore();
-  const caddieName = getCaddieName(voiceGender);
+  const caddieName = getCaddieName(caddiePersonality);
   const FEATURES: { icon: IconName; label: string; sub: string }[] = [
     { icon: 'golf-outline',         label: `${caddieName} on every hole`, sub: 'Real-time caddie advice, club selection, and course strategy' },
     { icon: 'telescope-outline',    label: 'SmartVision',         sub: 'AI hole analysis from satellite and on-course images' },

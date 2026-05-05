@@ -20,7 +20,8 @@ export default function TrustLevelScreen() {
   const setLevel = useTrustLevelStore(s => s.setLevel);
   const [showAbout, setShowAbout] = useState(false);
   const voiceGender = useSettingsStore(s => s.voiceGender);
-  const caddieName = getCaddieName(voiceGender);
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
+  const caddieName = getCaddieName(caddiePersonality);
   const subjectPronoun = voiceGender === 'female' ? 'She' : 'He';
   const possessivePronoun = voiceGender === 'female' ? 'her' : 'him';
   // Used in mid-sentence ("ready when you need him/her") — lowercase form.

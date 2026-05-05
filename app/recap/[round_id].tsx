@@ -164,8 +164,8 @@ function GhostRow({ ghostResult }: { ghostResult: GhostHoleResult; holeNum: numb
 export default function RecapScreen() {
   const { round_id } = useLocalSearchParams<{ round_id: string }>();
   const router = useRouter();
-  const { voiceGender, voiceEnabled } = useSettingsStore();
-  const caddieName = getCaddieName(voiceGender);
+  const { voiceGender, voiceEnabled, caddiePersonality } = useSettingsStore();
+  const caddieName = getCaddieName(caddiePersonality);
   // Phase R — pull round photos from the persisted RoundRecord (recap api
   // returns a different shape — photos live on the local roundStore).
   const roundPhotos = useRoundStore(s => s.roundHistory.find(r => r.id === round_id)?.round_photos ?? []);

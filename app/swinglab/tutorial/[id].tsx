@@ -26,7 +26,7 @@ export default function TutorialDetail() {
   const tutorial = useTutorialStore(s => s.tutorials.find(t => t.id === id) ?? null);
   const setActive = useTutorialStore(s => s.setActive);
   const deleteTutorial = useTutorialStore(s => s.deleteTutorial);
-  const caddieName = getCaddieName(useSettingsStore(s => s.voiceGender));
+  const caddieName = getCaddieName(useSettingsStore(s => s.caddiePersonality));
 
   if (!tutorial) {
     return (

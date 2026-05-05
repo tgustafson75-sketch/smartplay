@@ -123,7 +123,8 @@ export default function TutorialsScreen() {
   const router = useRouter();
   const [openId, setOpenId] = useState<string | null>(null);
   const voiceGender = useSettingsStore(s => s.voiceGender);
-  const caddieName = getCaddieName(voiceGender);
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
+  const caddieName = getCaddieName(caddiePersonality);
   const pronoun = voiceGender === 'female' ? 'She' : 'He';
   const tutorials = useMemo(() => buildTutorials(caddieName, pronoun), [caddieName, pronoun]);
 

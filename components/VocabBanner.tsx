@@ -28,7 +28,8 @@ export default function VocabBanner({ style }: Props) {
   const [count, setCount] = useState(0);
   const fade = useState(new Animated.Value(0))[0];
   const voiceGender = useSettingsStore(s => s.voiceGender);
-  const caddieName = getCaddieName(voiceGender);
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
+  const caddieName = getCaddieName(caddiePersonality);
   const subjectPronoun = voiceGender === 'female' ? 'she' : 'he';
 
   useEffect(() => {

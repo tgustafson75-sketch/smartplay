@@ -50,7 +50,7 @@ export default function KevinLearningScreen() {
   const recordCorrection = useVocabularyProfileStore(s => s.recordCorrection);
   const reset = useVocabularyProfileStore(s => s.reset);
   const roundsTogether = useRelationshipStore(s => s.roundsTogether);
-  const caddieName = getCaddieName(useSettingsStore(s => s.voiceGender));
+  const caddieName = getCaddieName(useSettingsStore(s => s.caddiePersonality));
 
   const sortedEntries: VocabularyEntry[] = useMemo(() => {
     return Object.values(entries)

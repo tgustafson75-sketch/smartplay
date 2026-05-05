@@ -50,7 +50,7 @@ export default function TutorialUpload() {
   const { colors } = useTheme();
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   const addTutorial = useTutorialStore(s => s.addTutorial);
-  const caddieName = getCaddieName(useSettingsStore(s => s.voiceGender));
+  const caddieName = getCaddieName(useSettingsStore(s => s.caddiePersonality));
 
   const [step, setStep] = useState<'compose' | 'analyzing'>('compose');
   const [videoUri, setVideoUri] = useState<string | null>(null);

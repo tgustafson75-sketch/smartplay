@@ -73,8 +73,8 @@ export default function DiagnosticCard() {
   const router = useRouter();
   const { colors, spacing, radii } = useTheme();
   const params = useLocalSearchParams<{ pattern?: string; reasoning?: string }>();
-  const { voiceGender, language } = useSettingsStore();
-  const caddieName = getCaddieName(voiceGender);
+  const { voiceGender, language, caddiePersonality } = useSettingsStore();
+  const caddieName = getCaddieName(caddiePersonality);
   const [playing, setPlaying] = useState(false);
 
   const pattern = String(params.pattern ?? '');
@@ -156,7 +156,7 @@ export default function DiagnosticCard() {
         ) : (
           // Fallback: show full reasoning text if heuristic parse found nothing
           <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.sectionLabel, { color: colors.accent }]}>KEVIN'S READ</Text>
+            <Text style={[styles.sectionLabel, { color: colors.accent }]}>{`${caddieName.toUpperCase()}'S READ`}</Text>
             <Text style={[styles.sectionBody, { color: colors.text_primary }]}>{reasoning || '—'}</Text>
           </View>
         )}

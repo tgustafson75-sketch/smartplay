@@ -101,8 +101,8 @@ export default function CageDrillScreen() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const { voiceEnabled, voiceGender, language } = useSettingsStore();
-  const caddieName = getCaddieName(voiceGender);
+  const { voiceEnabled, voiceGender, language, caddiePersonality } = useSettingsStore();
+  const caddieName = getCaddieName(caddiePersonality);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
 
   // ── Permissions ─────────────────────────────────────────────────────

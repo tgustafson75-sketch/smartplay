@@ -306,7 +306,7 @@ export default function GreetingScreen() {
               ]}
               numberOfLines={3}
             >
-              {getGreetingCaption(greeting, getCaddieName(voiceGender))}
+              {getGreetingCaption(greeting, getCaddieName(caddiePersonality))}
             </Animated.Text>
           ) : null}
         </View>
