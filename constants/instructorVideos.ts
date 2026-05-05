@@ -1,26 +1,32 @@
 /**
- * Phase 111 — Curated reputable-instructor YouTube links per fault category.
+ * Phase 111 → Phase 111-followup — curated instructor video links per fault category.
  *
- * Every entry is tagged `verified: false` until Tim manually confirms:
- *   1. The URL still resolves (channel + video both live)
- *   2. The video addresses the named fault category
- *   3. The video is under 10 minutes (attention span during practice)
- *   4. The channel is established and still active
+ * URLs upgraded from search-query placeholders to specific videos found
+ * via web search of the named instructors. Every URL is a real YouTube
+ * video by the attributed instructor (verified to exist, title matches
+ * category). `verified: false` remains on each entry because the
+ * empirical check still requires Tim:
+ *   1. Open URL on Galaxy Z Fold → video plays (not removed / private)
+ *   2. Length confirmed under 10 minutes (attention span during practice)
+ *   3. Content addresses the named fault category as expected
+ *   4. Video isn't dated by outdated technique (some Hank Haney pieces
+ *      are 10-15 years old — fundamentals like grip don't really change,
+ *      but check anyway)
  *
- * Empirical verification protocol: open each URL on Galaxy Z Fold's
- * dev-client → YouTube app or browser opens → video plays → confirm
- * Length, Title, and Channel match expectations. Flip `verified: true`
- * for any entry that passes. Replace primary with fallback (or drop
- * the category from the live deck) for any that fail.
+ * Each entry has primary + fallback. If primary fails Tim's check, swap
+ * with fallback or substitute. The card UI uses primary only.
  *
- * Notes on selection:
- *   - Names listed in Phase 111 spec: Mike Malaska, Sean Foley, Hank
- *     Haney, Pete Cowen, Mike Bender, Cameron Champ, Top 100 GolfDigest
- *     teaching pros, LPGA Hall of Fame teachers.
- *   - This file ships placeholder URLs that look right per channel
- *     name — they are NOT empirically verified to point at a video that
- *     specifically addresses the category. Tim's verification pass is
- *     a real step, not a formality.
+ * Sources for specific video selection (all via WebSearch on instructor name + topic):
+ * - Hank Haney via Golf Digest YouTube channel (slice fix, downswing, grip)
+ * - Sean Foley via Golf Digest YouTube channel (weight shift)
+ * - Mike Malaska via Malaska Golf YouTube channel (tempo, posture)
+ * - Mike Bender via MikeBenderGolf YouTube channel (impact / setup)
+ *
+ * Ball Position note: a specific Mike-Bender ball-position video did not
+ * surface in search; using his Impact video as primary (covers setup
+ * including ball position relative to clubface) and his Swing Plane
+ * video as fallback. Tim may want to source a more category-specific
+ * video for v1.2.
  */
 
 export type IssueCategory =
@@ -36,12 +42,14 @@ export interface InstructorVideoLink {
   title: string;
   /** Channel / instructor attribution (shown in small text). */
   instructor: string;
-  /** YouTube URL — full video link, NOT a search query. */
+  /** YouTube URL — full video link. */
   url: string;
-  /** Approximate runtime in seconds. Cap is 10 min (600s). */
+  /** Approximate runtime in seconds. Cap is 10 min (600s). Where the
+   *  video length wasn't surfaced by search, value is a conservative
+   *  guess and Tim refines on verification. */
   approxRuntimeSec: number;
   /** Tim flips to true after empirically verifying the URL resolves
-   *  to a relevant video on Galaxy Z Fold. */
+   *  to a relevant playable video on Galaxy Z Fold. */
   verified: boolean;
 }
 
@@ -50,97 +58,103 @@ interface CategoryVideos {
   fallback?: InstructorVideoLink;
 }
 
-// ─── PLACEHOLDER URLS ────────────────────────────────────────────────────────
-// These point at known instructor channels' search results so the link
-// at least resolves to a relevant page even before Tim's verification.
-// Replace each `url:` with the specific video URL once curated.
-
 export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
   swing_path: {
     primary: {
-      title: 'Stop Coming Over the Top',
-      instructor: 'Mike Malaska',
-      url: 'https://www.youtube.com/results?search_query=mike+malaska+over+the+top+fix',
-      approxRuntimeSec: 480,
+      title: "Hank Haney's Simple Slice Fix",
+      instructor: 'Hank Haney · Golf Digest',
+      url: 'https://www.youtube.com/watch?v=ziKwS6Dve0M',
+      approxRuntimeSec: 240,
       verified: false,
     },
     fallback: {
-      title: 'Swing Path Made Simple',
-      instructor: 'Mike Bender',
-      url: 'https://www.youtube.com/results?search_query=mike+bender+swing+path',
-      approxRuntimeSec: 360,
+      title: 'How to Start Your Downswing and Stop Losing Shots Right',
+      instructor: 'Hank Haney · Golf Digest',
+      url: 'https://www.youtube.com/watch?v=DsGez_e8O6g',
+      approxRuntimeSec: 240,
       verified: false,
     },
   },
   weight_transfer: {
     primary: {
-      title: 'Pressure & Weight Shift Drill',
-      instructor: 'Sean Foley',
-      url: 'https://www.youtube.com/results?search_query=sean+foley+pressure+shift+drill',
-      approxRuntimeSec: 420,
+      title: 'How to Shift Your Weight to Increase Swing Speed',
+      instructor: 'Sean Foley · Golf Digest',
+      url: 'https://www.youtube.com/watch?v=4ARmrHB3qSU',
+      approxRuntimeSec: 240,
       verified: false,
     },
     fallback: {
-      title: 'Get Off Your Back Foot',
-      instructor: 'Hank Haney',
-      url: 'https://www.youtube.com/results?search_query=hank+haney+weight+shift',
+      title: 'Weight Shift Made Really Easy',
+      instructor: 'Golf Lesson channel',
+      url: 'https://www.youtube.com/watch?v=foOHoj9HiEQ',
       approxRuntimeSec: 360,
       verified: false,
     },
   },
   tempo: {
     primary: {
-      title: '3-to-1 Tempo Drill',
-      instructor: 'Pete Cowen',
-      url: 'https://www.youtube.com/results?search_query=pete+cowen+tempo+drill',
-      approxRuntimeSec: 420,
+      title: 'Finding Your Tempo · Maintaining Tempo',
+      instructor: 'Mike Malaska · Malaska Golf',
+      url: 'https://www.youtube.com/watch?v=5HhC1xvFwyQ',
+      approxRuntimeSec: 360,
       verified: false,
     },
     fallback: {
-      title: 'Smooth Tempo Practice',
-      instructor: 'Mike Malaska',
-      url: 'https://www.youtube.com/results?search_query=mike+malaska+tempo',
+      title: 'Golf Swing — Motion — Tempo · From Garage to the Course',
+      instructor: 'Mike Malaska · Malaska Golf',
+      url: 'https://www.youtube.com/watch?v=IkJsjqJzPTs',
       approxRuntimeSec: 360,
       verified: false,
     },
   },
   ball_position: {
+    // Note: a specific ball-position video by a named instructor didn't
+    // surface in WebSearch. Mike Bender's Impact video covers setup
+    // (including ball position relative to clubface). v1.2 should source
+    // a more category-specific video.
     primary: {
-      title: 'Ball Position by Club',
-      instructor: 'Mike Bender',
-      url: 'https://www.youtube.com/results?search_query=mike+bender+ball+position+per+club',
+      title: 'Impact (covers ball position + setup fundamentals)',
+      instructor: 'Mike Bender · MikeBenderGolf',
+      url: 'https://www.youtube.com/watch?v=IRuo6FY0tDs',
+      approxRuntimeSec: 360,
+      verified: false,
+    },
+    fallback: {
+      title: 'Swing Plane',
+      instructor: 'Mike Bender · MikeBenderGolf',
+      url: 'https://www.youtube.com/watch?v=N2SQ5rfwvV0',
       approxRuntimeSec: 360,
       verified: false,
     },
   },
   grip: {
     primary: {
-      title: 'The Neutral Grip Explained',
-      instructor: 'Hank Haney',
-      url: 'https://www.youtube.com/results?search_query=hank+haney+neutral+grip',
-      approxRuntimeSec: 480,
+      title: 'How To Do the Correct Grip on a Golf Club',
+      instructor: 'Hank Haney · Golf Digest',
+      url: 'https://www.youtube.com/watch?v=WpPPewbRnos',
+      approxRuntimeSec: 240,
       verified: false,
     },
     fallback: {
-      title: 'Grip Pressure Fix',
-      instructor: 'Sean Foley',
-      url: 'https://www.youtube.com/results?search_query=sean+foley+grip+pressure',
-      approxRuntimeSec: 300,
+      title: 'Correct Grip (Golf Tip)',
+      instructor: 'Hank Haney',
+      url: 'https://www.youtube.com/watch?v=UcvA8tcuH2o',
+      approxRuntimeSec: 180,
       verified: false,
     },
   },
   posture: {
     primary: {
-      title: 'Athletic Setup Posture',
-      instructor: 'Mike Malaska',
-      url: 'https://www.youtube.com/results?search_query=mike+malaska+athletic+posture+golf+setup',
-      approxRuntimeSec: 420,
+      title: 'Balance · Posture · Setup · Consistency · Trust Your Toes',
+      instructor: 'Mike Malaska · Malaska Golf',
+      url: 'https://www.youtube.com/watch?v=KVdtrI3ZcOM',
+      approxRuntimeSec: 360,
       verified: false,
     },
     fallback: {
-      title: 'Spine Angle & Tilt',
-      instructor: 'Pete Cowen',
-      url: 'https://www.youtube.com/results?search_query=pete+cowen+spine+angle+golf',
+      title: 'Mobility, Stability and Golf Posture · Static Back Stretch',
+      instructor: 'Mike Malaska · Malaska Golf',
+      url: 'https://www.youtube.com/watch?v=l6E-uyQDfqU',
       approxRuntimeSec: 360,
       verified: false,
     },
