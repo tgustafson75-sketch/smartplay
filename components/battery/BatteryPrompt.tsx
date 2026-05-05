@@ -23,7 +23,12 @@ import { speak } from '../../services/voiceService';
 export default function BatteryPrompt() {
   const insets = useSafeAreaInsets();
   const trustLevel = useTrustLevelStore(s => s.level);
-  const { voiceGender, language, voiceEnabled } = useSettingsStore();
+  // Audit 101 / W9 — per-field selectors. Prior code subscribed to the
+  // entire settings store; any unrelated settings change re-rendered
+  // BatteryPrompt (which mounts at the app root and stays alive).
+  const voiceGender = useSettingsStore(s => s.voiceGender);
+  const language = useSettingsStore(s => s.language);
+  const voiceEnabled = useSettingsStore(s => s.voiceEnabled);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   const [bs, setBs] = useState<BatteryState | null>(null);
 

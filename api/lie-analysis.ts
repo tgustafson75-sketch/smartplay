@@ -148,10 +148,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? `Context:\n${contextLines.join('\n')}\n\nWhat do you see, and what should they do?`
       : 'What do you see, and what should they do?';
 
+    // Audit 101 / W10 — tuned tokens + temperature down. Lie-analysis
+    // outputs converge in <400 tokens at temperature 0.3; the prior
+    // 800/0.5 was over-generating descriptive prose for a vision Sonnet
+    // call (the slowest, most-expensive endpoint). Lowered to cut both
+    // latency and output cost without sacrificing read quality.
     const completion = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 800,
-      temperature: 0.5,
+      max_tokens: 400,
+      temperature: 0.3,
       system: buildSystemPrompt(personaInput),
       messages: [
         {

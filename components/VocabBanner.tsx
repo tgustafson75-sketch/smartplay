@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,7 +26,12 @@ export default function VocabBanner({ style }: Props) {
   const router = useRouter();
   const [visible, setVisible] = useState(false);
   const [count, setCount] = useState(0);
-  const fade = useState(new Animated.Value(0))[0];
+  // Audit 101 / W8 — useRef instead of useState. useState lazy-initializes
+  // its value, but if the parent triggers re-mount or this component is
+  // re-keyed, useState re-runs the initializer — leaving the prior
+  // Animated.Value alive with active animations while a fresh one takes
+  // over. useRef.current is the canonical pattern for animation values.
+  const fade = useRef(new Animated.Value(0)).current;
   const voiceGender = useSettingsStore(s => s.voiceGender);
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const caddieName = getCaddieName(caddiePersonality);
