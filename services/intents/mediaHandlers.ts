@@ -60,18 +60,19 @@ export const mediaCaptureHandler: IntentHandler = {
       (intent.parameters as { raw_utterance?: unknown }).raw_utterance ?? intent.raw_text ?? '',
     ).trim() || undefined;
 
-    // Phase 200 / F3 mitigation — Phase 110 voice intents fire and the
-    // orchestration boundary routes correctly, but camera surfaces are
-    // wired only for cage 'swing' kind today (round-pillar 'shot' /
-    // 'highlight' surfaces deferred). Tell the user honestly when no
-    // surface picks up the capture instead of falsely acknowledging.
+    // Phase 110-followup — surface availability check (per-kind).
+    // 'shot' / 'highlight' wired by CaptureOverlay (mounted at app root,
+    // active during round-active). 'swing' is owned by the cage session
+    // flow — voice during an active cage session is redundant (the
+    // session already records every detected swing); voice outside cage
+    // gets an honest "open cage mode" reply.
     if (!isCaptureWired(kind)) {
       track('media_capture_handler_no_surface', { kind });
       return {
         success: false,
         voice_response: kind === 'swing'
-          ? "Open Cage Mode and I'll capture the swing there."
-          : "Round-side capture isn't wired yet — start a cage session if you want me to record a swing.",
+          ? "Open Cage Mode and I'll capture every swing of your session."
+          : "Start a round and I'll record shots and highlights from there.",
         side_effects: [`media:capture_no_surface:${kind}`],
         follow_up_needed: false,
       };

@@ -30,6 +30,7 @@ import { useTeamIntelligenceStore } from '../store/teamIntelligenceStore';
 import { initTeamIntelligenceForSession } from '../services/teamIntelligence';
 import CaddieSuggestionCard from '../components/CaddieSuggestionCard';
 import GpsQualityOverlay from '../components/dev/GpsQualityOverlay';
+import CaptureOverlay from '../components/CaptureOverlay';
 
 // Phase Y — run `body` only after roundStore rehydration completes. Prevents
 // the rehydration race where a fast user tapping Start Round before
@@ -355,6 +356,9 @@ function AppNavigator() {
       <CaddieSuggestionCard />
       {/* Phase 107 — GPS quality debug overlay (gated by settings flag). */}
       <GpsQualityOverlay />
+      {/* Phase 110-followup — Round-side capture surface. Subscribes for
+          'shot' / 'highlight' kinds; renders CameraView only when active. */}
+      <CaptureOverlay />
       <RoundActiveDevIndicator />
       <Stack
         screenOptions={{

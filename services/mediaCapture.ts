@@ -59,27 +59,41 @@ const DURATION_BY_KIND: Record<CaptureKind, number> = {
 // requestCapture(); the surface listening picks it up and drives the
 // camera. Decoupled so the orchestration boundary doesn't need a direct
 // expo-camera dep.
+//
+// Phase 110-followup — subscribers declare WHICH kinds they handle so
+// isCaptureWired() can answer per-kind honestly. CaptureOverlay at app
+// root handles 'shot' + 'highlight' for round-side captures; cage
+// session flow continues to handle 'swing' through its own session loop.
 type CaptureListener = (req: CaptureRequest) => void;
-const captureListeners = new Set<CaptureListener>();
+interface SubscriberRegistration {
+  kinds: readonly CaptureKind[];
+  cb: CaptureListener;
+}
+const captureSubscribers = new Set<SubscriberRegistration>();
 
-export function subscribeCapture(cb: CaptureListener): () => void {
-  captureListeners.add(cb);
-  return () => { captureListeners.delete(cb); };
+export function subscribeCapture(kinds: readonly CaptureKind[], cb: CaptureListener): () => void {
+  const reg: SubscriberRegistration = { kinds, cb };
+  captureSubscribers.add(reg);
+  return () => { captureSubscribers.delete(reg); };
 }
 
 /**
- * Phase 200 / F3 — honest pre-flight check. Returns true only when a
- * capture surface is actually subscribed AND the requested kind has a
- * camera path that can drive it. Today CageSessionOverlay subscribes
- * for 'swing' kind; round-pillar capture surfaces (ShotCaptureOverlay
- * for 'shot' / 'highlight') are deferred. Voice handlers gate on this
- * to avoid falsely claiming "Recording" when nothing actually records.
+ * Phase 200 / F3 + Phase 110-followup — honest per-kind pre-flight check.
+ * Returns true only when a subscribed surface exists for this kind. Voice
+ * handlers gate on this to avoid falsely claiming "Recording" when no
+ * surface will pick it up.
+ *
+ *   'shot' / 'highlight' — wired iff CaptureOverlay (mounted at app root)
+ *                          has subscribed (it does so during round-active).
+ *   'swing'              — wired by Cage Session flow (session-recording
+ *                          captures all swings already; voice command is
+ *                          redundant during an active session).
  */
 export function isCaptureWired(kind: CaptureKind): boolean {
-  if (captureListeners.size === 0) return false;
-  // Conservative: only 'swing' has a known wired surface today
-  // (CageSessionOverlay during an active cage session).
-  return kind === 'swing';
+  for (const reg of captureSubscribers) {
+    if (reg.kinds.includes(kind)) return true;
+  }
+  return false;
 }
 
 // Recent captures buffer for playback. Persisted indirectly via the
@@ -127,12 +141,13 @@ export async function requestCapture(req: CaptureRequest): Promise<CapturedMedia
     kind: req.kind,
     has_active_round: round.isRoundActive,
     persona,
-    listener_count: captureListeners.size,
+    subscriber_count: captureSubscribers.size,
   });
 
-  // Notify any surface that's set up to drive the camera.
-  for (const cb of captureListeners) {
-    try { cb(req); } catch (e) { console.warn('[mediaCapture] listener threw:', e); }
+  // Fan out only to subscribers that handle this kind.
+  for (const reg of captureSubscribers) {
+    if (!reg.kinds.includes(req.kind)) continue;
+    try { reg.cb(req); } catch (e) { console.warn('[mediaCapture] subscriber threw:', e); }
   }
 
   return placeholder;
