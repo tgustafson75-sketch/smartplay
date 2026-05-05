@@ -7,6 +7,36 @@
 
 Phase 100 fixes (AbortSignal polyfill, persona-correctness sweep, lint baseline, console hygiene, TODOs) are excluded from this list — they are already shipped.
 
+---
+
+## EXECUTION STATUS (2026-05-05)
+
+All BLOCKING (B*) and SIGNIFICANT (S*) and high-leverage WIN (W1-W10) items shipped in 11 commits:
+
+| Commit | Items |
+|---|---|
+| `4dbf675` | S4 + S6 — voice write race + swingCapture timeout-after-parse |
+| `5a4b69e` | B3 — api/voice.ts text validation |
+| `68204e3` | W3 + S4-bonus — parallelize filler TTS with concurrency cap (40 phrases × 1-2s → ~5-10s on cold launch) |
+| `2290660` | B4 — server-side persona handling sweep (22 sites across 21 routes) |
+| `646f306` | W4 — Anthropic ephemeral prompt caching on 8 hot endpoints |
+| `ef2302f` | S2 + S3 + S5 — filler library mutex + save-before-flip + AsyncStorage error wrapping |
+| `756c390` | S1 — audioLifecycle trust-level subscription teardown |
+| `b00e5ae` | S7 — Anthropic + OpenAI SDK timeouts (32 constructor sites, 25s + maxRetries:1) |
+| `4464ca6` | W1 + W2 — caddie.tsx useShallow selectors + dead-memo cleanup |
+| `33d2aaf` | W6 — SmartVision + KevinPresence context value useMemo |
+| `0856ec1` | W8 + W9 + W10 — VocabBanner Animated.Value, BatteryPrompt selectors, lie-analysis tuning |
+
+Verified false positives (not fixed because nothing was broken):
+- B1 — Haversine in shotDetectionService:48 — formula correct (operand order differs from gpsManager:70)
+- W7 — CaddieAvatar resolvePersona "called twice" — computed once at L341, used 3x downstream
+- CaddieAvatar breath crossfade timeout — properly cleared at L424-427 of every transition
+- caddie.tsx:473 subscribeBattery cleanup — the subscribe fn return value IS the effect cleanup
+
+DEFERRED items (see below) remain v1.2 scope; no changes made.
+
+Build health post-audit-101: tsc clean, lint 0/0, expo-doctor 17/17.
+
 ## Severity legend
 - **BLOCKING** — incorrect behavior visible to a real user; ship-stopper for v1.1
 - **SIGNIFICANT** — wrong but bounded (silent persistence failure, server hang risk under load, etc.)
