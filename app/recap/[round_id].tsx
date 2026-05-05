@@ -25,6 +25,7 @@ import { loadRecap } from '../../services/planStorage';
 import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
 import { checkContent } from '../../services/contentGuardrail';
 import { useSettingsStore } from '../../store/settingsStore';
+import { getCaddieName } from '../../lib/persona';
 import { useRoundStore } from '../../store/roundStore';
 import PhotoCollage from '../../components/recap/PhotoCollage';
 import HandicapImpactCard from '../../components/recap/HandicapImpactCard';
@@ -164,6 +165,7 @@ export default function RecapScreen() {
   const { round_id } = useLocalSearchParams<{ round_id: string }>();
   const router = useRouter();
   const { voiceGender, voiceEnabled } = useSettingsStore();
+  const caddieName = getCaddieName(voiceGender);
   // Phase R — pull round photos from the persisted RoundRecord (recap api
   // returns a different shape — photos live on the local roundStore).
   const roundPhotos = useRoundStore(s => s.roundHistory.find(r => r.id === round_id)?.round_photos ?? []);
@@ -279,7 +281,7 @@ export default function RecapScreen() {
           <Text style={styles.emptyTitle}>Recap not ready yet</Text>
           <Text style={styles.emptyText}>Your round data is saved. The recap will be available the next time you open the app.</Text>
           <TouchableOpacity style={styles.emptyBtn} onPress={() => router.replace('/(tabs)/caddie' as never)}>
-            <Text style={styles.emptyBtnText}>Back to Kevin</Text>
+            <Text style={styles.emptyBtnText}>Back to {caddieName}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -369,7 +371,7 @@ export default function RecapScreen() {
             )}
 
             <View style={styles.kevinCard}>
-              <Text style={styles.kevinLabel}>KEVIN</Text>
+              <Text style={styles.kevinLabel}>{caddieName.toUpperCase()}</Text>
               <Text style={styles.kevinOverall}>{recap.overall_kevin_summary}</Text>
               <View style={styles.kevinActions}>
                 {voiceEnabled && (
@@ -445,7 +447,7 @@ export default function RecapScreen() {
 
       {/* Hidden share card — rendered offscreen for captureRef */}
       <View style={styles.offscreen} pointerEvents="none">
-        <RoundShareCard ref={cardRef} {...buildShareCardProps(recap)} />
+        <RoundShareCard ref={cardRef} {...buildShareCardProps(recap)} caddieName={caddieName} />
       </View>
 
     </SafeAreaView>

@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { getCaddieName, type VoiceGender } from '../../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -87,6 +88,7 @@ export async function POST(request: Request) {
       courseHoles = [],
       responseMode = 'neutral',
       watchData = null,
+      voiceGender = 'male',
     } = body as {
       message?: string;
       language?: string;
@@ -122,7 +124,10 @@ export async function POST(request: Request) {
         averageTempo: string; dominantFault: string | null;
         earlyTransitionRate: number; averageClubSpeed: number; swingCount: number;
       } | null;
+      voiceGender?: VoiceGender;
     };
+
+    const caddieName = getCaddieName(voiceGender);
 
     const totalScore   = Object.values(scores as Record<string, number>).reduce((a, b) => a + b, 0);
     const holesPlayed  = Object.keys(scores as Record<string, number>).length;
@@ -139,7 +144,7 @@ export async function POST(request: Request) {
     const systemPrompt = `
 ${language === 'es' ? 'Responde SIEMPRE en español.' : language === 'zh' ? '请始终用中文回复。' : ''}
 
-You are Kevin, caddie to ${firstName || playerName || 'your player'}.
+You are ${caddieName}, caddie to ${firstName || playerName || 'your player'}.
 
 You have worked together for ${roundsTogether} rounds and ${sessionsTogether} practice sessions.
 
@@ -229,7 +234,7 @@ If the player says anything like "did you get that", "save that", "hero reel", "
 RESPONSE LENGTH:
 ${responseMode === 'short' ? 'Maximum 15 words. Be extremely brief.' : responseMode === 'detailed' ? 'Up to 4 sentences if genuinely needed.' : 'Maximum 2 sentences. Be concise.'}
 
-Remember: You are Kevin. Not an app. Not an AI assistant. Kevin.
+Remember: You are ${caddieName}. Not an app. Not an AI assistant. ${caddieName}.
 `.trim();
 
     console.log('[kevin] processing:', String(message ?? '').slice(0, 50));

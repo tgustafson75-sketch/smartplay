@@ -8,13 +8,29 @@ const openai = new OpenAI({
 
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY;
 
-const ELEVEN_VOICES: Record<string, string> = {
-  male_en:   '1fz2mW1imKTf5Ryjk5su',
-  female_en: 'RGb96Dcl0k5eVje8EBch',
-  male_es:   '1fz2mW1imKTf5Ryjk5su',
-  female_es: 'RGb96Dcl0k5eVje8EBch',
-  male_zh:   '1fz2mW1imKTf5Ryjk5su',
-  female_zh: 'RGb96Dcl0k5eVje8EBch',
+// Persona-keyed ElevenLabs voice IDs. Each voice ID is language-agnostic
+// for English; for ES/ZH the multilingual model is used at request time.
+const KEVIN_VOICE_ID  = '1fz2mW1imKTf5Ryjk5su';
+const SERENA_VOICE_ID = 'RGb96Dcl0k5eVje8EBch';
+const HARRY_VOICE_ID  = '5Jfxy1x2Df4No3LQBZXE';
+const TANK_VOICE_ID   = 'gQOVuaEi4cxS2vkZAK3A';
+
+const ELEVEN_VOICES_BY_PERSONA: Record<string, string> = {
+  kevin:  KEVIN_VOICE_ID,
+  serena: SERENA_VOICE_ID,
+  harry:  HARRY_VOICE_ID,
+  tank:   TANK_VOICE_ID,
+};
+
+// Legacy gender_lang map — back-compat fallback for callers that haven't
+// been updated to pass `persona`.
+const ELEVEN_VOICES_BY_GENDER: Record<string, string> = {
+  male_en:   KEVIN_VOICE_ID,
+  female_en: SERENA_VOICE_ID,
+  male_es:   KEVIN_VOICE_ID,
+  female_es: SERENA_VOICE_ID,
+  male_zh:   KEVIN_VOICE_ID,
+  female_zh: SERENA_VOICE_ID,
 };
 
 const OPENAI_VOICES = {
@@ -31,19 +47,23 @@ export default async function handler(
   }
 
   try {
-    const { text, gender = 'male', language = 'en' } = req.body;
+    const { text, gender = 'male', language = 'en', persona = null } = req.body;
 
     if (!text) {
       return res.status(400).json({ error: 'No text' });
     }
 
-    console.log('[voice] generating:', String(text).slice(0, 50), gender);
+    console.log('[voice] generating:', String(text).slice(0, 50), persona ?? gender);
 
     // Try ElevenLabs first
     if (ELEVENLABS_KEY) {
       try {
-        const voiceKey = gender + '_' + language;
-        const voiceId = ELEVEN_VOICES[voiceKey] ?? ELEVEN_VOICES['male_en'] ?? '';
+        // Persona-keyed lookup wins; fall back to gender_lang for legacy callers.
+        const personaKey = typeof persona === 'string' ? persona.toLowerCase() : '';
+        const voiceId =
+          ELEVEN_VOICES_BY_PERSONA[personaKey] ??
+          ELEVEN_VOICES_BY_GENDER[gender + '_' + language] ??
+          KEVIN_VOICE_ID;
         const model = language === 'en' ? 'eleven_turbo_v2' : 'eleven_multilingual_v2';
 
         const elevenRes = await fetch(
@@ -77,8 +97,15 @@ export default async function handler(
       }
     }
 
-    // OpenAI TTS fallback — use gpt-4o-mini-tts with Kevin tone for consistent voice
-    const voice = gender === 'female' ? OPENAI_VOICES.female : OPENAI_VOICES.male;
+    // OpenAI TTS fallback — use gpt-4o-mini-tts with caddie tone for consistent voice.
+    // Persona maps to gender for the OpenAI fallback (Kevin/Harry/Tank → male,
+    // Serena → female). Until OpenAI exposes more distinct male voices, all
+    // three male personas share onyx — only ElevenLabs differentiates them.
+    const effectiveGender =
+      persona === 'serena' ? 'female'
+      : persona === 'kevin' || persona === 'harry' || persona === 'tank' ? 'male'
+      : gender;
+    const voice = effectiveGender === 'female' ? OPENAI_VOICES.female : OPENAI_VOICES.male;
 
     const mp3 = await openai.audio.speech.create({
       model: 'gpt-4o-mini-tts',

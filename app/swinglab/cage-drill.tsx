@@ -43,6 +43,7 @@ import { toggle as toggleListening } from '../../services/listeningSession';
 import { safeBack } from '../../services/safeBack';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { getCaddieName } from '../../lib/persona';
 import CageOverlay, { type CageOverlayPhase } from '../../components/swinglab/CageOverlay';
 
 type Phase =
@@ -101,6 +102,7 @@ export default function CageDrillScreen() {
   const [moreOpen, setMoreOpen] = useState(false);
 
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
+  const caddieName = getCaddieName(voiceGender);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
 
   // ── Permissions ─────────────────────────────────────────────────────
@@ -270,7 +272,7 @@ export default function CageDrillScreen() {
       // Hand features.json to Kevin's cage_swing_review tool. The coach
       // response replaces the raw-JSON display from Prompt 1; the JSON is
       // still available behind a 'Show details' expander.
-      const coachRes = await coachReview(res.data);
+      const coachRes = await coachReview(res.data, voiceGender);
       if (coachRes.kind === 'ok') {
         setCoach(coachRes.data);
         if (voiceEnabled) {
@@ -449,7 +451,7 @@ export default function CageDrillScreen() {
                   resizeMode="contain"
                 />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.kevinName}>Kevin</Text>
+                  <Text style={styles.kevinName}>{caddieName}</Text>
                   {coach ? (
                     <View style={styles.confidenceRow}>
                       <View style={[styles.confidenceDot, { backgroundColor: CONFIDENCE_DOT[coach.confidence] }]} />
@@ -545,7 +547,7 @@ function Header({
 }) {
   return (
     <View style={[styles.header, { top: insets.top + 8 }]} pointerEvents="box-none">
-      <TouchableOpacity onPress={onBadge} style={styles.badgeBtn} accessibilityLabel="Talk to Kevin">
+      <TouchableOpacity onPress={onBadge} style={styles.badgeBtn} accessibilityLabel="Talk to your caddie">
         <Image
           source={require('../../assets/avatars/smartplay_caddie_badge.png')}
           style={styles.badgeImg}

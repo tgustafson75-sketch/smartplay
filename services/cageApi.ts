@@ -135,7 +135,7 @@ export type CoachReviewResponse = {
  * a hardcoded response comes back after 1s so the cage screen can be
  * exercised without burning Anthropic tokens.
  */
-export async function coachReview(features: CageAnalyzeResponse): Promise<ApiResult<CoachReviewResponse>> {
+export async function coachReview(features: CageAnalyzeResponse, voiceGender: 'male' | 'female' = 'male'): Promise<ApiResult<CoachReviewResponse>> {
   if (KEVIN_MOCK_MODE) {
     await delay(KEVIN_MOCK_LATENCY_MS);
     return {
@@ -152,7 +152,7 @@ export async function coachReview(features: CageAnalyzeResponse): Promise<ApiRes
     const res = await fetch(`${apiUrl()}/api/kevin/coach`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ features }),
+      body: JSON.stringify({ features, voiceGender }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!res.ok) return { kind: 'error', message: `Server returned ${res.status}` };

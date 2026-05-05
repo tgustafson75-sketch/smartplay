@@ -34,6 +34,7 @@ export default function BriefingScreen() {
   const { firstName, handicap, goal, dominantMiss } = usePlayerProfileStore();
   const { roundsTogether } = useRelationshipStore();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const trustLevel = useTrustLevelStore(s => s.level);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
@@ -139,6 +140,7 @@ export default function BriefingScreen() {
           apiUrl,
           language,
           recentCageSessions,
+          voiceGender,
         });
 
         if (cancelled) return;
@@ -205,9 +207,12 @@ export default function BriefingScreen() {
         ]}
       >
         <Image
-          source={voiceGender === 'female'
-            ? require('../../assets/avatars/serena_portrait.jpg')
-            : require('../../assets/avatars/kevin_portrait.jpg')}
+          source={
+            caddiePersonality === 'serena' ? require('../../assets/avatars/serena_portrait.jpg')
+            : caddiePersonality === 'harry' ? require('../../assets/avatars/harry_portrait.png')
+            : caddiePersonality === 'tank'  ? require('../../assets/avatars/tank_portrait.png')
+            : require('../../assets/avatars/kevin_portrait.jpg')
+          }
           style={styles.avatar}
           resizeMode="cover"
         />

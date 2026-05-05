@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
-import { KEVIN_CHARACTER_SPEC } from '../constants/kevinCharacter';
+import { getCaddieName, getCharacterSpec } from '../lib/persona';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -32,7 +32,11 @@ export default async function handler(
       heroMoments = [],
       isCompetition = false,
       language = 'en',
+      voiceGender = 'male',
     } = req.body;
+
+    const caddieName = getCaddieName(voiceGender);
+    const characterSpec = getCharacterSpec(voiceGender);
 
     const cageContext = (recentCageSessions as Array<{ club: string; dominantMiss: string | null; rootCause: string | null }>).length > 0
       ? (recentCageSessions as Array<{ club: string; dominantMiss: string | null; rootCause: string | null }>)
@@ -44,11 +48,11 @@ export default async function handler(
           ).join('. ')
       : null;
 
-    const systemPrompt = `${KEVIN_CHARACTER_SPEC}
+    const systemPrompt = `${characterSpec}
 
 ${language === 'es' ? 'Responde SIEMPRE en español.' : language === 'zh' ? '请始终用中文回复。' : ''}
 
-You are Kevin, caddying for ${firstName || 'your player'} at ${courseName || 'the course'}.
+You are ${caddieName}, caddying for ${firstName || 'your player'} at ${courseName || 'the course'}.
 
 PLAYER: Handicap ${handicap}, ${roundsTogether} rounds together, ${sessionsTogether} practice sessions.
 ${goal ? 'Goal: ' + goal : ''}

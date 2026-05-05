@@ -101,7 +101,7 @@ export default function UploadSwing() {
             </Text>
             <Text style={[styles.copySub, { color: colors.text_muted }]}>
               Videos with coaching audio (a coach&apos;s voice over the swing) play with the audio
-              preserved during review. You can toggle to Kevin&apos;s analysis voice anytime.
+              preserved during review. You can toggle to the caddie&apos;s analysis voice anytime.
             </Text>
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.accent }]} onPress={onPick}>
               <Text style={styles.primaryBtnText}>Pick Video</Text>

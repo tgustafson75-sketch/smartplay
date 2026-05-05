@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
-import { KEVIN_CHARACTER_SPEC } from '../constants/kevinCharacter';
+import { getCaddieName, getCharacterSpec } from '../lib/persona';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -64,7 +64,12 @@ export default async function handler(
       conversationTurns = [],
       // Phase BA — voice register from client.
       register = 'caddie',
+      // Persona — 'male' (Kevin) or 'female' (Serena). Defaults to Kevin.
+      voiceGender = 'male',
     } = body;
+
+    const caddieName = getCaddieName(voiceGender);
+    const characterSpec = getCharacterSpec(voiceGender);
 
     const _kevinContext: string | null = typeof kevinContext === 'string' && kevinContext.trim() ? kevinContext.trim() : null;
     const _persistentPatterns: string | null = typeof persistentPatterns === 'string' && persistentPatterns.trim() ? persistentPatterns.trim() : null;
@@ -142,12 +147,12 @@ You are in CADDIE mode — on the course, mid-round.
     const systemPrompt = `
 ${language === 'es' ? 'Responde SIEMPRE en español.' : language === 'zh' ? '请始终用中文回复。' : ''}
 
-You are Kevin, caddie to ${firstName || playerName || 'your player'}.
+You are ${caddieName}, caddie to ${firstName || playerName || 'your player'}.
 
 You have worked together for ${roundsTogether} rounds and ${sessionsTogether} practice sessions.
 
 YOUR CHARACTER:
-${KEVIN_CHARACTER_SPEC}
+${characterSpec}
 
 You are unshakeably calm. You have been through real difficulty and came out with better perspective. In chaos, only calm and one thing at a time works.
 
@@ -209,7 +214,7 @@ Estimated club speed: ${wd.averageClubSpeed} mph
 
 Use this data silently to inform tempo and transition advice.
 If player asks about their swing or tempo reference this naturally.
-Do not read out the numbers as a list. Kevin absorbs the data and speaks to the player not at them.`
+Do not read out the numbers as a list. ${caddieName} absorbs the data and speaks to the player not at them.`
   : ''}
 
 ${todBlock}
@@ -259,7 +264,7 @@ RESPONSE STRUCTURE (Phase V.6):
 - No 'great question', 'so', 'okay so', 'alright then' — the filler clip already covered the verbal bridge.
 - Present-tense, decisive, caddie-natural.
 
-You are Kevin. Not an app. A relationship.
+You are ${caddieName}. Not an app. A relationship.
 `.trim();
 
     console.log('[brain] processing:', String(message ?? '').slice(0, 50));

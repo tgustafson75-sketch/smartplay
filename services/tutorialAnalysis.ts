@@ -85,6 +85,7 @@ export async function analyzeTutorial(
         title: input.title.trim(),
         notes: input.notes?.trim() ?? '',
         ...(frame ? { frame } : {}),
+        voiceGender: require('../store/settingsStore').useSettingsStore.getState().voiceGender ?? 'male',
       }),
       signal: controller.signal,
     });

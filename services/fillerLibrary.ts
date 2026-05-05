@@ -18,11 +18,15 @@ const rrCounters: Partial<Record<FillerCategory, number>> = {};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function voiceHash(gender: string, language: string): string {
-  // v3 = Phase V.6 extension fillers + context-aware variants. Without the
-  // bump, those new entries fall through as inert text and the user hears
-  // the prior pool. Bump forces regeneration of the local audio cache.
-  return `${gender}_${language}_v3`;
+type Persona = 'kevin' | 'serena' | 'harry' | 'tank';
+
+function voiceHash(persona: Persona, language: string): string {
+  // v4 = persona-keyed (was gender-keyed in v3). All male personas
+  // (Kevin/Harry/Tank) used to share the same male_<lang>_v3 cache,
+  // which meant Tank/Harry users heard Kevin's filler clips. v4
+  // keys each persona separately so each character has their own
+  // ElevenLabs-rendered filler set.
+  return `${persona}_${language}_v4`;
 }
 
 function clipFile(id: string): File {
@@ -85,12 +89,16 @@ export function getLibraryInfo(): { clipCount: number; generatedAt: number; hash
  */
 export async function generateLibrary(
   apiUrl: string,
-  gender: 'male' | 'female',
+  persona: Persona,
   language: 'en' | 'es' | 'zh',
 ): Promise<void> {
   if (isGenerating) return;
 
-  const hash = voiceHash(gender, language);
+  const hash = voiceHash(persona, language);
+  // Derive gender for the OpenAI fallback in /api/voice (back-compat).
+  // ElevenLabs picks by persona directly; gender only matters when
+  // ElevenLabs is unavailable.
+  const gender: 'male' | 'female' = persona === 'serena' ? 'female' : 'male';
 
   // Check if already valid
   if (library && library.voice_settings_hash === hash && allFilesExist(library)) {
@@ -120,7 +128,7 @@ export async function generateLibrary(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({ text: phrase.text, gender, language }),
+        body: JSON.stringify({ text: phrase.text, gender, language, persona }),
       }).finally(() => clearTimeout(timeout));
 
       if (!res.ok) {

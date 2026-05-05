@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useTheme } from '../contexts/ThemeContext';
+import { getCaddieName } from '../lib/persona';
 import { clearMicDenial } from '../services/voicePermissionService';
 import {
   startSimulatedWalk, stopSimulatedWalk, getAvailableWalks,
@@ -28,7 +29,6 @@ export default function Settings() {
 
   const {
     voiceEnabled,
-    voiceGender,
     language,
     discreteMode,
     responseMode,
@@ -52,7 +52,6 @@ export default function Settings() {
     setVoiceOnPhoneSpeaker,
     setKevinGreetingEnabled,
     setVoiceEnabled,
-    setVoiceGender,
     setLanguage,
     setDiscreteMode,
     setResponseMode,
@@ -66,6 +65,15 @@ export default function Settings() {
     setThemePreference,
     setFillerEnabled,
   } = useSettingsStore();
+
+  // 4-persona caddie selector — driven by caddiePersonality (the source
+  // of truth). voiceGender is auto-synced inside the store setter.
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
+  const setCaddiePersonality = useSettingsStore(s => s.setCaddiePersonality);
+
+  // Persona-aware display name. Settings labels reference the active caddie
+  // by name (Kevin / Serena / Harry / Tank) consistently with the rest of the app.
+  const caddieName = getCaddieName(caddiePersonality);
 
   const {
     name,
@@ -307,11 +315,13 @@ export default function Settings() {
           <PillRow
             label="Your Caddie"
             options={[
-              { label: 'Kevin', value: 'male' },
-              { label: 'Serena', value: 'female' },
+              { label: 'Kevin', value: 'kevin' },
+              { label: 'Serena', value: 'serena' },
+              { label: 'Harry', value: 'harry' },
+              { label: 'Tank', value: 'tank' },
             ]}
-            value={voiceGender}
-            onSelect={(v) => setVoiceGender(v as 'male' | 'female')}
+            value={caddiePersonality}
+            onSelect={(v) => setCaddiePersonality(v as 'kevin' | 'serena' | 'harry' | 'tank')}
           />
 
           <PillRow
@@ -342,8 +352,8 @@ export default function Settings() {
             activeOpacity={0.7}
           >
             <View style={styles.rowText}>
-              <Text style={labelStyle}>What Kevin&apos;s learning</Text>
-              <Text style={subStyle}>Phrases Kevin has picked up from you</Text>
+              <Text style={labelStyle}>What {caddieName}&apos;s learning</Text>
+              <Text style={subStyle}>Phrases {caddieName} has picked up from you</Text>
             </View>
             <Text style={[styles.rowSub, { color: colors.text_muted }]}>›</Text>
           </TouchableOpacity>
@@ -355,19 +365,19 @@ export default function Settings() {
         <View style={cardStyle}>
           <ToggleRow
             label="Skip Pre-Round Briefing"
-            sub="Go straight to the round without Kevin's intro"
+            sub={`Go straight to the round without ${caddieName}'s intro`}
             value={skip_briefings}
             onValueChange={setSkipBriefings}
           />
           <ToggleRow
-            label="Proactive Kevin"
-            sub="Kevin speaks up between holes — streaks, patterns, ghost updates"
+            label={`Proactive ${caddieName}`}
+            sub={`${caddieName} speaks up between holes — streaks, patterns, ghost updates`}
             value={proactive_kevin_enabled}
             onValueChange={setProactiveKevinEnabled}
           />
           <ToggleRow
             label="Voice Filler"
-            sub="Kevin fills the pause while thinking — 'let me see', 'hmm...'"
+            sub={`${caddieName} fills the pause while thinking — 'let me see', 'hmm...'`}
             value={fillerEnabled}
             onValueChange={setFillerEnabled}
           />
@@ -378,7 +388,7 @@ export default function Settings() {
         <View style={cardStyle}>
           <ToggleRow
             label="Voice Enabled"
-            sub="Kevin speaks responses aloud"
+            sub={`${caddieName} speaks responses aloud`}
             value={voiceEnabled}
             onValueChange={(v) => {
               setVoiceEnabled(v);
@@ -395,20 +405,20 @@ export default function Settings() {
           />
           <ToggleRow
             label="Auto-Listen During Round"
-            sub="Kevin listens automatically. Just talk."
+            sub={`${caddieName} listens automatically. Just talk.`}
             value={autoListenEnabled}
             onValueChange={setAutoListenEnabled}
           />
           <ToggleRow
             label="Earbud Tap-to-Talk · Coming soon"
-            sub="OS-level Bluetooth media-key support is on the roadmap. For now, tap Kevin's badge on the Caddie tab to talk."
+            sub={`OS-level Bluetooth media-key support is on the roadmap. For now, tap ${caddieName}'s badge on the Caddie tab to talk.`}
             value={false}
             onValueChange={() => {}}
             disabled
           />
           <ToggleRow
             label="Voice on Phone Speaker"
-            sub="Allow Kevin's voice when no earbuds are connected"
+            sub={`Allow ${caddieName}'s voice when no earbuds are connected`}
             value={voiceOnPhoneSpeaker}
             onValueChange={setVoiceOnPhoneSpeaker}
           />
@@ -425,12 +435,12 @@ export default function Settings() {
           />
         </View>
 
-        {/* KEVIN */}
-        <SectionHeader title="Kevin" />
+        {/* CADDIE */}
+        <SectionHeader title={caddieName} />
         <View style={cardStyle}>
           <ToggleRow
             label="Greet me on launch"
-            sub="Kevin says hello when you open the app"
+            sub={`${caddieName} says hello when you open the app`}
             value={kevinGreetingEnabled}
             onValueChange={setKevinGreetingEnabled}
           />
@@ -552,7 +562,7 @@ export default function Settings() {
           <View style={styles.aboutRow}>
             <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Caddie</Text>
             <Text style={[styles.aboutValue, { color: colors.text_primary }]}>
-              {voiceGender === 'female' ? 'Serena' : 'Kevin'}
+              {caddieName}
             </Text>
           </View>
         </View>

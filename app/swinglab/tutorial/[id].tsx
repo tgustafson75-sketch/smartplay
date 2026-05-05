@@ -15,6 +15,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useTutorialStore, MAX_ACTIVE_TUTORIALS } from '../../../store/tutorialStore';
 import { clubLabel } from '../../../services/clubRecognition';
+import { useSettingsStore } from '../../../store/settingsStore';
+import { getCaddieName } from '../../../lib/persona';
 
 export default function TutorialDetail() {
   const router = useRouter();
@@ -24,6 +26,7 @@ export default function TutorialDetail() {
   const tutorial = useTutorialStore(s => s.tutorials.find(t => t.id === id) ?? null);
   const setActive = useTutorialStore(s => s.setActive);
   const deleteTutorial = useTutorialStore(s => s.deleteTutorial);
+  const caddieName = getCaddieName(useSettingsStore(s => s.voiceGender));
 
   if (!tutorial) {
     return (
@@ -86,8 +89,8 @@ export default function TutorialDetail() {
               <Text style={[styles.label, { color: colors.text_muted }]}>ACTIVE PRACTICE CONTEXT</Text>
               <Text style={[styles.subText, { color: colors.text_secondary, marginTop: 4 }]}>
                 {tutorial.is_active
-                  ? 'Kevin will reference this lesson during your rounds.'
-                  : 'Kevin will not reference this lesson until you activate it.'}
+                  ? `${caddieName} will reference this lesson during your rounds.`
+                  : `${caddieName} will not reference this lesson until you activate it.`}
               </Text>
             </View>
             <Switch

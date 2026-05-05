@@ -78,7 +78,7 @@ export async function fetchCourseContent(input: CourseContentInput): Promise<Cou
     const res = await fetch(`${apiUrl}/api/course-content`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
+      body: JSON.stringify({ ...input, voiceGender: require('../store/settingsStore').useSettingsStore.getState().voiceGender ?? 'male' }),
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) {

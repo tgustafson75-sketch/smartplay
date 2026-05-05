@@ -61,7 +61,7 @@ Output ONLY a JSON object:
   "detected_issue": "none",
   "severity": "none",
   "confidence": "low",
-  "observation": "<one short sentence describing what is visible — tempo, balance, contact appearance, posture — written conversationally as Kevin would say it>",
+  "observation": "<one short sentence describing what is visible — tempo, balance, contact appearance, posture — written conversationally as the caddie would say it>",
   "follow_up_question": "<short suggestion for a clearer recording, e.g. 'Try a wider angle from the front so I can see your hips' OR null when the frames are workable enough that a clearer recording isn't the priority>"
 }
 

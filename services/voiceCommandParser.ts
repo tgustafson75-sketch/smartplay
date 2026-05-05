@@ -1,9 +1,11 @@
 import type { VoiceIntent, AppContext, IntentConfidence } from '../types/voiceIntent';
+import type { VoiceGender } from '../lib/persona';
 
 export async function parseVoiceIntent(
   text: string,
   context: AppContext,
   apiUrl: string,
+  voiceGender: VoiceGender = 'male',
 ): Promise<VoiceIntent> {
   const trimmed = text.trim();
 
@@ -25,7 +27,7 @@ export async function parseVoiceIntent(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
-      body: JSON.stringify({ text: trimmed, context }),
+      body: JSON.stringify({ text: trimmed, context, voiceGender }),
     }).finally(() => clearTimeout(timeout));
 
     if (!res.ok) {

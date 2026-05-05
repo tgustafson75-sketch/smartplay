@@ -8,6 +8,8 @@ import {
   getVocabBannerCount,
   markVocabBannerSeen,
 } from '../services/voiceOnboardingService';
+import { useSettingsStore } from '../store/settingsStore';
+import { getCaddieName } from '../lib/persona';
 
 interface Props {
   /** Optional style override (e.g. positioning offset). */
@@ -25,6 +27,9 @@ export default function VocabBanner({ style }: Props) {
   const [visible, setVisible] = useState(false);
   const [count, setCount] = useState(0);
   const fade = useState(new Animated.Value(0))[0];
+  const voiceGender = useSettingsStore(s => s.voiceGender);
+  const caddieName = getCaddieName(voiceGender);
+  const subjectPronoun = voiceGender === 'female' ? 'she' : 'he';
 
   useEffect(() => {
     if (shouldShowVocabBanner()) {
@@ -60,7 +65,7 @@ export default function VocabBanner({ style }: Props) {
     >
       <TouchableOpacity onPress={open} activeOpacity={0.85} style={styles.bannerContent}>
         <Text style={[styles.bannerText, { color: colors.text_primary }]}>
-          Kevin learned {count} of your phrases — see what he picked up.
+          {caddieName} learned {count} of your phrases — see what {subjectPronoun} picked up.
         </Text>
         <Ionicons name="chevron-forward" size={18} color={colors.accent} />
       </TouchableOpacity>

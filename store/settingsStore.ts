@@ -10,7 +10,7 @@ interface SettingsState {
   language: 'en' | 'es' | 'zh';
   discreteMode: boolean;
   responseMode: 'short' | 'neutral' | 'detailed';
-  caddiePersonality: 'kevin' | 'serena';
+  caddiePersonality: 'kevin' | 'serena' | 'harry' | 'tank';
 
   theme_preference: 'system' | 'light' | 'dark';
   highContrast: boolean;
@@ -57,7 +57,7 @@ interface SettingsState {
   setLanguage: (l: 'en' | 'es' | 'zh') => void;
   setDiscreteMode: (v: boolean) => void;
   setResponseMode: (m: 'short' | 'neutral' | 'detailed') => void;
-  setCaddiePersonality: (p: 'kevin' | 'serena') => void;
+  setCaddiePersonality: (p: 'kevin' | 'serena' | 'harry' | 'tank') => void;
   setThemePreference: (p: 'system' | 'light' | 'dark') => void;
   setHighContrast: (v: boolean) => void;
   setBrightMode: (v: boolean) => void;
@@ -132,7 +132,30 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setDiscreteMode: (v) => set({ discreteMode: v }),
       setResponseMode: (m) => set({ responseMode: m }),
-      setCaddiePersonality: (p) => set({ caddiePersonality: p }),
+      setCaddiePersonality: (p) => {
+        // Persona is the source of truth. voiceGender stays in sync
+        // because the TTS path (services/voiceService.speak → /api/voice
+        // OpenAI fallback) still keys by gender for the OpenAI voice
+        // selection. ElevenLabs voices are keyed by persona directly,
+        // but the gender map remains the back-compat fallback.
+        const prev = get().caddiePersonality;
+        const gender = p === 'serena' ? 'female' : 'male';
+        set({ caddiePersonality: p, voiceGender: gender });
+        // Persona switch invalidates the persona-keyed audio caches so
+        // the user doesn't keep hearing the prior caddie's filler clips
+        // or a cached briefing in the prior caddie's voice. Dynamic
+        // require avoids module-load cycles.
+        if (prev !== p) {
+          try {
+            const fillerMod = require('../services/fillerLibrary');
+            void fillerMod.clearLibrary?.().catch?.(() => {});
+          } catch { /* ignore */ }
+          try {
+            const briefMod = require('../services/briefingGenerator');
+            briefMod.clearBriefingCache?.();
+          } catch { /* ignore */ }
+        }
+      },
       setThemePreference: (p) => set({ theme_preference: p }),
       setHighContrast: (v) => set({ highContrast: v }),
       setBrightMode: (v) => set({ brightMode: v }),

@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { getCaddieName, type VoiceGender } from '../../lib/persona';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
       scores = {},
       courseHoles = [],
       responseMode = 'neutral',
+      voiceGender = 'male',
     } = body as {
       message?: string;
       language?: string;
@@ -71,7 +73,10 @@ export async function POST(request: Request) {
       scores?: Record<string, number>;
       courseHoles?: { hole: number; par: number }[];
       responseMode?: string;
+      voiceGender?: VoiceGender;
     };
+
+    const caddieName = getCaddieName(voiceGender);
 
     const totalScore = Object.values(scores).reduce(
       (a: number, b: number) => a + b, 0
@@ -95,7 +100,7 @@ ${language === 'es'
   ? '请始终用中文回复。'
   : ''}
 
-You are Kevin, caddie to ${firstName || playerName || 'your player'}.
+You are ${caddieName}, caddie to ${firstName || playerName || 'your player'}.
 
 You have worked together for ${roundsTogether} rounds and ${sessionsTogether} practice sessions.
 
@@ -207,7 +212,7 @@ ${responseMode === 'short'
   ? 'Up to 4 sentences if genuinely needed.'
   : 'Maximum 2 sentences. Be concise.'}
 
-Remember: You are Kevin. Not an app. Not an AI assistant. Kevin. You have been caddying for ${firstName || 'this player'} for ${roundsTogether} rounds. This is a relationship. Treat it like one.
+Remember: You are ${caddieName}. Not an app. Not an AI assistant. ${caddieName}. You have been caddying for ${firstName || 'this player'} for ${roundsTogether} rounds. This is a relationship. Treat it like one.
 `.trim();
 
     console.log('[brain] processing:', String(message ?? '').slice(0, 50));

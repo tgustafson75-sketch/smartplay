@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { KEVIN_TTS_VOICE, KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
-import { KEVIN_CHARACTER_SPEC } from '../constants/kevinCharacter';
+import { getCaddieName, getCharacterSpec } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -50,7 +50,7 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'lookup_course',
-    description: 'Search for a golf course by name or location. Use when the user asks about a course Kevin doesn\'t already have in context. Returns matching courses with basic info.',
+    description: 'Search for a golf course by name or location. Use when the user asks about a course the caddie doesn\'t already have in context. Returns matching courses with basic info.',
     input_schema: {
       type: 'object',
       properties: {
@@ -277,7 +277,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // string when one or more tutorials are active, null otherwise.
       // Capped at 3 active tutorials so token budget stays bounded.
       practice_context = null,
+      // Persona — 'male' (Kevin) or 'female' (Serena). Defaults to Kevin.
+      voiceGender = 'male',
     } = body;
+
+    const caddieName = getCaddieName(voiceGender);
+    const characterSpec = getCharacterSpec(voiceGender);
 
     const _kevinContext: string | null = typeof kevinContext === 'string' && kevinContext.trim() ? kevinContext.trim() : null;
     const _persistentPatterns: string | null = typeof persistentPatterns === 'string' && persistentPatterns.trim() ? persistentPatterns.trim() : null;
@@ -385,12 +390,12 @@ You are in CADDIE mode — on the course, mid-round. Your voice is:
     const systemPrompt = `
 ${language === 'es' ? 'Responde SIEMPRE en español.' : language === 'zh' ? '请始终用中文回复。' : ''}
 
-You are Kevin, caddie to ${firstName || playerName || 'your player'}.
+You are ${caddieName}, caddie to ${firstName || playerName || 'your player'}.
 
 You have worked together for ${roundsTogether} rounds and ${sessionsTogether} practice sessions.
 
 YOUR CHARACTER:
-${KEVIN_CHARACTER_SPEC}
+${characterSpec}
 
 You are unshakeably calm. You have been through real difficulty and came out the other side with better perspective than most. You found that through golf and you bring it to every round. You want to bring ${firstName || 'your player'} to a place of pure shots and genuine enjoyment of this game. Not perfection. Pure shots.
 
@@ -579,7 +584,7 @@ USER STATE AWARENESS:
 - If no round is active, engage in casual conversation, answer "what is this app?" or "what can you do?" style questions, and offer to walk through any feature.
 - If asked "show me SmartVision" or "how do I [X]?", describe how to access it via the ••• menu (top-right). Do not pretend to navigate for them — instruct them naturally.
 - If asked about features still in development, be honest. "Cage mode is here. Multi-player is on the way. Right now it's just you and me."
-- Never use the words "tutorial" or "onboarding". Just be Kevin and explain things naturally if asked.
+- Never use the words "tutorial" or "onboarding". Just be ${caddieName} and explain things naturally if asked.
 
 CRITICAL HONESTY RULES (Phase BC):
 - If you don't know something, say so directly. Do not fabricate.
@@ -600,7 +605,7 @@ RESPONSE STRUCTURE (Phase V.6):
 - No preamble, no acknowledgment of the question, no 'great question' / 'so' / 'okay so' / 'alright so'. The filler clip handled the verbal bridge already — don't repeat that work.
 - Caddie-natural phrasing: present-tense, decisive, conversational. Not formal.
 
-You are Kevin. Not an app. Not an AI. A relationship built over ${roundsTogether} rounds.
+You are ${caddieName}. Not an app. Not an AI. A relationship built over ${roundsTogether} rounds.
 `.trim();
 
     const baseMessage = String(message ?? '');

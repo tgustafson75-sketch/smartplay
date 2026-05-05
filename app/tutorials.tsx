@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AppIcon, { type IconName } from '../components/AppIcon';
+import { useSettingsStore } from '../store/settingsStore';
+import { getCaddieName } from '../lib/persona';
 
 /**
  * Tutorials surface — selectable cards by app function. Tap a card to expand
@@ -18,14 +20,14 @@ type Tutorial = {
   steps: string[];
 };
 
-const TUTORIALS: Tutorial[] = [
+const buildTutorials = (caddieName: string, pronoun: string): Tutorial[] => [
   {
     id: 'voice',
     icon: 'mic',
-    title: 'Talking to Kevin',
+    title: `Talking to ${caddieName}`,
     blurb: 'Voice anytime, tap anytime, both equal.',
     steps: [
-      'Tap Kevin or the mic icon to talk. He listens for a few seconds, then responds.',
+      `Tap ${caddieName} or the mic icon to talk. ${pronoun} listens for a few seconds, then responds.`,
       'Try natural lines like "What\'d you hit?" or "How far to the green?".',
       'Tap the ? button (L2 / L3) for a list of what you can say on the current screen.',
       'Voice can be muted in Tools → Voice On/Off if you want to play in silence.',
@@ -34,14 +36,14 @@ const TUTORIALS: Tutorial[] = [
   {
     id: 'trust',
     icon: 'options-outline',
-    title: 'Trust Spectrum (Kevin\'s Presence)',
+    title: `Trust Spectrum (${caddieName}'s Presence)`,
     blurb: 'Four levels, your call any time.',
     steps: [
-      'Quiet: just a logo and a SmartVision card. Kevin is reachable, not present.',
-      'Companion (default): split with Kevin and SmartVision side-by-side.',
-      'Active: Kevin takes most of the screen, chimes in between shots.',
-      'Full: Kevin centered, voice-first. SmartFinder collapses to a corner icon.',
-      'Change anytime in Tools → "Kevin\'s Presence" or in Settings.',
+      `Quiet: just a logo and a SmartVision card. ${caddieName} is reachable, not present.`,
+      `Companion (default): split with ${caddieName} and SmartVision side-by-side.`,
+      `Active: ${caddieName} takes most of the screen, chimes in between shots.`,
+      `Full: ${caddieName} centered, voice-first. SmartFinder collapses to a corner icon.`,
+      `Change anytime in Tools → "${caddieName}'s Presence" or in Settings.`,
     ],
   },
   {
@@ -86,7 +88,7 @@ const TUTORIALS: Tutorial[] = [
     title: 'Shot Logging',
     blurb: 'Voice or tap, after each shot.',
     steps: [
-      'Kevin asks "What\'d you hit?" after a detected shot. Just say it: "smoked a seven iron".',
+      `${caddieName} asks "What'd you hit?" after a detected shot. Just say it: "smoked a seven iron".`,
       'Or tap the shot card and pick from the menu.',
       'Add a penalty stroke from the scoring tool (water, OB, lost ball).',
       'Each shot writes GPS, weather, and your raw words to your round.',
@@ -109,7 +111,7 @@ const TUTORIALS: Tutorial[] = [
     title: 'Tools menu',
     blurb: 'Three-dot menu top-right of Caddie home.',
     steps: [
-      'Cycle Kevin\'s Presence (Trust Spectrum) without leaving the menu.',
+      `Cycle ${caddieName}'s Presence (Trust Spectrum) without leaving the menu.`,
       'Open Practice / Cage / SmartVision / SmartFinder.',
       'Toggle Voice On/Off, Cast Mode, end the round, jump to Settings.',
       'Tutorials (this screen) lives here too.',
@@ -120,6 +122,10 @@ const TUTORIALS: Tutorial[] = [
 export default function TutorialsScreen() {
   const router = useRouter();
   const [openId, setOpenId] = useState<string | null>(null);
+  const voiceGender = useSettingsStore(s => s.voiceGender);
+  const caddieName = getCaddieName(voiceGender);
+  const pronoun = voiceGender === 'female' ? 'She' : 'He';
+  const tutorials = useMemo(() => buildTutorials(caddieName, pronoun), [caddieName, pronoun]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -134,7 +140,7 @@ export default function TutorialsScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.subtitle}>Tap any card to see how it works.</Text>
 
-        {TUTORIALS.map(t => {
+        {tutorials.map(t => {
           const open = openId === t.id;
           return (
             <TouchableOpacity

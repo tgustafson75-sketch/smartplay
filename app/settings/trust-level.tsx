@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTrustLevelStore, TRUST_LEVEL_META, type TrustLevel } from '../../store/trustLevelStore';
+import { useSettingsStore } from '../../store/settingsStore';
+import { getCaddieName } from '../../lib/persona';
 
 /**
  * Phase E — Trust Spectrum slider screen.
@@ -17,6 +19,13 @@ export default function TrustLevelScreen() {
   const level = useTrustLevelStore(s => s.level);
   const setLevel = useTrustLevelStore(s => s.setLevel);
   const [showAbout, setShowAbout] = useState(false);
+  const voiceGender = useSettingsStore(s => s.voiceGender);
+  const caddieName = getCaddieName(voiceGender);
+  const subjectPronoun = voiceGender === 'female' ? 'She' : 'He';
+  const possessivePronoun = voiceGender === 'female' ? 'her' : 'him';
+  // Used in mid-sentence ("ready when you need him/her") — lowercase form.
+  const objectPronoun = possessivePronoun;
+  const subjectLower = voiceGender === 'female' ? 'she' : 'he';
 
   const levels: TrustLevel[] = [1, 2, 3, 4];
 
@@ -26,12 +35,12 @@ export default function TrustLevelScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Kevin&apos;s presence</Text>
+        <Text style={styles.title}>{caddieName}&apos;s presence</Text>
         <View style={styles.backBtn} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.subtitle}>How present should Kevin be?</Text>
+        <Text style={styles.subtitle}>How present should {caddieName} be?</Text>
 
         <View style={styles.slider}>
           {levels.map((l, i) => {
@@ -70,10 +79,10 @@ export default function TrustLevelScreen() {
 
         {showAbout && (
           <View style={styles.aboutBlock}>
-            <AboutRow label="Quiet" body="Kevin's reachable on tap, but he stays out of the way. Just the SmartPlay logo and a mic button — no avatar, no advice card. Pick this on focused range sessions or when you want silence." />
-            <AboutRow label="Companion" body="Kevin's there at the bottom of your home screen, ready when you need him. Voice is opt-in, advice is offered, never pushed." />
-            <AboutRow label="Active" body="Split screen — Kevin top, your yardages bottom. He'll chime in between shots and ride along through the round." />
-            <AboutRow label="Full" body="Kevin centered, voice on by default. He's right there with you, hands-free. Like having a real caddie on the bag." />
+            <AboutRow label="Quiet" body={`${caddieName}'s reachable on tap, but ${subjectLower} stays out of the way. Just the SmartPlay logo and a mic button — no avatar, no advice card. Pick this on focused range sessions or when you want silence.`} />
+            <AboutRow label="Companion" body={`${caddieName}'s there at the bottom of your home screen, ready when you need ${objectPronoun}. Voice is opt-in, advice is offered, never pushed.`} />
+            <AboutRow label="Active" body={`Split screen — ${caddieName} top, your yardages bottom. ${subjectPronoun}'ll chime in between shots and ride along through the round.`} />
+            <AboutRow label="Full" body={`${caddieName} centered, voice on by default. ${subjectPronoun}'s right there with you, hands-free. Like having a real caddie on the bag.`} />
           </View>
         )}
       </ScrollView>

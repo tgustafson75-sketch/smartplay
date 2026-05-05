@@ -213,7 +213,7 @@ export const useVoiceCaddie = ({
   // else keeps hearing the prior pool. generateLibrary internally checks
   // the hash and no-ops if up to date, so it's safe to call every boot.
   const _apiUrlForBoot = process.env.EXPO_PUBLIC_API_URL ?? '';
-  const _voiceGenderForBoot = useSettingsStore.getState().voiceGender;
+  const _personaForBoot = useSettingsStore.getState().caddiePersonality;
   const _languageForBoot = useSettingsStore.getState().language;
   useEffect(() => {
     void (async () => {
@@ -221,7 +221,7 @@ export const useVoiceCaddie = ({
         await initFillerLibrary();
         if (useSettingsStore.getState().voiceEnabled && _apiUrlForBoot) {
           const { generateLibrary } = await import('../services/fillerLibrary');
-          void generateLibrary(_apiUrlForBoot, _voiceGenderForBoot, _languageForBoot)
+          void generateLibrary(_apiUrlForBoot, _personaForBoot, _languageForBoot)
             .catch(e => console.log('[fillerLibrary] background regen failed', e));
         }
       } catch (e) {

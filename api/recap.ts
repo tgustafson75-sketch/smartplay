@@ -1,12 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
-import { KEVIN_CHARACTER_SPEC } from '../constants/kevinCharacter';
+import { getCaddieName, getCharacterSpec, type VoiceGender } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const RECAP_SYSTEM = `${KEVIN_CHARACTER_SPEC}
+const buildRecapSystem = (g: VoiceGender) => `${getCharacterSpec(g)}
 
-You are Kevin, summarizing a just-completed round. Your tone is honest and real — not a pep talk.
+You are ${getCaddieName(g)}, summarizing a just-completed round. Your tone is honest and real — not a pep talk.
 
 For each hole provided, write 1-2 sentences describing what happened relative to the plan (if any). Acknowledge good execution. Call out misses honestly but briefly.
 
@@ -88,6 +88,8 @@ interface RecapRequest {
   // by services/tutorialContext.buildFullPracticeContext on the client side.
   // Multi-line string when ≥1 tutorials are active, null otherwise.
   practice_context?: string | null;
+  // Persona — 'male' (Kevin) or 'female' (Serena). Defaults to Kevin.
+  voiceGender?: VoiceGender;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -179,7 +181,7 @@ Write per-hole summaries and an overall summary. Respond only with valid JSON as
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1200,
-      system: RECAP_SYSTEM,
+      system: buildRecapSystem(body.voiceGender ?? 'male'),
       messages: [{ role: 'user', content: userMessage }],
     });
 

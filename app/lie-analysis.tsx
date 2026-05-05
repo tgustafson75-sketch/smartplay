@@ -93,7 +93,7 @@ export default function LieAnalysisScreen() {
         return;
       }
       const ctx = await bundleLieAnalysisContext(playIntent);
-      const result: LieAnalysisResult = await analyzeLie(b64, ctx, 'image/jpeg');
+      const result: LieAnalysisResult = await analyzeLie(b64, ctx, 'image/jpeg', voiceGender);
 
       if (result.kind === 'ok') {
         setAnalysis(result.analysis);

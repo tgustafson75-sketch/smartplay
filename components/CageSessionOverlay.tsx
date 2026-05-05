@@ -7,10 +7,11 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Ionicons } from '@expo/vector-icons';
 import {
   createSession,
   endSession,
@@ -19,6 +20,8 @@ import {
   getSessionDir,
 } from '../services/cageStorage';
 import type { CageSession } from '../types/cage';
+import { useCageStore } from '../store/cageStore';
+import { runPhaseKOnSession } from '../services/videoUpload';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -41,6 +44,7 @@ type Phase = 'requesting' | 'preview' | 'recording' | 'ending';
 
 export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isFoldOpen = width > 500;
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
@@ -277,8 +281,54 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
 
     console.log(`[CageSession] Session ended. Duration: ${durationSeconds}s, Swings: ${swingCount}, Video: ${masterVideoPath}`);
 
+    // Phase BS-followup Issue G — bridge the cage live session into the
+    // Zustand cageStore.sessionHistory so My Swing Library renders it.
+    // Previously the cage flow only wrote to filesystem (cageStorage) and
+    // routed to /cage-debug; the swing library never saw these sessions.
+    // Now: ingest the master video as a one-shot CageSession with source
+    // 'live_cage', then fire Phase K analysis in the background. The
+    // swing detail screen subscribes to the analysis_status transitions
+    // so the user sees "Watching the swing…" → "ok" naturally.
+    //
+    // Issue H — club defaults to 'unknown' since the new cage flow
+    // doesn't yet integrate the BL three-tier club detection. User can
+    // tap the club label on the detail surface to set it manually, or
+    // a follow-up phase wires BL into the recording start step.
+    let libraryEntryId: string | null = null;
+    if (masterVideoPath) {
+      try {
+        libraryEntryId = useCageStore.getState().ingestUploadedSwing({
+          clipUri: masterVideoPath,
+          club: 'unknown',
+          upload: {
+            uploaded_at: Date.now(),
+            taken_at: sessionStartRef.current,
+            has_audio: true,
+            duration_sec: durationSeconds,
+            swinger: 'Me',
+            tag: 'cage',
+            notes: `${swingCount} swing${swingCount !== 1 ? 's' : ''} detected`,
+          },
+          source: 'live_cage',
+        });
+        console.log(`[CageSession] Bridged to swing library as ${libraryEntryId}`);
+        // Fire-and-forget Phase K (BR + U1 fallback already wired in
+        // runPhaseKOnSession). On a multi-swing master video the analysis
+        // may produce a tentative read; user can re-analyze later if a
+        // per-clip extraction phase ships.
+        void runPhaseKOnSession(libraryEntryId).catch(e =>
+          console.log('[CageSession] Phase K background error', e),
+        );
+      } catch (e) {
+        console.error('[CageSession] Bridge to swing library failed:', e);
+      }
+    }
+
     if (isMountedRef.current) {
-      onComplete(session.id);
+      // Hand the LIBRARY entry id to the consumer (not the cageStorage
+      // session id) so navigation lands on the swing detail screen which
+      // is keyed by sessionHistory[].id.
+      onComplete(libraryEntryId ?? session.id);
     }
   }, [phase, swingCount, stopMetering, onComplete]);
 
@@ -314,17 +364,19 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
 
   if (phase === 'preview') {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { paddingBottom: insets.bottom + 12 }]} edges={['top', 'left', 'right']}>
         <View style={styles.previewHeader}>
-          <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
-            <Text style={styles.cancelBtnText}>✕ Cancel</Text>
+          <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close" size={22} color="#6b7280" />
           </TouchableOpacity>
           <Text style={styles.previewTitle}>Cage Session</Text>
           <TouchableOpacity
             style={styles.flipBtn}
             onPress={() => setCameraFacing((f) => (f === 'back' ? 'front' : 'back'))}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={styles.flipBtnText}>⇄ Flip</Text>
+            <Ionicons name="camera-reverse-outline" size={20} color="#00C896" />
+            <Text style={styles.flipBtnText}>Flip</Text>
           </TouchableOpacity>
         </View>
 
@@ -335,9 +387,21 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
             facing={cameraFacing}
             mode="video"
           />
+
+          {/* Silhouette + swing-arc framing — same overlay as recording
+              phase so the user knows BEFORE they start where their full
+              swing needs to fit. (Issue E) */}
+          <View style={styles.silhouetteFrame} pointerEvents="none">
+            <View style={styles.silhouetteArcTop} />
+            <View style={styles.silhouettePersonWrap}>
+              <Ionicons name="body-outline" size={140} color="rgba(0, 200, 150, 0.42)" />
+            </View>
+            <View style={styles.silhouetteArcBottom} />
+          </View>
+
           <View style={styles.cameraOverlayHint}>
             <Text style={styles.cameraOverlayHintText}>
-              Point at your swing. Place the phone on the cage floor or shelf.
+              Place phone so you stand inside the figure. Backswing top + follow-through must fit between the dashed lines.
             </Text>
           </View>
         </View>
@@ -355,7 +419,7 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
           onPress={startSession}
           activeOpacity={0.8}
         >
-          <Text style={styles.startBtnIcon}>⏺</Text>
+          <Ionicons name="ellipse" size={18} color="#060f09" />
           <Text style={styles.startBtnText}>Start Recording</Text>
         </TouchableOpacity>
       </SafeAreaView>
@@ -367,33 +431,54 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
   const isEnding = phase === 'ending';
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Recording indicator + timer */}
-      <View style={styles.timerRow}>
-        <View style={styles.recDot} />
-        <Text style={styles.timerText}>{formatTime(elapsedSeconds)}</Text>
-        {!meterAvailable && (
-          <Text style={styles.manualOnlyBadge}>Manual only</Text>
-        )}
+    <SafeAreaView style={[styles.container, { paddingBottom: insets.bottom + 12 }]} edges={['top', 'left', 'right']}>
+      {/* Header row — recording indicator + timer + swing count, compact */}
+      <View style={styles.recHeader}>
+        <View style={styles.recHeaderLeft}>
+          <View style={styles.recDot} />
+          <Text style={styles.timerText}>{formatTime(elapsedSeconds)}</Text>
+        </View>
+        <View style={styles.recHeaderRight}>
+          <Text style={styles.swingCountNum}>{swingCount}</Text>
+          <Text style={styles.swingCountLabel}>
+            {swingCount === 1 ? 'swing' : 'swings'}
+          </Text>
+        </View>
       </View>
+      {!meterAvailable && (
+        <Text style={styles.manualOnlyBadge}>Auto-detect off — log manually</Text>
+      )}
 
-      {/* Swing count */}
-      <View style={styles.swingCountBox}>
-        <Text style={styles.swingCountNum}>{swingCount}</Text>
-        <Text style={styles.swingCountLabel}>
-          {swingCount === 1 ? 'swing detected' : 'swings detected'}
-        </Text>
-      </View>
-
-      {/* Small camera preview (so Tim can verify angle before putting phone down) */}
-      <View style={[styles.livePreviewBox, isFoldOpen && styles.livePreviewBoxWide]}>
+      {/* LIVE preview — fills available space so the user can verify
+          framing in real time (Issue D). Silhouette + swing-zone overlay
+          (Issue E) helps them position so the full swing fits. */}
+      <View style={styles.livePreviewBox}>
         <CameraView
           ref={cameraRef}
           style={StyleSheet.absoluteFill}
           facing={cameraFacing}
           mode="video"
         />
-        <View style={styles.liveOverlay}>
+
+        {/* Silhouette + swing-arc framing overlay (Issue E) — guides the
+            user to place the phone so a full backswing-to-follow-through
+            arc fits within the frame. The figure outline marks where the
+            golfer should stand; the dashed arc shows the swing envelope.
+            Pure absolute positioning, no SVG dependency. */}
+        <View style={styles.silhouetteFrame} pointerEvents="none">
+          <View style={styles.silhouetteArcTop} />
+          <View style={styles.silhouettePersonWrap}>
+            <Ionicons name="body-outline" size={140} color="rgba(0, 200, 150, 0.42)" />
+          </View>
+          <View style={styles.silhouetteArcBottom} />
+          <View style={styles.silhouetteHintWrap}>
+            <Text style={styles.silhouetteHintText}>
+              Stand inside the figure. Full backswing + follow-through fit between the dashed lines.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.liveBadgeRow}>
           <View style={styles.liveDot} />
           <Text style={styles.liveText}>LIVE</Text>
           <TouchableOpacity
@@ -401,37 +486,37 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
             onPress={() => setCameraFacing((f) => (f === 'back' ? 'front' : 'back'))}
             disabled={isEnding}
           >
-            <Text style={styles.smallFlipText}>⇄</Text>
+            <Ionicons name="camera-reverse-outline" size={18} color="#e8f5e9" />
           </TouchableOpacity>
         </View>
       </View>
 
-      <Text style={styles.instructionText}>
-        Put the phone down and hit balls.{'\n'}Tap below if auto-detect misses one.
-      </Text>
+      {/* Action row — Log swing + End session, compact, side-by-side on
+          Fold-open (more horizontal space) and stacked on Fold-closed.
+          Icons via Ionicons (Issue A). Sizes reduced (Issue B). */}
+      <View style={[styles.actionRow, !isFoldOpen && styles.actionRowStacked]}>
+        <TouchableOpacity
+          style={[styles.logSwingBtn, isEnding && styles.btnDisabled, isFoldOpen && styles.actionFlex]}
+          onPress={handleLogSwing}
+          disabled={isEnding}
+          activeOpacity={0.75}
+        >
+          <Ionicons name="golf-outline" size={20} color="#00C896" />
+          <Text style={styles.logSwingText}>Log swing</Text>
+        </TouchableOpacity>
 
-      {/* Log swing button */}
-      <TouchableOpacity
-        style={[styles.logSwingBtn, isEnding && styles.btnDisabled]}
-        onPress={handleLogSwing}
-        disabled={isEnding}
-        activeOpacity={0.75}
-      >
-        <Text style={styles.logSwingIcon}>🏌️</Text>
-        <Text style={styles.logSwingText}>Log swing</Text>
-      </TouchableOpacity>
-
-      {/* End session button */}
-      <TouchableOpacity
-        style={[styles.endBtn, isEnding && styles.btnDisabled]}
-        onPress={handleEndSession}
-        disabled={isEnding}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.endBtnText}>
-          {isEnding ? 'Saving session…' : 'End Session'}
-        </Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.endBtn, isEnding && styles.btnDisabled, isFoldOpen && styles.actionFlex]}
+          onPress={handleEndSession}
+          disabled={isEnding}
+          activeOpacity={0.8}
+        >
+          <Ionicons name={isEnding ? 'hourglass-outline' : 'stop-circle-outline'} size={18} color="#fca5a5" />
+          <Text style={styles.endBtnText}>
+            {isEnding ? 'Saving…' : 'End Session'}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -442,8 +527,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#060f09',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    // paddingBottom is set dynamically via useSafeAreaInsets so the End
+    // Session button clears the gesture-nav band on Android edge-to-edge
+    // (Issue C). Default safe value if no insets.
+    paddingBottom: 16,
   },
 
   requestingText: {
@@ -453,32 +541,33 @@ const styles = StyleSheet.create({
     marginTop: 80,
   },
 
-  // Preview phase
+  // ─── Preview phase ─────────────────────────────────────────────────
   previewHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 12,
-    paddingBottom: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   cancelBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  cancelBtnText: {
-    color: '#6b7280',
-    fontSize: 14,
+    width: 36, height: 36,
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: 18,
   },
   previewTitle: {
     color: '#e8f5e9',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   flipBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingVertical: 8,
     paddingHorizontal: 12,
     backgroundColor: '#0a2a1a',
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#1e3a28',
   },
@@ -492,20 +581,22 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#000',
-    minHeight: 280,
-    maxHeight: 460,
+    minHeight: 320,
     position: 'relative',
+    borderWidth: 1,
+    borderColor: '#1e3a28',
   },
   cameraPreviewBoxWide: {
-    maxHeight: 380,
+    // Wide-screen Fold-open keeps the same flex sizing — no maxHeight
+    // cap so the preview takes all available space (Issue D).
   },
   cameraOverlayHint: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: 16,
+    backgroundColor: 'rgba(6, 15, 9, 0.78)',
+    paddingHorizontal: 14,
     paddingVertical: 10,
   },
   cameraOverlayHintText: {
@@ -516,7 +607,7 @@ const styles = StyleSheet.create({
   },
   warnBanner: {
     backgroundColor: '#2a1a00',
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 10,
     marginTop: 10,
     borderWidth: 1,
@@ -533,88 +624,155 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#00C896',
     borderRadius: 14,
-    paddingVertical: 20,
-    marginTop: 16,
+    paddingVertical: 16,
+    marginTop: 14,
     gap: 10,
-  },
-  startBtnIcon: {
-    fontSize: 22,
-    color: '#060f09',
+    shadowColor: '#00C896',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
   startBtnText: {
     color: '#060f09',
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '800',
+    letterSpacing: 0.3,
   },
 
-  // Recording phase
-  timerRow: {
+  // ─── Recording phase ───────────────────────────────────────────────
+  // Phase BS-followup Issue B — replaced separate timerRow + swingCountBox
+  // (which together took ~150px of vertical real estate) with a single
+  // compact horizontal recHeader (~52px). Frees space for the live
+  // preview to fill (Issue D).
+  recHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 16,
-    paddingBottom: 8,
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    paddingBottom: 10,
+  },
+  recHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
   },
+  recHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
   recDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
     backgroundColor: '#ef4444',
   },
   timerText: {
     color: '#e8f5e9',
-    fontSize: 36,
-    fontWeight: '300',
+    fontSize: 22,
+    fontWeight: '500',
     fontVariant: ['tabular-nums'],
-    letterSpacing: 2,
+    letterSpacing: 1,
   },
   manualOnlyBadge: {
     color: '#fbbf24',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
-    backgroundColor: '#2a1a00',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-
-  swingCountBox: {
-    alignItems: 'center',
-    paddingVertical: 10,
+    backgroundColor: 'rgba(42, 26, 0, 0.85)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'center',
+    marginBottom: 6,
   },
   swingCountNum: {
+    // Phase BS-followup Issue B — was 64px standalone block; now an inline
+    // accent in the header row at 28px, giving the live preview the
+    // vertical room it needs.
     color: '#00C896',
-    fontSize: 64,
+    fontSize: 28,
     fontWeight: '800',
-    lineHeight: 72,
     fontVariant: ['tabular-nums'],
+    lineHeight: 30,
   },
   swingCountLabel: {
     color: '#6b7280',
-    fontSize: 14,
-    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '600',
   },
 
+  // Phase BS-followup Issue D — flex:1 so the preview fills all available
+  // space between the recHeader and actionRow. User can now verify
+  // framing in real time.
   livePreviewBox: {
-    height: 160,
-    borderRadius: 12,
+    flex: 1,
+    borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: '#000',
-    marginVertical: 12,
+    marginBottom: 12,
     position: 'relative',
+    borderWidth: 1,
+    borderColor: '#1e3a28',
   },
-  livePreviewBoxWide: {
-    height: 200,
-  },
-  liveOverlay: {
+
+  // Phase BS-followup Issue E — silhouette + swing-arc framing overlay.
+  // Three layered elements show the user where to stand and how much
+  // vertical room their backswing/follow-through needs.
+  silhouetteFrame: {
     position: 'absolute',
-    top: 8,
-    left: 0,
-    right: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  silhouetteArcTop: {
+    position: 'absolute',
+    top: '12%',
+    left: '15%',
+    right: '15%',
+    height: 0,
+    borderTopWidth: 1.5,
+    borderTopColor: 'rgba(0, 200, 150, 0.55)',
+    borderStyle: 'dashed',
+  },
+  silhouetteArcBottom: {
+    position: 'absolute',
+    bottom: '14%',
+    left: '15%',
+    right: '15%',
+    height: 0,
+    borderTopWidth: 1.5,
+    borderTopColor: 'rgba(0, 200, 150, 0.55)',
+    borderStyle: 'dashed',
+  },
+  silhouettePersonWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  silhouetteHintWrap: {
+    position: 'absolute',
+    top: 10,
+    left: 12,
+    right: 12,
+    backgroundColor: 'rgba(6, 15, 9, 0.62)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  silhouetteHintText: {
+    color: '#e8f5e9',
+    fontSize: 11,
+    textAlign: 'center',
+    lineHeight: 15,
+  },
+
+  liveBadgeRow: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    right: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
     gap: 6,
   },
   liveDot: {
@@ -628,63 +786,67 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   smallFlipBtn: {
     marginLeft: 'auto',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  smallFlipText: {
-    color: '#e8f5e9',
-    fontSize: 14,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 18,
+    width: 32, height: 32,
+    alignItems: 'center', justifyContent: 'center',
   },
 
-  instructionText: {
-    color: '#6b7280',
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 19,
-    marginBottom: 16,
+  // Phase BS-followup Issue B — buttons compacted: padding 22→14,
+  // text 22→16. Stacked on Fold-closed (vertical), side-by-side on
+  // Fold-open (more horizontal real estate, less vertical waste).
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
   },
-
+  actionRowStacked: {
+    flexDirection: 'column',
+    gap: 10,
+  },
+  actionFlex: {
+    flex: 1,
+  },
   logSwingBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#0a2a1a',
-    borderRadius: 14,
-    paddingVertical: 22,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: '#00C89644',
-    gap: 10,
-  },
-  logSwingIcon: {
-    fontSize: 26,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderColor: '#00C89655',
+    gap: 8,
   },
   logSwingText: {
     color: '#e8f5e9',
-    fontSize: 22,
+    fontSize: 16,
     fontWeight: '700',
   },
-
   endBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#3b0d0d',
-    borderRadius: 14,
-    paddingVertical: 20,
-    borderWidth: 2,
-    borderColor: '#ef444444',
+    backgroundColor: '#1f0a0a',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderColor: '#ef444466',
+    gap: 8,
   },
   endBtnText: {
     color: '#fca5a5',
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '700',
   },
-
   btnDisabled: {
     opacity: 0.4,
   },

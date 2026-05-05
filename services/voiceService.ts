@@ -449,10 +449,18 @@ export const speak = async (
     currentAbortController = abortController;
     const voiceTimeout = setTimeout(() => abortController.abort(), 12_000);
 
+    // Persona is the source-of-truth selector for ElevenLabs voice routing.
+    // Read from settings store at request time (dynamic require avoids a
+    // module-load cycle since voiceService is imported very early).
+    let persona: string | null = null;
+    try {
+      persona = require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? null;
+    } catch { /* ignore */ }
+
     const response = await fetch(apiUrl + '/api/voice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, gender, language }),
+      body: JSON.stringify({ text, gender, language, persona }),
       signal: abortController.signal,
     }).finally(() => clearTimeout(voiceTimeout));
 

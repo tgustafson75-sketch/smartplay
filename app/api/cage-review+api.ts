@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { getCaddieName, type VoiceGender } from '../../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -16,17 +17,20 @@ interface QuestionRequest {
   feel: string | null;
   shape: string | null;
   club: string;
+  voiceGender?: VoiceGender;
 }
 
 interface ExtractRequest {
   action: 'extract';
   transcript: string;
+  voiceGender?: VoiceGender;
 }
 
 interface VocabRequest {
   action: 'vocab';
   transcripts: string[];
   total_reviewed: number;
+  voiceGender?: VoiceGender;
 }
 
 type RequestBody = QuestionRequest | ExtractRequest | VocabRequest;
@@ -51,11 +55,12 @@ async function handleQuestion(body: QuestionRequest): Promise<Response> {
     body.prior_labels ? `Prior review labels: ${body.prior_labels}` : null,
   ].filter(Boolean).join('. ');
 
+  const caddieName = getCaddieName(body.voiceGender ?? 'male');
   const msg = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 80,
     system:
-      `You are Kevin, a golf coach reviewing cage session recordings with the user. ${modeInstruction} Vary your phrasing across clips. Never lecture. Output ONLY the question, no preamble, no quotes.`,
+      `You are ${caddieName}, a golf coach reviewing cage session recordings with the user. ${modeInstruction} Vary your phrasing across clips. Never lecture. Output ONLY the question, no preamble, no quotes.`,
     messages: [{ role: 'user', content: context }],
   });
 
@@ -108,11 +113,12 @@ async function handleVocab(body: VocabRequest): Promise<Response> {
     .map((t, i) => `Clip ${i + 1}: "${t}"`)
     .join('\n');
 
+  const caddieName = getCaddieName(body.voiceGender ?? 'male');
   const msg = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 500,
     system:
-      'You are Kevin, a golf coach analyzing the vocabulary a player uses when reviewing their swings. Extract recurring terminology and write a 2-3 sentence personal observation. Return valid JSON only, no markdown.',
+      `You are ${caddieName}, a golf coach analyzing the vocabulary a player uses when reviewing their swings. Extract recurring terminology and write a 2-3 sentence personal observation. Return valid JSON only, no markdown.`,
     messages: [
       {
         role: 'user',

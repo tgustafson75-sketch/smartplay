@@ -33,6 +33,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettingsStore } from '../store/settingsStore';
 import { speak, stopSpeaking } from '../services/voiceService';
+import { getCaddieName } from '../lib/persona';
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
@@ -73,6 +74,7 @@ export default function DiagnosticCard() {
   const { colors, spacing, radii } = useTheme();
   const params = useLocalSearchParams<{ pattern?: string; reasoning?: string }>();
   const { voiceGender, language } = useSettingsStore();
+  const caddieName = getCaddieName(voiceGender);
   const [playing, setPlaying] = useState(false);
 
   const pattern = String(params.pattern ?? '');
@@ -167,7 +169,7 @@ export default function DiagnosticCard() {
             activeOpacity={0.85}
           >
             <Ionicons name={playing ? 'stop' : 'play'} size={18} color="#ffffff" />
-            <Text style={styles.replayText}>{playing ? 'Stop' : "Listen to Kevin's full reasoning"}</Text>
+            <Text style={styles.replayText}>{playing ? 'Stop' : `Listen to ${caddieName}'s full reasoning`}</Text>
           </TouchableOpacity>
         ) : null}
       </ScrollView>

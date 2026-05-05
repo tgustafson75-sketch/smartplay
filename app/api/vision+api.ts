@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { getCaddieName } from '../../lib/persona';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -15,7 +16,9 @@ export async function POST(request: Request) {
       distance,
       courseName,
       dominantMiss = null,
+      voiceGender = 'male',
     } = body;
+    const caddieName = getCaddieName(voiceGender);
 
     console.log('[vision] received:', {
       mode,
@@ -51,17 +54,17 @@ export async function POST(request: Request) {
             {
               type: 'text',
               text:
-                'You are Kevin, an experienced golf caddie. ' +
+                'You are ' + caddieName + ', an experienced golf caddie. ' +
                 'This is an overhead satellite view of hole ' +
                 (hole ?? '?') + ', par ' + (par ?? '?') + ', ' +
                 (distance ?? '?') + ' yards' +
                 (courseName ? ' at ' + courseName : '') + '.' +
                 missContext +
-                ' In exactly 2 sentences as Kevin: identify the main hazard ' +
+                ' In exactly 2 sentences as ' + caddieName + ': identify the main hazard ' +
                 'and recommend an aim point, then give one specific swing thought ' +
                 'or club choice. Be direct and warm. Use yards not meters. ' +
                 'Do not start with "I can see". Do not describe the image. ' +
-                "Just give Kevin's read.",
+                "Just give " + caddieName + "'s read.",
             },
           ],
         }],

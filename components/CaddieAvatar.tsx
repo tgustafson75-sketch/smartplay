@@ -72,6 +72,74 @@ const SERENA_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
   kevin_self_critical: require('../assets/avatars/serena-studio-portrait-001.png'),
 };
 
+// Harry counterparts. Each emotion slot maps to the closest-matching PNG
+// from harry_emotions_24.zip. Slots without a perfect match reuse the
+// nearest expressive sibling (e.g. kevin_curious reuses attentive).
+const HARRY_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
+  kevin_course:        require('../assets/avatars/harry_portrait.png'),
+  kevin_dark:          require('../assets/avatars/harry_moods_serious.png'),
+  kevin_nod:           require('../assets/avatars/harry_expressive_friendly_smile.png'),
+  kevin_idle:          require('../assets/avatars/harry_expressive_friendly_smile.png'),
+  kevin_listening:     require('../assets/avatars/harry_expressive_attentive.png'),
+  kevin_explaining:    require('../assets/avatars/harry_moods_pointing_at_you.png'),
+  kevin_focused:       require('../assets/avatars/harry_moods_serious.png'),
+  kevin_determined:    require('../assets/avatars/harry_moods_ready.png'),
+  kevin_pensive:       require('../assets/avatars/harry_moods_thoughtful.png'),
+  kevin_inquisitive:   require('../assets/avatars/harry_expressive_suspicious.png'),
+  kevin_mentorship:    require('../assets/avatars/harry_moods_knowing_smile.png'),
+  kevin_humble:        require('../assets/avatars/harry_moods_tipping_cap.png'),
+  kevin_supportive:    require('../assets/avatars/harry_moods_approving.png'),
+  kevin_happy:         require('../assets/avatars/harry_expressive_warm_smile_wide.png'),
+  kevin_enthusiastic:  require('../assets/avatars/harry_expressive_laughing.png'),
+  kevin_surprised:     require('../assets/avatars/harry_expressive_surprised.png'),
+  kevin_celebrating:   require('../assets/avatars/harry_expressive_celebrating.png'),
+  kevin_confident:     require('../assets/avatars/harry_moods_knowing_smile.png'),
+  kevin_gameface:      require('../assets/avatars/harry_expressive_stern.png'),
+  kevin_curious:       require('../assets/avatars/harry_expressive_attentive.png'),
+  kevin_wincing:       require('../assets/avatars/harry_expressive_exasperated.png'),
+  kevin_self_critical: require('../assets/avatars/harry_moods_downcast.png'),
+};
+
+// Tank counterparts. Each emotion slot maps to the closest-matching PNG
+// from tank_emotions_30.zip. Determination doubles as game-face;
+// pointing_at_you doubles as mentorship/teaching pose.
+const TANK_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
+  kevin_course:        require('../assets/avatars/tank_portrait.png'),
+  kevin_dark:          require('../assets/avatars/tank_moods_intense.png'),
+  kevin_nod:           require('../assets/avatars/tank_expressive_warm_smile.png'),
+  kevin_idle:          require('../assets/avatars/tank_expressive_warm_smile.png'),
+  kevin_listening:     require('../assets/avatars/tank_expressive_thinking.png'),
+  kevin_explaining:    require('../assets/avatars/tank_expressive_pointing_at_you.png'),
+  kevin_focused:       require('../assets/avatars/tank_moods_intense.png'),
+  kevin_determined:    require('../assets/avatars/tank_emotions_determination.png'),
+  kevin_pensive:       require('../assets/avatars/tank_expressive_contemplative.png'),
+  kevin_inquisitive:   require('../assets/avatars/tank_moods_intrigued.png'),
+  kevin_mentorship:    require('../assets/avatars/tank_expressive_pointing_at_you.png'),
+  kevin_humble:        require('../assets/avatars/tank_emotions_relief.png'),
+  kevin_supportive:    require('../assets/avatars/tank_moods_pleased.png'),
+  kevin_happy:         require('../assets/avatars/tank_emotions_joy.png'),
+  kevin_enthusiastic:  require('../assets/avatars/tank_emotions_excitement.png'),
+  kevin_surprised:     require('../assets/avatars/tank_expressive_shocked.png'),
+  kevin_celebrating:   require('../assets/avatars/tank_expressive_celebration.png'),
+  kevin_confident:     require('../assets/avatars/tank_emotions_pride.png'),
+  kevin_gameface:      require('../assets/avatars/tank_emotions_determination.png'),
+  kevin_curious:       require('../assets/avatars/tank_moods_intrigued.png'),
+  kevin_wincing:       require('../assets/avatars/tank_emotions_frustration.png'),
+  kevin_self_critical: require('../assets/avatars/tank_expressive_facepalm.png'),
+};
+
+type Persona = 'kevin' | 'serena' | 'harry' | 'tank';
+
+function getAvatarSet(persona: Persona): Record<AvatarKey, ImageSourcePropType> {
+  switch (persona) {
+    case 'serena': return SERENA_AVATARS;
+    case 'harry':  return HARRY_AVATARS;
+    case 'tank':   return TANK_AVATARS;
+    case 'kevin':
+    default:       return AVATARS;
+  }
+}
+
 // ─── EMOTION → KEY MAP ────────────────────
 
 const EMOTION_KEY_MAP: Record<string, AvatarKey> = {
@@ -195,13 +263,13 @@ function getAvatarKey(
 }
 
 function computeSource(
-  gender: 'male' | 'female',
+  persona: Persona,
   emotion: string | null | undefined,
   isOnCourse: boolean,
   isCageMode: boolean,
 ): ImageSourcePropType {
   const key = getAvatarKey(emotion, isOnCourse, isCageMode);
-  return gender === 'female' ? SERENA_AVATARS[key] : AVATARS[key];
+  return getAvatarSet(persona)[key];
 }
 
 // voiceState → emotion used when no explicit emotion prop is passed
@@ -231,6 +299,11 @@ export interface HUDData {
 
 interface CaddieAvatarProps {
   gender: 'male' | 'female';
+  /** Persona ID — when provided, drives avatar set selection (4-way:
+   *  kevin/serena/harry/tank). When omitted, falls back to gender-based
+   *  selection for back-compat with older call sites (gender 'male' →
+   *  Kevin, 'female' → Serena). New call sites should pass persona. */
+  persona?: 'kevin' | 'serena' | 'harry' | 'tank';
   isOnCourse: boolean;
   isCageMode: boolean;
   voiceState: VoiceState;
@@ -251,6 +324,7 @@ interface CaddieAvatarProps {
 
 export default function CaddieAvatar({
   gender,
+  persona,
   isOnCourse,
   isCageMode,
   voiceState,
@@ -263,6 +337,8 @@ export default function CaddieAvatar({
   isThinking = false,
   trustLevel = 3,
 }: CaddieAvatarProps) {
+  // Resolve persona: explicit prop wins, else fall back to gender → kevin/serena.
+  const resolvedPersona: Persona = persona ?? (gender === 'female' ? 'serena' : 'kevin');
   const fill = fillMode ?? 'contain';
   const { width: W, height: H } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -305,10 +381,11 @@ export default function CaddieAvatar({
 
   // ── Derived emotion ─────────────────────
   const effectiveEmotion = emotion ?? VOICE_EMOTION[voiceState] ?? null;
-  const targetSource = computeSource(gender, effectiveEmotion, isOnCourse, isCageMode);
-  const effectiveKey: AvatarKey = gender === 'female'
-    ? 'kevin_idle'
-    : getAvatarKey(effectiveEmotion, isOnCourse, isCageMode);
+  const targetSource = computeSource(resolvedPersona, effectiveEmotion, isOnCourse, isCageMode);
+  // All four personas have per-emotion assets now (Kevin/Serena/Harry/Tank),
+  // so the same key resolution applies to all. Each persona's avatar map
+  // re-keys to its own PNG set.
+  const effectiveKey: AvatarKey = getAvatarKey(effectiveEmotion, isOnCourse, isCageMode);
 
   // Phase AU — recompose pipeline removed. See LOCK comment above.
 
@@ -355,10 +432,10 @@ export default function CaddieAvatar({
     const currentVisible =
       frozenFade >= 0.5 ? frontSourceRef.current : backSourceRef.current;
 
-    // Compute config using the key BEFORE this update
-    const config: TransitionConfig = gender === 'female'
-      ? { duration: 280, easing: Easing.inOut(Easing.quad), useBreath: false }
-      : getTransitionConfig(currentKeyRef.current, effectiveKey);
+    // Compute config using the key BEFORE this update. Same transition
+    // rules apply to every persona — the breath-stage intermediate uses
+    // the active persona's idle PNG (resolved a few lines down).
+    const config: TransitionConfig = getTransitionConfig(currentKeyRef.current, effectiveKey);
 
     // Advance tracking
     currentSourceRef.current = targetSource;
@@ -366,7 +443,10 @@ export default function CaddieAvatar({
 
     if (config.useBreath) {
       // ── 3-stage breath sequence ────────────
-      const breathSrc: ImageSourcePropType = AVATARS['kevin_idle'];
+      // Use the active persona's idle PNG as the breath intermediate so
+      // a Tank → Tank or Harry → Harry transition doesn't flash Kevin's
+      // face mid-breath.
+      const breathSrc: ImageSourcePropType = getAvatarSet(resolvedPersona)['kevin_idle'];
 
       // Stage 1: currentVisible → idle
       backSourceRef.current  = currentVisible;
@@ -895,8 +975,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stateTag: {
+    // Phase BS-followup Issue 1 — bumped top: 14 → 84 so the
+    // "● Listening" / "◌ Thinking" badge clears the wordmark + topnav +
+    // trial pill band when the avatar is in full-screen cover mode (L4 +
+    // pre-round thinking on Fold-open). Previously sat at the very top
+    // of the screen, overlapping the trial pill at insets.top + 52 and
+    // hiding the wordmark behind the badge background.
     position: 'absolute',
-    top: 14,
+    top: 84,
     left: 0,
     right: 0,
     alignItems: 'center',

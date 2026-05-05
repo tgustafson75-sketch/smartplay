@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
-import { KEVIN_CHARACTER_SPEC } from '../constants/kevinCharacter';
+import { getCaddieName, getCharacterSpec, type VoiceGender } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -37,9 +37,9 @@ type AnalysisResponse = {
   goal_aware_note?: string | null;
 };
 
-const SYSTEM_PROMPT = `${KEVIN_CHARACTER_SPEC}
+const buildSystemPrompt = (g: VoiceGender) => `${getCharacterSpec(g)}
 
-You are Kevin, the player's caddie, looking at a photo of their current lie. They've asked what they should do.
+You are ${getCaddieName(g)}, the player's caddie, looking at a photo of their current lie. They've asked what they should do.
 
 Your job: read the situation honestly and recommend a play in your Caddie voice. Tactical, present-tense, decisive.
 
@@ -98,11 +98,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const contextLines: string[] = [];
     if (ctx.current_hole != null) contextLines.push(`Hole ${ctx.current_hole} (par ${ctx.par ?? '?'})`);
     if (ctx.distance_to_green_yards != null) contextLines.push(`Distance to middle of green: ${ctx.distance_to_green_yards} yards`);
-    // Phase H v2.5 — explicit GPS-missing disclaimer so Kevin's voice
+    // Phase H v2.5 — explicit GPS-missing disclaimer so the caddie voice
     // acknowledges the data gap rather than recommending blind.
     if (ctx.current_hole != null && ctx.distance_to_green_yards == null) {
       contextLines.push("GPS distance unavailable — open with a brief 'can't see exact distances right now' acknowledgement, then read the lie and recommend.");
     }
+    const voiceGender: VoiceGender = (body.voiceGender as VoiceGender | undefined) ?? 'male';
     if (ctx.weather) {
       const w = ctx.weather as Record<string, unknown>;
       const parts: string[] = [];
@@ -147,7 +148,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       model: 'claude-sonnet-4-6',
       max_tokens: 800,
       temperature: 0.5,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(voiceGender),
       messages: [
         {
           role: 'user',

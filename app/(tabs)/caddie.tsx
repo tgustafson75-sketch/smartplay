@@ -26,6 +26,7 @@ import { useRoundStore } from '../../store/roundStore';
 import type { ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { getCaddieName, ALL_PERSONAS, type Persona } from '../../lib/persona';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useCageStore } from '../../store/cageStore';
 import { usePointsStore } from '../../store/pointsStore';
@@ -343,6 +344,8 @@ export default function CaddieTab() {
 
   const { firstName, goal, subscription_status, trial_started_at, dominantMiss } = usePlayerProfileStore();
   const { skip_briefings, proactive_kevin_enabled } = useSettingsStore();
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
+  const setCaddiePersonality = useSettingsStore(s => s.setCaddiePersonality);
   const daysLeft = useMemo(
     () => trialDaysLeft(trial_started_at),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -997,6 +1000,7 @@ export default function CaddieTab() {
         // flagged active; api/recap.ts skips the practice block in that
         // case, so pre-BR rounds without tutorials are unchanged.
         practiceContext: buildFullPracticeContext(),
+        voiceGender,
       })
         .then(_recap => {
           setRecapLoading(false);
@@ -1390,7 +1394,9 @@ export default function CaddieTab() {
                 }}
               >
                 <CaddieAvatar
+                  key={`${W}x${H}`}
                   gender={voiceGender === 'female' ? 'female' : 'male'}
+                  persona={caddiePersonality}
                   isOnCourse={isRoundActive}
                   isCageMode={false}
                   voiceState={voiceState}
@@ -1430,7 +1436,9 @@ export default function CaddieTab() {
               }}
             >
               <CaddieAvatar
+                key={`${W}x${H}`}
                 gender={voiceGender === 'female' ? 'female' : 'male'}
+                persona={caddiePersonality}
                 isOnCourse={isRoundActive}
                 isCageMode={false}
                 voiceState={voiceState}
@@ -1459,16 +1467,24 @@ export default function CaddieTab() {
         // his lower edge sits just above the dropdown row.
         <>
           {/* L3 SmartVision INLAY — Tim: "in bottom left of Kevin box,
-              overlayed, not so big horizontally". Compact 140×100 tile
-              anchored bottom-left of the Kevin avatar zone, zIndex
-              above Kevin so it overlays. */}
+              overlayed, not so big horizontally". Compact tile anchored
+              bottom-left of the Kevin avatar zone, zIndex above Kevin
+              so it overlays.
+
+              Phase BS-followup Issue 4 — shrunk 140×100 → 120×86 and
+              dropped bottom 158 → 132 so the tile sits flush at the
+              bottom-left corner of the avatar zone instead of floating
+              8px inside it. Previously the tile was covering the
+              SmartPlay shirt logo on Serena's chest. Smaller footprint
+              + lower anchor preserves the L3 overlay design intent
+              while clearing the wardrobe brand mark. */}
           <View
             style={{
               position: 'absolute',
               left: 12,
-              bottom: 158 + insets.bottom,
-              width: 140,
-              height: 100,
+              bottom: 132 + insets.bottom,
+              width: 120,
+              height: 86,
               borderRadius: 10,
               borderWidth: 1.5,
               borderColor: '#00C896',
@@ -1483,7 +1499,7 @@ export default function CaddieTab() {
             }}
             pointerEvents="box-none"
           >
-            <L1HolePreview onOpenSmartVision={openSmartVision} width={140} height={100} />
+            <L1HolePreview onOpenSmartVision={openSmartVision} width={120} height={86} />
           </View>
           {/* L3 Kevin avatar — full L3 zone now that SmartVision is an
               overlay inlay (not a top card). Top clamp ensures Kevin
@@ -1501,7 +1517,9 @@ export default function CaddieTab() {
             }}
           >
             <CaddieAvatar
+              key={`${W}x${H}`}
               gender={voiceGender === 'female' ? 'female' : 'male'}
+              persona={caddiePersonality}
               isOnCourse={isRoundActive}
               isCageMode={false}
               voiceState={voiceState}
@@ -1540,7 +1558,9 @@ export default function CaddieTab() {
           style={{ position: 'absolute', top: insets.top + 56, left: 0, width: W, height: avatarFrameHeight }}
         >
           <CaddieAvatar
+            key={`${W}x${H}`}
             gender={voiceGender === 'female' ? 'female' : 'male'}
+            persona={caddiePersonality}
             isOnCourse={isRoundActive}
             isCageMode={false}
             voiceState={voiceState}
@@ -1719,8 +1739,13 @@ export default function CaddieTab() {
           green-arrow dropdown. */}
 
       {/* TRIAL INDICATOR — only in final 3 days to avoid persistent clutter */}
+      {/* Phase BS-followup Issue 2 — top bumped 52 → 78 so the pill clears
+           the topnav row (back chevron + Tools ⋯) at insets.top + 38 with
+           ~28px icon height ending at ~insets.top + 66. Previous 52 was
+           literally inside the topnav band; the 8% green fill was hiding
+           the visual collision most of the time. */}
       {subscription_status === 'trial' && daysLeft !== null && daysLeft <= 3 && (
-        <View style={[styles.trialBanner, { top: insets.top + 52 }]}>
+        <View style={[styles.trialBanner, { top: insets.top + 78 }]}>
           <Text style={styles.trialBannerText}>
             {daysLeft > 0
               ? `${daysLeft} day${daysLeft !== 1 ? 's' : ''} left in trial`
@@ -1730,7 +1755,7 @@ export default function CaddieTab() {
       )}
       {subscription_status === 'expired' && (
         <TouchableOpacity
-          style={[styles.trialBanner, styles.trialBannerExpired, { top: insets.top + 52 }]}
+          style={[styles.trialBanner, styles.trialBannerExpired, { top: insets.top + 78 }]}
           onPress={() => triggerPaywall('trial_expired_banner', () => router.push('/paywall' as never))}
         >
           <Text style={[styles.trialBannerText, styles.trialBannerExpiredText]}>
@@ -1771,11 +1796,18 @@ export default function CaddieTab() {
           hole number graphic (Tim: "put windage circle below hole
           number that shows on SmartVision"). Pre-round renders a
           static N-pointing arrow placeholder so the circle's purpose
-          is visible without weather data. */}
+          is visible without weather data.
+
+          Phase BS-followup Issue 3 — Fold-aware top. On Fold-open
+          (W >= 540) the avatar lives in the side-by-side layout and
+          the wind circle at top: 160 sits cleanly above her face.
+          On Fold-closed, the avatar is full-bleed and 160 lands on
+          her cheek/eye line. Bump to 240 on Fold-closed so the
+          circle clears the eye-line of the canonical face framing. */}
       <View
         style={{
           position: 'absolute',
-          top: insets.top + 160,
+          top: insets.top + (W >= 540 ? 160 : 240),
           right: 12,
           zIndex: 16,
           width: 56,
@@ -1835,12 +1867,20 @@ export default function CaddieTab() {
           Default = just a chevron pill on the right; tap to expand
           LEFT into the row of contextual round icons (Scorecard /
           SmartVision / SmartFinder / MARK / TightLie / Tools).
-          Position bottom: 92 + insets.bottom keeps it above DataStrip. */}
+          Position bottom: 92 + insets.bottom keeps it above DataStrip.
+
+          Phase BS-followup Issue 5 — on Fold-open / wide screens
+          (W >= 540), the SmartVision card on the right side of the
+          split layout extends low enough that the chevron's default
+          position visually butts up against the card's bottom edge.
+          Add 18px clearance on Fold-open so the chevron sits cleanly
+          below the card. Fold-closed keeps the original 92 since the
+          single-column layout doesn't have this collision. */}
       {isRoundActive && (
         <View
           style={{
             position: 'absolute',
-            bottom: 92 + insets.bottom,
+            bottom: (W >= 540 ? 110 : 92) + insets.bottom,
             left: 12, right: 12,
             zIndex: 15,
             flexDirection: 'row',
@@ -2598,7 +2638,18 @@ export default function CaddieTab() {
                 label: trustLevel === 1 ? 'Resume Kevin' : 'Quiet Mode',
                 sub: trustLevel === 1 ? 'Bring Kevin back to Companion' : "Mute Kevin until I'm ready",
                 action: () => { setShowMoreMenu(false); setTrustLevel(trustLevel === 1 ? 2 : 1); } },
-              { icon: 'options-outline',     label: `Kevin's Presence: ${TRUST_LEVEL_META[trustLevel].label}`, sub: `${TRUST_LEVEL_META[trustLevel].one_liner} · Tap to cycle`, action: () => { const next = (((trustLevel) % 4) + 1) as TrustLevel; setTrustLevel(next); } },
+              { icon: 'options-outline',     label: `${getCaddieName(caddiePersonality)}'s Presence: ${TRUST_LEVEL_META[trustLevel].label}`, sub: `${TRUST_LEVEL_META[trustLevel].one_liner} · Tap to cycle`, action: () => { const next = (((trustLevel) % 4) + 1) as TrustLevel; setTrustLevel(next); } },
+              // Caddie persona cycler — Kevin → Serena → Harry → Tank → Kevin.
+              // Stays in the Tools sheet so the user can swap mid-round
+              // without diving into Settings.
+              { icon: 'people-outline' as IconName,
+                label: `Caddie: ${getCaddieName(caddiePersonality)}`,
+                sub: 'Tap to cycle · Kevin · Serena · Harry · Tank',
+                action: () => {
+                  const idx = ALL_PERSONAS.indexOf(caddiePersonality as Persona);
+                  const next = ALL_PERSONAS[(idx + 1) % ALL_PERSONAS.length];
+                  setCaddiePersonality(next);
+                } },
               { icon: 'golf-outline',        label: 'Practice',         sub: 'Cage & swing lab',         action: () => { setShowMoreMenu(false); router.push('/(tabs)/swinglab' as never); } },
               { icon: 'videocam-outline',    label: 'Cage Mode',        sub: 'Range session',            action: () => { setShowMoreMenu(false); if (!canAccess('cage_mode', subscription_status)) { void triggerPaywall('cage_mode', () => router.push('/paywall' as never)); return; } router.push('/cage' as never); } },
               { icon: 'telescope-outline',   label: 'SmartVision',      sub: 'Analyze the hole',         action: () => { setShowMoreMenu(false); openSmartVision(); } },

@@ -16,7 +16,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
-import { KEVIN_CHARACTER_SPEC } from '../constants/kevinCharacter';
+import { getCaddieName, getCharacterSpec, type VoiceGender } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -25,27 +25,27 @@ const TOOL_NAME = 'cage_swing_review';
 const TOOL: Anthropic.Tool = {
   name: TOOL_NAME,
   description:
-    'Reviews a single cage practice swing using extracted acoustic and visual features. Returns a 1-2 sentence coaching response in Kevin\'s voice.',
+    'Reviews a single cage practice swing using extracted acoustic and visual features. Returns a 1-2 sentence coaching response in the caddie\'s voice.',
   input_schema: {
     type: 'object',
     properties: {
       kevin_response: {
         type: 'string',
-        description: '1-2 sentences in Kevin\'s established voice. Companion register, not coach.',
+        description: '1-2 sentences in the caddie\'s established voice. Companion register, not coach.',
       },
       confidence: {
         type: 'string',
         enum: ['high', 'medium', 'low'],
-        description: 'How confident Kevin is in the response given the feature quality (capture issues lower this).',
+        description: 'How confident the caddie is in the response given the feature quality (capture issues lower this).',
       },
     },
     required: ['kevin_response', 'confidence'],
   },
 };
 
-const CAGE_SYSTEM_PROMPT = `${KEVIN_CHARACTER_SPEC}
+const buildCageSystemPrompt = (g: VoiceGender) => `${getCharacterSpec(g)}
 
-You are Kevin, the user's golf companion. You just watched a single
+You are ${getCaddieName(g)}, the user's golf companion. You just watched a single
 practice swing in their backyard cage. You will receive structured features
 extracted from the swing's audio and video.
 
@@ -87,11 +87,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as { features?: unknown };
+    const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as { features?: unknown; voiceGender?: VoiceGender };
     const features = body?.features;
     if (!features || typeof features !== 'object') {
       return res.status(400).json({ error: 'features (object) required' });
     }
+    const voiceGender: VoiceGender = body.voiceGender ?? 'male';
 
     console.log('[cage-coach] features received');
 
@@ -104,7 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       model: 'claude-sonnet-4-6',
       max_tokens: 400,
       temperature: 0.6,
-      system: CAGE_SYSTEM_PROMPT,
+      system: buildCageSystemPrompt(voiceGender),
       tools: [TOOL],
       tool_choice: { type: 'tool', name: TOOL_NAME },
       messages: [{ role: 'user', content: userMessage }],

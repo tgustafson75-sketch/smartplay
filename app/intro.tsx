@@ -14,16 +14,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { getCaddieName, type Persona } from '../lib/persona';
 
 export default function Intro() {
   const router = useRouter();
   const { setName, completeSetup } = usePlayerProfileStore();
-  const { setVoiceGender } = useSettingsStore();
+  const persistedPersona = useSettingsStore(s => s.caddiePersonality);
+  const setCaddiePersonality = useSettingsStore(s => s.setCaddiePersonality);
 
   const [step, setStep] = useState(0);
   const [playerName, setPlayerName] = useState('');
-  const [selectedGender, setSelectedGender] = useState<'male' | 'female'>('male');
-  const [selectedCaddie, setSelectedCaddie] = useState<'male' | 'female' | null>(null);
+  // If the user previously chose a persona, default Step 0's "Hey. I'm X."
+  // greeting to that one. First-launch users default to Kevin.
+  const [selectedPersona, setSelectedPersona] = useState<Persona>(persistedPersona ?? 'kevin');
+  const [pendingPersona, setPendingPersona] = useState<Persona | null>(null);
+  const introCaddieName = getCaddieName(selectedPersona);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -52,10 +57,33 @@ export default function Intro() {
     goToStep(1);
   };
 
-  const handleCaddieSelect = (gender: 'male' | 'female') => {
-    setSelectedGender(gender);
-    setVoiceGender(gender);
+  const handleCaddieSelect = (p: Persona) => {
+    setSelectedPersona(p);
+    setCaddiePersonality(p);
     goToStep(2);
+  };
+
+  // Persona-aware "I'm X. Let's go." for Step 2.
+  const step2OpenLine = (() => {
+    switch (selectedPersona) {
+      case 'serena': return "I'm Serena. Let's go.";
+      case 'harry':  return "I'm Harry. Let's play some golf.";
+      case 'tank':   return "I'm Tank. Let's GO.";
+      case 'kevin':
+      default:       return "I'm Kevin. Let's go play some golf.";
+    }
+  })();
+
+  // Avatar source per persona (uses primary portraits — Tank/Harry will
+  // fall back to studio portrait until per-state assets land).
+  const portraitFor = (p: Persona) => {
+    switch (p) {
+      case 'serena': return require('../assets/avatars/serena_portrait.jpg');
+      case 'harry':  return require('../assets/avatars/harry_portrait.png');
+      case 'tank':   return require('../assets/avatars/tank_portrait.png');
+      case 'kevin':
+      default:       return require('../assets/avatars/kevin_portrait.jpg');
+    }
   };
 
   const handleFinish = () => {
@@ -70,14 +98,10 @@ export default function Intro() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
 
-        {/* KEVIN IMAGE */}
+        {/* CADDIE IMAGE — switches with selectedPersona */}
         <View style={styles.avatarFrame}>
           <Image
-            source={
-              selectedGender === 'female'
-                ? require('../assets/avatars/serena_portrait.jpg')
-                : require('../assets/avatars/kevin_portrait.jpg')
-            }
+            source={portraitFor(selectedPersona)}
             style={styles.avatarImage}
             resizeMode="contain"
           />
@@ -86,7 +110,7 @@ export default function Intro() {
         {/* STEP 0 — NAME */}
         {step === 0 && (
           <Animated.View style={[styles.stepContainer, { opacity: fadeAnim }]}>
-            <Text style={styles.kevinSays}>Hey. I&apos;m Kevin.</Text>
+            <Text style={styles.kevinSays}>Hey. I&apos;m {introCaddieName}.</Text>
             <Text style={styles.kevinSub}>What should I call you?</Text>
             <TextInput
               style={styles.nameInput}
@@ -109,51 +133,35 @@ export default function Intro() {
           </Animated.View>
         )}
 
-        {/* STEP 1 — CADDIE CHOICE */}
+        {/* STEP 1 — CADDIE CHOICE (4-card 2x2 grid) */}
         {step === 1 && (
           <Animated.View style={[styles.stepContainer, { opacity: fadeAnim }]}>
             <Text style={styles.kevinSays}>
               {'Good to meet you, ' + playerName + '.'}
             </Text>
-            <Text style={styles.kevinSub}>Your caddie — Kevin or Serena?</Text>
-            <View style={styles.caddieRow}>
-              <TouchableOpacity
-                style={[
-                  styles.caddieCard,
-                  selectedCaddie === 'male' && styles.caddieCardSelected,
-                ]}
-                onPress={() => {
-                  setSelectedCaddie('male');
-                  setTimeout(() => handleCaddieSelect('male'), 300);
-                }}
-                activeOpacity={0.85}
-              >
-                <Image
-                  source={require('../assets/avatars/kevin_portrait.jpg')}
-                  style={styles.caddieThumb}
-                  resizeMode="cover"
-                />
-                <Text style={styles.caddieName}>Kevin</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.caddieCard,
-                  selectedCaddie === 'female' && styles.caddieCardSelected,
-                ]}
-                onPress={() => {
-                  setSelectedCaddie('female');
-                  setTimeout(() => handleCaddieSelect('female'), 300);
-                }}
-                activeOpacity={0.85}
-              >
-                <Image
-                  source={require('../assets/avatars/serena_portrait.jpg')}
-                  style={styles.caddieThumb}
-                  resizeMode="cover"
-                />
-                <Text style={styles.caddieName}>Serena</Text>
-              </TouchableOpacity>
+            <Text style={styles.kevinSub}>Pick your caddie. You can change later.</Text>
+            <View style={styles.caddieGrid}>
+              {(['kevin', 'serena', 'harry', 'tank'] as Persona[]).map(p => (
+                <TouchableOpacity
+                  key={p}
+                  style={[
+                    styles.caddieCardSmall,
+                    pendingPersona === p && styles.caddieCardSelected,
+                  ]}
+                  onPress={() => {
+                    setPendingPersona(p);
+                    setTimeout(() => handleCaddieSelect(p), 300);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Image
+                    source={portraitFor(p)}
+                    style={styles.caddieThumbSmall}
+                    resizeMode="cover"
+                  />
+                  <Text style={styles.caddieName}>{getCaddieName(p)}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </Animated.View>
         )}
@@ -161,11 +169,7 @@ export default function Intro() {
         {/* STEP 2 — READY */}
         {step === 2 && (
           <Animated.View style={[styles.stepContainer, { opacity: fadeAnim }]}>
-            <Text style={styles.kevinSays}>
-              {selectedGender === 'female'
-                ? "I'm Serena. Let's go."
-                : "Let's go play some golf."}
-            </Text>
+            <Text style={styles.kevinSays}>{step2OpenLine}</Text>
             <Text style={styles.kevinSub}>
               You can tell me more about your game as we go.
             </Text>
@@ -257,6 +261,15 @@ const styles = StyleSheet.create({
     gap: 16,
     width: '100%',
   },
+  // 2x2 grid layout — flex-wrap with calc(50%-gap) per card so
+  // four cards fit two-per-row on Fold-closed and standard phones.
+  caddieGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    width: '100%',
+    justifyContent: 'center',
+  },
   caddieCard: {
     flex: 1,
     backgroundColor: '#0d2418',
@@ -267,6 +280,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 12,
   },
+  caddieCardSmall: {
+    width: '47%',
+    backgroundColor: '#0d2418',
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#1e3a28',
+    overflow: 'hidden',
+    alignItems: 'center',
+    paddingBottom: 10,
+  },
   caddieCardSelected: {
     borderColor: '#00C896',
     backgroundColor: '#0d3020',
@@ -275,6 +298,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 180,
     marginBottom: 8,
+  },
+  caddieThumbSmall: {
+    width: '100%',
+    height: 130,
+    marginBottom: 6,
   },
   caddieName: {
     color: '#ffffff',

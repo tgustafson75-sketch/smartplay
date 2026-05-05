@@ -79,7 +79,7 @@ export default function SpaceScanScreen() {
       const base64 = resized.base64;
       if (!base64) throw new Error('Could not read image bytes.');
 
-      const result = await scanSpace(base64, 'image/jpeg');
+      const result = await scanSpace(base64, 'image/jpeg', voiceGender);
       if (result.kind === 'ok') {
         setAssessment(result.assessment);
         setPhase('result');

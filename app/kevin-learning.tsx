@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useVocabularyProfileStore, type VocabularyEntry } from '../store/vocabularyProfileStore';
 import { useRelationshipStore } from '../store/relationshipStore';
+import { useSettingsStore } from '../store/settingsStore';
+import { getCaddieName } from '../lib/persona';
 
 interface DecodedMeaning {
   club: string | null;
@@ -48,6 +50,7 @@ export default function KevinLearningScreen() {
   const recordCorrection = useVocabularyProfileStore(s => s.recordCorrection);
   const reset = useVocabularyProfileStore(s => s.reset);
   const roundsTogether = useRelationshipStore(s => s.roundsTogether);
+  const caddieName = getCaddieName(useSettingsStore(s => s.voiceGender));
 
   const sortedEntries: VocabularyEntry[] = useMemo(() => {
     return Object.values(entries)
@@ -60,7 +63,7 @@ export default function KevinLearningScreen() {
   const handleForget = (phrase: string) => {
     Alert.alert(
       'Forget this phrase?',
-      `Kevin will stop weighting "${phrase}" toward its current meaning.`,
+      `${caddieName} will stop weighting "${phrase}" toward its current meaning.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Forget', style: 'destructive', onPress: () => recordCorrection(phrase) },
@@ -70,8 +73,8 @@ export default function KevinLearningScreen() {
 
   const handleResetAll = () => {
     Alert.alert(
-      'Reset Kevin\'s vocabulary?',
-      'This wipes all phrases Kevin has learned from you. Cannot be undone.',
+      `Reset ${caddieName}'s vocabulary?`,
+      `This wipes all phrases ${caddieName} has learned from you. Cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Reset', style: 'destructive', onPress: () => reset() },
@@ -88,7 +91,7 @@ export default function KevinLearningScreen() {
         >
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>Kevin&apos;s Learning</Text>
+        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>{caddieName}&apos;s Learning</Text>
         <View style={{ width: 26 }} />
       </View>
 
@@ -107,7 +110,7 @@ export default function KevinLearningScreen() {
           </Text>
           {phraseCount === 0 && (
             <Text style={[styles.heroEmpty, { color: colors.text_muted }]}>
-              Once you start logging shots by voice, Kevin will start picking up the words you actually use.
+              Once you start logging shots by voice, {caddieName} will start picking up the words you actually use.
             </Text>
           )}
         </View>
@@ -162,7 +165,7 @@ export default function KevinLearningScreen() {
         )}
 
         <Text style={[styles.footer, { color: colors.text_muted }]}>
-          Kevin uses these phrases to understand your specific way of describing shots. Forgetting a phrase removes its weight; the next time you say it, Kevin parses it fresh.
+          {caddieName} uses these phrases to understand your specific way of describing shots. Forgetting a phrase removes its weight; the next time you say it, {caddieName} parses it fresh.
         </Text>
 
       </ScrollView>

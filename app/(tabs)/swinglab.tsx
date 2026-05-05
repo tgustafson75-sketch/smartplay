@@ -257,10 +257,16 @@ export default function SwingLab() {
       <CageSessionOverlay
         onComplete={(sessionId) => {
           setCageActive(false);
-          router.push({
-            pathname: '/cage-debug',
-            params: { sessionId },
-          } as never);
+          // Phase BS-followup Issue G — route to the swing detail screen
+          // (which is keyed by sessionHistory[].id and renders the BR/U1
+          // analysis pipeline) instead of /cage-debug. Fall back to
+          // /swinglab/library on missing id so the user always lands
+          // somewhere productive.
+          if (sessionId) {
+            router.push(`/swinglab/swing/${sessionId}` as never);
+          } else {
+            router.push('/swinglab/library' as never);
+          }
         }}
         onCancel={() => setCageActive(false)}
       />

@@ -187,7 +187,7 @@ async function openSession() {
     const parseRes = await fetch(`${apiUrl}/api/voice-intent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: utterance }),
+      body: JSON.stringify({ text: utterance, voiceGender: settings.voiceGender ?? 'male' }),
     });
     if (!parseRes.ok) {
       state = 'idle';
@@ -256,6 +256,7 @@ async function openSession() {
           practice_context: buildFullPracticeContext(),
           register: 'coach',
           inRoundDiagnostic: true,
+          voiceGender: settingsStore.voiceGender ?? 'male',
         };
         await fillerP;
         const r = await fetch(`${apiUrl}/api/kevin`, {

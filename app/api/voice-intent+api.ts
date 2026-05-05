@@ -1,8 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { getCaddieName, type VoiceGender } from '../../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const SYSTEM_PROMPT = `You are a voice intent parser for SmartPlay Caddie, a golf caddie app. The user is talking to their AI golf caddie Kevin. Parse the user's speech into structured intent.
+const buildSystemPrompt = (g: VoiceGender) => {
+  const caddieName = getCaddieName(g);
+  return `You are a voice intent parser for SmartPlay Caddie, a golf caddie app. The user is talking to their AI golf caddie ${caddieName}. Parse the user's speech into structured intent.
 
 Available intents:
 
@@ -39,7 +42,7 @@ Available intents:
    - "round_mode" (break_100/break_90/break_80/free_play) — the player's score-target mode for the round
    Examples:
    - "switch to dark mode" -> { setting_name: "theme", new_value: "dark" }
-   - "mute Kevin" -> { setting_name: "voice_enabled", new_value: false }
+   - "mute ${caddieName}" -> { setting_name: "voice_enabled", new_value: false }
    - "switch to Spanish" -> { setting_name: "language", new_value: "es" }
    - "change to break 80 mode" -> { setting_name: "round_mode", new_value: "break_80" }
    - "set mode to break 90" -> { setting_name: "round_mode", new_value: "break_90" }
@@ -64,21 +67,21 @@ Available intents:
    - "what are my options"
    - "what voice commands work here"
 
-6. acknowledge — User is acknowledging Kevin without requesting action.
+6. acknowledge — User is acknowledging ${caddieName} without requesting action.
    parameters: {}
-   Examples: "thanks Kevin", "got it", "okay", "alright", "cool"
+   Examples: "thanks ${caddieName}", "got it", "okay", "alright", "cool"
 
-8. set_trust_quiet — User wants Kevin silent / Discrete mode.
+8. set_trust_quiet — User wants ${caddieName} silent / Discrete mode.
    parameters: {}
-   Examples: "Kevin go quiet", "Kevin be quiet", "Kevin quiet mode", "Kevin quiet down", "Kevin shush", "go silent", "quiet please"
+   Examples: "${caddieName} go quiet", "${caddieName} be quiet", "${caddieName} quiet mode", "${caddieName} quiet down", "${caddieName} shush", "go silent", "quiet please"
 
-9. set_trust_companion — User wants Kevin back from Quiet mode.
+9. set_trust_companion — User wants ${caddieName} back from Quiet mode.
    parameters: {}
-   Examples: "Kevin come back", "Kevin speak up", "Kevin talk to me", "Kevin un-quiet", "back to normal"
+   Examples: "${caddieName} come back", "${caddieName} speak up", "${caddieName} talk to me", "${caddieName} un-quiet", "back to normal"
 
 7. unknown — Cannot determine intent.
    parameters: {}
-   Set follow_up_question to a brief clarifying question Kevin could ask.
+   Set follow_up_question to a brief clarifying question ${caddieName} could ask.
 
 If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_type "unknown" with confidence "medium" and a clarifying follow_up_question. Don't guess between candidates; ask once.
 
@@ -95,13 +98,15 @@ Confidence guide:
 - medium: intent is clear but parameters are partial or fuzzy
 - low: intent itself is uncertain — set follow_up_question
 
-If the user's words could be a tactical golf question ("what's the play here", "what club", "where do I aim"), return intent_type "unknown" with confidence "low" and follow_up_question null — those route to Kevin's brain instead.`;
+If the user's words could be a tactical golf question ("what's the play here", "what club", "where do I aim"), return intent_type "unknown" with confidence "low" and follow_up_question null — those route to ${caddieName}'s brain instead.`;
+};
 
 export async function POST(request: Request) {
   try {
     const body = await request.json() as Record<string, unknown>;
     const text = String(body.text ?? '').trim();
     const context = body.context ?? {};
+    const voiceGender: VoiceGender = (body.voiceGender as VoiceGender | undefined) ?? 'male';
 
     if (!text) {
       return new Response(JSON.stringify({
@@ -123,7 +128,7 @@ Parse the intent. Return JSON only.`;
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 400,
       temperature: 0,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(voiceGender),
       messages: [{ role: 'user', content: userPrompt }],
     });
 

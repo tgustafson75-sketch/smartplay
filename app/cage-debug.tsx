@@ -68,7 +68,8 @@ export default function CageDebug() {
   const [reviewDebugLoading, setReviewDebugLoading] = useState(false);
 
   // ── Filler debug state ─────────────────────────────────────────────────────
-  const { voiceGender, language } = useSettingsStore();
+  const { language } = useSettingsStore();
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
   const [fillerStatus, setFillerStatus] = useState<ReturnType<typeof getLibraryInfo>>(null);
   const [fillerGenerating, setFillerGenerating] = useState(false);
@@ -100,9 +101,9 @@ export default function CageDebug() {
 
   const handleFillerGenerate = useCallback(async () => {
     setFillerGenerating(true);
-    await generateLibrary(apiUrl, voiceGender, language).catch(() => {});
+    await generateLibrary(apiUrl, caddiePersonality, language).catch(() => {});
     refreshFillerStatus();
-  }, [apiUrl, voiceGender, language, refreshFillerStatus]);
+  }, [apiUrl, caddiePersonality, language, refreshFillerStatus]);
 
   const handleFillerClear = useCallback(async () => {
     await clearLibrary();

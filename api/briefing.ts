@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
-import { KEVIN_CHARACTER_SPEC } from '../constants/kevinCharacter';
+import { getCaddieName, getCharacterSpec } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -37,7 +37,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // the player was working on at practice ("let's see if Tuesday's
       // driver work holds up"). Quietly omitted when empty.
       recentCageSessions = [],
+      // Persona — 'male' (Kevin) or 'female' (Serena). Defaults to Kevin.
+      voiceGender = 'male',
     } = req.body;
+
+    const caddieName = getCaddieName(voiceGender);
+    const characterSpec = getCharacterSpec(voiceGender);
 
     const name = String(playerName || '').trim();
     const modeDesc = MODE_DESCRIPTIONS[String(mode)] ?? String(mode);
@@ -60,9 +65,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ).join('\n')}`
       : '';
 
-    const systemPrompt = `${KEVIN_CHARACTER_SPEC}
+    const systemPrompt = `${characterSpec}
 
-You are Kevin, the player's caddie. They are about to start a round. Deliver a 30-60 second spoken pre-round briefing in your voice.
+You are ${caddieName}, the player's caddie. They are about to start a round. Deliver a 30-60 second spoken pre-round briefing in your voice.
 
 ${language === 'es' ? 'Responde SIEMPRE en español.' : language === 'zh' ? '请始终用中文回复。' : ''}
 
@@ -74,7 +79,7 @@ Briefing structure (loose — vary it each time):
 5. A closing line that settles them — encouraging but not a pep talk
 
 Rules:
-- Speak it, don't write it — no bullet points, no headers, just the words Kevin would say
+- Speak it, don't write it — no bullet points, no headers, just the words ${caddieName} would say
 - Under 90 words
 - Vary the opening phrase across rounds — don't always start with 'Alright'
 - No app-speak. No 'metrics', 'sessions', 'features', 'data'

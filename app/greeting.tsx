@@ -30,14 +30,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Asset } from 'expo-asset';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettingsStore } from '../store/settingsStore';
-import { playLocalFile, stopSpeaking } from '../services/voiceService';
+import { playLocalFile, speak, stopSpeaking } from '../services/voiceService';
 import {
   pickGreeting,
   recordLaunch,
   getLaunchContext,
-  GREETING_CAPTION,
+  getGreetingCaption,
   type GreetingFilename,
 } from '../services/kevinGreeting';
+import { getCaddieName } from '../lib/persona';
 import { GREETING_ASSETS } from '../services/kevinGreetingManifest';
 
 type Phase = 'ENTERING' | 'SPEAKING' | 'TRANSITIONING' | 'COMPLETE';
@@ -52,6 +53,9 @@ export default function GreetingScreen() {
   const _insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const voiceGender = useSettingsStore(s => s.voiceGender);
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
+  const language = useSettingsStore(s => s.language);
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   const { width: W, height: H } = useWindowDimensions();
 
   const [phase, setPhase] = useState<Phase>('ENTERING');
@@ -164,11 +168,37 @@ export default function GreetingScreen() {
       Animated.timing(captionOpacity, { toValue: 1, duration: 220, useNativeDriver: true }).start();
     });
 
-    // Phase V.7 — route through playLocalFile so the greeting shares the
-    // voiceService singleton (speechId/currentSound). Without this, the next
-    // speak() in caddie.tsx can overlap the tail of the greeting audio.
+    // Persona-correct greeting voice:
+    //   - kevin: play the bundled mp3 (Kevin's recorded voice; highest quality).
+    //   - serena / harry / tank: route through speak() which hits /api/voice
+    //     with persona='<id>' so ElevenLabs returns the persona's actual
+    //     voice. The bundled mp3s are ALL in Kevin's recorded voice — playing
+    //     them for any other persona makes Kevin greet the user with Serena
+    //     selected (the bug Tim caught: "heard Kevin say 'there you are' but
+    //     I'm set on Serena"). Same caption text, persona-correct audio.
+    //
+    // Phase V.7 — route through voiceService (playLocalFile or speak) so the
+    // greeting shares the voiceService singleton (speechId/currentSound).
+    // Without this, the next speak() in caddie.tsx can overlap the tail.
     void (async () => {
       try {
+        const minDisplay = new Promise<void>(resolve => setTimeout(resolve, 2000));
+
+        if (caddiePersonality !== 'kevin') {
+          // TTS the caption in the active persona's voice. speak() reads
+          // caddiePersonality from the store at request time and threads
+          // it as `persona` in the /api/voice body — server picks the
+          // persona-keyed ElevenLabs voice ID.
+          const captionForVoice = getGreetingCaption(greeting, getCaddieName(caddiePersonality));
+          await Promise.all([
+            speak(captionForVoice, voiceGender, language as 'en' | 'es' | 'zh', apiUrl, { userInitiated: true }),
+            minDisplay,
+          ]);
+          if (!skippedRef.current) startTransition();
+          return;
+        }
+
+        // Kevin: bundled mp3 path.
         const assetMod = GREETING_ASSETS[greeting];
         const asset = Asset.fromModule(assetMod);
         await asset.downloadAsync();
@@ -181,7 +211,6 @@ export default function GreetingScreen() {
         // timeout fires). It also no-ops silently when voice is disabled, so
         // race against a 2s minimum to guarantee the caption stays readable
         // even on a silent greeting path.
-        const minDisplay = new Promise<void>(resolve => setTimeout(resolve, 2000));
         await Promise.all([playLocalFile(asset.localUri), minDisplay]);
         if (!skippedRef.current) startTransition();
       } catch (e) {
@@ -197,8 +226,18 @@ export default function GreetingScreen() {
       }
       void stopSpeaking().catch(() => {});
     };
+    // Bug fix — depend ONLY on `greeting`. Including `scheduleAdvance`
+    // (or anything that closes over `phase`) caused the effect to re-run
+    // when phase transitioned ENTERING → SPEAKING mid-flight. Each re-run
+    // hit the cleanup path (stopSpeaking) and then restarted playLocalFile
+    // from the top — manifesting as the greeting audio "doubling up" /
+    // restarting mid-sentence. The audio kickoff is conceptually a
+    // run-once-when-greeting-arrives effect; the closures it captures
+    // (startTransition, scheduleAdvance) work correctly with stale refs
+    // here because they're called at most once per mount and the cleanup
+    // tears them down on unmount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [greeting, scheduleAdvance]);
+  }, [greeting]);
 
   // Slow breathing pulse during SPEAKING — opacity 0.94↔1.0 at ~0.45 Hz with
   // sine easing. The previous 0.85↔1.0 / 180ms cycle read as a strobe.
@@ -247,9 +286,12 @@ export default function GreetingScreen() {
                 and is actually Kevin. resizeMode 'cover' fills the
                 circular container edge-to-edge. */}
             <Image
-              source={voiceGender === 'female'
-                ? require('../assets/avatars/serena_portrait.jpg')
-                : require('../assets/avatars/kevin_portrait.jpg')}
+              source={
+                caddiePersonality === 'serena' ? require('../assets/avatars/serena_portrait.jpg')
+                : caddiePersonality === 'harry' ? require('../assets/avatars/harry_portrait.png')
+                : caddiePersonality === 'tank'  ? require('../assets/avatars/tank_portrait.png')
+                : require('../assets/avatars/kevin_portrait.jpg')
+              }
               style={styles.avatarPhoto}
               resizeMode="cover"
             />
@@ -264,7 +306,7 @@ export default function GreetingScreen() {
               ]}
               numberOfLines={3}
             >
-              {GREETING_CAPTION[greeting]}
+              {getGreetingCaption(greeting, getCaddieName(voiceGender))}
             </Animated.Text>
           ) : null}
         </View>

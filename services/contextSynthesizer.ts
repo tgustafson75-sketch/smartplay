@@ -14,6 +14,7 @@
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useCageStore } from '../store/cageStore';
 import { useRoundStore, type RoundRecord } from '../store/roundStore';
+import { useSettingsStore } from '../store/settingsStore';
 
 const apiUrl = (): string => process.env.EXPO_PUBLIC_API_URL ?? '';
 
@@ -25,7 +26,7 @@ async function callSynthesis(
     const res = await fetch(`${apiUrl()}/api/context-synthesis`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, payload }),
+      body: JSON.stringify({ type, payload, voiceGender: useSettingsStore.getState().voiceGender ?? 'male' }),
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) {

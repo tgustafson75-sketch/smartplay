@@ -18,21 +18,23 @@ import { useSettingsStore } from '../store/settingsStore';
 import { track } from '../services/analytics';
 import { PRICING, PAYWALL_HEADLINE, PAYWALL_SUBHEAD } from '../lib/pricing';
 import { safeBack } from '../services/safeBack';
-
-const FEATURES: { icon: IconName; label: string; sub: string }[] = [
-  { icon: 'golf-outline',         label: 'Kevin on every hole', sub: 'Real-time caddie advice, club selection, and course strategy' },
-  { icon: 'telescope-outline',    label: 'SmartVision',         sub: 'AI hole analysis from satellite and on-course images' },
-  { icon: 'videocam-outline',     label: 'Cage Mode',           sub: 'Structured range sessions with pattern detection' },
-  { icon: 'mic-outline',          label: 'Voice caddie',        sub: 'Hands-free operation during your round' },
-  { icon: 'stats-chart-outline',  label: 'Round intelligence',  sub: 'Post-round recap, scoring trends, and ghost mode' },
-];
+import { getCaddieName } from '../lib/persona';
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
   const fadeIn = useRef(new Animated.Value(0)).current;
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
   const { subscription_status, setSubscriptionStatus: _setSubscriptionStatus } = usePlayerProfileStore();
+  const caddieName = getCaddieName(voiceGender);
+  const FEATURES: { icon: IconName; label: string; sub: string }[] = [
+    { icon: 'golf-outline',         label: `${caddieName} on every hole`, sub: 'Real-time caddie advice, club selection, and course strategy' },
+    { icon: 'telescope-outline',    label: 'SmartVision',         sub: 'AI hole analysis from satellite and on-course images' },
+    { icon: 'videocam-outline',     label: 'Cage Mode',           sub: 'Structured range sessions with pattern detection' },
+    { icon: 'mic-outline',          label: 'Voice caddie',        sub: 'Hands-free operation during your round' },
+    { icon: 'stats-chart-outline',  label: 'Round intelligence',  sub: 'Post-round recap, scoring trends, and ghost mode' },
+  ];
 
   useEffect(() => {
     Animated.timing(fadeIn, { toValue: 1, duration: 500, useNativeDriver: true }).start();
@@ -42,7 +44,7 @@ export default function PaywallScreen() {
       const delay = setTimeout(async () => {
         await configureAudioForSpeech();
         await speak(
-          "Full Kevin for nine ninety-nine a month, or seventy-nine a year. Seven days on me — no card required.",
+          `Full ${caddieName} for nine ninety-nine a month, or seventy-nine a year. Seven days on me — no card required.`,
           voiceGender, language, apiUrl,
         );
       }, 800);
@@ -84,9 +86,12 @@ export default function PaywallScreen() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
           <Image
-            source={voiceGender === 'female'
-              ? require('../assets/avatars/serena_portrait.jpg')
-              : require('../assets/avatars/kevin_portrait.jpg')}
+            source={
+              caddiePersonality === 'serena' ? require('../assets/avatars/serena_portrait.jpg')
+              : caddiePersonality === 'harry' ? require('../assets/avatars/harry_portrait.png')
+              : caddiePersonality === 'tank'  ? require('../assets/avatars/tank_portrait.png')
+              : require('../assets/avatars/kevin_portrait.jpg')
+            }
             style={styles.avatar}
             resizeMode="cover"
           />

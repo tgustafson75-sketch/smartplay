@@ -63,6 +63,7 @@ const controller = new SpaceScanController();
 export async function scanSpace(
   imageBase64: string,
   imageMediaType: 'image/jpeg' | 'image/png' = 'image/jpeg',
+  voiceGender: 'male' | 'female' = 'male',
 ): Promise<SpaceScanResult> {
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   const myController = controller.beginNew();
@@ -72,7 +73,7 @@ export async function scanSpace(
     const res = await fetch(`${apiUrl}/api/space-scan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image_b64: imageBase64, image_media_type: imageMediaType }),
+      body: JSON.stringify({ image_b64: imageBase64, image_media_type: imageMediaType, voiceGender }),
       signal: myController.signal,
     }).finally(() => clearTimeout(timeoutId));
 

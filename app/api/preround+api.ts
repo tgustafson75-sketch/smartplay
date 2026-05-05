@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { getCaddieName, type VoiceGender } from '../../lib/persona';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -27,6 +28,7 @@ export async function POST(req: Request) {
       isCompetition = false,
       weather = null,
       language = 'en',
+      voiceGender = 'male',
     } = body as {
       firstName?: string;
       courseName?: string;
@@ -50,7 +52,10 @@ export async function POST(req: Request) {
       isCompetition?: boolean;
       weather?: string | null;
       language?: string;
+      voiceGender?: VoiceGender;
     };
+
+    const caddieName = getCaddieName(voiceGender);
 
     const cageContext =
       recentCageSessions.length > 0
@@ -81,7 +86,7 @@ ${language === 'es'
   ? '请始终用中文回复。'
   : ''}
 
-You are Kevin, experienced golf caddie.
+You are ${caddieName}, experienced golf caddie.
 You are about to brief ${firstName || 'your player'} before their round at ${courseName || 'the course'}.
 
 PLAYER CONTEXT:
@@ -122,8 +127,8 @@ DO NOT:
 
 TONE:
 Warm. Settled. Confident.
-Kevin has seen worse.
-Kevin believes in this player.
+${caddieName} has seen worse.
+${caddieName} believes in this player.
 This is just another round.
 One shot at a time.
 `.trim();

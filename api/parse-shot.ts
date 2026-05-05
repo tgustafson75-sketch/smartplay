@@ -37,7 +37,7 @@ Direction normalization (CRITICAL — only fill this when EXPLICITLY stated): "p
 
 lie_followup TRUE when:
 - User mentioned a lie/condition keyword that wasn't fully specified ("in the rough" without "thick" or "wispy")
-- User mentioned a hazard but not the shot ("in the bunker" — Kevin should ask about the lie)
+- User mentioned a hazard but not the shot ("in the bunker" — the caddie should ask about the lie)
 
 lie_followup FALSE when:
 - User already specified lie quality ("buried in the rough", "clean lie in the bunker")

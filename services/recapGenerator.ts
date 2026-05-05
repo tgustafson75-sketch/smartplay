@@ -120,6 +120,7 @@ export async function generateRecap(
     // by services/tutorialContext.buildFullPracticeContext. Optional; null
     // when no tutorials are flagged active.
     practiceContext?: string | null;
+    voiceGender?: 'male' | 'female';
   },
 ): Promise<RoundRecap> {
   const { courseName, courseId, mode, startedAt, endedAt, totalScore, scoreVsPar, scores, plans, shots, courseHoles } = round;
@@ -183,6 +184,7 @@ export async function generateRecap(
         // Phase BR: active tutorial practice context (caller passes the
         // pre-formatted string from buildFullPracticeContext).
         practice_context: round.practiceContext ?? null,
+        voiceGender: round.voiceGender ?? 'male',
       }),
     }).finally(() => clearTimeout(timeout));
 

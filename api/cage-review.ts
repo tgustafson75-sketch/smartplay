@@ -1,9 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
+import { getCaddieName, type VoiceGender } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// ─── Action: generate a Kevin question for a shot ─────────────────────────────
+// ─── Action: generate a caddie question for a shot ───────────────────────────
 
 async function handleQuestion(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const {
@@ -17,7 +18,9 @@ async function handleQuestion(body: Record<string, unknown>): Promise<Record<str
     feel = null,
     shape = null,
     club = null,
+    voiceGender = 'male',
   } = body;
+  const caddieName = getCaddieName(voiceGender as VoiceGender);
 
   const shotNum = (clip_index as number) + 1;
   const positionStr = position === 'early' ? 'early in the session' : position === 'late' ? 'late in the session' : 'mid-session';
@@ -31,7 +34,7 @@ async function handleQuestion(body: Record<string, unknown>): Promise<Record<str
     ? 'Dig into this shot. Ask about what they were working on or what they felt. Conversational, curious. One or two sentences.'
     : 'Ask a quick question, but only about what is not already labeled.';
 
-  const prompt = `You are Kevin, a warm and observant golf caddie. You're reviewing a cage session with your player.
+  const prompt = `You are ${caddieName}, a warm and observant golf caddie. You're reviewing a cage session with your player.
 
 Shot ${shotNum} of ${total_clips} — ${positionStr}. Session from ${session_date}. Detected via ${detection_method}.
 ${clubStr}${feelStr}${shapeStr}${priorStr}
@@ -113,6 +116,7 @@ Return ONLY valid JSON. No markdown, no explanation.`;
 async function handleVocab(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const transcripts = (body.transcripts as string[]) ?? [];
   const total_reviewed = Number(body.total_reviewed ?? transcripts.length);
+  const caddieName = getCaddieName((body.voiceGender as VoiceGender | undefined) ?? 'male');
 
   if (transcripts.length === 0) {
     return {
@@ -134,7 +138,7 @@ Return a JSON object with:
   - contact_terms: words for quality of contact (e.g. "flush", "chunked", "thin", "caught it fat")
   - diagnostic_terms: cause/effect language they use (e.g. "came over it", "stayed behind", "early release")
   - feel_terms: sensation words (e.g. "heavy", "light", "rushed", "stuck")
-- kevin_summary: 1-2 sentences Kevin would say to this player about what he heard. Warm, observant, not preachy.
+- kevin_summary: 1-2 sentences ${caddieName} would say to this player about what they heard. Warm, observant, not preachy.
 - total_clips_reviewed: ${total_reviewed}
 
 Return ONLY valid JSON. No markdown, no explanation.`;

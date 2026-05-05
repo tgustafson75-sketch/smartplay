@@ -202,10 +202,16 @@ interface CageState {
   /** Phase R — ingest a single uploaded video as a one-shot CageSession.
    *  Returns the new session id so the caller can navigate to its detail
    *  surface and Phase K analysis can attach to it. */
+  /** Phase R / cage-live bridge — ingest a single video as a one-shot
+   *  CageSession. Used by the upload flow (source defaults to
+   *  'uploaded_video') and the live cage flow (pass source: 'live_cage'
+   *  so the My Swing Library can render the entry with the right kind
+   *  treatment). */
   ingestUploadedSwing: (input: {
     clipUri: string;
     club: string;
     upload: UploadMetadata;
+    source?: SwingSource;
   }) => string;
   /** Phase R — patch Phase K analysis onto an existing session, used both
    *  by the live cage post-session pipeline (already in app/cage/summary.tsx)
@@ -387,9 +393,11 @@ export const useCageStore = create<CageState>()(
 
       getClubProfile: (club) => get().clubProfiles[club] ?? null,
 
-      ingestUploadedSwing: ({ clipUri, club, upload }) => {
-        const sessionId = `${Date.now()}_upload`;
-        const shotId = `${Date.now()}_uploaded_shot`;
+      ingestUploadedSwing: ({ clipUri, club, upload, source }) => {
+        const resolvedSource: SwingSource = source ?? 'uploaded_video';
+        const idSuffix = resolvedSource === 'live_cage' ? '_cage' : '_upload';
+        const sessionId = `${Date.now()}${idSuffix}`;
+        const shotId = `${Date.now()}_${resolvedSource === 'live_cage' ? 'cage' : 'uploaded'}_shot`;
         const session: CageSession = {
           id: sessionId,
           date: upload.taken_at ?? upload.uploaded_at,
@@ -406,7 +414,7 @@ export const useCageStore = create<CageState>()(
           dominantMiss: null,
           rootCause: null,
           summary: null,
-          source: 'uploaded_video',
+          source: resolvedSource,
           upload,
           analysis_status: 'pending',
           analysis_error: null,

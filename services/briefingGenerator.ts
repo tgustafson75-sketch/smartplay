@@ -1,4 +1,5 @@
 import type { RoundMode } from '../types/patterns';
+import type { VoiceGender } from '../lib/persona';
 
 interface BriefingParams {
   roundId: string;
@@ -27,6 +28,7 @@ interface BriefingParams {
     rootCause: string | null;
     date: string;
   }>;
+  voiceGender?: VoiceGender;
 }
 
 // In-memory cache: `${roundId}|${language}` → briefing text. Keyed by
@@ -61,7 +63,7 @@ export async function generateBriefing(params: BriefingParams): Promise<string> 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
-      body: JSON.stringify({ ...rest, language }),
+      body: JSON.stringify({ ...rest, language, voiceGender: params.voiceGender ?? 'male' }),
     });
     clearTimeout(timeout);
 

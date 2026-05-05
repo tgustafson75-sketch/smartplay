@@ -25,6 +25,8 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTutorialStore } from '../../store/tutorialStore';
 import { analyzeTutorial } from '../../services/tutorialAnalysis';
+import { useSettingsStore } from '../../store/settingsStore';
+import { getCaddieName } from '../../lib/persona';
 import type { ClubId } from '../../services/clubRecognition';
 
 const CLUBS: { label: string; value: ClubId }[] = [
@@ -48,6 +50,7 @@ export default function TutorialUpload() {
   const { colors } = useTheme();
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   const addTutorial = useTutorialStore(s => s.addTutorial);
+  const caddieName = getCaddieName(useSettingsStore(s => s.voiceGender));
 
   const [step, setStep] = useState<'compose' | 'analyzing'>('compose');
   const [videoUri, setVideoUri] = useState<string | null>(null);
@@ -183,7 +186,7 @@ export default function TutorialUpload() {
           <>
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text style={[styles.copy, { color: colors.text_primary }]}>
-                Capture a coaching lesson so Kevin can reference it during your rounds.
+                Capture a coaching lesson so {caddieName} can reference it during your rounds.
               </Text>
               <Text style={[styles.copySub, { color: colors.text_muted }]}>
                 Attach the source video if you have it. A title plus a few notes about
@@ -233,7 +236,7 @@ export default function TutorialUpload() {
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text style={[styles.label, { color: colors.text_muted }]}>TARGET CLUBS (OPTIONAL)</Text>
               <Text style={[styles.copySub, { color: colors.text_muted, marginTop: 4, marginBottom: 8 }]}>
-                Tap any clubs this lesson directly applies to. Kevin will reference the
+                Tap any clubs this lesson directly applies to. {caddieName} will reference the
                 lesson on shots with those clubs.
               </Text>
               <View style={styles.clubGrid}>

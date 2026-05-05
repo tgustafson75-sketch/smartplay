@@ -88,6 +88,7 @@ export async function analyzeLie(
   imageBase64: string,
   context: LieAnalysisContext,
   imageMediaType: 'image/jpeg' | 'image/png' = 'image/jpeg',
+  voiceGender: 'male' | 'female' = 'male',
 ): Promise<LieAnalysisResult> {
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
 
@@ -108,6 +109,7 @@ export async function analyzeLie(
         image_b64: imageBase64,
         image_media_type: imageMediaType,
         context,
+        voiceGender,
       }),
       signal: myController.signal,
     }).finally(() => clearTimeout(timeoutId));

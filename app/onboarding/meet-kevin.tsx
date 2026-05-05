@@ -33,6 +33,7 @@ export default function MeetKevin() {
   const router = useRouter();
   const { colors, spacing, radii } = useTheme();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const markCompleted = useVoiceHintsStore(s => s.markMeetKevinCompleted);
   const markSkipped = useVoiceHintsStore(s => s.markMeetKevinSkipped);
 
@@ -56,7 +57,7 @@ export default function MeetKevin() {
   }, []);
 
   const finishToCaddie = () => {
-    if (voiceEnabled) generateLibrary(apiUrl, voiceGender, language).catch(() => {});
+    if (voiceEnabled) generateLibrary(apiUrl, caddiePersonality, language).catch(() => {});
     // Phase AQ — synthesize a Kevin-context note from the user's
     // onboarding inputs. Fire-and-forget; the result lands in
     // playerProfileStore.kevinContext and gets injected into every

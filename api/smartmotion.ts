@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
+import { getCaddieName } from '../lib/persona';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -32,7 +33,9 @@ export default async function handler(
       sessionFaults = [],
       swingView = 'face-on',
       language = 'en',
+      voiceGender = 'male',
     } = req.body;
+    const caddieName = getCaddieName(voiceGender);
 
     if (!frameBase64) {
       return res.status(200).json({
@@ -62,7 +65,7 @@ export default async function handler(
       : 'face-on camera angle';
 
     const systemPrompt = `
-You are Kevin, an experienced golf instructor and caddie.
+You are ${caddieName}, an experienced golf instructor and caddie.
 
 You are looking at a single frame from a golf swing captured from a ${viewContext}.
 
@@ -86,7 +89,7 @@ YOUR RESPONSE MUST:
   - Sentence 1: name the fault you see specifically
   - Sentence 2: give one physical feel or thought to fix it
   - Be direct and warm
-  - Sound like Kevin — not a manual
+  - Sound like ${caddieName} — not a manual
   - Use simple language
   - Reference what you actually see in the image
 

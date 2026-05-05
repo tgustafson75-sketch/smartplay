@@ -33,21 +33,39 @@ export type GreetingFilename =
   | 'weekend_01.mp3' | 'weekend_02.mp3'
   | 'first_launch.mp3' | 'returning.mp3' | 'demo_mode.mp3';
 
-/** Caption text shown on screen alongside the audio (and as the silent fallback). */
-export const GREETING_CAPTION: Record<GreetingFilename, string> = {
-  'universal_01.mp3':  "Welcome back. Let's play some golf.",
-  'universal_02.mp3':  'There you are. Ready when you are.',
-  'universal_03.mp3':  "Good to see you. Let's do this.",
-  'morning_01.mp3':    'Early start today — I like it.',
-  'morning_02.mp3':    'Morning. Course is calling.',
-  'evening_01.mp3':    "Squeezing in a late round? Let's go.",
-  'evening_02.mp3':    "Evening light's the best light. Let's play.",
-  'weekend_01.mp3':    'Saturday golf is the right kind of golf.',
-  'weekend_02.mp3':    'Weekend round. My favorite kind.',
-  'first_launch.mp3':  "Welcome to SmartPlay Caddie. I'm Kevin — your golf companion. Let's play some golf.",
-  'returning.mp3':     "Been a minute. Glad you're back.",
-  'demo_mode.mp3':     "Welcome to SmartPlay Caddie. I'm Kevin — your AI golf companion.",
+/**
+ * Caption text shown on screen alongside the audio (and as the silent fallback).
+ * The two name-bearing greetings (first_launch, demo_mode) accept a
+ * caddieName so the on-screen text matches the active persona. The static
+ * greetings are persona-neutral and don't require substitution.
+ */
+export const getGreetingCaption = (file: GreetingFilename, caddieName: string): string => {
+  switch (file) {
+    case 'universal_01.mp3':  return "Welcome back. Let's play some golf.";
+    case 'universal_02.mp3':  return 'There you are. Ready when you are.';
+    case 'universal_03.mp3':  return "Good to see you. Let's do this.";
+    case 'morning_01.mp3':    return 'Early start today — I like it.';
+    case 'morning_02.mp3':    return 'Morning. Course is calling.';
+    case 'evening_01.mp3':    return "Squeezing in a late round? Let's go.";
+    case 'evening_02.mp3':    return "Evening light's the best light. Let's play.";
+    case 'weekend_01.mp3':    return 'Saturday golf is the right kind of golf.';
+    case 'weekend_02.mp3':    return 'Weekend round. My favorite kind.';
+    case 'first_launch.mp3':  return `Welcome to SmartPlay Caddie. I'm ${caddieName} — your golf companion. Let's play some golf.`;
+    case 'returning.mp3':     return "Been a minute. Glad you're back.";
+    case 'demo_mode.mp3':     return `Welcome to SmartPlay Caddie. I'm ${caddieName} — your AI golf companion.`;
+  }
 };
+
+/**
+ * The bundled mp3 voice files were recorded for Kevin (male). For Serena,
+ * the on-screen caption stays correct via getGreetingCaption, but the
+ * audio cannot play "as Kevin" — so the greeting screen skips playback
+ * for Serena and shows the silent caption-only path instead. Once Serena
+ * audio is recorded (or TTS is wired up), this list can shrink to just
+ * the name-bearing files.
+ */
+export const isKevinSpecificAudio = (file: GreetingFilename): boolean =>
+  file === 'first_launch.mp3' || file === 'demo_mode.mp3';
 
 // ─── Selection ───────────────────────────────────────────────────────────────
 

@@ -22,25 +22,26 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
+import { getCaddieName, type VoiceGender } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 type SynthesisType = 'onboarding' | 'cage_session' | 'round' | 'patterns';
 
-const PROMPT_BY_TYPE: Record<SynthesisType, (payload: Record<string, unknown>) => { system: string; user: string }> = {
-  onboarding: (p) => ({
-    system: `You are writing a private 2-3 paragraph note for Kevin (an AI golf caddie) about a new user. Caddie's-eye-view: what this golfer is trying to achieve, what their level suggests about how to caddie for them, what to remember about their game, AND what tone register fits them.
+const PROMPT_BY_TYPE: Record<SynthesisType, (payload: Record<string, unknown>, caddieName: string) => { system: string; user: string }> = {
+  onboarding: (p, caddieName) => ({
+    system: `You are writing a private 2-3 paragraph note for ${caddieName} (an AI golf caddie) about a new user. Caddie's-eye-view: what this golfer is trying to achieve, what their level suggests about how to caddie for them, what to remember about their game, AND what tone register fits them.
 
 The note should explicitly call out:
 - Their level (handicap + experience context — are they starting / improving / returning / competitive?)
-- Their typical miss in language Kevin can act on ("favor left targets" not just "slice")
+- Their typical miss in language ${caddieName} can act on ("favor left targets" not just "slice")
 - The tone register that fits them best:
   * "starting" → patient, encouraging, plain-language explanations
   * "improving" → engaged coach voice on practice, decisive caddie on course
   * "returning" → supportive, non-judgmental, acknowledge effort over outcome
   * "competitive" → terse, precise, no fluff, admit uncertainty fast
 
-Style: terse, factual, second-person from Kevin's perspective ("She's an 18 handicap rebuilding after a decade away — keep the tone supportive..."). No advice to user, no padding. Output the note text only — no preamble, no headers.`,
+Style: terse, factual, second-person from ${caddieName}'s perspective ("She's an 18 handicap rebuilding after a decade away — keep the tone supportive..."). No advice to user, no padding. Output the note text only — no preamble, no headers.`,
     user: `New user inputs:
 - Name: ${p.firstName ?? 'unknown'}
 - Handicap: ${p.handicap ?? 'unknown'}
@@ -55,10 +56,10 @@ Style: terse, factual, second-person from Kevin's perspective ("She's an 18 hand
 Write the caddie's-eye-view note. Include the tone register guidance.`,
   }),
 
-  cage_session: (p) => ({
-    system: `You are writing a private 1-paragraph note for Kevin about a practice session. What to remember from this practice if relevant patterns appear next round.
+  cage_session: (p, caddieName) => ({
+    system: `You are writing a private 1-paragraph note for ${caddieName} about a practice session. What to remember from this practice if relevant patterns appear next round.
 
-Style: terse, factual, second-person from Kevin's perspective. Reference specific clubs and faults if known. Output the note text only.`,
+Style: terse, factual, second-person from ${caddieName}'s perspective. Reference specific clubs and faults if known. Output the note text only.`,
     user: `Cage session:
 - Club: ${p.club ?? 'unknown'}
 - Shot count: ${p.shotCount ?? 0}
@@ -70,8 +71,8 @@ Style: terse, factual, second-person from Kevin's perspective. Reference specifi
 Write the practice-memory note.`,
   }),
 
-  round: (p) => ({
-    system: `You are writing a private 1-paragraph note for Kevin about a completed round. What to remember if the user plays this course again or shows similar patterns.
+  round: (p, caddieName) => ({
+    system: `You are writing a private 1-paragraph note for ${caddieName} about a completed round. What to remember if the user plays this course again or shows similar patterns.
 
 Style: terse, factual, second-person. Specific (course name, hole numbers, club tendencies) — no generic golf platitudes. Output the note text only.`,
     user: `Round:
@@ -85,8 +86,8 @@ Style: terse, factual, second-person. Specific (course name, hole numbers, club 
 Write the round-memory note.`,
   }),
 
-  patterns: (p) => ({
-    system: `You are writing a private 2-3 sentence cross-session pattern summary for Kevin. Look across the user's recent rounds and practice for emerging tendencies — swing tendencies, scoring tendencies, club usage, course strugglers.
+  patterns: (p, caddieName) => ({
+    system: `You are writing a private 2-3 sentence cross-session pattern summary for ${caddieName}. Look across the user's recent rounds and practice for emerging tendencies — swing tendencies, scoring tendencies, club usage, course strugglers.
 
 Style: terse, factual, second-person. If no real pattern emerges, say so honestly ("No clear pattern across these sessions yet."). Output the summary text only.`,
     user: `Recent activity:
@@ -109,15 +110,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as {
       type?: SynthesisType;
       payload?: Record<string, unknown>;
+      voiceGender?: VoiceGender;
     };
     const type = body.type;
     const payload = body.payload ?? {};
+    const caddieName = getCaddieName(body.voiceGender ?? 'male');
 
     if (!type || !PROMPT_BY_TYPE[type]) {
       return res.status(400).json({ error: 'invalid type' });
     }
 
-    const { system, user } = PROMPT_BY_TYPE[type](payload);
+    const { system, user } = PROMPT_BY_TYPE[type](payload, caddieName);
 
     const completion = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',

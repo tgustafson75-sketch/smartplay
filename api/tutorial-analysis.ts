@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
+import { getCaddieName, type VoiceGender } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -42,13 +43,15 @@ type TutorialAnalysisResponse = {
   confidence: 'high' | 'medium' | 'low';
 };
 
-const SYSTEM_PROMPT = `You are extracting structured teaching content from a brief description of a golf instruction video. The player has watched the video and wants the lesson captured so their AI caddie (Kevin) can reference it during rounds.
+const buildSystemPrompt = (g: VoiceGender) => {
+  const caddieName = getCaddieName(g);
+  return `You are extracting structured teaching content from a brief description of a golf instruction video. The player has watched the video and wants the lesson captured so their AI caddie (${caddieName}) can reference it during rounds.
 
 Input: a short title and optional notes the player typed about the video, plus possibly a single representative video frame.
 
 Output ONLY a JSON object:
 {
-  "teaching_focus": "<one short sentence: what is the instructor teaching? written conversationally so Kevin can reference it naturally during a round>",
+  "teaching_focus": "<one short sentence: what is the instructor teaching? written conversationally so ${caddieName} can reference it naturally during a round>",
   "key_cues": ["<3-5 short phrases the player should remember when applying this lesson — direct from the instructor's vocabulary if visible in the notes>"],
   "target_clubs": ["<club codes from the catalog below — only the clubs this lesson directly applies to. Empty array if the lesson is non-club-specific>"],
   "target_situations": ["<short phrases describing when this lesson applies — 'approach shots inside 100 yards', 'tee shots into wind', 'putts inside 10 feet', etc>"],
@@ -70,7 +73,7 @@ Confidence scale:
 - low: notes are sparse or ambiguous; you're producing a best-effort summary
 
 Rules:
-- teaching_focus is what Kevin will reference during a round. Make it specific enough to act on, conversational enough to reference naturally. Bad: "Wedge play". Good: "Shallow attack angle on wedges — keep the club low through impact for crisper contact".
+- teaching_focus is what ${caddieName} will reference during a round. Make it specific enough to act on, conversational enough to reference naturally. Bad: "Wedge play". Good: "Shallow attack angle on wedges — keep the club low through impact for crisper contact".
 - key_cues are short — 3-8 words each. The player will remember these as cue-thoughts during the swing.
 - target_clubs only when the lesson is club-specific. A general "tempo" lesson has empty target_clubs.
 - target_situations only when the lesson is situation-specific. Empty array is fine.
@@ -83,6 +86,7 @@ Non-instruction guard (Phase BR Component 11):
 - Sparse-but-golf-shaped notes (e.g. "wedge thoughts" with no specifics) should NOT trigger this guard — return your best low-confidence summary instead. The guard is for clearly off-topic uploads, not for thin notes.
 
 Output ONLY valid JSON. No code fences, no preamble.`;
+};
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -103,6 +107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!title) {
       return res.status(400).json({ error: 'title (string) is required' });
     }
+    const voiceGender: VoiceGender = (body.voiceGender as VoiceGender | undefined) ?? 'male';
 
     const inputLines: string[] = [];
     inputLines.push(`Title: ${title}`);
@@ -127,7 +132,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       model: 'claude-sonnet-4-6',
       max_tokens: 600,
       temperature: 0.2,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(voiceGender),
       messages: [{ role: 'user', content: userContent }],
     });
 

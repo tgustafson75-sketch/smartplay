@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
-import { KEVIN_CHARACTER_SPEC } from '../constants/kevinCharacter';
+import { getCaddieName, getCharacterSpec, type VoiceGender } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -32,9 +32,9 @@ type CourseContent = {
 const cache: Map<string, { content: CourseContent; cached_at: number }> = new Map();
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
 
-const SYSTEM_PROMPT = `${KEVIN_CHARACTER_SPEC}
+const buildSystemPrompt = (g: VoiceGender) => `${getCharacterSpec(g)}
 
-You are Kevin generating Course Detail content — a thoughtful caddie's preview of a course the player is about to study before they tee off.
+You are ${getCaddieName(g)} generating Course Detail content — a thoughtful caddie's preview of a course the player is about to study before they tee off.
 
 Write as a caddie who has actually played this course many times. Specific over generic. Course character over scorecard recitation. Plain English over marketing copy.
 
@@ -76,6 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const rating = typeof body.rating === 'number' ? body.rating : null;
     const slope = typeof body.slope === 'number' ? body.slope : null;
     const holesInput = (body.holes ?? []) as HoleInput[];
+    const voiceGender: VoiceGender = (body.voiceGender as VoiceGender | undefined) ?? 'male';
 
     if (!courseId || !courseName || !Array.isArray(holesInput) || holesInput.length === 0) {
       return res.status(400).json({ error: 'courseId, courseName, and non-empty holes array required' });
@@ -99,7 +100,7 @@ Generate the JSON.`;
       model: 'claude-sonnet-4-6',
       max_tokens: 2000,
       temperature: 0.7,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(voiceGender),
       messages: [{ role: 'user', content: userPrompt }],
     });
 

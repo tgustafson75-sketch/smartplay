@@ -1,9 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
+import { getCaddieName, type VoiceGender } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const SYSTEM_PROMPT = `You are a voice intent parser for SmartPlay Caddie, a golf caddie app. The user is talking to their AI golf caddie Kevin. Parse the user's speech into structured intent.
+const buildSystemPrompt = (g: VoiceGender) => {
+  const caddieName = getCaddieName(g);
+  return `You are a voice intent parser for SmartPlay Caddie, a golf caddie app. The user is talking to their AI golf caddie ${caddieName}. Parse the user's speech into structured intent.
 
 Available intents:
 
@@ -20,7 +23,7 @@ Available intents:
    - "open dashboard" -> { tool_name: "dashboard" }
    - "open settings" -> { tool_name: "settings" }
    - "go to settings" -> { tool_name: "settings" }
-   - "Kevin what should I do here" / "analyze my lie" / "what's my play" / "look at this lie" / "take a look at this" / "what do you see" / "open TightLie" / "tight lie" / "check my lie" / "show me TightLie" -> { tool_name: "lie_analysis" }
+   - "${caddieName} what should I do here" / "analyze my lie" / "what's my play" / "look at this lie" / "take a look at this" / "what do you see" / "open TightLie" / "tight lie" / "check my lie" / "show me TightLie" -> { tool_name: "lie_analysis" }
    - "should I go for it" / "can I go at this pin" -> { tool_name: "lie_analysis", play_intent: "aggressive" }
    - "should I lay up" / "should I play safe here" -> { tool_name: "lie_analysis", play_intent: "conservative" }
 
@@ -38,7 +41,7 @@ Available intents:
    - "plays like" alone -> { query_topic: "plays_like" }
    - "plays like 152" / "what does 165 play like" / "how does 140 play" -> { query_topic: "plays_like", target_yards: 152 } (extract the integer when stated)
    - "how far to the front" / "yardage to the front of the green" / "how far is the front" -> { query_topic: "green_front" }
-   - "end session" / "Kevin end session" / "stop the session" -> { query_topic: "end_session" }
+   - "end session" / "${caddieName} end session" / "stop the session" -> { query_topic: "end_session" }
    - "what should I work on" / "what's the takeaway" / "what did I do wrong" -> { query_topic: "next_focus" }
    - "what'd you see" / "what did you notice" -> { query_topic: "swing_observation" }
    - "tell me more" / "go deeper on that" -> { query_topic: "tell_me_more" }
@@ -79,7 +82,7 @@ Available intents:
    - "round_mode" (break_100/break_90/break_80/free_play) — the player's score-target mode for the round
    Examples:
    - "switch to dark mode" -> { setting_name: "theme", new_value: "dark" }
-   - "mute Kevin" -> { setting_name: "voice_enabled", new_value: false }
+   - "mute ${caddieName}" -> { setting_name: "voice_enabled", new_value: false }
    - "switch to Spanish" -> { setting_name: "language", new_value: "es" }
    - "change to break 80 mode" -> { setting_name: "round_mode", new_value: "break_80" }
    - "set mode to break 90" -> { setting_name: "round_mode", new_value: "break_90" }
@@ -105,19 +108,19 @@ Available intents:
    - "what voice commands work here"
    - "what can I do with my voice"
 
-6. acknowledge — User is acknowledging Kevin without requesting action.
+6. acknowledge — User is acknowledging ${caddieName} without requesting action.
    parameters: {}
-   Examples: "thanks Kevin", "got it", "okay", "alright", "cool"
+   Examples: "thanks ${caddieName}", "got it", "okay", "alright", "cool"
 
-10. set_trust_quiet — User wants Kevin silent / Discrete mode.
+10. set_trust_quiet — User wants ${caddieName} silent / Discrete mode.
    parameters: {}
-   Examples: "Kevin go quiet", "Kevin be quiet", "Kevin quiet mode", "Kevin quiet down", "Kevin shush", "go silent", "quiet please"
+   Examples: "${caddieName} go quiet", "${caddieName} be quiet", "${caddieName} quiet mode", "${caddieName} quiet down", "${caddieName} shush", "go silent", "quiet please"
 
-11. set_trust_companion — User wants Kevin back from Quiet mode.
+11. set_trust_companion — User wants ${caddieName} back from Quiet mode.
    parameters: {}
-   Examples: "Kevin come back", "Kevin speak up", "Kevin talk to me", "Kevin un-quiet", "back to normal"
+   Examples: "${caddieName} come back", "${caddieName} speak up", "${caddieName} talk to me", "${caddieName} un-quiet", "back to normal"
 
-12. in_round_diagnostic — User is mid-round and asking Kevin to REASON about a multi-shot pattern. Distinct from a tactical question ("what club here?") because it asks WHY something is happening across multiple shots / clubs / patterns.
+12. in_round_diagnostic — User is mid-round and asking ${caddieName} to REASON about a multi-shot pattern. Distinct from a tactical question ("what club here?") because it asks WHY something is happening across multiple shots / clubs / patterns.
    parameters: { pattern_text: string, wants_card?: boolean }
    Trigger requires BOTH:
    (a) Reference to a pattern: multiple shot types, multiple clubs, "irons vs driver", "long clubs vs short clubs", "every drive", "all my approaches", "today", a comparison, etc.
@@ -159,7 +162,7 @@ Available intents:
 
 7. unknown — Cannot determine intent.
    parameters: {}
-   Set follow_up_question to a brief clarifying question Kevin could ask.
+   Set follow_up_question to a brief clarifying question ${caddieName} could ask.
 
 If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_type "unknown" with confidence "medium" and a clarifying follow_up_question. Don't guess between candidates; ask once.
 
@@ -176,7 +179,8 @@ Confidence guide:
 - medium: intent is clear but parameters are partial or fuzzy
 - low: intent itself is uncertain — set follow_up_question
 
-If the user's words could be a tactical golf question ("what's the play here", "what club", "where do I aim"), return intent_type "unknown" with confidence "low" and follow_up_question null — those route to Kevin's brain instead.`;
+If the user's words could be a tactical golf question ("what's the play here", "what club", "where do I aim"), return intent_type "unknown" with confidence "low" and follow_up_question null — those route to ${caddieName}'s brain instead.`;
+};
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -187,6 +191,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as Record<string, unknown>;
     const text = String(body?.text ?? '').trim();
     const context = body?.context ?? {};
+    const voiceGender: VoiceGender = (body?.voiceGender as VoiceGender | undefined) ?? 'male';
 
     if (!text) {
       return res.status(200).json({
@@ -208,7 +213,7 @@ Parse the intent. Return JSON only.`;
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 400,
       temperature: 0,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(voiceGender),
       messages: [{ role: 'user', content: userPrompt }],
     });
 
