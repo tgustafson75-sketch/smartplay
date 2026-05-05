@@ -117,73 +117,114 @@ export async function generateLibrary(
 
   isGenerating = true;
   console.log('[filler] generating', FILLER_PHRASES.length, 'clips...');
-  const clips: FillerClip[] = [];
 
-  for (const phrase of FILLER_PHRASES) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    // Audit 101 / W3 — parallelize TTS fetches with a concurrency cap.
+    // Prior code processed each phrase serially: ~40 phrases × ~1-2s
+    // ElevenLabs roundtrip = 30-60s observed cold-launch lag on persona
+    // switch. Pool of 4 concurrent fetches cuts this to ~5-10s while
+    // staying well under any per-IP rate limit.
+    const clips = await runWithConcurrency(
+      FILLER_PHRASES,
+      4,
+      (phrase) => generateOneClip(phrase, persona, language, gender, apiUrl),
+    );
 
-      const res = await fetch(apiUrl + '/api/voice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({ text: phrase.text, gender, language, persona }),
-      }).finally(() => clearTimeout(timeout));
+    const newLib: FillerLibrary = {
+      clips: clips.filter((c): c is FillerClip => c !== null),
+      generated_at: Date.now(),
+      voice_settings_hash: hash,
+    };
 
-      if (!res.ok) {
-        console.log('[filler] clip generation failed:', phrase.id, res.status);
-        continue;
-      }
-
-      const buf = await res.arrayBuffer();
-      if (buf.byteLength < 100) {
-        console.log('[filler] empty audio for:', phrase.id);
-        continue;
-      }
-
-      const f = clipFile(phrase.id);
-      f.write(new Uint8Array(buf));
-
-      // Measure duration via expo-av
-      let duration_ms = 1200;
-      try {
-        const { sound, status } = await Audio.Sound.createAsync(
-          { uri: f.uri },
-          { shouldPlay: false },
-        );
-        if (status.isLoaded && status.durationMillis) {
-          duration_ms = status.durationMillis;
-        }
-        await sound.unloadAsync();
-      } catch {
-        // keep fallback
-      }
-
-      clips.push({
-        id: phrase.id,
-        category: phrase.category,
-        text: phrase.text,
-        duration_ms,
-        audio_path: f.uri,
-        generated_at: Date.now(),
-      });
-
-    } catch (err) {
-      console.log('[filler] error generating clip:', phrase.id, err);
-    }
+    library = newLib;
+    await saveToStorage(newLib);
+    console.log('[filler] generation complete:', newLib.clips.length, '/', FILLER_PHRASES.length, 'clips');
+  } finally {
+    isGenerating = false;
   }
+}
 
-  const newLib: FillerLibrary = {
-    clips,
-    generated_at: Date.now(),
-    voice_settings_hash: hash,
-  };
+// Generate a single filler clip. Returns null on any failure (keeps the
+// pool moving — partial libraries are fine, the runtime falls back to
+// synthesized speech for missing clip IDs).
+async function generateOneClip(
+  phrase: typeof FILLER_PHRASES[number],
+  persona: Persona,
+  language: string,
+  gender: 'male' | 'female',
+  apiUrl: string,
+): Promise<FillerClip | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const res = await fetch(apiUrl + '/api/voice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({ text: phrase.text, gender, language, persona }),
+    });
+    if (!res.ok) {
+      console.log('[filler] clip generation failed:', phrase.id, res.status);
+      return null;
+    }
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength < 100) {
+      console.log('[filler] empty audio for:', phrase.id);
+      return null;
+    }
 
-  library = newLib;
-  await saveToStorage(newLib);
-  isGenerating = false;
-  console.log('[filler] generation complete:', clips.length, '/', FILLER_PHRASES.length, 'clips');
+    const f = clipFile(phrase.id);
+    // Audit 101 / S4 — await the write (Promise.resolve handles both
+    // sync and async write returns from expo-file-system).
+    await Promise.resolve(f.write(new Uint8Array(buf)));
+
+    let duration_ms = 1200;
+    try {
+      const { sound, status } = await Audio.Sound.createAsync(
+        { uri: f.uri },
+        { shouldPlay: false },
+      );
+      if (status.isLoaded && status.durationMillis) {
+        duration_ms = status.durationMillis;
+      }
+      await sound.unloadAsync();
+    } catch {
+      // keep fallback duration
+    }
+
+    return {
+      id: phrase.id,
+      category: phrase.category,
+      text: phrase.text,
+      duration_ms,
+      audio_path: f.uri,
+      generated_at: Date.now(),
+    };
+  } catch (err) {
+    console.log('[filler] error generating clip:', phrase.id, err);
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// Tiny concurrency limiter — N workers race through the queue.
+async function runWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= items.length) return;
+      results[i] = await worker(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 /**
