@@ -27,11 +27,15 @@ import { cageLog } from '../services/cageTelemetry';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const METER_INTERVAL_MS = 100;
-const METER_BUFFER_SAMPLES = 20; // 2 seconds at 100ms
-const TRANSIENT_THRESHOLD_DB = 14; // noise_floor + 14 dB ≈ 5x linear
-const DEBOUNCE_MS = 1500;
-const NOISE_FLOOR_MIN_SAMPLES = 5;
+// Phase BY-quick — extracted to constants/cageDetection.ts for tunability.
+import {
+  METER_INTERVAL_MS,
+  METER_BUFFER_SAMPLES,
+  NOISE_FLOOR_MIN_SAMPLES,
+  TRANSIENT_THRESHOLD_DB,
+  DECAY_MIN_DB_PER_SAMPLE,
+  DEBOUNCE_MS,
+} from '../constants/cageDetection';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -64,6 +68,16 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const meterBufferRef = useRef<number[]>([]);
   const lastDetectionRef = useRef<number>(0);
+  // Phase BY-quick — pending-peak state for multi-criterion validation.
+  // A sample that exceeds the threshold becomes a candidate; the NEXT
+  // sample either confirms the sharp decay (real impact) or rejects
+  // sustained / slow-decay sounds (voice, machinery, claps).
+  const pendingPeakRef = useRef<{
+    dBFS: number;
+    threshold: number;
+    offsetSec: number;
+    timestamp: number;
+  } | null>(null);
   const isMountedRef = useRef(true);
 
   // Portrait lock — cage recording must be vertical for correct video framing
@@ -189,41 +203,77 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
 
   const handleMeterReading = useCallback((dBFS: number) => {
     const buf = meterBufferRef.current;
+    const now = Date.now();
 
-    // Compute noise floor from existing buffer (before adding new sample)
-    if (buf.length >= NOISE_FLOOR_MIN_SAMPLES) {
-      const noiseFlorDB = buf.reduce((a, b) => a + b, 0) / buf.length;
-      const threshold = noiseFlorDB + TRANSIENT_THRESHOLD_DB;
+    // ─── Phase BY-quick: multi-criterion validation ────────────────────────
+    // Step 1 — verify any pending peak from the previous sample.
+    //   - If next sample is still above threshold → SUSTAINED sound
+    //     (voice, machinery). Reject.
+    //   - If decay ≥ DECAY_MIN_DB_PER_SAMPLE → confirmed SHARP transient
+    //     (golf impact). Emit detection (subject to debounce) using the
+    //     peak's offset, not the verification sample's offset.
+    //   - Otherwise → slow decay (clap, distant boom). Reject.
+    const pending = pendingPeakRef.current;
+    if (pending) {
+      pendingPeakRef.current = null;
+      const decay = pending.dBFS - dBFS;
+      const stillAboveThreshold = dBFS > pending.threshold;
+      const sharpDecay = decay >= DECAY_MIN_DB_PER_SAMPLE;
 
-      if (dBFS > threshold) {
-        const now = Date.now();
-        if (now - lastDetectionRef.current > DEBOUNCE_MS) {
-          // [path3:cage:swing-detected] fires inside the throttle so only
-          // the actual debounce-cleared events show up in trace.
+      if (sharpDecay && !stillAboveThreshold) {
+        if (now - lastDetectionRef.current > DEBOUNCE_MS &&
+            sessionRef.current && phase === 'recording') {
           lastDetectionRef.current = now;
-          if (sessionRef.current) {
-            const offset = (now - sessionStartRef.current) / 1000;
-            addClipEvent(sessionRef.current.id, offset, 'audio_transient');
-            cageLog('swing-detected', 'ok', {
-              method: 'audio_transient',
-              offset_seconds: Number(offset.toFixed(2)),
-              dBFS: Number(dBFS.toFixed(1)),
-              threshold_dB: Number(threshold.toFixed(1)),
-              session_id: sessionRef.current.id,
-            });
-            if (isMountedRef.current) {
-              setSwingCount((c) => c + 1);
-            }
-            console.log(`[CageSession] Auto-detected swing @ ${offset.toFixed(1)}s (${dBFS.toFixed(1)} dBFS vs threshold ${threshold.toFixed(1)})`);
+          addClipEvent(sessionRef.current.id, pending.offsetSec, 'audio_transient');
+          cageLog('swing-detected', 'ok', {
+            method: 'audio_transient',
+            offset_seconds: Number(pending.offsetSec.toFixed(2)),
+            peak_dBFS: Number(pending.dBFS.toFixed(1)),
+            next_dBFS: Number(dBFS.toFixed(1)),
+            decay_dB: Number(decay.toFixed(1)),
+            threshold_dB: Number(pending.threshold.toFixed(1)),
+            session_id: sessionRef.current.id,
+          });
+          if (isMountedRef.current) {
+            setSwingCount((c) => c + 1);
           }
+          console.log(
+            `[CageSession] Auto-detected swing @ ${pending.offsetSec.toFixed(1)}s ` +
+            `(peak ${pending.dBFS.toFixed(1)} dBFS, decay ${decay.toFixed(1)} dB, ` +
+            `threshold ${pending.threshold.toFixed(1)})`,
+          );
         }
+      } else {
+        cageLog('swing-rejected', 'partial', {
+          reason: stillAboveThreshold ? 'sustained-loudness' : 'slow-decay',
+          peak_dBFS: Number(pending.dBFS.toFixed(1)),
+          next_dBFS: Number(dBFS.toFixed(1)),
+          decay_dB: Number(decay.toFixed(1)),
+          threshold_dB: Number(pending.threshold.toFixed(1)),
+        });
       }
     }
 
-    // Add to rolling buffer
+    // Step 2 — check current sample for a new candidate. Don't emit yet;
+    // hold as pending until the next sample verifies decay.
+    if (!pendingPeakRef.current && buf.length >= NOISE_FLOOR_MIN_SAMPLES) {
+      const noiseFlorDB = buf.reduce((a, b) => a + b, 0) / buf.length;
+      const threshold = noiseFlorDB + TRANSIENT_THRESHOLD_DB;
+      if (dBFS > threshold) {
+        pendingPeakRef.current = {
+          dBFS,
+          threshold,
+          offsetSec: (now - sessionStartRef.current) / 1000,
+          timestamp: now,
+        };
+      }
+    }
+
+    // Step 3 — add the current sample to the rolling buffer for future
+    // noise-floor calculation.
     buf.push(dBFS);
     if (buf.length > METER_BUFFER_SAMPLES) buf.shift();
-  }, []);
+  }, [phase]);
 
   // ─── Start Session ─────────────────────────────────────────────────────────
 
