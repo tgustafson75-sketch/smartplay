@@ -60,6 +60,14 @@ export interface CageShot {
     confidence: 'high' | 'medium' | 'low';
     observation: string;
   } | null;
+
+  // Phase BZ-v1 — user annotations on a captured swing. All optional; absence
+  // = no opinion logged. `isGoodRep` true marks the swing as a keeper for
+  // future reference / drill comparison; false means actively flagged as
+  // "bad rep" (separate from delete). `userNotes` is free-form text capped
+  // at 280 chars by the UI.
+  isGoodRep?: boolean | null;
+  userNotes?: string | null;
 }
 
 // Phase BL — how the active club was identified for a given segment.
@@ -272,6 +280,17 @@ interface CageState {
    *  by the live cage post-session pipeline (already in app/cage/summary.tsx)
    *  and by the upload analysis pipeline. */
   setSessionAnalysis: (sessionId: string, primary_issue: PrimaryIssue | null, drill_recommendation: DrillRecommendation | null) => void;
+  /** Phase BZ-v1 — user annotation mutators. Each updates the named shot
+   *  in-place; no-op if shot id not found. */
+  updateShotTags: (sessionId: string, shotId: string, tags: {
+    feel?: string | null;
+    shape?: string | null;
+    contact?: string | null;
+    direction?: string | null;
+  }) => void;
+  markShotGoodRep: (sessionId: string, shotId: string, isGoodRep: boolean | null) => void;
+  setShotNotes: (sessionId: string, shotId: string, notes: string | null) => void;
+  deleteShot: (sessionId: string, shotId: string) => void;
   // Phase AQ
   addCageInsight: (session_id: string, club: string, insight: string) => void;
   /** Phase V — track analysis lifecycle so the swing detail surface can
@@ -548,6 +567,58 @@ export const useCageStore = create<CageState>()(
               shots: session.shots.map(shot =>
                 shot.id !== shotId ? shot : { ...shot, perShotAnalysis: analysis },
               ),
+            },
+          ),
+        })),
+
+      updateShotTags: (sessionId, shotId, tags) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              shots: session.shots.map(shot =>
+                shot.id !== shotId ? shot : {
+                  ...shot,
+                  ...(tags.feel !== undefined ? { feel: tags.feel } : {}),
+                  ...(tags.shape !== undefined ? { shape: tags.shape } : {}),
+                  ...(tags.contact !== undefined ? { contact: tags.contact } : {}),
+                  ...(tags.direction !== undefined ? { direction: tags.direction } : {}),
+                },
+              ),
+            },
+          ),
+        })),
+
+      markShotGoodRep: (sessionId, shotId, isGoodRep) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              shots: session.shots.map(shot =>
+                shot.id !== shotId ? shot : { ...shot, isGoodRep },
+              ),
+            },
+          ),
+        })),
+
+      setShotNotes: (sessionId, shotId, notes) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              shots: session.shots.map(shot =>
+                shot.id !== shotId ? shot : { ...shot, userNotes: notes },
+              ),
+            },
+          ),
+        })),
+
+      deleteShot: (sessionId, shotId) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              shots: session.shots.filter(shot => shot.id !== shotId),
             },
           ),
         })),

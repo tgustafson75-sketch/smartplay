@@ -10,13 +10,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Animated,
+  ActivityIndicator, Animated, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Video, ResizeMode, type AVPlaybackStatus, type AVPlaybackStatusSuccess } from 'expo-av';
+import * as Sharing from 'expo-sharing';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
-import { useCageStore, type AnalysisStatus } from '../../../store/cageStore';
+import { useCageStore, type AnalysisStatus, type CageShot } from '../../../store/cageStore';
 import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, stopSpeaking, configureAudioForSpeech } from '../../../services/voiceService';
@@ -24,6 +26,7 @@ import { runPhaseKOnSession } from '../../../services/videoUpload';
 import { uploadLog } from '../../../services/uploadDiagnostic';
 import PrimaryIssueCard from '../../../components/swinglab/PrimaryIssueCard';
 import DrillCard from '../../../components/swinglab/DrillCard';
+import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 
 type AudioSource = 'coach' | 'kevin';
 
@@ -63,7 +66,25 @@ export default function SwingDetail() {
   );
   const shot = session?.shots[0];
 
+  // Phase BZ-v1 — per-shot action sheet + compare mode state.
+  const [actionShotId, setActionShotId] = useState<string | null>(null);
+  const [leftCompareShotId, setLeftCompareShotId] = useState<string | null>(null);
+  const [rightCompareShotId, setRightCompareShotId] = useState<string | null>(null);
+  const isComparing = leftCompareShotId != null && rightCompareShotId != null;
+  const isPickingCompareTarget = leftCompareShotId != null && rightCompareShotId == null;
+  const actionShot = actionShotId
+    ? session?.shots.find(s => s.id === actionShotId) ?? null
+    : null;
+  const leftShot = leftCompareShotId
+    ? session?.shots.find(s => s.id === leftCompareShotId) ?? null
+    : null;
+  const rightShot = rightCompareShotId
+    ? session?.shots.find(s => s.id === rightCompareShotId) ?? null
+    : null;
+
   const videoRef = useRef<Video>(null);
+  const leftCompareVideoRef = useRef<Video>(null);
+  const rightCompareVideoRef = useRef<Video>(null);
   // Phase V.7+ — default to Kevin analysis. The has_audio probe in
   // videoUpload.probeVideo is unreliable (it returns true for any video with
   // a decoded duration, including silent gym clips), so previously every
@@ -159,6 +180,73 @@ export default function SwingDetail() {
     await videoRef.current?.playAsync();
   };
 
+  // Phase BZ-v1 — when in compare-picker mode, tapping a row picks the
+  // right-pane swing instead of scrubbing the main video. Otherwise
+  // scrubs as before.
+  const handleRowTap = async (s: CageShot) => {
+    if (isPickingCompareTarget) {
+      if (s.id === leftCompareShotId) return; // can't compare with itself
+      setRightCompareShotId(s.id);
+      return;
+    }
+    await scrubTo(s.clipStartSeconds ?? 0);
+  };
+
+  const handleStartCompare = (shotId: string) => {
+    setLeftCompareShotId(shotId);
+    setRightCompareShotId(null);
+  };
+
+  const exitCompare = () => {
+    setLeftCompareShotId(null);
+    setRightCompareShotId(null);
+  };
+
+  // Phase BZ-v1 — synced playback for the comparison view. Play/pause
+  // applied to both video panes together so the user sees the swings
+  // in lockstep.
+  const playBoth = async () => {
+    await Promise.all([
+      leftCompareVideoRef.current?.playAsync(),
+      rightCompareVideoRef.current?.playAsync(),
+    ]);
+  };
+  const pauseBoth = async () => {
+    await Promise.all([
+      leftCompareVideoRef.current?.pauseAsync(),
+      rightCompareVideoRef.current?.pauseAsync(),
+    ]);
+  };
+  const restartBoth = async () => {
+    const lStart = leftShot?.clipStartSeconds ?? 0;
+    const rStart = rightShot?.clipStartSeconds ?? 0;
+    await Promise.all([
+      leftCompareVideoRef.current?.setPositionAsync(lStart * 1000),
+      rightCompareVideoRef.current?.setPositionAsync(rStart * 1000),
+    ]);
+    await playBoth();
+  };
+
+  const handleSessionShare = async () => {
+    if (!shot?.clipUri) {
+      Alert.alert('Nothing to share', 'This session has no video file.');
+      return;
+    }
+    try {
+      const available = await Sharing.isAvailableAsync();
+      if (!available) {
+        Alert.alert('Sharing unavailable', 'Sharing is not available on this device.');
+        return;
+      }
+      await Sharing.shareAsync(shot.clipUri, {
+        mimeType: 'video/mp4',
+        dialogTitle: 'Share session',
+      });
+    } catch (e) {
+      console.log('[swing-detail] session share failed', e);
+    }
+  };
+
   if (!session || !shot?.clipUri) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -206,21 +294,104 @@ export default function SwingDetail() {
           <Text style={[styles.title, { color: colors.text_primary }]} numberOfLines={1}>
             {session.upload?.notes ?? `${session.club} swing`}
           </Text>
-          <View style={{ width: 60 }} />
+          <TouchableOpacity
+            onPress={handleSessionShare}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={{ width: 60, alignItems: 'flex-end' }}
+          >
+            <Ionicons name="share-outline" size={22} color={colors.accent} />
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.videoWrap}>
-          <Video
-            ref={videoRef}
-            source={{ uri: shot.clipUri }}
-            style={styles.video}
-            resizeMode={ResizeMode.CONTAIN}
-            useNativeControls
-            shouldPlay={false}
-            isMuted={audioSource === 'kevin'}
-            onPlaybackStatusUpdate={onPlaybackStatusUpdate}
-          />
-        </View>
+        {/* Phase BZ-v1 — comparison banner during compare-picker mode */}
+        {isPickingCompareTarget && leftShot && (
+          <View style={[styles.compareBanner, { backgroundColor: colors.accent_muted, borderColor: colors.accent }]}>
+            <Ionicons name="git-compare-outline" size={18} color={colors.accent} />
+            <Text style={[styles.compareBannerText, { color: colors.accent }]} numberOfLines={2}>
+              Pick a swing below to compare with swing {String((session.shots.findIndex(x => x.id === leftShot.id) + 1)).padStart(2, '0')}.
+            </Text>
+            <TouchableOpacity onPress={exitCompare} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={[styles.compareBannerCancel, { color: colors.accent }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Phase BZ-v1 — comparison view: two videos side-by-side */}
+        {isComparing && leftShot && rightShot && (
+          <View style={[styles.compareCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.compareHeader}>
+              <Text style={[styles.compareLabel, { color: colors.text_muted }]}>COMPARE</Text>
+              <TouchableOpacity onPress={exitCompare}>
+                <Text style={[styles.compareExit, { color: colors.accent }]}>Done</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.compareRow}>
+              <View style={styles.comparePane}>
+                <Text style={[styles.compareCaption, { color: colors.text_muted }]} numberOfLines={1}>
+                  Swing {String((session.shots.findIndex(x => x.id === leftShot.id) + 1)).padStart(2, '0')}
+                  {leftShot.perShotAnalysis?.detected_issue && leftShot.perShotAnalysis.detected_issue !== 'none'
+                    ? ` · ${leftShot.perShotAnalysis.detected_issue.replace(/_/g, ' ')}`
+                    : ''}
+                </Text>
+                <Video
+                  ref={leftCompareVideoRef}
+                  source={{ uri: leftShot.clipUri ?? '' }}
+                  style={styles.compareVideo}
+                  resizeMode={ResizeMode.CONTAIN}
+                  shouldPlay={false}
+                  isMuted
+                  positionMillis={(leftShot.clipStartSeconds ?? 0) * 1000}
+                />
+              </View>
+              <View style={styles.comparePane}>
+                <Text style={[styles.compareCaption, { color: colors.text_muted }]} numberOfLines={1}>
+                  Swing {String((session.shots.findIndex(x => x.id === rightShot.id) + 1)).padStart(2, '0')}
+                  {rightShot.perShotAnalysis?.detected_issue && rightShot.perShotAnalysis.detected_issue !== 'none'
+                    ? ` · ${rightShot.perShotAnalysis.detected_issue.replace(/_/g, ' ')}`
+                    : ''}
+                </Text>
+                <Video
+                  ref={rightCompareVideoRef}
+                  source={{ uri: rightShot.clipUri ?? '' }}
+                  style={styles.compareVideo}
+                  resizeMode={ResizeMode.CONTAIN}
+                  shouldPlay={false}
+                  isMuted
+                  positionMillis={(rightShot.clipStartSeconds ?? 0) * 1000}
+                />
+              </View>
+            </View>
+            <View style={styles.compareControls}>
+              <TouchableOpacity onPress={playBoth} style={[styles.compareCtrl, { backgroundColor: colors.accent }]}>
+                <Ionicons name="play" size={16} color="#fff" />
+                <Text style={styles.compareCtrlText}>Play both</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={pauseBoth} style={[styles.compareCtrl, { borderColor: colors.border, borderWidth: 1.5 }]}>
+                <Ionicons name="pause" size={16} color={colors.text_primary} />
+                <Text style={[styles.compareCtrlText, { color: colors.text_primary }]}>Pause</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={restartBoth} style={[styles.compareCtrl, { borderColor: colors.border, borderWidth: 1.5 }]}>
+                <Ionicons name="refresh" size={16} color={colors.text_primary} />
+                <Text style={[styles.compareCtrlText, { color: colors.text_primary }]}>Restart</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {!isComparing && (
+          <View style={styles.videoWrap}>
+            <Video
+              ref={videoRef}
+              source={{ uri: shot.clipUri }}
+              style={styles.video}
+              resizeMode={ResizeMode.CONTAIN}
+              useNativeControls
+              shouldPlay={false}
+              isMuted={audioSource === 'kevin'}
+              onPlaybackStatusUpdate={onPlaybackStatusUpdate}
+            />
+          </View>
+        )}
 
         {/* Audio source toggle */}
         {hasAudio && (
@@ -309,7 +480,9 @@ export default function SwingDetail() {
            session.shots.some(s => s.perShotAnalysis || s.clipStartSeconds != null) && (
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text style={[styles.label, { color: colors.text_muted }]}>
-                {session.shots.length} SWINGS · TAP TO JUMP
+                {isPickingCompareTarget
+                  ? `PICK A SWING TO COMPARE`
+                  : `${session.shots.length} SWINGS · TAP TO JUMP`}
               </Text>
               {session.shots.map((s, idx) => {
                 const start = s.clipStartSeconds ?? 0;
@@ -320,30 +493,65 @@ export default function SwingDetail() {
                     ? 'no clear issue'
                     : '—';
                 const conf = a?.confidence ?? null;
+                const isLeftPick = s.id === leftCompareShotId;
+                const goodRepIcon: keyof typeof Ionicons.glyphMap | null =
+                  s.isGoodRep === true ? 'star' :
+                  s.isGoodRep === false ? 'close-circle-outline' : null;
+                const noteIcon: keyof typeof Ionicons.glyphMap | null =
+                  s.userNotes && s.userNotes.length > 0 ? 'document-text' : null;
                 return (
-                  <TouchableOpacity
-                    key={s.id}
-                    onPress={() => void scrubTo(start)}
-                    style={[styles.shotRow, { borderColor: colors.border }]}
-                  >
-                    <Text style={[styles.shotIdx, { color: colors.accent }]}>
-                      {String(idx + 1).padStart(2, '0')}
-                    </Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.shotIssue, { color: colors.text_primary }]} numberOfLines={1}>
-                        {issueLabel}
+                  <View key={s.id} style={[styles.shotRow, { borderColor: colors.border, opacity: isPickingCompareTarget && isLeftPick ? 0.4 : 1 }]}>
+                    <TouchableOpacity
+                      onPress={() => void handleRowTap(s)}
+                      style={styles.shotRowTap}
+                      disabled={isPickingCompareTarget && isLeftPick}
+                    >
+                      <Text style={[styles.shotIdx, { color: colors.accent }]}>
+                        {String(idx + 1).padStart(2, '0')}
                       </Text>
-                      <Text style={[styles.shotMeta, { color: colors.text_muted }]} numberOfLines={1}>
-                        {`${formatMmSs(start)}`}
-                        {conf ? ` · ${conf} conf` : ''}
-                        {s.detectionMethod ? ` · ${s.detectionMethod === 'audio_transient' ? 'auto' : 'manual'}` : ''}
-                      </Text>
-                    </View>
-                    <Text style={[styles.shotChev, { color: colors.text_muted }]}>›</Text>
-                  </TouchableOpacity>
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.shotIssueRow}>
+                          <Text style={[styles.shotIssue, { color: colors.text_primary }]} numberOfLines={1}>
+                            {issueLabel}
+                          </Text>
+                          {goodRepIcon && (
+                            <Ionicons name={goodRepIcon} size={14} color={s.isGoodRep ? '#f59e0b' : colors.text_muted} />
+                          )}
+                          {noteIcon && (
+                            <Ionicons name={noteIcon} size={13} color={colors.accent} />
+                          )}
+                        </View>
+                        <Text style={[styles.shotMeta, { color: colors.text_muted }]} numberOfLines={1}>
+                          {`${formatMmSs(start)}`}
+                          {conf ? ` · ${conf} conf` : ''}
+                          {s.detectionMethod ? ` · ${s.detectionMethod === 'audio_transient' ? 'auto' : 'manual'}` : ''}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setActionShotId(s.id)}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      style={styles.shotActionBtn}
+                    >
+                      <Ionicons name="ellipsis-vertical" size={18} color={colors.text_muted} />
+                    </TouchableOpacity>
+                  </View>
                 );
               })}
             </View>
+          )}
+
+          {/* Phase BZ-v1 — single-shot Manage button. Multi-shot sessions
+              expose Manage via the per-row "•••". Single-shot uploads need
+              a dedicated affordance so users can still tag, note, share,
+              and delete without a per-row list. */}
+          {session.shots.length === 1 && shot && (
+            <TouchableOpacity
+              style={[styles.reanalyzeBtn, { borderColor: colors.border, marginTop: 8 }]}
+              onPress={() => setActionShotId(shot.id)}
+            >
+              <Text style={[styles.reanalyzeText, { color: colors.text_muted }]}>Manage swing</Text>
+            </TouchableOpacity>
           )}
 
           {analysisStatus === 'ok' && (
@@ -377,7 +585,26 @@ export default function SwingDetail() {
             ) : null}
           </View>
         )}
+
+        {/* Phase BZ-v1 — selected-shot user note display. Surfaces the
+            note prominently so the user sees their own annotation without
+            opening the action sheet. */}
+        {actionShot?.userNotes && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.label, { color: colors.text_muted }]}>NOTE</Text>
+            <Text style={[styles.detailLine, { color: colors.text_primary }]}>{actionShot.userNotes}</Text>
+          </View>
+        )}
       </ScrollView>
+
+      <SwingActionSheet
+        visible={actionShotId != null}
+        shot={actionShot}
+        sessionId={session.id}
+        onClose={() => setActionShotId(null)}
+        onStartCompare={handleStartCompare}
+        multiShotSessionAvailable={session.shots.length > 1}
+      />
     </SafeAreaView>
   );
 }
@@ -421,9 +648,55 @@ const styles = StyleSheet.create({
   shotIdx: {
     fontSize: 13, fontWeight: '900', minWidth: 24,
   },
-  shotIssue: { fontSize: 14, fontWeight: '600', textTransform: 'capitalize' },
+  shotIssue: { fontSize: 14, fontWeight: '600', textTransform: 'capitalize', flexShrink: 1 },
+  shotIssueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   shotMeta: { fontSize: 11, marginTop: 2 },
   shotChev: { fontSize: 22, fontWeight: '300', width: 14, textAlign: 'right' },
+  shotRowTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingRight: 4 },
+  shotActionBtn: { padding: 6 },
+  // Phase BZ-v1 — comparison view styles
+  compareBanner: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  compareBannerText: { fontSize: 13, fontWeight: '600', flex: 1 },
+  compareBannerCancel: { fontSize: 13, fontWeight: '800' },
+  compareCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  compareHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  compareLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
+  compareExit: { fontSize: 13, fontWeight: '800' },
+  compareRow: { flexDirection: 'row', gap: 6 },
+  comparePane: { flex: 1, gap: 4 },
+  compareCaption: { fontSize: 11, fontWeight: '600', textTransform: 'capitalize' },
+  compareVideo: { width: '100%', aspectRatio: 9 / 16, maxHeight: 360, backgroundColor: '#000' },
+  compareControls: { flexDirection: 'row', gap: 8, marginTop: 10, justifyContent: 'center' },
+  compareCtrl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+  },
+  compareCtrlText: { fontSize: 13, fontWeight: '800', color: '#fff' },
   analyzingCard: {
     marginHorizontal: 16, padding: 16, borderRadius: 14, borderWidth: 1,
     flexDirection: 'row', alignItems: 'center', gap: 12,

@@ -3,9 +3,14 @@
  *
  * Unified browse across cage sessions and uploaded videos. Filter chips,
  * tap-to-detail, long-press to delete. Empty state pivots to Upload CTA.
+ *
+ * Phase BZ-v1 — Adds date-range and club filters layered on top of the
+ * existing source filter (all/uploads/cage). All three apply
+ * intersection-style; only sessions matching every active dimension
+ * appear.
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert,
 } from 'react-native';
@@ -21,16 +26,63 @@ const FILTERS: { id: LibraryFilter; label: string }[] = [
   { id: 'cage', label: 'Cage' },
 ];
 
+type DateFilter = 'all' | '7d' | '30d';
+const DATE_FILTERS: { id: DateFilter; label: string }[] = [
+  { id: 'all', label: 'Any time' },
+  { id: '7d', label: 'Last 7 days' },
+  { id: '30d', label: 'Last 30 days' },
+];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export default function SwingLibrary() {
   const router = useRouter();
   const { colors } = useTheme();
   const sessionHistory = useCageStore(s => s.sessionHistory);
   const deleteSession = useCageStore(s => s.deleteSession);
   const [filter, setFilter] = useState<LibraryFilter>('all');
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [clubFilter, setClubFilter] = useState<string>('all');
 
   // Reading via getLibrary so the helper is the single source of sort/filter logic
   const _ = sessionHistory; // re-render trigger when sessions change
-  const entries = getLibrary(filter);
+  const sourceFilteredEntries = getLibrary(filter);
+
+  // Phase BZ-v1 — derive available club options from the source-filtered
+  // set so users only see clubs that are actually represented in the
+  // current source slice. "all" included always.
+  const availableClubs = useMemo(() => {
+    const set = new Set<string>();
+    sourceFilteredEntries.forEach(e => {
+      const c = e.session.club?.trim();
+      if (c && c !== 'unknown' && c !== '') set.add(c);
+    });
+    return ['all', ...Array.from(set).sort()];
+  }, [sourceFilteredEntries]);
+
+  // Reset clubFilter to 'all' if the previously-selected club is no
+  // longer in the visible set (e.g., user switched source filter).
+  if (clubFilter !== 'all' && !availableClubs.includes(clubFilter)) {
+    // Note: this is safe within the render — setState during render is
+    // legal in React when used to bail out of stale state, and React
+    // schedules a re-render. The next render will see clubFilter='all'.
+    setClubFilter('all');
+  }
+
+  const entries = useMemo(() => {
+    const now = Date.now();
+    const cutoff =
+      dateFilter === '7d' ? now - 7 * DAY_MS :
+      dateFilter === '30d' ? now - 30 * DAY_MS :
+      0;
+    return sourceFilteredEntries.filter(e => {
+      if (e.date_ms < cutoff) return false;
+      if (clubFilter !== 'all' && e.session.club !== clubFilter) return false;
+      return true;
+    });
+  }, [sourceFilteredEntries, dateFilter, clubFilter]);
+
+  const filtersActive = filter !== 'all' || dateFilter !== 'all' || clubFilter !== 'all';
 
   const onLongPress = (id: string) => {
     Alert.alert('Delete swing?', 'This removes it from your library. The original video on your phone is unaffected.', [
@@ -71,18 +123,73 @@ export default function SwingLibrary() {
         ))}
       </ScrollView>
 
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterStrip}>
+        {DATE_FILTERS.map(f => (
+          <TouchableOpacity
+            key={`date-${f.id}`}
+            onPress={() => setDateFilter(f.id)}
+            style={[
+              styles.chip,
+              { borderColor: colors.border, backgroundColor: colors.surface },
+              dateFilter === f.id && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
+            ]}
+          >
+            <Text style={[
+              styles.chipText,
+              { color: colors.text_muted },
+              dateFilter === f.id && { color: colors.accent, fontWeight: '700' },
+            ]}>{f.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {availableClubs.length > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterStrip}>
+          {availableClubs.map(c => (
+            <TouchableOpacity
+              key={`club-${c}`}
+              onPress={() => setClubFilter(c)}
+              style={[
+                styles.chip,
+                { borderColor: colors.border, backgroundColor: colors.surface },
+                clubFilter === c && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
+              ]}
+            >
+              <Text style={[
+                styles.chipText,
+                { color: colors.text_muted },
+                clubFilter === c && { color: colors.accent, fontWeight: '700' },
+              ]}>{c === 'all' ? 'Any club' : c}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
       {entries.length === 0 ? (
         <View style={styles.emptyWrap}>
-          <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>No swings yet</Text>
-          <Text style={[styles.emptyBody, { color: colors.text_muted }]}>
-            Upload a video from your phone or run a Cage Session to start your swing library.
+          <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>
+            {filtersActive ? 'No swings match these filters' : 'No swings yet'}
           </Text>
-          <TouchableOpacity
-            style={[styles.cta, { backgroundColor: colors.accent }]}
-            onPress={() => router.push('/swinglab/upload' as never)}
-          >
-            <Text style={styles.ctaText}>Upload a swing</Text>
-          </TouchableOpacity>
+          <Text style={[styles.emptyBody, { color: colors.text_muted }]}>
+            {filtersActive
+              ? 'Try widening the time range or clearing the club filter.'
+              : 'Upload a video from your phone or run a Cage Session to start your swing library.'}
+          </Text>
+          {filtersActive ? (
+            <TouchableOpacity
+              style={[styles.cta, { backgroundColor: colors.accent }]}
+              onPress={() => { setFilter('all'); setDateFilter('all'); setClubFilter('all'); }}
+            >
+              <Text style={styles.ctaText}>Clear filters</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.cta, { backgroundColor: colors.accent }]}
+              onPress={() => router.push('/swinglab/upload' as never)}
+            >
+              <Text style={styles.ctaText}>Upload a swing</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
