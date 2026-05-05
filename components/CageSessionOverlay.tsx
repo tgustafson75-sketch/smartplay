@@ -237,11 +237,6 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
           if (isMountedRef.current) {
             setSwingCount((c) => c + 1);
           }
-          console.log(
-            `[CageSession] Auto-detected swing @ ${pending.offsetSec.toFixed(1)}s ` +
-            `(peak ${pending.dBFS.toFixed(1)} dBFS, decay ${decay.toFixed(1)} dB, ` +
-            `threshold ${pending.threshold.toFixed(1)})`,
-          );
         }
       } else {
         cageLog('swing-rejected', 'partial', {
