@@ -123,7 +123,9 @@ export default function CourseDetailScreen() {
     }
     fetchCourseContent({
       courseId: course.id,
-      courseName: course.club_name,
+      // Use the local-friendly name when present so AI-generated About
+      // and Caddie Tips reflect the layout the user actually picked.
+      courseName: localFriendlyName ?? course.club_name,
       location: [course.location.city, course.location.state].filter(Boolean).join(', '),
       par: tee.par_total,
       yardage: tee.total_yards,
@@ -142,10 +144,27 @@ export default function CourseDetailScreen() {
         if (!cancelled) setContentLoading(false);
       });
     return () => { cancelled = true; };
+    // localFriendlyName is derived from course_id (route param, stable
+    // for the screen lifetime); listing it as a dep would cause an
+    // infinite refetch on first render. Course is the real trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [course]);
 
   const tee = course?.tees[0] ?? null;
-  const isPalms = (course?.club_name ?? '').toLowerCase().includes('palms');
+  // Local-curated branding: when the user picked a `local:*` slug we
+  // honor that intent for display + bundled-image lookup, even though
+  // the API returns the same parent club for both Menifee Lakes layouts.
+  // Without this both Palms and Lakes would show as "Menifee Lakes
+  // Country Club" with no bundled photos. The slug is the source of
+  // truth for which curated experience the user picked.
+  const localSlug = course_id?.startsWith('local:') ? course_id.slice('local:'.length) : null;
+  const localFriendlyName =
+    localSlug === 'palms' ? 'Menifee Lakes — Palms' :
+    localSlug === 'lakes' ? 'Menifee Lakes — Lakes' :
+    localSlug === 'rancho-california' ? 'Rancho California' :
+    null;
+  const displayClubName = localFriendlyName ?? course?.club_name ?? '';
+  const isPalms = localSlug === 'palms' || displayClubName.toLowerCase().includes('palms');
   const noteByHole = useMemo(() => {
     const m = new Map<number, string>();
     (content?.hole_notes ?? []).forEach(n => m.set(n.hole_number, n.note));
@@ -209,7 +228,7 @@ export default function CourseDetailScreen() {
   const handleBookTeeTime = () => {
     if (!course) return;
     const loc = [course.location.city, course.location.state].filter(Boolean).join(', ');
-    void openTeeTimeSearch(course.club_name, loc);
+    void openTeeTimeSearch(displayClubName || course.club_name, loc);
   };
 
   if (loading || !course) {
@@ -262,7 +281,7 @@ export default function CourseDetailScreen() {
             </View>
           )}
           <View style={styles.heroOverlay}>
-            <Text style={styles.heroTitle} numberOfLines={2}>{course.club_name}</Text>
+            <Text style={styles.heroTitle} numberOfLines={2}>{displayClubName || course.club_name}</Text>
             <View style={styles.heroLocRow}>
               <Ionicons name="location-outline" size={14} color="#9ca3af" />
               <Text style={styles.heroLocation} numberOfLines={1}>{location}</Text>

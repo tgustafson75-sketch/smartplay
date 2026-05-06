@@ -31,8 +31,15 @@ interface Props {
 
 // ─── Local fallback courses ────────────────────────────────────────────────────
 
+// Curated local courses — Tim's home rotation. Each maps to a real
+// golfcourseapi course via the slug → friendly-name resolution in
+// app/course/[course_id].tsx so detail pages, geometry, and content
+// fetch work the same as any API course (with curated bundled photos
+// where applicable, e.g. Palms).
 const LOCAL_COURSES: PickedCourse[] = [
-  { id: 'local:palms', name: 'Palms', fullName: 'Palms Golf Course', isLocal: true },
+  { id: 'local:palms',             name: 'Menifee Lakes — Palms',       fullName: 'Menifee Lakes Country Club — Palms',       isLocal: true },
+  { id: 'local:lakes',             name: 'Menifee Lakes — Lakes',       fullName: 'Menifee Lakes Country Club — Lakes',       isLocal: true },
+  { id: 'local:rancho-california', name: 'Rancho California',           fullName: 'Rancho California Golf Club',              isLocal: true },
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────
