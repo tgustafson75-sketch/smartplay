@@ -16,7 +16,10 @@
         "NSCameraUsageDescription": "SmartPlay Caddie uses the camera to record and analyze your swing in the practice cage.",
         "NSLocationWhenInUseUsageDescription": "SmartPlay Caddie uses your location to find nearby golf courses.",
         "NSPhotoLibraryUsageDescription": "SmartPlay Caddie saves your hero moments to your photo library.",
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio",
+          "audio"
+        ]
       }
     },
     "android": {
@@ -30,6 +33,14 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.VIBRATE",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
         "android.permission.ACCESS_FINE_LOCATION",
@@ -75,6 +86,12 @@
         "projectId": "60b7ee0e-0165-4971-a9c8-219960fed645"
       }
     },
-    "owner": "tgustafson76"
+    "owner": "tgustafson76",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/60b7ee0e-0165-4971-a9c8-219960fed645"
+    }
   }
 }
