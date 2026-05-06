@@ -558,6 +558,30 @@ export default function SwingDetail() {
             <Animated.View style={{ opacity: cardsFade }}>
               <PrimaryIssueCard issue={session.primary_issue ?? null} totalShots={session.shots.length} />
               <DrillCard recommendation={session.drill_recommendation ?? null} />
+              {/* Pose-derived biomechanics — only renders when the
+                  pose API was configured AND returned at least one
+                  usable frame. Pure additive surface; nothing
+                  regresses when null. */}
+              {session.biomechanics && (
+                <View style={[styles.biomechCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <Text style={[styles.biomechLabel, { color: colors.accent }]}>BIOMECHANICS</Text>
+                  <Text style={[styles.biomechSub, { color: colors.text_muted }]}>
+                    Measured from {session.biomechanics.frames.length} swing keyframes
+                  </Text>
+                  {session.biomechanics.verdicts.hipTurn && (
+                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {session.biomechanics.verdicts.hipTurn}</Text>
+                  )}
+                  {session.biomechanics.verdicts.shoulderTurn && (
+                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {session.biomechanics.verdicts.shoulderTurn}</Text>
+                  )}
+                  {session.biomechanics.verdicts.weightShift && (
+                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {session.biomechanics.verdicts.weightShift}</Text>
+                  )}
+                  {session.biomechanics.verdicts.posture && (
+                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {session.biomechanics.verdicts.posture}</Text>
+                  )}
+                </View>
+              )}
               <TouchableOpacity
                 style={[styles.reanalyzeBtn, { borderColor: colors.border }]}
                 onPress={onReanalyze}
@@ -722,4 +746,12 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   reanalyzeText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
+  biomechCard: {
+    marginHorizontal: 16, marginTop: 12, marginBottom: 4,
+    padding: 14, borderRadius: 12, borderWidth: 1,
+    gap: 6,
+  },
+  biomechLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
+  biomechSub: { fontSize: 11, fontStyle: 'italic', marginBottom: 4 },
+  biomechRow: { fontSize: 13, lineHeight: 19 },
 });

@@ -141,6 +141,12 @@ export interface CageSession {
   // pipeline errored and we need to surface honest copy.
   analysis_status?: AnalysisStatus;
   analysis_error?: string | null;
+  /** Pose-detection-derived biomechanics summary. Populated AFTER
+   *  Phase K completes by services/poseAnalysisApi when POSE_API_KEY
+   *  is set on the server. Null = pose API not configured, failed,
+   *  or returned no usable frames. UI hides the biomechanics card
+   *  when null — zero regression for non-configured installs. */
+  biomechanics?: import('../services/poseAnalysisApi').SwingBiomechanics | null;
 }
 
 export type AnalysisStatus =
@@ -280,6 +286,9 @@ interface CageState {
    *  by the live cage post-session pipeline (already in app/cage/summary.tsx)
    *  and by the upload analysis pipeline. */
   setSessionAnalysis: (sessionId: string, primary_issue: PrimaryIssue | null, drill_recommendation: DrillRecommendation | null) => void;
+  /** Pose-API biomechanics result. Fire-and-forget after Phase K, so
+   *  this commits independently from setSessionAnalysis. */
+  setSessionBiomechanics: (sessionId: string, biomechanics: import('../services/poseAnalysisApi').SwingBiomechanics | null) => void;
   /** Phase BZ-v1 — user annotation mutators. Each updates the named shot
    *  in-place; no-op if shot id not found. */
   updateShotTags: (sessionId: string, shotId: string, tags: {
@@ -638,6 +647,13 @@ export const useCageStore = create<CageState>()(
               ...session, primary_issue, drill_recommendation,
               analysis_status: 'ok' as AnalysisStatus, analysis_error: null,
             }
+          ),
+        })),
+
+      setSessionBiomechanics: (sessionId, biomechanics) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : { ...session, biomechanics }
           ),
         })),
 

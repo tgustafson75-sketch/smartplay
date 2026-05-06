@@ -431,6 +431,31 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       }).catch(() => {});
     }
 
+    // Pose-detection biomechanics — fire-and-forget AFTER Phase K so it
+    // never blocks the user reaching the swing detail screen. Reads the
+    // first usable swing's clipUri + duration, samples 5 keyframes via
+    // expo-video-thumbnails, hits /api/pose-analysis per frame, computes
+    // hip turn / shoulder coil / weight shift / posture / head drift.
+    // Stores result back to the session via setSessionBiomechanics.
+    // Failures silent (pose API has known reliability variance, env-var
+    // gated). Detail screen renders the Biomechanics card iff result is
+    // present — zero UX regression when API isn't configured.
+    const firstClipSwing = swings.find(s => s.clipUri);
+    if (firstClipSwing?.clipUri) {
+      const durationSec = session.upload?.duration_sec ?? 3;
+      void (async () => {
+        try {
+          const poseMod = await import('./poseAnalysisApi');
+          const biomech = await poseMod.analyzeSwingFromVideo(firstClipSwing.clipUri!, durationSec * 1000);
+          useCageStore.getState().setSessionBiomechanics(sessionId, biomech);
+          uploadLog('pose-analysis', { ok: !!biomech, frames: biomech?.frames.length ?? 0 }, sessionId);
+        } catch (poseErr) {
+          // Non-fatal — Phase K result already shown. Pose API is opt-in.
+          console.log('[pose] background analysis failed', poseErr);
+        }
+      })();
+    }
+
     return { primary_issue, drill_recommendation };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
