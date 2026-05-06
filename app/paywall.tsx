@@ -33,7 +33,7 @@ export default function PaywallScreen() {
   const FEATURES: { icon: IconName; label: string; sub: string }[] = [
     { icon: 'golf-outline',         label: `${caddieName} on every hole`, sub: 'Real-time caddie advice, club selection, and course strategy' },
     { icon: 'telescope-outline',    label: 'SmartVision',         sub: 'AI hole analysis from satellite and on-course images' },
-    { icon: 'videocam-outline',     label: 'Cage Mode',           sub: 'Structured range sessions with pattern detection' },
+    { icon: 'videocam-outline',     label: 'Cage Mode',           sub: 'Camera + auto-detect + Phase K analysis · drill picker baked in' },
     { icon: 'mic-outline',          label: 'Voice caddie',        sub: 'Hands-free operation during your round' },
     { icon: 'stats-chart-outline',  label: 'Round intelligence',  sub: 'Post-round recap, scoring trends, and ghost mode' },
   ];

@@ -42,6 +42,11 @@ const PERMISSIONS = [
     label: 'Location',
     why: 'For GPS yardages, hole detection, SmartFinder, and shot tracking. Always foreground-only — never tracked when the app is closed.',
   },
+  {
+    icon: 'images-outline' as const,
+    label: 'Photo Library',
+    why: 'For Space Scan and Tutorial Upload when you pick a photo or video instead of capturing one fresh.',
+  },
 ];
 
 export default function PermissionsScreen() {
@@ -114,7 +119,10 @@ export default function PermissionsScreen() {
         <View style={styles.list}>
           {PERMISSIONS.map((p, i) => {
             const granted = result
-              ? (i === 0 ? result.camera.granted : i === 1 ? result.microphone.granted : result.location.granted)
+              ? (i === 0 ? result.camera.granted
+                : i === 1 ? result.microphone.granted
+                : i === 2 ? result.location.granted
+                : result.mediaLibrary.granted)
               : undefined;
             return (
               <View key={p.label} style={styles.row}>
@@ -136,7 +144,7 @@ export default function PermissionsScreen() {
           onPress={handleAllowAll}
           disabled={busy}
           accessibilityRole="button"
-          accessibilityLabel="Allow camera, microphone, and location permissions"
+          accessibilityLabel="Allow camera, microphone, location, and photo library permissions"
         >
           <Text style={styles.allowBtnText}>{busy ? 'Asking…' : 'Allow all'}</Text>
         </TouchableOpacity>

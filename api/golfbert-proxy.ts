@@ -114,12 +114,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const url = auth.baseUrl + endpoint;
-  console.log('[golfbert]', action, '→', endpoint);
+  // Removed per-request success log — noisy at scale (every SmartVision
+  // hole switch hits this). Failures still log so debugging stays viable.
 
   try {
     const { ok, status, body } = await proxyFetch(url, auth.headers);
     if (!ok) {
-      console.error(`[golfbert] upstream ${status}:`, body);
+      console.error(`[golfbert] ${action} upstream ${status}:`, body);
       return res.status(status).json({ error: `Upstream error ${status}`, raw: body });
     }
     return res.status(200).json(body);

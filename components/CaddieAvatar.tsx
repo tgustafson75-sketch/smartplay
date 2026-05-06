@@ -111,24 +111,24 @@ const TANK_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
   kevin_dark:          require('../assets/avatars/tank_v2_lets_go_marine.png'), // intense Marine cadence
   kevin_nod:           require('../assets/avatars/tank_v2_here_we_go.png'),     // ready-to-roll affirmation
   kevin_idle:          require('../assets/avatars/tank_v2_here_we_go.png'),     // attentive idle
-  kevin_listening:     require('../assets/avatars/tank_expressive_thinking.png'),
-  kevin_explaining:    require('../assets/avatars/tank_expressive_pointing_at_you.png'),
-  kevin_focused:       require('../assets/avatars/tank_moods_intense.png'),
+  kevin_listening:     require('../assets/avatars/tank_expressive_thinking.png'), // v1 fallback (no v2 thinking pose)
+  kevin_explaining:    require('../assets/avatars/tank_v2_you_got_this.png'),   // mentor "you got this" gesture
+  kevin_focused:       require('../assets/avatars/tank_v2_lets_go_marine.png'), // shares with kevin_dark — intense
   kevin_determined:    require('../assets/avatars/tank_v2_lets_go.png'),        // "Lets Go" — full determination
-  kevin_pensive:       require('../assets/avatars/tank_expressive_contemplative.png'),
+  kevin_pensive:       require('../assets/avatars/tank_expressive_contemplative.png'), // v1 fallback (no v2 contemplative)
   kevin_inquisitive:   require('../assets/avatars/tank_v2_questioning.png'),    // explicitly questioning
   kevin_mentorship:    require('../assets/avatars/tank_v2_you_got_this.png'),   // mentor reassurance
-  kevin_humble:        require('../assets/avatars/tank_emotions_relief.png'),
+  kevin_humble:        require('../assets/avatars/tank_emotions_relief.png'),   // v1 fallback (no v2 relief)
   kevin_supportive:    require('../assets/avatars/tank_v2_encouraging.png'),    // "Encouraging" portrait
   kevin_happy:         require('../assets/avatars/tank_v2_happy.png'),
   kevin_enthusiastic:  require('../assets/avatars/tank_v2_excited.png'),
   kevin_surprised:     require('../assets/avatars/tank_v2_wtf.png'),            // "wtf" reads as surprised
   kevin_celebrating:   require('../assets/avatars/tank_v2_semper_fi.png'),      // Marine pride moment
-  kevin_confident:     require('../assets/avatars/tank_emotions_pride.png'),
+  kevin_confident:     require('../assets/avatars/tank_v2_semper_fi.png'),      // shares with celebrating — pride
   kevin_gameface:      require('../assets/avatars/tank_v2_lets_go.png'),        // shares with determined
   kevin_curious:       require('../assets/avatars/tank_v2_questioning.png'),    // shares with inquisitive
-  kevin_wincing:       require('../assets/avatars/tank_emotions_frustration.png'),
-  kevin_self_critical: require('../assets/avatars/tank_expressive_facepalm.png'),
+  kevin_wincing:       require('../assets/avatars/tank_emotions_frustration.png'), // v1 fallback (no v2 frustration)
+  kevin_self_critical: require('../assets/avatars/tank_expressive_facepalm.png'), // v1 fallback (no v2 facepalm)
 };
 
 type Persona = 'kevin' | 'serena' | 'harry' | 'tank';

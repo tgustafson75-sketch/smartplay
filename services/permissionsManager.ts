@@ -23,9 +23,10 @@
 import { Camera } from 'expo-camera';
 import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 import { useSettingsStore } from '../store/settingsStore';
 
-export type PermissionKind = 'camera' | 'microphone' | 'location';
+export type PermissionKind = 'camera' | 'microphone' | 'location' | 'mediaLibrary';
 
 export interface PermissionState {
   granted: boolean;
@@ -37,12 +38,13 @@ export interface CorePermissionsResult {
   camera: PermissionState;
   microphone: PermissionState;
   location: PermissionState;
+  /** Photo-library access. Used by Space Scan + Tutorial Upload when
+   *  the user picks an existing photo/video instead of capturing fresh.
+   *  Requested via expo-image-picker (already in the bundle) so we
+   *  don't need a separate expo-media-library install. */
+  mediaLibrary: PermissionState;
   allGranted: boolean;
 }
-
-// Note: photo-library access is intentionally NOT in the unified flow.
-// expo-image-picker handles its own permission at call-time, and the
-// camera-driven capture paths don't need a separate library grant.
 
 const REQUESTED_FLAG_KEY = 'core_permissions_requested';
 
@@ -59,16 +61,18 @@ function normalize(p: { granted?: boolean; canAskAgain?: boolean; status?: strin
  *  to call from any surface — used by tool screens to check whether
  *  they can use the camera/mic/etc. without re-asking. */
 export async function getCorePermissionsState(): Promise<CorePermissionsResult> {
-  const [cam, mic, loc] = await Promise.allSettled([
+  const [cam, mic, loc, ml] = await Promise.allSettled([
     Camera.getCameraPermissionsAsync(),
     Audio.getPermissionsAsync(),
     Location.getForegroundPermissionsAsync(),
+    ImagePicker.getMediaLibraryPermissionsAsync(),
   ]);
   const camera = normalize(cam.status === 'fulfilled' ? cam.value : null);
   const microphone = normalize(mic.status === 'fulfilled' ? mic.value : null);
   const location = normalize(loc.status === 'fulfilled' ? loc.value : null);
-  const allGranted = camera.granted && microphone.granted && location.granted;
-  return { camera, microphone, location, allGranted };
+  const mediaLibrary = normalize(ml.status === 'fulfilled' ? ml.value : null);
+  const allGranted = camera.granted && microphone.granted && location.granted && mediaLibrary.granted;
+  return { camera, microphone, location, mediaLibrary, allGranted };
 }
 
 /** One-time pre-flight: prompt for every permission we'll ever need.
@@ -81,6 +85,7 @@ export async function requestCorePermissions(): Promise<CorePermissionsResult> {
   let camera: PermissionState;
   let microphone: PermissionState;
   let location: PermissionState;
+  let mediaLibrary: PermissionState;
   try {
     camera = normalize(await Camera.requestCameraPermissionsAsync());
   } catch (e) { console.log('[perm] camera request failed', e); camera = normalize(null); }
@@ -90,14 +95,17 @@ export async function requestCorePermissions(): Promise<CorePermissionsResult> {
   try {
     location = normalize(await Location.requestForegroundPermissionsAsync());
   } catch (e) { console.log('[perm] location request failed', e); location = normalize(null); }
+  try {
+    mediaLibrary = normalize(await ImagePicker.requestMediaLibraryPermissionsAsync());
+  } catch (e) { console.log('[perm] media-library request failed', e); mediaLibrary = normalize(null); }
 
   // Mark "we've asked" regardless of grant outcome — partial denials are
   // a valid end state and we don't want to re-prompt on next launch.
   try { useSettingsStore.getState().markTutorialSeen(REQUESTED_FLAG_KEY); } catch {}
 
-  const allGranted = camera.granted && microphone.granted && location.granted;
-  console.log('[perm] core requested:', { camera: camera.status, microphone: microphone.status, location: location.status, allGranted });
-  return { camera, microphone, location, allGranted };
+  const allGranted = camera.granted && microphone.granted && location.granted && mediaLibrary.granted;
+  console.log('[perm] core requested:', { camera: camera.status, microphone: microphone.status, location: location.status, mediaLibrary: mediaLibrary.status, allGranted });
+  return { camera, microphone, location, mediaLibrary, allGranted };
 }
 
 /** Has the one-time pre-flight already been run? Drives the first-launch
