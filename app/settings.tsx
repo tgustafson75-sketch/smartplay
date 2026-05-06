@@ -10,6 +10,7 @@ import {
   Alert,
   Linking,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
@@ -758,6 +759,53 @@ export default function Settings() {
           </View>
         </View>
 
+        {/* Reset / Sign Out — until real auth lands, this is the
+            functional equivalent for testers who want to start fresh
+            (new persona, clear stored profile, fresh trial state). */}
+        <SectionHeader title="Reset" />
+        <View style={cardStyle}>
+          <TouchableOpacity
+            style={styles.resetRow}
+            accessibilityRole="button"
+            accessibilityLabel="Reset all app data and start fresh"
+            onPress={() => {
+              Alert.alert(
+                'Reset App Data',
+                'This clears your profile, round history, settings, cage sessions, and saved swings. Your installed app stays — you start fresh on next open. Continue?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Reset everything',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+                        const keys = await AsyncStorage.getAllKeys();
+                        await AsyncStorage.multiRemove(keys);
+                        Alert.alert(
+                          'Reset complete',
+                          'Force-close the app (swipe out of recents) and reopen to start fresh.',
+                          [{ text: 'OK' }],
+                        );
+                      } catch (e) {
+                        Alert.alert('Reset failed', e instanceof Error ? e.message : String(e));
+                      }
+                    },
+                  },
+                ],
+              );
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: '#f87171' }]}>Reset / Sign Out</Text>
+              <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                Clear all stored data — profile, rounds, settings, swings. Acts as a sign-out for tester rotations until real auth ships.
+              </Text>
+            </View>
+            <Ionicons name="trash-outline" size={20} color="#f87171" />
+          </TouchableOpacity>
+        </View>
+
         <View style={{ height: 40 }} />
 
       </ScrollView>
@@ -926,6 +974,10 @@ const styles = StyleSheet.create({
     borderWidth: 1, alignItems: 'center', justifyContent: 'center',
   },
   intensityStepText: { fontSize: 18, fontWeight: '900' },
+  resetRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 12,
+  },
   rowText: {
     flex: 1,
     paddingRight: 12,

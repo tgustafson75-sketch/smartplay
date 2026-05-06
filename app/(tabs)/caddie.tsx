@@ -1481,7 +1481,7 @@ export default function CaddieTab() {
                 }}
               >
                 <CaddieAvatar
-                  key={`${W}x${H}`}
+                  key={`${W}x${H}-${insets.top}`}
                   gender={voiceGender === 'female' ? 'female' : 'male'}
                   persona={caddiePersonality}
                   isOnCourse={isRoundActive}
@@ -1523,7 +1523,7 @@ export default function CaddieTab() {
               }}
             >
               <CaddieAvatar
-                key={`${W}x${H}`}
+                key={`${W}x${H}-${insets.top}`}
                 gender={voiceGender === 'female' ? 'female' : 'male'}
                 persona={caddiePersonality}
                 isOnCourse={isRoundActive}
@@ -1642,10 +1642,21 @@ export default function CaddieTab() {
         // ║  frame. See CLAUDE.md "Locked elements".                 ║
         // ╚══════════════════════════════════════════════════════════╝
         <View
-          style={{ position: 'absolute', top: insets.top + 56, left: 0, width: W, height: avatarFrameHeight }}
+          // Z Fold reconfigure fix (3rd attempt — this one's the real one):
+          // - width: '100%' instead of literal W so the container width is
+          //   layout-driven and updates atomically with the parent on
+          //   fold transitions (was racing against safe-area insets).
+          // - right: 0 paired with left: 0 enforces full-width positioning
+          //   without needing the literal value at all.
+          // - key includes insets.top so the inner subtree fully remounts
+          //   when the safe area changes (which it does on fold open/close
+          //   independently of W/H — that race is what produced the
+          //   "half-face Kevin" symptom Tim flagged).
+          style={{ position: 'absolute', top: insets.top + 56, left: 0, right: 0, height: avatarFrameHeight }}
+          key={`avatar-frame-${W}x${H}-${insets.top}`}
         >
           <CaddieAvatar
-            key={`${W}x${H}`}
+            key={`${W}x${H}-${insets.top}`}
             gender={voiceGender === 'female' ? 'female' : 'male'}
             persona={caddiePersonality}
             isOnCourse={isRoundActive}
