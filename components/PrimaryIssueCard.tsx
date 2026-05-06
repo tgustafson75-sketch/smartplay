@@ -14,7 +14,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Linking, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Linking, StyleSheet, Image, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import type { PrimaryIssueEntry } from '../constants/primaryIssueCatalog';
@@ -32,6 +32,7 @@ interface Props {
 }
 
 export default function PrimaryIssueCard({ entry, isPersonalized, onTryDrill, defaultExpanded = false }: Props) {
+  const { width: screenW } = useWindowDimensions();
   const { colors } = useTheme();
   const video = getInstructorVideo(entry.category);
   const Illustration = entry.Illustration;
@@ -80,7 +81,20 @@ export default function PrimaryIssueCard({ entry, isPersonalized, onTryDrill, de
       {expanded ? (
         <>
           <View style={styles.illoWrap}>
-            <Illustration size={220} okColor={colors.accent} warnColor="#ef4444" />
+            {entry.image ? (
+              // Tim's authored photo set — one per fault category. Falls back
+              // to the vector Illustration for any category without a photo.
+              // useWindowDimensions read here so the photo reflows cleanly
+              // on Z Fold open/close (cap width to keep aspect predictable).
+              <Image
+                source={entry.image}
+                style={[styles.faultImage, { width: Math.min(screenW - 64, 360) }]}
+                resizeMode="contain"
+                accessibilityLabel={`${entry.title} fault illustration`}
+              />
+            ) : (
+              <Illustration size={220} okColor={colors.accent} warnColor="#ef4444" />
+            )}
           </View>
 
           <Text style={[styles.body, { color: colors.text_primary }]}>{entry.description}</Text>
@@ -146,6 +160,11 @@ const styles = StyleSheet.create({
   illoWrap: {
     alignItems: 'center',
     marginVertical: 8,
+  },
+  faultImage: {
+    height: undefined,
+    aspectRatio: 1,
+    borderRadius: 12,
   },
   body: {
     fontSize: 13,

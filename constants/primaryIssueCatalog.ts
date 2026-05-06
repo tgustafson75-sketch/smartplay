@@ -13,6 +13,7 @@
  */
 
 import type { ComponentType } from 'react';
+import type { ImageSourcePropType } from 'react-native';
 import SwingPathIllustration from '../components/illustrations/SwingPathIllustration';
 import WeightTransferIllustration from '../components/illustrations/WeightTransferIllustration';
 import TempoIllustration from '../components/illustrations/TempoIllustration';
@@ -25,7 +26,12 @@ export interface PrimaryIssueEntry {
   category: IssueCategory;
   title: string;
   description: string;
+  /** Vector illustration component — fallback when no photo is supplied. */
   Illustration: ComponentType<{ size?: number; okColor?: string; warnColor?: string }>;
+  /** Optional photo asset — when present, PrimaryIssueCard renders this
+   *  instead of the vector Illustration. Tim authored a photo set for
+   *  each fault category so the cards land more concretely. */
+  image?: ImageSourcePropType;
   /** Optional related drill ID — links to the Drill Library if the user
    *  wants to practice the fault. Set to null when no curated drill maps. */
   relatedDrillId?: string | null;
@@ -43,6 +49,7 @@ export const PRIMARY_ISSUE_CATALOG: readonly PrimaryIssueEntry[] = [
     title: 'Swing Path',
     description: 'How the club moves through the ball — inside-out, on-plane, or outside-in. Path determines start direction and curve.',
     Illustration: SwingPathIllustration,
+    image: require('../assets/illustrations/faults/swing_path.png'),
     relatedDrillId: null,
     // Strings the Phase K classifier emits for path-related issues. Add
     // more synonyms as the classifier vocabulary settles.
@@ -53,6 +60,7 @@ export const PRIMARY_ISSUE_CATALOG: readonly PrimaryIssueEntry[] = [
     title: 'Weight Transfer',
     description: 'Pressure shift from trail foot to lead foot through impact. Hanging back costs compression and consistency.',
     Illustration: WeightTransferIllustration,
+    image: require('../assets/illustrations/faults/weight_transfer.png'),
     relatedDrillId: null,
     matchesDetectedIssues: ['weight_back', 'hanging_back', 'reverse_pivot', 'weight_transfer'] as const,
   },
@@ -61,6 +69,7 @@ export const PRIMARY_ISSUE_CATALOG: readonly PrimaryIssueEntry[] = [
     title: 'Tempo',
     description: 'A 3-to-1 backswing-to-downswing ratio is the tour-pro standard. Rushed transitions cost timing and contact.',
     Illustration: TempoIllustration,
+    image: require('../assets/illustrations/faults/tempo.png'),
     relatedDrillId: null,
     matchesDetectedIssues: ['tempo_rushed', 'rushed_transition', 'tempo'] as const,
   },
@@ -69,6 +78,7 @@ export const PRIMARY_ISSUE_CATALOG: readonly PrimaryIssueEntry[] = [
     title: 'Ball Position',
     description: 'Forward for driver, centre for mid-irons, slightly back for wedges. Position shifts angle of attack.',
     Illustration: BallPositionIllustration,
+    image: require('../assets/illustrations/faults/ball_position.png'),
     relatedDrillId: null,
     matchesDetectedIssues: ['ball_position', 'ball_too_far_back', 'ball_too_far_forward'] as const,
   },
@@ -77,6 +87,9 @@ export const PRIMARY_ISSUE_CATALOG: readonly PrimaryIssueEntry[] = [
     title: 'Grip',
     description: 'Neutral V-shape pointing toward the trail shoulder is the foundation. Strong or weak grips bias face control.',
     Illustration: GripIllustration,
+    // Tim's photo set didn't include a grip image — vector Illustration
+    // remains the fallback. Drop a `grip.png` in assets/illustrations/faults/
+    // to upgrade.
     relatedDrillId: null,
     matchesDetectedIssues: ['grip_strong', 'grip_weak', 'grip'] as const,
   },
@@ -85,6 +98,7 @@ export const PRIMARY_ISSUE_CATALOG: readonly PrimaryIssueEntry[] = [
     title: 'Posture',
     description: 'Athletic forward tilt from the hips, soft knees, head over the ball. Slumped or upright posture limits rotation.',
     Illustration: PostureIllustration,
+    image: require('../assets/illustrations/faults/posture.png'),
     relatedDrillId: null,
     matchesDetectedIssues: ['posture_rounded', 'posture_upright', 'posture'] as const,
   },

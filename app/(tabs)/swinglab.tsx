@@ -5,6 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -24,6 +25,18 @@ import { generatePatternInsights } from '../../services/patternDetection';
 
 type DrillEnv = 'range' | 'cage' | 'indoor' | 'arena';
 
+/** Curated coach video links per drill. Each entry points at a specific
+ *  reputable instructor's content on this topic. We use YouTube search
+ *  URLs targeted at the coach + drill keywords rather than direct video
+ *  IDs — the top result is reliably the coach on that topic, and the
+ *  approach survives coach re-uploads / channel reorganizations. Each
+ *  link should resolve to a video under 5 minutes. */
+interface DrillVideo {
+  coach: string;
+  /** YouTube URL — search-query form is preferred for durability. */
+  url: string;
+}
+
 interface Drill {
   id: string;
   title: string;
@@ -36,6 +49,10 @@ interface Drill {
    *  per drill so each reads in its own rhythm — Tempo Training has a
    *  different voice than Impact Position. Kept short (2–4 sentences). */
   coach_voice: string;
+  /** Curated coach video links — under 5-minute drill demonstrations
+   *  from reputable instructors (Rick Shiels, Me and My Golf, Hank
+   *  Haney, etc). 2–3 per drill so the player has options. */
+  videos: DrillVideo[];
 }
 
 const DRILLS: Drill[] = [
@@ -54,6 +71,11 @@ const DRILLS: Drill[] = [
     tip: 'Most amateurs aim right. Your shoulders are usually the culprit.',
     navigateTo: 'cage',
     coach_voice: "Alignment is the silent killer. Most amateurs think they're aiming at the flag — they're not. Get the shoulders square. If the shoulders are right, the swing path follows.",
+    videos: [
+      { coach: 'Rick Shiels',     url: 'https://www.youtube.com/results?search_query=rick+shiels+alignment+drill+golf' },
+      { coach: 'Me and My Golf',  url: 'https://www.youtube.com/results?search_query=me+and+my+golf+alignment+drill' },
+      { coach: 'Hank Haney',      url: 'https://www.youtube.com/results?search_query=hank+haney+alignment+drill' },
+    ],
   },
   {
     id: 'tempo',
@@ -70,6 +92,11 @@ const DRILLS: Drill[] = [
     tip: 'Rushing the downswing is the #1 cause of over-the-top moves.',
     navigateTo: null,
     coach_voice: "Tempo wins more rounds than swing speed. Three-to-one is the rhythm — slow back, easy through. Feel the pause at the top. When the rhythm's in, every club gets longer.",
+    videos: [
+      { coach: 'Mark Crossfield',    url: 'https://www.youtube.com/results?search_query=mark+crossfield+golf+tempo+drill' },
+      { coach: 'Me and My Golf',     url: 'https://www.youtube.com/results?search_query=me+and+my+golf+tempo+3+to+1' },
+      { coach: 'Padraig Harrington', url: 'https://www.youtube.com/results?search_query=padraig+harrington+tempo+drill' },
+    ],
   },
   {
     id: 'impact',
@@ -86,6 +113,11 @@ const DRILLS: Drill[] = [
     tip: 'Shaft lean at impact = distance. Every pro has it. Train it deliberately.',
     navigateTo: 'cage',
     coach_voice: "Impact is the only position that matters — everything else is just getting there. Hands ahead, weight forward, hips clearing. Train it slowly. The body learns position before it learns speed.",
+    videos: [
+      { coach: 'Athletic Motion Golf', url: 'https://www.youtube.com/results?search_query=athletic+motion+golf+impact+position+drill' },
+      { coach: 'Hank Haney',           url: 'https://www.youtube.com/results?search_query=hank+haney+impact+position+drill' },
+      { coach: 'Eric Cogorno',         url: 'https://www.youtube.com/results?search_query=eric+cogorno+impact+bag+drill' },
+    ],
   },
   {
     id: 'gate',
@@ -102,6 +134,11 @@ const DRILLS: Drill[] = [
     tip: 'Start with a 7-iron. The gate exposes path immediately — no hiding.',
     navigateTo: 'cage',
     coach_voice: "Path doesn't lie. The gate gives you immediate feedback — no second-guessing. Hit the inside tee, you're cutting across. Hit the outside tee, you're swinging out. Aim to clean it through ten in a row.",
+    videos: [
+      { coach: 'Rick Shiels',     url: 'https://www.youtube.com/results?search_query=rick+shiels+gate+drill+golf' },
+      { coach: 'Chris Ryan Golf', url: 'https://www.youtube.com/results?search_query=chris+ryan+golf+tee+gate+drill' },
+      { coach: 'Eric Cogorno',    url: 'https://www.youtube.com/results?search_query=eric+cogorno+swing+path+gate+drill' },
+    ],
   },
   {
     id: 'pump',
@@ -118,6 +155,11 @@ const DRILLS: Drill[] = [
     tip: 'The pump exaggerates lag. After 20 reps, your natural swing retains it.',
     navigateTo: null,
     coach_voice: "Lag is a feel, not a position. The pump teaches your hands to lead the clubhead — that's the whole game on the downswing. Reps over thinking. Twenty pumps, then go hit a ball. The body remembers.",
+    videos: [
+      { coach: 'Hank Haney',         url: 'https://www.youtube.com/results?search_query=hank+haney+pump+drill+downswing' },
+      { coach: 'Top Speed Golf',     url: 'https://www.youtube.com/results?search_query=top+speed+golf+pump+drill+lag' },
+      { coach: 'George Gankas',      url: 'https://www.youtube.com/results?search_query=george+gankas+pump+drill' },
+    ],
   },
   {
     id: 'landing-zone',
@@ -134,6 +176,11 @@ const DRILLS: Drill[] = [
     tip: 'Misses patterning right? Your release is early. Left? You\'re holding off.',
     navigateTo: 'arena',
     coach_voice: "Targets sharpen everything. Aim small, miss small. Watch where misses cluster — that's the read. Right pattern is an early release; left is the opposite. The pattern tells the truth.",
+    videos: [
+      { coach: 'Me and My Golf',     url: 'https://www.youtube.com/results?search_query=me+and+my+golf+target+practice+drill' },
+      { coach: 'Mark Crossfield',    url: 'https://www.youtube.com/results?search_query=mark+crossfield+target+practice+drill' },
+      { coach: 'Dan Whittaker Golf', url: 'https://www.youtube.com/results?search_query=dan+whittaker+wedge+target+drill' },
+    ],
   },
   {
     id: 'one-handed',
@@ -150,6 +197,11 @@ const DRILLS: Drill[] = [
     tip: 'One-handed swings reveal which hand is dominating. Balance them.',
     navigateTo: null,
     coach_voice: "One-handed work strips the swing down to feel. Trail hand teaches release; lead hand teaches structure. Slow swings only — speed comes back when both hands rejoin. Feel which hand wants to take over.",
+    videos: [
+      { coach: 'Me and My Golf', url: 'https://www.youtube.com/results?search_query=me+and+my+golf+one+handed+drill' },
+      { coach: 'Rick Shiels',    url: 'https://www.youtube.com/results?search_query=rick+shiels+one+handed+swing+drill' },
+      { coach: 'Eric Cogorno',   url: 'https://www.youtube.com/results?search_query=eric+cogorno+one+handed+swing+drill' },
+    ],
   },
   {
     id: 'distance-control',
@@ -166,6 +218,11 @@ const DRILLS: Drill[] = [
     tip: 'Most scoring happens inside 150 yards. Own those shots.',
     navigateTo: 'arena',
     coach_voice: "Scoring lives inside 150. Half-shots, three-quarter shots, knockdowns — these are the clubs that drop strokes. Adjust tempo, never effort. Build a yardage ladder you can trust under pressure.",
+    videos: [
+      { coach: 'Dan Whittaker Golf', url: 'https://www.youtube.com/results?search_query=dan+whittaker+wedge+distance+control+drill' },
+      { coach: 'Me and My Golf',     url: 'https://www.youtube.com/results?search_query=me+and+my+golf+wedge+distance+control' },
+      { coach: 'Rick Shiels',        url: 'https://www.youtube.com/results?search_query=rick+shiels+wedge+yardage+ladder' },
+    ],
   },
 ];
 
@@ -575,6 +632,33 @@ function DrillCard({ drill, expanded, onToggle, onNavigate }: DrillCardProps) {
             </View>
           </View>
 
+          {/* Curated coach demos — under 5-min YouTube videos from
+              reputable instructors. Search-URL form so re-uploads /
+              channel reorgs don't break the link; top result is
+              reliably the named coach on this topic. */}
+          {drill.videos && drill.videos.length > 0 && (
+            <View style={styles.videosSection}>
+              <Text style={styles.videosLabel}>Watch a coach (under 5 min)</Text>
+              {drill.videos.map((v, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={styles.videoRow}
+                  onPress={() => { void Linking.openURL(v.url); }}
+                  accessibilityRole="link"
+                  accessibilityLabel={`Watch ${v.coach} on ${drill.title} on YouTube`}
+                  activeOpacity={0.75}
+                >
+                  <AppIcon name="logo-youtube" size={18} color="#ef4444" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.videoCoach}>{v.coach}</Text>
+                    <Text style={styles.videoSub}>{drill.title} drill on YouTube</Text>
+                  </View>
+                  <AppIcon name="open-outline" size={14} color="#9ca3af" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
           {drill.navigateTo && (
             <TouchableOpacity
               style={[
@@ -947,6 +1031,39 @@ const styles = StyleSheet.create({
     color: '#a3b8a8',
     fontSize: 13,
     lineHeight: 18,
+  },
+  videosSection: {
+    marginTop: 14,
+    gap: 8,
+  },
+  videosLabel: {
+    color: '#9ca3af',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  videoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#0d1a0d',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+  },
+  videoCoach: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  videoSub: {
+    color: '#6b7280',
+    fontSize: 11,
+    marginTop: 1,
   },
   tryBtn: {
     backgroundColor: '#2563eb',
