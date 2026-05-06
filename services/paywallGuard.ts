@@ -14,6 +14,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Sentry from '@sentry/react-native';
 import { useRoundStore } from '../store/roundStore';
+import { SUBSCRIPTIONS_ENABLED } from './featureAccess';
 
 const KEY = '@smartplay/paywall_deferred';
 
@@ -48,6 +49,13 @@ export async function triggerPaywall(
   reason: string,
   navigate: () => void,
 ): Promise<boolean> {
+  // Subscriptions kill-switch (featureAccess.SUBSCRIPTIONS_ENABLED): when
+  // disabled, no paywall ever fires from this entry point. Caller behavior
+  // remains unchanged — they ask, we say "shown" but do nothing visible.
+  if (!SUBSCRIPTIONS_ENABLED) {
+    breadcrumb('paywall_suppressed_subscriptions_disabled', { reason });
+    return true;
+  }
   if (selectIsRoundActive()) {
     const payload: DeferredPaywall = { reason, ts: Date.now() };
     try {
@@ -64,6 +72,13 @@ export async function triggerPaywall(
 
 /** Read + clear any pending deferred paywall flag. */
 export async function consumeDeferredPaywall(): Promise<DeferredPaywall | null> {
+  // Same kill-switch — never resume a deferred paywall while subscriptions
+  // are disabled. Also clear any stale flag so a future re-enable doesn't
+  // surface an ancient deferral.
+  if (!SUBSCRIPTIONS_ENABLED) {
+    try { await AsyncStorage.removeItem(KEY); } catch {}
+    return null;
+  }
   try {
     const raw = await AsyncStorage.getItem(KEY);
     if (!raw) return null;
@@ -78,6 +93,10 @@ export async function consumeDeferredPaywall(): Promise<DeferredPaywall | null> 
 
 /** Force-show the paywall, bypassing the round-active guard. Debug-only. */
 export function forcePaywall(navigate: () => void): void {
+  if (!SUBSCRIPTIONS_ENABLED) {
+    breadcrumb('paywall_forced_suppressed', { source: 'debug' });
+    return;
+  }
   breadcrumb('paywall_forced', { source: 'debug' });
   navigate();
 }

@@ -9,6 +9,7 @@ import { SmartVisionProvider } from '../contexts/SmartVisionContext';
 import { KevinPresenceProvider } from '../contexts/KevinPresenceContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
+import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { useSettingsStore, type Persona } from '../store/settingsStore';
 import { useRoundStore } from '../store/roundStore';
 import { initListeningSession } from '../services/listeningSession';
@@ -87,9 +88,20 @@ function AppNavigator() {
   // Owner override: if the user's email (or EXPO_PUBLIC_OWNER_EMAIL env)
   // matches the owner allow-list, grant lifetime instead of starting a
   // trial. Lifetime accounts skip the expire check entirely.
+  //
+  // Subscriptions kill-switch (services/featureAccess.SUBSCRIPTIONS_ENABLED):
+  // when false, the entire trial lifecycle is short-circuited — every user
+  // is granted lifetime so no paywall, no expire, no countdown ever fires.
+  // Flip back to true once a real billing provider is wired up.
   useEffect(() => {
     const profile = usePlayerProfileStore.getState();
     const { first_opened_at, trial_started_at, subscription_status, initTrial, setSubscriptionStatus, grantLifetime } = profile;
+
+    // 0) Global kill-switch — make everyone lifetime, skip everything else.
+    if (!SUBSCRIPTIONS_ENABLED) {
+      if (subscription_status !== 'lifetime') grantLifetime();
+      return;
+    }
 
     // 1) Lifetime override wins over everything. Re-asserts every boot
     // so a corrupted/manually-edited status snaps back. Honors both the
