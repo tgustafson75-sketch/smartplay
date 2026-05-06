@@ -74,7 +74,7 @@ import AppIcon, { type IconName } from '../../components/AppIcon';
 import * as ImagePicker from 'expo-image-picker';
 import VocabBanner from '../../components/VocabBanner';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
-import { canAccess, trialDaysLeft } from '../../services/featureAccess';
+import { canAccess, trialDaysLeft, SUBSCRIPTIONS_ENABLED } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
 import { subscribeBattery } from '../../services/batteryMonitor';
 import { noteAudioActivity } from '../../services/audioLifecycle';
@@ -1825,13 +1825,12 @@ export default function CaddieTab() {
           levels. Score lives exclusively inside the universal
           green-arrow dropdown. */}
 
-      {/* TRIAL INDICATOR — only in final 3 days to avoid persistent clutter */}
-      {/* Phase BS-followup Issue 2 — top bumped 52 → 78 so the pill clears
-           the topnav row (back chevron + Tools ⋯) at insets.top + 38 with
-           ~28px icon height ending at ~insets.top + 66. Previous 52 was
-           literally inside the topnav band; the 8% green fill was hiding
-           the visual collision most of the time. */}
-      {subscription_status === 'trial' && daysLeft !== null && daysLeft <= 3 && (
+      {/* TRIAL INDICATOR — only in final 3 days to avoid persistent clutter.
+          Hard-gated on SUBSCRIPTIONS_ENABLED so even if a stored profile
+          still has subscription_status==='trial' (from a prior bundle),
+          neither banner ever renders until billing infra is wired.
+          Re-enable by flipping SUBSCRIPTIONS_ENABLED back to true. */}
+      {SUBSCRIPTIONS_ENABLED && subscription_status === 'trial' && daysLeft !== null && daysLeft <= 3 && (
         <View style={[styles.trialBanner, { top: insets.top + 78 }]}>
           <Text style={styles.trialBannerText}>
             {daysLeft > 0
@@ -1840,7 +1839,7 @@ export default function CaddieTab() {
           </Text>
         </View>
       )}
-      {subscription_status === 'expired' && (
+      {SUBSCRIPTIONS_ENABLED && subscription_status === 'expired' && (
         <TouchableOpacity
           style={[styles.trialBanner, styles.trialBannerExpired, { top: insets.top + 78 }]}
           onPress={() => triggerPaywall('trial_expired_banner', () => router.push('/paywall' as never))}

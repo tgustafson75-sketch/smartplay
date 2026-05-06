@@ -19,6 +19,7 @@ import { track } from '../services/analytics';
 import { PRICING, PAYWALL_HEADLINE, PAYWALL_SUBHEAD } from '../lib/pricing';
 import { safeBack } from '../services/safeBack';
 import { getCaddieName } from '../lib/persona';
+import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
@@ -27,6 +28,7 @@ export default function PaywallScreen() {
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
   const { subscription_status, setSubscriptionStatus: _setSubscriptionStatus } = usePlayerProfileStore();
+
   const caddieName = getCaddieName(caddiePersonality);
   const FEATURES: { icon: IconName; label: string; sub: string }[] = [
     { icon: 'golf-outline',         label: `${caddieName} on every hole`, sub: 'Real-time caddie advice, club selection, and course strategy' },
@@ -37,6 +39,14 @@ export default function PaywallScreen() {
   ];
 
   useEffect(() => {
+    // Subscriptions kill-switch: if anyone navigates here directly while
+    // disabled (e.g. via subscription-debug or a stale route), bounce
+    // immediately so the paywall surface never renders. Re-enable by
+    // flipping SUBSCRIPTIONS_ENABLED in services/featureAccess.ts.
+    if (!SUBSCRIPTIONS_ENABLED) {
+      safeBack();
+      return;
+    }
     Animated.timing(fadeIn, { toValue: 1, duration: 500, useNativeDriver: true }).start();
     track('paywall_viewed', { subscription_status });
 
@@ -52,6 +62,10 @@ export default function PaywallScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Hard-stop render when disabled — covers the moment between mount and
+  // the safeBack() above unwinding the route.
+  if (!SUBSCRIPTIONS_ENABLED) return null;
 
   const handleSubscribe = () => {
     // Stripe integration wired in Wrap Layer 2B
