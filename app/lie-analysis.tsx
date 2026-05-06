@@ -1,5 +1,5 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Linking } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Linking, AppState } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -37,6 +37,17 @@ export default function LieAnalysisScreen() {
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView | null>(null);
+
+  // AppState listener — when the user backgrounds to grant permission in
+  // Settings then returns, refresh the perm state so the UI unblocks
+  // automatically. Without this, returning from Settings leaves the
+  // "Allow Camera" screen stale until next forced re-render.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') { void requestCameraPermission(); }
+    });
+    return () => sub.remove();
+  }, [requestCameraPermission]);
 
   const [phase, setPhase] = useState<Phase>('camera');
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -166,8 +177,23 @@ export default function LieAnalysisScreen() {
     speakAnalysis(analysis);
   }, [analysis, speaking, speakAnalysis]);
 
-  // Permission gate
-  if (!cameraPermission) return <View style={styles.container} />;
+  // Permission gate — loading state ALWAYS renders a back affordance so
+  // a stalled OS dialog can never strand the user (Tim's "stuck on
+  // Allow Camera" complaint).
+  if (!cameraPermission) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <CourseDetailBanner />
+        <View style={styles.permBox}>
+          <ActivityIndicator color="#00C896" />
+          <Text style={[styles.permText, { marginTop: 12 }]}>Checking camera permission…</Text>
+          <TouchableOpacity style={styles.permLink} onPress={() => safeBack()}>
+            <Text style={styles.permLinkText}>← Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
   if (!cameraPermission.granted) {
     return (
       <SafeAreaView style={styles.container}>

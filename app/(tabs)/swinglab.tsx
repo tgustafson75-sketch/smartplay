@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
-import CageSessionOverlay from '../../components/CageSessionOverlay';
+import CageSessionOverlay, { type CageDrillContext } from '../../components/CageSessionOverlay';
 import PrimaryIssueCard from '../../components/PrimaryIssueCard';
 import { getRankedPrimaryIssues } from '../../services/primaryIssueRanker';
 import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
@@ -259,8 +259,19 @@ export default function SwingLab() {
   // Phase 111-followup — Common Faults section collapsible per Tim
   // feedback. Default false so the tab opens compact; user expands to
   // browse faults.
-  const [faultsOpen, setFaultsOpen] = useState(false);
+  // Common Faults defaults open — Tim wants it as the prominent card on
+  // tab visit. The first card inside is the caddie's read on the player's
+  // most likely fault (getRankedPrimaryIssues reorders by detected
+  // history); that ranked-first card auto-expands inside the section so
+  // the player lands on actionable content with no taps required.
+  const [faultsOpen, setFaultsOpen] = useState(true);
   const [cageActive, setCageActive] = useState(false);
+  // Optional drill context for the unified Cage Mode session. null =
+  // free practice (current default behavior). Set by the inline drill
+  // picker OR by a Drill card's "Open in Cage Mode" CTA.
+  const [cageDrillCtx, setCageDrillCtx] = useState<CageDrillContext | null>(null);
+  // Inline drill picker open/closed (renders below the "Cage Mode" tile).
+  const [cagePickerOpen, setCagePickerOpen] = useState(false);
 
   // Phase J.5 deep-link — when arriving with ?drill_id=X (from DrillCard's
   // "Open Drill" CTA on the Cage post-session review), auto-expand that
@@ -312,12 +323,17 @@ export default function SwingLab() {
     router.push('/cage-debug' as never);
   };
 
-  // Cage mode: replace entire screen with the overlay
+  // Unified Cage Mode: single surface that hosts both free-practice
+  // sessions AND drill-guided sessions. cageDrillCtx (set by the inline
+  // picker or a Drill card's CTA) drives whether the drill-info strip
+  // renders inside CageSessionOverlay; null = free practice.
   if (cageActive) {
     return (
       <CageSessionOverlay
+        drill={cageDrillCtx}
         onComplete={(sessionId) => {
           setCageActive(false);
+          setCageDrillCtx(null);
           // Phase BS-followup Issue G — route to the swing detail screen
           // (which is keyed by sessionHistory[].id and renders the BR/U1
           // analysis pipeline) instead of /cage-debug. Fall back to
@@ -329,10 +345,21 @@ export default function SwingLab() {
             router.push('/swinglab/library' as never);
           }
         }}
-        onCancel={() => setCageActive(false)}
+        onCancel={() => { setCageActive(false); setCageDrillCtx(null); }}
       />
     );
   }
+
+  // Helper — open Cage Mode for free practice (no drill context).
+  const openCageFree = () => { setCageDrillCtx(null); setCageActive(true); setCagePickerOpen(false); };
+  // Helper — open Cage Mode for a specific drill (info strip renders).
+  const openCageWithDrill = (d: typeof DRILLS[number]) => {
+    setCageDrillCtx({ id: d.id, title: d.title, steps: d.steps, tip: d.tip });
+    setCageActive(true);
+    setCagePickerOpen(false);
+  };
+  // Cage-applicable drills only — the ones whose environments include 'cage'.
+  const cageDrills = DRILLS.filter(d => d.environments.includes('cage'));
 
   const visibleDrills =
     activeEnv === 'all'
@@ -364,6 +391,38 @@ export default function SwingLab() {
              default at L2/L3/L4. Hidden at L1. Dismissible per-session. */}
         <KevinCoachBox body={coachIntroBody} accent="coach" />
 
+        {/* Common Faults — promoted to top of tab per Tim. The ranked-first
+            card auto-expands so the user lands on the caddie's read of
+            their most likely fault. Section header still collapsible.
+            Phase 111 + photo-zoom + caddie-driven ranking. */}
+        <TouchableOpacity
+          style={styles.drillsCardHeader}
+          onPress={() => setFaultsOpen(o => !o)}
+          activeOpacity={0.85}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.drillsCardTitle}>Common Faults</Text>
+            <Text style={styles.drillsCardSub}>Caddie&apos;s read on top · tap a photo to zoom</Text>
+          </View>
+          <AppIcon name={faultsOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#00C896" />
+        </TouchableOpacity>
+        {faultsOpen && (() => {
+          const ranked = getRankedPrimaryIssues();
+          // First card gets the personalization badge if the catalog was
+          // re-ordered (i.e. the first entry is NOT the static default
+          // first entry, which is swing_path).
+          const personalizedFirst = ranked.length > 0 && ranked[0].category !== 'swing_path';
+          return ranked.map((entry, idx) => (
+            <PrimaryIssueCard
+              key={entry.category}
+              entry={entry}
+              isPersonalized={personalizedFirst && idx === 0}
+              defaultExpanded={idx === 0}
+              onTryDrill={(drillId) => router.push(`/swinglab?drill=${drillId}` as never)}
+            />
+          ));
+        })()}
+
         {/* Practice Tools — single collapsible card holds the 5 actions
             (Cage Session / Upload / Library / Cage Mode / Arena). Default
             collapsed so SwingLab reads as a clean stack on small screens.
@@ -382,12 +441,46 @@ export default function SwingLab() {
 
         {toolsOpen && (
           <View style={styles.toolsList}>
+            {/* Unified Cage Mode — single surface that does camera +
+                analysis + drill-guided sessions. Replaced 3 prior entries
+                ("Start Cage Session", "Cage Drill", "Cage Mode") that all
+                opened similar screens with overlapping purpose. Tap to
+                expand the inline drill picker — pick "Free Practice" for
+                the original auto-detect session, or any cage drill to run
+                that drill inside the same camera surface.
+                Legacy routes (/cage, /swinglab/cage-drill) still resolve
+                via deep link for backwards compatibility. */}
             <ToolRow
               icon="videocam"
-              label="Start Cage Session"
-              sub="Record · auto-detect · review"
-              onPress={() => setCageActive(true)}
+              label="Cage Mode"
+              sub="Camera · auto-detect · analysis · drills"
+              onPress={() => setCagePickerOpen(o => !o)}
             />
+            {cagePickerOpen && (
+              <View style={styles.cagePickerWrap}>
+                <TouchableOpacity
+                  style={[styles.cagePickerChip, styles.cagePickerChipPrimary]}
+                  onPress={openCageFree}
+                  accessibilityRole="button"
+                  accessibilityLabel="Start free cage practice — auto-detect every swing"
+                >
+                  <AppIcon name="play-circle-outline" size={16} color="#0d1a0d" />
+                  <Text style={styles.cagePickerChipPrimaryText}>Free Practice</Text>
+                </TouchableOpacity>
+                {cageDrills.map(d => (
+                  <TouchableOpacity
+                    key={d.id}
+                    style={styles.cagePickerChip}
+                    onPress={() => openCageWithDrill(d)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Run ${d.title} drill in Cage Mode`}
+                  >
+                    <AppIcon name="radio-button-on-outline" size={14} color="#00C896" />
+                    <Text style={styles.cagePickerChipText}>{d.title}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
             {/* Phase BR Component 14 — Upload Swing entry was the source of
                 empirical failures (users uploading instructional videos to
                 a biomechanics pipeline). Redirected to the tutorial flow.
@@ -407,12 +500,6 @@ export default function SwingLab() {
               onPress={() => router.push('/swinglab/space-scan' as never)}
             />
             <ToolRow
-              icon="radio-button-on-outline"
-              label="Cage Drill"
-              sub="12-second capture · bullseye scoring"
-              onPress={() => router.push('/swinglab/cage-drill' as never)}
-            />
-            <ToolRow
               icon="library-outline"
               label="My Swing Library"
               sub="Browse + replay"
@@ -423,12 +510,6 @@ export default function SwingLab() {
               label="Tutorials"
               sub="Capture coaching lessons Kevin uses on course"
               onPress={() => router.push('/swinglab/tutorials' as never)}
-            />
-            <ToolRow
-              icon="golf-outline"
-              label="Cage Mode"
-              sub="Shot analysis + video"
-              onPress={() => router.push('/cage' as never)}
             />
             <ToolRow
               icon="trophy-outline"
@@ -496,7 +577,17 @@ export default function SwingLab() {
                 drill={drill}
                 expanded={expandedId === drill.id}
                 onToggle={() => toggleDrill(drill.id)}
-                onNavigate={(dest) => router.push(`/${dest}`)}
+                // Drill CTA: 'cage' destinations route into the unified
+                // Cage Mode WITH the drill pre-selected (drill-info strip
+                // renders inside the camera surface). 'arena' still routes
+                // to the dedicated Arena screen.
+                onNavigate={(dest) => {
+                  if (dest === 'cage') {
+                    openCageWithDrill(drill);
+                  } else {
+                    router.push(`/${dest}` as never);
+                  }
+                }}
               />
             ))}
 
@@ -507,41 +598,6 @@ export default function SwingLab() {
             )}
           </>
         )}
-
-        {/* Phase 111 — Primary Issue Cards (replaces the prior Setup Guide
-            silhouette section). Ranked by user's most-frequent detected
-            issue when analysis history exists; static default order
-            otherwise. Phase 111-followup: cards are individually
-            collapsible (Tim feedback: "take up too much space"). First
-            card starts expanded so the pattern is discoverable; the
-            section itself is also collapsible at the section header. */}
-        <TouchableOpacity
-          style={styles.drillsCardHeader}
-          onPress={() => setFaultsOpen(o => !o)}
-          activeOpacity={0.85}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={styles.drillsCardTitle}>Common Faults</Text>
-            <Text style={styles.drillsCardSub}>Quick lesson + drill per fault · tap to expand</Text>
-          </View>
-          <AppIcon name={faultsOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#00C896" />
-        </TouchableOpacity>
-        {faultsOpen && (() => {
-          const ranked = getRankedPrimaryIssues();
-          // First card gets the personalization badge if the catalog was
-          // re-ordered (i.e. the first entry is NOT the static default
-          // first entry, which is swing_path).
-          const personalizedFirst = ranked.length > 0 && ranked[0].category !== 'swing_path';
-          return ranked.map((entry, idx) => (
-            <PrimaryIssueCard
-              key={entry.category}
-              entry={entry}
-              isPersonalized={personalizedFirst && idx === 0}
-              defaultExpanded={idx === 0}
-              onTryDrill={(drillId) => router.push(`/swinglab?drill=${drillId}` as never)}
-            />
-          ));
-        })()}
 
         <View style={styles.bottomPad} />
       </ScrollView>
@@ -875,6 +931,19 @@ const styles = StyleSheet.create({
   },
   toolRowLabel: { color: '#fff', fontSize: 14, fontWeight: '700' },
   toolRowSub: { color: '#6b7280', fontSize: 11, marginTop: 1 },
+  cagePickerWrap: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8,
+    paddingHorizontal: 10, paddingTop: 4, paddingBottom: 12,
+  },
+  cagePickerChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(0,200,150,0.10)',
+    borderColor: 'rgba(0,200,150,0.45)', borderWidth: 1,
+    borderRadius: 16, paddingVertical: 7, paddingHorizontal: 12,
+  },
+  cagePickerChipText: { color: '#d1d5db', fontSize: 12, fontWeight: '700' },
+  cagePickerChipPrimary: { backgroundColor: '#00C896', borderColor: '#00C896' },
+  cagePickerChipPrimaryText: { color: '#0d1a0d', fontSize: 12, fontWeight: '900' },
   drillsCardTitle: { color: '#fff', fontSize: 16, fontWeight: '900' },
   drillsCardSub: { color: '#6b7280', fontSize: 12, marginTop: 2 },
 

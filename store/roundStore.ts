@@ -437,6 +437,16 @@ export const useRoundStore = create<RoundState>()(
             }
           } catch { /* ignore */ }
         }
+
+        // Points — every completed round is 100 pts (Tim's spec). Only
+        // counts if at least 9 holes were played so a one-tap-end-round
+        // doesn't farm points. Dynamic require avoids store-import cycle.
+        if (holesPlayed >= 9) {
+          try {
+            const pointsMod = require('./pointsStore');
+            pointsMod.usePointsStore.getState().addPoints(100, `round_completed_${holesPlayed}h`);
+          } catch (e) { console.log('[points] round-end emit failed:', e); }
+        }
       },
 
       addRoundInsight: (round_id, course, insight) =>

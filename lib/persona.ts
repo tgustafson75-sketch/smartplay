@@ -75,6 +75,23 @@ export function getCaddiePossessive(input: PersonaInput): string {
 
 export const ALL_PERSONAS: readonly Persona[] = ['kevin', 'serena', 'harry', 'tank'] as const;
 
+/**
+ * Personas exposed in the user-facing UI right now. Harry is currently
+ * dormant (Tim's call — overlaps Kevin's arc too closely). The character
+ * spec, voice config, avatars, and routing all stay in place so re-enable
+ * is one line: add `'harry'` back here. Settings store v6 migrate maps any
+ * persisted Harry assignment to Kevin so existing users don't get stuck.
+ *
+ * Drives every UI surface that lists pickable caddies (Settings rows,
+ * intro picker, suggestion targets). Anything in ALL_PERSONAS but not in
+ * ACTIVE_PERSONAS is dormant — type-valid, never shown.
+ */
+export const ACTIVE_PERSONAS: readonly Persona[] = ['kevin', 'serena', 'tank'] as const;
+
+export function isActivePersona(p: Persona): boolean {
+  return (ACTIVE_PERSONAS as readonly Persona[]).includes(p);
+}
+
 // Audit 101 / B4 — server-side request body persona resolver. Prefer the
 // newer `persona` field; fall back to the legacy `voiceGender` field. This
 // closes the F13 server-side gap where ~20 api/* routes called

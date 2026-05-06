@@ -100,30 +100,33 @@ const HARRY_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
   kevin_self_critical: require('../assets/avatars/harry_moods_downcast.png'),
 };
 
-// Tank counterparts. Each emotion slot maps to the closest-matching PNG
-// from tank_emotions_30.zip. Determination doubles as game-face;
-// pointing_at_you doubles as mentorship/teaching pose.
+// Tank counterparts. Refreshed with Tim's "tank_v2_*" set — personality-
+// rich Marine-flavored portraits (Encouraging, Lets go Marine, Semper Fi,
+// wtf, you got this, etc) mapped to the closest avatar slot. Slots that
+// don't have a matching v2 image fall back to the original tank_emotions_*
+// set for coverage. To upgrade further, drop a tank_v2_<emotion>.png into
+// assets/avatars/ and point the slot below at it.
 const TANK_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
-  kevin_course:        require('../assets/avatars/tank_portrait.png'),
-  kevin_dark:          require('../assets/avatars/tank_moods_intense.png'),
-  kevin_nod:           require('../assets/avatars/tank_expressive_warm_smile.png'),
-  kevin_idle:          require('../assets/avatars/tank_expressive_warm_smile.png'),
+  kevin_course:        require('../assets/avatars/tank_v2_portrait.png'),       // primary portrait — v2
+  kevin_dark:          require('../assets/avatars/tank_v2_lets_go_marine.png'), // intense Marine cadence
+  kevin_nod:           require('../assets/avatars/tank_v2_here_we_go.png'),     // ready-to-roll affirmation
+  kevin_idle:          require('../assets/avatars/tank_v2_here_we_go.png'),     // attentive idle
   kevin_listening:     require('../assets/avatars/tank_expressive_thinking.png'),
   kevin_explaining:    require('../assets/avatars/tank_expressive_pointing_at_you.png'),
   kevin_focused:       require('../assets/avatars/tank_moods_intense.png'),
-  kevin_determined:    require('../assets/avatars/tank_emotions_determination.png'),
+  kevin_determined:    require('../assets/avatars/tank_v2_lets_go.png'),        // "Lets Go" — full determination
   kevin_pensive:       require('../assets/avatars/tank_expressive_contemplative.png'),
-  kevin_inquisitive:   require('../assets/avatars/tank_moods_intrigued.png'),
-  kevin_mentorship:    require('../assets/avatars/tank_expressive_pointing_at_you.png'),
+  kevin_inquisitive:   require('../assets/avatars/tank_v2_questioning.png'),    // explicitly questioning
+  kevin_mentorship:    require('../assets/avatars/tank_v2_you_got_this.png'),   // mentor reassurance
   kevin_humble:        require('../assets/avatars/tank_emotions_relief.png'),
-  kevin_supportive:    require('../assets/avatars/tank_moods_pleased.png'),
-  kevin_happy:         require('../assets/avatars/tank_emotions_joy.png'),
-  kevin_enthusiastic:  require('../assets/avatars/tank_emotions_excitement.png'),
-  kevin_surprised:     require('../assets/avatars/tank_expressive_shocked.png'),
-  kevin_celebrating:   require('../assets/avatars/tank_expressive_celebration.png'),
+  kevin_supportive:    require('../assets/avatars/tank_v2_encouraging.png'),    // "Encouraging" portrait
+  kevin_happy:         require('../assets/avatars/tank_v2_happy.png'),
+  kevin_enthusiastic:  require('../assets/avatars/tank_v2_excited.png'),
+  kevin_surprised:     require('../assets/avatars/tank_v2_wtf.png'),            // "wtf" reads as surprised
+  kevin_celebrating:   require('../assets/avatars/tank_v2_semper_fi.png'),      // Marine pride moment
   kevin_confident:     require('../assets/avatars/tank_emotions_pride.png'),
-  kevin_gameface:      require('../assets/avatars/tank_emotions_determination.png'),
-  kevin_curious:       require('../assets/avatars/tank_moods_intrigued.png'),
+  kevin_gameface:      require('../assets/avatars/tank_v2_lets_go.png'),        // shares with determined
+  kevin_curious:       require('../assets/avatars/tank_v2_questioning.png'),    // shares with inquisitive
   kevin_wincing:       require('../assets/avatars/tank_emotions_frustration.png'),
   kevin_self_critical: require('../assets/avatars/tank_expressive_facepalm.png'),
 };

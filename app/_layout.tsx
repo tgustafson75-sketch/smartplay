@@ -424,6 +424,19 @@ function AppNavigator() {
         }}
       >
         <Stack.Screen name="index" options={{ animation: 'none' }} />
+        {/* First-launch intro video. fade animation matches greeting;
+            gestureEnabled false so users can't swipe back into it after
+            it routes them forward. */}
+        <Stack.Screen
+          name="intro-video"
+          options={{ animation: 'fade', headerShown: false, gestureEnabled: false }}
+        />
+        {/* One-time core permissions pre-flight. Same gating model as
+            intro-video — fade in/out, no swipe-back. */}
+        <Stack.Screen
+          name="permissions"
+          options={{ animation: 'fade', headerShown: false, gestureEnabled: false }}
+        />
         <Stack.Screen
           name="greeting"
           options={{ animation: 'fade', headerShown: false, gestureEnabled: false }}

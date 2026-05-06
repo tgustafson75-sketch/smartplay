@@ -186,6 +186,9 @@ export const useSettingsStore = create<SettingsState>()(
       simpleBriefingUserTouched: false,
       // Re-sim P2 — Harry default 100 → 90 (was a touch loud in carts for
       // multiple players). Tank stays 70 (sound-sensitive default).
+      // Note: Harry is soft-removed from active UI (see lib/persona.ts
+      // ACTIVE_PERSONAS) but the intensity entry stays so flipping him
+      // back active is a single-line edit.
       personaIntensity: { kevin: 100, serena: 100, harry: 90, tank: 70 },
       tankSoftIntro: true,
       watchConnected: false,
@@ -326,7 +329,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 5,
+      version: 6,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -362,6 +365,20 @@ export const useSettingsStore = create<SettingsState>()(
             p.personaIntensity = { ...p.personaIntensity, harry: 90 };
           }
           if (p.ttsCaptionsBluetoothPrompt == null) p.ttsCaptionsBluetoothPrompt = 'unasked';
+        }
+        // v6 — Harry soft-removed (overlaps Kevin's arc per Tim). Migrate
+        // any persisted Harry assignment to Kevin so existing users on
+        // 'harry' don't get stuck on a hidden persona. Re-enable: add
+        // 'harry' back to ACTIVE_PERSONAS in lib/persona.ts.
+        if (version < 6) {
+          if (p.caddiePersonality === 'harry') p.caddiePersonality = 'kevin';
+          if (p.caddieAssignments) {
+            const reassigned: CaddieAssignments = { ...p.caddieAssignments };
+            (Object.keys(reassigned) as CaddiePillar[]).forEach((pillar) => {
+              if (reassigned[pillar] === 'harry') reassigned[pillar] = 'kevin';
+            });
+            p.caddieAssignments = reassigned;
+          }
         }
         return p as SettingsState;
       },

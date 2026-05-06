@@ -127,7 +127,11 @@ export default function Scorecard() {
     : '#f59e0b';
 
   const roundHeroMoments = heroMoments.filter(m => m.courseName === viewCourseName).length;
-  const currentHolePar = viewCourseHoles.find(h => h.hole === currentHole)?.par ?? 4;
+  // currentHolePar — kept derived in case other surfaces reference it;
+  // the inline chip block computes par per-row to support back-9 hole-by-
+  // hole scoring without re-deriving.
+  const _currentHolePar = viewCourseHoles.find(h => h.hole === currentHole)?.par ?? 4;
+  void _currentHolePar;
 
   // Animate active hole highlight
   const activeBorderAnim = useRef(new Animated.Value(0)).current;
@@ -137,11 +141,12 @@ export default function Scorecard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentHole]);
 
-  // Club usage aggregation
+  // Club usage aggregation — pure helper, memoized so dep arrays are
+  // stable and the lint rule is satisfied without disable directives.
   type ClubAgg = { club: string; count: number; avg: number | null };
-  const clubUsage: ClubAgg[] = useMemo(() => {
+  const aggregateClubs = useCallback((shots: ShotResult[]): ClubAgg[] => {
     const map = new Map<string, { count: number; distSum: number; distCount: number }>();
-    (viewShots as ShotResult[]).forEach(s => {
+    shots.forEach(s => {
       if (!s.club) return;
       const cur = map.get(s.club) ?? { count: 0, distSum: 0, distCount: 0 };
       cur.count += 1;
@@ -155,7 +160,17 @@ export default function Scorecard() {
         avg: v.distCount > 0 ? Math.round(v.distSum / v.distCount) : null,
       }))
       .sort((a, b) => b.count - a.count);
-  }, [viewShots]);
+  }, []);
+  const clubUsage: ClubAgg[] = useMemo(() => aggregateClubs(viewShots as ShotResult[]), [viewShots, aggregateClubs]);
+  // Lifetime aggregation across every completed round's shots — used by
+  // the "Across all rounds" companion card. Helps the player pick the
+  // right bag for the next session and feeds the caddie's club-pattern
+  // memory (patternInsights consumes the same data downstream).
+  const lifetimeClubUsage: ClubAgg[] = useMemo(() => {
+    const allShots: ShotResult[] = [];
+    roundHistory.forEach(r => { if (Array.isArray(r.shots)) allShots.push(...r.shots); });
+    return aggregateClubs(allShots);
+  }, [roundHistory, aggregateClubs]);
 
   // Kevin's recap
   const [recap, setRecap] = useState<RoundRecap | null>(null);
@@ -347,6 +362,50 @@ export default function Scorecard() {
     </View>
   );
 
+  // Inline quick-score chips that render directly under the current hole's
+  // row. Tim flagged that the prior fixed-position block always rendered
+  // between Front 9 and Back 9, so visually the chips appeared under hole
+  // 9 no matter which hole was current — confusing "what am I scoring?"
+  // moment. Now they slot in below whichever row matches currentHole.
+  const renderQuickScoreChips = (hole: number) => {
+    const par = viewCourseHoles.find(h => h.hole === hole)?.par ?? 4;
+    return (
+      <View style={[styles.quickScoreInline, { backgroundColor: c.surface_elevated, borderBottomColor: c.border }]}>
+        <Text style={[styles.sectionLabel, { color: c.accent, marginBottom: 6 }]}>HOLE {hole} · TAP A SCORE</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+          {([-2, -1, 0, 1, 2, 3, 4] as const).map(diff => {
+            const score = par + diff;
+            if (score < 1) return null;
+            const fill = SCORE_FILL(diff);
+            const label =
+              diff <= -2 ? 'Eagle' :
+              diff === -1 ? 'Birdie' :
+              diff === 0 ? 'Par' :
+              diff === 1 ? 'Bogey' :
+              diff === 2 ? 'Double' :
+              diff === 3 ? 'Triple' : ('+' + diff);
+            return (
+              <TouchableOpacity
+                key={diff}
+                style={[styles.scoreChip, { backgroundColor: fill, borderColor: fill }]}
+                onPress={() => handleQuickScore(hole, score)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.scoreChipScore}>{score}</Text>
+                <Text style={styles.scoreChipLabel}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  // When should the chip strip appear? Round must be active AND the
+  // current hole has no score yet AND the hole is in the rendered set.
+  const showChipsForHole = (hole: number): boolean =>
+    isRoundActive && hole === currentHole && !scores[currentHole];
+
   const hasAnythingToShow = isRoundActive || lastCompletedRound != null;
   const front9 = viewCourseHoles.filter(h => h.hole <= 9);
   const back9 = viewCourseHoles.filter(h => h.hole >= 10 && h.hole <= 18);
@@ -434,55 +493,35 @@ export default function Scorecard() {
           </View>
         )}
 
-        {/* PER-HOLE ROWS — Front 9 */}
+        {/* PER-HOLE ROWS — Front 9 (chips slot in directly under the
+            current hole's row so it's always visually obvious which hole
+            you're scoring). */}
         {hasAnythingToShow && front9.length > 0 && (
           <View style={[styles.section, styles.holeListWrap]}>
             <Text style={[styles.sectionLabel, { color: c.text_muted }]}>FRONT 9</Text>
             <View style={[styles.holeList, { backgroundColor: c.surface, borderColor: c.border }]}>
-              {front9.map(renderHoleRow)}
+              {front9.map(h => (
+                <React.Fragment key={h.hole}>
+                  {renderHoleRow(h)}
+                  {showChipsForHole(h.hole) && renderQuickScoreChips(h.hole)}
+                </React.Fragment>
+              ))}
               {renderTotalsRow('OUT', frontScore, frontPar)}
             </View>
           </View>
         )}
 
-        {/* QUICK SCORE — only renders inline below current hole row when active */}
-        {isRoundActive && !scores[currentHole] && (
-          <View style={[styles.section, { marginTop: 4 }]}>
-            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>HOLE {currentHole} · TAP A SCORE</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-              {([-2, -1, 0, 1, 2, 3, 4] as const).map(diff => {
-                const score = currentHolePar + diff;
-                if (score < 1) return null;
-                const fill = SCORE_FILL(diff);
-                const label =
-                  diff <= -2 ? 'Eagle' :
-                  diff === -1 ? 'Birdie' :
-                  diff === 0 ? 'Par' :
-                  diff === 1 ? 'Bogey' :
-                  diff === 2 ? 'Double' :
-                  diff === 3 ? 'Triple' : ('+' + diff);
-                return (
-                  <TouchableOpacity
-                    key={diff}
-                    style={[styles.scoreChip, { backgroundColor: fill, borderColor: fill }]}
-                    onPress={() => handleQuickScore(currentHole, score)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.scoreChipScore}>{score}</Text>
-                    <Text style={styles.scoreChipLabel}>{label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* PER-HOLE ROWS — Back 9 */}
+        {/* PER-HOLE ROWS — Back 9 (same inline-chips behavior). */}
         {hasAnythingToShow && !nineHoleMode && back9.length > 0 && (
           <View style={[styles.section, styles.holeListWrap]}>
             <Text style={[styles.sectionLabel, { color: c.text_muted }]}>BACK 9</Text>
             <View style={[styles.holeList, { backgroundColor: c.surface, borderColor: c.border }]}>
-              {back9.map(renderHoleRow)}
+              {back9.map(h => (
+                <React.Fragment key={h.hole}>
+                  {renderHoleRow(h)}
+                  {showChipsForHole(h.hole) && renderQuickScoreChips(h.hole)}
+                </React.Fragment>
+              ))}
               {renderTotalsRow('IN', backScore, backPar)}
             </View>
           </View>
@@ -511,7 +550,7 @@ export default function Scorecard() {
         {/* CLUB USAGE */}
         {hasAnythingToShow && clubUsage.length > 0 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>CLUB USAGE</Text>
+            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>CLUB USAGE — THIS ROUND</Text>
             <View style={[styles.clubGrid, { backgroundColor: c.surface, borderColor: c.border }]}>
               <View style={[styles.clubRow, styles.clubHeader, { backgroundColor: c.surface_elevated, borderBottomColor: c.border }]}>
                 <Text style={[styles.clubCell, styles.clubColClub, { color: c.text_muted }]}>CLUB</Text>
@@ -528,6 +567,40 @@ export default function Scorecard() {
                 </View>
               ))}
             </View>
+          </View>
+        )}
+
+        {/* Lifetime club usage — across every round in roundHistory.
+            Helps the player pick the right bag for the next session
+            and feeds the caddie's club-pattern memory (the same shots
+            data is what patternInsights consumes downstream). Only
+            renders when there's at least one completed round AND its
+            club distribution is meaningfully different from the current
+            round (or there's no current round at all). */}
+        {lifetimeClubUsage.length > 0 && (clubUsage.length === 0 || roundHistory.length >= 2) && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>
+              CLUB USAGE — ACROSS ALL ROUNDS ({roundHistory.length})
+            </Text>
+            <View style={[styles.clubGrid, { backgroundColor: c.surface, borderColor: c.border }]}>
+              <View style={[styles.clubRow, styles.clubHeader, { backgroundColor: c.surface_elevated, borderBottomColor: c.border }]}>
+                <Text style={[styles.clubCell, styles.clubColClub, { color: c.text_muted }]}>CLUB</Text>
+                <Text style={[styles.clubCell, styles.clubColCount, { color: c.text_muted }]}>USED</Text>
+                <Text style={[styles.clubCell, styles.clubColAvg, { color: c.text_muted }]}>AVG YDS</Text>
+              </View>
+              {lifetimeClubUsage.map(item => (
+                <View key={item.club} style={[styles.clubRow, { borderBottomColor: c.border }]}>
+                  <Text style={[styles.clubCell, styles.clubColClub, { color: c.text_primary }]}>{item.club}</Text>
+                  <Text style={[styles.clubCell, styles.clubColCount, { color: c.text_secondary }]}>×{item.count}</Text>
+                  <Text style={[styles.clubCell, styles.clubColAvg, { color: item.avg != null ? c.accent : c.text_muted }]}>
+                    {item.avg != null ? item.avg : '—'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            <Text style={[styles.clubFooter, { color: c.text_muted }]}>
+              Helps you pack the right bag · feeds the caddie&apos;s usage patterns.
+            </Text>
           </View>
         )}
 
@@ -653,6 +726,12 @@ const styles = StyleSheet.create({
 
   // Quick score chips (filled, high contrast)
   chipsRow: { flexDirection: 'row', gap: 8, paddingRight: 8 },
+  quickScoreInline: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
   scoreChip: {
     alignItems: 'center',
     borderWidth: 1.5, borderRadius: 12,
@@ -673,6 +752,7 @@ const styles = StyleSheet.create({
   clubColClub: { flex: 2, textAlign: 'left' },
   clubColCount: { flex: 1, textAlign: 'center', fontWeight: '500' },
   clubColAvg: { flex: 1, textAlign: 'right' },
+  clubFooter: { fontSize: 11, marginTop: 8, fontStyle: 'italic', paddingHorizontal: 4 },
 
   // Kevin's Take
   kevinHeader: {

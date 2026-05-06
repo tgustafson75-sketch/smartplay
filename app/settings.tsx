@@ -16,7 +16,7 @@ import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useTheme } from '../contexts/ThemeContext';
-import { getCaddieName } from '../lib/persona';
+import { getCaddieName, ACTIVE_PERSONAS } from '../lib/persona';
 import { clearMicDenial } from '../services/voicePermissionService';
 import {
   startSimulatedWalk, stopSimulatedWalk, getAvailableWalks,
@@ -344,7 +344,6 @@ export default function Settings() {
             options={[
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
-              { label: 'Harry', value: 'harry' },
               { label: 'Tank', value: 'tank' },
             ]}
             value={caddieAssignments.round}
@@ -357,7 +356,6 @@ export default function Settings() {
               { label: 'Tank', value: 'tank' },
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
-              { label: 'Harry', value: 'harry' },
             ]}
             value={caddieAssignments.cage}
             onSelect={(v) => setCaddieForPillar('cage', v as 'kevin' | 'serena' | 'harry' | 'tank')}
@@ -368,7 +366,6 @@ export default function Settings() {
             options={[
               { label: 'Serena', value: 'serena' },
               { label: 'Kevin', value: 'kevin' },
-              { label: 'Harry', value: 'harry' },
               { label: 'Tank', value: 'tank' },
             ]}
             value={caddieAssignments.drills}
@@ -380,7 +377,6 @@ export default function Settings() {
             options={[
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
-              { label: 'Harry', value: 'harry' },
               { label: 'Tank', value: 'tank' },
             ]}
             value={caddieAssignments.play}
@@ -432,7 +428,6 @@ export default function Settings() {
             options={[
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
-              { label: 'Harry', value: 'harry' },
               { label: 'Tank', value: 'tank' },
             ]}
             value={caddiePersonality}
@@ -631,7 +626,11 @@ export default function Settings() {
             Harry=90, Kevin/Serena=100. Floor 0, ceiling 100. */}
         <SectionHeader title="Caddie Intensity" />
         <View style={cardStyle}>
-          {(['kevin', 'serena', 'harry', 'tank'] as const).map((p, idx, arr) => (
+          {/* Drives off ACTIVE_PERSONAS so dormant personas (Harry) don't
+              show up here. The persisted intensity entry stays — see
+              settingsStore migrate v6 — so re-enabling Harry restores
+              his slider untouched. */}
+          {ACTIVE_PERSONAS.map((p, idx, arr) => (
             <View
               key={p}
               style={[

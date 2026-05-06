@@ -86,26 +86,29 @@ function objectOf(p: Persona): string {
 
 // Decide which teammate fits the trigger. Conservative routing — each
 // trigger has one clear best fit; ties broken by Tim's product vision.
+// Harry was the prior "calm reset / partnership counsel" target for several
+// triggers; with him soft-removed (overlap with Kevin's arc), Kevin absorbs
+// those routing slots — his casual grounded register is the closest fit.
 function pickTeammateForTrigger(trigger: SuggestionTrigger, currentPersona: Persona): Persona {
   switch (trigger) {
     case 'drill_plateau':
       // Plateau on technique → Tank's intensity / speed-drill push.
       return currentPersona === 'tank' ? 'serena' : 'tank';
     case 'cage_frustration':
-      // Frustration in cage → Harry's calm reset.
-      return currentPersona === 'harry' ? 'kevin' : 'harry';
+      // Frustration in cage → Kevin's calm grounded reset.
+      return currentPersona === 'kevin' ? 'serena' : 'kevin';
     case 'mental_struggle':
-      // On-course mental spiral → Harry's partnership counsel.
-      return currentPersona === 'harry' ? 'kevin' : 'harry';
+      // On-course mental spiral → Kevin's grounded partnership.
+      return currentPersona === 'kevin' ? 'serena' : 'kevin';
     case 'tactical_to_mental':
-      // Coach voice when player needs Psychologist → Harry.
-      return currentPersona === 'harry' ? 'kevin' : 'harry';
+      // Coach voice when player needs Psychologist → Kevin.
+      return currentPersona === 'kevin' ? 'serena' : 'kevin';
     case 'user_explicit_stuck':
       // User asked for help → suggest the natural alternate for the
-      // current pillar.
-      return currentPersona === 'kevin' ? 'harry'
+      // current pillar (Harry removed from the rotation).
+      return currentPersona === 'kevin' ? 'tank'
            : currentPersona === 'tank'  ? 'serena'
-           : currentPersona === 'serena' ? 'tank'
+           : currentPersona === 'serena' ? 'kevin'
            : 'kevin';
   }
 }

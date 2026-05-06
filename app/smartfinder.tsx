@@ -8,6 +8,8 @@ import {
   StyleSheet,
   ScrollView,
   useWindowDimensions,
+  ActivityIndicator,
+  AppState,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
@@ -208,7 +210,30 @@ function CameraSmartFinder({
     });
   }, []);
 
-  if (!cameraPermission) return <View style={styles.cameraContainer} />;
+  // AppState refresh — on foreground, re-check camera permission so
+  // returning from Settings unblocks the screen automatically.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') { void requestCameraPermission(); }
+    });
+    return () => sub.remove();
+  }, [requestCameraPermission]);
+
+  // Loading state — always render a back affordance so a stalled OS
+  // dialog can never strand the user.
+  if (!cameraPermission) {
+    return (
+      <SafeAreaView style={styles.cameraContainer}>
+        <View style={styles.permBox}>
+          <ActivityIndicator color="#00C896" />
+          <Text style={[styles.permText, { marginTop: 12 }]}>Checking camera permission…</Text>
+          <TouchableOpacity style={styles.backLink} onPress={onClose}>
+            <Text style={styles.backLinkText}>← Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!cameraPermission.granted) {
     return (

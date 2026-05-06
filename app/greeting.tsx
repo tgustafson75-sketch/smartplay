@@ -289,7 +289,7 @@ export default function GreetingScreen() {
               source={
                 caddiePersonality === 'serena' ? require('../assets/avatars/serena_portrait.jpg')
                 : caddiePersonality === 'harry' ? require('../assets/avatars/harry_portrait.png')
-                : caddiePersonality === 'tank'  ? require('../assets/avatars/tank_portrait.png')
+                : caddiePersonality === 'tank'  ? require('../assets/avatars/tank_v2_portrait.png')
                 : require('../assets/avatars/kevin_portrait.jpg')
               }
               style={styles.avatarPhoto}

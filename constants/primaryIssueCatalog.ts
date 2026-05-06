@@ -87,9 +87,7 @@ export const PRIMARY_ISSUE_CATALOG: readonly PrimaryIssueEntry[] = [
     title: 'Grip',
     description: 'Neutral V-shape pointing toward the trail shoulder is the foundation. Strong or weak grips bias face control.',
     Illustration: GripIllustration,
-    // Tim's photo set didn't include a grip image — vector Illustration
-    // remains the fallback. Drop a `grip.png` in assets/illustrations/faults/
-    // to upgrade.
+    image: require('../assets/illustrations/faults/grip.png'),
     relatedDrillId: null,
     matchesDetectedIssues: ['grip_strong', 'grip_weak', 'grip'] as const,
   },

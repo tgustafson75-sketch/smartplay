@@ -14,7 +14,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Linking, StyleSheet, Image, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, Linking, StyleSheet, Image, useWindowDimensions, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import type { PrimaryIssueEntry } from '../constants/primaryIssueCatalog';
@@ -32,7 +32,12 @@ interface Props {
 }
 
 export default function PrimaryIssueCard({ entry, isPersonalized, onTryDrill, defaultExpanded = false }: Props) {
-  const { width: screenW } = useWindowDimensions();
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  // Tap-to-zoom modal state — when entry has a photo asset, tapping it
+  // opens a fullscreen lightbox sized to the device viewport. Tap to
+  // dismiss. Modal isolates state per-card so Z Fold open/close doesn't
+  // disturb other cards.
+  const [zoomOpen, setZoomOpen] = useState(false);
   const { colors } = useTheme();
   const video = getInstructorVideo(entry.category);
   const Illustration = entry.Illustration;
@@ -82,20 +87,63 @@ export default function PrimaryIssueCard({ entry, isPersonalized, onTryDrill, de
         <>
           <View style={styles.illoWrap}>
             {entry.image ? (
-              // Tim's authored photo set — one per fault category. Falls back
-              // to the vector Illustration for any category without a photo.
-              // useWindowDimensions read here so the photo reflows cleanly
-              // on Z Fold open/close (cap width to keep aspect predictable).
-              <Image
-                source={entry.image}
-                style={[styles.faultImage, { width: Math.min(screenW - 64, 360) }]}
-                resizeMode="contain"
-                accessibilityLabel={`${entry.title} fault illustration`}
-              />
+              // Tim's authored photo set — one per fault category. Tap-to-
+              // zoom opens a fullscreen lightbox; falls back to the vector
+              // Illustration for any category without a photo. useWindow
+              // Dimensions read here so the photo reflows cleanly on Z
+              // Fold open/close (cap width to keep aspect predictable).
+              <TouchableOpacity
+                onPress={() => setZoomOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`Zoom ${entry.title} fault illustration`}
+                activeOpacity={0.85}
+              >
+                <Image
+                  source={entry.image}
+                  style={[styles.faultImage, { width: Math.min(screenW - 64, 360) }]}
+                  resizeMode="contain"
+                />
+                <View style={styles.zoomHintWrap}>
+                  <Ionicons name="expand-outline" size={14} color="#ffffff" />
+                  <Text style={styles.zoomHintText}>Tap to zoom</Text>
+                </View>
+              </TouchableOpacity>
             ) : (
               <Illustration size={220} okColor={colors.accent} warnColor="#ef4444" />
             )}
           </View>
+
+          {/* Lightbox — only mounts when zoom is open AND there's an image
+              to show. Pressable backdrop dismisses; image sized to device
+              viewport with contain so the full asset is visible without
+              cropping on any aspect ratio (Z Fold open + closed alike). */}
+          {entry.image ? (
+            <Modal
+              visible={zoomOpen}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setZoomOpen(false)}
+            >
+              <Pressable
+                style={styles.lightboxBg}
+                onPress={() => setZoomOpen(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close zoomed image"
+              >
+                <Image
+                  source={entry.image}
+                  style={{ width: screenW, height: screenH * 0.85 }}
+                  resizeMode="contain"
+                />
+                <View style={[styles.lightboxLabel, { bottom: 60 }]}>
+                  <Text style={styles.lightboxLabelText}>{entry.title}</Text>
+                </View>
+                <View style={[styles.lightboxClose, { top: 50 }]}>
+                  <Ionicons name="close" size={26} color="#ffffff" />
+                </View>
+              </Pressable>
+            </Modal>
+          ) : null}
 
           <Text style={[styles.body, { color: colors.text_primary }]}>{entry.description}</Text>
 
@@ -165,6 +213,44 @@ const styles = StyleSheet.create({
     height: undefined,
     aspectRatio: 1,
     borderRadius: 12,
+  },
+  zoomHintWrap: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  zoomHintText: { color: '#ffffff', fontSize: 10, fontWeight: '700', letterSpacing: 0.4 },
+  lightboxBg: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lightboxLabel: {
+    position: 'absolute',
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,200,150,0.85)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  lightboxLabelText: { color: '#0d1a0d', fontSize: 14, fontWeight: '900', letterSpacing: 0.5 },
+  lightboxClose: {
+    position: 'absolute',
+    right: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   body: {
     fontSize: 13,

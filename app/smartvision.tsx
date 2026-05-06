@@ -49,6 +49,8 @@ import Svg, { Line as SvgLine } from 'react-native-svg';
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
+import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbertApi';
+import { hasGolfbertCourseMapping } from '../constants/golfbertCourses';
 import { fetchHoleImagery } from '../services/mapboxImagery';
 import { getLocalHoleImage } from '../data/localCourseImages';
 
@@ -293,6 +295,16 @@ export default function SmartVisionScreen() {
   // be accidentally moved by a fat-finger gesture during play.
   const [teeByHole, setTeeByHole] = useState<Record<number, { x: number; y: number }>>({});
 
+  // Golfbert premium-data state — populated when the active course has a
+  // mapping AND the upstream proxy returns data successfully. Holds the
+  // current hole's polygon vectors (greens / fairway / bunkers / water)
+  // so the SmartVision overlay layer can render them on top of the
+  // satellite tile. Null means no premium data; existing geometry path
+  // handles rendering with point-only data (status quo).
+  const [golfbertHole, setGolfbertHole] = useState<GolfbertHole | null>(null);
+  // hasGolfbertCourseMapping is checked inside the load effect; no
+  // top-level derived value needed.
+
   // ── Load geometry + imagery for the current hole ────────────────
   // Imagery selection logic:
   //   imageryMode='curated' → never fetch GPS tile, always show curated
@@ -316,6 +328,27 @@ export default function SmartVisionScreen() {
       }
       if (cancelled) return;
       setGeometry(geo);
+
+      // Golfbert premium fetch (opportunistic — failures are silent and
+      // the existing geometry path serves as the fallback). Pulls all
+      // mapped holes for the course, filters to current hole. Cached
+      // by SmartVision component mount; re-fetched only on hole switch.
+      if (courseId && hasGolfbertCourseMapping(courseId)) {
+        try {
+          const holes = await getGolfbertHolesForCourse(courseId);
+          if (cancelled) return;
+          const match = holes?.find(h => h.holeNumber === holeIndex) ?? null;
+          setGolfbertHole(match);
+          if (match) {
+            console.log('[smartvision] using Golfbert premium data for hole', holeIndex);
+          }
+        } catch (e) {
+          console.log('[smartvision] golfbert fetch failed (non-fatal)', e);
+          if (!cancelled) setGolfbertHole(null);
+        }
+      } else {
+        setGolfbertHole(null);
+      }
 
       // GPS tile only when allowed AND geometry has tee+green coords.
       if (imageryMode !== 'curated' && geo?.green && courseId) {
@@ -608,7 +641,21 @@ export default function SmartVisionScreen() {
 
       {/* Image canvas + markers */}
       <View style={{ width: imageW, height: imageH, backgroundColor: '#0d2418' }}>
-        {imageUri ? (
+        {/* Premium course data badge — visible only when Golfbert
+            mapping returned data for this hole. Tells the user the map
+            is using paid premium geometry (greens / bunkers / water)
+            instead of point-only golfcourseapi data. */}
+        {golfbertHole && (
+          <View style={styles.premiumBadge} pointerEvents="none">
+            <Text style={styles.premiumBadgeText}>★ Golfbert premium</Text>
+          </View>
+        )}
+        {/* Prefer the Golfbert per-hole satellite image when available
+            (has hazard outlines baked in), otherwise fall back to the
+            existing imageUri (Mapbox tile) or curated bundled image. */}
+        {golfbertHole?.imageryUrl ? (
+          <Image source={{ uri: golfbertHole.imageryUrl }} style={{ width: imageW, height: imageH }} resizeMode="cover" />
+        ) : imageUri ? (
           <Image source={{ uri: imageUri }} style={{ width: imageW, height: imageH }} resizeMode="cover" />
         ) : curatedImage && imageryMode !== 'gps' ? (
           // Curated bundled hole screenshot (Palms hole-NN.jpg etc).
@@ -783,6 +830,15 @@ const styles = StyleSheet.create({
   holeBadgeNum: { color: '#ffffff', fontSize: 18, fontWeight: '900' },
   holeBadgePar: { color: '#9ca3af', fontSize: 10, fontWeight: '700', letterSpacing: 1, marginTop: -2 },
   canvasFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  premiumBadge: {
+    position: 'absolute', top: 8, right: 8, zIndex: 10,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderColor: 'rgba(245, 166, 35, 0.85)', borderWidth: 1,
+    borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4,
+  },
+  premiumBadgeText: {
+    color: '#F5A623', fontSize: 10, fontWeight: '900', letterSpacing: 0.6,
+  },
   canvasFallbackTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
   canvasFallbackSub: { color: '#6b7280', fontSize: 13, textAlign: 'center' },
   marker: {

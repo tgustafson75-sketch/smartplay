@@ -15,6 +15,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { useSettingsStore, getEffectiveSimpleBriefing } from '../../store/settingsStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getCourseImageryUrl, getHoleThumbnailUrl } from '../../services/mapboxImagery';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import PALMS_IMAGES from '../../data/palmsImages';
@@ -63,6 +64,9 @@ export default function CourseDetailScreen() {
   // a dark sliver under a dark border under a teal fill (Tim flagged
   // the Start Round button "overlapping borders in lighter modes").
   const { colors } = useTheme();
+  // Safe-area insets — bottom CTA bar uses this so the home indicator /
+  // gesture nav doesn't clip "Start Round" / "Book Tee Time" buttons.
+  const insets = useSafeAreaInsets();
 
   const [course, setCourse] = useState<Course | null>(null);
   const [content, setContent] = useState<CourseContent | null>(getCachedContent(course_id ?? ''));
@@ -259,7 +263,7 @@ export default function CourseDetailScreen() {
     <View style={styles.container}>
       <CourseDetailBanner />
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 130 + insets.bottom }]} showsVerticalScrollIndicator={false}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.back}
@@ -385,7 +389,7 @@ export default function CourseDetailScreen() {
       {/* Sticky bottom CTAs — bar + Start Round border adapt to theme so
           the teal fill doesn't sit on a hard-coded dark border in light
           mode (visual "overlap" reported in user testing). */}
-      <View style={[styles.ctaBar, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+      <View style={[styles.ctaBar, { backgroundColor: colors.background, borderTopColor: colors.border, paddingBottom: 12 + insets.bottom }]}>
         <TouchableOpacity
           style={[styles.cta, styles.ctaBook]}
           onPress={handleBookTeeTime}

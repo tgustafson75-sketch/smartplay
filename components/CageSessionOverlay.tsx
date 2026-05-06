@@ -41,19 +41,39 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/** Optional drill context. When provided, the cage session renders a
+ *  drill-info strip (drill name + step) above the camera so the player
+ *  has structure inside the same surface as free practice. Recording
+ *  mechanics are unchanged in this pass — drill picks layer guidance,
+ *  not behavior. Per-drill scoring/recording-length lands in a follow-up. */
+export interface CageDrillContext {
+  id: string;
+  title: string;
+  steps: readonly string[];
+  /** Optional one-line tip rendered under the steps. */
+  tip?: string;
+}
+
 interface Props {
   onComplete: (sessionId: string) => void;
   onCancel: () => void;
+  /** When set, the session is run as a guided drill — info strip renders
+   *  at top; otherwise free-practice (current default). */
+  drill?: CageDrillContext | null;
 }
 
 type Phase = 'requesting' | 'preview' | 'recording' | 'ending';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
+export default function CageSessionOverlay({ onComplete, onCancel, drill }: Props) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isFoldOpen = width > 500;
+  // Drill step counter — currently advances on session-start only since
+  // mechanics are identical to free practice in this pass. The shape is
+  // ready for the follow-up that wires per-step prompts.
+  const [drillStepIdx, setDrillStepIdx] = useState(0);
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [phase, setPhase] = useState<Phase>('requesting');
@@ -469,12 +489,26 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
       // which only triggers if the recent N cage sessions all share
       // the same primary issue label.
       try { evaluateCageEnd(); } catch (e) { console.warn('[teamIntelligence] cage-end eval threw:', e); }
+
+      // Points — every cage session that captured at least one swing
+      // earns 10 pts (drill or free practice). Drill context tags the
+      // history entry so the points log reads as a record of what was
+      // practiced, not just a count. Empty sessions don't farm points.
+      if (swingCount > 0) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const pointsMod = require('../store/pointsStore');
+          const reason = drill ? `cage_drill_${drill.id}` : 'cage_session';
+          pointsMod.usePointsStore.getState().addPoints(10, reason);
+        } catch (e) { console.log('[points] cage-end emit failed:', e); }
+      }
+
       // Hand the LIBRARY entry id to the consumer (not the cageStorage
       // session id) so navigation lands on the swing detail screen which
       // is keyed by sessionHistory[].id.
       onComplete(libraryEntryId ?? session.id);
     }
-  }, [phase, swingCount, stopMetering, onComplete]);
+  }, [phase, swingCount, stopMetering, onComplete, drill]);
 
   // ─── Cleanup ───────────────────────────────────────────────────────────────
 
@@ -591,6 +625,32 @@ export default function CageSessionOverlay({ onComplete, onCancel }: Props) {
       </View>
       {!meterAvailable && (
         <Text style={styles.manualOnlyBadge}>Auto-detect off — log manually</Text>
+      )}
+
+      {/* Drill-info strip — only renders when this session was launched
+          with a drill context. Shows drill name + current step so the
+          player has structure inside the same surface as free practice.
+          Tap the chevron to advance the step counter manually (mechanics
+          are still free-detect; per-step prompts come in the follow-up). */}
+      {drill && (
+        <View style={styles.drillStrip}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.drillStripTitle} numberOfLines={1}>{drill.title}</Text>
+            <Text style={styles.drillStripStep} numberOfLines={2}>
+              {`Step ${Math.min(drillStepIdx + 1, drill.steps.length)} of ${drill.steps.length} · `}
+              <Text style={styles.drillStripStepBody}>{drill.steps[Math.min(drillStepIdx, drill.steps.length - 1)]}</Text>
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => setDrillStepIdx(i => (i + 1) % drill.steps.length)}
+            style={styles.drillStripBtn}
+            accessibilityRole="button"
+            accessibilityLabel={`Advance to next step of ${drill.title} drill`}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.drillStripBtnText}>Next ›</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* LIVE preview — fills available space so the user can verify
@@ -830,6 +890,29 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 6,
   },
+  drillStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(0, 200, 150, 0.10)',
+    borderColor: 'rgba(0, 200, 150, 0.45)',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginHorizontal: 12,
+    marginBottom: 8,
+  },
+  drillStripTitle: { color: '#00C896', fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+  drillStripStep:  { color: '#9ca3af', fontSize: 12, marginTop: 2, lineHeight: 16 },
+  drillStripStepBody: { color: '#d1d5db', fontWeight: '600' },
+  drillStripBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#00C896',
+    borderRadius: 8,
+  },
+  drillStripBtnText: { color: '#0d1a0d', fontSize: 12, fontWeight: '900' },
   swingCountNum: {
     // Phase BS-followup Issue B — was 64px standalone block; now an inline
     // accent in the header row at 28px, giving the live preview the

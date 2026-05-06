@@ -26,7 +26,7 @@ import type { ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useShallow } from 'zustand/react/shallow';
-import { getCaddieName, ALL_PERSONAS, type Persona } from '../../lib/persona';
+import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useCageStore } from '../../store/cageStore';
 import { usePointsStore } from '../../store/pointsStore';
@@ -2747,15 +2747,19 @@ export default function CaddieTab() {
                 sub: 'Pick club + outcome · GPS captured automatically',
                 action: () => { setShowMoreMenu(false); setQuickLogOpen(true); },
               }] : []),
-              // Caddie persona cycler — Kevin → Serena → Harry → Tank → Kevin.
+              // Caddie persona cycler — Kevin → Serena → Tank → Kevin.
               // Stays in the Tools sheet so the user can swap mid-round
-              // without diving into Settings.
+              // without diving into Settings. Drives off ACTIVE_PERSONAS
+              // so dormant personas (Harry) are skipped in the rotation.
               { icon: 'people-outline' as IconName,
                 label: `Caddie: ${getCaddieName(caddiePersonality)}`,
-                sub: 'Tap to cycle · Kevin · Serena · Harry · Tank',
+                sub: `Tap to cycle · ${ACTIVE_PERSONAS.map(p => getCaddieName(p)).join(' · ')}`,
                 action: () => {
-                  const idx = ALL_PERSONAS.indexOf(caddiePersonality as Persona);
-                  const next = ALL_PERSONAS[(idx + 1) % ALL_PERSONAS.length];
+                  const list = ACTIVE_PERSONAS as readonly Persona[];
+                  const idx = list.indexOf(caddiePersonality as Persona);
+                  // If current persona is dormant (e.g. legacy Harry that
+                  // missed migration), -1 → start at index 0.
+                  const next = list[(Math.max(idx, -1) + 1) % list.length];
                   setCaddiePersonality(next);
                 } },
               { icon: 'golf-outline',        label: 'Practice',         sub: 'Cage & swing lab',         action: () => { setShowMoreMenu(false); router.push('/(tabs)/swinglab' as never); } },
@@ -2815,6 +2819,38 @@ export default function CaddieTab() {
                   }
                 } },
               { icon: 'logo-youtube',        label: 'YouTube Channel',  sub: '@smartplaycaddie',         action: () => { void openYouTubeChannel('@smartplaycaddie'); setShowMoreMenu(false); } },
+              // Functional EAS Update check — fetches the latest preview-
+              // channel bundle if one is available and prompts to restart.
+              // Lets testers pull the latest fix without uninstall/reinstall.
+              { icon: 'cloud-download-outline' as IconName, label: 'Check for Updates', sub: 'Pull the latest fix from the preview channel',
+                action: async () => {
+                  setShowMoreMenu(false);
+                  try {
+                    const Updates = await import('expo-updates');
+                    if (!Updates.isEnabled) {
+                      Alert.alert('Updates not enabled', 'This build was made before updates were wired in. Reinstall the latest APK from Expo to start receiving over-the-air updates.');
+                      return;
+                    }
+                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                    const result = await Updates.checkForUpdateAsync();
+                    if (!result.isAvailable) {
+                      Alert.alert('Up to date', 'You\'re on the latest preview build. Nothing to fetch.');
+                      return;
+                    }
+                    await Updates.fetchUpdateAsync();
+                    Alert.alert(
+                      'Update ready',
+                      'A new bundle was downloaded. Restart the app now to apply it?',
+                      [
+                        { text: 'Later', style: 'cancel' },
+                        { text: 'Restart now', style: 'default', onPress: () => { void Updates.reloadAsync(); } },
+                      ],
+                    );
+                  } catch (e) {
+                    console.log('[updates] check failed', e);
+                    Alert.alert('Update check failed', 'Try again in a moment. If it keeps failing, your network may be blocking u.expo.dev.');
+                  }
+                } },
               { icon: 'settings-outline',    label: 'Settings',         sub: 'App preferences',          action: () => { setShowMoreMenu(false); router.push('/settings' as never); } },
             ]) as { icon: IconName; label: string; sub: string; action: () => void | Promise<void> }[]).map(item => (
               <TouchableOpacity

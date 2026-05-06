@@ -62,6 +62,32 @@ export default function Index() {
 
   const isDone = has_completed_onboarding || isSetupComplete;
 
+  // First-launch intro video — plays once per install, before the
+  // welcome / greeting flow. tutorialsSeen.intro_video flag gates it
+  // permanently after the first view (or skip / error). Defensive:
+  // any failure inside the intro screen self-routes to the next step,
+  // so a corrupt video file or codec issue can never strand the user.
+  const tutorialsSeen = useSettingsStore.getState().tutorialsSeen ?? {};
+  const introVideoSeen = !!tutorialsSeen['intro_video'];
+  if (!introVideoSeen) {
+    // expo-router's typed routes are generated from the filesystem at
+    // build time; new routes need an `as never` cast until the type
+    // regeneration catches up. Same workaround used elsewhere in the
+    // codebase for new screens.
+    return <Redirect href={'/intro-video' as never} />;
+  }
+
+  // One-time core permissions pre-flight — runs after intro, before
+  // onboarding. Asks for camera/mic/location in one batch so individual
+  // tools never need to prompt again. Defensive: any failure inside
+  // the screen exits cleanly with the flag set, so a crash here can't
+  // strand the user. Tools fall back to per-call permission UX if the
+  // user skipped or denied during pre-flight.
+  const corePermsAsked = !!tutorialsSeen['core_permissions_requested'];
+  if (!corePermsAsked) {
+    return <Redirect href={'/permissions' as never} />;
+  }
+
   // Onboarding always wins — first-run users go through the welcome flow,
   // not the greeting. (The greeting is a 'welcome back' moment.)
   if (!isDone) return <Redirect href="/onboarding/welcome" />;

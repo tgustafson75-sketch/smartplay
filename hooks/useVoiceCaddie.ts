@@ -482,6 +482,16 @@ export const useVoiceCaddie = ({
         return { text: 'Sorry, lost you for a moment. Try again.', audioBase64: null, toolAction: null };
       }
       const data = await res.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null };
+
+      // Points — every successful caddie response is a real interaction
+      // (3 pts per Tim's spec). Failed / network-error returns above
+      // don't qualify, so we only emit on the success path here. Dynamic
+      // require avoids any risk of an import cycle through pointsStore.
+      try {
+        const pointsMod = require('../store/pointsStore');
+        pointsMod.usePointsStore.getState().addPoints(3, 'caddie_interaction');
+      } catch (e) { console.log('[points] caddie-interaction emit failed:', e); }
+
       return {
         text:        data.text       ?? 'Got nothing back from the brain. Try again.',
         audioBase64: data.audioBase64 ?? null,

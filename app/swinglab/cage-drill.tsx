@@ -352,7 +352,29 @@ export default function CageDrillScreen() {
   }, [phase]);
 
   // ── Permission gates ────────────────────────────────────────────────
-  if (!camPerm) return <SafeAreaView style={styles.container}><ActivityIndicator color="#00C896" style={{ marginTop: 80 }} /></SafeAreaView>;
+  // Loading state (camPerm null) USED to render a bare spinner with no
+  // Header/back affordance — if the OS permission dialog hung or got
+  // backgrounded the user was stranded. Now always renders Header (back
+  // button) + visible "Cancel" path so no state can trap the user.
+  if (!camPerm) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <Header insets={insets} onBack={() => safeBack()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
+        <View style={styles.permWrap}>
+          <ActivityIndicator color="#00C896" />
+          <Text style={[styles.permBody, { marginTop: 12 }]}>Checking camera permission…</Text>
+          <TouchableOpacity
+            style={[styles.primaryBtn, { marginTop: 20, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#00C896' }]}
+            onPress={() => safeBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Go back to SwingLab"
+          >
+            <Text style={[styles.primaryBtnText, { color: '#00C896' }]}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
   if (!camPerm.granted) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -362,6 +384,15 @@ export default function CageDrillScreen() {
           <Text style={styles.permBody}>Cage Drill records your swing to score your strikes.</Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={() => void requestCamPerm()}>
             <Text style={styles.primaryBtnText}>Allow Camera</Text>
+          </TouchableOpacity>
+          {/* Always-available exit so a denied OS prompt never strands the user. */}
+          <TouchableOpacity
+            style={[styles.primaryBtn, { marginTop: 12, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#00C896' }]}
+            onPress={() => safeBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Go back to SwingLab"
+          >
+            <Text style={[styles.primaryBtnText, { color: '#00C896' }]}>Back to SwingLab</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>

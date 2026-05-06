@@ -27,7 +27,7 @@ const PORTRAIT_FOR: Record<Persona, ImageSourcePropType> = {
   kevin:  require('../assets/avatars/kevin_portrait.jpg'),
   serena: require('../assets/avatars/serena_portrait.jpg'),
   harry:  require('../assets/avatars/harry_portrait.png'),
-  tank:   require('../assets/avatars/tank_portrait.png'),
+  tank:   require('../assets/avatars/tank_v2_portrait.png'),
 };
 
 const NAME_FOR: Record<Persona, string> = {

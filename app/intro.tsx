@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { getCaddieName, type Persona } from '../lib/persona';
+import { getCaddieName, type Persona, ACTIVE_PERSONAS } from '../lib/persona';
 
 export default function Intro() {
   const router = useRouter();
@@ -80,7 +80,7 @@ export default function Intro() {
     switch (p) {
       case 'serena': return require('../assets/avatars/serena_portrait.jpg');
       case 'harry':  return require('../assets/avatars/harry_portrait.png');
-      case 'tank':   return require('../assets/avatars/tank_portrait.png');
+      case 'tank':   return require('../assets/avatars/tank_v2_portrait.png');
       case 'kevin':
       default:       return require('../assets/avatars/kevin_portrait.jpg');
     }
@@ -139,9 +139,9 @@ export default function Intro() {
             <Text style={styles.kevinSays}>
               {'Good to meet you, ' + playerName + '.'}
             </Text>
-            <Text style={styles.kevinSub}>You have a team of four caddies. Pick whoever you want greeting you first — we&apos;ll set sensible defaults for the rest of your game (Cage, Drills, Play). Customize anytime in Settings.</Text>
+            <Text style={styles.kevinSub}>You have a team of caddies. Pick whoever you want greeting you first — we&apos;ll set sensible defaults for the rest of your game (Cage, Drills, Play). Customize anytime in Settings.</Text>
             <View style={styles.caddieGrid}>
-              {(['kevin', 'serena', 'harry', 'tank'] as Persona[]).map(p => (
+              {ACTIVE_PERSONAS.map(p => (
                 <TouchableOpacity
                   key={p}
                   style={[

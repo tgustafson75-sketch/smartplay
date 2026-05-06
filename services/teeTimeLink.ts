@@ -19,10 +19,48 @@
 import { Linking } from 'react-native';
 
 /**
- * Open Google search for tee-time booking. Crafted query maximises the
- * chance the official booking page is the top result.
+ * Hand-curated direct-booking URLs for courses we know operate on a
+ * specific tee-time platform (foreUP, Chronogolf, GolfNow per-course
+ * deep links, etc). Match is case-insensitive substring on club_name.
+ *
+ * Sourced from each course's own website. When a course isn't in this
+ * map, we fall back to a Google search that reliably surfaces the
+ * official booking page in the top result.
+ *
+ * To add a course: drop a new entry — match string is checked against
+ * the lower-cased club_name.includes(matchKey).
+ */
+const DIRECT_BOOKING_URLS: { matchKey: string; url: string; label?: string }[] = [
+  // Tim's home rotation
+  { matchKey: 'menifee lakes', url: 'https://foreupsoftware.com/index.php/booking/index/19103#/teetimes', label: 'Menifee Lakes (foreUP)' },
+  { matchKey: 'rancho california', url: 'https://www.ranchocaliforniagolfclub.com/tee-times', label: 'Rancho California GC' },
+];
+
+function findDirectBookingUrl(courseName: string): string | null {
+  const lc = courseName.trim().toLowerCase();
+  for (const entry of DIRECT_BOOKING_URLS) {
+    if (lc.includes(entry.matchKey)) return entry.url;
+  }
+  return null;
+}
+
+/**
+ * Open the course's tee-time booking flow. Strategy:
+ *   1. If we have a curated direct-booking URL for this course → open it.
+ *   2. Otherwise → Google search crafted to put the official booking
+ *      page at the top of results.
  */
 export async function openTeeTimeSearch(courseName: string, locationHint?: string | null): Promise<void> {
+  const direct = findDirectBookingUrl(courseName);
+  if (direct) {
+    try {
+      console.log('[teeTimeLink] direct →', direct);
+      await Linking.openURL(direct);
+      return;
+    } catch (e) {
+      console.log('[teeTimeLink] direct openURL failed, falling back to search:', e);
+    }
+  }
   const parts = [courseName.trim()];
   if (locationHint && locationHint.trim()) parts.push(locationHint.trim());
   parts.push('book tee time online');

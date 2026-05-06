@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   View,
   useWindowDimensions,
+  ActivityIndicator,
+  AppState,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -151,9 +153,30 @@ export default function SmartFinder() {
     if (countdownRef.current) clearInterval(countdownRef.current);
   }, []);
 
+  // ── AppState refresh — re-check on foreground so returning from
+  // Settings unblocks the screen automatically. ──
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') { void requestCameraPermission(); }
+    });
+    return () => sub.remove();
+  }, [requestCameraPermission]);
+
   // ── Permission gates ──────────────────────
+  // Loading state ALWAYS renders a Back button so a stalled OS dialog
+  // can never strand the user (Tim's "stuck on Allow Camera" complaint).
   if (!cameraPermission) {
-    return <View style={styles.container} />;
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.permissionBox}>
+          <ActivityIndicator color="#00C896" />
+          <Text style={[styles.permText, { marginTop: 12 }]}>Checking camera permission…</Text>
+          <TouchableOpacity style={styles.backLink} onPress={() => router.back()}>
+            <Text style={styles.backLinkText}>← Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   if (!cameraPermission.granted) {
