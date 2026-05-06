@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { safeBack } from '../../services/safeBack';
 import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
 import { captureRef } from 'react-native-view-shot';
 import { loadRecap } from '../../services/planStorage';
 import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
@@ -208,6 +209,53 @@ export default function RecapScreen() {
     }
   }, [recap, sharing]);
 
+  // PGA HOPE follow-up (B4) — pros asked for a PDF artifact for the
+  // player's HOPE file. Captures the share card as PNG, embeds it in a
+  // printable HTML template, and routes through expo-print to produce a
+  // shareable PDF. Same card content as the PNG share, formatted for
+  // print/file storage.
+  const handleSharePdf = useCallback(async () => {
+    if (!recap || sharing) return;
+    setSharing(true);
+    try {
+      const pngUri = await captureRef(cardRef, { format: 'png', quality: 1, result: 'base64' });
+      const dataUrl = `data:image/png;base64,${pngUri}`;
+      const dateStr = new Date(recap.ended_at ?? Date.now()).toLocaleDateString();
+      const html = `
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <style>
+              @page { size: letter; margin: 0.5in; }
+              body { font-family: -apple-system, system-ui, sans-serif; color: #0d1a0d; }
+              .header { font-size: 12pt; color: #6b7280; margin-bottom: 8pt; }
+              .title { font-size: 22pt; font-weight: 800; margin-bottom: 14pt; }
+              img { width: 100%; max-width: 7.5in; border-radius: 12pt; }
+            </style>
+          </head>
+          <body>
+            <div class="header">SmartPlay Round Recap · ${dateStr}</div>
+            <div class="title">${recap.course_name ?? 'Round Recap'}</div>
+            <img src="${dataUrl}" />
+          </body>
+        </html>
+      `;
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Share not available', 'Native share is not supported on this device.');
+        return;
+      }
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Save round recap as PDF' });
+      track('round_shared_pdf', { round_id: recap.round_id, mode: recap.mode });
+    } catch (e) {
+      console.warn('[recap] pdf export failed:', e);
+      Alert.alert('Could not generate PDF', 'Try again in a moment.');
+    } finally {
+      setSharing(false);
+    }
+  }, [recap, sharing]);
+
   const handlePlayAloud = useCallback(async () => {
     if (!recap) return;
     if (isSpeaking()) { await stopSpeaking(); setSpeaking(false); return; }
@@ -373,6 +421,24 @@ export default function RecapScreen() {
             <View style={styles.kevinCard}>
               <Text style={styles.kevinLabel}>{caddieName.toUpperCase()}</Text>
               <Text style={styles.kevinOverall}>{recap.overall_kevin_summary}</Text>
+              {/* Re-sim P0 #3 — surface "Walk me through it" prominently
+                  for first-recap viewers. Coach Davis flagged that gen-pop
+                  golfers don't know the guided walkthrough exists. Hides
+                  permanently after first use. */}
+              {voiceEnabled && !useSettingsStore.getState().tutorialsSeen?.['recap_walkthrough'] && (
+                <TouchableOpacity
+                  style={styles.walkthroughCta}
+                  onPress={() => {
+                    useSettingsStore.getState().markTutorialSeen('recap_walkthrough');
+                    void handleNarrate();
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Walk me through this round — caddie will narrate the highlights with hole-by-hole context"
+                >
+                  <Text style={styles.walkthroughCtaText}>◈ Walk me through this round</Text>
+                  <Text style={styles.walkthroughCtaSub}>{caddieName} will guide you hole-by-hole</Text>
+                </TouchableOpacity>
+              )}
               <View style={styles.kevinActions}>
                 {voiceEnabled && (
                   <TouchableOpacity style={styles.playBtn} onPress={handlePlayAloud}>
@@ -391,9 +457,24 @@ export default function RecapScreen() {
                 style={[styles.shareBtn, sharing && styles.shareBtnDisabled]}
                 onPress={handleShare}
                 disabled={sharing}
+                accessibilityRole="button"
+                accessibilityLabel="Share this round as an image"
               >
                 <Text style={styles.shareBtnText}>
                   {sharing ? 'Generating...' : '↑ Share this round'}
+                </Text>
+              </TouchableOpacity>
+              {/* PGA HOPE follow-up (B4) — pros asked for a PDF artifact
+                  for the player's HOPE file. Same card, printable. */}
+              <TouchableOpacity
+                style={[styles.shareBtn, sharing && styles.shareBtnDisabled, { marginTop: 8 }]}
+                onPress={handleSharePdf}
+                disabled={sharing}
+                accessibilityRole="button"
+                accessibilityLabel="Save this round as a PDF for your file"
+              >
+                <Text style={styles.shareBtnText}>
+                  {sharing ? 'Generating...' : '⤓ Save as PDF'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -512,6 +593,13 @@ const styles = StyleSheet.create({
   },
   kevinLabel: { color: '#00C896', fontSize: 10, fontWeight: '800', letterSpacing: 2, marginBottom: 6 },
   kevinOverall: { color: '#ffffff', fontSize: 15, lineHeight: 22 },
+  walkthroughCta: {
+    marginTop: 12, marginBottom: 4,
+    backgroundColor: '#00C896', borderRadius: 12,
+    paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center',
+  },
+  walkthroughCtaText: { color: '#0d1a0d', fontSize: 15, fontWeight: '900' },
+  walkthroughCtaSub: { color: '#0d1a0d', fontSize: 11, fontWeight: '600', marginTop: 2, opacity: 0.75 },
   kevinActions: { flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' },
   playBtn: {
     alignSelf: 'flex-start',

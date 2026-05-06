@@ -12,6 +12,9 @@ import { getCourse, searchCourses } from '../../services/golfCourseApi';
 import { fetchCourseContent, getCachedContent, type CourseContent } from '../../services/courseContentService';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { useRoundStore } from '../../store/roundStore';
+import { useSettingsStore, getEffectiveSimpleBriefing } from '../../store/settingsStore';
+import { useRelationshipStore } from '../../store/relationshipStore';
+import { useTheme } from '../../contexts/ThemeContext';
 import { getCourseImageryUrl, getHoleThumbnailUrl } from '../../services/mapboxImagery';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import PALMS_IMAGES from '../../data/palmsImages';
@@ -42,6 +45,24 @@ export default function CourseDetailScreen() {
   // reconfigure (open ↔ closed) re-renders this screen with the new width
   // instead of keeping the stale module-load value.
   const { width: screenW } = useWindowDimensions();
+  // Re-sim P1 — when simpleBriefing is on (auto for first 5 rounds OR
+  // explicit), collapse the dense ABOUT / CADDIE TIPS / HOLE PHOTOS
+  // sections behind expandable headers. Mark + Priya from the gen-pop
+  // re-sim asked for this, and Joel from the original HOPE trial got
+  // stuck on the same screen.
+  const roundsTogether = useRelationshipStore(s => s.roundsTogether);
+  const _rawSimple = useSettingsStore(s => s.simpleBriefing);
+  const _userTouched = useSettingsStore(s => s.simpleBriefingUserTouched);
+  const simpleBriefing = (() => { void _rawSimple; void _userTouched;
+    return getEffectiveSimpleBriefing(roundsTogether);
+  })();
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [tipsOpen, setTipsOpen] = useState(false);
+  const [photosOpen, setPhotosOpen] = useState(false);
+  // Bottom CTA bar adapts to active theme so Light mode doesn't show
+  // a dark sliver under a dark border under a teal fill (Tim flagged
+  // the Start Round button "overlapping borders in lighter modes").
+  const { colors } = useTheme();
 
   const [course, setCourse] = useState<Course | null>(null);
   const [content, setContent] = useState<CourseContent | null>(getCachedContent(course_id ?? ''));
@@ -220,7 +241,12 @@ export default function CourseDetailScreen() {
       <CourseDetailBanner />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.back}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.back}
+          accessibilityRole="button"
+          accessibilityLabel="Back to courses list"
+        >
           <Text style={styles.backText}>‹ Courses</Text>
         </TouchableOpacity>
 
@@ -255,19 +281,45 @@ export default function CourseDetailScreen() {
 
         {/* About */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>ABOUT</Text>
-          {content?.about ? (
-            <Text style={styles.aboutText}>{content.about}</Text>
+          {simpleBriefing ? (
+            <TouchableOpacity
+              onPress={() => setAboutOpen(o => !o)}
+              accessibilityRole="button"
+              accessibilityLabel={`About this course — tap to ${aboutOpen ? 'collapse' : 'expand'}`}
+              style={styles.collapseHeader}
+            >
+              <Text style={styles.sectionLabel}>ABOUT</Text>
+              <Text style={styles.collapseChevron}>{aboutOpen ? '▾' : '▸'}</Text>
+            </TouchableOpacity>
           ) : (
-            <Text style={styles.aboutLoading}>{contentLoading ? 'Loading…' : 'No description available.'}</Text>
+            <Text style={styles.sectionLabel}>ABOUT</Text>
+          )}
+          {(!simpleBriefing || aboutOpen) && (
+            content?.about ? (
+              <Text style={styles.aboutText}>{content.about}</Text>
+            ) : (
+              <Text style={styles.aboutLoading}>{contentLoading ? 'Loading…' : 'No description available.'}</Text>
+            )
           )}
         </View>
 
         {/* Caddie tips */}
         {(content?.caddie_tips && content.caddie_tips.length > 0) && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>CADDIE TIPS</Text>
-            {content.caddie_tips.map((tip, i) => (
+            {simpleBriefing ? (
+              <TouchableOpacity
+                onPress={() => setTipsOpen(o => !o)}
+                accessibilityRole="button"
+                accessibilityLabel={`Caddie tips — tap to ${tipsOpen ? 'collapse' : 'expand'}`}
+                style={styles.collapseHeader}
+              >
+                <Text style={styles.sectionLabel}>CADDIE TIPS</Text>
+                <Text style={styles.collapseChevron}>{tipsOpen ? '▾' : '▸'}</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.sectionLabel}>CADDIE TIPS</Text>
+            )}
+            {(!simpleBriefing || tipsOpen) && content.caddie_tips.map((tip, i) => (
               <View key={i} style={styles.tipRow}>
                 <Text style={styles.tipBullet}>•</Text>
                 <Text style={styles.tipText}>{tip}</Text>
@@ -278,14 +330,28 @@ export default function CourseDetailScreen() {
 
         {/* Hole photos */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>HOLE PHOTOS</Text>
-          <HolePhotosGrid
-            photos={holePhotos.map(p => ({
-              hole_number: p.hole_number,
-              url: p.url === '__palms__' ? '' : p.url,
-              palmsImage: p.url === '__palms__' ? PALMS_IMAGES[p.hole_number] as ImageSourcePropType : undefined,
-            }))}
-          />
+          {simpleBriefing ? (
+            <TouchableOpacity
+              onPress={() => setPhotosOpen(o => !o)}
+              accessibilityRole="button"
+              accessibilityLabel={`Hole photos — tap to ${photosOpen ? 'collapse' : 'expand'}`}
+              style={styles.collapseHeader}
+            >
+              <Text style={styles.sectionLabel}>HOLE PHOTOS</Text>
+              <Text style={styles.collapseChevron}>{photosOpen ? '▾' : '▸'}</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.sectionLabel}>HOLE PHOTOS</Text>
+          )}
+          {(!simpleBriefing || photosOpen) && (
+            <HolePhotosGrid
+              photos={holePhotos.map(p => ({
+                hole_number: p.hole_number,
+                url: p.url === '__palms__' ? '' : p.url,
+                palmsImage: p.url === '__palms__' ? PALMS_IMAGES[p.hole_number] as ImageSourcePropType : undefined,
+              }))}
+            />
+          )}
         </View>
 
         {/* Hole guide */}
@@ -297,13 +363,25 @@ export default function CourseDetailScreen() {
         <View style={{ height: 24 }} />
       </ScrollView>
 
-      {/* Sticky bottom CTAs */}
-      <View style={styles.ctaBar}>
-        <TouchableOpacity style={[styles.cta, styles.ctaBook]} onPress={handleBookTeeTime}>
+      {/* Sticky bottom CTAs — bar + Start Round border adapt to theme so
+          the teal fill doesn't sit on a hard-coded dark border in light
+          mode (visual "overlap" reported in user testing). */}
+      <View style={[styles.ctaBar, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+        <TouchableOpacity
+          style={[styles.cta, styles.ctaBook]}
+          onPress={handleBookTeeTime}
+          accessibilityRole="button"
+          accessibilityLabel="Book a tee time at this course"
+        >
           <Ionicons name="calendar-outline" size={16} color="#F5A623" style={{ marginRight: 6 }} />
           <Text style={styles.ctaBookText}>Book Tee Time</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.cta, styles.ctaStart]} onPress={handleStartRound}>
+        <TouchableOpacity
+          style={[styles.cta, styles.ctaStart]}
+          onPress={handleStartRound}
+          accessibilityRole="button"
+          accessibilityLabel="Start a new round at this course"
+        >
           <Ionicons name="flag" size={16} color="#0d1a0d" style={{ marginRight: 6 }} />
           <Text style={styles.ctaStartText}>Start Round Here</Text>
         </TouchableOpacity>
@@ -357,6 +435,13 @@ const styles = StyleSheet.create({
     color: '#00C896', fontSize: 11, fontWeight: '800',
     letterSpacing: 1.6, marginBottom: 10,
   },
+  collapseHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 4, marginBottom: 8,
+  },
+  collapseChevron: {
+    color: '#00C896', fontSize: 14, fontWeight: '700', marginBottom: 6,
+  },
   aboutText: { color: '#d1d5db', fontSize: 14, lineHeight: 21 },
   aboutLoading: { color: '#6b7280', fontSize: 13, fontStyle: 'italic' },
 
@@ -371,9 +456,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#060f09',
     borderTopWidth: 1, borderTopColor: '#1e3a28',
   },
-  cta: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
+  cta: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', overflow: 'hidden' },
   ctaBook: { backgroundColor: '#3a2a08', borderWidth: 1, borderColor: '#F5A623' },
   ctaBookText: { color: '#F5A623', fontSize: 14, fontWeight: '800' },
-  ctaStart: { backgroundColor: '#00C896' },
+  // Match the Book Tee Time sibling: solid fill + a 1px outline of the
+  // same color so the rounded edge stays crisp on light surfaces and the
+  // two CTAs visually align. Without the border, the teal fill on a
+  // light card edge bled into the surrounding chrome.
+  ctaStart: { backgroundColor: '#00C896', borderWidth: 1, borderColor: '#00C896' },
   ctaStartText: { color: '#0d1a0d', fontSize: 14, fontWeight: '800' },
 });

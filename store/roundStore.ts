@@ -423,6 +423,20 @@ export const useRoundStore = create<RoundState>()(
         const holesPlayed = Object.keys(s.scores).length;
         console.log(`[path2:round] end totalScore=${total} holesPlayed=${holesPlayed}`);
         console.log(`[audit:round-active] state=false holesPlayed=${holesPlayed} totalScore=${total}`);
+
+        // PGA HOPE follow-up — auto-clear Tank's soft-intro after the player
+        // has completed at least one full round (>=9 holes) with Tank as
+        // their active caddie. They've been with him for a real session;
+        // future utterances unlock his full Marine cadence.
+        if (holesPlayed >= 9) {
+          try {
+            const settingsMod = require('./settingsStore');
+            const cur = settingsMod.useSettingsStore.getState();
+            if (cur.tankSoftIntro && cur.caddiePersonality === 'tank') {
+              cur.setTankSoftIntro(false);
+            }
+          } catch { /* ignore */ }
+        }
       },
 
       addRoundInsight: (round_id, course, insight) =>

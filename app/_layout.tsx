@@ -8,7 +8,7 @@ import * as Sentry from '@sentry/react-native';
 import { SmartVisionProvider } from '../contexts/SmartVisionContext';
 import { KevinPresenceProvider } from '../contexts/KevinPresenceContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
-import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
 import { useSettingsStore, type Persona } from '../store/settingsStore';
 import { useRoundStore } from '../store/roundStore';
 import { initListeningSession } from '../services/listeningSession';
@@ -31,6 +31,7 @@ import { initTeamIntelligenceForSession } from '../services/teamIntelligence';
 import CaddieSuggestionCard from '../components/CaddieSuggestionCard';
 import GpsQualityOverlay from '../components/dev/GpsQualityOverlay';
 import CaptureOverlay from '../components/CaptureOverlay';
+import CaptionStrip from '../components/CaptionStrip';
 
 // Phase Y — run `body` only after roundStore rehydration completes. Prevents
 // the rehydration race where a fast user tapping Start Round before
@@ -82,10 +83,28 @@ function AppNavigator() {
   // routing after hydration. A guard here fires before AsyncStorage hydrates,
   // races against index.tsx's redirect, and corrupts the nav stack.
 
-  // Trial lifecycle: init on first open, expire after 7 days
+  // Trial lifecycle: init on first open, expire after 7 days.
+  // Owner override: if the user's email (or EXPO_PUBLIC_OWNER_EMAIL env)
+  // matches the owner allow-list, grant lifetime instead of starting a
+  // trial. Lifetime accounts skip the expire check entirely.
   useEffect(() => {
-    const { first_opened_at, trial_started_at, subscription_status, initTrial, setSubscriptionStatus } =
-      usePlayerProfileStore.getState();
+    const profile = usePlayerProfileStore.getState();
+    const { first_opened_at, trial_started_at, subscription_status, initTrial, setSubscriptionStatus, grantLifetime } = profile;
+
+    // 1) Lifetime override wins over everything. Re-asserts every boot
+    // so a corrupted/manually-edited status snaps back. Honors both the
+    // stored email and the env-var fallback. When env-var is set and
+    // there's no stored email yet, mirror it into the profile so other
+    // surfaces (Settings "About me") read the right value.
+    const envOwner = (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim();
+    if (isOwnerEmail(profile.email) || envOwner.length > 0) {
+      if (!profile.email && envOwner) profile.setEmail(envOwner);
+      if (subscription_status !== 'lifetime') grantLifetime();
+      return;
+    }
+    // 2) Already lifetime — leave it alone.
+    if (subscription_status === 'lifetime') return;
+    // 3) Standard trial lifecycle.
     if (!first_opened_at) {
       initTrial();
     } else if (subscription_status === 'trial' && trial_started_at) {
@@ -197,10 +216,23 @@ function AppNavigator() {
     let firstSync = true;
     const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
+    // PGA HOPE follow-up (B2): cart power-cycles re-fire the active-surface
+    // subscriber, which used to deliver the handoff line twice in quick
+    // succession. Debounce identical (cur → next) transitions inside a 2s
+    // window so a wake event after a momentary sleep doesn't double-speak.
+    let lastHandoffKey = '';
+    let lastHandoffAt = 0;
+    const HANDOFF_DEBOUNCE_MS = 2000;
+
     const syncFromSurface = () => {
       const next = getActiveCaddie();
       const cur = useSettingsStore.getState().caddiePersonality;
       if (next === cur) return;
+      const key = `${cur}->${next}`;
+      const now = Date.now();
+      if (key === lastHandoffKey && now - lastHandoffAt < HANDOFF_DEBOUNCE_MS) return;
+      lastHandoffKey = key;
+      lastHandoffAt = now;
       // Voice race fix (sim-202 follow-up): kill any in-flight TTS before
       // flipping caddiePersonality. Without this, an utterance that was
       // already mid-fetch/mid-playback finishes in the prior caddie's
@@ -367,6 +399,10 @@ function AppNavigator() {
       {/* Phase 110-followup — Round-side capture surface. Subscribes for
           'shot' / 'highlight' kinds; renders CameraView only when active. */}
       <CaptureOverlay />
+      {/* PGA HOPE follow-up (A2) — pinned TTS caption strip for hearing
+          accessibility. Renders only while TTS is playing AND ttsCaptions
+          is enabled in settings. */}
+      <CaptionStrip />
       <RoundActiveDevIndicator />
       <Stack
         screenOptions={{

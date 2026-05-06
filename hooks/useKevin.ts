@@ -85,6 +85,10 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
           register, // Phase BA
           // Phase BR — active practice context from tutorialStore.
           practice_context: buildFullPracticeContext(),
+          // PGA HOPE follow-up — persona, intensity dial, Tank soft-intro.
+          persona: useSettingsStore.getState().caddiePersonality,
+          personaIntensity: useSettingsStore.getState().personaIntensity?.[useSettingsStore.getState().caddiePersonality] ?? 100,
+          tankSoftIntro: useSettingsStore.getState().tankSoftIntro,
         }),
       }).finally(() => clearTimeout(timeout));
 

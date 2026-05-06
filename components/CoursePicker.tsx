@@ -121,7 +121,18 @@ export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
 
       {/* API results */}
       {!loading && searched && searchError && (
-        <Text style={styles.searchError}>{searchError}</Text>
+        <View style={styles.searchErrorBlock}>
+          <Text style={styles.searchError}>{searchError}</Text>
+          {/* Make the failure mode actionable rather than silent. The
+              most common cause is GOLFCOURSE_API_KEY missing or expired
+              on the Vercel deployment — surface that explicitly so a
+              tester can flag it instead of assuming the app is broken. */}
+          <Text style={styles.searchErrorHint}>
+            {searchError.toLowerCase().includes('api key') || searchError.toLowerCase().includes('not set')
+              ? 'Course-search API key is not configured on the server. Use a course from the local list below for now.'
+              : 'Check your network — or pick a course from the local list below.'}
+          </Text>
+        </View>
       )}
       {!loading && searched && !searchError && results.length === 0 && (
         <Text style={styles.noResults}>No courses found. Try a different name or city.</Text>
@@ -247,7 +258,22 @@ const styles = StyleSheet.create({
   searchError: {
     color: '#f87171',
     fontSize: 12,
-    paddingVertical: 4,
+    fontWeight: '700',
+  },
+  searchErrorBlock: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(248, 113, 113, 0.08)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(248, 113, 113, 0.35)',
+    marginBottom: 8,
+    gap: 4,
+  },
+  searchErrorHint: {
+    color: '#fca5a5',
+    fontSize: 11,
+    lineHeight: 15,
   },
   results: {
     maxHeight: 180,

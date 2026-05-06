@@ -184,6 +184,24 @@ const playbackTimeoutForDuration = (durationMs: number | null | undefined): numb
 // utterance as scripted (briefing, opener, filler, proactive, summary).
 type SpeakOpts = { userInitiated?: boolean };
 
+// PGA HOPE follow-up (A5) — read the active persona's intensity dial and
+// convert to playback volume. Floor at 0.3 so the slider never silences
+// the caddie entirely (use voiceEnabled=false for that). 100 → 1.0,
+// 50 → ~0.55, 0 → 0.3.
+const currentPlaybackVolume = (): number => {
+  try {
+    const settingsMod = require('../store/settingsStore');
+    const s = settingsMod.useSettingsStore.getState();
+    const persona = s.caddiePersonality as 'kevin' | 'serena' | 'harry' | 'tank';
+    const dial = s.personaIntensity?.[persona];
+    if (typeof dial !== 'number') return 1.0;
+    const clamped = Math.max(0, Math.min(100, dial));
+    return Math.max(0.3, clamped / 100);
+  } catch {
+    return 1.0;
+  }
+};
+
 const isVoiceAllowed = (opts?: SpeakOpts): boolean => {
   try {
     const settingsMod = require('../store/settingsStore');
@@ -218,6 +236,27 @@ export const subscribeToSpeaking = (
   return () => speechSubscribers.delete(cb);
 };
 
+// PGA HOPE follow-up (A2) — current spoken-text caption. Set whenever
+// speak() / speakFromBase64() begins playback; cleared on stopSpeaking()
+// and on natural completion. Subscribers (CaptionStrip) render the line
+// while audio is playing for hearing-impaired users.
+let currentCaption: string | null = null;
+const captionSubscribers = new Set<(text: string | null) => void>();
+
+const notifyCaption = (text: string | null) => {
+  currentCaption = text;
+  captionSubscribers.forEach(cb => cb(text));
+};
+
+export const getCurrentCaption = (): string | null => currentCaption;
+
+export const subscribeToCaption = (
+  cb: (text: string | null) => void,
+): (() => void) => {
+  captionSubscribers.add(cb);
+  return () => captionSubscribers.delete(cb);
+};
+
 // ─── STOP ─────────────────────────────────
 
 export const stopSpeaking = async (): Promise<void> => {
@@ -234,6 +273,7 @@ export const stopSpeaking = async (): Promise<void> => {
     currentSound = null;
   }
   notifySpeaking(false);
+  notifyCaption(null);
 };
 
 export const isSpeaking = (): boolean => currentSound !== null;
@@ -272,7 +312,7 @@ export const playLocalFile = async (
   try {
     const { sound, status } = await Audio.Sound.createAsync(
       { uri },
-      { shouldPlay: true, volume: 1.0 },
+      { shouldPlay: true, volume: currentPlaybackVolume() },
     );
 
     if (myId !== currentSpeechId) {
@@ -365,7 +405,7 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
 
     const { sound, status } = await Audio.Sound.createAsync(
       { uri: audioFile.uri },
-      { shouldPlay: true, volume: 1.0 },
+      { shouldPlay: true, volume: currentPlaybackVolume() },
     );
 
     if (myId !== currentSpeechId) {
@@ -446,6 +486,9 @@ export const speak = async (
   }
 
   notifySpeaking(true);
+  // PGA HOPE follow-up (A2) — broadcast caption text for the duration
+  // of the utterance. Cleared on natural completion or stopSpeaking.
+  notifyCaption(text);
   noteAudioActivity('tts');
   await configureAudioForSpeech();
 
@@ -497,7 +540,7 @@ export const speak = async (
 
     const { sound } = await Audio.Sound.createAsync(
       { uri: audioFile.uri },
-      { shouldPlay: true, volume: 1.0 },
+      { shouldPlay: true, volume: currentPlaybackVolume() },
     );
 
     // Bail if ownership was taken during createAsync.
@@ -518,6 +561,7 @@ export const speak = async (
             if (myId === currentSpeechId) {
               currentSound = null;
               notifySpeaking(false);
+              notifyCaption(null);
             }
             resolve();
           }
@@ -529,6 +573,7 @@ export const speak = async (
           if (myId === currentSpeechId) {
             currentSound = null;
             notifySpeaking(false);
+            notifyCaption(null);
           }
           resolve();
         }, playbackTimeoutForText(text))
@@ -540,6 +585,7 @@ export const speak = async (
       currentSound = null;
       currentAbortController = null;
       notifySpeaking(false);
+      notifyCaption(null);
     }
     if (!(err instanceof Error && err.name === 'AbortError')) {
       console.log('[voice] speak error:', err);

@@ -128,8 +128,13 @@ class ShotDetector {
    */
   ingest(sample: GPSSample): void {
     this.samples.push(sample);
-    // Keep last 60s of samples
-    const cutoff = sample.timestamp - 60_000;
+    // PGA HOPE follow-up (B1): adaptive players (wheelchair transfers,
+    // prosthetic adjustment, longer pre-shot routine) routinely take 90s+
+    // between sample-down and swing. The prior 60s buffer dropped the
+    // stationary anchor before displacement could be measured, so the
+    // shot was never detected. 180s covers realistic adaptive setup
+    // without ballooning memory (~180 samples at 1Hz).
+    const cutoff = sample.timestamp - 180_000;
     this.samples = this.samples.filter(s => s.timestamp >= cutoff);
     this.evaluate();
   }

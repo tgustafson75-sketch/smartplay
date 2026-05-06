@@ -3,7 +3,7 @@ import { type SubscriptionStatus } from '../store/playerProfileStore';
 export type FeatureKey = 'round_start' | 'smartvision' | 'cage_mode' | 'voice_advanced' | 'smartfinder';
 
 export function canAccess(feature: FeatureKey, status: SubscriptionStatus): boolean {
-  return status === 'active' || status === 'trial';
+  return status === 'active' || status === 'trial' || status === 'lifetime';
 }
 
 export function trialDaysLeft(trial_started_at: number | null): number | null {

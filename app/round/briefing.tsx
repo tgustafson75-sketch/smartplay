@@ -14,7 +14,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useCageStore } from '../../store/cageStore';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettingsStore, getEffectiveSimpleBriefing } from '../../store/settingsStore';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { speak, stopSpeaking, configureAudioForSpeech } from '../../services/voiceService';
 import { generateBriefing } from '../../services/briefingGenerator';
@@ -35,6 +35,19 @@ export default function BriefingScreen() {
   const { roundsTogether } = useRelationshipStore();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
+  // PGA HOPE follow-up (A1, A3) — accessibility flags. largeText
+  // upgrades base font size for low-vision; effective simpleBriefing
+  // combines explicit user choice with auto-on for first 5 rounds
+  // (re-sim P0 #1 — gen-pop "I want to play" preference is broader
+  // than originally scoped).
+  // Subscribe to userTouched + raw flag so the effective value
+  // re-derives when either changes.
+  const _rawSimple = useSettingsStore(s => s.simpleBriefing);
+  const _userTouched = useSettingsStore(s => s.simpleBriefingUserTouched);
+  const simpleBriefing = (() => { void _rawSimple; void _userTouched;
+    return getEffectiveSimpleBriefing(roundsTogether);
+  })();
+  const largeText = useSettingsStore(s => s.largeText);
   const trustLevel = useTrustLevelStore(s => s.level);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
@@ -241,14 +254,24 @@ export default function BriefingScreen() {
           style={[StyleSheet.absoluteFill, styles.contentArea, { opacity: textFade }]}
           pointerEvents={phase !== 'thinking' ? 'auto' : 'none'}
         >
-          <Text style={styles.briefText}>{briefText}</Text>
+          <Text
+            style={[
+              styles.briefText,
+              (largeText || simpleBriefing) && { fontSize: 22, lineHeight: 30 },
+            ]}
+            accessibilityLabel={`Caddie briefing: ${briefText}`}
+          >{briefText}</Text>
         </Animated.View>
       </View>
 
       {/* Bottom hint */}
       <View style={[styles.bottomHint, { paddingBottom: insets.bottom + 32 }]}>
-        <Text style={styles.hintText}>
-          {phase === 'done' ? 'Tap to start round' : 'Tap to skip'}
+        <Text
+          style={[styles.hintText, (largeText || simpleBriefing) && { fontSize: 16 }]}
+          accessibilityRole="button"
+          accessibilityLabel={phase === 'done' ? 'Tap anywhere to start round' : 'Tap anywhere to skip the briefing'}
+        >
+          {phase === 'done' ? 'Tap to start round' : (simpleBriefing ? 'Tap to continue' : 'Tap to skip')}
         </Text>
       </View>
     </TouchableOpacity>

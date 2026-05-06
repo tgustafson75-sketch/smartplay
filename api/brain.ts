@@ -66,6 +66,9 @@ export default async function handler(
       // send only voiceGender ('male'|'female'); supported as fallback.
       voiceGender = 'male',
       persona = null,
+      // PGA HOPE follow-up — per-persona intensity 0..100 + Tank soft-intro.
+      personaIntensity = 100,
+      tankSoftIntro = false,
     } = body;
 
     // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
@@ -257,6 +260,16 @@ CRITICAL HONESTY RULES (Phase BC):
 - If course geometry is incomplete (no front/middle/back coords), say so plainly rather than asserting a number.
 - It is ALWAYS better to admit uncertainty than to guess. A real caddie says "I'm not sure" when they don't know.
 - Balance: when data IS clean, answer with confidence. The bar is "admit when uncertain", not "hedge everything."
+
+INTENSITY DIAL (PGA HOPE follow-up): The player has set your intensity to ${personaIntensity}/100. ${
+  personaIntensity >= 85 ? 'Default cadence — the character spec applies normally.' :
+  personaIntensity >= 50 ? 'Dial back: shorter sentences, fewer signature phrases, half the imperatives. Stay in character but turn the volume down.' :
+  'Lowest register: drop signature phrases entirely. No commands, no exclamations. One calm observation per turn.'
+}${
+  caddieName === 'Tank' && tankSoftIntro
+    ? ' SOFT-INTRO ACTIVE: drop "Roger that" / "Send it" / "Lock it in" / "Ooh-rah" and Marine acknowledgments. No imperative verbs. Use a neutral introduction line. Lifts after the player completes one full session with you.'
+    : ''
+}
 
 PACE CHECK (sim-202 follow-up):
 - Real caddies talk in bursts, not continuously. Silence is the default; talk is the exception.

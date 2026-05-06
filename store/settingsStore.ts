@@ -49,6 +49,39 @@ interface SettingsState {
   highContrast: boolean;
   brightMode: boolean;
   castMode: boolean;
+  // PGA HOPE follow-up (A1) — when true, BrightMode also bumps text scale
+  // and forces icon-button labels to render so low-vision users don't
+  // operate the app from muscle memory alone.
+  largeText: boolean;
+  // PGA HOPE follow-up (A2) — pin TTS captions during voice playback so
+  // hearing-impaired participants don't lose the persona-swap handoff
+  // line. Defaults true; users can hide if they want a chrome-free UI.
+  ttsCaptions: boolean;
+  // Re-sim P1 polish — first-time Bluetooth-detected caption surfacing
+  // asks once, persists the choice (or 'never' for don't-ask). Avoids
+  // silently flipping ttsCaptions on/off as the user pairs/unpairs.
+  ttsCaptionsBluetoothPrompt: 'unasked' | 'asked' | 'never';
+  // PGA HOPE follow-up (A3) — sequence the round-briefing into one card
+  // at a time instead of the all-at-once long-scroll. Lower cognitive
+  // load for TBI / first-time users. Mixed-cohort re-sim revealed
+  // gen-pop "I want to play, not learn the app" preference too — so
+  // this defaults TRUE for the first 5 rounds (auto via getEffectiveSimpleBriefing
+  // which checks roundsTogether) unless the user explicitly opts out.
+  simpleBriefing: boolean;
+  // Sticks once the user toggles the row in Settings either way; gates
+  // the "auto-on for first 5 rounds" behavior so an explicit choice
+  // always wins over the heuristic.
+  simpleBriefingUserTouched: boolean;
+  // PGA HOPE follow-up (A5) — per-persona TTS intensity 0..100. Drives
+  // playback volume and is forwarded to system prompts so the model
+  // can match cadence to the dial. Default Tank=70 (sound-sensitive
+  // default), others=100.
+  personaIntensity: Record<Persona, number>;
+  // PGA HOPE follow-up (Tank softening) — when true, Tank's first
+  // utterance with a player drops Marine cadence + signature phrases
+  // and uses a neutral introduction. Auto-clears after the player has
+  // accepted Tank for at least one full session.
+  tankSoftIntro: boolean;
 
   watchConnected: boolean;
   glassesConnected: boolean;
@@ -101,6 +134,12 @@ interface SettingsState {
   setHighContrast: (v: boolean) => void;
   setBrightMode: (v: boolean) => void;
   setCastMode: (v: boolean) => void;
+  setLargeText: (v: boolean) => void;
+  setTtsCaptions: (v: boolean) => void;
+  setTtsCaptionsBluetoothPrompt: (v: 'unasked' | 'asked' | 'never') => void;
+  setSimpleBriefing: (v: boolean) => void;
+  setPersonaIntensity: (p: Persona, v: number) => void;
+  setTankSoftIntro: (v: boolean) => void;
   setWatchConnected: (v: boolean) => void;
   setGlassesConnected: (v: boolean) => void;
   setAutoListenEnabled: (v: boolean) => void;
@@ -137,6 +176,18 @@ export const useSettingsStore = create<SettingsState>()(
       highContrast: false,
       brightMode: false,
       castMode: false,
+      largeText: false,
+      ttsCaptions: true,
+      ttsCaptionsBluetoothPrompt: 'unasked' as const,
+      // Re-sim P0 #1 — default true; auto-clears via the getEffectiveSimpleBriefing
+      // helper after the player has 5+ completed rounds, unless they've
+      // explicitly toggled it.
+      simpleBriefing: true,
+      simpleBriefingUserTouched: false,
+      // Re-sim P2 — Harry default 100 → 90 (was a touch loud in carts for
+      // multiple players). Tank stays 70 (sound-sensitive default).
+      personaIntensity: { kevin: 100, serena: 100, harry: 90, tank: 70 },
+      tankSoftIntro: true,
       watchConnected: false,
       glassesConnected: false,
       autoListenEnabled: false,
@@ -214,6 +265,17 @@ export const useSettingsStore = create<SettingsState>()(
       setHighContrast: (v) => set({ highContrast: v }),
       setBrightMode: (v) => set({ brightMode: v }),
       setCastMode: (v) => set({ castMode: v }),
+      setLargeText: (v) => set({ largeText: v }),
+      setTtsCaptions: (v) => set({ ttsCaptions: v }),
+      setTtsCaptionsBluetoothPrompt: (v) => set({ ttsCaptionsBluetoothPrompt: v }),
+      setSimpleBriefing: (v) => set({ simpleBriefing: v, simpleBriefingUserTouched: true }),
+      setPersonaIntensity: (p, v) => set((s) => ({
+        personaIntensity: {
+          ...s.personaIntensity,
+          [p]: Math.max(0, Math.min(100, Math.round(v))),
+        },
+      })),
+      setTankSoftIntro: (v) => set({ tankSoftIntro: v }),
       setWatchConnected: (v) => set({ watchConnected: v }),
       setGlassesConnected: (v) => set({ glassesConnected: v }),
       setAutoListenEnabled: (v) => set({ autoListenEnabled: v }),
@@ -264,7 +326,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 3,
+      version: 5,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -278,6 +340,28 @@ export const useSettingsStore = create<SettingsState>()(
             drills: prior,
             play: prior,
           };
+        }
+        // PGA HOPE follow-up — seed accessibility + per-persona intensity
+        // defaults for users on v3 payloads.
+        if (version < 4) {
+          if (p.largeText == null) p.largeText = false;
+          if (p.ttsCaptions == null) p.ttsCaptions = true;
+          if (p.simpleBriefing == null) p.simpleBriefing = false;
+          if (p.tankSoftIntro == null) p.tankSoftIntro = true;
+          if (p.personaIntensity == null) {
+            p.personaIntensity = { kevin: 100, serena: 100, harry: 100, tank: 70 };
+          }
+        }
+        // Re-sim P0 #1 + P2 — auto-on simpleBriefing for new users
+        // and lower Harry default. Existing users keep whatever they had;
+        // only seed the new userTouched flag (true so existing users
+        // don't suddenly get auto-on flipped on them).
+        if (version < 5) {
+          if (p.simpleBriefingUserTouched == null) p.simpleBriefingUserTouched = true;
+          if (p.personaIntensity?.harry === 100) {
+            p.personaIntensity = { ...p.personaIntensity, harry: 90 };
+          }
+          if (p.ttsCaptionsBluetoothPrompt == null) p.ttsCaptionsBluetoothPrompt = 'unasked';
         }
         return p as SettingsState;
       },
@@ -295,6 +379,13 @@ export const useSettingsStore = create<SettingsState>()(
         highContrast: s.highContrast,
         brightMode: s.brightMode,
         castMode: s.castMode,
+        largeText: s.largeText,
+        ttsCaptions: s.ttsCaptions,
+        ttsCaptionsBluetoothPrompt: s.ttsCaptionsBluetoothPrompt,
+        simpleBriefing: s.simpleBriefing,
+        simpleBriefingUserTouched: s.simpleBriefingUserTouched,
+        personaIntensity: s.personaIntensity,
+        tankSoftIntro: s.tankSoftIntro,
         autoListenEnabled: s.autoListenEnabled,
         skip_briefings: s.skip_briefings,
         proactive_kevin_enabled: s.proactive_kevin_enabled,
@@ -312,3 +403,23 @@ export const useSettingsStore = create<SettingsState>()(
     },
   ),
 );
+
+/**
+ * Re-sim P0 #1 — effective simpleBriefing combines explicit user choice
+ * with an auto-on heuristic for the first 5 rounds. The mixed-cohort
+ * re-sim showed gen-pop "I want to play, not learn the app" players
+ * benefit from sequenced briefings the same as adaptive HOPE players,
+ * so we default it on and let the player opt out once they're settled.
+ *
+ *   - Explicit ON  → on (always)
+ *   - Explicit OFF (userTouched=true) → off (always)
+ *   - Default ON + roundsTogether < 5 → on
+ *   - Default ON + roundsTogether >= 5 → off (auto-clears at round 5)
+ */
+export function getEffectiveSimpleBriefing(roundsTogether: number): boolean {
+  const s = useSettingsStore.getState();
+  if (s.simpleBriefingUserTouched) return s.simpleBriefing;
+  // Default-on heuristic: first 5 rounds get the simpler flow.
+  if (roundsTogether < 5) return true;
+  return s.simpleBriefing;
+}

@@ -4,7 +4,25 @@ import { getPersistStorage } from '../services/ssrSafeStorage';
 
 // ─── STATE ────────────────────────────────
 
-export type SubscriptionStatus = 'trial' | 'expired' | 'active' | 'free';
+// 'lifetime' = owner / founder grant; never expires, never asks for payment.
+// Treated identically to 'active' by featureAccess but distinguished so the
+// paywall + trial-init paths can short-circuit cleanly.
+export type SubscriptionStatus = 'trial' | 'expired' | 'active' | 'free' | 'lifetime';
+
+// Owner allow-list: any user whose email matches one of these gets a
+// lifetime grant on first boot, bypassing the trial. Add to this list
+// (or set EXPO_PUBLIC_OWNER_EMAIL) when granting comp access.
+export const OWNER_EMAILS: readonly string[] = [
+  't.gustafson75@gmail.com',
+];
+
+export function isOwnerEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const normalized = email.trim().toLowerCase();
+  if (OWNER_EMAILS.includes(normalized)) return true;
+  const fromEnv = (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim().toLowerCase();
+  return fromEnv.length > 0 && fromEnv === normalized;
+}
 
 interface PlayerProfileState {
   name: string;
@@ -31,6 +49,11 @@ interface PlayerProfileState {
   first_opened_at: number | null;
   trial_started_at: number | null;
   subscription_status: SubscriptionStatus;
+  /** Optional player email. Used by isOwnerEmail() to grant lifetime
+   *  access on first boot. Currently no auth surface populates this; set
+   *  manually via setEmail or via the EXPO_PUBLIC_OWNER_EMAIL env-var
+   *  fallback in isOwnerEmail. */
+  email: string | null;
 
   // Phase T — WHS handicap fields
   /** USGA Handicap Index (one decimal, e.g. 18.0). null until user sets it. */
@@ -68,6 +91,10 @@ interface PlayerProfileState {
   setDefaultMode: (m: 'break_100' | 'break_90' | 'break_80' | 'free_play') => void;
   initTrial: () => void;
   setSubscriptionStatus: (s: SubscriptionStatus) => void;
+  setEmail: (email: string | null) => void;
+  /** Owner override — sets subscription_status='lifetime' and stamps
+   *  first_opened_at if missing. Idempotent. */
+  grantLifetime: () => void;
   // Phase T
   setHandicapIndex: (idx: number | null) => void;
   setHandicapGender: (g: 'm' | 'f' | 'x') => void;
@@ -99,6 +126,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       first_opened_at: null,
       trial_started_at: null,
       subscription_status: 'free',
+      email: null,
       handicap_index: null,
       handicap_gender: 'x',
       recent_differentials: [],
@@ -136,6 +164,15 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
         set({ first_opened_at: now, trial_started_at: now, subscription_status: 'trial' });
       },
       setSubscriptionStatus: (s) => set({ subscription_status: s }),
+      setEmail: (email) => set({ email }),
+      grantLifetime: () =>
+        set(s => ({
+          first_opened_at: s.first_opened_at ?? Date.now(),
+          // Clear trial timestamp so any UI that checks it doesn't show
+          // a "trial expires in X" prompt on a lifetime account.
+          trial_started_at: null,
+          subscription_status: 'lifetime',
+        })),
       setHandicapIndex: (idx) => set({ handicap_index: idx }),
       setHandicapGender: (g) => set({ handicap_gender: g }),
       pushDifferential: (diff) =>

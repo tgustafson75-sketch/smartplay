@@ -247,6 +247,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       smartFinderContext = null,
       penaltyContext = null,
       is_proactive = false,
+      // PGA HOPE follow-up — per-persona intensity dial 0..100. Lets
+      // sound-sensitive / low-tolerance players soften the active caddie's
+      // cadence without losing them entirely. Optional; defaults to 100.
+      personaIntensity = 100,
+      // PGA HOPE follow-up — Tank-only soft-intro flag. When true the
+      // first three turns drop Marine cadence + signature phrases.
+      tankSoftIntro = false,
       // Phase V.7+ — caller-supplied local hour (0-23) so prompt can match
       // tone to time of day (groggy AM, calm PM). Optional; falls back to
       // generic if missing.
@@ -600,6 +607,16 @@ CRITICAL HONESTY RULES (Phase BC):
 - Balance: when data IS clean (GPS strong, weather loaded, course mapped), answer with confidence. The honesty bar is "admit when uncertain", not "hedge everything."
 
 ${is_proactive ? `PROACTIVE CONTEXT: You are speaking up on your own — the player did not ask a question. This is an observation, a nudge, or a check-in you chose to offer. Keep it to one sentence. Natural. Not a reminder, not a tip. Something a real caddie would say as they walk between holes.` : ''}
+
+INTENSITY DIAL (PGA HOPE follow-up): The player has set your intensity to ${personaIntensity}/100. ${
+  personaIntensity >= 85 ? 'Default cadence — the character spec applies normally.' :
+  personaIntensity >= 50 ? 'Dial back: shorter sentences, fewer signature phrases, half the imperative verbs. Stay in character but turn the volume down.' :
+  'Lowest register: drop signature phrases entirely. No commands. No exclamations. Use a single calm observation per turn. Same character — at the lowest intensity floor it knows.'
+}${
+  caddieName === 'Tank' && tankSoftIntro
+    ? ' SOFT-INTRO ACTIVE: this is one of your first three turns with this player. Drop "Roger that" / "Send it" / "Lock it in" / "Ooh-rah" / Marine acknowledgments and article-dropping. No imperative verbs. Introduce yourself as "I\'m Tank. I work direct and I keep it short." rather than the standard intro. The player can opt in to your full cadence later.'
+    : ''
+}
 
 PACE CHECK (sim-202 follow-up):
 - Real caddies talk in bursts, not continuously. Between every spoken read or comment, assume there is walking, addressing the ball, breathing, swinging — silence is the default state, talk is the exception.

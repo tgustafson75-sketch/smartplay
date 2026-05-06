@@ -46,6 +46,7 @@ import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { getCaddieName } from '../../lib/persona';
 import CageOverlay, { type CageOverlayPhase } from '../../components/swinglab/CageOverlay';
 import { setActiveSurface } from '../../services/activeSurfaceRegistry';
+import { subscribeCapture } from '../../services/mediaCapture';
 
 type Phase =
   | 'SETUP'
@@ -119,6 +120,25 @@ export default function CageDrillScreen() {
     setActiveSurface('drill_session');
     return () => { setActiveSurface(null); };
   }, []);
+
+  // PGA HOPE follow-up (A4) — single-handed players cannot reach the
+  // bottom-right record button while holding the camera. Subscribe to
+  // 'swing' kind voice captures so saying "record" / "capture" / "start"
+  // triggers the same handler the button does. Only fires while phase
+  // is READY (don't double-trigger mid-recording).
+  useEffect(() => {
+    let cancelled = false;
+    const unsub = subscribeCapture(['swing'], () => {
+      if (cancelled) return;
+      // Race-safe: only trigger if we're in the phase that allows it.
+      // The button uses phase === 'READY' as its guard; mirror that.
+      if (phase === 'READY') {
+        void handleStartRecording();
+      }
+    });
+    return () => { cancelled = true; unsub(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   // ── Cleanup on unmount ──────────────────────────────────────────────
   useEffect(() => {
@@ -416,10 +436,33 @@ export default function CageDrillScreen() {
               <Text style={styles.checkingText}>Checking position…</Text>
             </View>
           ) : phase === 'READY' ? (
-            <TouchableOpacity style={[styles.primaryBtn, styles.recordBtn]} onPress={handleStartRecording} activeOpacity={0.85}>
-              <View style={styles.recordDot} />
-              <Text style={styles.primaryBtnText}>Start Recording</Text>
-            </TouchableOpacity>
+            <>
+              {/* Re-sim P0 #2 — surface the voice trigger one-time so
+                  players (especially those who can't easily reach the
+                  button) know it exists. Hidden once tutorialsSeen marks
+                  cage_voice_trigger. */}
+              {!useSettingsStore.getState().tutorialsSeen?.['cage_voice_trigger'] && (
+                <View style={styles.voiceHintRow}>
+                  <Ionicons name="mic-outline" size={14} color="#00C896" />
+                  <Text style={styles.voiceHintText} accessibilityLabel="Tip: say record or capture to start recording with voice">
+                    {'Tip: say "record" or "capture" — hands-free.'}
+                  </Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[styles.primaryBtn, styles.recordBtn]}
+                onPress={() => {
+                  useSettingsStore.getState().markTutorialSeen('cage_voice_trigger');
+                  void handleStartRecording();
+                }}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Start recording your swing — or say record"
+              >
+                <View style={styles.recordDot} />
+                <Text style={styles.primaryBtnText}>Start Recording</Text>
+              </TouchableOpacity>
+            </>
           ) : (
             <TouchableOpacity
               style={[styles.primaryBtn, phase === 'NOT_READY' && styles.primaryBtnDisabled]}
@@ -639,6 +682,14 @@ const styles = StyleSheet.create({
 
   recordBtn: { backgroundColor: '#ef4444' },
   recordDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#ffffff' },
+
+  voiceHintRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(6, 15, 9, 0.78)',
+    borderColor: 'rgba(0, 200, 150, 0.45)', borderWidth: 1,
+    borderRadius: 10, paddingVertical: 6, paddingHorizontal: 12,
+  },
+  voiceHintText: { color: '#d1d5db', fontSize: 12, fontWeight: '600' },
 
   checkingCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,

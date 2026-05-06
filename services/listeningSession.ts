@@ -257,6 +257,10 @@ async function openSession() {
           register: 'coach',
           inRoundDiagnostic: true,
           voiceGender: settingsStore.voiceGender ?? 'male',
+          // PGA HOPE follow-up — persona, intensity dial, Tank soft-intro.
+          persona: settingsStore.caddiePersonality,
+          personaIntensity: settingsStore.personaIntensity?.[settingsStore.caddiePersonality] ?? 100,
+          tankSoftIntro: settingsStore.tankSoftIntro,
         };
         await fillerP;
         const r = await fetch(`${apiUrl}/api/kevin`, {

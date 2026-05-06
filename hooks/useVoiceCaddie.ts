@@ -464,6 +464,12 @@ export const useVoiceCaddie = ({
           // the prior shot). Cleared after 60s of no activity OR on
           // round/hole change.
           conversationTurns: getRecentTurns().map(t => ({ role: t.role, text: t.text })),
+          // PGA HOPE follow-up — server-side persona resolution, intensity
+          // dial, and Tank soft-intro flag. Read fresh at call time so
+          // settings changes apply to the next utterance without restart.
+          persona: useSettingsStore.getState().caddiePersonality,
+          personaIntensity: useSettingsStore.getState().personaIntensity?.[useSettingsStore.getState().caddiePersonality] ?? 100,
+          tankSoftIntro: useSettingsStore.getState().tankSoftIntro,
         }),
       }).finally(() => clearTimeout(timeout));
 

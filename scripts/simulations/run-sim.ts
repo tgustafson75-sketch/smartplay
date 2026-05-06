@@ -324,6 +324,95 @@ const quickLogPath = path.resolve(__dirname, '../../components/QuickLogShotSheet
 const quickLogSrc = fs.readFileSync(quickLogPath, 'utf-8');
 check('QuickLogShotSheet outcome enum aligns', quickLogSrc.includes("'hazard_drop'"), 'hazard_drop present');
 
+// ─── Scenario 11: PGA HOPE follow-up — settings store + helpers ────────────────
+
+console.log('\n=== Scenario 11: PGA HOPE accessibility + intensity wiring ===');
+
+const settingsStorePath = path.resolve(__dirname, '../../store/settingsStore.ts');
+const settingsSrc = fs.readFileSync(settingsStorePath, 'utf-8');
+
+check('settingsStore exports getEffectiveSimpleBriefing helper',
+  settingsSrc.includes('export function getEffectiveSimpleBriefing'),
+  'helper exported for callers');
+
+check('settingsStore migrates v3 -> v4 (a11y defaults)',
+  settingsSrc.includes('version < 4') && settingsSrc.includes('largeText'),
+  'v4 migrate present');
+
+check('settingsStore migrates v4 -> v5 (Harry default + bluetooth prompt)',
+  settingsSrc.includes('version < 5') && settingsSrc.includes('ttsCaptionsBluetoothPrompt'),
+  'v5 migrate present');
+
+check('settingsStore Harry default lowered to 90',
+  /personaIntensity:\s*\{\s*kevin:\s*100,\s*serena:\s*100,\s*harry:\s*90,\s*tank:\s*70/.test(settingsSrc),
+  'Harry default 90, Tank default 70');
+
+check('settingsStore tracks simpleBriefingUserTouched',
+  settingsSrc.includes('simpleBriefingUserTouched'),
+  'auto-on heuristic gate present');
+
+const captionStripPath = path.resolve(__dirname, '../../components/CaptionStrip.tsx');
+const captionSrc = fs.readFileSync(captionStripPath, 'utf-8');
+
+check('CaptionStrip subscribes to caption + route + speaking events',
+  captionSrc.includes('subscribeToCaption') && captionSrc.includes('subscribeRouteChanges') && captionSrc.includes('subscribeToSpeaking'),
+  'all three subscriptions wired');
+
+check('CaptionStrip prompts (not silently flips) ttsCaptions on Bluetooth',
+  captionSrc.includes('ttsCaptionsBluetoothPrompt') && captionSrc.includes("Alert.alert"),
+  'first-time bluetooth prompt present');
+
+check('CaptionStrip honors "never" prompt response',
+  captionSrc.includes("'never'"),
+  'don\'t-ask-again branch present');
+
+const voicePath = path.resolve(__dirname, '../../services/voiceService.ts');
+const voiceSrc = fs.readFileSync(voicePath, 'utf-8');
+
+check('voiceService exports caption + speaking subscriptions',
+  voiceSrc.includes('export const subscribeToCaption') && voiceSrc.includes('export const subscribeToSpeaking'),
+  'subscription surface present');
+
+check('voiceService volume reads currentPlaybackVolume() (per-persona dial)',
+  /volume:\s*currentPlaybackVolume\(\)/.test(voiceSrc),
+  'volume threaded from intensity dial');
+
+const tankSpecPath = path.resolve(__dirname, '../../constants/tankCharacter.ts');
+const tankSpec = fs.readFileSync(tankSpecPath, 'utf-8');
+check('Tank character spec has DISASTER DISCIPLINE block',
+  tankSpec.includes('DISASTER DISCIPLINE'),
+  'disaster discipline guard present');
+check('Tank character spec has SOFT-INTRO MODE block',
+  tankSpec.includes('SOFT-INTRO MODE'),
+  'soft-intro mode present');
+
+const kevinApiPath = path.resolve(__dirname, '../../api/kevin.ts');
+const kevinSrc = fs.readFileSync(kevinApiPath, 'utf-8');
+check('api/kevin.ts threads INTENSITY DIAL into prompt',
+  kevinSrc.includes('INTENSITY DIAL'),
+  'intensity dial present in system prompt');
+check('api/kevin.ts has PACE CHECK section',
+  kevinSrc.includes('PACE CHECK'),
+  'pace check present in system prompt');
+
+const profilePath = path.resolve(__dirname, '../../store/playerProfileStore.ts');
+const profileSrc = fs.readFileSync(profilePath, 'utf-8');
+check('SubscriptionStatus includes lifetime',
+  /SubscriptionStatus\s*=\s*[^;]*'lifetime'/.test(profileSrc),
+  'lifetime tier defined');
+check('isOwnerEmail honors Tim\'s email and env-var fallback',
+  profileSrc.includes('isOwnerEmail') && profileSrc.includes('EXPO_PUBLIC_OWNER_EMAIL'),
+  'owner allow-list + env fallback wired');
+check('grantLifetime action exists',
+  profileSrc.includes('grantLifetime'),
+  'lifetime grant action present');
+
+const featurePath = path.resolve(__dirname, '../../services/featureAccess.ts');
+const featureSrc = fs.readFileSync(featurePath, 'utf-8');
+check('featureAccess.canAccess treats lifetime as paid',
+  featureSrc.includes("'lifetime'"),
+  'lifetime accepted by feature gate');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

@@ -57,6 +57,18 @@ export default function Settings() {
     setResponseMode,
     setCastMode,
     setHighContrast,
+    // PGA HOPE follow-up + re-sim — accessibility / persona-fit fields.
+    largeText,
+    setLargeText,
+    ttsCaptions,
+    setTtsCaptions,
+    simpleBriefing,
+    setSimpleBriefing,
+    simpleBriefingUserTouched,
+    personaIntensity,
+    setPersonaIntensity,
+    tankSoftIntro,
+    setTankSoftIntro,
     setWatchConnected,
     setAutoListenEnabled,
     setSkipBriefings,
@@ -575,6 +587,83 @@ export default function Settings() {
             value={highContrast}
             onValueChange={setHighContrast}
           />
+          {/* PGA HOPE follow-up (A1) — large-text upgrade for low-vision
+              participants. Bumps caption + briefing font sizes. */}
+          <ToggleRow
+            label="Large Text"
+            sub="Bigger captions and briefing text — helpful in bright sun or for low-vision users"
+            value={largeText}
+            onValueChange={setLargeText}
+          />
+        </View>
+
+        {/* ACCESSIBILITY — captions, simpler briefings, and the
+            per-persona intensity dial all live together so participants
+            and pros can find them in one place. */}
+        <SectionHeader title="Accessibility & Pacing" />
+        <View style={cardStyle}>
+          <ToggleRow
+            label="Caption caddie speech"
+            sub="Show what the caddie is saying on screen during voice playback. Auto-on for Bluetooth audio."
+            value={ttsCaptions}
+            onValueChange={setTtsCaptions}
+          />
+          <ToggleRow
+            label="Simple briefing"
+            sub={
+              simpleBriefingUserTouched
+                ? 'One card at a time, slower pacing. Larger text on the briefing screen.'
+                : 'Auto-on for your first 5 rounds. One card at a time, slower pacing.'
+            }
+            value={simpleBriefing}
+            onValueChange={setSimpleBriefing}
+          />
+          <ToggleRow
+            label="Tank soft-intro"
+            sub="Tank drops Marine cadence for his first three turns with you, then unlocks. Auto-clears after one full round."
+            value={tankSoftIntro}
+            onValueChange={setTankSoftIntro}
+          />
+        </View>
+
+        {/* PER-PERSONA INTENSITY DIAL — slider per caddie. Default Tank=70,
+            Harry=90, Kevin/Serena=100. Floor 0, ceiling 100. */}
+        <SectionHeader title="Caddie Intensity" />
+        <View style={cardStyle}>
+          {(['kevin', 'serena', 'harry', 'tank'] as const).map((p, idx, arr) => (
+            <View
+              key={p}
+              style={[
+                styles.row,
+                idx < arr.length - 1 && { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth },
+              ]}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={labelStyle}>{getCaddieName(p)}</Text>
+                <Text style={subStyle}>
+                  {`Volume + cadence (${personaIntensity[p]}/100). Lower = quieter, fewer signature phrases.`}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                <TouchableOpacity
+                  onPress={() => setPersonaIntensity(p, Math.max(0, personaIntensity[p] - 10))}
+                  style={[styles.intensityStep, { borderColor: colors.border }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Lower ${getCaddieName(p)} intensity`}
+                >
+                  <Text style={[styles.intensityStepText, { color: colors.text_primary }]}>−</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setPersonaIntensity(p, Math.min(100, personaIntensity[p] + 10))}
+                  style={[styles.intensityStep, { borderColor: colors.border }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Raise ${getCaddieName(p)} intensity`}
+                >
+                  <Text style={[styles.intensityStepText, { color: colors.text_primary }]}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
         </View>
 
         {/* MEASUREMENT */}
@@ -832,6 +921,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#1e3a28',
   },
+  intensityStep: {
+    width: 36, height: 36, borderRadius: 18,
+    borderWidth: 1, alignItems: 'center', justifyContent: 'center',
+  },
+  intensityStepText: { fontSize: 18, fontWeight: '900' },
   rowText: {
     flex: 1,
     paddingRight: 12,
