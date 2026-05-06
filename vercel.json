@@ -28,6 +28,11 @@
     { "src": "/api/swing-analysis",  "dest": "/api/swing-analysis.ts" },
     { "src": "/api/cv-scoring",      "dest": "/api/cv-scoring.ts" },
     { "src": "/api/kevin/coach",     "dest": "/api/cage-coach.ts" },
-    { "src": "/api/context-synthesis", "dest": "/api/context-synthesis.ts" }
+    { "src": "/api/context-synthesis", "dest": "/api/context-synthesis.ts" },
+    { "src": "/api/club-recognition",  "dest": "/api/club-recognition.ts" },
+    { "src": "/api/space-scan",        "dest": "/api/space-scan.ts" },
+    { "src": "/api/tutorial-analysis", "dest": "/api/tutorial-analysis.ts" },
+    { "src": "/api/golfbert-proxy",    "dest": "/api/golfbert-proxy.ts" },
+    { "src": "/api/pose-analysis",     "dest": "/api/pose-analysis.ts" }
   ]
 }
