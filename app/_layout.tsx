@@ -25,7 +25,7 @@ import { setMarkedFix } from '../services/smartFinderService';
 import BatteryPrompt from '../components/battery/BatteryPrompt';
 import { subscribeActiveSurface } from '../services/activeSurfaceRegistry';
 import { getActiveCaddie, mapSurfaceToPillar } from '../services/caddieResolver';
-import { speak as speakHandoff } from '../services/voiceService';
+import { speak as speakHandoff, stopSpeaking } from '../services/voiceService';
 import { useTeamIntelligenceStore } from '../store/teamIntelligenceStore';
 import { initTeamIntelligenceForSession } from '../services/teamIntelligence';
 import CaddieSuggestionCard from '../components/CaddieSuggestionCard';
@@ -201,6 +201,12 @@ function AppNavigator() {
       const next = getActiveCaddie();
       const cur = useSettingsStore.getState().caddiePersonality;
       if (next === cur) return;
+      // Voice race fix (sim-202 follow-up): kill any in-flight TTS before
+      // flipping caddiePersonality. Without this, an utterance that was
+      // already mid-fetch/mid-playback finishes in the prior caddie's
+      // voice while the avatar onscreen has already swapped — a hard
+      // immersion break that Tim flagged from Z Fold testing.
+      stopSpeaking().catch(() => {});
       useSettingsStore.getState().setCaddiePersonality(next);
       // Skip the handoff line on the very first sync (cold launch); only
       // play it on real surface transitions during the session.
@@ -216,6 +222,8 @@ function AppNavigator() {
       const next = getActiveCaddie();
       const cur = useSettingsStore.getState().caddiePersonality;
       if (next === cur) return;
+      // Same race guard for Settings-driven swaps.
+      stopSpeaking().catch(() => {});
       // Manual Settings edit — suppress voice handoff (the user was just
       // tapping a row, no need to talk over them).
       useSettingsStore.getState().setCaddiePersonality(next);

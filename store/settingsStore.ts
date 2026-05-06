@@ -182,6 +182,18 @@ export const useSettingsStore = create<SettingsState>()(
         // but the gender map remains the back-compat fallback.
         const prev = get().caddiePersonality;
         const gender = p === 'serena' ? 'female' : 'male';
+        // Defensive voice-race guard (sim-202 follow-up): any caller that
+        // flips persona without first stopping in-flight TTS would
+        // otherwise leak the prior caddie's voice into the new persona's
+        // first utterance. Stop here too so the store invariant holds
+        // regardless of caller. Dynamic require avoids the layout/store
+        // import cycle.
+        if (prev !== p) {
+          try {
+            const voiceMod = require('../services/voiceService');
+            voiceMod.stopSpeaking?.()?.catch?.(() => {});
+          } catch { /* ignore */ }
+        }
         set({ caddiePersonality: p, voiceGender: gender });
         // Persona switch invalidates the persona-keyed audio caches so
         // the user doesn't keep hearing the prior caddie's filler clips

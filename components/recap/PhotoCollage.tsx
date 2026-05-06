@@ -8,14 +8,14 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Image, Modal,
-  StyleSheet, Dimensions, Pressable,
+  StyleSheet, useWindowDimensions, Pressable,
 } from 'react-native';
 import type { RoundPhoto } from '../../store/roundStore';
 
-const SCREEN_W = Dimensions.get('window').width;
-
 export default function PhotoCollage({ photos }: { photos: RoundPhoto[] }) {
   const [expanded, setExpanded] = useState<number | null>(null);
+  // Subscribe so the lightbox resizes when Z Fold opens/closes.
+  const { width: screenW } = useWindowDimensions();
 
   if (photos.length === 0) return null;
 
@@ -37,7 +37,7 @@ export default function PhotoCollage({ photos }: { photos: RoundPhoto[] }) {
         <Pressable style={styles.lightboxBg} onPress={() => setExpanded(null)}>
           {expanded != null && (
             <>
-              <Image source={{ uri: photos[expanded].uri }} style={styles.lightboxImage} resizeMode="contain" />
+              <Image source={{ uri: photos[expanded].uri }} style={{ width: screenW, height: screenW }} resizeMode="contain" />
               <View style={styles.lightboxOverlay}>
                 <Text style={styles.lightboxText}>Hole {photos[expanded].hole}</Text>
               </View>
@@ -71,7 +71,6 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: 'rgba(0,0,0,0.95)',
     alignItems: 'center', justifyContent: 'center',
   },
-  lightboxImage: { width: SCREEN_W, height: SCREEN_W },
   lightboxOverlay: {
     position: 'absolute', bottom: 60, left: 0, right: 0,
     alignItems: 'center',

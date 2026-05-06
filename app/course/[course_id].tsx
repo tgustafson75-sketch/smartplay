@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet,
-  Image, Dimensions, type ImageSourcePropType,
+  Image, useWindowDimensions, type ImageSourcePropType,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,8 +16,6 @@ import { getCourseImageryUrl, getHoleThumbnailUrl } from '../../services/mapboxI
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import PALMS_IMAGES from '../../data/palmsImages';
 import type { Course } from '../../types/course';
-
-const SCREEN_W = Dimensions.get('window').width;
 
 /**
  * Course Detail — legacy long-scroll format.
@@ -40,6 +38,10 @@ const SCREEN_W = Dimensions.get('window').width;
 export default function CourseDetailScreen() {
   const { course_id } = useLocalSearchParams<{ course_id: string }>();
   const router = useRouter();
+  // useWindowDimensions subscribes to device-config changes — Galaxy Z Fold
+  // reconfigure (open ↔ closed) re-renders this screen with the new width
+  // instead of keeping the stale module-load value.
+  const { width: screenW } = useWindowDimensions();
 
   const [course, setCourse] = useState<Course | null>(null);
   const [content, setContent] = useState<CourseContent | null>(getCachedContent(course_id ?? ''));
@@ -171,9 +173,9 @@ export default function CourseDetailScreen() {
         const g = getHoleGeometry(course.id, h.hole_number);
         return { tee: g?.tee ?? null, green: g?.green ?? null };
       }),
-    }, Math.round(SCREEN_W), Math.round(SCREEN_W * 0.55));
+    }, Math.round(screenW), Math.round(screenW * 0.55));
     return url ? { uri: url } : null;
-  }, [course, tee, isPalms, geometryReady]);
+  }, [course, tee, isPalms, geometryReady, screenW]);
 
   const handleStartRound = () => {
     if (!course) return;

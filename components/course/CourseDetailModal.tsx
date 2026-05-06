@@ -13,13 +13,11 @@
 import React from 'react';
 import {
   Modal, View, Text, ScrollView, Image, TouchableOpacity, StyleSheet,
-  Dimensions, type ImageSourcePropType,
+  useWindowDimensions, type ImageSourcePropType,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getHoleThumbnailUrl, getCourseImageryUrl } from '../../services/mapboxImagery';
 import PALMS_IMAGES from '../../data/palmsImages';
-
-const SCREEN_W = Dimensions.get('window').width;
 
 export type ModalHole = {
   hole_number: number;
@@ -39,12 +37,14 @@ type Props = {
 };
 
 export default function CourseDetailModal({ visible, onClose, courseName, location, holes }: Props) {
+  // Subscribe to dimensions so Z Fold reconfigure refreshes the aerial size.
+  const { width: screenW } = useWindowDimensions();
   // Palms is curated — bundled screenshots beat Mapbox tiles for this course.
   const isPalms = courseName.toLowerCase().includes('palms');
   const courseUrl = isPalms ? null : getCourseImageryUrl({
     courseId: null,
     holes: holes.map(h => ({ tee: h.tee, green: h.green })),
-  }, Math.round(SCREEN_W * 0.92), Math.round(SCREEN_W * 0.92 * 0.55));
+  }, Math.round(screenW * 0.92), Math.round(screenW * 0.92 * 0.55));
   const courseAerialPalms: ImageSourcePropType | null = isPalms ? PALMS_IMAGES[1] ?? null : null;
 
   return (

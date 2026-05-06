@@ -1,9 +1,13 @@
-// Layout hook — built in Day 4
+// Layout hook — Day 4 (refreshed for Z Fold reconfigure).
+//
+// useWindowDimensions subscribes to RN's dim-change events so foldable
+// open/close re-renders with the new viewport. Plain Dimensions.get
+// snapshots once and goes stale on the first reconfigure.
 
-import { Dimensions } from 'react-native';
+import { useWindowDimensions } from 'react-native';
 
 export const useLayout = () => {
-  const { width, height } = Dimensions.get('window');
+  const { width, height } = useWindowDimensions();
   return {
     width,
     height,
