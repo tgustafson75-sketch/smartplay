@@ -71,7 +71,9 @@ import { getFirstToolHint } from '../../services/voiceOnboardingService';
 // on caddie home (Tutorials in Tool menu is the discoverability path).
 import ScorecardChip from '../../components/caddie/ScorecardChip';
 import AppIcon, { type IconName } from '../../components/AppIcon';
-import * as ImagePicker from 'expo-image-picker';
+// ImagePicker import removed when Capture Photo was pulled from the
+// Tools menu (Tim flagged it as not belonging there). Re-add when the
+// dedicated round-active camera button surfaces it elsewhere.
 import VocabBanner from '../../components/VocabBanner';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
 import { canAccess, trialDaysLeft, SUBSCRIPTIONS_ENABLED } from '../../services/featureAccess';
@@ -2739,14 +2741,13 @@ export default function CaddieTab() {
                 sub: trustLevel === 1 ? 'Bring Kevin back to Companion' : "Mute Kevin until I'm ready",
                 action: () => { setShowMoreMenu(false); setTrustLevel(trustLevel === 1 ? 2 : 1); } },
               { icon: 'options-outline',     label: `${getCaddieName(caddiePersonality)}'s Presence: ${TRUST_LEVEL_META[trustLevel].label}`, sub: `${TRUST_LEVEL_META[trustLevel].one_liner} · Tap to cycle`, action: () => { const next = (((trustLevel) % 4) + 1) as TrustLevel; setTrustLevel(next); } },
-              // Phase 109-followup — proactive shot logging without waiting
-              // for auto-detection or voice. Round-active gated.
-              ...(isRoundActive ? [{
-                icon: 'create-outline' as IconName,
-                label: 'Log a shot',
-                sub: 'Pick club + outcome · GPS captured automatically',
-                action: () => { setShowMoreMenu(false); setQuickLogOpen(true); },
-              }] : []),
+              // (Removed from Tools menu per Tim — Log a shot, Penalty
+              // Stroke, and Capture Photo don't belong here. Log a shot
+              // is reachable via voice ("log a shot") + auto-detection;
+              // Penalty Stroke moves to a future scorecard inline action;
+              // Capture Photo lives on the round-active surface camera
+              // button. Tools menu is for tools, not round actions.)
+
               // Caddie persona cycler — Kevin → Serena → Tank → Kevin.
               // Stays in the Tools sheet so the user can swap mid-round
               // without diving into Settings. Drives off ACTIVE_PERSONAS
@@ -2766,28 +2767,6 @@ export default function CaddieTab() {
               { icon: 'videocam-outline',    label: 'Cage Mode',        sub: 'Range session',            action: () => { setShowMoreMenu(false); if (!canAccess('cage_mode', subscription_status)) { void triggerPaywall('cage_mode', () => router.push('/paywall' as never)); return; } router.push('/cage' as never); } },
               { icon: 'telescope-outline',   label: 'SmartVision',      sub: 'Analyze the hole',         action: () => { setShowMoreMenu(false); openSmartVision(); } },
               { icon: 'locate-outline',      label: 'SmartFinder',      sub: 'Tap-to-lock rangefinder',  action: () => { setShowMoreMenu(false); if (!canAccess('smartfinder', subscription_status)) { void triggerPaywall('smartfinder', () => router.push('/paywall' as never)); return; } router.push('/smartfinder' as never); } },
-              { icon: 'warning-outline',     label: 'Penalty Stroke',   sub: 'Water · OB · Lost ball',   action: () => { if (isRoundActive) addPenalty(currentHole); setShowMoreMenu(false); } },
-              ...(isRoundActive ? [{
-                icon: 'camera-outline' as IconName, label: 'Capture Photo', sub: 'Add a memory to this round',
-                action: async () => {
-                  setShowMoreMenu(false);
-                  try {
-                    const perm = await ImagePicker.requestCameraPermissionsAsync();
-                    if (!perm.granted) {
-                      Alert.alert('Camera permission needed', 'Allow camera access to capture round photos.');
-                      return;
-                    }
-                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    const result = await ImagePicker.launchCameraAsync({
-                      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                      quality: 0.7, allowsEditing: false,
-                    });
-                    if (result.canceled || !result.assets[0]?.uri) return;
-                    useRoundStore.getState().addRoundPhoto(result.assets[0].uri);
-                    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                  } catch (e) { console.log('[capture-photo] error', e); }
-                },
-              }] : []),
               ...(isRoundActive ? [{
                 icon: 'flag-outline' as IconName, label: 'End Round',   sub: 'Finish and get summary',   action: async () => { setShowMoreMenu(false); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {}); clearShotPending(); endRound(); await generateRoundSummary(); },
               }] : []),

@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   useWindowDimensions,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -66,6 +67,19 @@ type Phase = 'requesting' | 'preview' | 'recording' | 'ending';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+/** Curated cage drills exposed in the in-overlay drill picker. Same set
+ *  used by SwingLab's drill list — duplicated here as a minimal subset
+ *  so the overlay can pick without importing the full DRILLS array
+ *  (which would create a UI-side circular-ish dep). When SwingLab adds
+ *  a new cage drill, mirror its id/title/steps here. */
+const PICKER_DRILLS: CageDrillContext[] = [
+  { id: 'alignment',   title: 'Alignment Check', steps: ['Set alignment sticks parallel.', 'Verify shoulder line.', 'Hit 10 with check before each.'], tip: 'Most amateurs aim right.' },
+  { id: 'impact',      title: 'Impact Position', steps: ['Set impact bag.', 'Slow swing to impact.', 'Check hands ahead, weight forward.', 'Hold position 5 sec.'], tip: 'Shaft lean = distance.' },
+  { id: 'gate',        title: 'Gate Drill',      steps: ['Place tees 1" wider than clubhead.', 'Swing through without hitting either tee.', 'Adjust path until clean.'], tip: 'Path doesn\'t lie.' },
+  { id: 'pump',        title: 'Pump Drill',      steps: ['Take club to top.', 'Pump down to hip height 3x.', '4th pump finishes through.'], tip: 'Hands lead clubhead.' },
+  { id: 'one-handed',  title: 'One-Handed Swings', steps: ['Trail hand: 10 slow swings.', 'Lead hand: 10 slow swings.', 'Both hands: feel the balance.'], tip: 'Reveals dominant hand.' },
+];
+
 export default function CageSessionOverlay({ onComplete, onCancel, drill }: Props) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -77,6 +91,11 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
   // are wide enough that we keep the width check too as a backstop.
   const aspect = height / Math.max(width, 1);
   const isFoldOpen = (aspect < 1.5 && width > 500) || width > 700;
+  // Local drill state — initialized from prop, mutable via the in-
+  // overlay picker so the user can pick a drill AFTER opening Cage
+  // Mode (rather than having to pick before opening). Null = Free
+  // Practice (the default cage behavior).
+  const [activeDrill, setActiveDrill] = useState<CageDrillContext | null>(drill ?? null);
   // Drill step counter — currently advances on session-start only since
   // mechanics are identical to free practice in this pass. The shape is
   // ready for the follow-up that wires per-step prompts.
@@ -505,7 +524,7 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
         try {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const pointsMod = require('../store/pointsStore');
-          const reason = drill ? `cage_drill_${drill.id}` : 'cage_session';
+          const reason = activeDrill ? `cage_drill_${activeDrill.id}` : 'cage_session';
           pointsMod.usePointsStore.getState().addPoints(10, reason);
         } catch (e) { console.log('[points] cage-end emit failed:', e); }
       }
@@ -515,7 +534,7 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
       // is keyed by sessionHistory[].id.
       onComplete(libraryEntryId ?? session.id);
     }
-  }, [phase, swingCount, stopMetering, onComplete, drill]);
+  }, [phase, swingCount, stopMetering, onComplete, activeDrill]);
 
   // ─── Cleanup ───────────────────────────────────────────────────────────────
 
@@ -591,6 +610,52 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
           </View>
         </View>
 
+        {/* Drill picker — Free Practice (default) + each cage drill.
+            Lives inside Cage Mode so the user picks AFTER opening the
+            camera, not before. Tapping a chip sets the drill context;
+            the recording will render the drill-info strip when started.
+            Free Practice clears any selection. */}
+        <View style={styles.drillPickerWrap}>
+          <Text style={styles.drillPickerLabel}>DRILL (OPTIONAL)</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.drillPickerRow}
+          >
+            <TouchableOpacity
+              style={[
+                styles.drillPickerChip,
+                activeDrill === null && styles.drillPickerChipActive,
+              ]}
+              onPress={() => setActiveDrill(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Free practice — no drill structure"
+            >
+              <Text style={[
+                styles.drillPickerChipText,
+                activeDrill === null && styles.drillPickerChipTextActive,
+              ]}>Free</Text>
+            </TouchableOpacity>
+            {PICKER_DRILLS.map(d => (
+              <TouchableOpacity
+                key={d.id}
+                style={[
+                  styles.drillPickerChip,
+                  activeDrill?.id === d.id && styles.drillPickerChipActive,
+                ]}
+                onPress={() => setActiveDrill(d)}
+                accessibilityRole="button"
+                accessibilityLabel={`Run ${d.title} drill`}
+              >
+                <Text style={[
+                  styles.drillPickerChipText,
+                  activeDrill?.id === d.id && styles.drillPickerChipTextActive,
+                ]}>{d.title}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
         {!meterAvailable && (
           <View style={styles.warnBanner}>
             <Text style={styles.warnText}>
@@ -639,20 +704,20 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
           player has structure inside the same surface as free practice.
           Tap the chevron to advance the step counter manually (mechanics
           are still free-detect; per-step prompts come in the follow-up). */}
-      {drill && (
+      {activeDrill && (
         <View style={styles.drillStrip}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.drillStripTitle} numberOfLines={1}>{drill.title}</Text>
+            <Text style={styles.drillStripTitle} numberOfLines={1}>{activeDrill.title}</Text>
             <Text style={styles.drillStripStep} numberOfLines={2}>
-              {`Step ${Math.min(drillStepIdx + 1, drill.steps.length)} of ${drill.steps.length} · `}
-              <Text style={styles.drillStripStepBody}>{drill.steps[Math.min(drillStepIdx, drill.steps.length - 1)]}</Text>
+              {`Step ${Math.min(drillStepIdx + 1, activeDrill.steps.length)} of ${activeDrill.steps.length} · `}
+              <Text style={styles.drillStripStepBody}>{activeDrill.steps[Math.min(drillStepIdx, activeDrill.steps.length - 1)]}</Text>
             </Text>
           </View>
           <TouchableOpacity
-            onPress={() => setDrillStepIdx(i => (i + 1) % drill.steps.length)}
+            onPress={() => setDrillStepIdx(i => (i + 1) % activeDrill.steps.length)}
             style={styles.drillStripBtn}
             accessibilityRole="button"
-            accessibilityLabel={`Advance to next step of ${drill.title} drill`}
+            accessibilityLabel={`Advance to next step of ${activeDrill.title} drill`}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Text style={styles.drillStripBtnText}>Next ›</Text>
@@ -910,6 +975,27 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     marginBottom: 8,
   },
+  drillPickerWrap: {
+    paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4,
+  },
+  drillPickerLabel: {
+    color: '#9ca3af', fontSize: 10, fontWeight: '800',
+    letterSpacing: 1.2, marginBottom: 6,
+  },
+  drillPickerRow: {
+    flexDirection: 'row', gap: 8, paddingRight: 8,
+  },
+  drillPickerChip: {
+    paddingHorizontal: 12, paddingVertical: 7,
+    backgroundColor: 'rgba(0, 200, 150, 0.10)',
+    borderColor: 'rgba(0, 200, 150, 0.45)', borderWidth: 1,
+    borderRadius: 16,
+  },
+  drillPickerChipActive: {
+    backgroundColor: '#00C896', borderColor: '#00C896',
+  },
+  drillPickerChipText: { color: '#d1d5db', fontSize: 12, fontWeight: '700' },
+  drillPickerChipTextActive: { color: '#0d1a0d', fontSize: 12, fontWeight: '900' },
   drillStripTitle: { color: '#00C896', fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
   drillStripStep:  { color: '#9ca3af', fontSize: 12, marginTop: 2, lineHeight: 16 },
   drillStripStepBody: { color: '#d1d5db', fontWeight: '600' },

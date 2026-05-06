@@ -253,9 +253,15 @@ export default function SwingLab() {
   const roundHistory = useRoundStore(s => s.roundHistory);
   const [activeEnv, setActiveEnv] = useState<DrillEnv | 'all'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  // Phase R polish — drill list + practice tools collapsed by default.
+  // Per-section collapse state. Tim's restructure: Common Faults → Cage
+  // Mode → Swing Library → Tutorial → Drills → Arena, each as its own
+  // discoverable card. Common Faults defaults open (it's the prominent
+  // surface); rest collapsed so the tab reads as a clean stack.
   const [drillsOpen, setDrillsOpen] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false);
+  const [cageOpen, setCageOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [arenaOpen, setArenaOpen] = useState(false);
   // Phase 111-followup — Common Faults section collapsible per Tim
   // feedback. Default false so the tab opens compact; user expands to
   // browse faults.
@@ -270,8 +276,9 @@ export default function SwingLab() {
   // free practice (current default behavior). Set by the inline drill
   // picker OR by a Drill card's "Open in Cage Mode" CTA.
   const [cageDrillCtx, setCageDrillCtx] = useState<CageDrillContext | null>(null);
-  // Inline drill picker open/closed (renders below the "Cage Mode" tile).
-  const [cagePickerOpen, setCagePickerOpen] = useState(false);
+  // (cagePickerOpen removed — drill picker now lives INSIDE
+  // CageSessionOverlay's preview phase, not as an inline chip row in
+  // Practice Tools. Kept the comment to mark the design pivot.)
 
   // Phase J.5 deep-link — when arriving with ?drill_id=X (from DrillCard's
   // "Open Drill" CTA on the Cage post-session review), auto-expand that
@@ -350,16 +357,16 @@ export default function SwingLab() {
     );
   }
 
-  // Helper — open Cage Mode for free practice (no drill context).
-  const openCageFree = () => { setCageDrillCtx(null); setCageActive(true); setCagePickerOpen(false); };
+  // Helper — open Cage Mode for free practice (no drill context). The
+  // in-overlay picker lets the user upgrade to a guided drill once
+  // inside, so we don't need a pre-pick chip row in this tab anymore.
+  const openCageFree = () => { setCageDrillCtx(null); setCageActive(true); };
   // Helper — open Cage Mode for a specific drill (info strip renders).
+  // Used by Drill cards' "Open in Cage Mode" CTA.
   const openCageWithDrill = (d: typeof DRILLS[number]) => {
     setCageDrillCtx({ id: d.id, title: d.title, steps: d.steps, tip: d.tip });
     setCageActive(true);
-    setCagePickerOpen(false);
   };
-  // Cage-applicable drills only — the ones whose environments include 'cage'.
-  const cageDrills = DRILLS.filter(d => d.environments.includes('cage'));
 
   const visibleDrills =
     activeEnv === 'all'
@@ -423,70 +430,80 @@ export default function SwingLab() {
           ));
         })()}
 
-        {/* Practice Tools — single collapsible card holds the 5 actions
-            (Cage Session / Upload / Library / Cage Mode / Arena). Default
-            collapsed so SwingLab reads as a clean stack on small screens.
-            Expanded: compact icon-row list. */}
+        {/* CAGE MODE — own card. Camera + auto-detect + analysis +
+            drill picker (inside overlay). Bullseye Drill + Scan Your
+            Space hang off here as cage-related supporting tools. */}
         <TouchableOpacity
-          style={styles.toolsCardHeader}
-          onPress={() => setToolsOpen(o => !o)}
+          style={styles.drillsCardHeader}
+          onPress={() => setCageOpen(o => !o)}
           activeOpacity={0.85}
         >
           <View style={{ flex: 1 }}>
-            <Text style={styles.drillsCardTitle}>Practice Tools</Text>
-            <Text style={styles.drillsCardSub}>Cage · Upload · Library · Arena</Text>
+            <Text style={styles.drillsCardTitle}>Cage Mode</Text>
+            <Text style={styles.drillsCardSub}>Camera · auto-detect · analysis · drills</Text>
           </View>
-          <AppIcon name={toolsOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#00C896" />
+          <AppIcon name={cageOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#00C896" />
         </TouchableOpacity>
-
-        {toolsOpen && (
+        {cageOpen && (
           <View style={styles.toolsList}>
-            {/* Unified Cage Mode — single surface that does camera +
-                analysis + drill-guided sessions. Replaced 3 prior entries
-                ("Start Cage Session", "Cage Drill", "Cage Mode") that all
-                opened similar screens with overlapping purpose. Tap to
-                expand the inline drill picker — pick "Free Practice" for
-                the original auto-detect session, or any cage drill to run
-                that drill inside the same camera surface.
-                Legacy routes (/cage, /swinglab/cage-drill) still resolve
-                via deep link for backwards compatibility. */}
             <ToolRow
               icon="videocam"
-              label="Cage Mode"
-              sub="Camera · auto-detect · analysis · drills"
-              onPress={() => setCagePickerOpen(o => !o)}
+              label="Open Cage Mode"
+              sub="Camera · auto-detect swings · drill picker inside"
+              onPress={openCageFree}
             />
-            {cagePickerOpen && (
-              <View style={styles.cagePickerWrap}>
-                <TouchableOpacity
-                  style={[styles.cagePickerChip, styles.cagePickerChipPrimary]}
-                  onPress={openCageFree}
-                  accessibilityRole="button"
-                  accessibilityLabel="Start free cage practice — auto-detect every swing"
-                >
-                  <AppIcon name="play-circle-outline" size={16} color="#0d1a0d" />
-                  <Text style={styles.cagePickerChipPrimaryText}>Free Practice</Text>
-                </TouchableOpacity>
-                {cageDrills.map(d => (
-                  <TouchableOpacity
-                    key={d.id}
-                    style={styles.cagePickerChip}
-                    onPress={() => openCageWithDrill(d)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Run ${d.title} drill in Cage Mode`}
-                  >
-                    <AppIcon name="radio-button-on-outline" size={14} color="#00C896" />
-                    <Text style={styles.cagePickerChipText}>{d.title}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-            {/* Phase BR Component 14 — Upload Swing entry was the source of
-                empirical failures (users uploading instructional videos to
-                a biomechanics pipeline). Redirected to the tutorial flow.
-                Legacy biomech sessions still re-analyze from My Swing
-                Library; live cage recordings keep their own Phase K +
-                U1-fallback pipeline. */}
+            <ToolRow
+              icon="radio-button-on-outline"
+              label="Bullseye Drill"
+              sub="Structured 12-second capture with bullseye scoring"
+              onPress={() => router.push('/swinglab/cage-drill' as never)}
+            />
+            <ToolRow
+              icon="scan-outline"
+              label="Scan Your Space"
+              sub="30-second setup read for cage framing"
+              onPress={() => router.push('/swinglab/space-scan' as never)}
+            />
+          </View>
+        )}
+
+        {/* SWING LIBRARY — own card. Browse + replay every recorded swing. */}
+        <TouchableOpacity
+          style={styles.drillsCardHeader}
+          onPress={() => setLibraryOpen(o => !o)}
+          activeOpacity={0.85}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.drillsCardTitle}>Swing Library</Text>
+            <Text style={styles.drillsCardSub}>Browse + replay every captured swing</Text>
+          </View>
+          <AppIcon name={libraryOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#00C896" />
+        </TouchableOpacity>
+        {libraryOpen && (
+          <View style={styles.toolsList}>
+            <ToolRow
+              icon="library-outline"
+              label="Open Swing Library"
+              sub="Every recorded swing with analysis + biomechanics"
+              onPress={() => router.push('/swinglab/library' as never)}
+            />
+          </View>
+        )}
+
+        {/* TUTORIALS — own card. Add coaching lessons + browse the library. */}
+        <TouchableOpacity
+          style={styles.drillsCardHeader}
+          onPress={() => setTutorialOpen(o => !o)}
+          activeOpacity={0.85}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.drillsCardTitle}>Tutorials</Text>
+            <Text style={styles.drillsCardSub}>Add coaching lessons · browse what Kevin can reference</Text>
+          </View>
+          <AppIcon name={tutorialOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#00C896" />
+        </TouchableOpacity>
+        {tutorialOpen && (
+          <View style={styles.toolsList}>
             <ToolRow
               icon="cloud-upload-outline"
               label="Add Tutorial"
@@ -494,29 +511,10 @@ export default function SwingLab() {
               onPress={() => router.push('/swinglab/tutorial-upload' as never)}
             />
             <ToolRow
-              icon="scan-outline"
-              label="Scan Your Space"
-              sub="30-second setup read"
-              onPress={() => router.push('/swinglab/space-scan' as never)}
-            />
-            <ToolRow
-              icon="library-outline"
-              label="My Swing Library"
-              sub="Browse + replay"
-              onPress={() => router.push('/swinglab/library' as never)}
-            />
-            <ToolRow
               icon="school-outline"
-              label="Tutorials"
-              sub="Capture coaching lessons Kevin uses on course"
+              label="Browse Tutorials"
+              sub="Lessons available for Kevin to reference"
               onPress={() => router.push('/swinglab/tutorials' as never)}
-            />
-            <ToolRow
-              icon="trophy-outline"
-              label="Arena"
-              sub="Target games + scoring"
-              onPress={() => router.push('/arena' as never)}
-              accent="#F5A623"
             />
           </View>
         )}
@@ -597,6 +595,31 @@ export default function SwingLab() {
               </View>
             )}
           </>
+        )}
+
+        {/* ARENA — own card. Target games + scoring. Distinct from Drills
+            because it's a separate game mode, not a structured drill. */}
+        <TouchableOpacity
+          style={styles.drillsCardHeader}
+          onPress={() => setArenaOpen(o => !o)}
+          activeOpacity={0.85}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.drillsCardTitle}>Arena</Text>
+            <Text style={styles.drillsCardSub}>Target games + scoring</Text>
+          </View>
+          <AppIcon name={arenaOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#F5A623" />
+        </TouchableOpacity>
+        {arenaOpen && (
+          <View style={styles.toolsList}>
+            <ToolRow
+              icon="trophy-outline"
+              label="Open Arena"
+              sub="Target games + scoring · alternate game modes"
+              onPress={() => router.push('/arena' as never)}
+              accent="#F5A623"
+            />
+          </View>
         )}
 
         <View style={styles.bottomPad} />

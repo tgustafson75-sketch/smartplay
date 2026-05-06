@@ -78,23 +78,61 @@ export default function CourseDetailScreen() {
     let cancelled = false;
     if (!course_id) return;
     void (async () => {
-      // Resolve local: prefix (synthetic id used by the Play tab's curated
-      // CLOSEST LOCAL COURSES) → real API course id via name search.
+      // Local-course shortcut — synthesize a stub Course immediately
+      // from bundled metadata so the detail screen renders without
+      // waiting on a golfcourseapi search-then-fetch round-trip that
+      // can fail when the local-friendly name doesn't match the API's
+      // course list (Tim's "stuck on loading aerial photos" complaint).
+      // After the stub renders, we still attempt API enrichment in the
+      // background; if it succeeds we upgrade the data, but the user
+      // never stares at a spinner while we figure it out.
       let realId = course_id;
       if (course_id.startsWith('local:')) {
         const slug = course_id.slice('local:'.length);
         const friendly =
-          slug === 'palms' ? 'Menifee Lakes Palms' :
-          slug === 'lakes' ? 'Menifee Lakes Lakes' :
+          slug === 'palms' ? 'Menifee Lakes Country Club — Palms' :
+          slug === 'lakes' ? 'Menifee Lakes Country Club — Lakes' :
           slug === 'rancho-california' ? 'Rancho California Golf Club' :
           slug;
-        try {
-          const found = await searchCourses(friendly);
-          const real = found.find(r => !r._error);
-          if (real?.id) realId = real.id;
-        } catch (e) {
-          console.log('[course-detail] local resolve failed:', e);
+        const stubHoles = Array.from({ length: 18 }, (_, i): import('../../types/course').Hole => ({
+          hole_number: i + 1,
+          par: 4,
+          yardage: 380,
+          handicap: null,
+          gps: null,
+          hazards: [],
+        }));
+        const stubCourse: Course = {
+          id: course_id,
+          club_name: friendly,
+          course_name: friendly,
+          location: { city: slug.startsWith('rancho') ? 'Temecula' : 'Menifee', state: 'CA', country: 'USA' },
+          tees: [{
+            tee_name: 'White',
+            total_yards: 6840,
+            course_rating: null,
+            slope_rating: null,
+            par_total: 72,
+            holes: stubHoles,
+          }],
+          cached_at: Date.now(),
+        };
+        if (!cancelled) {
+          setCourse(stubCourse);
+          setLoading(false);
+          setGeometryReady(true); // bundled images don't need API geometry
         }
+        // Background enrichment — don't await, don't block UI on it.
+        void searchCourses(friendly).then(found => {
+          if (cancelled) return;
+          const real = found.find(r => !r._error);
+          if (!real?.id) return;
+          void getCourse(real.id).then(c => {
+            if (!cancelled && c) setCourse(c);
+          }).catch(() => {});
+          void fetchCourseGeometry(real.id).catch(() => {});
+        }).catch(() => {});
+        return;
       }
       try {
         const c = await getCourse(realId);

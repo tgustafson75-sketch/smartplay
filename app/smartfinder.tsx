@@ -10,6 +10,7 @@ import {
   useWindowDimensions,
   ActivityIndicator,
   AppState,
+  Linking,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
@@ -243,8 +244,16 @@ function CameraSmartFinder({
           <Text style={styles.permText}>
             SmartFinder uses the camera to aim at your target. Your camera feed never leaves your device.
           </Text>
-          <TouchableOpacity style={styles.permBtn} onPress={requestCameraPermission}>
-            <Text style={styles.permBtnText}>Allow Camera</Text>
+          <TouchableOpacity
+            style={styles.permBtn}
+            onPress={async () => {
+              if (cameraPermission && !cameraPermission.canAskAgain) { Linking.openSettings(); return; }
+              await requestCameraPermission();
+            }}
+          >
+            <Text style={styles.permBtnText}>
+              {cameraPermission && !cameraPermission.canAskAgain ? 'Open Settings' : 'Allow Camera'}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.backLink} onPress={onClose}>
             <Text style={styles.backLinkText}>← Back</Text>

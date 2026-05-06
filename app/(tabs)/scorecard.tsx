@@ -362,49 +362,13 @@ export default function Scorecard() {
     </View>
   );
 
-  // Inline quick-score chips that render directly under the current hole's
-  // row. Tim flagged that the prior fixed-position block always rendered
-  // between Front 9 and Back 9, so visually the chips appeared under hole
-  // 9 no matter which hole was current — confusing "what am I scoring?"
-  // moment. Now they slot in below whichever row matches currentHole.
-  const renderQuickScoreChips = (hole: number) => {
-    const par = viewCourseHoles.find(h => h.hole === hole)?.par ?? 4;
-    return (
-      <View style={[styles.quickScoreInline, { backgroundColor: c.surface_elevated, borderBottomColor: c.border }]}>
-        <Text style={[styles.sectionLabel, { color: c.accent, marginBottom: 6 }]}>HOLE {hole} · TAP A SCORE</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-          {([-2, -1, 0, 1, 2, 3, 4] as const).map(diff => {
-            const score = par + diff;
-            if (score < 1) return null;
-            const fill = SCORE_FILL(diff);
-            const label =
-              diff <= -2 ? 'Eagle' :
-              diff === -1 ? 'Birdie' :
-              diff === 0 ? 'Par' :
-              diff === 1 ? 'Bogey' :
-              diff === 2 ? 'Double' :
-              diff === 3 ? 'Triple' : ('+' + diff);
-            return (
-              <TouchableOpacity
-                key={diff}
-                style={[styles.scoreChip, { backgroundColor: fill, borderColor: fill }]}
-                onPress={() => handleQuickScore(hole, score)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.scoreChipScore}>{score}</Text>
-                <Text style={styles.scoreChipLabel}>{label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-    );
-  };
-
-  // When should the chip strip appear? Round must be active AND the
-  // current hole has no score yet AND the hole is in the rendered set.
-  const showChipsForHole = (hole: number): boolean =>
-    isRoundActive && hole === currentHole && !scores[currentHole];
+  // Sticky bottom chip panel — renders ONCE at the bottom of the
+  // ScrollView footer when the current hole has no score. Replaces the
+  // prior inline-per-row attempt that confusingly made chips appear
+  // under multiple holes when the user tapped around. One panel, one
+  // hole label, no surprises.
+  const stickyChipHole = isRoundActive && !scores[currentHole] ? currentHole : null;
+  const stickyChipPar = stickyChipHole != null ? (viewCourseHoles.find(h => h.hole === stickyChipHole)?.par ?? 4) : 4;
 
   const hasAnythingToShow = isRoundActive || lastCompletedRound != null;
   const front9 = viewCourseHoles.filter(h => h.hole <= 9);
@@ -493,37 +457,64 @@ export default function Scorecard() {
           </View>
         )}
 
-        {/* PER-HOLE ROWS — Front 9 (chips slot in directly under the
-            current hole's row so it's always visually obvious which hole
-            you're scoring). */}
+        {/* PER-HOLE ROWS — Front 9. Quick-score chips moved to a single
+            sticky panel below this list (rendered after Back 9) instead
+            of interleaved per-row, which made them appear to pop around. */}
         {hasAnythingToShow && front9.length > 0 && (
           <View style={[styles.section, styles.holeListWrap]}>
             <Text style={[styles.sectionLabel, { color: c.text_muted }]}>FRONT 9</Text>
             <View style={[styles.holeList, { backgroundColor: c.surface, borderColor: c.border }]}>
-              {front9.map(h => (
-                <React.Fragment key={h.hole}>
-                  {renderHoleRow(h)}
-                  {showChipsForHole(h.hole) && renderQuickScoreChips(h.hole)}
-                </React.Fragment>
-              ))}
+              {front9.map(renderHoleRow)}
               {renderTotalsRow('OUT', frontScore, frontPar)}
             </View>
           </View>
         )}
 
-        {/* PER-HOLE ROWS — Back 9 (same inline-chips behavior). */}
+        {/* PER-HOLE ROWS — Back 9. */}
         {hasAnythingToShow && !nineHoleMode && back9.length > 0 && (
           <View style={[styles.section, styles.holeListWrap]}>
             <Text style={[styles.sectionLabel, { color: c.text_muted }]}>BACK 9</Text>
             <View style={[styles.holeList, { backgroundColor: c.surface, borderColor: c.border }]}>
-              {back9.map(h => (
-                <React.Fragment key={h.hole}>
-                  {renderHoleRow(h)}
-                  {showChipsForHole(h.hole) && renderQuickScoreChips(h.hole)}
-                </React.Fragment>
-              ))}
+              {back9.map(renderHoleRow)}
               {renderTotalsRow('IN', backScore, backPar)}
             </View>
+          </View>
+        )}
+
+        {/* Single sticky chip panel — only shows when round is active AND
+            current hole has no score yet. Renders ONCE under the totals,
+            with a clear "HOLE X" label so the user knows what they're
+            scoring. No inline-per-row rendering, no popping around. */}
+        {stickyChipHole != null && (
+          <View style={[styles.stickyChipPanel, { backgroundColor: c.surface_elevated, borderColor: c.accent }]}>
+            <Text style={[styles.sectionLabel, { color: c.accent, marginBottom: 8 }]}>
+              HOLE {stickyChipHole} · TAP A SCORE
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+              {([-2, -1, 0, 1, 2, 3, 4] as const).map(diff => {
+                const score = stickyChipPar + diff;
+                if (score < 1) return null;
+                const fill = SCORE_FILL(diff);
+                const label =
+                  diff <= -2 ? 'Eagle' :
+                  diff === -1 ? 'Birdie' :
+                  diff === 0 ? 'Par' :
+                  diff === 1 ? 'Bogey' :
+                  diff === 2 ? 'Double' :
+                  diff === 3 ? 'Triple' : ('+' + diff);
+                return (
+                  <TouchableOpacity
+                    key={diff}
+                    style={[styles.scoreChip, { backgroundColor: fill, borderColor: fill }]}
+                    onPress={() => handleQuickScore(stickyChipHole, score)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.scoreChipScore}>{score}</Text>
+                    <Text style={styles.scoreChipLabel}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         )}
 
@@ -726,11 +717,9 @@ const styles = StyleSheet.create({
 
   // Quick score chips (filled, high contrast)
   chipsRow: { flexDirection: 'row', gap: 8, paddingRight: 8 },
-  quickScoreInline: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  stickyChipPanel: {
+    marginHorizontal: 16, marginTop: 16, marginBottom: 8,
+    padding: 14, borderRadius: 12, borderWidth: 1,
   },
   scoreChip: {
     alignItems: 'center',

@@ -788,16 +788,24 @@ export default function CaddieAvatar({
             offsets. Composition is controlled entirely by the parent
             container's frame size in caddie.tsx (canonical: full W ×
             W·16/9 anchored top:0 left:0). =========================== */}
+        {/* Tank v2 portraits are taller than the frame aspect (Tim's
+            authored set has Tank's head near the top of the canvas).
+            With resizeMode='cover' the head gets cropped on wide
+            frames (Z Fold open). For Tank we use 'contain' so the
+            full portrait shows even with letterbox. Other personas
+            keep cover-mode (their portraits are pre-fitted to 9:16).
+            TODO: re-crop tank_v2_*.png assets to 9:16 to remove this
+            override. Until then, contain prevents the head crop. */}
         <Animated.Image
           source={backSource}
           style={[styles.avatarImage, { transform: backTransform, opacity: backOpacity }]}
-          resizeMode={fill}
+          resizeMode={resolvedPersona === 'tank' ? 'contain' : fill}
         />
 
         <Animated.Image
           source={frontSource}
           style={[styles.avatarImage, { transform: frontTransform, opacity: fadeAnim }]}
-          resizeMode={fill}
+          resizeMode={resolvedPersona === 'tank' ? 'contain' : fill}
         />
 
         {/* Layer 2 — Bottom gradient */}

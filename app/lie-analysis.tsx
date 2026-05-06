@@ -203,8 +203,21 @@ export default function LieAnalysisScreen() {
           <Text style={styles.permText}>
             TightLie needs the camera to look at your shot. The photo never leaves your device except to be analyzed.
           </Text>
-          <TouchableOpacity style={styles.permBtn} onPress={requestCameraPermission}>
-            <Text style={styles.permBtnText}>Allow Camera</Text>
+          <TouchableOpacity
+            style={styles.permBtn}
+            onPress={async () => {
+              // canAskAgain false → OS dialog won't appear; route to
+              // Settings instead of silently no-opping the user's tap.
+              if (cameraPermission && !cameraPermission.canAskAgain) {
+                Linking.openSettings();
+                return;
+              }
+              await requestCameraPermission();
+            }}
+          >
+            <Text style={styles.permBtnText}>
+              {cameraPermission && !cameraPermission.canAskAgain ? 'Open Settings' : 'Allow Camera'}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.permLink} onPress={() => Linking.openSettings()}>
             <Text style={styles.permLinkText}>Open Settings</Text>
