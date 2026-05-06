@@ -68,8 +68,13 @@ export default async function handler(
     return res.status(200).json({ text: transcription.text });
 
   } catch (err: unknown) {
+    // Audit fix: was returning HTTP 200 with `{error,text:''}` which made
+    // failures look like silent successes — client-side code that read
+    // `text` got an empty string and assumed the user said nothing. Now
+    // we return a proper 5xx so monitoring (Sentry once enabled) sees
+    // these as real errors and the voice UI can re-prompt the user.
     const msg = err instanceof Error ? err.message : String(err);
-    console.log('[transcribe] error:', msg);
-    return res.status(200).json({ error: 'Transcription failed', text: '' });
+    console.error('[transcribe] error:', msg);
+    return res.status(502).json({ error: 'Transcription failed', detail: msg, text: '' });
   }
 }

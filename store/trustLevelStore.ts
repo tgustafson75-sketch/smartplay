@@ -47,6 +47,9 @@ export const useTrustLevelStore = create<TrustLevelState>()(
     {
       name: 'trust-level-store-v1',
       storage: createJSONStorage(() => getPersistStorage()),
+      // Audit follow-up — explicit version + migrate added defensively.
+      version: 1,
+      migrate: (persisted) => persisted as TrustLevelState,
     },
   ),
 );

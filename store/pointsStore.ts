@@ -59,6 +59,12 @@ export const usePointsStore = create<PointsState>()(
     {
       name: 'points-store-v1',
       storage: createJSONStorage(() => getPersistStorage()),
+      // Audit follow-up: explicit version + migrate added defensively so
+      // future schema changes (new tier, new history field) have a
+      // documented bump path. v1 = current shape; bump + add migrate
+      // logic when changing PointsEntry / TIERS.
+      version: 1,
+      migrate: (persisted) => persisted as PointsState,
     },
   ),
 );

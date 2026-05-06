@@ -540,8 +540,22 @@ export const useVoiceCaddie = ({
         signal: transcribeController.signal,
       }).finally(() => clearTimeout(transcribeTimeout));
 
-      const transcribeData = await transcribeRes.json() as { text?: string };
+      const transcribeData = await transcribeRes.json().catch(() => ({})) as { text?: string; error?: string };
       const transcript = transcribeData.text ?? '';
+
+      // Audit follow-up: distinguish "API broke" from "user was silent".
+      // Prior code treated both as "no input"; now a real upstream
+      // failure (HTTP non-2xx OR error field present) bubbles a haptic
+      // + brief vibration so the user knows to retry rather than
+      // assuming the mic missed them. Empty transcript on a 200 is
+      // still "user said nothing" — silent return.
+      if (!transcribeRes.ok || transcribeData.error) {
+        console.error('[voice] transcribe failed', transcribeRes.status, transcribeData.error);
+        try { Vibration.vibrate(120); } catch {}
+        onVoiceStateChange('idle');
+        isProcessingRef.current = false;
+        return;
+      }
 
       console.log('[voice] transcript:', transcript);
 

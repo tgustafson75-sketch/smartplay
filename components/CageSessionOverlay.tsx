@@ -67,9 +67,16 @@ type Phase = 'requesting' | 'preview' | 'recording' | 'ending';
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CageSessionOverlay({ onComplete, onCancel, drill }: Props) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const isFoldOpen = width > 500;
+  // Audit fix: was `width > 500` only, which mis-identified some tablets
+  // (always wide) as folded-open AND missed Z Fold's reconfigure if the
+  // device was rotated. Aspect-ratio + width together gives a sturdier
+  // signal — folded-open Z Fold is roughly square-ish (aspect 0.85–1.15);
+  // closed Z Fold and standard phones are tall (aspect > 1.6). Tablets
+  // are wide enough that we keep the width check too as a backstop.
+  const aspect = height / Math.max(width, 1);
+  const isFoldOpen = (aspect < 1.5 && width > 500) || width > 700;
   // Drill step counter — currently advances on session-start only since
   // mechanics are identical to free practice in this pass. The shape is
   // ready for the follow-up that wires per-step prompts.

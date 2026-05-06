@@ -17,7 +17,6 @@ import { useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import KevinBadge from '../components/KevinBadge';
 import { useSettingsStore } from '../store/settingsStore';
-import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSmartFinderStore } from '../store/smartFinderStore';
 import {
   computeDistance,
@@ -35,7 +34,9 @@ export default function SmartFinder() {
   const { width: _W, height: H } = useWindowDimensions();
 
   const { distance_unit } = useSettingsStore();
-  const { subscription_status: _subscription_status } = usePlayerProfileStore();
+  // (Subscription gate removed — kill-switch makes every feature accessible
+  // and the redundant destructure was flagged by audit. Re-add when the
+  // subscription system comes back online.)
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [locationGranted, setLocationGranted] = useState(false);

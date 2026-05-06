@@ -688,6 +688,13 @@ export const useCageStore = create<CageState>()(
     {
       name: 'cage-store-v1',
       storage: createJSONStorage(() => getPersistStorage()),
+      // Audit follow-up — explicit version + migrate added defensively.
+      // Cage session schemas have evolved (clubSegments, primary_issue,
+      // analysis_status added across phases) without bumping the persist
+      // version. v1 = current shape; bump + add migrate when changing
+      // CageSession / CageShot type shape going forward.
+      version: 1,
+      migrate: (persisted) => persisted as CageState,
       partialize: (s) => ({
         // activeSession NOT persisted — in-flight session lost on crash is acceptable
         sessionHistory: s.sessionHistory,
