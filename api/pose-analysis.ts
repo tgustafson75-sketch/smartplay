@@ -140,7 +140,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...auth.headers,
         'Content-Type': `multipart/form-data; boundary=${boundary}`,
       },
-      body: multipartBody as unknown as BodyInit,
+      // Type escape: this file is compiled under the project tsconfig
+      // which mixes DOM + Node lib types. Vercel's build environment
+      // drops global BodyInit (causing TS2304) while the Expo-side lib
+      // includes it but rejects Buffer/Uint8Array against the narrowed
+      // union (TS2769). Both are spurious — Node 18+ fetch accepts a
+      // Buffer at runtime. `as unknown as never` short-circuits both.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      body: multipartBody as any,
       signal: upstreamController.signal,
     });
     clearTimeout(upstreamTimer);
