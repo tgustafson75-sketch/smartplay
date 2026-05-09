@@ -90,6 +90,7 @@ export async function POST(request: Request) {
       watchData = null,
       voiceGender = 'male',
       persona = null,
+      history = [],
     } = body as {
       message?: string;
       language?: string;
@@ -127,6 +128,7 @@ export async function POST(request: Request) {
       } | null;
       voiceGender?: VoiceGender;
       persona?: string | null;
+      history?: Array<{ role: 'user' | 'assistant'; content: string }>;
     };
 
     // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
@@ -245,12 +247,28 @@ Remember: You are ${caddieName}. Not an app. Not an AI assistant. ${caddieName}.
     // ── Anthropic call ──────────────────────────────────────────────────────
 
     // Audit 101 / W4 — Anthropic ephemeral prompt caching (5-min TTL).
+    // Conversation history: last N turns of {role:user|assistant, content}
+    // sent by the V3 client. Filtered to safe shapes + capped at 12 messages
+    // (~6 turns) so a long session can't bloat the prompt or smuggle tool
+    // blocks. Empty array if the client doesn't send history (legacy clients
+    // keep working — single-message messages array, no regression).
+    const safeHistory = (Array.isArray(history) ? history : [])
+      .filter((m): m is { role: 'user' | 'assistant'; content: string } =>
+        m && typeof m === 'object' &&
+        (m.role === 'user' || m.role === 'assistant') &&
+        typeof m.content === 'string' && m.content.length > 0,
+      )
+      .slice(-12);
+
     const aiResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 400,
       tools: TOOLS,
       system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: String(message ?? '') }],
+      messages: [
+        ...safeHistory,
+        { role: 'user', content: String(message ?? '') },
+      ],
     });
 
     // Parse content blocks for text and tool_use
