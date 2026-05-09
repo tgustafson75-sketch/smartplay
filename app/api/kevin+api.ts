@@ -252,13 +252,19 @@ Remember: You are ${caddieName}. Not an app. Not an AI assistant. ${caddieName}.
     // (~6 turns) so a long session can't bloat the prompt or smuggle tool
     // blocks. Empty array if the client doesn't send history (legacy clients
     // keep working — single-message messages array, no regression).
-    const safeHistory = (Array.isArray(history) ? history : [])
+    let safeHistory = (Array.isArray(history) ? history : [])
       .filter((m): m is { role: 'user' | 'assistant'; content: string } =>
         m && typeof m === 'object' &&
         (m.role === 'user' || m.role === 'assistant') &&
         typeof m.content === 'string' && m.content.length > 0,
       )
       .slice(-12);
+    // Anthropic requires the first message to be from 'user'. If the
+    // client (or a legacy/buggy buffer) sends a leading-assistant
+    // history, drop everything up to the first user message.
+    while (safeHistory.length > 0 && safeHistory[0].role !== 'user') {
+      safeHistory.shift();
+    }
 
     const aiResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-5',
