@@ -26,6 +26,7 @@
     { "src": "/api/course-content",  "dest": "/api/course-content.ts" },
     { "src": "/api/lie-analysis",    "dest": "/api/lie-analysis.ts" },
     { "src": "/api/swing-analysis",  "dest": "/api/swing-analysis.ts" },
+    { "src": "/api/image-edit",      "dest": "/api/image-edit.ts" },
     { "src": "/api/cv-scoring",      "dest": "/api/cv-scoring.ts" },
     { "src": "/api/kevin/coach",     "dest": "/api/cage-coach.ts" },
     { "src": "/api/context-synthesis", "dest": "/api/context-synthesis.ts" },
