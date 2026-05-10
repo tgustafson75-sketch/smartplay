@@ -118,13 +118,14 @@ export default function CaddieTab() {
   // the dropdown row + DataStrip + insets. On phones the natural
   // W·16/9 fits within viewport so the cap doesn't trigger and the
   // canonical look is preserved.
-  // Phase BI — pre-round at L4, the Start Round CTA sits at bottom 40 +
-  // insets.bottom (height 60). The avatar frame must leave 200px of
-  // clearance below it so the CTA's top edge isn't clipped by the
-  // avatar's bottom gradient. In-round, the data strip + green-arrow
-  // dropdown row claim ~160px which is the existing budget.
+  // Phase BJ — pre-round Start Round CTA budget. Standard phones reserve
+  // 200px below the avatar; Fold Z open (W >= 540) reserves 280px because
+  // the wider avatar pushes its bottom gradient further down the visible
+  // viewport and a 200px reservation was clipping the CTA top edge.
+  // In-round both aspects share the 160px DataStrip + dropdown budget.
   const _isRoundActiveForLayout = useRoundStore(s => s.isRoundActive);
-  const _avatarMaxH = H - insets.top - insets.bottom - 56 - (_isRoundActiveForLayout ? 160 : 200);
+  const _preRoundBudget = W >= 540 ? 280 : 200;
+  const _avatarMaxH = H - insets.top - insets.bottom - 56 - (_isRoundActiveForLayout ? 160 : _preRoundBudget);
   const avatarFrameHeight = Math.min(Math.round(W * 16 / 9), _avatarMaxH);
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
@@ -2304,7 +2305,7 @@ export default function CaddieTab() {
         pointerEvents={isRoundActive ? 'none' : 'box-none'}
       >
         <TouchableOpacity
-          style={[styles.startRoundBtn, { bottom: 40 + insets.bottom }]}
+          style={[styles.startRoundBtn, { bottom: (W >= 540 ? 80 : 40) + insets.bottom }]}
           // Caddie's Start Round button now routes to the Play tab (Course
           // Discovery). After a course is picked there, the Selected Course
           // card's "Start Round" button navigates back here with

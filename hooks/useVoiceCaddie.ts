@@ -22,6 +22,7 @@ import { voiceCommandRouter } from '../services/intents';
 import type { AppContext } from '../types/voiceIntent';
 import type { ToolAction } from '../app/api/kevin+api';
 import { useSmartVision } from '../contexts/SmartVisionContext';
+import { useKevinPresence } from '../contexts/KevinPresenceContext';
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
@@ -185,8 +186,7 @@ export const useVoiceCaddie = ({
   // services/voiceService.subscribeToSpeaking, so we only need to plumb
   // the thinking signal. Wraps the caller's onVoiceStateChange so existing
   // local state (caddie.tsx voiceState) keeps working too.
-  const presenceMod = require('../contexts/KevinPresenceContext') as typeof import('../contexts/KevinPresenceContext');
-  const { setIsThinking } = presenceMod.useKevinPresence();
+  const { setIsThinking } = useKevinPresence();
   const wrappedOnVoiceStateChange = useCallback((state: VoiceState) => {
     setIsThinking(state === 'thinking');
     onVoiceStateChange(state);

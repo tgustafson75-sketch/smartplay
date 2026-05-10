@@ -57,10 +57,25 @@ export default function WindArrow({ weather, shotBearingDeg, compact }: Props) {
   const size = compact ? 44 : 60;
   const stroke = compact ? 2.5 : 3;
 
-  // No data or sub-3 mph — render nothing, keep the overlay clean.
-  if (!weather || weather.wind_direction_deg == null) return null;
+  // Loading state — weather hasn't resolved yet. Render a small dim
+  // compass needle so the badge isn't an empty blue circle while the
+  // weather fetch / cache lookup races.
+  if (!weather || weather.wind_direction_deg == null) {
+    return (
+      <View style={styles.container}>
+        <Text style={[styles.placeholder, { color: COLORS.neutral }]}>—</Text>
+      </View>
+    );
+  }
   const speedMph = weather.wind_speed_mph ?? 0;
-  if (speedMph < 3) return null;
+  // Calm — show "calm" mph='0' chip so the badge has a clean readable state.
+  if (speedMph < 3) {
+    return (
+      <View style={styles.container}>
+        <Text style={[styles.calmText, { color: COLORS.neutral }]}>calm</Text>
+      </View>
+    );
+  }
 
   const windToDeg = (weather.wind_direction_deg + 180) % 360;
   let arrowAngle: number;
@@ -128,5 +143,16 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginTop: -2,
     letterSpacing: 0.3,
+  },
+  placeholder: {
+    fontSize: 18,
+    fontWeight: '600',
+    opacity: 0.6,
+  },
+  calmText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.0,
+    textTransform: 'uppercase',
   },
 });
