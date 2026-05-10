@@ -605,6 +605,14 @@ export default function CaddieTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayText]);
 
+  // Phase BH — auto-clear an in-round caddieResponse after 8s so the bubble
+  // doesn't linger over the data strip across multiple shots.
+  useEffect(() => {
+    if (!isRoundActive || !caddieResponse) return;
+    const id = setTimeout(() => setCaddieResponse(''), 8000);
+    return () => clearTimeout(id);
+  }, [isRoundActive, caddieResponse]);
+
   const currentPar = getCurrentPar();
 
   // Phase 106 — evaluate round-progress triggers when the active hole
@@ -907,7 +915,10 @@ export default function CaddieTab() {
   });
 
   const handleMicPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    // Phase BH — stronger haptic so the tap is unmistakable when Kevin's
+    // visual ring takes a beat to appear (audio init / permission resolve).
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    console.log('[caddie] avatar tap → handleMicPress');
     _handleMicPress();
   };
 
@@ -2086,11 +2097,22 @@ export default function CaddieTab() {
                 </View>
               </TouchableOpacity>
 
-              {/* MARK */}
+              {/* MARK — Phase BH: on hole 1 the first Mark also runs a full
+                  GPS recalibrate so the round starts on a fresh, high-accuracy
+                  fix. Course-loaded yardages depend on this first fix being
+                  trustworthy; without recalibrate, a stale tower-triangulation
+                  fix can push hole-1 yardages off by 30-60 yards. */}
               <TouchableOpacity
                 onPress={async () => {
                   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
                   setL4ActionsExpanded(false);
+                  if (currentHole === 1) {
+                    try {
+                      const gps = await import('../../services/gpsManager');
+                      setCaddieResponse('Recalibrating GPS…');
+                      await gps.recalibrateGps();
+                    } catch (e) { console.log('[mark:hole1] recalibrate failed', e); }
+                  }
                   const mod = await import('../../services/positionMarkBus');
                   const r = await mod.forceMarkPosition();
                   if (r.kind === 'ok') {
@@ -2178,17 +2200,25 @@ export default function CaddieTab() {
            bottom-anchored copy was removed when L1 was restructured to
            mirror the L2 Companion stack. */}
 
-      {/* GREETING BUBBLE — pre-round only, sits in negative space above Start Round.
-          Bottom = startRoundBtn (40 + 60 height) + 24 clearance = 124. */}
-      {!isRoundActive && shownText && trustLevel !== 1 ? (
+      {/* GREETING BUBBLE — pre-round shows opening prompt; in-round shows the
+          most recent caddieResponse so a tap on Kevin produces visible
+          feedback even when voice is muted. Pre-round bottom sits above
+          Start Round (124); in-round bottom sits above the data strip
+          (96 + insets) so it doesn't overlap the dropdown chevron. */}
+      {((!isRoundActive && shownText) || (isRoundActive && caddieResponse)) && trustLevel !== 1 ? (
         <Animated.View
-          style={[styles.bubble, { bottom: 124 + insets.bottom, opacity: responseFade }]}
+          style={[
+            styles.bubble,
+            {
+              bottom: (isRoundActive ? 168 : 124) + insets.bottom,
+              opacity: responseFade,
+            },
+          ]}
+          pointerEvents="none"
         >
-          {/* Backdrop deliberately almost-transparent so Kevin's face shows through.
-              Text legibility is preserved by the textShadow on bubbleText. */}
           <View style={[StyleSheet.absoluteFill, styles.bubbleTint]} />
           <Text style={styles.bubbleText} numberOfLines={3}>
-            {shownText}
+            {isRoundActive ? caddieResponse : shownText}
           </Text>
         </Animated.View>
       ) : null}
@@ -2778,47 +2808,53 @@ export default function CaddieTab() {
               // current subscription + cached fix, pulls a single Highest-
               // accuracy fix, restarts the watch in active mode. Useful when
               // yardages feel off (under trees, by water, after backgrounding).
-              { icon: 'compass-outline',     label: 'GPS Calibration',  sub: 'Refresh signal & accuracy', action: async () => {
+              { icon: 'compass-outline',     label: 'GPS Refresh',      sub: 'Pull a fresh fix & refresh yardages', action: async () => {
                   setShowMoreMenu(false);
-                  // Phase V.7+ — haptic confirms the tap; single Alert when
-                  // the result is in (avoids stacked Android alerts).
                   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
                   try {
                     const gps = await import('../../services/gpsManager');
                     const fix = await gps.recalibrateGps();
                     if (fix) {
+                      // Phase BH — also fire the position-mark bus so every
+                      // non-gpsManager subscriber (smartFinder, holeDetection,
+                      // hole-view) refreshes against the new fix without
+                      // waiting for the next watch tick.
+                      try {
+                        const bus = await import('../../services/positionMarkBus');
+                        await bus.forceMarkPosition().catch(() => {});
+                      } catch (e) { console.log('[gps-refresh] mark cascade failed', e); }
                       const acc = fix.accuracy_m != null ? `~${Math.round(fix.accuracy_m)}m` : 'unknown';
-                      Alert.alert('GPS', `Locked. Accuracy ${acc}.`);
+                      Alert.alert('GPS Refresh', `Locked. Accuracy ${acc}.`);
                     } else {
-                      Alert.alert('GPS', "Couldn't get a fresh fix. Step into the open and try again.");
+                      Alert.alert('GPS Refresh', "Couldn't get a fresh fix. Step into the open and try again.");
                     }
                   } catch (e) {
-                    console.log('[gps-calibration] error', e);
-                    Alert.alert('GPS', 'Calibration failed. Try again in a moment.');
+                    console.log('[gps-refresh] error', e);
+                    Alert.alert('GPS Refresh', 'Refresh failed. Try again in a moment.');
                   }
                 } },
               { icon: 'logo-youtube',        label: 'YouTube Channel',  sub: '@smartplaycaddie',         action: () => { void openYouTubeChannel('@smartplaycaddie'); setShowMoreMenu(false); } },
               // Functional EAS Update check — fetches the latest preview-
               // channel bundle if one is available and prompts to restart.
               // Lets testers pull the latest fix without uninstall/reinstall.
-              { icon: 'cloud-download-outline' as IconName, label: 'Check for Updates', sub: 'Pull the latest fix from the preview channel',
+              { icon: 'cloud-download-outline' as IconName, label: 'App Refresh', sub: 'Pull the latest fix from the preview channel',
                 action: async () => {
                   setShowMoreMenu(false);
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
                   try {
                     const Updates = await import('expo-updates');
                     if (!Updates.isEnabled) {
-                      Alert.alert('Updates not enabled', 'This build was made before updates were wired in. Reinstall the latest APK from Expo to start receiving over-the-air updates.');
+                      Alert.alert('App Refresh', 'Updates are not enabled in this build. Reinstall the latest APK to start receiving over-the-air updates.');
                       return;
                     }
-                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
                     const result = await Updates.checkForUpdateAsync();
                     if (!result.isAvailable) {
-                      Alert.alert('Up to date', 'You\'re on the latest preview build. Nothing to fetch.');
+                      Alert.alert('App Refresh', "You're on the latest build. Nothing to fetch.");
                       return;
                     }
                     await Updates.fetchUpdateAsync();
                     Alert.alert(
-                      'Update ready',
+                      'App Refresh',
                       'A new bundle was downloaded. Restart the app now to apply it?',
                       [
                         { text: 'Later', style: 'cancel' },
@@ -2826,8 +2862,8 @@ export default function CaddieTab() {
                       ],
                     );
                   } catch (e) {
-                    console.log('[updates] check failed', e);
-                    Alert.alert('Update check failed', 'Try again in a moment. If it keeps failing, your network may be blocking u.expo.dev.');
+                    console.log('[app-refresh] check failed', e);
+                    Alert.alert('App Refresh', 'Refresh failed. Try again in a moment — if it keeps failing, your network may be blocking u.expo.dev.');
                   }
                 } },
               { icon: 'settings-outline',    label: 'Settings',         sub: 'App preferences',          action: () => { setShowMoreMenu(false); router.push('/settings' as never); } },

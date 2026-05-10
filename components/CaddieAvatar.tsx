@@ -775,7 +775,9 @@ export default function CaddieAvatar({
       <TouchableOpacity
         style={fill === 'cover' ? styles.frameFull : [styles.frame, { height: AVATAR_HEIGHT }]}
         onPress={onTap}
-        activeOpacity={0.97}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Tap to talk"
       >
         {/* Phase AT — Kevin recompose. Source portraits have the subject
             offset right-of-center within the JPG canvas (face occupies

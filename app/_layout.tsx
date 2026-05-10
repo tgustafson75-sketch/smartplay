@@ -132,6 +132,26 @@ function AppNavigator() {
     initBatteryMonitor();
   }, []);
 
+  // Phase BH — silent OTA on app start. checkForUpdateAsync + fetch happen
+  // in the background; the bundle applies on the *next* cold launch (we
+  // never auto-reload mid-session because that would interrupt a round).
+  // Manual "App Refresh" in the Tools menu is still the way to apply
+  // immediately when the user wants it.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const Updates = await import('expo-updates');
+        if (!Updates.isEnabled) return;
+        const result = await Updates.checkForUpdateAsync();
+        if (!result.isAvailable) return;
+        await Updates.fetchUpdateAsync();
+        console.log('[updates] background fetch complete — applies on next launch');
+      } catch (e) {
+        console.log('[updates] background fetch failed', e);
+      }
+    })();
+  }, []);
+
   // Phase 106 — boot team intelligence: reset per-session counters and
   // wire the handoff orchestrator. When a pending suggestion is accepted,
   // temporarily reassign the suggestion's pillar to the suggested caddie.

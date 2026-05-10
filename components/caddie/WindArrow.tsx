@@ -11,25 +11,16 @@ import Animated, {
 import type { WeatherSnapshot } from '../../services/weatherService';
 
 /**
- * Phase C — Wind arrow.
- *
- * Caddie-mode visualization of wind relative to shot direction. Mike sees an arrow
- * and immediately knows whether the wind is helping, hurting, or sideways. No
- * reading required.
+ * Phase BH — minimal Windage overlay.
+ * Just an arrow and the wind speed. No labels, no calm circle, no
+ * "wind"/"calm"/"—" placeholders. When data is missing we render
+ * nothing so the parent badge stays clean.
  *
  * Conventions:
- *   - Arrow up = tailwind (helping). Color: green.
- *   - Arrow down = headwind (hurting). Color: red/orange.
- *   - Arrow sideways = crosswind. Color: amber.
- *   - Calm (<3 mph): small neutral circle, no arrow.
- *   - Stale weather (>10 min) or null: subtle "—" placeholder.
- *
- * If shotBearingDeg is null (unknown shot direction), the arrow rotates by
- * compass-true wind direction (no shot-relative rotation) and the color
- * collapses to neutral.
- *
- * Sized for both Fold-closed and Fold-open aspect ratios via the optional
- * `compact` prop (smaller chrome when screen width is tight).
+ *   - Arrow up = tailwind, Arrow down = headwind, sideways = crosswind.
+ *   - Color follows the same family.
+ *   - When shotBearingDeg is null, the arrow points by compass-true wind
+ *     direction with neutral coloring.
  */
 
 type Props = {
@@ -42,13 +33,10 @@ const COLORS = {
   tailwind: '#00C896',
   headwind: '#ef4444',
   cross: '#F5A623',
-  neutral: '#6b7280',
-  calm: '#9ca3af',
-  stale: '#374151',
+  neutral: '#9ca3af',
 };
 
 function classifyWind(alongMph: number, crossMph: number): 'tail' | 'head' | 'cross' {
-  // Threshold: if along is dominant (>1.5x cross), classify by along sign; else cross
   if (Math.abs(alongMph) > Math.abs(crossMph) * 1.5) {
     return alongMph >= 0 ? 'tail' : 'head';
   }
@@ -59,55 +47,34 @@ export default function WindArrow({ weather, shotBearingDeg, compact }: Props) {
   const pulse = useSharedValue(1);
   useEffect(() => {
     pulse.value = withRepeat(
-      withTiming(1.08, { duration: 1400, easing: Easing.inOut(Easing.quad) }),
+      withTiming(1.06, { duration: 1400, easing: Easing.inOut(Easing.quad) }),
       -1,
       true,
     );
   }, [pulse]);
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
 
-  const size = compact ? 56 : 72;
+  const size = compact ? 44 : 60;
   const stroke = compact ? 2.5 : 3;
 
-  // No data
-  if (!weather || weather.wind_direction_deg == null) {
-    return (
-      <View style={[styles.container, compact && styles.containerCompact]}>
-        <Text style={[styles.placeholder, { color: COLORS.stale }]}>—</Text>
-        <Text style={[styles.label, { color: COLORS.stale }]}>wind</Text>
-      </View>
-    );
-  }
-
+  // No data or sub-3 mph — render nothing, keep the overlay clean.
+  if (!weather || weather.wind_direction_deg == null) return null;
   const speedMph = weather.wind_speed_mph ?? 0;
+  if (speedMph < 3) return null;
 
-  // Calm
-  if (speedMph < 3) {
-    return (
-      <View style={[styles.container, compact && styles.containerCompact]}>
-        <View style={[styles.calmCircle, { width: size * 0.5, height: size * 0.5, borderRadius: size * 0.25 }]} />
-        <Text style={[styles.label, { color: COLORS.calm }]}>calm</Text>
-      </View>
-    );
-  }
-
-  // Compute relative angle to shot bearing (or absolute compass-up if no bearing)
   const windToDeg = (weather.wind_direction_deg + 180) % 360;
   let arrowAngle: number;
-  let alongMph = 0;
-  let crossMph = 0;
   let category: 'tail' | 'head' | 'cross' | 'neutral' = 'neutral';
 
   if (shotBearingDeg != null) {
     let rel = windToDeg - shotBearingDeg;
     rel = ((rel + 540) % 360) - 180;
-    arrowAngle = rel; // 0 = up = tailwind
+    arrowAngle = rel;
     const r = (rel * Math.PI) / 180;
-    alongMph = Math.cos(r) * speedMph;
-    crossMph = Math.sin(r) * speedMph;
+    const alongMph = Math.cos(r) * speedMph;
+    const crossMph = Math.sin(r) * speedMph;
     category = classifyWind(alongMph, crossMph);
   } else {
-    // No bearing — rotate by compass (windToDeg, 0 = up = north). Neutral coloring.
     arrowAngle = windToDeg;
     category = 'neutral';
   }
@@ -118,12 +85,11 @@ export default function WindArrow({ weather, shotBearingDeg, compact }: Props) {
     : category === 'cross' ? COLORS.cross
     : COLORS.neutral;
 
-  // Length scales with speed — clamp 3..30 mph to 0.5..1.0 of available space
+  // Length scales with speed — clamp 3..30 mph to 0.55..1.0
   const speedNorm = Math.max(0, Math.min(1, (speedMph - 3) / 27));
-  const arrowLength = size * (0.5 + 0.4 * speedNorm);
-  const headSize = compact ? 7 : 9;
+  const arrowLength = size * (0.55 + 0.35 * speedNorm);
+  const headSize = compact ? 6 : 8;
 
-  // Build a vertical arrow centered at (size/2, size/2), shaft from y_bottom to y_top.
   const cx = size / 2;
   const cy = size / 2;
   const half = arrowLength / 2;
@@ -132,7 +98,7 @@ export default function WindArrow({ weather, shotBearingDeg, compact }: Props) {
   const headPath = `M ${cx} ${shaftTop - headSize} L ${cx - headSize} ${shaftTop} L ${cx + headSize} ${shaftTop} Z`;
 
   return (
-    <View style={[styles.container, compact && styles.containerCompact]}>
+    <View style={styles.container}>
       <Animated.View style={pulseStyle}>
         <Svg width={size} height={size}>
           <G transform={`rotate(${arrowAngle} ${cx} ${cy})`}>
@@ -147,9 +113,7 @@ export default function WindArrow({ weather, shotBearingDeg, compact }: Props) {
           </G>
         </Svg>
       </Animated.View>
-      <Text style={[styles.speed, { color }]}>
-        {Math.round(speedMph)}{' '}<Text style={styles.unit}>mph</Text>
-      </Text>
+      <Text style={[styles.speed, { color }]}>{Math.round(speedMph)}</Text>
     </View>
   );
 }
@@ -158,23 +122,11 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 6,
-  },
-  containerCompact: { padding: 4 },
-  placeholder: {
-    fontSize: 28, fontWeight: '700',
-  },
-  label: {
-    fontSize: 9, fontWeight: '700', letterSpacing: 1.2, marginTop: 2,
-  },
-  calmCircle: {
-    backgroundColor: '#1e3a28',
-    borderWidth: 1.5,
-    borderColor: '#9ca3af',
-    marginBottom: 4,
   },
   speed: {
-    fontSize: 13, fontWeight: '800', marginTop: 2,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: -2,
+    letterSpacing: 0.3,
   },
-  unit: { fontSize: 10, fontWeight: '600' },
 });
