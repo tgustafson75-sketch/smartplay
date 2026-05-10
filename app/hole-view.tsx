@@ -385,7 +385,16 @@ export default function HoleView() {
     : null;
 
   // ── Yards per pixel (bundled only) ─────
-  const yardsPerPixel = distance / (IMAGE_HEIGHT_BUNDLED * 0.80 || 1);
+  // Calibration: the markers initialize with tee at 0.87·H and pin at 0.10·H,
+  // so the initial T→P pixel span is 0.77·H and represents `distance` yards.
+  // Lock yardsPerPixel to that calibration so initial fromTeeYards +
+  // approachYards equals `distance` exactly (the prior 0.80 constant
+  // produced a ~4% under-read on every hole). The constant is image-relative
+  // — moving markers later measures different pixel spans on the same image
+  // scale, which is the intended behavior.
+  const TEE_INIT_FRAC = 0.87;
+  const PIN_INIT_FRAC = 0.10;
+  const yardsPerPixel = distance / (IMAGE_HEIGHT_BUNDLED * (TEE_INIT_FRAC - PIN_INIT_FRAC) || 1);
 
   const fromTeeYards = useMemo(() => {
     const dx = targetPos.x - teePos.x;
@@ -403,9 +412,9 @@ export default function HoleView() {
   useEffect(() => {
     if (displayType !== 'bundled' || markersReady) return;
     const cx = IMAGE_WIDTH / 2;
-    const tee    = { x: cx, y: IMAGE_HEIGHT_BUNDLED * 0.87 };
+    const tee    = { x: cx, y: IMAGE_HEIGHT_BUNDLED * TEE_INIT_FRAC };
     const target = { x: cx, y: IMAGE_HEIGHT_BUNDLED * 0.52 };
-    const pin    = { x: cx, y: IMAGE_HEIGHT_BUNDLED * 0.10 };
+    const pin    = { x: cx, y: IMAGE_HEIGHT_BUNDLED * PIN_INIT_FRAC };
     teePosRef.current = tee;
     targetPosRef.current = target;
     pinPosRef.current = pin;

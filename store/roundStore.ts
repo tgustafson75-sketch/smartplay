@@ -63,13 +63,20 @@ function greenForHole(
 
 export interface ShotResult {
   id?: string;
-  feel: 'flush' | 'solid' | 'fat' | 'thin' | 'heel' | 'toe' | null;
+  feel: 'flush' | 'solid' | 'fat' | 'thin' | 'heel' | 'toe' | 'pure' | 'topped' | null;
   direction: 'left' | 'straight' | 'right' | null;
   shape: 'draw' | 'straight' | 'fade' | null;
   club: string | null;
   hole: number;
   timestamp: number;
   acousticContact: string | null;
+  // Phase BJ — free-text fields populated by Kevin's log_shot tool when
+  // direction/feel didn't fit the closed enums above. outcome_text is the
+  // free-text "where it ended up" (vs the ShotOutcome enum); swing_feel is
+  // the swing-feel description ("rushed", "smooth"), distinct from the
+  // contact-quality `feel` enum.
+  outcome_text?: string | null;
+  swing_feel?: string | null;
   // Outcome tagging (added v1 migration — absent in old data treated as 'clean')
   outcome?: ShotOutcome;
   penalty_strokes?: number;
@@ -172,6 +179,12 @@ interface RoundState {
   // this course / when similar patterns appear). Last 10 retained.
   recentInsights: { round_id: string; course: string; insight: string; created_at: number }[];
 
+  // Phase BJ — emotional state log. Per-utterance log when Tim voices a
+  // feeling. Reset at round start. Future pattern detector can correlate
+  // valence ↔ shot outcomes ("you tend to push right when stressed"); for
+  // now this is just storage.
+  emotionalLog: { state: string; valence: 'positive' | 'neutral' | 'negative'; hole: number; timestamp: number }[];
+
   // ─── ACTIONS ────────────────────────────
 
   startRound: (
@@ -232,6 +245,9 @@ interface RoundState {
   logPutts: (hole: number, putts: number) => void;
   addPenalty: (hole: number) => void;
   logShot: (shot: ShotResult) => void;
+  // Phase BJ — append an emotional state entry. Caller passes state +
+  // valence + hole; timestamp stamped here.
+  logEmotionalState: (state: string, valence: 'positive' | 'neutral' | 'negative', hole: number) => void;
   // Phase 109-followup — edit / delete / bulk-add shots after the fact
   // (correcting typos, removing accidentally-logged shots, catching up
   // after forgetting to log several). Each operates on shot.id.
@@ -293,6 +309,8 @@ export const useRoundStore = create<RoundState>()(
       roundHistory: [],
       // Phase AQ
       recentInsights: [],
+      // Phase BJ
+      emotionalLog: [],
       active_ghost: null,
 
       startRound: (course, holes, options) => {
@@ -323,6 +341,7 @@ export const useRoundStore = create<RoundState>()(
           shots: [],
           holeStats: [],
           currentRoundPhotos: [],
+          emotionalLog: [],
           roundStartTime: Date.now(),
           roundNumber: prev.roundNumber + 1,
           active_ghost: null,
@@ -508,6 +527,14 @@ export const useRoundStore = create<RoundState>()(
 
       logScore: (hole, score) =>
         set(s => ({ scores: { ...s.scores, [hole]: score } })),
+
+      logEmotionalState: (state, valence, hole) =>
+        set(s => ({
+          emotionalLog: [
+            ...(s.emotionalLog ?? []),
+            { state, valence, hole, timestamp: Date.now() },
+          ].slice(-50),
+        })),
 
       logPutts: (hole, putts) =>
         set(s => ({ putts: { ...s.putts, [hole]: putts } })),

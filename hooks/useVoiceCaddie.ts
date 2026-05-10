@@ -180,6 +180,18 @@ export const useVoiceCaddie = ({
   const isProcessingRef = useRef(false);
   const autoStopTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Phase BJ — propagate KevinPresence.isThinking from any voice state
+  // change. Speaking is already auto-tracked by KevinPresenceProvider via
+  // services/voiceService.subscribeToSpeaking, so we only need to plumb
+  // the thinking signal. Wraps the caller's onVoiceStateChange so existing
+  // local state (caddie.tsx voiceState) keeps working too.
+  const presenceMod = require('../contexts/KevinPresenceContext') as typeof import('../contexts/KevinPresenceContext');
+  const { setIsThinking } = presenceMod.useKevinPresence();
+  const wrappedOnVoiceStateChange = useCallback((state: VoiceState) => {
+    setIsThinking(state === 'thinking');
+    onVoiceStateChange(state);
+  }, [setIsThinking, onVoiceStateChange]);
+
   const {
     isRoundActive,
     currentHole,
@@ -464,6 +476,32 @@ export const useVoiceCaddie = ({
           // the prior shot). Cleared after 60s of no activity OR on
           // round/hole change.
           conversationTurns: getRecentTurns().map(t => ({ role: t.role, text: t.text })),
+          // Phase BJ — on-course shot context. holeShots is current-hole
+          // only (front-loaded for "this hole again" pattern); recentShots
+          // is last 5 across the round (round-wide pattern detection).
+          // Mapped to the lite shape the server prompt expects.
+          holeShots: (() => {
+            const all = useRoundStore.getState().shots;
+            return all.filter(s => s.hole === (currentHole ?? -1)).map(s => ({
+              hole: s.hole,
+              shotIndex: s.shot_in_hole_index ?? null,
+              direction: s.direction,
+              outcome: s.outcome ?? null,
+              outcomeText: s.outcome_text ?? null,
+              feel: s.swing_feel ?? null,
+            }));
+          })(),
+          recentShots: useRoundStore.getState().shots.slice(-5).map(s => ({
+            hole: s.hole,
+            shotIndex: s.shot_in_hole_index ?? null,
+            club: s.club,
+            shape: s.shape,
+            direction: s.direction,
+            outcome: s.outcome ?? null,
+            outcomeText: s.outcome_text ?? null,
+            feel: s.swing_feel ?? null,
+            distance_yards: s.distance_yards ?? null,
+          })),
           // PGA HOPE follow-up — server-side persona resolution, intensity
           // dial, and Tank soft-intro flag. Read fresh at call time so
           // settings changes apply to the next utterance without restart.
@@ -525,7 +563,7 @@ export const useVoiceCaddie = ({
     if (isProcessingRef.current) return;
     try {
       isProcessingRef.current = true;
-      onVoiceStateChange('thinking');
+      wrappedOnVoiceStateChange('thinking');
 
       const formData = new FormData();
       formData.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
@@ -552,7 +590,7 @@ export const useVoiceCaddie = ({
       if (!transcribeRes.ok || transcribeData.error) {
         console.error('[voice] transcribe failed', transcribeRes.status, transcribeData.error);
         try { Vibration.vibrate(120); } catch {}
-        onVoiceStateChange('idle');
+        wrappedOnVoiceStateChange('idle');
         isProcessingRef.current = false;
         return;
       }
@@ -560,7 +598,7 @@ export const useVoiceCaddie = ({
       console.log('[voice] transcript:', transcript);
 
       if (!transcript.trim()) {
-        onVoiceStateChange('idle');
+        wrappedOnVoiceStateChange('idle');
         isProcessingRef.current = false;
         return;
       }
@@ -579,16 +617,16 @@ export const useVoiceCaddie = ({
 
         if (bypass.triggerMute) {
           await stopSpeaking();
-          onVoiceStateChange('idle');
+          wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;
           return;
         }
 
         if (bypass.response) {
           onResponseReceived(bypass.response);
-          onVoiceStateChange('speaking');
+          wrappedOnVoiceStateChange('speaking');
           await speakResponse(bypass.response);
-          onVoiceStateChange('idle');
+          wrappedOnVoiceStateChange('idle');
         }
 
         isProcessingRef.current = false;
@@ -627,9 +665,9 @@ export const useVoiceCaddie = ({
           (intent.intent_type === 'unknown' || intent.confidence !== 'high')
         ) {
           onResponseReceived(result.voice_response);
-          onVoiceStateChange('speaking');
+          wrappedOnVoiceStateChange('speaking');
           await speakResponse(result.voice_response);
-          onVoiceStateChange('listening');
+          wrappedOnVoiceStateChange('listening');
           const clarification = await captureUtterance(8000, apiUrl, language);
           if (clarification && clarification.trim()) {
             const second = await voiceCommandRouter.route(clarification, appContext, apiUrl);
@@ -637,7 +675,7 @@ export const useVoiceCaddie = ({
             result = second.result;
           } else {
             // No clarification — end gracefully.
-            onVoiceStateChange('idle');
+            wrappedOnVoiceStateChange('idle');
             isProcessingRef.current = false;
             return;
           }
@@ -652,10 +690,10 @@ export const useVoiceCaddie = ({
           if (result.tool_action) onToolAction?.(result.tool_action);
           if (result.voice_response) {
             onResponseReceived(result.voice_response);
-            onVoiceStateChange('speaking');
+            wrappedOnVoiceStateChange('speaking');
             await speakResponse(result.voice_response);
           }
-          onVoiceStateChange('idle');
+          wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;
           return;
         }
@@ -682,18 +720,18 @@ export const useVoiceCaddie = ({
       // Phase AR — record Kevin's reply so the next user follow-up has it
       // available as conversational antecedent.
       recordKevinTurn(kevinResponse.text);
-      onVoiceStateChange('speaking');
+      wrappedOnVoiceStateChange('speaking');
       if (kevinResponse.audioBase64 && voiceEnabled && !discreteMode) {
         // Phase V.7+ — user-initiated reply, plays at L1 too.
         await speakFromBase64(kevinResponse.audioBase64, { userInitiated: true });
       } else {
         await speakResponse(kevinResponse.text);
       }
-      onVoiceStateChange('idle');
+      wrappedOnVoiceStateChange('idle');
 
     } catch (err) {
       console.log('[voice] process error:', err);
-      onVoiceStateChange('idle');
+      wrappedOnVoiceStateChange('idle');
     } finally {
       isProcessingRef.current = false;
     }
@@ -705,7 +743,7 @@ export const useVoiceCaddie = ({
     if (isSpeaking()) {
       await stopSpeaking();
       isProcessingRef.current = false;
-      onVoiceStateChange('idle');
+      wrappedOnVoiceStateChange('idle');
       return;
     }
 
@@ -721,7 +759,7 @@ export const useVoiceCaddie = ({
         recordingRef.current = null;
 
         if (!uri) {
-          onVoiceStateChange('idle');
+          wrappedOnVoiceStateChange('idle');
           return;
         }
 
@@ -729,7 +767,7 @@ export const useVoiceCaddie = ({
 
       } catch (err) {
         console.log('[voice] stop error:', err);
-        onVoiceStateChange('idle');
+        wrappedOnVoiceStateChange('idle');
       }
       return;
     }
@@ -747,7 +785,7 @@ export const useVoiceCaddie = ({
       const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
 
       recordingRef.current = recording;
-      onVoiceStateChange('listening');
+      wrappedOnVoiceStateChange('listening');
       console.log('[voice] recording started');
 
       // Auto-stop after AUTO_STOP_MS
@@ -759,7 +797,7 @@ export const useVoiceCaddie = ({
 
     } catch (err) {
       console.log('[voice] record error:', err);
-      onVoiceStateChange('idle');
+      wrappedOnVoiceStateChange('idle');
     }
 
   }, [

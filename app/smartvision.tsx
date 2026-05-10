@@ -48,6 +48,7 @@ import Svg, { Line as SvgLine } from 'react-native-svg';
 
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useSmartVision } from '../contexts/SmartVisionContext';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbertApi';
 import { hasGolfbertCourseMapping } from '../constants/golfbertCourses';
@@ -238,6 +239,7 @@ export default function SmartVisionScreen() {
   const [savedFlash, setSavedFlash] = useState(false);
 
   const imageryMode = useSettingsStore(s => s.smartVisionImagery);
+  const { setSmartVisionState } = useSmartVision();
   const setImageryMode = useSettingsStore(s => s.setSmartVisionImagery);
 
   // Phase BG — subscribe to position-mark bus so a Mark event triggers
@@ -505,6 +507,26 @@ export default function SmartVisionScreen() {
     }
     return null;
   }, [usingGpsTile, projection, targetPx, teePx, pinPx, geometry, courseHoles, holeIndex]);
+
+  // ── SmartVision context wiring (Phase BJ) ───────────────────────
+  // Tells Kevin "SmartVision is open at hole N with these yardages" so
+  // the [SMARTVISION OPEN] block lands in the prompt and tactical reads
+  // skip the "let me look" preamble. Mirrors the legacy hole-view wiring.
+  const par = useMemo(() => {
+    return courseHoles.find(h => h.hole === holeIndex)?.par ?? null;
+  }, [courseHoles, holeIndex]);
+  useEffect(() => {
+    setSmartVisionState({ isOpen: true, holeNumber: holeIndex, par });
+    return () => setSmartVisionState({ isOpen: false, analysisText: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holeIndex, par]);
+  useEffect(() => {
+    setSmartVisionState({
+      centerYards: yardages.middle,
+      measureYards: carryYards,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yardages.middle, carryYards]);
 
   // ── Drag handlers for yellow target + pin (canvas coords) ───────
   const targetDragStartRef = useRef<{ x: number; y: number } | null>(null);

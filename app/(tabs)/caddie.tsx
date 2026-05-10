@@ -162,6 +162,7 @@ export default function CaddieTab() {
     roundHistory,
     shots,
     logShot,
+    logEmotionalState,
     computeHoleScore,
   } = useRoundStore(useShallow((s) => ({
     isRoundActive: s.isRoundActive,
@@ -190,6 +191,7 @@ export default function CaddieTab() {
     roundHistory: s.roundHistory,
     shots: s.shots,
     logShot: s.logShot,
+    logEmotionalState: s.logEmotionalState,
     computeHoleScore: s.computeHoleScore,
   })));
 
@@ -718,46 +720,11 @@ export default function CaddieTab() {
       void triggerPaywall('smartvision', () => router.push('/paywall' as never));
       return;
     }
-    const state = useRoundStore.getState();
-    const {
-      currentHole: hole,
-      activeCourse,
-      currentYardage,
-      courseHoles,
-      isRoundActive: roundActive,
-    } = state;
-
-    const holeData = courseHoles.find(h => h.hole === hole);
-
     // Phase AV — SmartVision now routes to the dedicated GolfShot-class
-    // screen (app/smartvision.tsx). The legacy hole-view (badge rows,
-    // club selectors) remains available at /hole-view for fallback.
+    // screen (app/smartvision.tsx). The legacy hole-view fallback was
+    // removed in Phase BJ; reach hole-view directly via /hole-view if a
+    // future regression makes that necessary.
     router.push('/smartvision' as never);
-    // Reference unused locals so existing destructure stays intact
-    // for the back-compat hole-view payload below if we ever want it.
-    void holeData; void hole; void currentYardage; void roundActive;
-    return;
-    // eslint-disable-next-line no-unreachable
-    router.push({
-      pathname: '/hole-view',
-      params: {
-        hole: String(hole),
-        par: String(holeData?.par ?? 4),
-        distance: String(currentYardage ?? holeData?.distance ?? 150),
-        courseName: activeCourse ?? '',
-        // Phase AG followup — courseId enables per-user GPS anchor capture
-        // (override store lookup keyed by courseId+hole).
-        courseId: useRoundStore.getState().activeCourseId ?? '',
-        isRoundActive: String(roundActive),
-        autoRunVision: 'true',
-        teeLat: String(holeData?.teeLat ?? 0),
-        teeLng: String(holeData?.teeLng ?? 0),
-        middleLat: String(holeData?.middleLat ?? 0),
-        middleLng: String(holeData?.middleLng ?? 0),
-        front: String(holeData?.front ?? 0),
-        back: String(holeData?.back ?? 0),
-      },
-    } as never);
   };
 
   // ── Kevin programmatic hook ──────────────
@@ -779,9 +746,69 @@ export default function CaddieTab() {
       case 'open_swinglab':
         router.push('/(tabs)/swinglab' as never);
         break;
-      case 'log_score':
-        setShowShotCard(true);
+      case 'log_score': {
+        // Phase BJ — Kevin's structured args now persist instead of just
+        // opening the modal. `hole` is optional; default to currentHole.
+        const targetHole = (action as { hole?: number }).hole ?? currentHole;
+        const score = (action as { score: number }).score;
+        if (typeof score === 'number' && Number.isFinite(score)) {
+          logScore(targetHole, Math.round(score));
+        } else {
+          // Score missing — fall back to manual modal so Tim can finish entry.
+          setShowShotCard(true);
+        }
         break;
+      }
+      case 'log_shot': {
+        // Phase BJ — map Kevin's free-text fields to the existing
+        // ShotResult shape. Wider direction enum (pull/push/hook/slice/
+        // fade/draw) collapses to left/straight/right for analytics that
+        // already key on the closed enum; the original word survives in
+        // shape/swing_feel/outcome_text fields.
+        const a = action as {
+          direction?: string;
+          contactQuality?: string;
+          outcome?: string;
+          feel?: string;
+        };
+        const dirMap: Record<string, 'left' | 'straight' | 'right' | null> = {
+          left: 'left', pull: 'left', hook: 'left',
+          right: 'right', push: 'right', slice: 'right',
+          straight: 'straight', fade: 'straight', draw: 'straight',
+        };
+        const shapeMap: Record<string, 'draw' | 'straight' | 'fade' | null> = {
+          draw: 'draw', hook: 'draw',
+          fade: 'fade', slice: 'fade', push: 'fade',
+          pull: 'draw',
+          straight: 'straight',
+        };
+        const feelMap: Record<string, ShotResult['feel']> = {
+          fat: 'fat', thin: 'thin', heel: 'heel', toe: 'toe',
+          pure: 'pure', topped: 'topped',
+        };
+        const direction: ShotResult['direction'] = a.direction ? dirMap[a.direction] ?? null : null;
+        const shape: ShotResult['shape'] = a.direction ? shapeMap[a.direction] ?? null : null;
+        const feel: ShotResult['feel'] = a.contactQuality ? feelMap[a.contactQuality] ?? null : null;
+        const shot: ShotResult = {
+          hole: currentHole,
+          timestamp: Date.now(),
+          feel,
+          direction,
+          shape,
+          club: club ?? null,
+          acousticContact: null,
+          outcome_text: a.outcome ?? null,
+          swing_feel: a.feel ?? null,
+          logged_via: 'voice',
+        };
+        logShot(shot);
+        break;
+      }
+      case 'log_emotional_state': {
+        const a = action as { state: string; valence: 'positive' | 'neutral' | 'negative' };
+        logEmotionalState(a.state, a.valence, currentHole);
+        break;
+      }
       case 'record_swing':
         router.push('/(tabs)/swinglab?mode=record' as never);
         break;
@@ -798,7 +825,7 @@ export default function CaddieTab() {
     const hint = getFirstToolHint();
     if (hint) setCaddieResponse(hint);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openSmartVision, club, router]);
+  }, [openSmartVision, club, router, currentHole, logScore, logShot, logEmotionalState]);
 
   // ── Shot tracking callbacks ──────────────
   const clearShotPending = useCallback(() => {

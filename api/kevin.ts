@@ -33,14 +33,60 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'log_score',
-    description: 'Open the score entry flow. Trigger this when Tim says ANY of: "log my score", "I finished the hole", "I got a [number]", "putting score in", "done with this hole", "scorecard", "enter score", or any phrasing meaning he wants to record a score.',
+    description: 'Log the score for a specific hole. Trigger when Tim names a score ("got a 3 on hole 3", "bogey on this one", "made the putt for par", "5 here", "triple on 7"). Pass `hole` ONLY if Tim names a specific hole; otherwise omit it (the client uses currentHole).',
     input_schema: {
       type: 'object',
       properties: {
-        hole:  { type: 'number', description: 'Hole number (1-18)' },
+        hole:  { type: 'number', description: 'Hole number (1-18). Omit when Tim is talking about the hole he is currently on.' },
         score: { type: 'number', description: 'Strokes taken on the hole' },
       },
-      required: ['hole', 'score'],
+      required: ['score'],
+    },
+  },
+  {
+    name: 'log_shot',
+    description: 'Log a shot Tim just hit, extracting whatever he mentioned: direction, contact quality, where it ended up, and how it felt. Use whenever Tim describes a shot he made ("I hit it fat and it\'s short", "pulled it left, in the trees", "striped it", "pushed it but it\'s playable", "felt rushed"). Pass only the fields Tim mentioned — omit anything he did not say.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        direction: {
+          type: 'string',
+          enum: ['left', 'straight', 'right', 'pull', 'push', 'hook', 'slice', 'fade', 'draw'],
+          description: 'Shot direction or shape if Tim mentioned it',
+        },
+        contactQuality: {
+          type: 'string',
+          enum: ['fat', 'thin', 'pure', 'toe', 'heel', 'topped'],
+          description: 'Contact quality if Tim mentioned it',
+        },
+        outcome: {
+          type: 'string',
+          description: 'Free-text where the ball ended up — "in the bunker", "in the water", "on the green", "in the trees", "just past the green", "playable rough"',
+        },
+        feel: {
+          type: 'string',
+          description: 'How the swing felt — free text such as "rushed", "smooth", "decelerated", "powerful", "lost balance", "came over the top"',
+        },
+      },
+    },
+  },
+  {
+    name: 'log_emotional_state',
+    description: 'Note Tim\'s emotional or mental state when he expresses it ("I\'m pissed", "feeling locked in", "pressure\'s getting to me", "this is fun"). Pass valence as positive/neutral/negative. Use only when Tim actually voices a feeling, not on every sentence.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        state: {
+          type: 'string',
+          description: 'Free text describing the emotional state Tim expressed',
+        },
+        valence: {
+          type: 'string',
+          enum: ['positive', 'neutral', 'negative'],
+          description: 'Overall positive, neutral, or negative state',
+        },
+      },
+      required: ['state', 'valence'],
     },
   },
   {
@@ -279,6 +325,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Phase BH — recent shots from active round, used by in-round
       // diagnostic Coach to ground reasoning in actual observed shots.
       recentShots = [],
+      // Phase BJ — shots logged on the current hole only (front-loaded
+      // for on-course pattern reads: "second shot on this hole again
+      // pushed right" etc.).
+      holeShots = [],
       // Phase BR — active practice context. Pre-formatted by the client
       // (services/tutorialContext.ts buildFullPracticeContext). Multi-line
       // string when one or more tutorials are active, null otherwise.
@@ -588,6 +638,34 @@ Rules:
 - Do not invent landmark names. Use only what's in the HolePlan or the hazards array.
 - If the hazards array is empty or absent for the current hole, give your best directional advice based on yardage, mode, player tendencies, and any locked HolePlan. Recommend a target side from hole shape and player miss tendency alone ("with that right miss showing today, favor the left side off the tee"). Never invent hazards that aren't in the data.
 
+ON-COURSE CONVERSATION HANDLING (Phase BJ):
+
+You are the caddie walking with Tim during his round. Tim speaks naturally — describing shots he just hit, asking for tactical advice, calling out scores, or talking. Understand and respond to all of it.
+
+When Tim describes a shot he just hit ("hit it fat and it's short", "pulled it left, in the trees", "striped it down the middle", "felt rushed"):
+- Call log_shot. Pull whatever Tim mentioned: direction, contactQuality, outcome (free-text where the ball ended up), feel.
+- Pass ONLY the fields he said. Don't infer fields he didn't mention.
+- Respond in ONE sentence. Bad shots get short and supportive ("Shake it off — let's see what we have left"). Good shots get recognition ("Beautiful strike"). DO NOT lecture or analyze every shot. Tim is playing, not getting a lesson.
+
+When Tim reports a score ("got a 3 on hole 3", "bogey on this one", "made the putt for par", "5 here"):
+- Call log_score with the strokes value. Pass hole ONLY if Tim named a specific hole; otherwise omit hole (the client uses currentHole).
+- React appropriately to par. Birdies and better get celebration ("Birdie. That's the one."). Bogey gets a neutral "moving on." Doubles+ get supportive — never sympathetic to the point of deflating him.
+
+When Tim expresses emotional state ("I'm pissed", "feeling locked in", "pressure's getting to me"):
+- Call log_emotional_state with state + valence (positive/neutral/negative).
+- Acknowledge the feeling specifically — not generic.
+- Offer ONE brief mental cue if appropriate ("Take a breath. Reset. Same swing."). DO NOT therapize. You're a caddie, not a sports psychologist.
+
+When Tim asks tactical questions ("what's my yardage", "what club", "where do I aim", "lay up or go for it", "wind"):
+- Use the round context (par, hole number, listed yardage) and player profile.
+- Distance + club suggestion + brief reasoning + invitation to confirm.
+- End with engagement: "What are you feeling?" or "Sound right?"
+
+PATTERN AWARENESS (Phase BJ):
+The body may include \`holeShots\` (this hole) and \`recentShots\` (last shots across the round). When 3+ shots show a clear directional pattern (three pushes right, two pulled left), reference it briefly the next time Tim asks for a tactical read and adjust the suggestion accordingly ("you've been right today — favor left center"). Use this once or twice a round, not every shot.
+
+KEEP IT SHORT. On-course Kevin is terse. 1-2 sentences for most responses. The walks between shots are for longer conversations, not the shot itself.
+
 SMARTVISION BEHAVIOR:
 When you receive [SMARTVISION OPEN] context at the top of the message, you already have the numbers. Do NOT say "let me look", "I'll check", or any delaying phrase — you are ALREADY looking at it. Deliver the tactical read immediately using the specific yardages provided. Structure: (1) state the key distance(s) — center yards and/or tapped target yards — and the one most relevant consideration, (2) briefly name the conservative play, (3) ask Tim one short question to think together. Two or three sentences total. Use the exact numbers from the context. Never hedge, never delay, never pretend you need to look — the data is already in front of you.
 
@@ -644,8 +722,11 @@ You are ${caddieName}. Not an app. Not an AI. A relationship built over ${rounds
     // Phase BH — when in-round diagnostic, prepend recent shots so Coach
     // can reason about actual observed shots (clubs, outcomes), not just
     // the user's verbal pattern description.
-    type ShotLite = { hole?: number; club?: string | null; shape?: string | null; direction?: string | null; outcome?: string | null; distance_yards?: number | null };
+    type ShotLite = { hole?: number; shotIndex?: number; club?: string | null; shape?: string | null; direction?: string | null; outcome?: string | null; outcomeText?: string | null; feel?: string | null; distance_yards?: number | null };
     const shotsArr = Array.isArray(recentShots) ? recentShots as ShotLite[] : [];
+    const holeShotsArr = Array.isArray(holeShots) ? holeShots as ShotLite[] : [];
+
+    // Phase BH — coach sub-prompt block (deeper recap with club/shape).
     const recentShotsBlock = inRoundDiagnostic && shotsArr.length > 0
       ? `[RECENT SHOTS THIS ROUND — most recent last]
 ${shotsArr.slice(-10).map((s, i) => {
@@ -657,6 +738,29 @@ ${shotsArr.slice(-10).map((s, i) => {
 `
       : '';
 
+    // Phase BJ — on-course pattern blocks always available (not just diagnostic
+    // mode). holeShots is hole-scoped; recentShots is round-scoped (last 5).
+    const formatShotLite = (s: ShotLite) =>
+      `  - shot ${s.shotIndex ?? '?'}` +
+      (s.direction ? ` ${s.direction}` : '') +
+      (s.outcome ? `, ${s.outcome}` : s.outcomeText ? `, ${s.outcomeText}` : '') +
+      (s.feel ? ` — felt ${s.feel}` : '');
+    const onCourseHoleBlock = !inRoundDiagnostic && holeShotsArr.length > 0
+      ? `[THIS HOLE SO FAR]
+${holeShotsArr.map(formatShotLite).join('\n')}
+[/THIS HOLE]
+`
+      : '';
+    const onCourseRecentBlock = !inRoundDiagnostic && shotsArr.length >= 3
+      ? `[RECENT PATTERN]
+${shotsArr.slice(-5).map(s => `  - h${s.hole ?? '?'} #${s.shotIndex ?? '?'}` + (s.direction ? ` ${s.direction}` : '') + (s.outcome ? `, ${s.outcome}` : s.outcomeText ? `, ${s.outcomeText}` : '')).join('\n')}
+[/RECENT PATTERN]
+`
+      : '';
+    const onCourseContextBlock = onCourseHoleBlock || onCourseRecentBlock
+      ? `${onCourseHoleBlock}${onCourseRecentBlock}\n`
+      : '';
+
     const userMessage = sv
       ? `[SMARTVISION OPEN]
 Hole ${sv.holeNumber ?? '?'}, par ${sv.par ?? '?'}
@@ -665,8 +769,8 @@ ${sv.measureYards != null ? sv.measureYards + ' yards to tapped target' : ''}
 ${sv.analysisText ? 'SmartVision analysis: ' + sv.analysisText : ''}
 [/SMARTVISION OPEN]
 
-${baseMessage}`
-      : `${recentShotsBlock}${baseMessage}`;
+${onCourseContextBlock}${baseMessage}`
+      : `${recentShotsBlock}${onCourseContextBlock}${baseMessage}`;
 
     // SmartVision-open requests are always tactical — we have the numbers, deliver the read.
     // Phase BH — in-round diagnostic always Sonnet (reasoning across patterns).
@@ -730,9 +834,31 @@ ${baseMessage}`
               case 'open_smartfinder': toolAction = { type: 'open_smartfinder' }; break;
               case 'open_swinglab':    toolAction = { type: 'open_swinglab' };    break;
               case 'record_swing':     toolAction = { type: 'record_swing' };     break;
-              case 'log_score':
-                toolAction = { type: 'log_score', hole: Number(input.hole), score: Number(input.score) };
+              case 'log_score': {
+                // Phase BJ — `hole` optional now. Pass through; client uses
+                // currentHole when undefined.
+                const t: Record<string, unknown> = { type: 'log_score', score: Number(input.score) };
+                if (typeof input.hole === 'number') t.hole = input.hole;
+                toolAction = t;
                 break;
+              }
+              case 'log_shot': {
+                const t: Record<string, unknown> = { type: 'log_shot' };
+                if (typeof input.direction === 'string') t.direction = input.direction;
+                if (typeof input.contactQuality === 'string') t.contactQuality = input.contactQuality;
+                if (typeof input.outcome === 'string') t.outcome = input.outcome;
+                if (typeof input.feel === 'string') t.feel = input.feel;
+                toolAction = t;
+                break;
+              }
+              case 'log_emotional_state': {
+                toolAction = {
+                  type: 'log_emotional_state',
+                  state: String(input.state ?? ''),
+                  valence: String(input.valence ?? 'neutral'),
+                };
+                break;
+              }
             }
             toolResultBlocks.push({ type: 'tool_result', tool_use_id: block.id, content: 'Action triggered.' });
           }
@@ -756,11 +882,13 @@ ${baseMessage}`
 
     if (toolAction && !text) {
       const defaults: Record<string, string> = {
-        open_smartvision: 'Pulling up the layout.',
-        open_smartfinder: 'Locking that distance.',
-        open_swinglab:    'Heading to SwingLab.',
-        log_score:        'Logging it.',
-        record_swing:     "I'm watching.",
+        open_smartvision:    'Pulling up the layout.',
+        open_smartfinder:    'Locking that distance.',
+        open_swinglab:       'Heading to SwingLab.',
+        log_score:           'Got it.',
+        log_shot:            'Logged.',
+        log_emotional_state: 'I hear you.',
+        record_swing:        "I'm watching.",
       };
       text = defaults[String(toolAction.type)] ?? 'On it.';
     }
