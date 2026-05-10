@@ -246,7 +246,7 @@ export default function Scorecard() {
       lines.push('Kevin: ' + recap.overall_kevin_summary);
     }
     lines.push('');
-    lines.push('— SmartPlay Caddie');
+    lines.push('— SmartPlay Caddie Pro');
     try {
       await Share.share({
         title: (viewCourseName ?? 'Round') + ' scorecard',

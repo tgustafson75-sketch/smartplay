@@ -724,7 +724,7 @@ export default function Settings() {
             style={styles.aboutRow}
             onPress={() => {
               const url = 'mailto:support@smartplaycaddie.com?subject=' +
-                encodeURIComponent('SmartPlay Caddie Support Request');
+                encodeURIComponent('SmartPlay Caddie Pro Support Request');
               Linking.openURL(url).catch(() => {
                 Alert.alert(
                   'Email',
@@ -744,7 +744,7 @@ export default function Settings() {
         <View style={cardStyle}>
           <View style={styles.aboutRow}>
             <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>App</Text>
-            <Text style={[styles.aboutValue, { color: colors.text_primary }]}>SmartPlay Caddie</Text>
+            <Text style={[styles.aboutValue, { color: colors.text_primary }]}>SmartPlay Caddie Pro</Text>
           </View>
           <View style={styles.aboutRow}>
             <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Version</Text>

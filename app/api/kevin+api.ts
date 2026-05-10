@@ -25,20 +25,66 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'log_score',
-    description: 'Log the score for a hole.',
+    description: 'Log the score for a specific hole. If Tim says "I made a 4 on this hole" omit hole (the client uses currentHole). If he says "got a 5 on hole 7" pass hole=7.',
     input_schema: {
       type: 'object',
       properties: {
-        hole:  { type: 'number', description: 'Hole number (1-18)' },
+        hole:  { type: 'number', description: 'Hole number (1-18). Omit when Tim is talking about the hole he is currently on.' },
         score: { type: 'number', description: 'Strokes taken on the hole' },
       },
-      required: ['hole', 'score'],
+      required: ['score'],
     },
   },
   {
     name: 'record_swing',
     description: 'Start a swing recording for analysis.',
     input_schema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'log_shot',
+    description: 'Log a shot Tim just hit, extracting whatever he mentioned: direction, contact quality, where it ended up, and how it felt. Use whenever Tim describes a shot he made ("I hit it fat and it\'s short", "pulled it left, in the trees", "striped it", "felt rushed"). Pass only the fields Tim mentioned — omit anything he did not say.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        direction: {
+          type: 'string',
+          enum: ['left', 'straight', 'right', 'pull', 'push', 'hook', 'slice', 'fade', 'draw'],
+          description: 'Shot direction or shape if Tim mentioned it',
+        },
+        contactQuality: {
+          type: 'string',
+          enum: ['fat', 'thin', 'pure', 'toe', 'heel', 'topped'],
+          description: 'Contact quality if Tim mentioned it',
+        },
+        outcome: {
+          type: 'string',
+          description: 'Free-text where the ball ended up — "in the bunker", "in the water", "on the green", "in the trees", "just past the green", "playable rough"',
+        },
+        feel: {
+          type: 'string',
+          description: 'How the swing felt — free text such as "rushed", "smooth", "decelerated", "powerful", "lost balance", "came over the top"',
+        },
+      },
+    },
+  },
+  {
+    name: 'log_emotional_state',
+    description: 'Note Tim\'s emotional or mental state when he expresses it ("I\'m pissed", "feeling locked in", "pressure\'s getting to me"). Pass valence as positive/neutral/negative. Use sparingly — only when Tim actually voices a feeling, not every sentence.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        state: {
+          type: 'string',
+          description: 'Free text describing the emotional state Tim expressed',
+        },
+        valence: {
+          type: 'string',
+          enum: ['positive', 'neutral', 'negative'],
+          description: 'Overall positive, neutral, or negative state',
+        },
+      },
+      required: ['state', 'valence'],
+    },
   },
 ];
 
@@ -48,8 +94,10 @@ export type ToolAction =
   | { type: 'open_smartvision' }
   | { type: 'open_smartfinder' }
   | { type: 'open_swinglab' }
-  | { type: 'log_score'; hole: number; score: number }
+  | { type: 'log_score'; hole?: number; score: number }
   | { type: 'record_swing' }
+  | { type: 'log_shot'; direction?: string; contactQuality?: string; outcome?: string; feel?: string }
+  | { type: 'log_emotional_state'; state: string; valence: 'positive' | 'neutral' | 'negative' }
   // Phase R — generic in-app navigation for voice handlers (swing detail, library)
   | { type: 'open_url'; url: string };
 
@@ -91,6 +139,8 @@ export async function POST(request: Request) {
       voiceGender = 'male',
       persona = null,
       history = [],
+      recentShots = [],
+      holeShots = [],
     } = body as {
       message?: string;
       language?: string;
@@ -129,6 +179,26 @@ export async function POST(request: Request) {
       voiceGender?: VoiceGender;
       persona?: string | null;
       history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+      recentShots?: Array<{
+        hole: number;
+        shotIndex: number;
+        direction?: string;
+        contactQuality?: string;
+        outcome?: string;
+        outcomeText?: string;
+        feel?: string;
+        club?: string;
+      }>;
+      holeShots?: Array<{
+        hole: number;
+        shotIndex: number;
+        direction?: string;
+        contactQuality?: string;
+        outcome?: string;
+        outcomeText?: string;
+        feel?: string;
+        club?: string;
+      }>;
     };
 
     // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
@@ -169,7 +239,35 @@ HOW YOU SPEAK:
 - The goal is never the score. The goal is the next shot.
 
 TOOLS:
-You have access to tools. Use them only when the player explicitly asks — "show me the hole", "find my ball", "log my score", "record my swing", etc. Never use a tool unprompted. When you use a tool, still speak a brief acknowledgment (1 short sentence).
+You have access to tools. The on-course tools (log_shot, log_score, log_emotional_state) are how Tim's app learns the round in real time — use them whenever Tim describes a shot, names a score, or expresses a feeling. The navigation tools (open_smartvision, open_smartfinder, open_swinglab, record_swing) are only for explicit asks — never open them unprompted. After ANY tool, speak a brief acknowledgment (1 short sentence — see ON-COURSE CONVERSATION HANDLING below).
+
+ON-COURSE CONVERSATION HANDLING
+
+You are the caddie walking with Tim during his round. Tim speaks naturally — describing shots he just hit, asking for tactical advice, calling out scores, or just talking. Understand and respond to all of it.
+
+When Tim describes a shot he just hit ("hit it fat and it's short", "pulled it left, in the trees", "striped it down the middle", "felt rushed"):
+- Call log_shot. Pull whatever Tim mentioned: direction, contactQuality, outcome (free-text where the ball ended up), feel.
+- Pass ONLY the fields he said. Don't infer fields he didn't mention.
+- Respond in ONE sentence. Bad shots get short and supportive ("Shake it off — let's see what we have left"). Good shots get recognition ("Beautiful strike"). DO NOT lecture or analyze every shot. Tim is playing, not getting a lesson.
+
+When Tim reports a score ("got a 3 on hole 3", "bogey on this one", "made the putt for par", "5 here"):
+- Call log_score with the strokes value. Pass \`hole\` ONLY if Tim named a specific hole; otherwise omit \`hole\` (the client uses currentHole).
+- React appropriately to par. Birdies and better get celebration ("Birdie. That's the one."). Bogey gets a neutral "moving on." Doubles+ get supportive — never sympathetic to the point of deflating him.
+
+When Tim asks tactical questions ("what's my yardage", "what club", "where do I aim", "lay up or go for it", "wind"):
+- Use the round context (par, hole number, listed yardage) and player profile.
+- Distance + club suggestion + brief reasoning + invitation to confirm.
+- End with engagement: "What are you feeling?" or "Sound right?"
+
+When Tim expresses emotional state ("I'm pissed", "feeling locked in", "pressure's getting to me"):
+- Call log_emotional_state with state + valence (positive/neutral/negative).
+- Acknowledge the feeling specifically — not generic.
+- Offer ONE brief mental cue if appropriate. ("Take a breath. Reset. Same swing.") DO NOT therapize. You're a caddie, not a sports psychologist.
+
+KEEP IT SHORT. On-course Kevin is terse. 1-2 sentences for most responses. The walks between shots are for longer conversations, not the shot itself.
+
+PATTERN AWARENESS
+The round context may include \`recentShots\` and \`holeShots\`. When Tim asks for a tactical read and the recent pattern points one direction (three shots right today, two pulled left), reference it briefly and adjust the suggestion accordingly ("You've been right today — favor left center"). Use this once or twice a round, not every shot.
 
 ${(topObservations as { content: string }[]).length > 0
   ? `WHAT YOU KNOW PRIVATELY ABOUT THIS PLAYER (never reference directly — just let it inform your advice):
@@ -219,7 +317,22 @@ ${holesPlayed > 0 ? `SCORING CONTEXT:\n${(() => {
   if (v <= 5)  return `Player is ${d} — manageable. Redirect to this hole, not the total.`;
   if (v <= 10) return `Player is ${d} — tough round. This hole is all that matters.`;
   return `Player is ${d} — difficult day. Save the experience, not the score.`;
-})()}` : ''}`
+})()}` : ''}
+${(holeShots as { hole: number; shotIndex: number; direction?: string; outcome?: string; outcomeText?: string; feel?: string }[]).length > 0
+  ? `THIS HOLE SO FAR:\n${(holeShots as { hole: number; shotIndex: number; direction?: string; outcome?: string; outcomeText?: string; feel?: string }[]).map(s =>
+      `  - Shot ${s.shotIndex}` +
+      (s.direction ? ` ${s.direction}` : '') +
+      (s.outcome ? `, ${s.outcome}` : s.outcomeText ? `, ${s.outcomeText}` : '') +
+      (s.feel ? ` — felt ${s.feel}` : '')
+    ).join('\n')}`
+  : ''}
+${(recentShots as { hole: number; shotIndex: number; direction?: string; outcome?: string; outcomeText?: string }[]).length >= 3
+  ? `RECENT PATTERN (last shots across the round):\n${(recentShots as { hole: number; shotIndex: number; direction?: string; outcome?: string; outcomeText?: string }[]).map(s =>
+      `  - H${s.hole} #${s.shotIndex}` +
+      (s.direction ? ` ${s.direction}` : '') +
+      (s.outcome ? `, ${s.outcome}` : s.outcomeText ? `, ${s.outcomeText}` : '')
+    ).join('\n')}\nIf there's a clear pattern (3+ shots in one direction, repeated contact issues), reference it once when giving tactical advice — don't repeat every shot.`
+  : ''}`
   : 'No active round.'}
 
 ${watchData ? `SWING SENSOR DATA (from Apple Watch — use silently):
@@ -291,13 +404,40 @@ Remember: You are ${caddieName}. Not an app. Not an AI assistant. ${caddieName}.
           case 'open_smartfinder': toolAction = { type: 'open_smartfinder' }; break;
           case 'open_swinglab':    toolAction = { type: 'open_swinglab' };    break;
           case 'record_swing':     toolAction = { type: 'record_swing' };     break;
-          case 'log_score':
+          case 'log_score': {
+            const holeRaw = input.hole;
+            const holeNum = typeof holeRaw === 'number' ? holeRaw : (typeof holeRaw === 'string' && holeRaw.length > 0 ? Number(holeRaw) : NaN);
             toolAction = {
               type: 'log_score',
-              hole:  Number(input.hole),
+              ...(Number.isFinite(holeNum) ? { hole: holeNum } : {}),
               score: Number(input.score),
             };
             break;
+          }
+          case 'log_shot': {
+            const dir = typeof input.direction === 'string' ? input.direction : undefined;
+            const cq = typeof input.contactQuality === 'string' ? input.contactQuality : undefined;
+            const out = typeof input.outcome === 'string' ? input.outcome : undefined;
+            const feel = typeof input.feel === 'string' ? input.feel : undefined;
+            toolAction = {
+              type: 'log_shot',
+              ...(dir ? { direction: dir } : {}),
+              ...(cq ? { contactQuality: cq } : {}),
+              ...(out ? { outcome: out } : {}),
+              ...(feel ? { feel } : {}),
+            };
+            break;
+          }
+          case 'log_emotional_state': {
+            const state = typeof input.state === 'string' ? input.state : '';
+            const valenceRaw = typeof input.valence === 'string' ? input.valence : 'neutral';
+            const valence: 'positive' | 'neutral' | 'negative' =
+              valenceRaw === 'positive' || valenceRaw === 'negative' ? valenceRaw : 'neutral';
+            if (state) {
+              toolAction = { type: 'log_emotional_state', state, valence };
+            }
+            break;
+          }
         }
       }
     }

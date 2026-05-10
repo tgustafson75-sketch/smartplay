@@ -81,10 +81,12 @@ export default function CageDrillScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: W, height: H } = useWindowDimensions();
-  const aspect = H / W;
-  // Z Fold open ≈ 8:9 → aspect ~1.13. Closed phone ≈ 9:21 → aspect ~2.33.
-  // Standard phone ≈ 9:19.5 → aspect ~2.17.
-  const isFoldOpen = aspect < 1.5;
+  // Phase BI — Fold-open detection via width threshold (not aspect ratio).
+  // Z Fold open W ≈ 673; closed W ≈ 412; standard phone W ≈ 390. The prior
+  // `aspect < 1.5` heuristic mis-fired in portrait-locked mode (Fold open
+  // portrait aspect ≈ 3.28, which is > 1.5) so the wide-caption branch
+  // never engaged on the device class it was written for.
+  const isFoldOpen = W >= 540;
 
   const [camPerm, requestCamPerm] = useCameraPermissions();
   const [micPerm, requestMicPerm] = useMicrophonePermissions();

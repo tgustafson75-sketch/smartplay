@@ -321,6 +321,10 @@ interface CaddieAvatarProps {
    *  Trust Spectrum level. L1 = none (Kevin not visible), L2 subtle,
    *  L3 standard, L4 most pronounced. Defaults to 3 (standard). */
   trustLevel?: 1 | 2 | 3 | 4;
+  /** Phase BI — when set, overrides the persona avatar set with the
+   *  user-generated portrait. Renders that single image with no
+   *  emotion-driven crossfades. Pass raw base64 (no data: prefix). */
+  customPortraitB64?: string | null;
 }
 
 // ─── COMPONENT ────────────────────────────
@@ -339,6 +343,7 @@ export default function CaddieAvatar({
   fillMode,
   isThinking = false,
   trustLevel = 3,
+  customPortraitB64,
 }: CaddieAvatarProps) {
   // Resolve persona: explicit prop wins, else fall back to gender → kevin/serena.
   const resolvedPersona: Persona = persona ?? (gender === 'female' ? 'serena' : 'kevin');
@@ -384,7 +389,15 @@ export default function CaddieAvatar({
 
   // ── Derived emotion ─────────────────────
   const effectiveEmotion = emotion ?? VOICE_EMOTION[voiceState] ?? null;
-  const targetSource = computeSource(resolvedPersona, effectiveEmotion, isOnCourse, isCageMode);
+  // Phase BI — custom portrait override. When the user has generated a
+  // personal caddie and turned the toggle on, the resolved source is the
+  // single base64 portrait for every emotion + state. Crossfade still
+  // works because the source object is stable across renders.
+  const customSource: ImageSourcePropType | null = customPortraitB64
+    ? { uri: `data:image/png;base64,${customPortraitB64}` }
+    : null;
+  const targetSource: ImageSourcePropType = customSource
+    ?? computeSource(resolvedPersona, effectiveEmotion, isOnCourse, isCageMode);
   // All four personas have per-emotion assets now (Kevin/Serena/Harry/Tank),
   // so the same key resolution applies to all. Each persona's avatar map
   // re-keys to its own PNG set.

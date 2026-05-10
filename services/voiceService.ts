@@ -194,11 +194,44 @@ const currentPlaybackVolume = (): number => {
     const s = settingsMod.useSettingsStore.getState();
     const persona = s.caddiePersonality as 'kevin' | 'serena' | 'harry' | 'tank';
     const dial = s.personaIntensity?.[persona];
-    if (typeof dial !== 'number') return 1.0;
-    const clamped = Math.max(0, Math.min(100, dial));
-    return Math.max(0.3, clamped / 100);
+    let base = 1.0;
+    if (typeof dial === 'number') {
+      const clamped = Math.max(0, Math.min(100, dial));
+      base = Math.max(0.3, clamped / 100);
+    }
+    // Phase BI — when the user's custom caddie is active, "tone down" by
+    // multiplying volume by 0.85. Combined with the rate bump below this
+    // gives the personal caddie a noticeably different presence.
+    const profileMod = require('../store/playerProfileStore');
+    const p = profileMod.usePlayerProfileStore.getState();
+    if (p.useCustomCaddie && p.customCaddiePortraitB64) base *= 0.85;
+    return base;
   } catch {
     return 1.0;
+  }
+};
+
+// Phase BI — slight rate bump for the custom caddie. expo-av's setRateAsync
+// with shouldCorrectPitch=true keeps Kevin's voice timbre while playing
+// faster, satisfying "sped up" without raising into chipmunk territory.
+const currentPlaybackRate = (): number => {
+  try {
+    const profileMod = require('../store/playerProfileStore');
+    const p = profileMod.usePlayerProfileStore.getState();
+    if (p.useCustomCaddie && p.customCaddiePortraitB64) return 1.08;
+  } catch {}
+  return 1.0;
+};
+
+// Apply rate to a freshly-created Sound. Failure is non-fatal — the audio
+// just plays at 1.0× instead of 1.08×, which is still correct behavior.
+const applyCustomRate = async (sound: Audio.Sound): Promise<void> => {
+  const rate = currentPlaybackRate();
+  if (rate === 1.0) return;
+  try {
+    await sound.setRateAsync(rate, true);
+  } catch (e) {
+    console.log('[voice] setRateAsync failed', e);
   }
 };
 
@@ -321,6 +354,7 @@ export const playLocalFile = async (
     }
 
     currentSound = sound;
+    await applyCustomRate(sound);
 
     // Phase V.7 — prefer the actual decoded duration; fall back to caller-
     // provided knownDurationMs (e.g. measured at clip-generation time).
@@ -414,6 +448,7 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
     }
 
     currentSound = sound;
+    await applyCustomRate(sound);
 
     // Phase V.7 — derive timeout from actual decoded duration so longer
     // brain responses (60-90 words) aren't sliced by a hard 30s cap.
@@ -550,6 +585,7 @@ export const speak = async (
     }
 
     currentSound = sound;
+    await applyCustomRate(sound);
 
     await Promise.race([
       new Promise<void>((resolve) => {

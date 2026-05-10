@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "SmartPlay Caddie",
+    "name": "SmartPlay Caddie Pro",
     "slug": "smartplay-caddie",
     "version": "1.0.0",
     "orientation": "default",
@@ -12,10 +12,10 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.smartplaycaddie.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "SmartPlay Caddie uses the microphone to listen for your voice commands.",
-        "NSCameraUsageDescription": "SmartPlay Caddie uses the camera to record and analyze your swing in the practice cage.",
-        "NSLocationWhenInUseUsageDescription": "SmartPlay Caddie uses your location to find nearby golf courses.",
-        "NSPhotoLibraryUsageDescription": "SmartPlay Caddie saves your hero moments to your photo library.",
+        "NSMicrophoneUsageDescription": "SmartPlay Caddie Pro uses the microphone to listen for your voice commands.",
+        "NSCameraUsageDescription": "SmartPlay Caddie Pro uses the camera to record and analyze your swing in the practice cage.",
+        "NSLocationWhenInUseUsageDescription": "SmartPlay Caddie Pro uses your location to find nearby golf courses.",
+        "NSPhotoLibraryUsageDescription": "SmartPlay Caddie Pro saves your hero moments to your photo library.",
         "UIBackgroundModes": [
           "audio",
           "audio"

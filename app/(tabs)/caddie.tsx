@@ -118,7 +118,13 @@ export default function CaddieTab() {
   // the dropdown row + DataStrip + insets. On phones the natural
   // W·16/9 fits within viewport so the cap doesn't trigger and the
   // canonical look is preserved.
-  const _avatarMaxH = H - insets.top - insets.bottom - 56 - 160;
+  // Phase BI — pre-round at L4, the Start Round CTA sits at bottom 40 +
+  // insets.bottom (height 60). The avatar frame must leave 200px of
+  // clearance below it so the CTA's top edge isn't clipped by the
+  // avatar's bottom gradient. In-round, the data strip + green-arrow
+  // dropdown row claim ~160px which is the existing budget.
+  const _isRoundActiveForLayout = useRoundStore(s => s.isRoundActive);
+  const _avatarMaxH = H - insets.top - insets.bottom - 56 - (_isRoundActiveForLayout ? 160 : 200);
   const avatarFrameHeight = Math.min(Math.round(W * 16 / 9), _avatarMaxH);
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
@@ -408,13 +414,16 @@ export default function CaddieTab() {
     setCastMode: s.setCastMode,
   })));
 
-  const { firstName, goal, subscription_status, trial_started_at, dominantMiss } = usePlayerProfileStore(useShallow((s) => ({
+  const { firstName, goal, subscription_status, trial_started_at, dominantMiss, useCustomCaddie, customCaddiePortraitB64 } = usePlayerProfileStore(useShallow((s) => ({
     firstName: s.firstName,
     goal: s.goal,
     subscription_status: s.subscription_status,
     trial_started_at: s.trial_started_at,
     dominantMiss: s.dominantMiss,
+    useCustomCaddie: s.useCustomCaddie,
+    customCaddiePortraitB64: s.customCaddiePortraitB64,
   })));
+  const activeCustomPortrait = useCustomCaddie ? customCaddiePortraitB64 : null;
   const { skip_briefings, proactive_kevin_enabled } = useSettingsStore(useShallow((s) => ({
     skip_briefings: s.skip_briefings,
     proactive_kevin_enabled: s.proactive_kevin_enabled,
@@ -1508,6 +1517,7 @@ export default function CaddieTab() {
                   fillMode="cover"
                   isThinking={kevinThinking}
                   trustLevel={trustLevel as 1 | 2 | 3 | 4}
+                  customPortraitB64={activeCustomPortrait}
                 />
               </View>
               <View
@@ -1550,6 +1560,7 @@ export default function CaddieTab() {
                 fillMode="cover"
                 isThinking={kevinThinking}
                 trustLevel={trustLevel as 1 | 2 | 3 | 4}
+                customPortraitB64={activeCustomPortrait}
               />
             </View>
             <View
@@ -1608,7 +1619,7 @@ export default function CaddieTab() {
             style={{
               position: 'absolute',
               left: 0,
-              width: W,
+              right: 0,
               bottom: 150 + insets.bottom,
               height: Math.min(
                 Math.round(H * 2 / 3 * (W >= 540 ? 0.8 : 1)),
@@ -1631,6 +1642,7 @@ export default function CaddieTab() {
               fillMode="cover"
               isThinking={kevinThinking}
               trustLevel={trustLevel as 1 | 2 | 3 | 4}
+              customPortraitB64={activeCustomPortrait}
             />
           </View>
         </>
@@ -1683,6 +1695,7 @@ export default function CaddieTab() {
             fillMode="cover"
             isThinking={kevinThinking}
             trustLevel={trustLevel as 1 | 2 | 3 | 4}
+            customPortraitB64={activeCustomPortrait}
           />
         </View>
       )}
@@ -1781,7 +1794,7 @@ export default function CaddieTab() {
           {/* Phase AR — Caddie word now consumes theme.text_primary so it
               flips white-on-dark / black-on-light. Was hardcoded white,
               which washed against the light-mode background. */}
-          <Text style={[styles.brandSub, { color: theme.colors.text_primary }]}> Caddie</Text>
+          <Text style={[styles.brandSub, { color: theme.colors.text_primary }]}> Caddie Pro</Text>
         </View>
       </View>
 
@@ -2782,6 +2795,10 @@ export default function CaddieTab() {
               // Stays in the Tools sheet so the user can swap mid-round
               // without diving into Settings. Drives off ACTIVE_PERSONAS
               // so dormant personas (Harry) are skipped in the rotation.
+              { icon: 'sparkles-outline' as IconName,
+                label: 'Your Caddie',
+                sub: 'Selfie → AI portrait + voice',
+                action: () => { setShowMoreMenu(false); router.push('/profile/custom-caddie' as never); } },
               { icon: 'people-outline' as IconName,
                 label: `Caddie: ${getCaddieName(caddiePersonality)}`,
                 sub: `Tap to cycle · ${ACTIVE_PERSONAS.map(p => getCaddieName(p)).join(' · ')}`,

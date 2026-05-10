@@ -425,7 +425,7 @@ export default function SwingLab() {
               entry={entry}
               isPersonalized={personalizedFirst && idx === 0}
               defaultExpanded={idx === 0}
-              onTryDrill={(drillId) => router.push(`/swinglab?drill=${drillId}` as never)}
+              onTryDrill={(drillId) => router.push(`/swinglab?drill_id=${drillId}` as never)}
             />
           ));
         })()}

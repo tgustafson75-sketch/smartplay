@@ -74,6 +74,16 @@ interface PlayerProfileState {
   /** Timestamp of last pattern synthesis; gates the periodic re-run. */
   patternsSynthesizedAt: number | null;
 
+  // Phase BI — user-personalized caddie. selfieB64 is the original capture,
+  // customCaddiePortraitB64 is the AI-edited result. Both stored as raw
+  // base64 (no data: prefix). useCustomCaddie toggles the override on Caddie
+  // home + voice service. When on, voice playback runs slightly faster +
+  // slightly quieter so the personal caddie sounds different from default
+  // Kevin even though the underlying TTS voice is the same.
+  selfieB64: string | null;
+  customCaddiePortraitB64: string | null;
+  useCustomCaddie: boolean;
+
   // ─── ACTIONS ────────────────────────────
 
   setName: (name: string) => void;
@@ -102,6 +112,10 @@ interface PlayerProfileState {
   // Phase AQ
   setKevinContext: (c: string | null) => void;
   setPersistentPatterns: (p: string | null) => void;
+  // Phase BI
+  setSelfieB64: (b: string | null) => void;
+  setCustomCaddiePortraitB64: (b: string | null) => void;
+  setUseCustomCaddie: (on: boolean) => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -134,6 +148,10 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       kevinContext: null,
       persistentPatterns: null,
       patternsSynthesizedAt: null,
+      // Phase BI defaults
+      selfieB64: null,
+      customCaddiePortraitB64: null,
+      useCustomCaddie: false,
 
       setName: (name) =>
         set({ name, firstName: name.split(' ')[0] ?? name }),
@@ -180,6 +198,9 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setKevinContext: (c) => set({ kevinContext: c }),
       setPersistentPatterns: (p) =>
         set({ persistentPatterns: p, patternsSynthesizedAt: p ? Date.now() : null }),
+      setSelfieB64: (b) => set({ selfieB64: b }),
+      setCustomCaddiePortraitB64: (b) => set({ customCaddiePortraitB64: b }),
+      setUseCustomCaddie: (on) => set({ useCustomCaddie: on }),
     }),
     {
       name: 'player-profile-v2',

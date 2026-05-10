@@ -129,7 +129,7 @@ export default function PaywallScreen() {
           </View>
 
           <View style={styles.pricingCard}>
-            <Text style={styles.pricingTitle}>SmartPlay Caddie</Text>
+            <Text style={styles.pricingTitle}>SmartPlay Caddie Pro</Text>
             <Text style={styles.pricingPrice}>{PRICING.monthly.displayPrice} / {PRICING.monthly.period}</Text>
             <Text style={styles.pricingTrial}>
               or {PRICING.annual.displayPrice}/{PRICING.annual.period} — save {PRICING.annual.savingsPct}%
