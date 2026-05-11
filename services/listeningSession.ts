@@ -380,10 +380,11 @@ async function openSession() {
 
 function closeSession() {
   console.log('[path4:voice] close');
-  // Stop any in-flight TTS
-  if (isSpeaking()) {
-    void stopSpeaking().catch(() => {});
-  }
+  // Phase BM — always stopSpeaking (drops the isSpeaking() guard). The guard
+  // missed the gap between speechId++ and Sound.createAsync returning where
+  // currentSound is still null but a TTS fetch is in-flight; a session-close
+  // tap during that window otherwise left the pending utterance to play.
+  void stopSpeaking().catch(() => {});
   // Cancel mic if listening (Phase V.7 — now actually stops the recording)
   if (cancelMic) {
     try { cancelMic(); } catch {}

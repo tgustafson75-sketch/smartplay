@@ -265,21 +265,20 @@ function AppNavigator() {
       if (key === lastHandoffKey && now - lastHandoffAt < HANDOFF_DEBOUNCE_MS) return;
       lastHandoffKey = key;
       lastHandoffAt = now;
-      // Voice race fix (sim-202 follow-up): kill any in-flight TTS before
-      // flipping caddiePersonality. Without this, an utterance that was
-      // already mid-fetch/mid-playback finishes in the prior caddie's
-      // voice while the avatar onscreen has already swapped — a hard
-      // immersion break that Tim flagged from Z Fold testing.
-      stopSpeaking().catch(() => {});
+      // Phase BM — await stopSpeaking BEFORE issuing the handoff line so the
+      // queued briefing/proactive utterance is fully cancelled. Previously
+      // both ran in parallel via the singleton, which gave the ~50ms two-voice
+      // overlap Tim reported at round-start.
       useSettingsStore.getState().setCaddiePersonality(next);
-      // Skip the handoff line on the very first sync (cold launch); only
-      // play it on real surface transitions during the session.
       if (firstSync) { firstSync = false; return; }
       const settings = useSettingsStore.getState();
       if (!settings.voiceEnabled || settings.discreteMode) return;
       const line = HANDOFF_LINES[next];
       if (!line) return;
-      speakHandoff(line, settings.voiceGender, settings.language, apiUrl, { userInitiated: false }).catch(() => {});
+      void (async () => {
+        await stopSpeaking().catch(() => {});
+        await speakHandoff(line, settings.voiceGender, settings.language, apiUrl, { userInitiated: false }).catch(() => {});
+      })();
     };
 
     const syncFromAssignmentChange = () => {

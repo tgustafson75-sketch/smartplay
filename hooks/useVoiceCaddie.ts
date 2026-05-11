@@ -41,6 +41,10 @@ import { useSmartFinderStore } from '../store/smartFinderStore';
 
 const AUTO_STOP_MS = 4000;
 
+// Phase BM — module-level mic permission cache. Once granted, every tap
+// skips the IPC roundtrip. Stays false on first denial / cold launch.
+let micPermissionGranted = false;
+
 // 16kHz mono 32kbps — 4x smaller than HIGH_QUALITY, same Whisper accuracy
 const RECORDING_OPTIONS: Audio.RecordingOptions = {
   android: {
@@ -440,7 +444,15 @@ export const useVoiceCaddie = ({
           recentCageSessions,
           club,
           scores,
-          courseHoles: useRoundStore.getState().courseHoles,
+          // Phase BM — slice courseHoles to current ± 1 instead of the full
+          // 18-hole array. Kevin only needs the hole he's playing (and the
+          // next hole when transitioning); shipping the entire course
+          // geometry added 5-15KB to every brain call.
+          courseHoles: (() => {
+            const all = useRoundStore.getState().courseHoles;
+            if (currentHole == null) return all.slice(0, 1);
+            return all.filter(h => Math.abs(h.hole - currentHole) <= 1);
+          })(),
           responseMode,
           smartVisionContext: smartVision.isOpen ? {
             holeNumber: smartVision.holeNumber,
@@ -774,10 +786,16 @@ export const useVoiceCaddie = ({
 
     // ── START recording ───────────────────
     try {
-      const { granted } = await Audio.requestPermissionsAsync();
-      if (!granted) {
-        console.log('[voice] no mic permission');
-        return;
+      // Phase BM — cache the mic permission grant in a module-level flag so
+      // every subsequent tap skips the 30-80ms IPC roundtrip to the OS
+      // permission cache. Re-asks only if the cached value is false.
+      if (!micPermissionGranted) {
+        const { granted } = await Audio.requestPermissionsAsync();
+        if (!granted) {
+          console.log('[voice] no mic permission');
+          return;
+        }
+        micPermissionGranted = true;
       }
 
       await configureAudioForRecording();

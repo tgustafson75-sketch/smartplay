@@ -28,6 +28,7 @@ export const configureAudioForRecording =
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
       });
+      currentAudioMode = 'record';
     } catch (err) {
       console.log('[voice] configure record error:', err);
     }
@@ -132,8 +133,15 @@ export const captureUtterance = async (
   }
 };
 
+// Phase BM — memoize last-applied audio mode so back-to-back speak calls
+// don't pay the 50-150ms setAudioModeAsync cost on every utterance.
+// configureAudioForRecording flips this to 'record' so the next speech
+// path correctly re-applies.
+let currentAudioMode: 'speech' | 'record' | null = null;
+
 export const configureAudioForSpeech =
   async (): Promise<void> => {
+    if (currentAudioMode === 'speech') return;
     try {
       await setAudioModeSerial({
         allowsRecordingIOS: false,
@@ -142,6 +150,7 @@ export const configureAudioForSpeech =
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
       });
+      currentAudioMode = 'speech';
     } catch (err) {
       console.log('[voice] configure speech error:', err);
     }
@@ -151,6 +160,32 @@ export const configureAudioForSpeech =
 // Module-level state shared across all components and hook instances.
 // A new speechId is issued on every speak() or stopSpeaking() call;
 // any in-flight operation whose id is stale self-terminates.
+//
+// Phase BM — speak serial queue. The speechId check alone has a race window
+// between `Audio.Sound.createAsync` returning and the post-check unload —
+// during that microtask the new sound has already started playback, which
+// surfaces as two voices for ~50ms at round-start when briefing + handoff
+// fire in true parallel. The queue funnels every public speak entry point
+// through a single in-flight slot so createAsync calls are strictly ordered.
+
+let speakQueue: Promise<void> = Promise.resolve();
+// Phase BM — every stopSpeaking call bumps this generation; queued
+// (not-yet-running) bodies snapshot it at enqueue time and skip if it has
+// moved by the time they get to run. Prevents a chained briefing → handoff
+// pair from continuing after the user taps to interrupt mid-briefing.
+let speakGeneration = 0;
+
+const enqueueSpeak = (body: () => Promise<void>): Promise<void> => {
+  const enqueuedAt = speakGeneration;
+  speakQueue = speakQueue
+    .catch(() => { /* drop prior failure */ })
+    .then(() => {
+      if (enqueuedAt !== speakGeneration) return; // stopSpeaking fired after enqueue
+      return body();
+    })
+    .then(() => undefined);
+  return speakQueue;
+};
 
 const SPEAK_TIMEOUT_MS = 30_000;
 
@@ -294,6 +329,7 @@ export const subscribeToCaption = (
 
 export const stopSpeaking = async (): Promise<void> => {
   currentSpeechId++;
+  speakGeneration++;
   if (currentAbortController) {
     currentAbortController.abort();
     currentAbortController = null;
@@ -319,7 +355,7 @@ export const playLocalFile = async (
   uri: string,
   knownDurationMs?: number,
   opts?: SpeakOpts,
-): Promise<void> => {
+): Promise<void> => enqueueSpeak(async () => {
   // Phase V.7 — same Quiet/route guard as speak() so filler clips don't
   // play when voice is disabled or routed to the phone speaker.
   if (!isVoiceAllowed(opts)) return;
@@ -393,11 +429,11 @@ export const playLocalFile = async (
     }
     console.log('[voice] playLocalFile error:', err);
   }
-};
+});
 
 // ─── SPEAK FROM BASE64 ────────────────────
 
-export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise<void> => {
+export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise<void> => enqueueSpeak(async () => {
   // Phase V.7 — guard for parity with speak() / playLocalFile.
   if (!isVoiceAllowed(opts)) return;
 
@@ -490,7 +526,7 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
     }
     console.log('[voice] speakFromBase64 error:', err);
   }
-};
+});
 
 // ─── SPEAK ────────────────────────────────
 
@@ -500,7 +536,7 @@ export const speak = async (
   language: 'en' | 'es' | 'zh' = 'en',
   apiUrl: string,
   opts?: SpeakOpts,
-): Promise<void> => {
+): Promise<void> => enqueueSpeak(async () => {
   // Phase V.7 — shared guard (formerly inlined here).
   if (!isVoiceAllowed(opts)) return;
 
@@ -627,4 +663,4 @@ export const speak = async (
       console.log('[voice] speak error:', err);
     }
   }
-};
+});

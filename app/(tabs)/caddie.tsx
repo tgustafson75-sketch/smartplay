@@ -848,6 +848,12 @@ export default function CaddieTab() {
   ) => {
     if (shotCommittedRef.current) return; // already committed — timer + tap race guard
     shotCommittedRef.current = true;
+    // Phase BM — cancel the 15s auto-resolve timer so it can't fire and
+    // re-speak after the user has already committed via tap.
+    if (outcomeAutoTimerRef.current) {
+      clearTimeout(outcomeAutoTimerRef.current);
+      outcomeAutoTimerRef.current = null;
+    }
     const resolution = resolvePenalty(outcome, rulesDecision);
     const shot: ShotResult = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
