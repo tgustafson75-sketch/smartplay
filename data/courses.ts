@@ -360,6 +360,47 @@ const RANCHO_HOLES: CourseHole[] = [
     note: '', estimated: true },
 ];
 
+// Phase BL — Crystal Springs Golf Course (Burlingame, CA). Yardages
+// captured from Golfshot for the "back" tee set (par 71, 6185y total
+// from middle markers). GPS lat/lng intentionally omitted (all 0) so
+// SmartVision falls back to bundled imagery + static yardages until
+// upstream geometry is sourced via golfcourseapi.
+const CRYSTAL_SPRINGS_HOLES: CourseHole[] = [
+  { hole:  1, par: 4, distance: 381, front: 366, back: 395, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  2, par: 4, distance: 396, front: 381, back: 412, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  3, par: 3, distance: 153, front: 138, back: 168, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  4, par: 5, distance: 494, front: 476, back: 512, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  5, par: 4, distance: 382, front: 369, back: 396, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  6, par: 4, distance: 403, front: 389, back: 417, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  7, par: 5, distance: 478, front: 464, back: 493, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  8, par: 3, distance: 175, front: 158, back: 192, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  9, par: 4, distance: 388, front: 372, back: 403, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 10, par: 4, distance: 279, front: 271, back: 288, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 11, par: 3, distance: 148, front: 133, back: 162, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 12, par: 4, distance: 333, front: 323, back: 344, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 13, par: 3, distance: 150, front: 138, back: 161, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 14, par: 4, distance: 364, front: 354, back: 375, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 15, par: 4, distance: 319, front: 304, back: 334, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 16, par: 4, distance: 455, front: 444, back: 466, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 17, par: 4, distance: 380, front: 366, back: 394, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 18, par: 5, distance: 507, front: 496, back: 518, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+];
+
+// Phase BL — Mariners Point Golf Center (Burlingame, CA). 9-hole
+// executive par-3 course; all holes par 3 with center yardages 90-160y.
+// Total par 27, total middle yardage 1041y.
+const MARINERS_POINT_HOLES: CourseHole[] = [
+  { hole: 1, par: 3, distance: 120, front: 108, back: 131, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 2, par: 3, distance:  96, front:  80, back: 112, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 3, par: 3, distance: 120, front: 105, back: 134, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 4, par: 3, distance: 156, front: 144, back: 168, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 5, par: 3, distance: 142, front: 125, back: 158, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 6, par: 3, distance: 160, front: 149, back: 171, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 7, par: 3, distance: 144, front: 130, back: 157, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 8, par: 3, distance: 106, front:  95, back: 116, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 9, par: 3, distance:  90, front:  78, back: 102, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+];
+
 export const COURSES: Course[] = [
   {
     id: 'palms',
@@ -390,5 +431,25 @@ export const COURSES: Course[] = [
     par: 72,
     totalYards: 6294,
     holes: RANCHO_HOLES,
+  },
+  {
+    id: 'crystal-springs',
+    name: 'Crystal Springs',
+    fullName: 'Crystal Springs Golf Course — Burlingame, CA',
+    rating: '70.4',
+    slope: '128',
+    par: 71,
+    totalYards: 6185,
+    holes: CRYSTAL_SPRINGS_HOLES,
+  },
+  {
+    id: 'mariners-point',
+    name: 'Mariners Point',
+    fullName: 'Mariners Point Golf Center — Foster City / Burlingame, CA',
+    rating: '53.0',
+    slope: '74',
+    par: 27,
+    totalYards: 1134,
+    holes: MARINERS_POINT_HOLES,
   },
 ];
