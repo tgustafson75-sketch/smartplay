@@ -961,7 +961,6 @@ export default function CaddieTab() {
     // Phase BH — stronger haptic so the tap is unmistakable when Kevin's
     // visual ring takes a beat to appear (audio init / permission resolve).
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    console.log('[caddie] avatar tap → handleMicPress');
     _handleMicPress();
   };
 
@@ -2024,7 +2023,9 @@ export default function CaddieTab() {
           Default = just a chevron pill on the right; tap to expand
           LEFT into the row of contextual round icons (Scorecard /
           SmartVision / SmartFinder / MARK / TightLie / Tools).
-          Position bottom: 92 + insets.bottom keeps it above DataStrip.
+          Position bottom: (W >= 540 ? 110 : 92) + insets.bottom keeps it
+          above DataStrip; the Fold-open bump is detailed in the BS-followup
+          paragraph below.
 
           Phase BS-followup Issue 5 — on Fold-open / wide screens
           (W >= 540), the SmartVision card on the right side of the
