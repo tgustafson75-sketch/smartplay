@@ -2249,15 +2249,18 @@ export default function CaddieTab() {
 
       {/* GREETING BUBBLE — pre-round shows opening prompt; in-round shows the
           most recent caddieResponse so a tap on Kevin produces visible
-          feedback even when voice is muted. Pre-round bottom sits above
-          Start Round (124); in-round bottom sits above the data strip
-          (96 + insets) so it doesn't overlap the dropdown chevron. */}
+          feedback even when voice is muted. Pre-round bottom is derived from
+          the Start Round CTA (bottom 24+ib, height 60) + 24pt gap = 108+ib
+          uniform across all aspects (Phase BN — Tim: "one freaking button
+          that needs to move down so it never goes up into elements above
+          it"). In-round bottom sits above the data strip (168 + insets) so
+          it doesn't overlap the dropdown chevron. */}
       {((!isRoundActive && shownText) || (isRoundActive && caddieResponse)) && trustLevel !== 1 ? (
         <Animated.View
           style={[
             styles.bubble,
             {
-              bottom: (isRoundActive ? 168 : 124) + insets.bottom,
+              bottom: (isRoundActive ? 168 : 108) + insets.bottom,
               opacity: responseFade,
             },
           ]}
@@ -2311,7 +2314,14 @@ export default function CaddieTab() {
         pointerEvents={isRoundActive ? 'none' : 'box-none'}
       >
         <TouchableOpacity
-          style={[styles.startRoundBtn, { bottom: (W >= 540 ? 80 : 40) + insets.bottom }]}
+          // Phase BN — Anchor uniformly at bottom 24 + ib across ALL aspects
+          // (phones AND Fold open). Earlier aspect-branched values
+          // (40 vs 80 + ib) kept producing overlap with the greeting bubble
+          // or the L2 Companion cells above. zIndex 50 (in styles.startRoundBtn)
+          // makes the button visually invincible against anything it could
+          // overlap (L2 cells zIndex 6, L3 SmartVision inlay zIndex 12,
+          // dropdown row zIndex 15, bubble zIndex 6).
+          style={[styles.startRoundBtn, { bottom: 24 + insets.bottom }]}
           // Caddie's Start Round button now routes to the Play tab (Course
           // Discovery). After a course is picked there, the Selected Course
           // card's "Start Round" button navigates back here with
@@ -3091,7 +3101,12 @@ const styles = StyleSheet.create({
     borderColor: '#00C896',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 5,
+    // Phase BN — zIndex bumped 5 → 50 so the CTA always renders above any
+    // element it could geometrically overlap: L2 Companion cells (zIndex 6),
+    // greeting bubble (zIndex 6), L3 SmartVision inlay (zIndex 12), and the
+    // in-round dropdown row (zIndex 15). Wind arrow (zIndex 11) is unaffected
+    // because it lives in the top portion of the screen.
+    zIndex: 50,
   },
   startRoundText: {
     color: '#00C896',
