@@ -262,6 +262,7 @@ export default function SwingLab() {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [arenaOpen, setArenaOpen] = useState(false);
+  const [diagOpen, setDiagOpen] = useState(false);
   // Phase 111-followup — Common Faults section collapsible per Tim
   // feedback. Default false so the tab opens compact; user expands to
   // browse faults.
@@ -618,6 +619,32 @@ export default function SwingLab() {
               sub="Target games + scoring · alternate game modes"
               onPress={() => router.push('/arena' as never)}
               accent="#F5A623"
+            />
+          </View>
+        )}
+
+        {/* DIAGNOSTICS — Phase BO.1. Device-validation tools that aren't part
+            of daily practice. Today: Acoustic Test Bench (mic + strike-detection
+            pipeline check). Phase BO.2 will decide how/whether to wire the
+            detector into a live capture flow. */}
+        <TouchableOpacity
+          style={styles.drillsCardHeader}
+          onPress={() => setDiagOpen(o => !o)}
+          activeOpacity={0.85}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.drillsCardTitle}>Diagnostics</Text>
+            <Text style={styles.drillsCardSub}>Validate device hardware before the range</Text>
+          </View>
+          <AppIcon name={diagOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#00C896" />
+        </TouchableOpacity>
+        {diagOpen && (
+          <View style={styles.toolsList}>
+            <ToolRow
+              icon="pulse-outline"
+              label="Acoustic Test Bench"
+              sub="Mic + strike-detection pipeline check (15s clap test)"
+              onPress={() => router.push('/acoustic-test' as never)}
             />
           </View>
         )}
