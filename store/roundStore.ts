@@ -771,3 +771,44 @@ export const useRoundStore = create<RoundState>()(
     },
   ),
 );
+
+/**
+ * Phase Y / Audit follow-up — expose the persist middleware's hydration
+ * API as a typed helper so consumers (app/_layout.tsx, anywhere else
+ * that needs to gate effects on rehydrate completion) don't have to
+ * use `as unknown as` casts against Zustand's internal typing.
+ *
+ * Usage:
+ *   useEffect(() => whenRoundStoreHydrated(() => { ... }), []);
+ *
+ * If the store is already hydrated, body runs immediately and the
+ * returned cleanup is whatever body returns. Otherwise the body fires
+ * when persist signals onFinishHydration; the returned cleanup
+ * unsubscribes from that hook AND runs the body's cleanup if it
+ * returned one.
+ */
+type ZustandPersistApi = {
+  persist: {
+    hasHydrated: () => boolean;
+    onFinishHydration: (cb: () => void) => () => void;
+  };
+};
+
+export function whenRoundStoreHydrated(body: () => void | (() => void)): () => void {
+  let cleanup: void | (() => void) = undefined;
+  const persistApi = (useRoundStore as unknown as ZustandPersistApi).persist;
+  if (persistApi.hasHydrated()) {
+    cleanup = body();
+    return () => {
+      if (typeof cleanup === 'function') cleanup();
+    };
+  }
+  const unsub = persistApi.onFinishHydration(() => {
+    cleanup = body();
+    unsub();
+  });
+  return () => {
+    unsub();
+    if (typeof cleanup === 'function') cleanup();
+  };
+}

@@ -42,7 +42,13 @@ async function loadFromStorage(): Promise<FillerLibrary | null> {
   try {
     const json = await AsyncStorage.getItem(STORAGE_KEY);
     return json ? (JSON.parse(json) as FillerLibrary) : null;
-  } catch {
+  } catch (err) {
+    // Audit follow-up (2026-05-13) — was silently swallowing. Log so a
+    // corrupted/unreadable filler cache shows up in console rather than
+    // mysteriously producing empty libraries with no clue why.
+    // Returning null is intentional: caller (initFillerLibrary +
+    // generateLibrary) treats null as "no cache yet, regenerate."
+    console.warn('[filler] loadFromStorage failed:', err);
     return null;
   }
 }

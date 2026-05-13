@@ -634,7 +634,7 @@ export default function HoleView() {
         const CHUNK = 8192;
         let dlBinary = '';
         for (let offset = 0; offset < uint8.byteLength; offset += CHUNK) {
-          dlBinary += String.fromCharCode(...(uint8.subarray(offset, offset + CHUNK) as unknown as number[]));
+          dlBinary += String.fromCharCode(...Array.from(uint8.subarray(offset, offset + CHUNK)));
         }
         const cacheFile = new File(Paths.cache, 'sv_' + cacheKey + '.jpg');
         cacheFile.write(btoa(dlBinary), { encoding: 'base64' });

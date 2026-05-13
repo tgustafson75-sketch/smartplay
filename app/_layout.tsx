@@ -11,7 +11,7 @@ import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { useSettingsStore, type Persona } from '../store/settingsStore';
-import { useRoundStore } from '../store/roundStore';
+import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
 import { initListeningSession } from '../services/listeningSession';
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
 import { activateMediaSession, deactivateMediaSession } from '../services/mediaKeyBridge';
@@ -34,35 +34,9 @@ import GpsQualityOverlay from '../components/dev/GpsQualityOverlay';
 import CaptureOverlay from '../components/CaptureOverlay';
 import CaptionStrip from '../components/CaptionStrip';
 
-// Phase Y — run `body` only after roundStore rehydration completes. Prevents
-// the rehydration race where a fast user tapping Start Round before
-// AsyncStorage finishes loading sees `isRoundActive` flip true → false (the
-// rehydrated snapshot lands AFTER startRound and overwrites it). All three
-// subscribers in this file initialise `let active = getState().isRoundActive`
-// at effect-mount; without this gate, they'd capture the pre-hydration
-// default (false) and miss the user's startRound() flip when hydration
-// races in afterwards.
-function whenRoundStoreHydrated(body: () => void | (() => void)): () => void {
-  let cleanup: void | (() => void) = undefined;
-  const persistApi = (useRoundStore as unknown as {
-    persist: { hasHydrated: () => boolean; onFinishHydration: (cb: () => void) => () => void };
-  }).persist;
-  if (persistApi.hasHydrated()) {
-    cleanup = body();
-  } else {
-    const unsub = persistApi.onFinishHydration(() => {
-      cleanup = body();
-      unsub();
-    });
-    return () => {
-      unsub();
-      if (typeof cleanup === 'function') cleanup();
-    };
-  }
-  return () => {
-    if (typeof cleanup === 'function') cleanup();
-  };
-}
+// Phase Y — whenRoundStoreHydrated lives in store/roundStore.ts (was
+// inlined here originally; audit moved it to remove a brittle
+// Zustand-internals cast from this file).
 
 // TODO (Wednesday MacBook setup): add EXPO_PUBLIC_SENTRY_DSN + Sentry org/project to eas.json,
 // then remove SENTRY_DISABLE_AUTO_UPLOAD=true from eas.json build profiles.
