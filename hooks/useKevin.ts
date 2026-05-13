@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { speakFromBase64, stopSpeaking } from '../services/voiceService';
 import { checkContent } from '../services/contentGuardrail';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
@@ -21,14 +22,34 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
   const [isThinking, setIsThinking] = useState(false);
   const { setIsThinking: setPresenceThinking } = useKevinPresence();
 
-  const { name, firstName, handicap } = usePlayerProfileStore();
-  const { language } = useSettingsStore();
-  const { roundsTogether, sessionsTogether } = useRelationshipStore();
+  // Audit follow-up (2026-05-13) — wrapped each multi-key destructure
+  // in useShallow so unrelated store writes (e.g. a settings flip on a
+  // theme toggle) don't force this hook + every component using it to
+  // re-render. Functions are pulled separately via single-key selectors
+  // since they're stable references.
+  const { name, firstName, handicap } = usePlayerProfileStore(
+    useShallow((s) => ({ name: s.name, firstName: s.firstName, handicap: s.handicap }))
+  );
+  const language = useSettingsStore((s) => s.language);
+  const { roundsTogether, sessionsTogether } = useRelationshipStore(
+    useShallow((s) => ({ roundsTogether: s.roundsTogether, sessionsTogether: s.sessionsTogether }))
+  );
   const {
     currentHole, currentYardage, activeCourse,
     isRoundActive, isCompetition, club, scores, courseHoles,
-    getCurrentPar,
-  } = useRoundStore();
+  } = useRoundStore(
+    useShallow((s) => ({
+      currentHole: s.currentHole,
+      currentYardage: s.currentYardage,
+      activeCourse: s.activeCourse,
+      isRoundActive: s.isRoundActive,
+      isCompetition: s.isCompetition,
+      club: s.club,
+      scores: s.scores,
+      courseHoles: s.courseHoles,
+    }))
+  );
+  const getCurrentPar = useRoundStore((s) => s.getCurrentPar);
 
   const ask = useCallback(async (message: string): Promise<string> => {
     setIsThinking(true);

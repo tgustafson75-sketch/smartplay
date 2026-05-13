@@ -1,4 +1,5 @@
 import { useRef, useCallback, useEffect } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { Audio } from 'expo-av';
 import { Vibration } from 'react-native';
 import { usePathname } from 'expo-router';
@@ -206,6 +207,12 @@ export const useVoiceCaddie = ({
     onVoiceStateChange(state);
   }, [setIsThinking, onVoiceStateChange]);
 
+  // Audit follow-up (2026-05-13) — useShallow wrappers on every
+  // multi-key destructure so an unrelated store write (theme flip,
+  // unrelated setting change, etc.) doesn't force the entire voice
+  // hook + every component using it to re-render. Functions and
+  // getters are pulled separately via single-key selectors since
+  // they're stable references.
   const {
     isRoundActive,
     currentHole,
@@ -215,12 +222,26 @@ export const useVoiceCaddie = ({
     club,
     scores,
     isCompetition,
-    getCurrentPar,
     mode: roundMode,
     shots,
     courseHoles,
-    getPlanForHole,
-  } = useRoundStore();
+  } = useRoundStore(
+    useShallow((s) => ({
+      isRoundActive: s.isRoundActive,
+      currentHole: s.currentHole,
+      currentYardage: s.currentYardage,
+      activeCourse: s.activeCourse,
+      activeCourseId: s.activeCourseId,
+      club: s.club,
+      scores: s.scores,
+      isCompetition: s.isCompetition,
+      mode: s.mode,
+      shots: s.shots,
+      courseHoles: s.courseHoles,
+    }))
+  );
+  const getCurrentPar = useRoundStore((s) => s.getCurrentPar);
+  const getPlanForHole = useRoundStore((s) => s.getPlanForHole);
 
   const {
     voiceGender,
@@ -229,7 +250,16 @@ export const useVoiceCaddie = ({
     language,
     responseMode,
     fillerEnabled,
-  } = useSettingsStore();
+  } = useSettingsStore(
+    useShallow((s) => ({
+      voiceGender: s.voiceGender,
+      voiceEnabled: s.voiceEnabled,
+      discreteMode: s.discreteMode,
+      language: s.language,
+      responseMode: s.responseMode,
+      fillerEnabled: s.fillerEnabled,
+    }))
+  );
 
   // Load the filler library index into memory on first mount — fast, reads
   // AsyncStorage only. Phase AB — also fire-and-forget generateLibrary so
@@ -265,7 +295,17 @@ export const useVoiceCaddie = ({
     physicalLimitation,
     goal,
     personalBest,
-  } = usePlayerProfileStore();
+  } = usePlayerProfileStore(
+    useShallow((s) => ({
+      name: s.name,
+      firstName: s.firstName,
+      handicap: s.handicap,
+      dominantMiss: s.dominantMiss,
+      physicalLimitation: s.physicalLimitation,
+      goal: s.goal,
+      personalBest: s.personalBest,
+    }))
+  );
 
   // dominantMiss from profile has compatible type — just cast for patternDetection
   const profileDominantMiss = dominantMiss as 'left' | 'right' | 'straight' | null;
@@ -276,10 +316,21 @@ export const useVoiceCaddie = ({
     currentMentalState,
     consecutiveBadHoles,
     isSpiralRisk,
-    getTopObservations,
-    getRecentHeroMoments,
-    addHeroMoment,
-  } = useRelationshipStore();
+  } = useRelationshipStore(
+    useShallow((s) => ({
+      roundsTogether: s.roundsTogether,
+      sessionsTogether: s.sessionsTogether,
+      currentMentalState: s.currentMentalState,
+      consecutiveBadHoles: s.consecutiveBadHoles,
+      isSpiralRisk: s.isSpiralRisk,
+    }))
+  );
+  // Function refs pulled separately — they're stable across renders
+  // and including them in the shallow selector would cost nothing
+  // either way, but separating clarifies "these are actions, not data."
+  const getTopObservations = useRelationshipStore((s) => s.getTopObservations);
+  const getRecentHeroMoments = useRelationshipStore((s) => s.getRecentHeroMoments);
+  const addHeroMoment = useRelationshipStore((s) => s.addHeroMoment);
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
   const currentPar = getCurrentPar();
