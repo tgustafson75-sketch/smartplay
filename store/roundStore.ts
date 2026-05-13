@@ -756,6 +756,17 @@ export const useRoundStore = create<RoundState>()(
         roundHistory: s.roundHistory,
         active_ghost: s.active_ghost,
         recentInsights: s.recentInsights,
+        // Audit follow-up (2026-05-13) — these five fields were
+        // initialized in the store and mutated during gameplay but were
+        // missing from partialize, so a crash mid-round dropped them.
+        // mentalState + riskMode affect caddie tone; currentRoundPhotos
+        // is captured memories; roundStartTime is needed by recap;
+        // emotionalLog feeds future pattern detection.
+        mentalState: s.mentalState,
+        riskMode: s.riskMode,
+        currentRoundPhotos: s.currentRoundPhotos,
+        roundStartTime: s.roundStartTime,
+        emotionalLog: s.emotionalLog,
       }),
     },
   ),
