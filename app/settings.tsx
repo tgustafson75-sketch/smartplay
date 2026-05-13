@@ -11,11 +11,12 @@ import {
   Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useTheme } from '../contexts/ThemeContext';
+import type { ThemeColors } from '../theme/tokens';
 import { getCaddieName, ACTIVE_PERSONAS } from '../lib/persona';
 import { clearMicDenial } from '../services/voicePermissionService';
 import {
@@ -25,6 +26,10 @@ import {
 
 export default function Settings() {
   const router = useRouter();
+  // Audit follow-up (2026-05-13) — pull bottom inset so the last
+  // Settings row doesn't clip under the home indicator on notched
+  // devices. Applied to the ScrollView's contentContainerStyle below.
+  const insets = useSafeAreaInsets();
 
   const { colors } = useTheme();
 
@@ -221,7 +226,7 @@ export default function Settings() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom + 16, 40) }]}
         style={{ backgroundColor: colors.background }}
       >
 
@@ -695,8 +700,8 @@ export default function Settings() {
             <Switch
               value={watchConnected}
               onValueChange={setWatchConnected}
-              trackColor={{ false: colors.border, true: '#60a5fa' }}
-              thumbColor="#ffffff"
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={colors.text_primary}
             />
           </View>
 
@@ -818,7 +823,7 @@ export default function Settings() {
 // path. Used to verify holeDetection sustained-position transitions
 // without requiring a real course visit.
 
-function DeveloperToolsSection({ cardStyle, colors }: { cardStyle: object[]; colors: { accent: string; text_primary: string; text_muted: string; border: string } }) {
+function DeveloperToolsSection({ cardStyle, colors }: { cardStyle: object[]; colors: ThemeColors }) {
   const walks = getAvailableWalks();
   const [walkState, setWalkState] = useState<SimulatedWalkState | null>(null);
   const [active, setActive] = useState(isSimulatedActive());
@@ -864,8 +869,8 @@ function DeveloperToolsSection({ cardStyle, colors }: { cardStyle: object[]; col
           </View>
         ) : (
           <View style={{ gap: 8 }}>
-            <View style={{ backgroundColor: 'rgba(0,200,150,0.10)', borderColor: '#00C896', borderWidth: 1, borderRadius: 10, padding: 12 }}>
-              <Text style={{ color: '#00C896', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>
+            <View style={{ backgroundColor: colors.accent_muted, borderColor: colors.accent, borderWidth: 1, borderRadius: 10, padding: 12 }}>
+              <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>
                 ● SIM ACTIVE
               </Text>
               {walkState ? (
@@ -885,10 +890,10 @@ function DeveloperToolsSection({ cardStyle, colors }: { cardStyle: object[]; col
               ) : null}
             </View>
             <TouchableOpacity
-              style={{ backgroundColor: '#3a1a1a', borderColor: '#ef4444', borderWidth: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
+              style={{ backgroundColor: colors.surface_elevated, borderColor: colors.error, borderWidth: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
               onPress={() => stopSimulatedWalk()}
             >
-              <Text style={{ color: '#ef4444', fontSize: 13, fontWeight: '800' }}>Stop Simulated Walk</Text>
+              <Text style={{ color: colors.error, fontSize: 13, fontWeight: '800' }}>Stop Simulated Walk</Text>
             </TouchableOpacity>
           </View>
         )}

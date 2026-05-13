@@ -11,6 +11,13 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+// Audit follow-up (2026-05-13) — pull theme tokens so the state ring
+// inherits the active palette instead of using hardcoded brand greens.
+// Light-mode users were getting the dark-mode shade of green on the
+// ring. StyleSheet-level static colors (chip backgrounds, etc.) stay
+// hardcoded — they're brand-intentional and changing them risks dark-
+// mode regressions we'd need to verify visually.
+import { useTheme } from '../contexts/ThemeContext';
 
 // ─── AVATAR MAP ───────────────────────────
 
@@ -350,6 +357,7 @@ export default function CaddieAvatar({
   const fill = fillMode ?? 'contain';
   const { width: W, height: H } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const themeColors = useTheme().colors;
 
   const aspectRatio = H / W;
   const isFolded = aspectRatio > 1.6;
@@ -744,9 +752,14 @@ export default function CaddieAvatar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceState]);
 
+  // Audit follow-up (2026-05-13) — state-ring color now uses
+  // colors.accent so light-mode users see the light-mode accent shade
+  // instead of the dark-mode-baked '#00C896'. The 'proactive'/'thinking'
+  // gold (#F5A623) stays literal — no warning token exists in
+  // ThemeTokens yet; add one and switch this when ready.
   const ringColor =
     voiceState === 'proactive'               ? '#F5A623' :
-    (voiceState === 'thinking' || isThinking) ? '#F5A623' : '#00C896';
+    (voiceState === 'thinking' || isThinking) ? '#F5A623' : themeColors.accent;
 
   const stateText =
     voiceState === 'listening'             ? '● Listening' :
@@ -790,7 +803,15 @@ export default function CaddieAvatar({
         onPress={onTap}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel="Tap to talk"
+        accessibilityLabel="Tap to talk to your caddie"
+        accessibilityHint="Starts recording. Tap again to stop."
+        // Audit follow-up (2026-05-13) — accessibilityState communicates
+        // listening / thinking / speaking to screen readers so a
+        // VoiceOver / TalkBack user knows the caddie is mid-response
+        // without having to wait for audio cues.
+        accessibilityState={{
+          busy: voiceState === 'listening' || voiceState === 'thinking' || voiceState === 'speaking',
+        }}
       >
         {/* Phase AT — Kevin recompose. Source portraits have the subject
             offset right-of-center within the JPG canvas (face occupies
