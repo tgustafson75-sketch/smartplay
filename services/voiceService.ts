@@ -464,12 +464,16 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
     }
 
     const audioFile = new File(Paths.cache, `kevin_voice_${Date.now()}.mp3`);
-    // Audit 101 / S4 — await the write before createAsync. If write returns
-    // a promise (depends on expo-file-system version), unawaited it may not
-    // flush before the playback layer reads the file → empty/truncated audio
-    // → playback timeout clamps short and cuts speech mid-utterance. Plausible
-    // cause of the [voice] speak timeout observed during F1 verification.
-    await Promise.resolve(audioFile.write(bytes));
+    // Audit follow-up (2026-05-13) — expo-file-system's File.write() is
+    // synchronous (returns void), so the old `Promise.resolve(write())`
+    // wrapper was a no-op. On some Android devices the audio subsystem
+    // can briefly see a stale filesystem view if we read immediately
+    // after writing, producing the "[voice] speak timeout" symptom
+    // (empty/truncated playback). Yielding to a macrotask boundary
+    // gives the OS file system a tick to settle before createAsync
+    // reads via URI.
+    audioFile.write(bytes);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     if (myId !== currentSpeechId) return;
 
@@ -604,8 +608,11 @@ export const speak = async (
 
     const uint8 = new Uint8Array(arrayBuffer);
     const audioFile = new File(Paths.cache, `kevin_voice_${Date.now()}.mp3`);
-    // Audit 101 / S4 — await the write (see notes at the base64 path).
-    await Promise.resolve(audioFile.write(uint8));
+    // Audit follow-up (2026-05-13) — see speakFromBase64 above. Macrotask
+    // boundary after sync write so the audio subsystem sees a consistent
+    // FS state when createAsync reads the URI.
+    audioFile.write(uint8);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     if (myId !== currentSpeechId) return;
 

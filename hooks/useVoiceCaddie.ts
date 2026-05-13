@@ -43,7 +43,17 @@ const AUTO_STOP_MS = 4000;
 
 // Phase BM — module-level mic permission cache. Once granted, every tap
 // skips the IPC roundtrip. Stays false on first denial / cold launch.
+//
+// Audit follow-up (2026-05-13) — exported `resetMicPermissionCache()` so
+// voicePermissionService.clearMicDenial() can invalidate the cache when
+// the user re-enables voice in Settings. Without this reset, a user who
+// denied mic → re-granted in OS Settings → flipped voiceEnabled back on
+// would still hit the stale `false` cache and Kevin would silently fail
+// until app restart.
 let micPermissionGranted = false;
+export function resetMicPermissionCache(): void {
+  micPermissionGranted = false;
+}
 
 // 16kHz mono 32kbps — 4x smaller than HIGH_QUALITY, same Whisper accuracy
 const RECORDING_OPTIONS: Audio.RecordingOptions = {

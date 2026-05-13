@@ -56,6 +56,17 @@ export function isVoiceSuppressed(): boolean {
 /** User flipped voiceEnabled back on in Settings — clear any prior denial flag. */
 export function clearMicDenial(): void {
   useVoiceHintsStore.getState().setMicDenied(false);
+  // Audit follow-up (2026-05-13) — also invalidate the module-level
+  // permission cache inside useVoiceCaddie. Without this, a user who
+  // denied mic earlier and now re-enables voice still hits a stale
+  // `micPermissionGranted = false` and the next tap silently bails
+  // instead of re-asking the OS. Dynamic import avoids the
+  // hook-imports-service-imports-hook cycle.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('../hooks/useVoiceCaddie') as { resetMicPermissionCache?: () => void };
+    mod.resetMicPermissionCache?.();
+  } catch { /* swallow — cache reset is a nice-to-have, not load-bearing */ }
 }
 
 export const PERMISSION_EXPLAINER_TEXT = PERMISSION_EXPLAINER;
