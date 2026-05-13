@@ -30,6 +30,10 @@ import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRoundStore } from '../store/roundStore';
 import { useCourseGeometryOverrideStore } from '../store/courseGeometryOverrideStore';
+// Per-(course, hole) image marker calibration. Persisted across rounds
+// so once the user drags the tee/pin to where they actually sit on a
+// hole image, the markers come up there on every subsequent visit.
+import { useHoleMarkerCalibrationStore } from '../store/holeMarkerCalibrationStore';
 import VectorHoleView from '../components/smartvision/VectorHoleView';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSmartVision } from '../contexts/SmartVisionContext';
@@ -409,12 +413,26 @@ export default function HoleView() {
   }, [pinPos, targetPos, yardsPerPixel]);
 
   // ── Init bundled markers ────────────────
+  // Reads any per-(course, hole) calibration the user has saved before
+  // (via a prior drag → auto-save). When no calibration exists, falls
+  // back to the historical defaults (0.5, 0.87) for tee and (0.5, 0.10)
+  // for pin. This fixes "arbitrary marker locations" — once the user
+  // drags markers to the actual tee/pin on a hole, that calibration is
+  // persisted and re-used on every subsequent visit.
   useEffect(() => {
     if (displayType !== 'bundled' || markersReady) return;
-    const cx = IMAGE_WIDTH / 2;
-    const tee    = { x: cx, y: IMAGE_HEIGHT_BUNDLED * TEE_INIT_FRAC };
-    const target = { x: cx, y: IMAGE_HEIGHT_BUNDLED * 0.52 };
-    const pin    = { x: cx, y: IMAGE_HEIGHT_BUNDLED * PIN_INIT_FRAC };
+    const calibration = courseId
+      ? useHoleMarkerCalibrationStore.getState().getCalibration(courseId, hole)
+      : null;
+    const teeFracX    = calibration?.tee?.x    ?? 0.5;
+    const teeFracY    = calibration?.tee?.y    ?? TEE_INIT_FRAC;
+    const targetFracX = calibration?.target?.x ?? 0.5;
+    const targetFracY = calibration?.target?.y ?? 0.52;
+    const pinFracX    = calibration?.pin?.x    ?? 0.5;
+    const pinFracY    = calibration?.pin?.y    ?? PIN_INIT_FRAC;
+    const tee    = { x: IMAGE_WIDTH * teeFracX,    y: IMAGE_HEIGHT_BUNDLED * teeFracY };
+    const target = { x: IMAGE_WIDTH * targetFracX, y: IMAGE_HEIGHT_BUNDLED * targetFracY };
+    const pin    = { x: IMAGE_WIDTH * pinFracX,    y: IMAGE_HEIGHT_BUNDLED * pinFracY };
     teePosRef.current = tee;
     targetPosRef.current = target;
     pinPosRef.current = pin;
@@ -422,7 +440,7 @@ export default function HoleView() {
     setTargetPos(target);
     setPinPos(pin);
     setMarkersReady(true);
-  }, [displayType, IMAGE_WIDTH, IMAGE_HEIGHT_BUNDLED, markersReady]);
+  }, [displayType, IMAGE_WIDTH, IMAGE_HEIGHT_BUNDLED, markersReady, courseId, hole]);
 
   // ── Restore existing plan when markers initialise ──
   useEffect(() => {
@@ -465,6 +483,18 @@ export default function HoleView() {
             total: fromTeeYards + approachYards,
           },
         });
+        // Also persist the marker fractions as per-(course, hole)
+        // calibration. The round plan only lives within the active
+        // round; this calibration store survives across rounds and
+        // app restarts so the markers come up at the user's last
+        // calibrated positions on the next visit.
+        if (courseId) {
+          useHoleMarkerCalibrationStore.getState().setCalibration(courseId, hole, {
+            tee:    { x: teePos.x    / IMAGE_WIDTH, y: teePos.y    / IMAGE_HEIGHT_BUNDLED },
+            target: { x: targetPos.x / IMAGE_WIDTH, y: targetPos.y / IMAGE_HEIGHT_BUNDLED },
+            pin:    { x: pinPos.x    / IMAGE_WIDTH, y: pinPos.y    / IMAGE_HEIGHT_BUNDLED },
+          });
+        }
       }, 500);
     }
     prevDraggingRef.current = isDragging;
