@@ -22,6 +22,7 @@
     },
     "preview": {
       "distribution": "internal",
+      "developmentClient": false,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://smartplay-beta.vercel.app",
         "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCh6a4PaRpohas6kmh1KjrmdYDQkIZuth4",
