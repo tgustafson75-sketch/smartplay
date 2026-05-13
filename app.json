@@ -17,7 +17,6 @@
         "NSLocationWhenInUseUsageDescription": "SmartPlay Caddie Pro uses your location to find nearby golf courses.",
         "NSPhotoLibraryUsageDescription": "SmartPlay Caddie Pro saves your hero moments to your photo library.",
         "UIBackgroundModes": [
-          "audio",
           "audio"
         ]
       }
