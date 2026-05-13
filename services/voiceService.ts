@@ -1,4 +1,4 @@
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import { File, Paths } from 'expo-file-system';
 import { noteAudioActivity } from './audioLifecycle';
 
@@ -27,6 +27,13 @@ export const configureAudioForRecording =
         staysActiveInBackground: true,
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
+        // Audit follow-up (2026-05-13) — iOS-specific interruption
+        // policy. DoNotMix while recording: if Spotify/podcast is
+        // playing, iOS pauses it so the mic captures clean audio
+        // instead of background music. interruption{Begin,End}
+        // events are handled by the OS automatically given this mode.
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
       });
       currentAudioMode = 'record';
     } catch (err) {
@@ -149,6 +156,13 @@ export const configureAudioForSpeech =
         staysActiveInBackground: true,
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
+        // Audit follow-up (2026-05-13) — DuckOthers while speaking so
+        // Spotify / podcasts / nav voices drop in volume during Kevin's
+        // reply and restore automatically when the speak queue drains.
+        // Required for clean coexistence on iOS; matches shouldDuckAndroid
+        // semantics on the Android side.
+        interruptionModeIOS: InterruptionModeIOS.DuckOthers,
+        interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
       });
       currentAudioMode = 'speech';
     } catch (err) {

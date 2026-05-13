@@ -1,7 +1,7 @@
 import { useRef, useCallback, useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Audio } from 'expo-av';
-import { Vibration } from 'react-native';
+import { Vibration, Alert, Linking } from 'react-native';
 import { usePathname } from 'expo-router';
 import {
   configureAudioForRecording,
@@ -54,7 +54,15 @@ const AUTO_STOP_MS = 4000;
 let micPermissionGranted = false;
 export function resetMicPermissionCache(): void {
   micPermissionGranted = false;
+  micBlockedPromptShown = false;
 }
+
+// Audit follow-up (2026-05-13) — show the "Mic blocked → open Settings"
+// Alert at most once per app session so a user who denies and then
+// taps the mic ten more times isn't pestered repeatedly. Reset alongside
+// the granted cache so resetMicPermissionCache() in voicePermissionService
+// gives the user a clean slate on re-enable.
+let micBlockedPromptShown = false;
 
 // 16kHz mono 32kbps — 4x smaller than HIGH_QUALITY, same Whisper accuracy
 const RECORDING_OPTIONS: Audio.RecordingOptions = {
@@ -851,9 +859,34 @@ export const useVoiceCaddie = ({
       // every subsequent tap skips the 30-80ms IPC roundtrip to the OS
       // permission cache. Re-asks only if the cached value is false.
       if (!micPermissionGranted) {
-        const { granted } = await Audio.requestPermissionsAsync();
-        if (!granted) {
-          console.log('[voice] no mic permission');
+        const result = await Audio.requestPermissionsAsync();
+        if (!result.granted) {
+          console.log('[voice] no mic permission', {
+            canAskAgain: result.canAskAgain,
+            status: result.status,
+          });
+          // Audit follow-up (2026-05-13) — when iOS / Android has
+          // permanently denied (canAskAgain === false), the OS dialog
+          // won't appear on subsequent taps. Without this prompt, the
+          // user keeps tapping the mic and nothing happens with no
+          // explanation. Show a one-shot Alert that routes to Settings.
+          // canAskAgain === true means the OS dialog WILL re-appear on
+          // the next tap, so we don't need to nag with our own UI.
+          if (!result.canAskAgain && !micBlockedPromptShown) {
+            micBlockedPromptShown = true;
+            Alert.alert(
+              'Microphone access needed',
+              'Kevin needs the microphone to hear you. Open Settings to enable it.',
+              [
+                { text: 'Not now', style: 'cancel' },
+                {
+                  text: 'Open Settings',
+                  onPress: () => { void Linking.openSettings().catch(() => undefined); },
+                },
+              ],
+              { cancelable: true },
+            );
+          }
           return;
         }
         micPermissionGranted = true;
