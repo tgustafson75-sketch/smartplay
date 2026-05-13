@@ -121,20 +121,26 @@ async function startWatchInternal() {
       return;
     }
     const cfg = POLL_CONFIG[mode];
-    subscription = await Location.watchPositionAsync(
-      {
-        accuracy: cfg.accuracy,
-        timeInterval: cfg.intervalMs,
-        distanceInterval: 2,
-      },
-      (loc) => {
-        const raw: GpsFix = {
-          lat: loc.coords.latitude,
-          lng: loc.coords.longitude,
-          accuracy_m: loc.coords.accuracy ?? null,
-          speed: loc.coords.speed ?? null,
-          timestamp: loc.timestamp,
-        };
+    // Audit follow-up (2026-05-13) — fallback ladder for older Android
+    // devices / locked-down OEMs that throw on the configured accuracy
+    // tier. Try the configured accuracy first, drop to Balanced on
+    // failure, then Low. If all three throw, we log and leave the
+    // subscription null (consumers handle the absent-fix case).
+    // Yardages going coarse-but-present is strictly better than yardages
+    // going completely dark for the rest of the round.
+    const accuracyLadder: Location.Accuracy[] = [
+      cfg.accuracy,
+      Location.Accuracy.Balanced,
+      Location.Accuracy.Low,
+    ];
+    const onLocationUpdate = (loc: Location.LocationObject) => {
+      const raw: GpsFix = {
+        lat: loc.coords.latitude,
+        lng: loc.coords.longitude,
+        accuracy_m: loc.coords.accuracy ?? null,
+        speed: loc.coords.speed ?? null,
+        timestamp: loc.timestamp,
+      };
 
         // Phase 107 / B2 — outlier rejection.
         // (1) Discard if reported accuracy is worse than threshold.
@@ -179,12 +185,42 @@ async function startWatchInternal() {
           lastMotionAt = Date.now();
         }
 
-        lastFix = fix;
-        for (const cb of subscribers) {
-          try { cb(fix); } catch {}
+      lastFix = fix;
+      for (const cb of subscribers) {
+        try { cb(fix); } catch {}
+      }
+    };
+
+    // Try each accuracy in the ladder. First success wins.
+    let lastWatchErr: unknown = null;
+    for (const accuracy of accuracyLadder) {
+      try {
+        subscription = await Location.watchPositionAsync(
+          {
+            accuracy,
+            timeInterval: cfg.intervalMs,
+            distanceInterval: 2,
+          },
+          onLocationUpdate,
+        );
+        if (accuracy !== cfg.accuracy) {
+          // Made it on a fallback rung — tell the breadcrumbs so we
+          // can see the device class fingerprint in Sentry later.
+          breadcrumb('watch_accuracy_fallback', {
+            wanted: cfg.accuracy,
+            got: accuracy,
+          });
+          console.log(`[gps] accuracy fallback: ${cfg.accuracy} → ${accuracy}`);
         }
-      },
-    );
+        break;
+      } catch (err) {
+        lastWatchErr = err;
+        console.log(`[gps] watch error at accuracy=${accuracy}:`, err);
+      }
+    }
+    if (!subscription) {
+      console.log('[gps] all accuracy levels failed:', lastWatchErr);
+    }
   } catch (err) {
     console.log('[gps] watch error:', err);
   }
