@@ -22,6 +22,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { loadRecap } from '../../services/planStorage';
 import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
 import AppIcon from '../../components/AppIcon';
+import BrandHeaderRow from '../../components/brand/BrandHeaderRow';
 import type { ShotResult } from '../../store/roundStore';
 import type { RoundRecap } from '../../types/plan';
 
@@ -380,6 +381,9 @@ export default function Scorecard() {
         contentContainerStyle={{ paddingBottom: 120, flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
       >
+
+        {/* Shared v3 brand row — same in all tabs. */}
+        <BrandHeaderRow />
 
         {/* HEADER */}
         <View style={styles.header}>

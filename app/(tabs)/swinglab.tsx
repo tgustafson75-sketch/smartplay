@@ -32,6 +32,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
+import BrandHeaderRow from '../../components/brand/BrandHeaderRow';
 
 type Status = 'LIVE' | 'BETA' | 'SOON';
 
@@ -111,23 +112,8 @@ export default function SwingLab() {
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* BRAND HEADER — matches Caddie/Dashboard tab for unified app feel. */}
-        <View style={styles.brandWrap}>
-          <Image
-            source={require('../../assets/avatars/smartplay_caddie_badge.png')}
-            style={styles.brandBadge}
-            resizeMode="contain"
-          />
-          <View style={styles.brandTitleBlock}>
-            <View style={styles.brandWordmarkRow}>
-              <Text style={[styles.brandName1, { color: colors.accent }]}>SMARTPLAY</Text>
-              <Text style={[styles.brandName2, { color: colors.text_primary }]}> CADDIE</Text>
-            </View>
-            <Text style={[styles.brandTagline, { color: colors.text_muted }]}>
-              REAL-TIME CADDIE INTELLIGENCE
-            </Text>
-          </View>
-        </View>
+        {/* BRAND HEADER — shared v3-style row, matches every other tab. */}
+        <BrandHeaderRow />
 
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>PRACTICE</Text>
 

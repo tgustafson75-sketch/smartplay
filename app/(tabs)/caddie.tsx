@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   Modal,
   Alert,
@@ -28,6 +29,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 // useSettingsStore.cockpitMode; off by default. Voice/avatar code
 // below is byte-identical to pre-Cockpit when the toggle is off.
 import CockpitCaddieScreen from '../../components/caddie/CockpitCaddieScreen';
+import { DistanceCard, type FrontMiddleBack } from '../../components/caddie/cockpit/DistanceCard';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useShallow } from 'zustand/react/shallow';
 import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
@@ -398,6 +400,23 @@ export default function CaddieTab() {
   }, [yardageMode, isRoundActive, currentHole, markTick]);
 
   const displayYardage = liveYardage ?? currentYardage;
+
+  // L1 Quiet's new SmartFinder hero needs the F/M/B triplet, not just
+  // the middle. Pulled the same way liveYardage is (sync read + markTick
+  // re-subscribe) so we don't add another GPS subscription.
+  const fmb = useMemo<FrontMiddleBack | null>(() => {
+    if (!isRoundActive) return null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getGreenYardagesSync } = require('../../services/smartFinderService');
+      const y = getGreenYardagesSync(currentHole);
+      if (!y) return null;
+      if (y.front == null && y.middle == null && y.back == null) return null;
+      return { front: y.front, middle: y.middle, back: y.back };
+    } catch { return null; }
+    // markTick listed as a re-render signal — same rationale as liveYardage.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRoundActive, currentHole, markTick]);
 
   const playsLikeYardage = useMemo(() => {
     if (displayYardage == null) return displayYardage;
@@ -1761,76 +1780,74 @@ export default function CaddieTab() {
       )}
       {trustLevel === 1 && (
         <>
-          {/* L1 Quiet — locked design. Kevin's face does NOT show.
-              Voice entry on L1 lives in the universal green-arrow
-              dropdown (mic icon, state-aware) — see the Phase AU note
-              just below. The lie-analysis camera lives on the right
-              edge via the placements block below. SmartVision
-              (L1HolePreview) and SmartFinder cards stack in the body
-              so the player has hole context without Kevin's face on
-              screen. */}
-          {/* Phase AU — L1 standalone SmartPlay badge mic-trigger removed.
-              Voice entry on L1 now lives inside the universal green-arrow
-              dropdown (mic icon, state-aware). Frees the upper-left
-              corner of the Quiet surface per Tim's "move it to the green
-              arrow tools for space" feedback. */}
+          {/* L1 Quiet — v3-style SmartFinder hero with a small SmartVision
+              inset in the corner. Kevin's face does not show. Voice entry
+              lives in the universal green-arrow dropdown (mic icon,
+              state-aware). The big yardage card dominates so the player
+              gets distances at a glance; the camera inset is one tap from
+              opening the full SmartVision when they want it.
 
-          {/* L1 Quiet — SmartVision card. Green border, no scope ticks
-              (those belong to SmartFinder). Card stretches from below the
-              badge area to just above the SmartFinder card so the hole
-              preview gets real estate.
-              Phase AR follow-up — cardTop bumped insets.top+150 → +220
-              so SmartVision sits lower on screen, closer to SmartFinder
-              (per "too much space between SmartVision and SmartFinder"
-              feedback). Card bottom remains anchored to (SmartFinder top
-              - 4px), so the visual gap between the two cards is now
-              minimal instead of empty middle-third real-estate. */}
+              Layout: SmartFinder card top-anchored at insets.top + 80,
+              fixed height around 240px. The SmartVision inset (~140×100)
+              floats below-right so it never overlaps the F/M/B numerals. */}
           {(() => {
-            // L1 SmartVision card. Top anchored at insets.top + 80.
-            // Tim: "make box and holeview taller toward the bottom
-            // with clean space above next card." Card extends down
-            // to 24px above the dropdown chevron row (no aspect-ratio
-            // cap on height — fills the available space).
             const cardTop = insets.top + 80;
-            const dropdownTop = H - 144 - insets.bottom;
-            const cardH = Math.max(200, dropdownTop - cardTop - 24);
-            const cardW = W - 32;
-            const headerH = 26;
-            const innerW = cardW - 28;
-            const innerH = Math.max(120, cardH - 6 - 4 - headerH);
+            const cardLeft = 16;
+            const cardRight = 16;
+            const insetW = 140;
+            const insetH = 100;
+            const insetGap = 12;
             return (
-              <View
-                style={{
-                  position: 'absolute',
-                  left: 16,
-                  right: 16,
-                  top: cardTop,
-                  height: cardH,
-                  zIndex: 7,
-                  backgroundColor: 'rgba(13, 36, 24, 0.92)',
-                  borderRadius: 14,
-                  borderWidth: 1.5,
-                  borderColor: '#00C896',
-                  paddingHorizontal: 12,
-                  paddingTop: 6,
-                  paddingBottom: 4,
-                  shadowColor: '#00C896',
-                  shadowOffset: { width: 0, height: 0 },
-                  shadowOpacity: 0.5,
-                  shadowRadius: 10,
-                  elevation: 8,
-                }}
-                pointerEvents="box-none"
-              >
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: headerH }}>
-                  <Text style={{ color: '#00C896', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 }}>
-                    SMARTVISION{isRoundActive ? ` · HOLE ${currentHole}` : ''}
-                  </Text>
+              <>
+                <View
+                  style={{
+                    position: 'absolute',
+                    left: cardLeft,
+                    right: cardRight,
+                    top: cardTop,
+                    zIndex: 7,
+                  }}
+                  pointerEvents="box-none"
+                >
+                  <DistanceCard
+                    fmb={fmb}
+                    baseYardage={currentYardage}
+                    gpsAccuracy={fmb && fmb.middle != null ? 'good' : currentYardage != null ? 'weak' : 'off'}
+                    unit={useSettingsStore.getState().distance_unit}
+                    onPressOpenRangefinder={() => { router.push('/smartfinder' as never); }}
+                  />
                 </View>
-                <View style={{ alignSelf: 'center', borderRadius: 8, overflow: 'hidden', width: innerW, height: innerH }}>
-                  <L1HolePreview onOpenSmartVision={openSmartVision} width={innerW} height={innerH} />
-                </View>
-              </View>
+
+                {/* Small SmartVision inset — tap-target for the full
+                    camera + AI analysis. Anchored top-right under the
+                    SmartFinder card so the wordmark above it stays clear. */}
+                <Pressable
+                  onPress={openSmartVision}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open SmartVision"
+                  style={({ pressed }) => ({
+                    position: 'absolute',
+                    right: cardRight,
+                    top: cardTop + 240 + insetGap,
+                    width: insetW,
+                    height: insetH,
+                    zIndex: 8,
+                    borderRadius: 12,
+                    borderWidth: 1.5,
+                    borderColor: '#00C896',
+                    backgroundColor: 'rgba(13, 36, 24, 0.92)',
+                    overflow: 'hidden',
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <View style={{ position: 'absolute', top: 4, left: 6, zIndex: 2 }}>
+                    <Text style={{ color: '#00C896', fontSize: 9, fontWeight: '800', letterSpacing: 1.2 }}>
+                      SMARTVISION
+                    </Text>
+                  </View>
+                  <L1HolePreview onOpenSmartVision={openSmartVision} width={insetW} height={insetH} />
+                </Pressable>
+              </>
             );
           })()}
         </>
@@ -1854,7 +1871,7 @@ export default function CaddieTab() {
           {/* Phase AR — Caddie word now consumes theme.text_primary so it
               flips white-on-dark / black-on-light. Was hardcoded white,
               which washed against the light-mode background. */}
-          <Text style={[styles.brandSub, { color: theme.colors.text_primary }]}> Caddie Pro</Text>
+          <Text style={[styles.brandSub, { color: theme.colors.text_primary }]}> Caddie</Text>
         </View>
       </View>
 

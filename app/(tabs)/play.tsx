@@ -31,6 +31,7 @@ import { toggle as toggleListening } from '../../services/listeningSession';
 import PALMS_IMAGES from '../../data/palmsImages';
 import { CRYSTAL_SPRINGS_HOLE_IMAGES, MARINERS_POINT_HOLE_IMAGES } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
+import BrandHeaderRow from '../../components/brand/BrandHeaderRow';
 import type { Course } from '../../types/course';
 
 type CourseSummary = {
@@ -348,25 +349,8 @@ export default function PlayTab() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Banner — logo doubles as Kevin: tap to open listening session */}
-      <View style={styles.banner}>
-        <TouchableOpacity
-          style={styles.bannerLogoWrap}
-          onPress={() => { void toggleListening(); }}
-          accessibilityRole="button"
-          accessibilityLabel="Talk to Kevin"
-          activeOpacity={0.85}
-        >
-          <Image source={require('../../assets/avatars/smartplay_caddie_badge.png')} style={styles.bannerLogo} />
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.bannerTitle}>
-            <Text style={{ color: '#00C896' }}>SmartPlay</Text>
-            <Text style={{ color: '#fff' }}> Caddie</Text>
-          </Text>
-          <Text style={styles.bannerSub}>REAL-TIME CADDIE INTELLIGE…</Text>
-        </View>
-      </View>
+      {/* Shared v3 brand row — logo tap opens the listening session. */}
+      <BrandHeaderRow onLogoPress={() => { void toggleListening(); }} />
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}

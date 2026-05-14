@@ -41,6 +41,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { detectPatternShift } from '../../services/patternDetection';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import AppIcon from '../../components/AppIcon';
+import BrandHeaderRow from '../../components/brand/BrandHeaderRow';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -171,22 +172,7 @@ export default function Dashboard() {
         contentContainerStyle={styles.scroll}
       >
         {/* ─── 1. BRAND HEADER ──────────────────────────────────────── */}
-        <View style={styles.brandWrap}>
-          <Image
-            source={require('../../assets/avatars/smartplay_caddie_badge.png')}
-            style={styles.brandBadge}
-            resizeMode="contain"
-          />
-          <View style={styles.brandTitleBlock}>
-            <View style={styles.brandWordmarkRow}>
-              <Text style={[styles.brandName1, { color: colors.accent }]}>SMARTPLAY</Text>
-              <Text style={[styles.brandName2, { color: colors.text_primary }]}> CADDIE</Text>
-            </View>
-            <Text style={[styles.brandTagline, { color: colors.text_muted }]}>
-              REAL-TIME CADDIE INTELLIGENCE
-            </Text>
-          </View>
-        </View>
+        <BrandHeaderRow />
 
         {/* ─── 2. TITLE + WELCOME ────────────────────────────────────── */}
         <View style={styles.titleBlock}>
