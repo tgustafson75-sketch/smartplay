@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Switch, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTrustLevelStore, TRUST_LEVEL_META, type TrustLevel } from '../../store/trustLevelStore';
@@ -21,6 +21,8 @@ export default function TrustLevelScreen() {
   const [showAbout, setShowAbout] = useState(false);
   const voiceGender = useSettingsStore(s => s.voiceGender);
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
+  const cockpitMode = useSettingsStore(s => s.cockpitMode);
+  const setCockpitMode = useSettingsStore(s => s.setCockpitMode);
   const caddieName = getCaddieName(caddiePersonality);
   const subjectPronoun = voiceGender === 'female' ? 'She' : 'He';
   const possessivePronoun = voiceGender === 'female' ? 'her' : 'him';
@@ -70,6 +72,22 @@ export default function TrustLevelScreen() {
         <View style={styles.descriptionBlock}>
           <Text style={styles.activeOneLiner}>{TRUST_LEVEL_META[level].one_liner}</Text>
           {level === 2 && <Text style={styles.recommendedTag}>Recommended for most.</Text>}
+        </View>
+
+        <View style={styles.cockpitRow}>
+          <View style={styles.cockpitText}>
+            <Text style={styles.cockpitLabel}>Cockpit Mode</Text>
+            <Text style={styles.cockpitSub}>
+              Minimal Caddie tab: brand header, big SmartFinder card, Vision/Motion/Play row, Tap-to-Ask pill, manual shot-result entry. Layout only — voice + GPS unchanged.
+            </Text>
+          </View>
+          <Switch
+            value={cockpitMode}
+            onValueChange={setCockpitMode}
+            trackColor={{ true: '#00C896', false: '#1e3a28' }}
+            thumbColor="#ffffff"
+            accessibilityLabel="Cockpit Mode"
+          />
         </View>
 
         <TouchableOpacity onPress={() => setShowAbout(!showAbout)} style={styles.aboutToggle}>
@@ -137,4 +155,19 @@ const styles = StyleSheet.create({
   aboutRow: {},
   aboutLabel: { color: '#00C896', fontSize: 12, fontWeight: '800', letterSpacing: 1.2, marginBottom: 4 },
   aboutBody: { color: '#9ca3af', fontSize: 13, lineHeight: 19 },
+  cockpitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#0a1e12',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  cockpitText: { flex: 1, minWidth: 0 },
+  cockpitLabel: { color: '#e8f5e9', fontSize: 15, fontWeight: '800', marginBottom: 2 },
+  cockpitSub: { color: '#9ca3af', fontSize: 12, lineHeight: 17 },
 });

@@ -213,25 +213,30 @@ export default function PlayTab() {
       return;
     }
     setSelectedLoading(true);
-    const c = await getCourse(s.id);
-    if (c) {
-      setSelected(c);
-      try {
-        await fetchCourseGeometry(c.id);
-        const tee = c.tees[0];
-        if (tee) {
-          const url = getCourseImageryUrl({
-            courseId: c.id,
-            holes: tee.holes.map(h => {
-              const g = getHoleGeometry(c.id, h.hole_number);
-              return { tee: g?.tee ?? null, green: g?.green ?? null };
-            }),
-          }, 200, 200);
-          setSelectedHero(url);
-        }
-      } catch (e) { console.log('[play] geometry warm failed:', e); }
+    try {
+      const c = await getCourse(s.id);
+      if (c) {
+        setSelected(c);
+        try {
+          await fetchCourseGeometry(c.id);
+          const tee = c.tees[0];
+          if (tee) {
+            const url = getCourseImageryUrl({
+              courseId: c.id,
+              holes: tee.holes.map(h => {
+                const g = getHoleGeometry(c.id, h.hole_number);
+                return { tee: g?.tee ?? null, green: g?.green ?? null };
+              }),
+            }, 200, 200);
+            setSelectedHero(url);
+          }
+        } catch (e) { console.log('[play] geometry warm failed:', e); }
+      }
+    } catch (e) {
+      console.log('[play] selectSummary failed:', e);
+    } finally {
+      setSelectedLoading(false);
     }
-    setSelectedLoading(false);
   }, []);
 
   // Local courses don't have a real API course_id (their id is the
