@@ -33,40 +33,63 @@ export interface BrandHeaderProps {
 export function BrandHeader({ voiceState, onMicPress, onModePress }: BrandHeaderProps) {
   const { colors } = useTheme();
 
+  // Visible-state hints on the badge ring so the user gets immediate
+  // feedback for every voice state — not just listening. Idle = accent
+  // border; thinking/speaking get a tinted border so the tap clearly
+  // "did something" even before audio init completes.
+  const ringColor =
+    voiceState === 'listening' ? colors.accent
+    : voiceState === 'thinking' ? '#F5A623'
+    : voiceState === 'speaking' ? colors.accent
+    : colors.accent;
+  const ringBg =
+    voiceState === 'thinking' ? 'rgba(245,166,35,0.18)'
+    : voiceState === 'speaking' ? colors.accent_muted
+    : colors.surface_elevated;
+
   return (
     <View style={styles.wrap}>
+      {/* Whole brand row (badge + title) is the mic tap surface — matches
+          v3's "badge IS the mic" rule and gives a generous tap target so
+          users don't keep missing the small 56-pixel circle. */}
       <Pressable
         onPress={onMicPress}
-        hitSlop={10}
+        hitSlop={4}
         accessibilityRole="button"
         accessibilityLabel="Talk to caddie"
         accessibilityHint="Starts recording. Tap again to stop."
-        style={({ pressed }) => [
-          styles.badgeBtn,
-          {
-            borderColor: colors.accent,
-            backgroundColor: colors.surface_elevated,
-            opacity: pressed ? 0.85 : 1,
-          },
-        ]}
+        style={({ pressed }) => [styles.micRow, { opacity: pressed ? 0.7 : 1 }]}
       >
-        {voiceState === 'listening' && <ListeningHalo accent={colors.accent} />}
-        <Image
-          source={require('../../../assets/avatars/smartplay_caddie_badge.png')}
-          style={styles.badgeImg}
-          resizeMode="contain"
-        />
-      </Pressable>
-
-      <View style={styles.titleBlock}>
-        <View style={styles.wordmarkRow}>
-          <Text style={[styles.brand1, { color: colors.accent }]}>SMARTPLAY</Text>
-          <Text style={[styles.brand2, { color: colors.text_primary }]}> CADDIE</Text>
+        <View
+          style={[
+            styles.badgeBtn,
+            {
+              borderColor: ringColor,
+              backgroundColor: ringBg,
+            },
+          ]}
+        >
+          {voiceState === 'listening' && <ListeningHalo accent={colors.accent} />}
+          <Image
+            source={require('../../../assets/avatars/smartplay_caddie_badge.png')}
+            style={styles.badgeImg}
+            resizeMode="contain"
+          />
         </View>
-        <Text style={[styles.tagline, { color: colors.text_muted }]}>
-          REAL-TIME CADDIE INTELLIGENCE
-        </Text>
-      </View>
+
+        <View style={styles.titleBlock}>
+          <View style={styles.wordmarkRow}>
+            <Text style={[styles.brand1, { color: colors.accent }]}>SMARTPLAY</Text>
+            <Text style={[styles.brand2, { color: colors.text_primary }]}> CADDIE</Text>
+          </View>
+          <Text style={[styles.tagline, { color: colors.text_muted }]}>
+            {voiceState === 'listening' ? 'LISTENING…'
+              : voiceState === 'thinking' ? 'THINKING…'
+              : voiceState === 'speaking' ? 'SPEAKING…'
+              : 'TAP TO TALK · REAL-TIME CADDIE'}
+          </Text>
+        </View>
+      </Pressable>
 
       {onModePress && (
         <Pressable
@@ -132,7 +155,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 8,
+    gap: 8,
+  },
+  micRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 4,
   },
   badgeBtn: {
     width: BADGE_SIZE,
