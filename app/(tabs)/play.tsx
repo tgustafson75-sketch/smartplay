@@ -29,6 +29,7 @@ import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeome
 import { getCourseImageryUrl } from '../../services/mapboxImagery';
 import { toggle as toggleListening } from '../../services/listeningSession';
 import PALMS_IMAGES from '../../data/palmsImages';
+import { CRYSTAL_SPRINGS_HOLE_IMAGES, MARINERS_POINT_HOLE_IMAGES } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
 import type { Course } from '../../types/course';
 
@@ -43,16 +44,54 @@ type CourseSummary = {
 };
 
 // Curated local courses (Tim's playtest set). These render in the closest-local
-// section even when the API hasn't been called yet.
+// section even when the API hasn't been called yet. Rating/slope mirror
+// data/courses.ts COURSES — the simulator's source of truth for these
+// courses' geometry + walks.
 const LOCAL_COURSES: CourseSummary[] = [
   {
     id: 'local:palms',
     club_name: 'Menifee Lakes — Palms',
     location: 'Menifee, CA',
-    rating: 69.8,
-    slope: 118,
+    rating: 69.6,
+    slope: 119,
     isLocal: true,
     thumbnail: PALMS_IMAGES[1] as ImageSourcePropType,
+  },
+  {
+    id: 'local:lakes',
+    club_name: 'Menifee Lakes — Lakes',
+    location: 'Menifee, CA',
+    rating: 69.3,
+    slope: 119,
+    isLocal: true,
+    thumbnail: null,
+  },
+  {
+    id: 'local:rancho',
+    club_name: 'Rancho California',
+    location: 'Temecula, CA',
+    rating: 70.9,
+    slope: 127,
+    isLocal: true,
+    thumbnail: null,
+  },
+  {
+    id: 'local:crystal-springs',
+    club_name: 'Crystal Springs',
+    location: 'Burlingame, CA',
+    rating: 70.4,
+    slope: 128,
+    isLocal: true,
+    thumbnail: (CRYSTAL_SPRINGS_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+  },
+  {
+    id: 'local:mariners-point',
+    club_name: 'Mariners Point',
+    location: 'Foster City, CA',
+    rating: 53.0,
+    slope: 74,
+    isLocal: true,
+    thumbnail: (MARINERS_POINT_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
   },
 ];
 
