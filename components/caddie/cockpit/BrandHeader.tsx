@@ -26,11 +26,12 @@ import type { VoiceState } from '../../CaddieAvatar';
 export interface BrandHeaderProps {
   voiceState: VoiceState;
   onMicPress: () => void;
-  /** Optional — tap target on the right that opens the mode/presence picker. */
-  onModePress?: () => void;
+  // 2026-05-14 — onModePress removed. Tim: "Tools menu cycler is the only
+  // mode control. Remove the MODE pill from Cockpit too." The ••• Tools
+  // pill in BrandHeaderRow (every tab) is now the single mode switcher.
 }
 
-export function BrandHeader({ voiceState, onMicPress, onModePress }: BrandHeaderProps) {
+export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
   const { colors } = useTheme();
 
   // Visible-state hints on the badge ring so the user gets immediate
@@ -90,22 +91,6 @@ export function BrandHeader({ voiceState, onMicPress, onModePress }: BrandHeader
           </Text>
         </View>
       </Pressable>
-
-      {onModePress && (
-        <Pressable
-          onPress={onModePress}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Change caddie mode"
-          accessibilityHint="Opens the presence picker — Quiet, Companion, Active, Full, or Cockpit."
-          style={({ pressed }) => [
-            styles.modePill,
-            { borderColor: colors.accent, opacity: pressed ? 0.7 : 1 },
-          ]}
-        >
-          <Text style={[styles.modePillText, { color: colors.accent }]}>MODE</Text>
-        </Pressable>
-      )}
     </View>
   );
 }

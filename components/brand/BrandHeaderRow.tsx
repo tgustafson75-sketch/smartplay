@@ -17,7 +17,9 @@
 
 import React from 'react';
 import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useToolsMenuStore } from '../../store/toolsMenuStore';
 
 export const BRAND_BADGE_SIZE = 56;
 export const BRAND_TAGLINE = 'REAL-TIME CADDIE INTELLIGENCE';
@@ -33,6 +35,7 @@ export interface BrandHeaderRowProps {
 
 export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress }: BrandHeaderRowProps) {
   const { colors } = useTheme();
+  const openTools = useToolsMenuStore((s) => s.open);
   const logo = (
     <Image
       source={require('../../assets/avatars/smartplay_caddie_badge.png')}
@@ -64,6 +67,21 @@ export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress }: BrandHe
           {tagline}
         </Text>
       </View>
+      {/* ••• Tools pill — same control on every tab so mode cycler +
+          persona cycler + Settings link are always one tap away. Opens
+          the GlobalToolsMenu mounted at app/_layout.tsx root. */}
+      <Pressable
+        onPress={openTools}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel="Open tools menu"
+        style={({ pressed }) => [
+          styles.toolsPill,
+          { borderColor: colors.border, opacity: pressed ? 0.6 : 1 },
+        ]}
+      >
+        <Ionicons name="ellipsis-horizontal" size={20} color={colors.text_muted} />
+      </Pressable>
     </View>
   );
 }
@@ -96,4 +114,12 @@ const styles = StyleSheet.create({
   name1: { fontSize: 18, fontWeight: '800', letterSpacing: 2.5 },
   name2: { fontSize: 18, fontWeight: '800', letterSpacing: 2.5 },
   tagline: { fontSize: 10, fontWeight: '500', letterSpacing: 1.4, marginTop: 2 },
+  toolsPill: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

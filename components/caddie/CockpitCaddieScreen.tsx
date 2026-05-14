@@ -212,10 +212,6 @@ export default function CockpitCaddieScreen({
         <BrandHeader
           voiceState={voiceState}
           onMicPress={onMicPress}
-          onModePress={() => {
-            void Haptics.selectionAsync().catch(() => undefined);
-            router.push('/settings/trust-level' as never);
-          }}
         />
 
         {/* Minimal sub-row: hole / course. Mirrors v3's SubHeaderBar

@@ -33,6 +33,7 @@ import CaddieSuggestionCard from '../components/CaddieSuggestionCard';
 import GpsQualityOverlay from '../components/dev/GpsQualityOverlay';
 import CaptureOverlay from '../components/CaptureOverlay';
 import CaptionStrip from '../components/CaptionStrip';
+import GlobalToolsMenu from '../components/tools/GlobalToolsMenu';
 
 // Phase Y — whenRoundStoreHydrated lives in store/roundStore.ts (was
 // inlined here originally; audit moved it to remove a brittle
@@ -408,6 +409,10 @@ function AppNavigator() {
           accessibility. Renders only while TTS is playing AND ttsCaptions
           is enabled in settings. */}
       <CaptionStrip />
+      {/* Global Tools menu — opened from the ••• pill in every tab's
+          BrandHeaderRow. Mounts once here so the modal is reachable from
+          anywhere without prop-drilling. State lives in toolsMenuStore. */}
+      <GlobalToolsMenu />
       <RoundActiveDevIndicator />
       <Stack
         screenOptions={{
