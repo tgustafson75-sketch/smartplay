@@ -253,7 +253,13 @@ export default function CockpitCaddieScreen({
 
         <SmartToolsRow
           onVision={() => router.push('/smartvision' as never)}
-          onMotion={() => router.push('/swinglab' as never)}
+          onMotion={() => {
+            // Course mode: skip the camera-setup checklist (which is
+            // tuned for range-mode multi-shot framing) and jump straight
+            // to single-swing capture. Mid-round users want to fire the
+            // camera fast, not configure tripod alignment.
+            router.push('/swinglab/cage-drill' as never);
+          }}
           onPlay={() => router.push('/lie-analysis' as never)}
           onSettings={() => router.push('/settings' as never)}
         />

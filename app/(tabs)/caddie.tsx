@@ -1870,7 +1870,7 @@ export default function CaddieTab() {
         }}
         pointerEvents="none"
       >
-        <BrandHeaderRow />
+        <BrandHeaderRow hideToolsPill />
       </View>
 
       {/* TOP NAV — sits below the SmartPlay banner.

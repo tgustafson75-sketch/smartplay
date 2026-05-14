@@ -31,9 +31,14 @@ export interface BrandHeaderRowProps {
   /** Optional — makes the logo badge tappable (used on the Play tab to
    *  open the listening session). The wordmark + tagline stay static. */
   onLogoPress?: () => void;
+  /** Hide the ••• Tools pill. Use on screens that have their own
+   *  Tools button (e.g. the Caddie tab's anchored top-right ••• with
+   *  Caddie-specific actions like Mark/persona/etc.) to avoid the
+   *  duplicate pill Tim flagged 2026-05-14. */
+  hideToolsPill?: boolean;
 }
 
-export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress }: BrandHeaderRowProps) {
+export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress, hideToolsPill = false }: BrandHeaderRowProps) {
   const { colors } = useTheme();
   const openTools = useToolsMenuStore((s) => s.open);
   const logo = (
@@ -69,19 +74,23 @@ export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress }: BrandHe
       </View>
       {/* ••• Tools pill — same control on every tab so mode cycler +
           persona cycler + Settings link are always one tap away. Opens
-          the GlobalToolsMenu mounted at app/_layout.tsx root. */}
-      <Pressable
-        onPress={openTools}
-        hitSlop={10}
-        accessibilityRole="button"
-        accessibilityLabel="Open tools menu"
-        style={({ pressed }) => [
-          styles.toolsPill,
-          { borderColor: colors.border, opacity: pressed ? 0.6 : 1 },
-        ]}
-      >
-        <Ionicons name="ellipsis-horizontal" size={20} color={colors.text_muted} />
-      </Pressable>
+          the GlobalToolsMenu mounted at app/_layout.tsx root. Hidden
+          when hideToolsPill is true (Caddie tab has its own anchored
+          Tools button with round-specific actions). */}
+      {!hideToolsPill && (
+        <Pressable
+          onPress={openTools}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Open tools menu"
+          style={({ pressed }) => [
+            styles.toolsPill,
+            { borderColor: colors.border, opacity: pressed ? 0.6 : 1 },
+          ]}
+        >
+          <Ionicons name="ellipsis-horizontal" size={20} color={colors.text_muted} />
+        </Pressable>
+      )}
     </View>
   );
 }

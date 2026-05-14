@@ -20,7 +20,9 @@
 
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Image, Pressable, Animated, Easing, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useToolsMenuStore } from '../../../store/toolsMenuStore';
 import type { VoiceState } from '../../CaddieAvatar';
 
 export interface BrandHeaderProps {
@@ -33,6 +35,7 @@ export interface BrandHeaderProps {
 
 export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
   const { colors } = useTheme();
+  const openTools = useToolsMenuStore((s) => s.open);
 
   // Visible-state hints on the badge ring so the user gets immediate
   // feedback for every voice state — not just listening. Idle = accent
@@ -90,6 +93,23 @@ export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
               : 'TAP TO TALK · REAL-TIME CADDIE'}
           </Text>
         </View>
+      </Pressable>
+
+      {/* ••• Tools pill — matches BrandHeaderRow on every other tab.
+          Opens the GlobalToolsMenu (Presence cycler, Persona cycler,
+          Settings). Without this pill Cockpit had no on-screen way to
+          switch modes after the MODE pill was retired. */}
+      <Pressable
+        onPress={openTools}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel="Open tools menu"
+        style={({ pressed }) => [
+          styles.toolsPill,
+          { borderColor: colors.border, opacity: pressed ? 0.6 : 1 },
+        ]}
+      >
+        <Ionicons name="ellipsis-horizontal" size={20} color={colors.text_muted} />
       </Pressable>
     </View>
   );
@@ -194,18 +214,13 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
     marginTop: 2,
   },
-  modePill: {
+  toolsPill: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  modePillText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.4,
   },
 });
 
