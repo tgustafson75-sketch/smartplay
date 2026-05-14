@@ -671,6 +671,11 @@ export const useVoiceCaddie = ({
       if (!transcribeRes.ok || transcribeData.error) {
         console.error('[voice] transcribe failed', transcribeRes.status, transcribeData.error);
         try { Vibration.vibrate(120); } catch {}
+        // Surface visible feedback — without this, Cockpit users saw the
+        // badge cycle listening → idle with no clue why nothing happened
+        // (no avatar bubble like Full Mode has). Text reaches the
+        // CockpitCaddieScreen advice card and the Full Mode bottom bubble.
+        onResponseReceived('Network hiccup on transcribe. Try again.');
         wrappedOnVoiceStateChange('idle');
         isProcessingRef.current = false;
         return;
@@ -679,6 +684,10 @@ export const useVoiceCaddie = ({
       console.log('[voice] transcript:', transcript);
 
       if (!transcript.trim()) {
+        // Silent / unintelligible audio. Common when the mic was too
+        // far away or background noise drowned the user out. Tell them
+        // so they know to try again louder/closer.
+        onResponseReceived("Didn't catch that — try once more, a bit closer to the mic.");
         wrappedOnVoiceStateChange('idle');
         isProcessingRef.current = false;
         return;
@@ -755,7 +764,9 @@ export const useVoiceCaddie = ({
             intent = second.intent;
             result = second.result;
           } else {
-            // No clarification — end gracefully.
+            // No clarification — surface a hint so Cockpit users see
+            // the loop ended without a hanging "?" state.
+            onResponseReceived('No problem — try again whenever.');
             wrappedOnVoiceStateChange('idle');
             isProcessingRef.current = false;
             return;
@@ -812,6 +823,11 @@ export const useVoiceCaddie = ({
 
     } catch (err) {
       console.log('[voice] process error:', err);
+      // Same Cockpit-visibility rationale as the transcribe/empty paths
+      // above — without a text feedback, the badge silently cycled back
+      // to idle and Tim had no way to tell whether the mic missed him
+      // or the pipeline threw.
+      onResponseReceived('Hit a snag on my end. Try again.');
       wrappedOnVoiceStateChange('idle');
     } finally {
       isProcessingRef.current = false;
