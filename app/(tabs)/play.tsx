@@ -18,7 +18,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet,
-  Image, ActivityIndicator, type ImageSourcePropType,
+  Image, ActivityIndicator, Alert, type ImageSourcePropType,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -102,6 +102,9 @@ export default function PlayTab() {
   const router = useRouter();
   const recentCourseIds = useRoundStore(s => s.recentCourseIds);
   const activeCourseId = useRoundStore(s => s.activeCourseId);
+  const isRoundActive = useRoundStore(s => s.isRoundActive);
+  const activeCourse = useRoundStore(s => s.activeCourse);
+  const endRound = useRoundStore(s => s.endRound);
 
   // Pre-beta — legacy round factors restored to the Play tab so the user
   // picks strategy + mental + format BEFORE the round fires. The Play tab
@@ -353,6 +356,37 @@ export default function PlayTab() {
       <BrandHeaderRow onLogoPress={() => { void toggleListening(); }} />
 
       <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Active-round banner — End Round lives here so the user doesn't
+            have to dig into the Tools menu. Confirms before tearing down
+            the round to avoid an accidental tap during course browsing. */}
+        {isRoundActive && (
+          <View style={styles.activeRoundBanner}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.activeRoundLabel}>ACTIVE ROUND</Text>
+              <Text style={styles.activeRoundCourse} numberOfLines={1}>
+                {activeCourse ?? 'In progress'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.endRoundBtn}
+              onPress={() => {
+                Alert.alert(
+                  'End round?',
+                  'Your scorecard saves to history. Anything in progress this hole will be finalized.',
+                  [
+                    { text: 'Keep playing', style: 'cancel' },
+                    { text: 'End round', style: 'destructive', onPress: () => endRound() },
+                  ],
+                );
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="End round"
+            >
+              <Text style={styles.endRoundBtnText}>End Round</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Header */}
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
@@ -410,8 +444,8 @@ export default function PlayTab() {
           })}
         </View>
 
-        {/* GolfCourse API Search */}
-        <Text style={[styles.sectionLabel, { marginTop: 22 }]}>GOLFCOURSE API SEARCH</Text>
+        {/* Course search — golfcourseapi-backed lookup for non-local courses. */}
+        <Text style={[styles.sectionLabel, { marginTop: 22 }]}>SEARCH FOR LOCAL COURSES</Text>
         <View style={styles.kindRow}>
           {(['courses', 'range_practice'] as SearchKind[]).map(k => (
             <TouchableOpacity
@@ -630,6 +664,22 @@ const styles = StyleSheet.create({
   bannerLogo: { width: '100%', height: '100%' },
   bannerTitle: { fontSize: 18, fontWeight: '900' },
   bannerSub: { color: '#6b7d72', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginTop: 2 },
+
+  activeRoundBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    marginHorizontal: 12, marginTop: 12,
+    paddingHorizontal: 14, paddingVertical: 12,
+    backgroundColor: 'rgba(0, 200, 150, 0.10)',
+    borderRadius: 12, borderWidth: 1, borderColor: '#00C896',
+  },
+  activeRoundLabel: { color: '#00C896', fontSize: 10, fontWeight: '800', letterSpacing: 1.4 },
+  activeRoundCourse: { color: '#e8f5e9', fontSize: 14, fontWeight: '700', marginTop: 2 },
+  endRoundBtn: {
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 8, borderWidth: 1, borderColor: '#ef4444',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+  },
+  endRoundBtnText: { color: '#ef4444', fontSize: 13, fontWeight: '800' },
 
   headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
   h1: { color: '#fff', fontSize: 22, fontWeight: '900' },
