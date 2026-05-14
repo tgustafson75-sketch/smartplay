@@ -66,7 +66,7 @@ import { fetchCourseGeometry } from '../../services/courseGeometryService';
 import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
-import { useTrustLevelStore, TRUST_LEVEL_META, type TrustLevel } from '../../store/trustLevelStore';
+import { useTrustLevelStore, TRUST_LEVEL_META, TRUST_LEVEL_SLIDER_ORDER, type TrustLevel } from '../../store/trustLevelStore';
 // Phase U2 — KevinAvatar import removed. The L1 SmartPlay-badge mic-trigger
 // it used to wrap was deleted in Phase AU; the import sat as orphan dead
 // code with no JSX consumer. The component file itself is preserved for
@@ -1856,20 +1856,17 @@ export default function CaddieTab() {
 
       {/* TOP BRAND ROW — shared v3 BrandHeaderRow so the Caddie tab matches
            Dashboard / SwingLab / Play / Scorecard exactly. Absolute-positioned
-           above all the overlays so the wordmark + badge always show, even
-           when the avatar / SmartFinder / data strip cover the body.
-           pointerEvents="none" so taps pass through to the topNav and ToolMore
-           button anchored at insets.top + 38 directly underneath — without
-           this gate Tim reported the tool pill "did not always react to
-           touch." The brand row is purely informational here (no logo press
-           handler), so swallowing taps would have been pure UX cost. */}
+           BELOW the topNav row (zIndex 18 < topNav 20) so the chevron-back
+           and Tool ••• icons render on top of the brand row — Tim reported
+           both icons disappeared visually when the brand row was at zIndex
+           22. pointerEvents="none" still passes taps through. */}
       <View
         style={{
           position: 'absolute',
           top: insets.top,
           left: 0,
           right: 0,
-          zIndex: 22,
+          zIndex: 18,
         }}
         pointerEvents="none"
       >
@@ -2873,7 +2870,15 @@ export default function CaddieTab() {
                 label: trustLevel === 1 ? 'Resume Kevin' : 'Quiet Mode',
                 sub: trustLevel === 1 ? 'Bring Kevin back to Companion' : "Mute Kevin until I'm ready",
                 action: () => { setShowMoreMenu(false); setTrustLevel(trustLevel === 1 ? 2 : 1); } },
-              { icon: 'options-outline',     label: `${getCaddieName(caddiePersonality)}'s Presence: ${TRUST_LEVEL_META[trustLevel].label}`, sub: `${TRUST_LEVEL_META[trustLevel].one_liner} · Tap to cycle`, action: () => { const next = (((trustLevel) % 4) + 1) as TrustLevel; setTrustLevel(next); } },
+              { icon: 'options-outline',     label: `${getCaddieName(caddiePersonality)}'s Presence: ${TRUST_LEVEL_META[trustLevel].label}`, sub: `${TRUST_LEVEL_META[trustLevel].one_liner} · Tap to cycle`, action: () => {
+                  // Cycle through the slider display order so Cockpit (L5)
+                  // is reachable: Quiet → Cockpit → Companion → Active → Full → Quiet.
+                  // Old `((level % 4) + 1)` skipped 5 entirely and dropped
+                  // L5 → L2 in one tap — exactly the bug Tim reported.
+                  const cur = TRUST_LEVEL_SLIDER_ORDER.indexOf(trustLevel);
+                  const next = TRUST_LEVEL_SLIDER_ORDER[(cur + 1) % TRUST_LEVEL_SLIDER_ORDER.length];
+                  setTrustLevel(next);
+                } },
               // (Removed from Tools menu per Tim — Log a shot, Penalty
               // Stroke, and Capture Photo don't belong here. Log a shot
               // is reachable via voice ("log a shot") + auto-detection;

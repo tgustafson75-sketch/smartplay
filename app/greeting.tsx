@@ -211,7 +211,11 @@ export default function GreetingScreen() {
         // timeout fires). It also no-ops silently when voice is disabled, so
         // race against a 2s minimum to guarantee the caption stays readable
         // even on a silent greeting path.
-        await Promise.all([playLocalFile(asset.localUri), minDisplay]);
+        // userInitiated: true — the user JUST opened the app, so the
+        // greeting is user-initiated by definition. Without this flag,
+        // isVoiceAllowed silently drops the audio when the persisted
+        // trustLevel is 1 (Quiet) — Tim hit this and heard nothing.
+        await Promise.all([playLocalFile(asset.localUri, undefined, { userInitiated: true }), minDisplay]);
         if (!skippedRef.current) startTransition();
       } catch (e) {
         console.warn('[greeting] audio playback failed:', e);

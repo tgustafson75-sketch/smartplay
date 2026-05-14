@@ -134,8 +134,14 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       personalBest: null,
       homeCourse: null,
       preferredTee: 'middle',
-      isSetupComplete: false,
-      has_completed_onboarding: false,
+      // 2026-05-14 — Tim: "Get rid of that whole stupid onboarding
+      // nonsense. User does all that in profile and settings." Default
+      // both gates to TRUE so fresh installs skip the onboarding flow
+      // entirely and land on the greeting → caddie route. The screens
+      // under /onboarding/ are preserved so the user can still revisit
+      // any step via Settings if they want — they just never auto-fire.
+      isSetupComplete: true,
+      has_completed_onboarding: true,
       default_mode: null,
       first_opened_at: null,
       trial_started_at: null,

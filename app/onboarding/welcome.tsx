@@ -52,7 +52,11 @@ export default function OnboardingWelcome() {
     const voiceTimer = setTimeout(async () => {
       if (voiceEnabled) {
         await configureAudioForSpeech();
-        await speak(GREETING, voiceGender, language, apiUrl);
+        // userInitiated: true — onboarding welcome is user-initiated (they
+        // tapped to open the app). Without this, isVoiceAllowed drops the
+        // audio when persisted trustLevel === 1, leaving the user staring
+        // at silent text.
+        await speak(GREETING, voiceGender, language, apiUrl, { userInitiated: true });
       }
       setVoiceDone(true);
     }, 600);
