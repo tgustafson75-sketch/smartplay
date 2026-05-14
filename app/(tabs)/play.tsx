@@ -29,7 +29,12 @@ import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeome
 import { getCourseImageryUrl } from '../../services/mapboxImagery';
 import { toggle as toggleListening } from '../../services/listeningSession';
 import PALMS_IMAGES from '../../data/palmsImages';
-import { CRYSTAL_SPRINGS_HOLE_IMAGES, MARINERS_POINT_HOLE_IMAGES } from '../../data/localCourseImages';
+import {
+  CRYSTAL_SPRINGS_HOLE_IMAGES,
+  MARINERS_POINT_HOLE_IMAGES,
+  LAKES_HOLE_IMAGES,
+  RANCHO_CALIFORNIA_HOLE_IMAGES,
+} from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
 import BrandHeaderRow from '../../components/brand/BrandHeaderRow';
 import type { Course } from '../../types/course';
@@ -65,7 +70,7 @@ const LOCAL_COURSES: CourseSummary[] = [
     rating: 69.3,
     slope: 119,
     isLocal: true,
-    thumbnail: null,
+    thumbnail: (LAKES_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
   },
   {
     id: 'local:rancho',
@@ -74,7 +79,7 @@ const LOCAL_COURSES: CourseSummary[] = [
     rating: 70.9,
     slope: 127,
     isLocal: true,
-    thumbnail: null,
+    thumbnail: (RANCHO_CALIFORNIA_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
   },
   {
     id: 'local:crystal-springs',

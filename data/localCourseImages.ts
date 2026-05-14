@@ -36,18 +36,49 @@ export const PALMS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   18: require('../assets/courses/palms/hole-18.jpg'),
 };
 
-// Pre-registered for Tim's downloads — drop the assets at the indicated
-// path and add require() entries below to activate.
+// Menifee Lakes — Lakes course (Tim's home club's sister course to Palms).
+// Imported from V3's menifee-lakes set, renamed lakes-h{n}.jpg → hole-{nn}.jpg.
 export const LAKES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  // 1: require('../assets/courses/lakes/hole-01.jpg'),
-  // 2: require('../assets/courses/lakes/hole-02.jpg'),
-  // ... 18 holes
+  1:  require('../assets/courses/lakes/hole-01.jpg'),
+  2:  require('../assets/courses/lakes/hole-02.jpg'),
+  3:  require('../assets/courses/lakes/hole-03.jpg'),
+  4:  require('../assets/courses/lakes/hole-04.jpg'),
+  5:  require('../assets/courses/lakes/hole-05.jpg'),
+  6:  require('../assets/courses/lakes/hole-06.jpg'),
+  7:  require('../assets/courses/lakes/hole-07.jpg'),
+  8:  require('../assets/courses/lakes/hole-08.jpg'),
+  9:  require('../assets/courses/lakes/hole-09.jpg'),
+  10: require('../assets/courses/lakes/hole-10.jpg'),
+  11: require('../assets/courses/lakes/hole-11.jpg'),
+  12: require('../assets/courses/lakes/hole-12.jpg'),
+  13: require('../assets/courses/lakes/hole-13.jpg'),
+  14: require('../assets/courses/lakes/hole-14.jpg'),
+  15: require('../assets/courses/lakes/hole-15.jpg'),
+  16: require('../assets/courses/lakes/hole-16.jpg'),
+  17: require('../assets/courses/lakes/hole-17.jpg'),
+  18: require('../assets/courses/lakes/hole-18.jpg'),
 };
 
+// Rancho California — imported from V3, renamed rancho-h{n}.jpg → hole-{nn}.jpg.
 export const RANCHO_CALIFORNIA_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  // 1: require('../assets/courses/rancho-california/hole-01.jpg'),
-  // 2: require('../assets/courses/rancho-california/hole-02.jpg'),
-  // ... 18 holes
+  1:  require('../assets/courses/rancho-california/hole-01.jpg'),
+  2:  require('../assets/courses/rancho-california/hole-02.jpg'),
+  3:  require('../assets/courses/rancho-california/hole-03.jpg'),
+  4:  require('../assets/courses/rancho-california/hole-04.jpg'),
+  5:  require('../assets/courses/rancho-california/hole-05.jpg'),
+  6:  require('../assets/courses/rancho-california/hole-06.jpg'),
+  7:  require('../assets/courses/rancho-california/hole-07.jpg'),
+  8:  require('../assets/courses/rancho-california/hole-08.jpg'),
+  9:  require('../assets/courses/rancho-california/hole-09.jpg'),
+  10: require('../assets/courses/rancho-california/hole-10.jpg'),
+  11: require('../assets/courses/rancho-california/hole-11.jpg'),
+  12: require('../assets/courses/rancho-california/hole-12.jpg'),
+  13: require('../assets/courses/rancho-california/hole-13.jpg'),
+  14: require('../assets/courses/rancho-california/hole-14.jpg'),
+  15: require('../assets/courses/rancho-california/hole-15.jpg'),
+  16: require('../assets/courses/rancho-california/hole-16.jpg'),
+  17: require('../assets/courses/rancho-california/hole-17.jpg'),
+  18: require('../assets/courses/rancho-california/hole-18.jpg'),
 };
 
 // Phase BL — Crystal Springs Golf Course, Burlingame CA (18 holes).
