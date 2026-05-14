@@ -293,6 +293,54 @@ async function openSession() {
       return;
     }
 
+    // Phase BS audit (2026-05-14) — small-talk fallback. The voice-intent
+    // classifier returns intent_type === 'unknown' for greetings and
+    // chit-chat ("how are you", "thanks", "what's up"). Previously the
+    // session fell through with no voice_response, producing a silent
+    // drop after the filler played — users assumed Kevin didn't hear them
+    // and the magic moment was gone. Now: if intent has a clarifying
+    // follow_up_question, speak that. Otherwise route the raw utterance
+    // to /api/kevin for a conversational reply.
+    if (!voiceCommandRouter.getHandler(intent.intent_type) && state === 'responding') {
+      const responseAllowed =
+        settings.voiceEnabled &&
+        (route !== 'phone_speaker' || allowPhoneSpeaker);
+      await fillerP;
+      if (responseAllowed) {
+        if (intent.follow_up_question) {
+          await speak(intent.follow_up_question, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
+            .catch((e) => console.log('[listeningSession] follow_up speak failed', e));
+        } else {
+          try {
+            const chatRes = await fetch(`${apiUrl}/api/kevin`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                message: utterance,
+                language: settings.language,
+                currentHole: round.isRoundActive ? round.currentHole : null,
+                currentYardage: round.currentYardage ?? null,
+                activeCourse: round.activeCourse,
+                isRoundActive: round.isRoundActive,
+              }),
+            });
+            if (chatRes.ok) {
+              const chatJson = await chatRes.json();
+              const reply = typeof chatJson?.response === 'string' ? chatJson.response : null;
+              if (reply) {
+                await speak(reply, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
+                  .catch((e) => console.log('[listeningSession] chat fallback speak failed', e));
+              }
+            }
+          } catch (e) {
+            console.log('[listeningSession] chat fallback fetch failed', e);
+          }
+        }
+      }
+      state = 'idle';
+      return;
+    }
+
     const handler = voiceCommandRouter.getHandler(intent.intent_type);
     if (handler) {
       // Phase V.6 — race the handler against filler completion. If the

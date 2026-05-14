@@ -9,6 +9,8 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useKevinPresence } from '../contexts/KevinPresenceContext';
 import type { ToolAction } from '../app/api/kevin+api';
 import { buildFullPracticeContext } from '../services/tutorialContext';
+import { getGreenYardagesSync } from '../services/smartFinderService';
+import { useSmartFinderStore } from '../store/smartFinderStore';
 
 export type { ToolAction };
 
@@ -82,6 +84,25 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
         }
       } catch { /* default caddie */ }
 
+      // Phase BS audit (2026-05-14) — give the brain the same yardages the
+      // user sees on the Caddie tab so "how far to the pin?" returns a
+      // crisp answer instead of "I don't have a clean GPS read." The
+      // server side (api/kevin.ts:610) already consumes smartFinderContext
+      // and pins the working number into the system prompt.
+      const smartFinderContext = (() => {
+        if (!isRoundActive) return null;
+        const fmb = getGreenYardagesSync(currentHole);
+        const lock = useSmartFinderStore.getState().currentLock;
+        const parts: string[] = [];
+        if (fmb && (fmb.front != null || fmb.middle != null || fmb.back != null)) {
+          parts.push(`Live GPS to green — front ${fmb.front ?? '?'}, middle ${fmb.middle ?? '?'}, back ${fmb.back ?? '?'} yards.`);
+        }
+        if (lock && typeof lock.distance_yards === 'number') {
+          parts.push(`Locked target: ${lock.distance_yards} yards.`);
+        }
+        return parts.length > 0 ? parts.join(' ') : null;
+      })();
+
       const res = await fetch(API_URL + '/api/kevin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -92,6 +113,7 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
           playerName: name,
           firstName,
           handicap,
+          smartFinderContext,
           roundsTogether,
           sessionsTogether,
           currentHole,
