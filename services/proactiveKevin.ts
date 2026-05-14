@@ -23,9 +23,10 @@ interface TriggerContext {
   mode: string;
   /** Sim-report gap 5 — Trust Spectrum dampens proactive cadence at L2
    *  Companion (player wants Kevin available, not chatty). L1 is silent
-   *  by separate gating; L3/L4 inherit the standard cadence. Optional;
-   *  call sites pass when known and we default to L3 standard. */
-  trustLevel?: 1 | 2 | 3 | 4;
+   *  by separate gating; L3/L4 inherit the standard cadence. L5 Cockpit
+   *  inherits L1 silent treatment (minimal surface). Optional; call sites
+   *  pass when known and we default to L3 standard. */
+  trustLevel?: 1 | 2 | 3 | 4 | 5;
 }
 
 const lastFiredAt: Partial<Record<ProactiveTriggerType, number>> = {};

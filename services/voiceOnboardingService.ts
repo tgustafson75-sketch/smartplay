@@ -40,6 +40,13 @@ const HINTS_BY_LEVEL: Record<TrustLevel, {
     first_shot: "Tell me about that shot — I'm listening.",
     first_tool: "Just say what you need. I've got you.",
   },
+  // L5 Cockpit — minimal surface, tools-first; no proactive hints. The
+  // Cockpit screen has its own AskCaddieButton + manual entry affordances.
+  5: {
+    first_tee:  null,
+    first_shot: null,
+    first_tool: null,
+  },
 };
 
 function hintsForCurrentLevel() {

@@ -338,11 +338,11 @@ export default function CaddieTab() {
   // fix yet, falls back to static so the strip never renders "—".
   const yardageMode = useSettingsStore(s => s.yardageMode);
   const setYardageMode = useSettingsStore(s => s.setYardageMode);
-  // Phase Cockpit — gate for the alternate Caddie tab layout. Read here
-  // (above hooks/effects) so the early-return below is well-defined; the
-  // selector is a single-key read so unrelated settings changes don't
-  // trigger a Cockpit-toggle re-render.
-  const cockpitMode = useSettingsStore(s => s.cockpitMode);
+  // Cockpit is now Trust Level 5 (numeric value kept at 5 for back-compat
+  // with the original 1-4 era; the slider renders it between Quiet and
+  // Companion via TRUST_LEVEL_SLIDER_ORDER). The early-return below uses
+  // trustLevel === 5, not the deprecated settings.cockpitMode flag.
+  const cockpitMode = trustLevel === 5;
   // markTick increments on every position-mark event AND every 4s tick
   // during an active round so liveYardage recomputes both on push (Mark
   // fires) and pull (organic GPS movement during walking). Phase BG —

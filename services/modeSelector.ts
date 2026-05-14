@@ -79,7 +79,7 @@ export function selectMode(signals: ModeSignals): RoleId {
  * Convenience for callers that want the trust level alongside the chosen role
  * (e.g. prompt templates that adjust verbosity by level).
  */
-export function selectModeWithLevel(signals: ModeSignals): { role: RoleId; level: 1 | 2 | 3 | 4 } {
+export function selectModeWithLevel(signals: ModeSignals): { role: RoleId; level: 1 | 2 | 3 | 4 | 5 } {
   return { role: selectMode(signals), level: getTrustLevel() };
 }
 

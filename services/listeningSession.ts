@@ -205,7 +205,7 @@ async function openSession() {
     const role: 'caddie' | 'coach' | 'psychologist' = round.isRoundActive ? 'caddie' : 'coach';
     const decision = routeQuery(intent.intent_type, {
       role,
-      trust_level: getTrustLevel() as 1 | 2 | 3 | 4,
+      trust_level: getTrustLevel() as 1 | 2 | 3 | 4 | 5,
       topic: intent.parameters?.query_topic ?? null,
     });
     let fillerP: Promise<void> = Promise.resolve();

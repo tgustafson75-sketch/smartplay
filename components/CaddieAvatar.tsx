@@ -327,11 +327,16 @@ interface CaddieAvatarProps {
   /** Phase R Component 14 — idle breathing animation intensity per
    *  Trust Spectrum level. L1 = none (Kevin not visible), L2 subtle,
    *  L3 standard, L4 most pronounced. Defaults to 3 (standard). */
-  trustLevel?: 1 | 2 | 3 | 4;
+  trustLevel?: 1 | 2 | 3 | 4 | 5;
   /** Phase BI — when set, overrides the persona avatar set with the
    *  user-generated portrait. Renders that single image with no
    *  emotion-driven crossfades. Pass raw base64 (no data: prefix). */
   customPortraitB64?: string | null;
+  /** When true, the avatar suppresses its internal text overlay (opening
+   *  prompt + response text). Use this when the caller renders the
+   *  caddie's text in its own card above/below the avatar so the user
+   *  doesn't see the same text twice. */
+  hideInternalText?: boolean;
 }
 
 // ─── COMPONENT ────────────────────────────
@@ -351,6 +356,7 @@ export default function CaddieAvatar({
   isThinking = false,
   trustLevel = 3,
   customPortraitB64,
+  hideInternalText = false,
 }: CaddieAvatarProps) {
   // Resolve persona: explicit prop wins, else fall back to gender → kevin/serena.
   const resolvedPersona: Persona = persona ?? (gender === 'female' ? 'serena' : 'kevin');
@@ -928,8 +934,13 @@ export default function CaddieAvatar({
 
       </TouchableOpacity>
 
-      {/* ── RESPONSE TEXT ─────────────── */}
-      {fill === 'contain' && (
+      {/* ── RESPONSE TEXT ───────────────
+          Hidden when the caller renders the text itself (see
+          hideInternalText prop) OR when there is nothing to say —
+          prevents the same line from showing both overlaid on the
+          avatar AND in a separate top card, and stops empty text
+          blocks from holding visual real estate. */}
+      {fill === 'contain' && !hideInternalText && displayedText !== '' && (
         <Animated.View style={[styles.responseArea, { opacity: responseFade }]}>
           <Text
             style={caddieResponse ? styles.responseText : styles.openingText}

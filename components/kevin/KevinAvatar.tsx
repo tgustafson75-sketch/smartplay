@@ -48,6 +48,8 @@ const PRESENCE_CONFIG: Record<TrustLevel, { size: number; ringWidth: number; sho
   2: { size: 64,  ringWidth: 2,   show: true  },
   3: { size: 96,  ringWidth: 2.5, show: true  },
   4: { size: 140, ringWidth: 3,   show: true  },
+  // Cockpit (L5) has its own BrandHeader badge — no KevinAvatar surface.
+  5: { size: 0,   ringWidth: 0,   show: false },
 };
 
 type Props = {

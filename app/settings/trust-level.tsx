@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Switch, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useTrustLevelStore, TRUST_LEVEL_META, type TrustLevel } from '../../store/trustLevelStore';
+import {
+  useTrustLevelStore,
+  TRUST_LEVEL_META,
+  TRUST_LEVEL_SLIDER_ORDER,
+} from '../../store/trustLevelStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getCaddieName } from '../../lib/persona';
 
@@ -21,8 +25,6 @@ export default function TrustLevelScreen() {
   const [showAbout, setShowAbout] = useState(false);
   const voiceGender = useSettingsStore(s => s.voiceGender);
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
-  const cockpitMode = useSettingsStore(s => s.cockpitMode);
-  const setCockpitMode = useSettingsStore(s => s.setCockpitMode);
   const caddieName = getCaddieName(caddiePersonality);
   const subjectPronoun = voiceGender === 'female' ? 'She' : 'He';
   const possessivePronoun = voiceGender === 'female' ? 'her' : 'him';
@@ -30,7 +32,9 @@ export default function TrustLevelScreen() {
   const objectPronoun = possessivePronoun;
   const subjectLower = voiceGender === 'female' ? 'she' : 'he';
 
-  const levels: TrustLevel[] = [1, 2, 3, 4];
+  // Slider renders in display order (Quiet → Cockpit → Companion → Active → Full);
+  // numeric values stay 1-5 with Cockpit at 5 to preserve existing users' state.
+  const levels = TRUST_LEVEL_SLIDER_ORDER;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -74,22 +78,6 @@ export default function TrustLevelScreen() {
           {level === 2 && <Text style={styles.recommendedTag}>Recommended for most.</Text>}
         </View>
 
-        <View style={styles.cockpitRow}>
-          <View style={styles.cockpitText}>
-            <Text style={styles.cockpitLabel}>Cockpit Mode</Text>
-            <Text style={styles.cockpitSub}>
-              Minimal Caddie tab: brand header, big SmartFinder card, Vision/Motion/Play row, Tap-to-Ask pill, manual shot-result entry. Layout only — voice + GPS unchanged.
-            </Text>
-          </View>
-          <Switch
-            value={cockpitMode}
-            onValueChange={setCockpitMode}
-            trackColor={{ true: '#00C896', false: '#1e3a28' }}
-            thumbColor="#ffffff"
-            accessibilityLabel="Cockpit Mode"
-          />
-        </View>
-
         <TouchableOpacity onPress={() => setShowAbout(!showAbout)} style={styles.aboutToggle}>
           <Text style={styles.aboutToggleText}>
             {showAbout ? '− About these' : '+ About these'}
@@ -98,7 +86,8 @@ export default function TrustLevelScreen() {
 
         {showAbout && (
           <View style={styles.aboutBlock}>
-            <AboutRow label="Quiet" body={`${caddieName}'s reachable on tap, but ${subjectLower} stays out of the way. Just the SmartPlay logo and a mic button — no avatar, no advice card. Pick this on focused range sessions or when you want silence.`} />
+            <AboutRow label="Quiet" body={`${caddieName}'s reachable on tap, but ${subjectLower} stays out of the way. Big SmartFinder yardage card with a small SmartVision inset — no avatar, no advice card. Pick this on focused range sessions or when you want silence.`} />
+            <AboutRow label="Cockpit" body={`Minimal layout, tools first. Brand header, big SmartFinder card, Vision/Motion/Play row, Tap-to-Ask pill, manual shot-result entry. Same voice + GPS as the other modes — just a different surface.`} />
             <AboutRow label="Companion" body={`${caddieName}'s there at the bottom of your home screen, ready when you need ${objectPronoun}. Voice is opt-in, advice is offered, never pushed.`} />
             <AboutRow label="Active" body={`Split screen — ${caddieName} top, your yardages bottom. ${subjectPronoun}'ll chime in between shots and ride along through the round.`} />
             <AboutRow label="Full" body={`${caddieName} centered, voice on by default. ${subjectPronoun}'s right there with you, hands-free. Like having a real caddie on the bag.`} />
