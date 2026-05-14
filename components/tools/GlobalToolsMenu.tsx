@@ -20,9 +20,10 @@
  */
 
 import React from 'react';
-import { Modal, View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { Modal, View, Text, Pressable, ScrollView, Alert, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useToolsMenuStore } from '../../store/toolsMenuStore';
 import {
@@ -32,6 +33,8 @@ import {
 } from '../../store/trustLevelStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
+import { recalibrateGps } from '../../services/gpsManager';
+import { forceMarkPosition } from '../../services/positionMarkBus';
 
 export function GlobalToolsMenu() {
   const router = useRouter();
@@ -42,6 +45,10 @@ export function GlobalToolsMenu() {
   const setTrustLevel = useTrustLevelStore((s) => s.setLevel);
   const caddiePersonality = useSettingsStore((s) => s.caddiePersonality);
   const setCaddiePersonality = useSettingsStore((s) => s.setCaddiePersonality);
+  const voiceEnabled = useSettingsStore((s) => s.voiceEnabled);
+  const setVoiceEnabled = useSettingsStore((s) => s.setVoiceEnabled);
+  const castMode = useSettingsStore((s) => s.castMode);
+  const setCastMode = useSettingsStore((s) => s.setCastMode);
 
   const cycleMode = () => {
     const cur = TRUST_LEVEL_SLIDER_ORDER.indexOf(trustLevel);
@@ -59,6 +66,23 @@ export function GlobalToolsMenu() {
   const openSettings = () => {
     close();
     router.push('/settings' as never);
+  };
+
+  const refreshGps = async () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    try {
+      const fix = await recalibrateGps();
+      // Also force-mark the position so every yardage consumer picks
+      // up the fresh fix immediately (same cascade Mark uses).
+      void forceMarkPosition().catch(() => undefined);
+      if (fix?.accuracy_m != null) {
+        Alert.alert('GPS refreshed', `Fresh fix at ±${Math.round(fix.accuracy_m)}m.`);
+      } else {
+        Alert.alert('GPS refreshed', 'Fresh fix acquired.');
+      }
+    } catch {
+      Alert.alert('GPS refresh failed', 'Step into open sky and try again.');
+    }
   };
 
   return (
@@ -86,6 +110,30 @@ export function GlobalToolsMenu() {
               label={`Your Caddie: ${getCaddieName(caddiePersonality)}`}
               sub={`Tap to cycle · ${ACTIVE_PERSONAS.map((p) => getCaddieName(p)).join(' · ')}`}
               onPress={cyclePersona}
+              colors={colors}
+            />
+
+            <Row
+              icon="locate-outline"
+              label="Refresh GPS"
+              sub="Pull a fresh high-accuracy fix and recalibrate yardages"
+              onPress={refreshGps}
+              colors={colors}
+            />
+
+            <Row
+              icon={voiceEnabled ? 'volume-high-outline' : 'volume-mute-outline'}
+              label={voiceEnabled ? 'Voice: ON' : 'Voice: OFF'}
+              sub={voiceEnabled ? 'Caddie speaks responses aloud · Tap to mute' : 'Caddie is silent · Tap to enable voice'}
+              onPress={() => setVoiceEnabled(!voiceEnabled)}
+              colors={colors}
+            />
+
+            <Row
+              icon={castMode ? 'tv' : 'tv-outline'}
+              label={castMode ? 'Cast Mode: ON' : 'Cast Mode: OFF'}
+              sub={castMode ? 'Large-text display optimized for casting · Tap to disable' : 'Switch to large-text display for casting to a TV'}
+              onPress={() => setCastMode(!castMode)}
               colors={colors}
             />
 

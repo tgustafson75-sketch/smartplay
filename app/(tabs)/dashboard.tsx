@@ -208,6 +208,30 @@ export default function Dashboard() {
           </TouchableOpacity>
         </View>
 
+        {/* ─── Selfie + AI portrait — ports v3's "Try a new look" card.
+             Routes to Pro's /profile/custom-caddie which handles selfie
+             capture → AI image edit → save as profile pic and/or caddie
+             portrait. Tim 2026-05-14: "Dashboard is supposed to have the
+             ability for user to take selfie and have ai reprocess as their
+             profile pic and even the caddie." ───────────────────────── */}
+        <TouchableOpacity
+          onPress={() => router.push('/profile/custom-caddie' as never)}
+          style={[styles.selfieCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}
+          accessibilityRole="button"
+          accessibilityLabel="Try a new look — selfie + AI portrait"
+        >
+          <View style={[styles.selfieIcon, { backgroundColor: colors.accent_muted }]}>
+            <Ionicons name="sparkles-outline" size={20} color={colors.accent} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[styles.selfieTitle, { color: colors.text_primary }]}>Try a new look</Text>
+            <Text style={[styles.selfieSub, { color: colors.text_muted }]} numberOfLines={1}>
+              Selfie + AI — see yourself as your caddie
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+        </TouchableOpacity>
+
         {/* ─── 4. CURRENT ROUND ──────────────────────────────────────── */}
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>CURRENT ROUND</Text>
         {isRoundActive ? (
@@ -619,6 +643,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Selfie + AI portrait card — ported from v3.
+  selfieCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  selfieIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selfieTitle: { fontSize: 15, fontWeight: '700' },
+  selfieSub: { fontSize: 12, marginTop: 2 },
   // Section header
   sectionHeader: {
     fontSize: 11,
