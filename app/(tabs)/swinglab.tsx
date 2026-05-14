@@ -52,7 +52,10 @@ const CARDS: LauncherCardSpec[] = [
     title: 'Drills',
     status: 'LIVE',
     sub: 'Primary Issue · Common Faults · pro instructor videos',
-    route: '/swinglab/drills',
+    // Diagnostic catalog (v3-style — issue → fix mapping).
+    // Pro's prior prescriptive drills are still reachable at
+    // /swinglab/drills-legacy if a power user wants them.
+    route: '/drills',
   },
   {
     key: 'range',
