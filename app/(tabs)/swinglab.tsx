@@ -81,7 +81,10 @@ const CARDS: LauncherCardSpec[] = [
     title: 'Arena',
     status: 'LIVE',
     sub: 'Bag distances · tempo trainer · putting clock',
-    route: '/arena',
+    // v3-style practice-drills launcher. Pro's gameplay challenges
+    // (CTP / Scramble / Sim / Skills) are still reachable via the
+    // "Open Arena →" footer link on the practice screen.
+    route: '/arena/practice',
   },
   {
     key: 'library',
