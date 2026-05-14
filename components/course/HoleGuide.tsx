@@ -35,8 +35,8 @@ export default function HoleGuide({ holes, notesLoading }: Props) {
         <Text style={[styles.h, styles.colYds]}>YDS</Text>
         <Text style={[styles.h, styles.colNote]}>NOTE</Text>
       </View>
-      {sorted.map(h => (
-        <View key={h.hole_number} style={styles.row}>
+      {sorted.map((h, i) => (
+        <View key={h.hole_number} style={[styles.row, i % 2 === 1 && styles.rowAlt]}>
           <Text style={[styles.cell, styles.colHole]}>{h.hole_number}</Text>
           <Text style={[styles.cell, styles.colPar]}>{h.par}</Text>
           <Text style={[styles.cell, styles.colYds]}>{h.yardage > 0 ? h.yardage : '—'}</Text>
@@ -70,9 +70,16 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     paddingVertical: 8,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#0f1f15',
     alignItems: 'flex-start',
+  },
+  // v3-style alternating row tint — every other row gets a subtle dark
+  // band so the eye can track left→right across 18 holes without losing
+  // place. Tim 2026-05-14: "look at v3 course info ... it was beautiful."
+  rowAlt: {
+    backgroundColor: '#0a1612',
   },
   cell: { color: '#e8f5e9', fontSize: 13 },
   colHole: { width: 28, fontWeight: '700' },

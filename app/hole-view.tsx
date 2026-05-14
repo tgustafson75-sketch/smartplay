@@ -772,7 +772,12 @@ export default function HoleView() {
             <Image
               source={imageSource}
               style={styles.holeImage}
-              resizeMode={displayType === 'bundled' ? 'contain' : 'cover'}
+              // Always 'contain' so teeboxes and greens at the edges of
+              // the source image are never cropped. Tim 2026-05-14: "The
+              // holeview are curring off teeboxes and greens in some
+              // bases." 'cover' was filling the box but cropping the
+              // critical features on the aspect-ratio mismatch.
+              resizeMode="contain"
               onLoad={() => setImageReady(true)}
             />
           ) : (

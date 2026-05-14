@@ -23,7 +23,11 @@ export default function HolePhotosGrid({ photos }: Props) {
   const { width } = useWindowDimensions();
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
 
-  const cell = Math.floor((width - 16 * 2 - 8 * 2) / 3);
+  // v3-style: 4:3 landscape tiles read more cinematic than squares.
+  // Width = (screen − horizontal padding − two gutters) / 3.
+  // Height = width / 1.4 (4:3-ish).
+  const cellW = Math.floor((width - 16 * 2 - 8 * 2) / 3);
+  const cellH = Math.round(cellW / 1.4);
 
   if (photos.length === 0) {
     return (
@@ -39,7 +43,7 @@ export default function HolePhotosGrid({ photos }: Props) {
         {photos.map((p, i) => (
           <TouchableOpacity
             key={p.hole_number}
-            style={[styles.cell, { width: cell, height: cell }]}
+            style={[styles.cell, { width: cellW, height: cellH }]}
             onPress={() => setActiveIdx(i)}
             activeOpacity={0.85}
           >
@@ -99,8 +103,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d2418',
   },
   badge: {
+    // v3-style — chip in BOTTOM-left so it sits on the darker part of
+    // most aerial / hole-photo compositions (sky/horizon up top stays
+    // clean). Tim 2026-05-14: "Look at v3 course info ... it was
+    // beautiful."
     position: 'absolute',
-    top: 6,
+    bottom: 6,
     left: 6,
     backgroundColor: 'rgba(0,0,0,0.7)',
     paddingHorizontal: 6,
