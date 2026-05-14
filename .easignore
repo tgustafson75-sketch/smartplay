@@ -1,0 +1,28 @@
+# EAS Build only — files here are excluded from the tarball uploaded to
+# EAS, but stay in the repo. This is independent of .gitignore.
+# Without this file EAS uploaded ~248 MB and hit EPIPE pipe failures
+# repeatedly on Google Cloud Storage. dist/ alone is ~308 MB.
+
+# Web export output — EAS Build is mobile-only, doesn't need it.
+dist/
+
+# Git history — EAS pulls a clean clone from your remote already.
+.git/
+
+# Local docs the build doesn't compile.
+docs/
+
+# Local-only debug scripts.
+*.log
+.DS_Store
+
+# Vercel artifacts.
+.vercel/
+
+# Test outputs.
+coverage/
+.nyc_output/
+
+# Editor stuff.
+.vscode/
+.idea/
