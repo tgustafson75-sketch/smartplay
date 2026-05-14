@@ -68,7 +68,9 @@ const CARDS: LauncherCardSpec[] = [
     title: 'SmartMotion',
     status: 'BETA',
     sub: 'Single-swing video + audio narration',
-    route: '/swinglab/cage-drill',
+    // Routes through the Camera Setup gate first; user proceeds to
+    // the actual capture (cage-drill) after the 5-item checklist passes.
+    route: '/swinglab/camera-setup?next=%2Fswinglab%2Fcage-drill',
   },
   {
     key: 'arena',
