@@ -1857,7 +1857,12 @@ export default function CaddieTab() {
       {/* TOP BRAND ROW — shared v3 BrandHeaderRow so the Caddie tab matches
            Dashboard / SwingLab / Play / Scorecard exactly. Absolute-positioned
            above all the overlays so the wordmark + badge always show, even
-           when the avatar / SmartFinder / data strip cover the body. */}
+           when the avatar / SmartFinder / data strip cover the body.
+           pointerEvents="none" so taps pass through to the topNav and ToolMore
+           button anchored at insets.top + 38 directly underneath — without
+           this gate Tim reported the tool pill "did not always react to
+           touch." The brand row is purely informational here (no logo press
+           handler), so swallowing taps would have been pure UX cost. */}
       <View
         style={{
           position: 'absolute',
@@ -1866,7 +1871,7 @@ export default function CaddieTab() {
           right: 0,
           zIndex: 22,
         }}
-        pointerEvents="box-none"
+        pointerEvents="none"
       >
         <BrandHeaderRow />
       </View>

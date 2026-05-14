@@ -478,6 +478,21 @@ export default function Settings() {
         {/* ROUND EXPERIENCE */}
         <SectionHeader title="Round Experience" />
         <View style={cardStyle}>
+          {/* Trust Spectrum entry — five modes (Quiet, Cockpit, Companion,
+              Active, Full). Was previously only reachable from inside Cockpit,
+              which made it impossible to find Cockpit in the first place. */}
+          <TouchableOpacity
+            style={rowDivStyle}
+            onPress={() => router.push('/settings/trust-level' as never)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>{caddieName}&apos;s presence</Text>
+              <Text style={subStyle}>Quiet · Cockpit · Companion · Active · Full</Text>
+            </View>
+            <Text style={[styles.rowSub, { color: colors.text_muted }]}>›</Text>
+          </TouchableOpacity>
+
           <ToggleRow
             label="Skip Pre-Round Briefing"
             sub={`Go straight to the round without ${caddieName}'s intro`}
