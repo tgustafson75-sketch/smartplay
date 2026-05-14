@@ -132,16 +132,15 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
         </SmartVisionTap>
       );
     }
+    // No geometry + no curated image. Don't shout "unavailable" — that
+    // alarmed Tim ("where did my images go?") when he picked a course
+    // whose photo bundle isn't dropped in yet. Show a soft placeholder
+    // that names the hole and offers SmartVision as the path forward.
     return (
       <SmartVisionTap>
         <View style={[styles.wrap, wrapDims, styles.placeholder]}>
           <Text style={styles.placeholderText}>HOLE {currentHole}</Text>
-          <Text style={styles.placeholderSub}>Hole geometry unavailable for this course.</Text>
-          {/* Sim-report — give the user somewhere to go from the dead-end.
-              hole-view has its own Mapbox aerial path that may render even
-              when geometry is missing. Palms never lands here (curated
-              imagery hits getLocalHoleImage above), so this CTA only
-              affects non-Palms courses. */}
+          <Text style={styles.placeholderSub}>Preview coming for this course.</Text>
           <Text style={styles.placeholderCta}>Tap to open SmartVision →</Text>
         </View>
       </SmartVisionTap>

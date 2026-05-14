@@ -30,6 +30,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 // below is byte-identical to pre-Cockpit when the toggle is off.
 import CockpitCaddieScreen from '../../components/caddie/CockpitCaddieScreen';
 import { DistanceCard, type FrontMiddleBack } from '../../components/caddie/cockpit/DistanceCard';
+import BrandHeaderRow from '../../components/brand/BrandHeaderRow';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useShallow } from 'zustand/react/shallow';
 import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
@@ -1853,26 +1854,21 @@ export default function CaddieTab() {
         </>
       )}
 
-      {/* TOP BANNER — SmartPlay Caddie wordmark across the very top, always
-           visible. Sits above the existing top-nav row. */}
+      {/* TOP BRAND ROW — shared v3 BrandHeaderRow so the Caddie tab matches
+           Dashboard / SwingLab / Play / Scorecard exactly. Absolute-positioned
+           above all the overlays so the wordmark + badge always show, even
+           when the avatar / SmartFinder / data strip cover the body. */}
       <View
         style={{
           position: 'absolute',
-          top: insets.top + 4,
+          top: insets.top,
           left: 0,
           right: 0,
-          alignItems: 'center',
           zIndex: 22,
         }}
-        pointerEvents="none"
+        pointerEvents="box-none"
       >
-        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-          <Text style={styles.brandName}>SmartPlay</Text>
-          {/* Phase AR — Caddie word now consumes theme.text_primary so it
-              flips white-on-dark / black-on-light. Was hardcoded white,
-              which washed against the light-mode background. */}
-          <Text style={[styles.brandSub, { color: theme.colors.text_primary }]}> Caddie</Text>
-        </View>
+        <BrandHeaderRow />
       </View>
 
       {/* TOP NAV — sits below the SmartPlay banner.
