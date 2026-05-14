@@ -191,6 +191,22 @@ export default function SmartFinder() {
 
 // ─── Camera-mode wrapper (Standard + Putt) ────────────────────────────────────
 
+/**
+ * Rangefinder-style zoom stops. expo-camera's `zoom` prop is 0..1 where 0 ≈
+ * native 1× and 1 ≈ the device's max zoom (often ~10× digital). Capping at
+ * 0.35 keeps us in the "useful framing" range (~3–4× on most phones) and
+ * prevents weird device defaults from landing at 10–30× (the Fold Z report).
+ *
+ * Stops are intentionally coarse — golfers want quick, repeatable framing,
+ * not 0.01-precision sliders. ± buttons cycle through these.
+ */
+const ZOOM_STOPS: readonly { label: string; value: number }[] = [
+  { label: '1.0x', value: 0.00 },
+  { label: '2.0x', value: 0.12 },
+  { label: '3.0x', value: 0.22 },
+  { label: '4.0x', value: 0.35 },
+];
+
 function CameraSmartFinder({
   mode, currentHole, gps, onModeChange, onClose, height,
 }: {
@@ -204,6 +220,15 @@ function CameraSmartFinder({
   const insets = useSafeAreaInsets();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [locationGranted, setLocationGranted] = useState(false);
+  // Default to 1.0x (native lens, no digital zoom). Persists for the
+  // lifetime of the SmartFinder screen; resets on close — matches how a
+  // real rangefinder powers up at its base magnification.
+  const [zoomIdx, setZoomIdx] = useState(0);
+  const zoom = ZOOM_STOPS[zoomIdx].value;
+  const zoomLabel = ZOOM_STOPS[zoomIdx].label;
+  const stepZoom = useCallback((delta: 1 | -1) => {
+    setZoomIdx((i) => Math.max(0, Math.min(ZOOM_STOPS.length - 1, i + delta)));
+  }, []);
 
   useEffect(() => {
     Location.requestForegroundPermissionsAsync().then(({ status }) => {
@@ -265,12 +290,17 @@ function CameraSmartFinder({
 
   return (
     <View style={styles.cameraContainer}>
-      <CameraView style={StyleSheet.absoluteFill} facing="back" />
+      <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={zoom} />
 
       {mode === 'standard' ? (
         <StandardCameraOverlay
           locationGranted={locationGranted}
           height={height}
+          zoomLabel={zoomLabel}
+          zoomIdx={zoomIdx}
+          zoomMaxIdx={ZOOM_STOPS.length - 1}
+          onZoomIn={() => stepZoom(1)}
+          onZoomOut={() => stepZoom(-1)}
         />
       ) : (
         <PuttCameraOverlay locationGranted={locationGranted} />
@@ -302,9 +332,15 @@ function CameraSmartFinder({
 
 function StandardCameraOverlay({
   locationGranted, height,
+  zoomLabel, zoomIdx, zoomMaxIdx, onZoomIn, onZoomOut,
 }: {
   locationGranted: boolean;
   height: number;
+  zoomLabel: string;
+  zoomIdx: number;
+  zoomMaxIdx: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const headingRef = useRef(0);
@@ -439,14 +475,33 @@ function StandardCameraOverlay({
         <View style={styles.reticleCenterDot} />
       </View>
 
-      {/* Top-right zoom indicator + flashlight (visual only — actual zoom /
-           torch are 1.x. Layout matches legacy v2 reference. */}
-      <View pointerEvents="none" style={[styles.zoomCol, { top: insets.top + 130 }]}>
-        <Text style={styles.zoomLabel}>1.0x</Text>
+      {/* Top-right zoom control. ± buttons step through ZOOM_STOPS so the
+          user can frame distant targets like a real rangefinder. Capped at
+          4× to avoid the 30× Fold-Z surprise reported on stock expo-camera. */}
+      <View style={[styles.zoomCol, { top: insets.top + 130 }]}>
+        <Text style={styles.zoomLabel}>{zoomLabel}</Text>
         <View style={styles.zoomDots}>
-          <View style={styles.zoomDotBg}><Text style={styles.zoomDotMinus}>−</Text></View>
+          <TouchableOpacity
+            onPress={onZoomOut}
+            disabled={zoomIdx === 0}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Zoom out"
+            style={[styles.zoomDotBg, zoomIdx === 0 && styles.zoomDotBgDisabled]}
+          >
+            <Text style={styles.zoomDotMinus}>−</Text>
+          </TouchableOpacity>
           <View style={styles.zoomDotActive} />
-          <View style={styles.zoomDotBg}><Text style={styles.zoomDotPlus}>+</Text></View>
+          <TouchableOpacity
+            onPress={onZoomIn}
+            disabled={zoomIdx === zoomMaxIdx}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Zoom in"
+            style={[styles.zoomDotBg, zoomIdx === zoomMaxIdx && styles.zoomDotBgDisabled]}
+          >
+            <Text style={styles.zoomDotPlus}>+</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -846,10 +901,11 @@ const styles = StyleSheet.create({
   zoomLabel: { color: '#F5A623', fontSize: 13, fontWeight: '800' },
   zoomDots: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   zoomDotBg: {
-    width: 28, height: 28, borderRadius: 14,
+    width: 32, height: 32, borderRadius: 16,
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center', justifyContent: 'center',
   },
+  zoomDotBgDisabled: { opacity: 0.35 },
   zoomDotActive: {
     width: 10, height: 10, borderRadius: 5, backgroundColor: '#F5A623',
   },

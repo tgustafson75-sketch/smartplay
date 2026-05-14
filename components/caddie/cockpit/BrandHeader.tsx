@@ -26,9 +26,11 @@ import type { VoiceState } from '../../CaddieAvatar';
 export interface BrandHeaderProps {
   voiceState: VoiceState;
   onMicPress: () => void;
+  /** Optional — tap target on the right that opens the mode/presence picker. */
+  onModePress?: () => void;
 }
 
-export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
+export function BrandHeader({ voiceState, onMicPress, onModePress }: BrandHeaderProps) {
   const { colors } = useTheme();
 
   return (
@@ -65,6 +67,22 @@ export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
           REAL-TIME CADDIE INTELLIGENCE
         </Text>
       </View>
+
+      {onModePress && (
+        <Pressable
+          onPress={onModePress}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Change caddie mode"
+          accessibilityHint="Opens the presence picker — Quiet, Companion, Active, Full, or Cockpit."
+          style={({ pressed }) => [
+            styles.modePill,
+            { borderColor: colors.accent, opacity: pressed ? 0.7 : 1 },
+          ]}
+        >
+          <Text style={[styles.modePillText, { color: colors.accent }]}>MODE</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -159,6 +177,19 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     letterSpacing: 1.4,
     marginTop: 2,
+  },
+  modePill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modePillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.4,
   },
 });
 
