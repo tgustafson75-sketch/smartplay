@@ -23,6 +23,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useRoundStore } from '../../store/roundStore';
+import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse } from '../../services/golfCourseApi';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
@@ -110,6 +111,7 @@ export default function PlayTab() {
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const activeCourse = useRoundStore(s => s.activeCourse);
   const endRound = useRoundStore(s => s.endRound);
+  const homeCourse = usePlayerProfileStore(s => s.homeCourse);
 
   // Pre-beta — legacy round factors restored to the Play tab so the user
   // picks strategy + mental + format BEFORE the round fires. The Play tab
@@ -176,6 +178,33 @@ export default function PlayTab() {
     ...LOCAL_COURSES,
     ...recentCourses.filter(r => !LOCAL_COURSES.some(l => l.id === r.id)),
   ];
+
+  // Default the SELECTED COURSE card to the user's home course on first
+  // mount (or Palms — Tim's primary local — if none is set yet). User
+  // can still pick anything else from the list above; this just gives
+  // the screen a meaningful default rather than an empty selected card.
+  // Only seeds once per session: if the user has already picked a
+  // course or a round is active, leave it alone.
+  useEffect(() => {
+    if (selected) return;
+    if (isRoundActive && activeCourseId) {
+      // Round in progress — surface the active course as selected.
+      const match = LOCAL_COURSES.find(l =>
+        l.id === activeCourseId ||
+        (activeCourse && l.club_name.toLowerCase().includes(activeCourse.toLowerCase()))
+      );
+      if (match) { void selectSummary(match); return; }
+    }
+    const homeName = (homeCourse ?? '').toLowerCase();
+    const homeMatch = homeName
+      ? LOCAL_COURSES.find(l => l.club_name.toLowerCase().includes(homeName) || l.id.toLowerCase().includes(homeName))
+      : null;
+    const defaultPick = homeMatch ?? LOCAL_COURSES[0];  // LOCAL_COURSES[0] = Palms
+    if (defaultPick) void selectSummary(defaultPick);
+    // selectSummary is intentionally not in deps — it'd retrigger on every
+    // closure refresh. We only want this once per mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [homeCourse, isRoundActive, activeCourseId, activeCourse]);
 
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();

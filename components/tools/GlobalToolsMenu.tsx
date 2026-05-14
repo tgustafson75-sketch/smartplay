@@ -50,10 +50,21 @@ export function GlobalToolsMenu() {
   const castMode = useSettingsStore((s) => s.castMode);
   const setCastMode = useSettingsStore((s) => s.setCastMode);
 
+  // Every action below closes the menu before doing its thing — Tim
+  // 2026-05-14: "There is still a screwy loop in tools ... like there's
+  // a broken step in the logical loop." Leaving the modal open after
+  // every tap was the broken step. Presence cycler ALSO routes to the
+  // Caddie tab so the user lands where the mode change is visible
+  // (changing trustLevel from the Dashboard ••• menu used to flip
+  // state silently with no on-screen feedback).
+
   const cycleMode = () => {
     const cur = TRUST_LEVEL_SLIDER_ORDER.indexOf(trustLevel);
     const next = TRUST_LEVEL_SLIDER_ORDER[(cur + 1) % TRUST_LEVEL_SLIDER_ORDER.length];
     setTrustLevel(next);
+    void Haptics.selectionAsync().catch(() => undefined);
+    close();
+    router.push('/(tabs)/caddie' as never);
   };
 
   const cyclePersona = () => {
@@ -61,6 +72,8 @@ export function GlobalToolsMenu() {
     const idx = list.indexOf(caddiePersonality as Persona);
     const next = list[(idx + 1) % list.length];
     setCaddiePersonality(next);
+    void Haptics.selectionAsync().catch(() => undefined);
+    close();
   };
 
   const openSettings = () => {
@@ -70,6 +83,7 @@ export function GlobalToolsMenu() {
 
   const refreshGps = async () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    close();
     try {
       const fix = await recalibrateGps();
       // Also force-mark the position so every yardage consumer picks
@@ -83,6 +97,18 @@ export function GlobalToolsMenu() {
     } catch {
       Alert.alert('GPS refresh failed', 'Step into open sky and try again.');
     }
+  };
+
+  const toggleVoice = () => {
+    setVoiceEnabled(!voiceEnabled);
+    void Haptics.selectionAsync().catch(() => undefined);
+    close();
+  };
+
+  const toggleCast = () => {
+    setCastMode(!castMode);
+    void Haptics.selectionAsync().catch(() => undefined);
+    close();
   };
 
   return (
@@ -125,7 +151,7 @@ export function GlobalToolsMenu() {
               icon={voiceEnabled ? 'volume-high-outline' : 'volume-mute-outline'}
               label={voiceEnabled ? 'Voice: ON' : 'Voice: OFF'}
               sub={voiceEnabled ? 'Caddie speaks responses aloud · Tap to mute' : 'Caddie is silent · Tap to enable voice'}
-              onPress={() => setVoiceEnabled(!voiceEnabled)}
+              onPress={toggleVoice}
               colors={colors}
             />
 
@@ -133,7 +159,7 @@ export function GlobalToolsMenu() {
               icon={castMode ? 'tv' : 'tv-outline'}
               label={castMode ? 'Cast Mode: ON' : 'Cast Mode: OFF'}
               sub={castMode ? 'Large-text display optimized for casting · Tap to disable' : 'Switch to large-text display for casting to a TV'}
-              onPress={() => setCastMode(!castMode)}
+              onPress={toggleCast}
               colors={colors}
             />
 
