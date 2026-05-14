@@ -82,6 +82,9 @@ export default function Settings() {
     setDistanceUnit,
     setThemePreference,
     setFillerEnabled,
+    // Phase Cockpit — alternate Caddie tab toggle
+    cockpitMode,
+    setCockpitMode,
   } = useSettingsStore();
 
   // 4-persona caddie selector — driven by caddiePersonality (the source
@@ -495,6 +498,15 @@ export default function Settings() {
             sub={`${caddieName} fills the pause while thinking — 'let me see', 'hmm...'`}
             value={fillerEnabled}
             onValueChange={setFillerEnabled}
+          />
+          {/* Phase Cockpit — alternate Caddie tab layout. Pure render-
+              path switch; voice + GPS + avatar logic untouched in Full
+              Mode. */}
+          <ToggleRow
+            label="Cockpit Mode"
+            sub="V3-style Caddie tab: brand header, big SmartFinder card, Vision/Motion/Play row, Tap-to-Ask pill, and manual shot-result backup entry. Toggle takes effect immediately."
+            value={cockpitMode}
+            onValueChange={setCockpitMode}
           />
         </View>
 

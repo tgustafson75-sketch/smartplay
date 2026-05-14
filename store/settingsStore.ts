@@ -116,6 +116,15 @@ interface SettingsState {
   // utterance but show the manual picker instead of registering.
   cageAutoClubDetection: boolean;
 
+  // Phase Cockpit — opt-in alternate Caddie tab layout (v3-style:
+  // brand header + HOLE/SHOTS/PUTTS stepper + big SmartFinder card +
+  // Vision/Motion/Play/Settings pill row + Tap-to-Ask pill + manual
+  // SHOT RESULT backup entry + caddie advice). Defaults false so Full
+  // Mode stays the out-of-box experience for everyone. Pure render-path
+  // switch — voice plumbing is shared with Full Mode (no remount, no
+  // audio interruption when flipped).
+  cockpitMode: boolean;
+
   // ─── ACTIONS ────────────────────────────
 
   setVoiceEnabled: (v: boolean) => void;
@@ -156,6 +165,8 @@ interface SettingsState {
   setYardageMode: (v: 'live' | 'preround') => void;
   // Phase BL
   setCageAutoClubDetection: (v: boolean) => void;
+  // Phase Cockpit
+  setCockpitMode: (v: boolean) => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -205,6 +216,7 @@ export const useSettingsStore = create<SettingsState>()(
       smartVisionImagery: 'auto' as const,
       yardageMode: 'live' as const,
       cageAutoClubDetection: true,
+      cockpitMode: false,
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
       setVoiceGender: (g) => set({ voiceGender: g }),
@@ -311,6 +323,7 @@ export const useSettingsStore = create<SettingsState>()(
         }
       },
       setCageAutoClubDetection: (v) => set({ cageAutoClubDetection: v }),
+      setCockpitMode: (v) => set({ cockpitMode: v }),
       // Phase 105 — per-pillar assignment.
       setCaddieForPillar: (pillar, p) => set((s) => ({
         caddieAssignments: { ...s.caddieAssignments, [pillar]: p },
@@ -415,6 +428,7 @@ export const useSettingsStore = create<SettingsState>()(
         smartVisionImagery: s.smartVisionImagery,
         yardageMode: s.yardageMode,
         cageAutoClubDetection: s.cageAutoClubDetection,
+        cockpitMode: s.cockpitMode,
         // watchConnected / glassesConnected not persisted — rechecked on mount
       }),
     },

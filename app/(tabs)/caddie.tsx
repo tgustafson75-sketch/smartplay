@@ -24,6 +24,10 @@ import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
 import { useRoundStore } from '../../store/roundStore';
 import type { ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
+// Phase Cockpit — alternate Caddie tab layout (v3-style). Gated by
+// useSettingsStore.cockpitMode; off by default. Voice/avatar code
+// below is byte-identical to pre-Cockpit when the toggle is off.
+import CockpitCaddieScreen from '../../components/caddie/CockpitCaddieScreen';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useShallow } from 'zustand/react/shallow';
 import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
@@ -334,6 +338,11 @@ export default function CaddieTab() {
   // fix yet, falls back to static so the strip never renders "—".
   const yardageMode = useSettingsStore(s => s.yardageMode);
   const setYardageMode = useSettingsStore(s => s.setYardageMode);
+  // Phase Cockpit — gate for the alternate Caddie tab layout. Read here
+  // (above hooks/effects) so the early-return below is well-defined; the
+  // selector is a single-key read so unrelated settings changes don't
+  // trigger a Cockpit-toggle re-render.
+  const cockpitMode = useSettingsStore(s => s.cockpitMode);
   // markTick increments on every position-mark event AND every 4s tick
   // during an active round so liveYardage recomputes both on push (Mark
   // fires) and pull (organic GPS movement during walking). Phase BG —
@@ -1501,6 +1510,24 @@ export default function CaddieTab() {
   }, [isRoundActive]);
 
   // ── RENDER ───────────────────────────────
+
+  // Phase Cockpit — opt-in alternate Caddie tab layout. Voice plumbing
+  // (useVoiceCaddie, useKevin, audio session, recording) initializes
+  // above this point — voiceState / caddieResponse / handleMicPress are
+  // stable. Passing them as props to CockpitCaddieScreen means the
+  // recording session is shared with Full Mode and flipping the toggle
+  // does NOT interrupt an in-flight reply. Default OFF; user opts in
+  // via Settings → "Cockpit Mode".
+  if (cockpitMode) {
+    return (
+      <CockpitCaddieScreen
+        voiceState={voiceState}
+        caddieResponse={caddieResponse}
+        onMicPress={handleMicPress}
+      />
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
 
