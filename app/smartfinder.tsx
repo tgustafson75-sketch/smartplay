@@ -37,6 +37,9 @@ import SmartFinderModeToggle from '../components/smartfinder/SmartFinderModeTogg
 import { useCurrentWeather } from '../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../utils/playsLike';
 import type { WeatherSnapshot } from '../services/weatherService';
+import { useSettingsStore } from '../store/settingsStore';
+import { useTrustLevelStore } from '../store/trustLevelStore';
+import { speak } from '../services/voiceService';
 
 const REFRESH_MS = 3_000;
 const CANVAS_W_FRACTION = 0.92;
@@ -109,6 +112,44 @@ export default function SmartFinder() {
 
   const { weather: caddieWeather, shotBearingDeg } = useCurrentWeather();
   const [holePickerOpen, setHolePickerOpen] = useState(false);
+
+  // ── Voice callout on SmartFinder open ──────────────────────────────
+  // Tim's WOW moment: when the rangefinder fires up, the caddie should
+  // tell you what you're looking at — middle yardage, plays-like, wind
+  // direction + speed — without you asking. Fires once per mount, gated
+  // on isRoundActive (no callout off-course), voiceEnabled (respect
+  // mute), and trustLevel >= 2 (Quiet stays silent by definition).
+  // Waits for both green yardages AND weather to load before speaking
+  // so we don't fire a half-sentence "Middle yards" and never finish.
+  const calloutSpokenRef = useRef(false);
+  const voiceGender = useSettingsStore(s => s.voiceGender);
+  const voiceEnabled = useSettingsStore(s => s.voiceEnabled);
+  const language = useSettingsStore(s => s.language);
+  const trustLevel = useTrustLevelStore(s => s.level);
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  useEffect(() => {
+    if (calloutSpokenRef.current) return;
+    if (!isRoundActive) return;
+    if (!voiceEnabled) return;
+    if (trustLevel < 2) return; // Quiet = silent by design
+    const middle = yards.middle;
+    if (middle == null) return;
+    calloutSpokenRef.current = true;
+    const parts: string[] = [`Middle of green, ${middle} yards.`];
+    if (caddieWeather) {
+      const breakdown = playsLikeDistance(middle, caddieWeather, shotBearingDeg);
+      if (Math.abs(breakdown.delta_yards) >= 3) {
+        parts.push(`Plays ${breakdown.plays_like_yards}.`);
+      }
+      if (caddieWeather.wind_speed_mph >= 5) {
+        const dir = describeWindDirection(caddieWeather.wind_direction_deg, shotBearingDeg);
+        parts.push(`Wind ${Math.round(caddieWeather.wind_speed_mph)} ${dir}.`);
+      }
+    }
+    void speak(parts.join(' '), voiceGender, language, apiUrl).catch((e) => {
+      console.log('[smartfinder] open callout speak failed', e);
+    });
+  }, [isRoundActive, voiceEnabled, trustLevel, yards.middle, caddieWeather, shotBearingDeg, voiceGender, language, apiUrl]);
 
   // Camera modes share the camera view + need permission gate
   const isCameraMode = mode === 'standard' || mode === 'putt';
@@ -658,6 +699,28 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
       </View>
     </>
   );
+}
+
+/**
+ * Convert a meteorological wind direction (degrees the wind is coming
+ * FROM) into a caddie-friendly relative phrase based on the shot bearing.
+ * Returns "into you", "with you", "from the right", or "from the left."
+ * Falls back to compass cardinals when shot bearing is unknown.
+ */
+function describeWindDirection(windDeg: number | null, shotBearingDeg: number | null): string {
+  if (windDeg == null) return '';
+  if (shotBearingDeg == null) {
+    // No shot bearing — fall back to plain cardinal.
+    const cardinals = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    return `from the ${cardinals[Math.round(((windDeg % 360) + 360) % 360 / 45) % 8]}`;
+  }
+  // Relative angle: wind FROM minus shot bearing TO. 0 = headwind, 180 = tail.
+  let rel = ((windDeg - shotBearingDeg) % 360 + 360) % 360;
+  if (rel > 180) rel -= 360; // -180..180 (negative = left of shot, positive = right)
+  const abs = Math.abs(rel);
+  if (abs <= 30) return 'into you';
+  if (abs >= 150) return 'with you';
+  return rel > 0 ? 'from the right' : 'from the left';
 }
 
 function slopeColor(pct: number | null): string {
