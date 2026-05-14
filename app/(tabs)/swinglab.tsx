@@ -61,9 +61,9 @@ const CARDS: LauncherCardSpec[] = [
     key: 'range',
     icon: 'videocam-outline',
     title: 'Range Mode',
-    status: 'SOON',
+    status: 'BETA',
     sub: 'Multi-shot session: range, studio, or backyard cage',
-    route: null,
+    route: '/swinglab/range',
   },
   {
     key: 'smartmotion',
