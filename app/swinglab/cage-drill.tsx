@@ -47,6 +47,7 @@ import { getCaddieName } from '../../lib/persona';
 import CageOverlay, { type CageOverlayPhase } from '../../components/swinglab/CageOverlay';
 import { setActiveSurface } from '../../services/activeSurfaceRegistry';
 import { subscribeCapture } from '../../services/mediaCapture';
+import { useWatchStore, type SwingMetrics } from '../../store/watchStore';
 
 type Phase =
   | 'SETUP'
@@ -102,6 +103,16 @@ export default function CageDrillScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [result, setResult] = useState<CageAnalyzeResponse | null>(null);
   const [coach, setCoach] = useState<CoachReviewResponse | null>(null);
+  // Watch metrics for THIS capture — populated after stopRecording if
+  // the watchStore recorded a swing within the recording window.
+  const [watchSwing, setWatchSwing] = useState<SwingMetrics | null>(null);
+  // Connection status — surfaces "no watch" hint in the result card so
+  // users know the section is empty by design, not broken.
+  const watchConnected = useWatchStore((s) => s.isConnected);
+  // Timestamp captured at the moment recording starts. Used to filter
+  // watchStore.sessionSwings to ONLY the swing that happened during
+  // this video capture. Set in startRecording, read in stopRecording.
+  const recordingStartedAtRef = useRef<number | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -221,9 +232,15 @@ export default function CageDrillScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setRecordedSeconds(0);
     setPhase('RECORDING');
+    // Reset any previous watch swing so the result card shows fresh state.
+    setWatchSwing(null);
 
     // Tick countdown
     const startedAt = Date.now();
+    // Capture the recording-start timestamp so we can later filter
+    // watchStore.sessionSwings to swings that happened DURING this
+    // capture window (recording-start → analyze-complete).
+    recordingStartedAtRef.current = startedAt;
     recordTimerRef.current = setInterval(() => {
       const s = Math.floor((Date.now() - startedAt) / 1000);
       setRecordedSeconds(s);
@@ -299,6 +316,19 @@ export default function CageDrillScreen() {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setResult(res.data);
 
+      // Wire watch metrics. If the connected watch recorded a swing
+      // during the capture window (recording start → now), attach it to
+      // the result so the user sees video analysis + watch tempo/club
+      // speed side by side. No-op when no watch connected; harmless if
+      // the watch recorded for a different drill.
+      const startedAt = recordingStartedAtRef.current ?? 0;
+      const endedAt = Date.now();
+      const watchSwings = useWatchStore.getState().sessionSwings;
+      const matched = [...watchSwings]
+        .reverse()
+        .find((s) => s.timestamp >= startedAt && s.timestamp <= endedAt + 2000);
+      if (matched) setWatchSwing(matched);
+
       // Hand features.json to Kevin's cage_swing_review tool. The coach
       // response replaces the raw-JSON display from Prompt 1; the JSON is
       // still available behind a 'Show details' expander.
@@ -329,6 +359,7 @@ export default function CageDrillScreen() {
   const handleSwingAgain = useCallback(() => {
     setResult(null);
     setCoach(null);
+    setWatchSwing(null);
     setErrorMessage(null);
     setDetailsOpen(false);
     setRecordedSeconds(0);
@@ -551,6 +582,45 @@ export default function CageDrillScreen() {
               </Text>
             </View>
 
+            {/* Watch metrics — paired to the same swing the video
+                captured. Hidden when no watch connected so the empty
+                state doesn't confuse users without one. */}
+            {watchSwing && (
+              <View style={styles.watchCard}>
+                <View style={styles.watchHeader}>
+                  <Ionicons name="watch-outline" size={16} color="#00C896" />
+                  <Text style={styles.watchHeaderText}>WATCH METRICS</Text>
+                  <Text style={styles.watchClub}>{watchSwing.club}</Text>
+                </View>
+                <View style={styles.watchGrid}>
+                  <WatchStat
+                    label="TEMPO"
+                    value={watchSwing.tempoRatio.toFixed(2)}
+                    sub={watchSwing.tempoGood ? 'in range' : 'work on it'}
+                    good={watchSwing.tempoGood}
+                  />
+                  <WatchStat
+                    label="CLUB MPH"
+                    value={String(Math.round(watchSwing.clubHeadSpeedEst))}
+                    sub={`${Math.round(watchSwing.peakWristSpeed)} wrist`}
+                  />
+                  <WatchStat
+                    label="BACKSWING"
+                    value={`${Math.round(watchSwing.backswingMs)} ms`}
+                    sub={`${Math.round(watchSwing.downswingMs)} down`}
+                  />
+                </View>
+                {watchSwing.earlyTransition && (
+                  <Text style={styles.watchWarn}>⚠ Early transition detected — pause at the top.</Text>
+                )}
+              </View>
+            )}
+            {!watchSwing && watchConnected && (
+              <View style={[styles.watchCard, styles.watchCardEmpty]}>
+                <Text style={styles.watchEmptyText}>Watch is connected but didn&apos;t catch this swing. Make sure it&apos;s on the lead wrist.</Text>
+              </View>
+            )}
+
             {/* Collapsible features.json — debug surface, off by default */}
             <TouchableOpacity
               style={styles.detailsToggle}
@@ -620,6 +690,32 @@ export default function CageDrillScreen() {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────
+
+/**
+ * WatchStat — single cell of the watch-metrics grid on the result card.
+ * Three of these render side-by-side: TEMPO, CLUB MPH, BACKSWING.
+ */
+function WatchStat({
+  label, value, sub, good,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  good?: boolean;
+}) {
+  const valueStyle = [
+    styles.watchStatValue,
+    good === true ? styles.watchStatGood : null,
+    good === false ? styles.watchStatBad : null,
+  ];
+  return (
+    <View style={styles.watchStat}>
+      <Text style={styles.watchStatLabel}>{label}</Text>
+      <Text style={valueStyle}>{value}</Text>
+      <Text style={styles.watchStatSub}>{sub}</Text>
+    </View>
+  );
+}
 
 function Header({
   insets, onBack, onMore, onBadge,
@@ -778,6 +874,32 @@ const styles = StyleSheet.create({
   confidenceDot: { width: 8, height: 8, borderRadius: 4 },
   confidenceLabel: { color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
   kevinResponse: { color: '#ffffff', fontSize: 16, fontWeight: '500', lineHeight: 23 },
+
+  // Watch metrics card — sits below the Kevin card on the result surface.
+  watchCard: {
+    marginTop: 14,
+    marginHorizontal: 16,
+    backgroundColor: 'rgba(0, 200, 150, 0.06)',
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  watchCardEmpty: { backgroundColor: 'rgba(107, 114, 128, 0.08)' },
+  watchHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  watchHeaderText: { color: '#00C896', fontSize: 11, fontWeight: '800', letterSpacing: 1.4, flex: 1 },
+  watchClub: { color: '#9ca3af', fontSize: 11, fontWeight: '700' },
+  watchGrid: { flexDirection: 'row', gap: 10 },
+  watchStat: { flex: 1, alignItems: 'flex-start' },
+  watchStatLabel: { color: '#6b7280', fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
+  watchStatValue: { color: '#e8f5e9', fontSize: 22, fontWeight: '900', marginTop: 4 },
+  watchStatSub: { color: '#9ca3af', fontSize: 11, marginTop: 2 },
+  watchStatGood: { color: '#00C896' },
+  watchStatBad: { color: '#F0C030' },
+  watchWarn: { color: '#F0C030', fontSize: 12, fontWeight: '600', marginTop: 10 },
+  watchEmptyText: { color: '#9ca3af', fontSize: 12, lineHeight: 17, fontStyle: 'italic' },
 
   detailsToggle: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
