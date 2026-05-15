@@ -6,12 +6,16 @@
  *
  *   1. Body alignment box — rectangular frame the user fits their swing
  *      inside (top above head, bottom below feet, sides shoulder + club
- *      length).
- *   2. Bullseye reticle — centered crosshair indicating optimal phone
- *      position (spine alignment + hip height).
- *   3. Strike zone — smaller rectangle near the bullseye marking ball
- *      address / impact zone. Phase K uses this region as the priority
- *      sample area; Phase X (future) uses it for strike validation.
+ *      length). STATIC — sized to viewport.
+ *   2. Bullseye reticle — DRAGGABLE crosshair indicating target /
+ *      bullseye center. User aligns this to flag, range bag, etc. Last
+ *      position persists via useCageOverlayCalibrationStore.
+ *   3. Strike zone — DRAGGABLE rectangle marking ball address / impact
+ *      zone. User aligns to where the ball sits on the ground. Last
+ *      position persists.
+ *
+ * Tim 2026-05-14: "make the center crosshairs moveable for user to move
+ * to center of the bullseye or target and fix that location."
  *
  * Color feedback driven by phase:
  *   SETUP / NOT_READY → amber ("frame your swing")
@@ -22,14 +26,15 @@
  * portrait phone (~9:19.5 tall). The body box is sized as a fraction of
  * viewport height so it always fits.
  *
- * No CV detection in this component. Visual scaffold only — alignment
- * verification still goes through the existing handleCheckPosition →
- * /api/cage/check-bullseye backend call.
+ * Drag interactions use Pressable + PanResponder. Wrapper switches
+ * pointerEvents off body-box / labels (decorative) but ON for the two
+ * draggable controls so taps land on them.
  */
 
-import React from 'react';
-import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, useWindowDimensions, PanResponder, Animated } from 'react-native';
 import Svg, { Rect, Line, Circle } from 'react-native-svg';
+import { useCageOverlayCalibrationStore } from '../../store/cageOverlayCalibrationStore';
 
 export type CageOverlayPhase = 'SETUP' | 'CHECKING' | 'READY' | 'NOT_READY';
 
@@ -38,7 +43,7 @@ interface Props {
 }
 
 const COLOR_BY_PHASE: Record<CageOverlayPhase, { stroke: string; fill: string; label: string }> = {
-  SETUP:     { stroke: '#F5A623', fill: 'rgba(245,166,35,0.06)', label: 'Frame your swing inside the box' },
+  SETUP:     { stroke: '#F5A623', fill: 'rgba(245,166,35,0.06)', label: 'Drag bullseye to target · drag BALL to address' },
   CHECKING:  { stroke: '#F5A623', fill: 'rgba(245,166,35,0.10)', label: 'Checking alignment…' },
   READY:     { stroke: '#00C896', fill: 'rgba(0,200,150,0.10)', label: 'Locked in — ready to swing' },
   NOT_READY: { stroke: '#ef4444', fill: 'rgba(239,68,68,0.10)', label: "Adjust your position" },
@@ -51,93 +56,245 @@ export default function CageOverlay({ phase }: Props) {
 
   const palette = COLOR_BY_PHASE[phase];
 
-  // Body alignment box — sized as a fraction of viewport so it always
-  // fits regardless of aspect. On portrait, taller frame (golfer takes up
-  // most vertical space). On Fold open / landscape, wider frame.
+  // Body alignment box — STATIC, sized to viewport.
   const boxHeight = isFoldOpen ? H * 0.78 : H * 0.62;
   const boxWidth = isFoldOpen ? W * 0.45 : W * 0.62;
   const boxLeft = (W - boxWidth) / 2;
   const boxTop = (H - boxHeight) / 2;
 
-  // Bullseye centered on box (corresponds to spine + hip-height).
-  const cx = W / 2;
-  const cy = H / 2;
-
-  // Strike zone — small rectangle below center where ball address lives,
-  // ~25% of body box size. Aligned to bottom-third (where the ball would
-  // be at address position).
+  // Strike zone dimensions — fixed; only the center position is mobile.
   const strikeW = boxWidth * 0.28;
   const strikeH = boxHeight * 0.18;
-  const strikeLeft = cx - strikeW / 2;
-  const strikeTop = boxTop + boxHeight * 0.62;
+
+  // ─── Draggable positions ────────────────────────────────────────────
+  // Read persisted fractions; fall back to viewport-center defaults.
+  // Stored as fractions so the same calibration works across phone
+  // rotations + Fold open/closed.
+  const savedBullseye = useCageOverlayCalibrationStore((s) => s.bullseye);
+  const savedBallBox = useCageOverlayCalibrationStore((s) => s.ballBox);
+  const setBullseyeStore = useCageOverlayCalibrationStore((s) => s.setBullseye);
+  const setBallBoxStore = useCageOverlayCalibrationStore((s) => s.setBallBox);
+
+  const defaultBullseye = { x: 0.5, y: 0.5 };
+  const defaultBallBox = { x: 0.5, y: (boxTop + boxHeight * 0.71) / H };
+
+  // Live pixel positions (state) — restored from store on mount, updated
+  // on drag, persisted on release.
+  const [bullseye, setBullseye] = useState({
+    x: (savedBullseye?.x ?? defaultBullseye.x) * W,
+    y: (savedBullseye?.y ?? defaultBullseye.y) * H,
+  });
+  const [ballBox, setBallBox] = useState({
+    x: (savedBallBox?.x ?? defaultBallBox.x) * W,
+    y: (savedBallBox?.y ?? defaultBallBox.y) * H,
+  });
+
+  // Re-seed when viewport changes (Fold open ↔ closed): convert stored
+  // fractions to the new pixel dimensions so the markers don't appear
+  // to drift after a rotation.
+  useEffect(() => {
+    setBullseye({
+      x: (savedBullseye?.x ?? defaultBullseye.x) * W,
+      y: (savedBullseye?.y ?? defaultBullseye.y) * H,
+    });
+    setBallBox({
+      x: (savedBallBox?.x ?? defaultBallBox.x) * W,
+      y: (savedBallBox?.y ?? defaultBallBox.y) * H,
+    });
+    // defaultBallBox depends on boxTop/boxHeight which depend on W/H — the
+    // W/H dep here is the canonical trigger. Keep deps minimal so we
+    // don't re-seed mid-drag.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [W, H]);
+
+  // Live refs read inside PanResponder closures (captured once at create
+  // time, so we can't read directly from state).
+  const bullseyeRef = useRef(bullseye);
+  bullseyeRef.current = bullseye;
+  const ballBoxRef = useRef(ballBox);
+  ballBoxRef.current = ballBox;
+
+  // Track drag-start position so the move handler can compute the new
+  // anchor as start + delta, instead of jumping to the touch point.
+  const dragStart = useRef({ x: 0, y: 0 });
+  const [draggingTarget, setDraggingTarget] = useState<'bullseye' | 'ballBox' | null>(null);
+
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+  const bullseyePR = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => {
+      dragStart.current = { x: bullseyeRef.current.x, y: bullseyeRef.current.y };
+      setDraggingTarget('bullseye');
+    },
+    onPanResponderMove: (_, gesture) => {
+      const nx = clamp(dragStart.current.x + gesture.dx, 0, W);
+      const ny = clamp(dragStart.current.y + gesture.dy, 0, H);
+      setBullseye({ x: nx, y: ny });
+    },
+    onPanResponderRelease: () => {
+      const pos = bullseyeRef.current;
+      setBullseyeStore({ x: pos.x / W, y: pos.y / H });
+      setDraggingTarget(null);
+    },
+    onPanResponderTerminate: () => setDraggingTarget(null),
+  })).current;
+
+  const ballBoxPR = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => {
+      dragStart.current = { x: ballBoxRef.current.x, y: ballBoxRef.current.y };
+      setDraggingTarget('ballBox');
+    },
+    onPanResponderMove: (_, gesture) => {
+      const nx = clamp(dragStart.current.x + gesture.dx, strikeW / 2, W - strikeW / 2);
+      const ny = clamp(dragStart.current.y + gesture.dy, strikeH / 2, H - strikeH / 2);
+      setBallBox({ x: nx, y: ny });
+    },
+    onPanResponderRelease: () => {
+      const pos = ballBoxRef.current;
+      setBallBoxStore({ x: pos.x / W, y: pos.y / H });
+      setDraggingTarget(null);
+    },
+    onPanResponderTerminate: () => setDraggingTarget(null),
+  })).current;
+
+  // Pulse the active drag handle ~10% larger so the user gets clear
+  // tactile feedback that they grabbed it.
+  const bullseyeScale = useRef(new Animated.Value(1)).current;
+  const ballBoxScale = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.timing(bullseyeScale, {
+      toValue: draggingTarget === 'bullseye' ? 1.15 : 1,
+      duration: 120,
+      useNativeDriver: true,
+    }).start();
+    Animated.timing(ballBoxScale, {
+      toValue: draggingTarget === 'ballBox' ? 1.10 : 1,
+      duration: 120,
+      useNativeDriver: true,
+    }).start();
+  }, [draggingTarget, bullseyeScale, ballBoxScale]);
+
+  // Derived strike-box top-left from the saved center.
+  const strikeLeft = ballBox.x - strikeW / 2;
+  const strikeTop = ballBox.y - strikeH / 2;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Svg width={W} height={H}>
-        {/* Body alignment box */}
-        <Rect
-          x={boxLeft}
-          y={boxTop}
-          width={boxWidth}
-          height={boxHeight}
-          stroke={palette.stroke}
-          strokeWidth={2.5}
-          strokeDasharray={phase === 'CHECKING' ? '8,4' : 'none'}
-          fill={palette.fill}
-          rx={12}
-        />
-        {/* Corner brackets — make the box read more like a viewfinder than
-            a filled rectangle. Small L-shapes at each corner. */}
-        {[
-          [boxLeft, boxTop, 1, 1],
-          [boxLeft + boxWidth, boxTop, -1, 1],
-          [boxLeft, boxTop + boxHeight, 1, -1],
-          [boxLeft + boxWidth, boxTop + boxHeight, -1, -1],
-        ].map(([x, y, dx, dy], i) => (
-          <React.Fragment key={i}>
-            <Line x1={x} y1={y} x2={x + 18 * dx} y2={y} stroke={palette.stroke} strokeWidth={4} strokeLinecap="round" />
-            <Line x1={x} y1={y} x2={x} y2={y + 18 * dy} stroke={palette.stroke} strokeWidth={4} strokeLinecap="round" />
-          </React.Fragment>
-        ))}
-
-        {/* Bullseye reticle — outer ring + inner dot + crosshair lines */}
-        <Circle cx={cx} cy={cy} r={28} stroke={palette.stroke} strokeWidth={2} fill="none" opacity={0.6} />
-        <Circle cx={cx} cy={cy} r={3} fill={palette.stroke} />
-        <Line x1={cx - 14} y1={cy} x2={cx - 4} y2={cy} stroke={palette.stroke} strokeWidth={2} opacity={0.7} />
-        <Line x1={cx + 4} y1={cy} x2={cx + 14} y2={cy} stroke={palette.stroke} strokeWidth={2} opacity={0.7} />
-        <Line x1={cx} y1={cy - 14} x2={cx} y2={cy - 4} stroke={palette.stroke} strokeWidth={2} opacity={0.7} />
-        <Line x1={cx} y1={cy + 4} x2={cx} y2={cy + 14} stroke={palette.stroke} strokeWidth={2} opacity={0.7} />
-
-        {/* Strike zone — dashed sub-rect for ball-address area */}
-        <Rect
-          x={strikeLeft}
-          y={strikeTop}
-          width={strikeW}
-          height={strikeH}
-          stroke={palette.stroke}
-          strokeWidth={1.5}
-          strokeDasharray="4,3"
-          fill="none"
-          rx={4}
-          opacity={0.55}
-        />
-      </Svg>
-
-      {/* Guidance text under the box. Lives outside the SVG so it can
-          use native text styling (letter-spacing, shadow). */}
-      <View style={[styles.labelWrap, { top: boxTop + boxHeight + 12 }]}>
-        <Text style={[styles.label, { color: palette.stroke }]}>{palette.label}</Text>
+    <View style={StyleSheet.absoluteFill}>
+      {/* Static decorative SVG — body box, corner brackets. Doesn't
+          intercept touches (pointerEvents none on the wrapping View
+          ancestor below). */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Svg width={W} height={H}>
+          {/* Body alignment box */}
+          <Rect
+            x={boxLeft}
+            y={boxTop}
+            width={boxWidth}
+            height={boxHeight}
+            stroke={palette.stroke}
+            strokeWidth={2.5}
+            strokeDasharray={phase === 'CHECKING' ? '8,4' : 'none'}
+            fill={palette.fill}
+            rx={12}
+          />
+          {/* Corner brackets */}
+          {[
+            [boxLeft, boxTop, 1, 1],
+            [boxLeft + boxWidth, boxTop, -1, 1],
+            [boxLeft, boxTop + boxHeight, 1, -1],
+            [boxLeft + boxWidth, boxTop + boxHeight, -1, -1],
+          ].map(([x, y, dx, dy], i) => (
+            <React.Fragment key={i}>
+              <Line x1={x} y1={y} x2={x + 18 * dx} y2={y} stroke={palette.stroke} strokeWidth={4} strokeLinecap="round" />
+              <Line x1={x} y1={y} x2={x} y2={y + 18 * dy} stroke={palette.stroke} strokeWidth={4} strokeLinecap="round" />
+            </React.Fragment>
+          ))}
+        </Svg>
       </View>
 
-      {/* Strike zone label — tiny tag above the dashed sub-rect */}
-      <View style={[styles.zoneLabel, { top: strikeTop - 14, left: strikeLeft }]}>
-        <Text style={[styles.zoneLabelText, { color: palette.stroke }]}>BALL</Text>
+      {/* Draggable bullseye crosshair — anchored at the saved center, sits
+          on top of the static body-box. Generous hit-slop (40px) so users
+          can grab it without precise tapping. */}
+      <Animated.View
+        {...bullseyePR.panHandlers}
+        style={[
+          styles.bullseyeWrap,
+          {
+            left: bullseye.x - 32,
+            top: bullseye.y - 32,
+            transform: [{ scale: bullseyeScale }],
+          },
+        ]}
+      >
+        <Svg width={64} height={64}>
+          <Circle cx={32} cy={32} r={28} stroke={palette.stroke} strokeWidth={2} fill="rgba(0,0,0,0.001)" opacity={0.7} />
+          <Circle cx={32} cy={32} r={3} fill={palette.stroke} />
+          <Line x1={32 - 18} y1={32} x2={32 - 6} y2={32} stroke={palette.stroke} strokeWidth={2} opacity={0.8} />
+          <Line x1={32 + 6} y1={32} x2={32 + 18} y2={32} stroke={palette.stroke} strokeWidth={2} opacity={0.8} />
+          <Line x1={32} y1={32 - 18} x2={32} y2={32 - 6} stroke={palette.stroke} strokeWidth={2} opacity={0.8} />
+          <Line x1={32} y1={32 + 6} x2={32} y2={32 + 18} stroke={palette.stroke} strokeWidth={2} opacity={0.8} />
+        </Svg>
+      </Animated.View>
+
+      {/* Draggable ball-address strike-box */}
+      <Animated.View
+        {...ballBoxPR.panHandlers}
+        style={[
+          styles.ballBoxWrap,
+          {
+            left: strikeLeft,
+            top: strikeTop,
+            width: strikeW,
+            height: strikeH,
+            transform: [{ scale: ballBoxScale }],
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.ballBoxInner,
+            { borderColor: palette.stroke, backgroundColor: phase === 'READY' ? 'rgba(0,200,150,0.05)' : 'rgba(0,0,0,0.001)' },
+          ]}
+        />
+        <View style={styles.zoneLabel}>
+          <Text style={[styles.zoneLabelText, { color: palette.stroke }]}>BALL</Text>
+        </View>
+      </Animated.View>
+
+      {/* Guidance text — outside any draggable so it doesn't move. */}
+      <View pointerEvents="none" style={[styles.labelWrap, { top: boxTop + boxHeight + 12 }]}>
+        <Text style={[styles.label, { color: palette.stroke }]}>{palette.label}</Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  bullseyeWrap: {
+    position: 'absolute',
+    width: 64,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ballBoxWrap: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ballBoxInner: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderRadius: 4,
+    opacity: 0.7,
+  },
   labelWrap: {
     position: 'absolute',
     left: 0, right: 0,
@@ -153,6 +310,8 @@ const styles = StyleSheet.create({
   },
   zoneLabel: {
     position: 'absolute',
+    top: -14,
+    left: 0,
   },
   zoneLabelText: {
     fontSize: 9,
