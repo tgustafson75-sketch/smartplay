@@ -35,6 +35,7 @@ import {
   MARINERS_POINT_HOLE_IMAGES,
   LAKES_HOLE_IMAGES,
   RANCHO_CALIFORNIA_HOLE_IMAGES,
+  SAN_JOSE_MUNI_HOLE_IMAGES,
 } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
 import BrandHeaderRow from '../../components/brand/BrandHeaderRow';
@@ -99,6 +100,19 @@ const LOCAL_COURSES: CourseSummary[] = [
     slope: 74,
     isLocal: true,
     thumbnail: (MARINERS_POINT_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+  },
+  // Added 2026-05-14 — Tim is in the San Jose area for the next 3-6
+  // months and asked to test against his local muni. All 18 hole photos
+  // bundled from his IMG_6426-6443 set. Rating/slope are public-record
+  // course estimates; refine when official numbers are confirmed.
+  {
+    id: 'local:san-jose-muni',
+    club_name: 'San Jose Municipal',
+    location: 'San Jose, CA',
+    rating: 70.2,
+    slope: 122,
+    isLocal: true,
+    thumbnail: (SAN_JOSE_MUNI_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
   },
 ];
 

@@ -94,6 +94,9 @@ export default function CourseDetailScreen() {
           slug === 'palms' ? 'Menifee Lakes Country Club — Palms' :
           slug === 'lakes' ? 'Menifee Lakes Country Club — Lakes' :
           slug === 'rancho-california' ? 'Rancho California Golf Club' :
+          slug === 'crystal-springs' ? 'Crystal Springs Golf Course' :
+          slug === 'mariners-point' ? 'Mariners Point Golf Center' :
+          slug === 'san-jose-muni' ? 'San Jose Municipal Golf Course' :
           slug;
         const stubHoles = Array.from({ length: 18 }, (_, i): import('../../types/course').Hole => ({
           hole_number: i + 1,
@@ -107,7 +110,16 @@ export default function CourseDetailScreen() {
           id: course_id,
           club_name: friendly,
           course_name: friendly,
-          location: { city: slug.startsWith('rancho') ? 'Temecula' : 'Menifee', state: 'CA', country: 'USA' },
+          location: {
+            city:
+              slug.startsWith('rancho') ? 'Temecula' :
+              slug === 'crystal-springs' ? 'Burlingame' :
+              slug === 'mariners-point' ? 'Foster City' :
+              slug === 'san-jose-muni' ? 'San Jose' :
+              'Menifee',
+            state: 'CA',
+            country: 'USA',
+          },
           tees: [{
             tee_name: 'White',
             total_yards: 6840,
@@ -205,6 +217,9 @@ export default function CourseDetailScreen() {
     localSlug === 'palms' ? 'Menifee Lakes — Palms' :
     localSlug === 'lakes' ? 'Menifee Lakes — Lakes' :
     localSlug === 'rancho-california' ? 'Rancho California' :
+    localSlug === 'crystal-springs' ? 'Crystal Springs' :
+    localSlug === 'mariners-point' ? 'Mariners Point' :
+    localSlug === 'san-jose-muni' ? 'San Jose Municipal' :
     null;
   const displayClubName = localFriendlyName ?? course?.club_name ?? '';
   const isPalms = localSlug === 'palms' || displayClubName.toLowerCase().includes('palms');
