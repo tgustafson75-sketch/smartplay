@@ -849,6 +849,14 @@ export const useVoiceCaddie = ({
     // ── STOP and process ──────────────────
     if (recordingRef.current) {
       clearAutoStop();
+      // Flip state to 'thinking' IMMEDIATELY so the badge's listening
+      // halo unmounts the instant the user taps stop — without this,
+      // the halo keeps pulsing for the 100-500ms that stopAndUnloadAsync
+      // takes to resolve before processAudioUri can set 'thinking'.
+      // Tim 2026-05-15: "the second question you ask it does not appear
+      // that he stops listening and the mic pulses but he does
+      // eventually answer." That gap is the bug.
+      wrappedOnVoiceStateChange('thinking');
 
       try {
         await recordingRef.current.stopAndUnloadAsync();
