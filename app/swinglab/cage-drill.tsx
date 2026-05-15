@@ -48,6 +48,12 @@ import CageOverlay, { type CageOverlayPhase } from '../../components/swinglab/Ca
 import { setActiveSurface } from '../../services/activeSurfaceRegistry';
 import { subscribeCapture } from '../../services/mediaCapture';
 import { useWatchStore, type SwingMetrics } from '../../store/watchStore';
+import {
+  startImpactRecording,
+  stopAndDetectImpact,
+  abortImpactRecording,
+  type ImpactReading,
+} from '../../services/acousticImpactDetector';
 
 type Phase =
   | 'SETUP'
@@ -113,6 +119,8 @@ export default function CageDrillScreen() {
   // watchStore.sessionSwings to ONLY the swing that happened during
   // this video capture. Set in startRecording, read in stopRecording.
   const recordingStartedAtRef = useRef<number | null>(null);
+  // Acoustic impact detector result for this capture.
+  const [impactReading, setImpactReading] = useState<ImpactReading | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -232,8 +240,9 @@ export default function CageDrillScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setRecordedSeconds(0);
     setPhase('RECORDING');
-    // Reset any previous watch swing so the result card shows fresh state.
+    // Reset any previous watch swing + impact reading.
     setWatchSwing(null);
+    setImpactReading(null);
 
     // Tick countdown
     const startedAt = Date.now();
@@ -241,6 +250,12 @@ export default function CageDrillScreen() {
     // watchStore.sessionSwings to swings that happened DURING this
     // capture window (recording-start → analyze-complete).
     recordingStartedAtRef.current = startedAt;
+
+    // Phase J.1 — kick off the parallel audio recording for acoustic
+    // impact detection. Fire-and-forget; if it fails (denied mic,
+    // device busy) we silently skip detection. The video record below
+    // already has its own mic permission gate so this won't double-prompt.
+    void startImpactRecording().catch(() => undefined);
     recordTimerRef.current = setInterval(() => {
       const s = Math.floor((Date.now() - startedAt) / 1000);
       setRecordedSeconds(s);
@@ -279,6 +294,13 @@ export default function CageDrillScreen() {
     // unmount would no-op against a null ref and the recordAsync promise
     // could hang or reject. Stop synchronously, then transition.
     try { cameraRef.current?.stopRecording(); } catch {}
+
+    // Phase J.1 — stop the parallel audio recording and run peak
+    // detection. Fire in parallel with the video upload below so this
+    // ~50ms work doesn't block the user from seeing UPLOADING state.
+    void stopAndDetectImpact()
+      .then((reading) => { if (reading) setImpactReading(reading); })
+      .catch(() => undefined);
 
     setPhase('UPLOADING');
 
@@ -360,10 +382,20 @@ export default function CageDrillScreen() {
     setResult(null);
     setCoach(null);
     setWatchSwing(null);
+    setImpactReading(null);
     setErrorMessage(null);
     setDetailsOpen(false);
     setRecordedSeconds(0);
     setPhase('SETUP');
+  }, []);
+
+  // Belt-and-suspenders: if the user backs out mid-recording we don't
+  // want the parallel AudioRecorder to leak. abortImpactRecording is
+  // idempotent so calling on every unmount is safe.
+  useEffect(() => {
+    return () => {
+      void abortImpactRecording().catch(() => undefined);
+    };
   }, []);
 
   const handleTryAgain = useCallback(() => {
@@ -618,6 +650,22 @@ export default function CageDrillScreen() {
             {!watchSwing && watchConnected && (
               <View style={[styles.watchCard, styles.watchCardEmpty]}>
                 <Text style={styles.watchEmptyText}>Watch is connected but didn&apos;t catch this swing. Make sure it&apos;s on the lead wrist.</Text>
+              </View>
+            )}
+
+            {/* Acoustic impact card — shows the detected strike time so
+                users can scrub to the impact frame. Hidden when no
+                acoustic reading came back (quiet mic / no detected peak). */}
+            {impactReading && (
+              <View style={styles.impactCard}>
+                <View style={styles.watchHeader}>
+                  <Ionicons name="pulse-outline" size={16} color="#F5A623" />
+                  <Text style={[styles.watchHeaderText, { color: '#F5A623' }]}>ACOUSTIC IMPACT</Text>
+                  <Text style={styles.watchClub}>{Math.round(impactReading.confidence * 100)}% conf</Text>
+                </View>
+                <Text style={styles.impactBody}>
+                  Strike at <Text style={styles.impactBold}>{(impactReading.impact_ms / 1000).toFixed(2)}s</Text> · peak {impactReading.peak_db.toFixed(1)} dB
+                </Text>
               </View>
             )}
 
@@ -900,6 +948,21 @@ const styles = StyleSheet.create({
   watchStatBad: { color: '#F0C030' },
   watchWarn: { color: '#F0C030', fontSize: 12, fontWeight: '600', marginTop: 10 },
   watchEmptyText: { color: '#9ca3af', fontSize: 12, lineHeight: 17, fontStyle: 'italic' },
+
+  // Acoustic impact card.
+  impactCard: {
+    marginTop: 12,
+    marginHorizontal: 16,
+    backgroundColor: 'rgba(245, 166, 35, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 166, 35, 0.30)',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  impactBody: { color: '#e8f5e9', fontSize: 13, lineHeight: 18 },
+  impactBold: { color: '#F5A623', fontWeight: '800' },
 
   detailsToggle: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
