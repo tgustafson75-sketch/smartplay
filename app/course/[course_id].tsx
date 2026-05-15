@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getCourseImageryUrl, getHoleThumbnailUrl } from '../../services/mapboxImagery';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import PALMS_IMAGES from '../../data/palmsImages';
+import { getLocalHoleImage } from '../../data/localCourseImages';
 import type { Course } from '../../types/course';
 
 /**
@@ -223,12 +224,21 @@ export default function CourseDetailScreen() {
     }));
   }, [tee, noteByHole]);
 
-  // Hole photos: per-hole Mapbox tiles, or Palms bundled images for Palms.
+  // Hole photos. Resolution order per hole:
+  //   1. Curated bundled image for the named course (Palms, Lakes,
+  //      Rancho California, Crystal Springs, Mariners Point — all 5
+  //      now have full 18-hole sets).
+  //   2. Mapbox per-hole tile (requires green geometry).
+  //   3. Skip (returns null and gets filtered).
+  // Tim 2026-05-14 hit "aerial unavailable" on Lakes/Rancho because the
+  // Palms-only branch was the only bundled path; now every local course
+  // routes through getLocalHoleImage which handles all 5.
   const holePhotos = useMemo(() => {
     if (!tee || !course) return [];
     return tee.holes.map(h => {
-      if (isPalms && PALMS_IMAGES[h.hole_number]) {
-        return { hole_number: h.hole_number, url: '__palms__' };
+      const bundled = getLocalHoleImage(displayClubName, h.hole_number);
+      if (bundled) {
+        return { hole_number: h.hole_number, url: '__bundled__', bundled };
       }
       const geom = getHoleGeometry(course.id, h.hole_number);
       const url = getHoleThumbnailUrl({
@@ -239,15 +249,21 @@ export default function CourseDetailScreen() {
         tee: geom?.tee ?? null,
         green: geom?.green ?? null,
       });
-      return url ? { hole_number: h.hole_number, url } : null;
-    }).filter((x): x is { hole_number: number; url: string } => x !== null);
+      return url ? { hole_number: h.hole_number, url, bundled: null } : null;
+    }).filter((x): x is { hole_number: number; url: string; bundled: ImageSourcePropType | null } => x !== null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tee, course, isPalms, geometryReady]);
+  }, [tee, course, displayClubName, geometryReady]);
 
-  // Course hero — Palms bundled image or Mapbox course-wide aerial.
+  // Course hero — bundled hole-1 for any curated local course, else
+  // Mapbox course-wide aerial. Previously only Palms had a bundled hero
+  // path; everything else fell back to Mapbox which fails when
+  // geometry is missing → "Aerial unavailable" placeholder. Lakes,
+  // Rancho, Crystal Springs, Mariners Point all now show their hole-1
+  // photo as the hero.
   const heroSource: ImageSourcePropType | { uri: string } | null = useMemo(() => {
     if (!course) return null;
-    if (isPalms && PALMS_IMAGES[1]) return PALMS_IMAGES[1] as ImageSourcePropType;
+    const bundledHero = getLocalHoleImage(displayClubName, 1);
+    if (bundledHero) return bundledHero;
     if (!tee || !geometryReady) return null;
     const url = getCourseImageryUrl({
       courseId: course.id,
@@ -257,7 +273,7 @@ export default function CourseDetailScreen() {
       }),
     }, Math.round(screenW), Math.round(screenW * 0.55));
     return url ? { uri: url } : null;
-  }, [course, tee, isPalms, geometryReady, screenW]);
+  }, [course, tee, displayClubName, geometryReady, screenW]);
 
   const handleStartRound = () => {
     if (!course) return;
@@ -408,8 +424,11 @@ export default function CourseDetailScreen() {
             <HolePhotosGrid
               photos={holePhotos.map(p => ({
                 hole_number: p.hole_number,
-                url: p.url === '__palms__' ? '' : p.url,
-                palmsImage: p.url === '__palms__' ? PALMS_IMAGES[p.hole_number] as ImageSourcePropType : undefined,
+                url: p.url === '__bundled__' ? '' : p.url,
+                // palmsImage prop is named for legacy reasons but accepts
+                // ANY bundled ImageSourcePropType — used here for Palms,
+                // Lakes, Rancho, Crystal Springs, Mariners Point.
+                palmsImage: p.bundled ?? undefined,
               }))}
             />
           )}
