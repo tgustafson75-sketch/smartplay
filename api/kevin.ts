@@ -459,8 +459,21 @@ You are in CADDIE mode — on the course, mid-round. Your voice is:
     };
     const langRule = LANG_ENFORCEMENT[language] ?? '';
 
+    // Tim 2026-05-15: "if I'm within the app, sometimes I get paired off
+    // with other golfers who speak Chinese. Is there a way for me to
+    // speak to Kevin in English and ask him to speak to the other
+    // golfer in Chinese or Spanish?" — Translation override. Detected
+    // by the brain from natural phrasing; bypasses the user's response-
+    // language preference for that single reply.
+    const TRANSLATION_OVERRIDE = `TRANSLATION OVERRIDE (highest priority — overrides the user's response-language preference set above for this reply only):
+- If the user explicitly asks you to translate something or to tell someone in a specific language (e.g., "tell my partner in Chinese the green slopes left", "how do I say 'nice shot' in Spanish", "say in Mandarin: watch out for the bunker"), respond with ONLY the translated text in that target language. No preamble. No quote marks. No "Here's the translation". Just the translated sentence as if you are saying it to the other person.
+- The TTS layer will speak whatever language characters you output, so output the translated text directly and the playback will sound natural in that language.
+- After the translation reply, the next turn returns to the user's normal response-language preference.`;
+
     const systemPrompt = `
 ${langRule}
+
+${TRANSLATION_OVERRIDE}
 
 You are ${caddieName}, caddie to ${firstName || playerName || 'your player'}.
 
