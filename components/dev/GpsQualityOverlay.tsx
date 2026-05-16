@@ -22,11 +22,26 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoundStore } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getGpsStats } from '../../services/gpsManager';
+import { useOffCourseStore } from '../../services/offCourseDetector';
+import { useMovementModeStore } from '../../services/movementModeDetector';
 
 export default function GpsQualityOverlay() {
   const insets = useSafeAreaInsets();
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const showDevOverlay = useSettingsStore(s => s.gpsQualityDebugOverlay ?? false);
+  // Phase 405 wave 3 — extended diagnostics. The overlay now also
+  // surfaces off-course state, movement mode, selected tee, and the
+  // current hole so Tim can verify the whole Phase 405 ecosystem is
+  // wired correctly during his Z Fold empirical pass. All reads are
+  // O(1) lookups against in-memory Zustand state; no GPS-side cost.
+  const offCourseInfo = useOffCourseStore(s => ({
+    isOff: s.isOffCourse,
+    yards: s.yardsToNearestHole,
+  }));
+  const movementMode = useMovementModeStore(s => s.mode);
+  const movementSpeed = useMovementModeStore(s => s.avg_speed_mps);
+  const selectedTee = useRoundStore(s => s.selectedTee);
+  const currentHole = useRoundStore(s => s.currentHole);
   const [tick, setTick] = useState(0);
 
   // Repaint every second while visible.
@@ -52,12 +67,29 @@ export default function GpsQualityOverlay() {
   // tick referenced so React keeps re-rendering on the interval.
   void tick;
 
+  // Phase 405 wave 3 — second line of diagnostic state. Renders below
+  // the GPS row so Tim sees the entire Phase 405 ecosystem at a glance.
+  const moveStr =
+    movementMode === 'unknown' ? '—' :
+    movementMode === 'cart' ? `cart (${movementSpeed.toFixed(1)} m/s)` :
+    movementMode === 'walking' ? `walk (${movementSpeed.toFixed(1)} m/s)` :
+    'still';
+  const offStr = offCourseInfo.isOff
+    ? `OFF ${offCourseInfo.yards ?? '?'}y`
+    : offCourseInfo.yards != null ? `~${offCourseInfo.yards}y` : 'on';
+  const teeStr = selectedTee === 'unspecified' ? '—' : selectedTee;
+
   return (
     <View style={[styles.wrap, { top: insets.top + 8 }]}>
       <View style={[styles.dot, { backgroundColor: color }]} />
-      <Text style={styles.text}>
-        {accStr}  ·  {stats.mode}  ·  {ageStr}  ·  out:{stats.outliersDiscarded}
-      </Text>
+      <View>
+        <Text style={styles.text}>
+          {accStr}  ·  {stats.mode}  ·  {ageStr}  ·  out:{stats.outliersDiscarded}
+        </Text>
+        <Text style={styles.textSub}>
+          H{currentHole}  ·  {moveStr}  ·  {offStr}  ·  tee:{teeStr}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -84,5 +116,12 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 10,
     fontWeight: '600',
+  },
+  // Phase 405 wave 3 — second diagnostic row.
+  textSub: {
+    color: '#9ca3af',
+    fontSize: 9,
+    fontWeight: '600',
+    marginTop: 1,
   },
 });
