@@ -29,12 +29,27 @@ import {
   type CaptureKind,
   type CaptureRequest,
 } from '../services/mediaCapture';
+import {
+  startImpactRecording,
+  stopAndDetectImpact,
+  abortImpactRecording,
+  cleanupImpactRecording,
+} from '../services/acousticImpactDetector';
 
+/**
+ * Maximum recording duration (ms) if no acoustic strike is detected.
+ * When the impact detector fires (strike heard), we stop POST_STRIKE_MS
+ * after the impact instead — saves clip size and centers analysis on
+ * the strike moment.
+ */
 const DURATION_BY_KIND: Record<CaptureKind, number> = {
   shot: 5_000,
   swing: 8_000,
   highlight: 5_000,
 };
+/** Trail after the strike before stopping. 1.5s captures follow-through
+ *  + ball flight start, then trims dead air at the end. */
+const POST_STRIKE_MS = 1500;
 
 interface ActiveCapture {
   id: string;
@@ -126,21 +141,67 @@ export default function CaptureOverlay() {
 
       try {
         recordingPromiseRef.current = cam.recordAsync() as Promise<{ uri: string } | undefined>;
-        // Schedule the stop after the configured duration.
-        stopTimerRef.current = setTimeout(() => {
-          try { cam.stopRecording(); } catch {}
-        }, DURATION_BY_KIND[active.kind]);
+        const maxDuration = DURATION_BY_KIND[active.kind];
+
+        // Schedule the FIXED-MAX stop. The real-time impact callback
+        // below will replace this with an earlier stop the moment a
+        // strike is detected.
+        const scheduleStop = (ms: number) => {
+          if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+          stopTimerRef.current = setTimeout(() => {
+            try { cam.stopRecording(); } catch {}
+          }, ms);
+        };
+        scheduleStop(maxDuration);
+
+        // Start the parallel acoustic recording. When the meter crosses
+        // the impact threshold, replace the max-duration timer with
+        // (now - recordingStart + POST_STRIKE_MS). Keeps clips short
+        // and centered on the strike. Fire-and-forget: if mic is denied
+        // or device busy, the fixed timer still runs.
+        const recStart = Date.now();
+        void startImpactRecording({
+          onImpactDetected: (offsetMs) => {
+            if (cancelled) return;
+            const elapsed = Date.now() - recStart;
+            const fromNowMs = Math.max(0, (offsetMs - elapsed) + POST_STRIKE_MS);
+            scheduleStop(fromNowMs);
+          },
+        }).catch(() => undefined);
 
         const result = await recordingPromiseRef.current;
         if (cancelled) return;
+
+        // Now stop the acoustic detector and read the final impact data.
+        // This is the SAME pass that powered the real-time callback;
+        // calling stopAndDetectImpact yields the precise peak + dB +
+        // confidence which we persist alongside the clip.
+        let acousticImpactMs: number | null = null;
+        let acousticConfidence: number | null = null;
+        try {
+          const reading = await stopAndDetectImpact();
+          if (reading) {
+            acousticImpactMs = reading.impact_ms;
+            acousticConfidence = reading.confidence;
+            // Discard the WAV — we don't ship CaptureOverlay clips to
+            // the acoustic server for ball-speed (different surface).
+            void cleanupImpactRecording(reading.audio_uri);
+          }
+        } catch { /* noop */ }
+
         if (result?.uri) {
-          commitCapture(active.id, result.uri);
+          commitCapture(active.id, result.uri, {
+            impact_ms: acousticImpactMs,
+            impact_confidence: acousticConfidence,
+          });
         } else {
           console.warn('[captureOverlay] recordAsync returned no uri');
         }
       } catch (e) {
         console.warn('[captureOverlay] recording failed:', e);
         if (!cancelled) setErrorMsg('Recording failed.');
+        // Make sure the parallel audio is torn down on the failure path.
+        void abortImpactRecording().catch(() => undefined);
       } finally {
         if (stopTimerRef.current) {
           clearTimeout(stopTimerRef.current);

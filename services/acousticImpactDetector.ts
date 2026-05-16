@@ -38,6 +38,14 @@ import { Audio } from 'expo-av';
 
 const METERING_INTERVAL_MS = 50;
 const MIN_IMPACT_DB = -30; // anything quieter doesn't count
+/**
+ * Real-time impact threshold for the onImpactDetected callback. Set
+ * looser than MIN_IMPACT_DB so a clear strike fires the callback even
+ * when the global-peak detection later picks something slightly
+ * louder. Callers use this to auto-stop video recording N seconds
+ * after the strike instead of running the full fixed window.
+ */
+const REALTIME_IMPACT_THRESHOLD_DB = -15;
 
 export interface ImpactReading {
   /** Offset in ms from the start of the parallel audio recording when
@@ -60,6 +68,10 @@ interface RunningRecorder {
   startedAt: number;
   meterSamples: { offset_ms: number; db: number }[];
   metersInterval: ReturnType<typeof setInterval> | null;
+  /** One-shot real-time impact callback. Fires the moment a meter
+   *  sample crosses REALTIME_IMPACT_THRESHOLD_DB so callers can
+   *  schedule an early stop. Reset to null after firing once. */
+  onImpactDetected: ((offset_ms: number) => void) | null;
 }
 
 let active: RunningRecorder | null = null;
@@ -73,7 +85,11 @@ let active: RunningRecorder | null = null;
  * this — the video record path already does that gate in cage-drill,
  * so we don't double-prompt here.
  */
-export async function startImpactRecording(): Promise<boolean> {
+export async function startImpactRecording(opts?: {
+  /** Fires once when the live meter crosses the impact threshold. Used
+   *  by callers that want to auto-stop video N seconds after a strike. */
+  onImpactDetected?: (offset_ms: number) => void;
+}): Promise<boolean> {
   if (active) return false;
   try {
     const perm = await Audio.getPermissionsAsync();
@@ -123,16 +139,26 @@ export async function startImpactRecording(): Promise<boolean> {
       startedAt,
       meterSamples: [],
       metersInterval: null,
+      onImpactDetected: opts?.onImpactDetected ?? null,
     };
 
     state.metersInterval = setInterval(async () => {
       try {
         const status = await recording.getStatusAsync();
         if (status.isRecording && typeof status.metering === 'number') {
+          const offset = Date.now() - startedAt;
           state.meterSamples.push({
-            offset_ms: Date.now() - startedAt,
+            offset_ms: offset,
             db: status.metering,
           });
+          // Real-time peak callback — fires ONCE when the meter first
+          // crosses the threshold. Callers schedule an early stop from
+          // here ("video keeps running N seconds after the strike").
+          if (state.onImpactDetected && status.metering >= REALTIME_IMPACT_THRESHOLD_DB) {
+            const cb = state.onImpactDetected;
+            state.onImpactDetected = null; // one-shot
+            try { cb(offset); } catch (e) { console.log('[acoustic] onImpactDetected callback threw', e); }
+          }
         }
       } catch {
         // Recording stopped between our setInterval tick and the

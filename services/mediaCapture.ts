@@ -45,6 +45,11 @@ export interface CapturedMedia {
   persona: string;
   isHighlight: boolean;
   raw_utterance?: string;
+  /** Acoustic-detector impact offset (ms from record start). Null when
+   *  no detectable strike (no acoustic detector wired, or too quiet). */
+  impact_ms?: number | null;
+  /** Acoustic detection confidence 0-1. */
+  impact_confidence?: number | null;
 }
 
 // Per-kind durations (seconds). Tunable per Phase 110 spec.
@@ -162,10 +167,19 @@ export async function requestCapture(req: CaptureRequest): Promise<CapturedMedia
  *     an active round (sets clip_uri + is_highlight on the most recent
  *     shot of the current hole so recap can render the clip with the shot).
  */
-export function commitCapture(id: string, uri: string): void {
+export function commitCapture(
+  id: string,
+  uri: string,
+  acoustic?: { impact_ms: number | null; impact_confidence: number | null },
+): void {
   const idx = recentCaptures.findIndex((c) => c.id === id);
   if (idx < 0) return;
-  recentCaptures[idx] = { ...recentCaptures[idx], uri };
+  recentCaptures[idx] = {
+    ...recentCaptures[idx],
+    uri,
+    impact_ms: acoustic?.impact_ms ?? recentCaptures[idx].impact_ms ?? null,
+    impact_confidence: acoustic?.impact_confidence ?? recentCaptures[idx].impact_confidence ?? null,
+  };
   const c = recentCaptures[idx];
 
   // Phase 110-followup — write all kinds to the swing library so they
