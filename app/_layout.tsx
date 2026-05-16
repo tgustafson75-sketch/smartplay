@@ -17,6 +17,7 @@ import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
 import { activateMediaSession, deactivateMediaSession } from '../services/mediaKeyBridge';
 import { startHoleDetection, stopHoleDetection, subscribeToHoleDetection } from '../services/holeDetection';
 import { startOffCourseDetector, stopOffCourseDetector } from '../services/offCourseDetector';
+import { startMovementModeDetector, stopMovementModeDetector } from '../services/movementModeDetector';
 import { subscribePoorSignal } from '../services/gpsManager';
 import { useToastStore } from '../store/toastStore';
 import { consumeDeferredPaywall } from '../services/paywallGuard';
@@ -347,19 +348,25 @@ function AppNavigator() {
       useToastStore.getState().show(`GPS weak (${acc}) — step into open sky or tap Mark.`);
     });
     let active = useRoundStore.getState().isRoundActive;
-    if (active) { startHoleDetection(); startOffCourseDetector(); }
+    if (active) {
+      startHoleDetection();
+      startOffCourseDetector();
+      // Phase 405 wave 3 — movement-mode detector starts with the
+      // others so the UI can show a cart/walking indicator from the
+      // first hole.
+      startMovementModeDetector();
+    }
     const unsubRound = useRoundStore.subscribe((s) => {
       if (s.isRoundActive === active) return;
       active = s.isRoundActive;
       if (active) {
         startHoleDetection();
-        // Phase 405 — off-course detector starts with hole detection so
-        // wandering off the property surfaces a visible badge instead
-        // of silently blanking yardages.
         startOffCourseDetector();
+        startMovementModeDetector();
       } else {
         stopHoleDetection();
         stopOffCourseDetector();
+        stopMovementModeDetector();
       }
     });
     return () => {
@@ -368,6 +375,7 @@ function AppNavigator() {
       unsubPoor();
       stopHoleDetection();
       stopOffCourseDetector();
+      stopMovementModeDetector();
     };
   }), []);
 

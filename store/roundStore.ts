@@ -28,6 +28,15 @@ export interface CourseHole {
 
 export type ShotLocation = { lat: number; lng: number };
 
+// Phase 405 wave 3 — tee box selection. Standard course colors; the
+// 'unspecified' default fires when the user starts a round without
+// touching the picker (most users until they discover the affordance).
+// Per-tee coordinate sets aren't wired into SmartFinder math yet — the
+// selection is recorded in the round record so recap + analysis can
+// show which tees the player used and future per-tee yardages can be
+// added without a schema change.
+export type TeeColor = 'unspecified' | 'gold' | 'blue' | 'white' | 'red';
+
 /**
  * Phase Q.5b Component 3 — single-source-of-truth green centroid lookup.
  * Reads courseGeometryService first (the authoritative paid-tier data
@@ -170,6 +179,12 @@ interface RoundState {
   // Phase R — memory photos captured during the active round.
   currentRoundPhotos: RoundPhoto[];
 
+  // Phase 405 wave 3 — tee box color selected by the player for this
+  // round. Standard set covers most courses; 'unspecified' is the
+  // default until a UI surface forces a choice. The recap layer
+  // shows the played tee so the user's score is contextual.
+  selectedTee: TeeColor;
+
   roundStartTime: number | null;
   roundNumber: number;
   roundHistory: RoundRecord[];
@@ -197,8 +212,14 @@ interface RoundState {
       goal: string | null;
       courseId?: string | null;
       mode?: RoundMode;
+      // Phase 405 wave 3 — tee box selection. Persisted on the round
+      // record so recap shows which tees were played; informational
+      // today (per-tee coordinates aren't wired into SmartFinder math
+      // yet). Defaults to 'white' when omitted.
+      selectedTee?: TeeColor;
     },
   ) => void;
+  setSelectedTee: (color: TeeColor) => void;
   setActiveCourseId: (id: string | null) => void;
   setCurrentRoundMode: (mode: RoundMode) => void;
   addOrUpdatePlan: (partial: {
@@ -312,6 +333,10 @@ export const useRoundStore = create<RoundState>()(
       // Phase BJ
       emotionalLog: [],
       active_ghost: null,
+      // Phase 405 wave 3 — tee box selection. 'unspecified' until user picks.
+      selectedTee: 'unspecified',
+
+      setSelectedTee: (color) => set({ selectedTee: color }),
 
       startRound: (course, holes, options) => {
         const courseId = options.courseId ?? null;
@@ -333,6 +358,10 @@ export const useRoundStore = create<RoundState>()(
           isCompetition: options.isCompetition,
           roundNotes: options.notes,
           goal: options.goal,
+          // Phase 405 wave 3 — honor explicit tee from options, else keep
+          // the prior selection (if user picked one on the Play tab),
+          // else 'unspecified' for back-compat with callers predating wave 3.
+          selectedTee: options.selectedTee ?? prev.selectedTee ?? 'unspecified',
           currentHole: 1,
           currentYardage: holes[0]?.distance ?? null,
           scores: {},
@@ -366,6 +395,38 @@ export const useRoundStore = create<RoundState>()(
             }
           })();
         }
+        // Phase 405 wave 3 — round-start orchestration. The audit
+        // documented that GPS-dependent services were started from
+        // scattered call sites (caddie.tsx focusEffect,
+        // shotDetectionService.start indirectly via _layout.tsx,
+        // gpsManager via recalibrate). A user could tap Start Round
+        // without ever navigating to the Caddie tab and miss GPS
+        // entirely. Now: startRound is the single orchestrator that
+        // ensures permission + GPS + shot detection are running before
+        // the user does anything else.
+        //
+        // hole detection + off-course detector + poor-signal subscription
+        // already auto-start from app/_layout.tsx via the existing
+        // isRoundActive subscription (since Phase 405 wave 1) so they
+        // ride along automatically with the isRoundActive=true set
+        // above.
+        void (async () => {
+          try {
+            const Location = await import('expo-location');
+            const perm = await Location.requestForegroundPermissionsAsync();
+            if (!perm.granted) {
+              console.log('[roundStore] foreground location permission denied at round start — GPS features will be degraded');
+              return;
+            }
+            const { startGpsManager } = await import('../services/gpsManager');
+            await startGpsManager();
+            const { shotDetectionService } = await import('../services/shotDetectionService');
+            await shotDetectionService.start();
+            console.log('[audit:round-active] GPS + shot detection orchestrated start complete');
+          } catch (e) {
+            console.log('[roundStore] round-start orchestration failed (non-fatal):', e);
+          }
+        })();
       },
 
       setActiveCourseId: (id) => set({ activeCourseId: id }),
@@ -460,6 +521,22 @@ export const useRoundStore = create<RoundState>()(
         const holesPlayed = Object.keys(s.scores).length;
         console.log(`[path2:round] end totalScore=${total} holesPlayed=${holesPlayed}`);
         console.log(`[audit:round-active] state=false holesPlayed=${holesPlayed} totalScore=${total}`);
+
+        // Phase 405 wave 3 — round-end teardown guarantee. Symmetric to
+        // the orchestrated start: shotDetectionService.stop drops GPS
+        // via stopGpsManager. hole-detection + off-course detector are
+        // torn down by the _layout.tsx isRoundActive subscription.
+        // Fire-and-forget on its own microtask so this set() returns
+        // synchronously.
+        void (async () => {
+          try {
+            const { shotDetectionService } = await import('../services/shotDetectionService');
+            shotDetectionService.stop();
+            console.log('[audit:round-active] GPS + shot detection orchestrated stop complete');
+          } catch (e) {
+            console.log('[roundStore] round-end orchestration failed (non-fatal):', e);
+          }
+        })();
 
         // PGA HOPE follow-up — auto-clear Tank's soft-intro after the player
         // has completed at least one full round (>=9 holes) with Tank as

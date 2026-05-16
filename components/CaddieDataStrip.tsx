@@ -10,6 +10,7 @@ import {
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useOffCourseStore } from '../services/offCourseDetector';
+import { useMovementModeStore } from '../services/movementModeDetector';
 
 export interface CaddieDataStripProps {
   yardage: number | null;
@@ -48,6 +49,11 @@ export default function CaddieDataStrip({
   // live-vs-static.
   const isOffCourse = useOffCourseStore(s => s.isOffCourse);
   const yardsToNearestHole = useOffCourseStore(s => s.yardsToNearestHole);
+  // Phase 405 wave 3 — movement mode pill (cart vs walking). Renders
+  // a small icon-chip next to the source pill so the user can see the
+  // app is reading their movement correctly. Hidden when 'unknown'
+  // (round not active or no fixes yet) so it doesn't add noise.
+  const movementMode = useMovementModeStore(s => s.mode);
   const mountedOpacity = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const [isMounted, setIsMounted] = useState(visible);
   const pressScale = useRef(new Animated.Value(1)).current;
@@ -312,6 +318,15 @@ export default function CaddieDataStrip({
             </Text>
           </View>
         )}
+        {(movementMode === 'cart' || movementMode === 'walking') && (
+          <View style={styles.movementPill}>
+            <Ionicons
+              name={movementMode === 'cart' ? 'car-outline' : 'walk-outline'}
+              size={10}
+              color="#9ca3af"
+            />
+          </View>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -461,5 +476,19 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '800',
     letterSpacing: 0.8,
+  },
+  // Phase 405 wave 3 — movement-mode pill (icon-only, beside the
+  // off-course pill in the top-right). Subtle gray so it reads as a
+  // status hint, not an alert.
+  movementPill: {
+    position: 'absolute',
+    top: 4,
+    right: 78,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(156,163,175,0.45)',
+    backgroundColor: 'rgba(156,163,175,0.10)',
   },
 });

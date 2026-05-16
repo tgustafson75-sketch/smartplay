@@ -14,10 +14,12 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "SmartPlay Caddie uses the microphone to listen for your voice commands.",
         "NSCameraUsageDescription": "SmartPlay Caddie uses the camera to record and analyze your swing in the practice cage.",
-        "NSLocationWhenInUseUsageDescription": "SmartPlay Caddie uses your location to find nearby golf courses.",
+        "NSLocationWhenInUseUsageDescription": "SmartPlay Caddie uses your location to find nearby golf courses and track your round.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "SmartPlay Caddie tracks your round in the background so hole transitions, shot tracking, and yardages keep working when your phone is in your pocket.",
         "NSPhotoLibraryUsageDescription": "SmartPlay Caddie saves your hero moments to your photo library.",
         "UIBackgroundModes": [
-          "audio"
+          "audio",
+          "location"
         ]
       }
     },
@@ -36,6 +38,7 @@
         "android.permission.CAMERA",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.VIBRATE",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
@@ -51,6 +54,14 @@
       "expo-router",
       "expo-screen-orientation",
       "expo-camera",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "SmartPlay Caddie tracks your round in the background so hole transitions, shot tracking, and yardages keep working when your phone is in your pocket.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
       [
         "expo-splash-screen",
         {

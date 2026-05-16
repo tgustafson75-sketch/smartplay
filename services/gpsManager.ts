@@ -352,6 +352,13 @@ export async function startGpsManager(): Promise<void> {
     });
   }
   breadcrumb('manager_start');
+  // Phase 405 wave 3 — TODO: wire Location.startLocationUpdatesAsync
+  // with foregroundService config + a TaskManager.defineTask handler so
+  // GPS keeps running when the OS suspends the app (phone-in-pocket).
+  // Native config (manifest + plugin) is in place after this commit;
+  // requires `expo-task-manager` npm dep + a defineTask module imported
+  // at app boot before this call site can be exercised. Schedule a
+  // dedicated commit + EAS build to land the full background-GPS path.
 }
 
 /** Called by round-end. Drops the underlying subscription. */

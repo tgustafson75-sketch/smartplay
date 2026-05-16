@@ -162,6 +162,11 @@ export default function PlayTab() {
   const [setupCompetition, setSetupCompetition] = useState(false);
   const [setupMental, setSetupMental] = useState<'fresh' | 'neutral' | 'tense'>('neutral');
   const [setupNotes, setSetupNotes] = useState('');
+  // Phase 405 wave 3 — tee box color selection. 'unspecified' until the
+  // user picks. Survives the Play tab lifetime so navigating away and
+  // back doesn't lose the selection.
+  const setupTee = useRoundStore(s => s.selectedTee);
+  const setSetupTee = useRoundStore(s => s.setSelectedTee);
 
   const [searchKind, setSearchKind] = useState<SearchKind>('courses');
   const [query, setQuery] = useState('');
@@ -778,6 +783,46 @@ export default function PlayTab() {
               >
                 <Text style={[styles.chipText, setupCompetition && styles.chipTextActive]}>Competition</Text>
               </TouchableOpacity>
+            </View>
+
+            {/* Phase 405 wave 3 — tee box selection. Standard 4 colors.
+                Stored on roundStore.selectedTee + persisted onto the
+                round record via startRound. Informational for v1.1
+                (per-tee coordinates aren't wired into SmartFinder
+                math yet); shows up in recap so the score is contextual. */}
+            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>TEE BOX</Text>
+            <View style={styles.factorRow}>
+              {(['gold', 'blue', 'white', 'red'] as const).map(color => {
+                const active = setupTee === color;
+                const tint =
+                  color === 'gold'  ? '#F5A623' :
+                  color === 'blue'  ? '#3b82f6' :
+                  color === 'white' ? '#e5e7eb' :
+                                      '#ef4444';
+                return (
+                  <TouchableOpacity
+                    key={color}
+                    style={[
+                      styles.chip,
+                      active && { borderColor: tint, backgroundColor: `${tint}22` },
+                    ]}
+                    onPress={() => setSetupTee(active ? 'unspecified' : color)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select ${color} tees`}
+                  >
+                    <View style={{
+                      width: 10, height: 10, borderRadius: 5,
+                      backgroundColor: tint, marginRight: 6,
+                    }} />
+                    <Text style={[
+                      styles.chipText,
+                      active && { color: tint, fontWeight: '800' },
+                    ]}>
+                      {color.charAt(0).toUpperCase() + color.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
             <Text style={[styles.sectionLabel, { marginTop: 18 }]}>NOTES (optional)</Text>
