@@ -142,9 +142,14 @@ function extractHazardsFromRawHole(raw: RawHole): string[] {
   return [...new Set(hazardStrings)];
 }
 
-function normalizeHole(raw: RawHole): Hole {
+function normalizeHole(raw: RawHole, indexFallback: number): Hole {
   return {
-    hole_number: raw.hole_number ?? raw.number ?? 0,
+    // Phase 405 — when the upstream omits hole_number / number (some
+    // golfcourseapi entries do this for older or partially-populated
+    // courses), fall back to the array index + 1 instead of 0. The
+    // previous `?? 0` collapsed every hole to "0" in the Hole Guide
+    // table on those courses.
+    hole_number: raw.hole_number ?? raw.number ?? (indexFallback + 1),
     par: raw.par ?? 4,
     yardage: raw.yardage ?? raw.yards ?? 0,
     handicap: raw.handicap ?? raw.handicap_index ?? null,
@@ -161,7 +166,7 @@ function normalizeTee(raw: RawTee): TeeBox {
     course_rating: raw.course_rating ?? raw.rating ?? null,
     slope_rating: raw.slope_rating ?? raw.slope ?? null,
     par_total: raw.par_total ?? raw.par ?? 72,
-    holes: holes.map(normalizeHole),
+    holes: holes.map((h, i) => normalizeHole(h, i)),
   };
 }
 

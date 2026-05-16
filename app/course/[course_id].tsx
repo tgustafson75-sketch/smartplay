@@ -74,6 +74,11 @@ export default function CourseDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(true);
   const [geometryReady, setGeometryReady] = useState(false);
+  // Phase 405 — hero image error fallback. Previously a broken Mapbox
+  // tile or a CDN white-fill would render as an enormous blank area
+  // because <Image source={{uri: ...}} /> doesn't expose its load
+  // status. Catch the error and swap to the placeholder.
+  const [heroFailed, setHeroFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -342,17 +347,31 @@ export default function CourseDetailScreen() {
           <Text style={styles.backText}>‹ Courses</Text>
         </TouchableOpacity>
 
-        {/* Hero */}
+        {/* Hero — Phase 405 cleanup. (a) maxHeight caps the aspect-ratio
+            growth on Fold-open / tablet widths so it doesn't dominate
+            the visible area. (b) onError swaps to the dark placeholder
+            when Mapbox returns a broken / blank tile (previously the
+            user saw a giant white field). (c) heroTint sits between
+            the image and the title overlay so bright satellite tiles
+            don't blow out the text legibility at the bottom. */}
         <View style={styles.heroWrap}>
-          {heroSource ? (
-            <Image source={heroSource} style={styles.heroImage} resizeMode="cover" />
+          {heroSource && !heroFailed ? (
+            <Image
+              source={heroSource}
+              style={styles.heroImage}
+              resizeMode="cover"
+              onError={() => setHeroFailed(true)}
+            />
           ) : (
             <View style={[styles.heroImage, styles.heroPlaceholder]}>
               {!geometryReady ? <ActivityIndicator color="#00C896" /> : (
-                <Text style={styles.heroPlaceholderText}>Aerial unavailable for this course</Text>
+                <Text style={styles.heroPlaceholderText}>
+                  {heroFailed ? 'Aerial image unavailable — Mapbox returned a blank tile.' : 'Aerial unavailable for this course'}
+                </Text>
               )}
             </View>
           )}
+          <View style={styles.heroTint} pointerEvents="none" />
           <View style={styles.heroOverlay}>
             <Text style={styles.heroTitle} numberOfLines={2}>{displayClubName || course.club_name}</Text>
             <View style={styles.heroLocRow}>
@@ -503,9 +522,22 @@ const styles = StyleSheet.create({
   backText: { color: '#00C896', fontSize: 14, fontWeight: '700' },
 
   heroWrap: { width: '100%', position: 'relative' },
-  heroImage: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#0d1a0d' },
-  heroPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  heroPlaceholderText: { color: '#6b7280', fontSize: 13 },
+  // Phase 405 — banner-style hero. maxHeight 320 keeps the hero from
+  // consuming half the visible area on Fold-open / tablet widths (the
+  // 16:9 aspect at 1768 logical width was ~995 px tall, the source of
+  // the "giant white area" complaint). Standard phones still get a
+  // proper hero via aspectRatio.
+  heroImage: { width: '100%', aspectRatio: 16 / 9, maxHeight: 320, backgroundColor: '#0d1a0d' },
+  heroPlaceholder: { alignItems: 'center', justifyContent: 'center', padding: 20 },
+  heroPlaceholderText: { color: '#6b7280', fontSize: 13, textAlign: 'center' },
+  // Phase 405 — gradient-ish dark tint at the bottom of the hero so
+  // the course-name overlay stays legible regardless of how bright the
+  // satellite tile happens to be. pointerEvents=none lets taps pass
+  // through to anything below (currently nothing — defensive only).
+  heroTint: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, height: 120,
+    backgroundColor: 'rgba(6,15,9,0.55)',
+  },
   heroOverlay: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
     paddingHorizontal: 16, paddingTop: 30, paddingBottom: 12,
