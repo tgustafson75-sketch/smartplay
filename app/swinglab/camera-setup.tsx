@@ -43,6 +43,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCageCalibrationStore } from '../../store/cageCalibrationStore';
 
 type CameraAngle = 'face-on' | 'down-the-line';
 
@@ -65,9 +66,22 @@ export default function CameraSetup() {
   const { next } = useLocalSearchParams<{ next?: string }>();
   const { colors } = useTheme();
 
+  // Auto-detected cage distance from the server-side acoustic detector
+  // (lands after the user's first swing in cage-drill). Surfaced here
+  // so the user knows the cage has been calibrated AND can override if
+  // the auto reading looks wrong.
+  const lastDetectedYards = useCageCalibrationStore(s => s.lastDetectedYards);
+  const userOverrideYards = useCageCalibrationStore(s => s.userOverrideYards);
+  const setManualOverride = useCageCalibrationStore(s => s.setManualOverride);
+
   const [angle, setAngle] = useState<CameraAngle>('face-on');
   // Distance in feet — 8 ft default per v3 guidance (6-8 face-on, 8-10 dtl).
-  const [distanceFt, setDistanceFt] = useState<string>('8');
+  // Prefer the persisted calibration when available (manual override wins
+  // over auto-detected). Convert yards → feet for the existing input.
+  const persistedYards = userOverrideYards ?? lastDetectedYards;
+  const [distanceFt, setDistanceFt] = useState<string>(
+    persistedYards != null ? String(Math.round(persistedYards * 3)) : '8',
+  );
   // Checklist state — keyed by item.key so we can flip individually.
   // distance auto-checks when user types a valid number.
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -183,27 +197,51 @@ export default function CameraSetup() {
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{item.label}</Text>
                       {isDistance ? (
-                        <View style={styles.distanceRow}>
-                          <TextInput
-                            value={distanceFt}
-                            onChangeText={setDistanceFt}
-                            keyboardType="number-pad"
-                            maxLength={3}
-                            accessibilityLabel="Camera distance in feet"
-                            style={[
-                              styles.distanceInput,
-                              {
-                                borderColor: colors.border,
-                                backgroundColor: colors.background,
-                                color: colors.accent,
-                              },
-                            ]}
-                          />
-                          <Text style={[styles.distanceUnit, { color: colors.text_muted }]}>ft</Text>
-                          <Text style={[styles.rowSub, { color: colors.text_muted }]} numberOfLines={2}>
-                            {' · ' + distanceHint}
-                          </Text>
-                        </View>
+                        <>
+                          <View style={styles.distanceRow}>
+                            <TextInput
+                              value={distanceFt}
+                              onChangeText={(v) => {
+                                setDistanceFt(v);
+                                // Persist the user's manual override
+                                // (yards) whenever they edit feet to a
+                                // valid positive value. Clears on empty
+                                // so the auto-detected value can win again.
+                                const n = parseInt(v, 10);
+                                if (Number.isFinite(n) && n > 0) {
+                                  setManualOverride(Math.round((n / 3) * 10) / 10);
+                                } else if (v === '') {
+                                  setManualOverride(null);
+                                }
+                              }}
+                              keyboardType="number-pad"
+                              maxLength={3}
+                              accessibilityLabel="Camera distance in feet"
+                              style={[
+                                styles.distanceInput,
+                                {
+                                  borderColor: colors.border,
+                                  backgroundColor: colors.background,
+                                  color: colors.accent,
+                                },
+                              ]}
+                            />
+                            <Text style={[styles.distanceUnit, { color: colors.text_muted }]}>ft</Text>
+                            <Text style={[styles.rowSub, { color: colors.text_muted }]} numberOfLines={2}>
+                              {' · ' + distanceHint}
+                            </Text>
+                          </View>
+                          {/* Auto-detected hint — shown when the server
+                              acoustic detector has measured the cage on
+                              a recent swing. User can ignore (already
+                              applied as default above) or override. */}
+                          {lastDetectedYards != null && (
+                            <Text style={[styles.rowSub, { color: colors.accent, marginTop: 6 }]}>
+                              Auto-detected from echo: {lastDetectedYards} yd (~{Math.round(lastDetectedYards * 3)} ft)
+                              {userOverrideYards != null ? ' · using your override' : ''}
+                            </Text>
+                          )}
+                        </>
                       ) : (
                         <Text style={[styles.rowSub, { color: colors.text_muted }]} numberOfLines={2}>
                           {item.sub}

@@ -56,6 +56,7 @@ import {
   type ImpactReading,
 } from '../../services/acousticImpactDetector';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
+import { useCageCalibrationStore } from '../../store/cageCalibrationStore';
 
 type Phase =
   | 'SETUP'
@@ -315,7 +316,12 @@ export default function CageDrillScreen() {
             audioUri: reading.audio_uri,
             impact_ms: reading.impact_ms,
           });
-          if (speed) setBallSpeed(speed);
+          if (speed) {
+            setBallSpeed(speed);
+            // Persist the server-derived cage distance so camera-setup
+            // can surface it (and the user can override if it's off).
+            useCageCalibrationStore.getState().setAutoDetected(speed.cage_distance_yards);
+          }
           void cleanupImpactRecording(reading.audio_uri);
         }
       })
