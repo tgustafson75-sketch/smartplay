@@ -86,8 +86,33 @@ export async function startImpactRecording(): Promise<boolean> {
     });
 
     const recording = new Audio.Recording();
+    // Force WAV (linear PCM) on both platforms so the server can decode
+    // the file in pure JS without ffmpeg. 22050 Hz mono int16 is plenty
+    // for peak-pair detection (we don't need music-grade fidelity) and
+    // keeps a 12s clip around 530 KB before base64.
     await recording.prepareToRecordAsync({
-      ...Audio.RecordingOptionsPresets.LOW_QUALITY,
+      android: {
+        extension: '.wav',
+        outputFormat: Audio.AndroidOutputFormat.DEFAULT,
+        audioEncoder: Audio.AndroidAudioEncoder.DEFAULT,
+        sampleRate: 22050,
+        numberOfChannels: 1,
+        bitRate: 128000,
+      },
+      ios: {
+        extension: '.wav',
+        audioQuality: Audio.IOSAudioQuality.HIGH,
+        sampleRate: 22050,
+        numberOfChannels: 1,
+        bitRate: 128000,
+        linearPCMBitDepth: 16,
+        linearPCMIsBigEndian: false,
+        linearPCMIsFloat: false,
+      },
+      web: {
+        mimeType: 'audio/wav',
+        bitsPerSecond: 128000,
+      },
       isMeteringEnabled: true,
     });
     await recording.startAsync();

@@ -13,20 +13,32 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
 export interface BallSpeedResult {
-  speed_mph: number;
+  /** Server-confirmed impact timestamp (independent of client metering). */
   impact_ms: number;
+  /** Cage-wall echo timestamp. */
   echo_ms: number;
+  /** Echo delay = echo_ms - impact_ms. */
   delta_ms: number;
+  /** Cage distance derived from echo delay — real measurement. */
+  cage_distance_yards: number;
+  /** Ball-speed estimate (heuristic: club-typical × peak-amplitude
+   *  factor). True ball speed needs 2 mics / radar / doppler. */
+  ball_speed_mph: number;
+  /** Detection confidence 0-1. */
   confidence: number;
-  source: 'mock_scaffold' | 'acoustic_real';
+  /** Peak loudness at impact, dBFS. */
+  peak_db: number;
+  source: 'acoustic_real';
 }
 
 const apiUrl = (): string => process.env.EXPO_PUBLIC_API_URL ?? '';
 
 export async function detectBallSpeed(args: {
   audioUri: string;
-  distance_yards: number;
   impact_ms: number | null;
+  /** Optional — server uses this for the ball-speed heuristic
+   *  (club-typical × peak-amplitude factor). Defaults to '7I'. */
+  club?: string;
 }): Promise<BallSpeedResult | null> {
   try {
     const base = apiUrl();
@@ -42,13 +54,13 @@ export async function detectBallSpeed(args: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         audioBase64,
-        distance_yards: args.distance_yards,
         impact_ms: args.impact_ms ?? null,
+        club: args.club ?? '7I',
       }),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as Partial<BallSpeedResult>;
-    if (typeof data.speed_mph !== 'number') return null;
+    if (typeof data.ball_speed_mph !== 'number') return null;
     return data as BallSpeedResult;
   } catch (e) {
     console.log('[acoustic-detect] failed:', e);

@@ -123,12 +123,9 @@ export default function CageDrillScreen() {
   const recordingStartedAtRef = useRef<number | null>(null);
   // Acoustic impact detector result for this capture.
   const [impactReading, setImpactReading] = useState<ImpactReading | null>(null);
-  // Server-detected ball speed (lands asynchronously after analyze).
+  // Server-detected acoustic result (cage distance + ball-speed estimate).
+  // Lands asynchronously after the on-device impact detector returns.
   const [ballSpeed, setBallSpeed] = useState<BallSpeedResult | null>(null);
-  // Cage distance (yards) — for now, default 8 ft = 2.67 yards which is
-  // the camera-setup default. TODO next session: pipe through the
-  // calibrated distance from cageOverlayCalibrationStore or settings.
-  const cageDistanceYards = 4;
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -316,7 +313,6 @@ export default function CageDrillScreen() {
         if (reading.audio_uri) {
           const speed = await detectBallSpeed({
             audioUri: reading.audio_uri,
-            distance_yards: cageDistanceYards,
             impact_ms: reading.impact_ms,
           });
           if (speed) setBallSpeed(speed);
@@ -692,10 +688,15 @@ export default function CageDrillScreen() {
                   Strike at <Text style={styles.impactBold}>{(impactReading.impact_ms / 1000).toFixed(2)}s</Text> · peak {impactReading.peak_db.toFixed(1)} dB
                 </Text>
                 {ballSpeed ? (
-                  <Text style={[styles.impactBody, { marginTop: 6 }]}>
-                    Ball speed <Text style={styles.impactBold}>{ballSpeed.speed_mph} mph</Text>
-                    {ballSpeed.source === 'mock_scaffold' ? ' · (scaffold — real DSP next session)' : ''}
-                  </Text>
+                  <>
+                    <Text style={[styles.impactBody, { marginTop: 6 }]}>
+                      Cage <Text style={styles.impactBold}>{ballSpeed.cage_distance_yards} yd</Text> · echo {ballSpeed.delta_ms} ms
+                    </Text>
+                    <Text style={[styles.impactBody, { marginTop: 4 }]}>
+                      Ball speed <Text style={styles.impactBold}>~{ballSpeed.ball_speed_mph} mph</Text>
+                      <Text style={styles.impactNote}> · estimate (single-mic, club-typical × peak)</Text>
+                    </Text>
+                  </>
                 ) : null}
               </View>
             )}
@@ -994,6 +995,7 @@ const styles = StyleSheet.create({
   },
   impactBody: { color: '#e8f5e9', fontSize: 13, lineHeight: 18 },
   impactBold: { color: '#F5A623', fontWeight: '800' },
+  impactNote: { color: '#6b7280', fontSize: 11 },
 
   detailsToggle: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
