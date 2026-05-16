@@ -50,10 +50,6 @@ import CaptureOverlay from '../components/CaptureOverlay';
 import CaptionStrip from '../components/CaptionStrip';
 import { GlobalToolsMenu } from '../components/tools/GlobalToolsMenu';
 import { GlobalToast } from '../components/toast/GlobalToast';
-// Phase 410B — Google + Supabase auth boot wiring.
-import { configureGoogleSignIn } from '../lib/googleAuth';
-import { useAuthStore } from '../store/authStore';
-import { hydrateProfileFromServer, clearProfileSync } from '../services/profileSync';
 
 // Phase Y — whenRoundStoreHydrated lives in store/roundStore.ts (was
 // inlined here originally; audit moved it to remove a brittle
@@ -119,29 +115,6 @@ function AppNavigator() {
         setSubscriptionStatus('expired');
       }
     }
-  }, []);
-
-  // Phase 410B — Auth boot: configure Google + hydrate Supabase session
-  // once, at app boot. The store flips `hydrated` true even when env
-  // vars are missing so the routing gate doesn't hang.
-  useEffect(() => {
-    configureGoogleSignIn();
-    void useAuthStore.getState().init();
-  }, []);
-
-  // Phase 410B — Profile sync lifecycle. Subscribe to authStore.user and:
-  //   - SIGNED_IN: hydrate the user's profile row + wire push-on-edit
-  //   - SIGNED_OUT: tear down sync subscriptions
-  // Wrapped in try/catch at the service level so any Supabase error is
-  // logged-not-thrown.
-  useEffect(() => {
-    return useAuthStore.subscribe((curr, prev) => {
-      if (curr.user && curr.user.id !== prev.user?.id) {
-        void hydrateProfileFromServer(curr.user.id);
-      } else if (!curr.user && prev.user) {
-        clearProfileSync();
-      }
-    });
   }, []);
 
   // Pre-beta — boot battery discipline lifecycles. Both are idempotent.
