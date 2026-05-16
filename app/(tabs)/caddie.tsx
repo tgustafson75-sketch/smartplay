@@ -68,6 +68,7 @@ import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
 import { useTrustLevelStore, TRUST_LEVEL_META, TRUST_LEVEL_SLIDER_ORDER, type TrustLevel } from '../../store/trustLevelStore';
 import { useToastStore } from '../../store/toastStore';
+import { useToolsMenuStore } from '../../store/toolsMenuStore';
 // Phase U2 — KevinAvatar import removed. The L1 SmartPlay-badge mic-trigger
 // it used to wrap was deleted in Phase AU; the import sat as orphan dead
 // code with no JSX consumer. The component file itself is preserved for
@@ -1904,7 +1905,12 @@ export default function CaddieTab() {
               this corner pill remains the canonical anchor. */}
           <TouchableOpacity
             style={styles.navBtn}
-            onPress={() => setShowMoreMenu(true)}
+            // 2026-05-15 — universal Tools menu. Opens the same
+            // sectioned GlobalToolsMenu the ••• pill on every other tab
+            // uses. The local showMoreMenu modal below stays mounted
+            // for now but no longer opens (zero-risk migration; will
+            // be removed in a follow-up once we've tested the global).
+            onPress={() => useToolsMenuStore.getState().open()}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             <Ionicons name="ellipsis-horizontal" size={24} color="#6b7d72" />
