@@ -377,6 +377,13 @@ export const useRoundStore = create<RoundState>()(
         });
         console.log(`[path2:round] start course=${course} holes=${holes.length} courseId=${courseId ?? 'none'}`);
         console.log(`[audit:round-active] state=true roundId=${roundId} hole=1 course="${course}"`);
+        // Phase 405 wave 3 — visible round-start confirmation. Dynamic
+        // require avoids a circular dep when toastStore re-imports
+        // anything that touches roundStore.
+        try {
+          const toast = require('./toastStore');
+          toast.useToastStore.getState().show(`Round started · ${course}`);
+        } catch { /* non-fatal */ }
         // Phase 405 — geometry pre-warm. Fire-and-forget so the round
         // can start immediately, but the cache populates in the
         // background so SmartFinder doesn't cold-start when the user
@@ -521,6 +528,11 @@ export const useRoundStore = create<RoundState>()(
         const holesPlayed = Object.keys(s.scores).length;
         console.log(`[path2:round] end totalScore=${total} holesPlayed=${holesPlayed}`);
         console.log(`[audit:round-active] state=false holesPlayed=${holesPlayed} totalScore=${total}`);
+        // Phase 405 wave 3 — visible round-end confirmation.
+        try {
+          const toast = require('./toastStore');
+          toast.useToastStore.getState().show(`Round ended · ${holesPlayed} hole${holesPlayed === 1 ? '' : 's'} · ${total}`);
+        } catch { /* non-fatal */ }
 
         // Phase 405 wave 3 — round-end teardown guarantee. Symmetric to
         // the orchestrated start: shotDetectionService.stop drops GPS
