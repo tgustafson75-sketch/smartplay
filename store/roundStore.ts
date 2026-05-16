@@ -425,6 +425,20 @@ export const useRoundStore = create<RoundState>()(
               console.log('[roundStore] foreground location permission denied at round start — GPS features will be degraded');
               return;
             }
+            // Phase 405 wave 4 — also request background-location
+            // permission so phone-in-pocket play keeps GPS active. On
+            // both platforms this is a second, separate prompt that
+            // appears only after foreground is granted. Denial is
+            // non-fatal — foreground-service notification on Android
+            // still keeps the subsystem warm; iOS just won't track
+            // when truly backgrounded. The honest UX (the OS shows a
+            // clear "Allow all the time?" choice) lands with the
+            // next build that carries NSLocationAlwaysAndWhenInUseUsageDescription.
+            try {
+              await Location.requestBackgroundPermissionsAsync();
+            } catch (e) {
+              console.log('[roundStore] background permission request skipped:', e);
+            }
             const { startGpsManager } = await import('../services/gpsManager');
             await startGpsManager();
             const { shotDetectionService } = await import('../services/shotDetectionService');

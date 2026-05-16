@@ -115,6 +115,72 @@ function haversineMeters(a: GpsFix, b: { lat: number; lng: number }): number {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
+/**
+ * Phase 405 wave 4 — shared fix-processing path. Runs the outlier
+ * rejection + rolling smoothing + motion-tracking + subscriber-fanout
+ * for any incoming fix, whether sourced from watchPositionAsync (the
+ * foreground primary), Location.startLocationUpdatesAsync via
+ * TaskManager (the background keepalive), or a future test harness.
+ *
+ * Returns true when the fix was accepted (not rejected as an outlier).
+ */
+function processFix(raw: GpsFix): boolean {
+  // (1) Discard if reported accuracy is worse than threshold.
+  if (raw.accuracy_m != null && raw.accuracy_m > OUTLIER_ACCURACY_M) {
+    outliersDiscarded++;
+    console.log(`[gps:outlier-rejected] accuracy_m=${raw.accuracy_m.toFixed(1)} (>${OUTLIER_ACCURACY_M})`);
+    return false;
+  }
+  // (2) Discard if position jumps > 50m within 5s of the last accepted fix.
+  if (lastFix && (raw.timestamp - lastFix.timestamp) < OUTLIER_JUMP_WINDOW_MS) {
+    const jump = haversineMeters(lastFix, raw);
+    if (jump > OUTLIER_JUMP_M) {
+      outliersDiscarded++;
+      console.log(`[gps:outlier-rejected] jump_m=${jump.toFixed(1)} dt_ms=${raw.timestamp - lastFix.timestamp}`);
+      return false;
+    }
+  }
+  // Rolling smoothing.
+  smoothingBuffer.push(raw);
+  if (smoothingBuffer.length > SMOOTHING_WINDOW) smoothingBuffer.shift();
+  const avgLat = smoothingBuffer.reduce((s, f) => s + f.lat, 0) / smoothingBuffer.length;
+  const avgLng = smoothingBuffer.reduce((s, f) => s + f.lng, 0) / smoothingBuffer.length;
+  const fix: GpsFix = {
+    lat: avgLat,
+    lng: avgLng,
+    accuracy_m: raw.accuracy_m,
+    speed: raw.speed,
+    timestamp: raw.timestamp,
+  };
+  // Motion tracking — stationary -> walking on real motion.
+  if (lastFix) {
+    const moved = haversineMeters(lastFix, fix);
+    if (moved >= STATIONARY_DELTA) {
+      lastMotionAt = Date.now();
+      if (mode === 'stationary') setMode('walking', 'motion_resumed');
+    }
+  } else {
+    lastMotionAt = Date.now();
+  }
+  lastFix = fix;
+  lastTickAt = Date.now();
+  for (const cb of subscribers) {
+    try { cb(fix); } catch {}
+  }
+  return true;
+}
+
+/**
+ * Phase 405 wave 4 — public ingest for fixes that originate outside
+ * watchPositionAsync (currently: the background-location TaskManager
+ * callback in services/backgroundLocationTask.ts). Runs through the
+ * same outlier-rejection + smoothing + subscriber-fanout path so
+ * consumers see a unified stream regardless of source.
+ */
+export function ingestExternalFix(fix: GpsFix): boolean {
+  return processFix(fix);
+}
+
 function setMode(next: GpsMode, reason: string) {
   if (mode === next) return;
   // Battery-saver floor — never drop into 'active' if the user opted to save.
@@ -156,63 +222,17 @@ async function startWatchInternal() {
       Location.Accuracy.Balanced,
       Location.Accuracy.Low,
     ];
+    // Phase 405 wave 4 — body extracted into module-level processFix
+    // so background-location ingest paths share the same outlier +
+    // smoothing + subscriber-fanout flow.
     const onLocationUpdate = (loc: Location.LocationObject) => {
-      const raw: GpsFix = {
+      processFix({
         lat: loc.coords.latitude,
         lng: loc.coords.longitude,
         accuracy_m: loc.coords.accuracy ?? null,
         speed: loc.coords.speed ?? null,
         timestamp: loc.timestamp,
-      };
-
-        // Phase 107 / B2 — outlier rejection.
-        // (1) Discard if reported accuracy is worse than threshold.
-        if (raw.accuracy_m != null && raw.accuracy_m > OUTLIER_ACCURACY_M) {
-          outliersDiscarded++;
-          console.log(`[gps:outlier-rejected] accuracy_m=${raw.accuracy_m.toFixed(1)} (>${OUTLIER_ACCURACY_M})`);
-          return;
-        }
-        // (2) Discard if position jumps > 50m within 5s of the last accepted fix.
-        if (lastFix && (raw.timestamp - lastFix.timestamp) < OUTLIER_JUMP_WINDOW_MS) {
-          const jump = haversineMeters(lastFix, raw);
-          if (jump > OUTLIER_JUMP_M) {
-            outliersDiscarded++;
-            console.log(`[gps:outlier-rejected] jump_m=${jump.toFixed(1)} dt_ms=${raw.timestamp - lastFix.timestamp}`);
-            return;
-          }
-        }
-
-        // Phase 107 / B3 — rolling smoothing.
-        // Push raw into the buffer, trim to window, average the buffered fixes.
-        smoothingBuffer.push(raw);
-        if (smoothingBuffer.length > SMOOTHING_WINDOW) smoothingBuffer.shift();
-        const avgLat = smoothingBuffer.reduce((s, f) => s + f.lat, 0) / smoothingBuffer.length;
-        const avgLng = smoothingBuffer.reduce((s, f) => s + f.lng, 0) / smoothingBuffer.length;
-        const fix: GpsFix = {
-          lat: avgLat,
-          lng: avgLng,
-          accuracy_m: raw.accuracy_m,
-          speed: raw.speed,
-          timestamp: raw.timestamp,
-        };
-
-        // Motion tracking + B4: stationary → walking on real motion.
-        if (lastFix) {
-          const moved = haversineMeters(lastFix, fix);
-          if (moved >= STATIONARY_DELTA) {
-            lastMotionAt = Date.now();
-            // B4 — auto-recover from stationary on motion.
-            if (mode === 'stationary') setMode('walking', 'motion_resumed');
-          }
-        } else {
-          lastMotionAt = Date.now();
-        }
-
-      lastFix = fix;
-      lastTickAt = Date.now();
-      for (const cb of subscribers) {
-        try { cb(fix); } catch {}
-      }
+      });
     };
 
     // Try each accuracy in the ladder. First success wins.
@@ -352,13 +372,20 @@ export async function startGpsManager(): Promise<void> {
     });
   }
   breadcrumb('manager_start');
-  // Phase 405 wave 3 — TODO: wire Location.startLocationUpdatesAsync
-  // with foregroundService config + a TaskManager.defineTask handler so
-  // GPS keeps running when the OS suspends the app (phone-in-pocket).
-  // Native config (manifest + plugin) is in place after this commit;
-  // requires `expo-task-manager` npm dep + a defineTask module imported
-  // at app boot before this call site can be exercised. Schedule a
-  // dedicated commit + EAS build to land the full background-GPS path.
+  // Phase 405 wave 4 — also start the background-location task. This
+  // shows the foreground-service notification on Android (keeps the
+  // location subsystem alive during Doze) and registers the iOS
+  // background-mode entitlement use. Fire-and-forget — if the user
+  // hasn't granted background-location permission, the call no-ops
+  // gracefully and watchPositionAsync still provides foreground fixes.
+  void (async () => {
+    try {
+      const { startBackgroundLocation } = await import('./backgroundLocationTask');
+      await startBackgroundLocation();
+    } catch (e) {
+      console.log('[gps] background task start skipped:', e);
+    }
+  })();
 }
 
 /** Called by round-end. Drops the underlying subscription. */
@@ -382,6 +409,18 @@ export function stopGpsManager(): void {
   batterySaverFloor = null;
   lastTickAt = 0;
   breadcrumb('manager_stop');
+  // Phase 405 wave 4 — also stop the background-location task so the
+  // foreground-service notification dismisses and the OS releases the
+  // location subsystem. Fire-and-forget; no-op when the task isn't
+  // currently running.
+  void (async () => {
+    try {
+      const { stopBackgroundLocation } = await import('./backgroundLocationTask');
+      await stopBackgroundLocation();
+    } catch (e) {
+      console.log('[gps] background task stop skipped:', e);
+    }
+  })();
 }
 
 /** Phase 107 / C2 — runtime stats for the GPS quality debug overlay. */

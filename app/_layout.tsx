@@ -19,6 +19,11 @@ import { startHoleDetection, stopHoleDetection, subscribeToHoleDetection } from 
 import { startOffCourseDetector, stopOffCourseDetector } from '../services/offCourseDetector';
 import { startMovementModeDetector, stopMovementModeDetector } from '../services/movementModeDetector';
 import { subscribePoorSignal } from '../services/gpsManager';
+// Phase 405 wave 4 — side-effect import so TaskManager.defineTask
+// registers the background location handler at app boot, before any
+// Location.startLocationUpdatesAsync call could deliver a fix.
+// expo-task-manager silently drops updates for an undefined task.
+import '../services/backgroundLocationTask';
 import { useToastStore } from '../store/toastStore';
 import { consumeDeferredPaywall } from '../services/paywallGuard';
 import { initAudioLifecycle } from '../services/audioLifecycle';
