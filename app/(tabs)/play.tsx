@@ -38,6 +38,7 @@ import {
   LAKES_HOLE_IMAGES,
   RANCHO_CALIFORNIA_HOLE_IMAGES,
   SAN_JOSE_MUNI_HOLE_IMAGES,
+  SUNNYVALE_HOLE_IMAGES,
 } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
@@ -139,6 +140,21 @@ const LOCAL_COURSES: CourseSummary[] = [
     thumbnail: (SAN_JOSE_MUNI_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
     lat: 37.3670,
     lng: -121.9310,
+  },
+  // Added 2026-05-16 — Sunnyvale Golf Course (Sunnyvale, CA). Tim is
+  // playing it tomorrow. All 18 hole photos bundled from his Golfshot
+  // screenshot set. Rating/slope are public-record estimates; refine
+  // when official numbers are confirmed.
+  {
+    id: 'local:sunnyvale',
+    club_name: 'Sunnyvale Golf Course',
+    location: 'Sunnyvale, CA',
+    rating: 69.8,
+    slope: 117,
+    isLocal: true,
+    thumbnail: (SUNNYVALE_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    lat: 37.3777,
+    lng: -122.0357,
   },
 ];
 

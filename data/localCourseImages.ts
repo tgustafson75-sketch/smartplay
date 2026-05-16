@@ -128,6 +128,31 @@ export const SAN_JOSE_MUNI_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   18: require('../assets/courses/san-jose-muni/hole-18.jpg'),
 };
 
+// Sunnyvale Golf Course (Bay Area, CA — added 2026-05-16 because Tim
+// is playing it tomorrow). All 18 holes bundled from Golfshot-app
+// screenshots Tim captured: sequential filename timestamps
+// (172038–172307 on 2026-04-18) mapped 1:1 to holes 1–18.
+export const SUNNYVALE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1:  require('../assets/courses/sunnyvale/hole-01.jpg'),
+  2:  require('../assets/courses/sunnyvale/hole-02.jpg'),
+  3:  require('../assets/courses/sunnyvale/hole-03.jpg'),
+  4:  require('../assets/courses/sunnyvale/hole-04.jpg'),
+  5:  require('../assets/courses/sunnyvale/hole-05.jpg'),
+  6:  require('../assets/courses/sunnyvale/hole-06.jpg'),
+  7:  require('../assets/courses/sunnyvale/hole-07.jpg'),
+  8:  require('../assets/courses/sunnyvale/hole-08.jpg'),
+  9:  require('../assets/courses/sunnyvale/hole-09.jpg'),
+  10: require('../assets/courses/sunnyvale/hole-10.jpg'),
+  11: require('../assets/courses/sunnyvale/hole-11.jpg'),
+  12: require('../assets/courses/sunnyvale/hole-12.jpg'),
+  13: require('../assets/courses/sunnyvale/hole-13.jpg'),
+  14: require('../assets/courses/sunnyvale/hole-14.jpg'),
+  15: require('../assets/courses/sunnyvale/hole-15.jpg'),
+  16: require('../assets/courses/sunnyvale/hole-16.jpg'),
+  17: require('../assets/courses/sunnyvale/hole-17.jpg'),
+  18: require('../assets/courses/sunnyvale/hole-18.jpg'),
+};
+
 // Phase BL — Mariners Point Golf Center, Burlingame CA (9 holes par 3).
 export const MARINERS_POINT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   1: require('../assets/courses/mariners-point/hole-01.jpg'),
@@ -141,7 +166,7 @@ export const MARINERS_POINT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   9: require('../assets/courses/mariners-point/hole-09.jpg'),
 };
 
-export type LocalCourseSlug = 'palms' | 'lakes' | 'rancho-california' | 'crystal-springs' | 'mariners-point' | 'san-jose-muni';
+export type LocalCourseSlug = 'palms' | 'lakes' | 'rancho-california' | 'crystal-springs' | 'mariners-point' | 'san-jose-muni' | 'sunnyvale';
 
 export const LOCAL_COURSE_IMAGES: Record<LocalCourseSlug, Record<number, ImageSourcePropType>> = {
   'palms': PALMS_HOLE_IMAGES,
@@ -150,6 +175,7 @@ export const LOCAL_COURSE_IMAGES: Record<LocalCourseSlug, Record<number, ImageSo
   'crystal-springs': CRYSTAL_SPRINGS_HOLE_IMAGES,
   'mariners-point': MARINERS_POINT_HOLE_IMAGES,
   'san-jose-muni': SAN_JOSE_MUNI_HOLE_IMAGES,
+  'sunnyvale': SUNNYVALE_HOLE_IMAGES,
 };
 
 /**
@@ -166,6 +192,7 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   if (c.includes('lakes') && !c.includes('palms')) return LAKES_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('rancho')) return RANCHO_CALIFORNIA_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('san jose')) return SAN_JOSE_MUNI_HOLE_IMAGES[holeNumber] ?? null;
+  if (c.includes('sunnyvale')) return SUNNYVALE_HOLE_IMAGES[holeNumber] ?? null;
   return null;
 }
 
