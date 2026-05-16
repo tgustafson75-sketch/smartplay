@@ -16,6 +16,7 @@ import { initListeningSession } from '../services/listeningSession';
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
 import { activateMediaSession, deactivateMediaSession } from '../services/mediaKeyBridge';
 import { startHoleDetection, stopHoleDetection, subscribeToHoleDetection } from '../services/holeDetection';
+import { startOffCourseDetector, stopOffCourseDetector } from '../services/offCourseDetector';
 import { consumeDeferredPaywall } from '../services/paywallGuard';
 import { initAudioLifecycle } from '../services/audioLifecycle';
 import { initBatteryMonitor } from '../services/batteryMonitor';
@@ -333,17 +334,26 @@ function AppNavigator() {
       if (round.currentHole !== nextHole) round.setCurrentHole(nextHole);
     });
     let active = useRoundStore.getState().isRoundActive;
-    if (active) startHoleDetection();
+    if (active) { startHoleDetection(); startOffCourseDetector(); }
     const unsubRound = useRoundStore.subscribe((s) => {
       if (s.isRoundActive === active) return;
       active = s.isRoundActive;
-      if (active) startHoleDetection();
-      else stopHoleDetection();
+      if (active) {
+        startHoleDetection();
+        // Phase 405 — off-course detector starts with hole detection so
+        // wandering off the property surfaces a visible badge instead
+        // of silently blanking yardages.
+        startOffCourseDetector();
+      } else {
+        stopHoleDetection();
+        stopOffCourseDetector();
+      }
     });
     return () => {
       unsubDetect();
       unsubRound();
       stopHoleDetection();
+      stopOffCourseDetector();
     };
   }), []);
 

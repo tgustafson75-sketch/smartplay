@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import { useOffCourseStore } from '../services/offCourseDetector';
 
 export interface CaddieDataStripProps {
   yardage: number | null;
@@ -39,6 +40,14 @@ export default function CaddieDataStrip({
   yardageSource = null,
   onPress,
 }: CaddieDataStripProps) {
+  // Phase 405 — off-course badge. When the offCourseDetector observes
+  // the player >200y from every hole's reference points for 20s, this
+  // store flips and the strip shows an amber "OFF COURSE · ~Xy" badge
+  // in the top-right. Replaces the previous Phase 400-followup LIVE
+  // pill placement when off-course is more important to surface than
+  // live-vs-static.
+  const isOffCourse = useOffCourseStore(s => s.isOffCourse);
+  const yardsToNearestHole = useOffCourseStore(s => s.yardsToNearestHole);
   const mountedOpacity = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const [isMounted, setIsMounted] = useState(visible);
   const pressScale = useRef(new Animated.Value(1)).current;
@@ -295,6 +304,14 @@ export default function CaddieDataStrip({
             </Text>
           </View>
         )}
+        {isOffCourse && (
+          <View style={styles.offCoursePill}>
+            <Ionicons name="warning-outline" size={9} color="#fbbf24" />
+            <Text style={styles.offCoursePillText}>
+              {yardsToNearestHole != null ? `OFF COURSE · ${yardsToNearestHole}y` : 'OFF COURSE'}
+            </Text>
+          </View>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -420,5 +437,29 @@ const styles = StyleSheet.create({
   },
   sourcePillTextStatic: {
     color: '#fbbf24',
+  },
+  // Phase 405 — off-course badge. Top-right of the strip (opposite the
+  // LIVE/STATIC source pill in the top-left) so they don't collide.
+  // Amber border + warning icon makes it unmistakable; the inline
+  // yardage tells the user how far they are from the nearest hole.
+  offCoursePill: {
+    position: 'absolute',
+    top: 4,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(251,191,36,0.7)',
+    backgroundColor: 'rgba(251,191,36,0.15)',
+  },
+  offCoursePillText: {
+    color: '#fbbf24',
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
 });

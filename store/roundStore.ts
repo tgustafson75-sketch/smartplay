@@ -348,6 +348,24 @@ export const useRoundStore = create<RoundState>()(
         });
         console.log(`[path2:round] start course=${course} holes=${holes.length} courseId=${courseId ?? 'none'}`);
         console.log(`[audit:round-active] state=true roundId=${roundId} hole=1 course="${course}"`);
+        // Phase 405 — geometry pre-warm. Fire-and-forget so the round
+        // can start immediately, but the cache populates in the
+        // background so SmartFinder doesn't cold-start when the user
+        // first opens it mid-round. The geometry service has a 7-day
+        // AsyncStorage cache so this survives a network drop later in
+        // the round. Errors are non-fatal — SmartFinder gracefully
+        // falls through to the bundled courseHoles fallback path.
+        if (courseId) {
+          void (async () => {
+            try {
+              const { fetchCourseGeometry } = await import('../services/courseGeometryService');
+              await fetchCourseGeometry(courseId);
+              console.log(`[audit:round-active] geometry pre-warm complete for ${courseId}`);
+            } catch (e) {
+              console.log('[roundStore] geometry pre-warm failed (non-fatal):', e);
+            }
+          })();
+        }
       },
 
       setActiveCourseId: (id) => set({ activeCourseId: id }),
