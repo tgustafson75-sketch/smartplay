@@ -101,6 +101,12 @@ import type { RulesDecision } from '../../types/penalty';
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
+// One-shot per process: speak the Caddie-tab opening prompt the FIRST
+// time the user lands here in this app session. Skips on subsequent
+// tab-switches so the user isn't re-greeted every time they leave and
+// come back. Reset on cold launch (module-level state).
+let openingPromptSpokenThisProcess = false;
+
 export default function CaddieTab() {
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
@@ -743,6 +749,23 @@ export default function CaddieTab() {
     }
 
     setOpeningPrompt(prompt);
+
+    // Tim 2026-05-15: "Kevin or Caddie has a greeting but does not
+    // speak it." Speak the opener once per process so the user gets
+    // a coherent voice flow from greeting screen → Caddie tab.
+    // Guards: not spoken yet this process, voice enabled, trust level
+    // > 1 (Quiet stays silent by design), no greeting screen audio
+    // overlap (short delay).
+    if (!openingPromptSpokenThisProcess && voiceEnabled && trustLevel !== 1 && prompt) {
+      openingPromptSpokenThisProcess = true;
+      setTimeout(() => {
+        // userInitiated: true so isVoiceAllowed lets it through even
+        // at L1 if the user manually flipped trust back up after the
+        // greeting (same convention greeting.tsx uses).
+        void speak(prompt, voiceGender, language, apiUrl, { userInitiated: true })
+          .catch((e) => console.log('[caddie] opening prompt speak failed', e));
+      }, 600);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
