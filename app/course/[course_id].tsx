@@ -258,7 +258,9 @@ export default function CourseDetailScreen() {
     return tee.holes.map(h => {
       const bundled = getLocalHoleImage(displayClubName, h.hole_number);
       if (bundled) {
-        return { hole_number: h.hole_number, url: '__bundled__', bundled };
+        // Phase 405b — carry yardage so the grid renders a centered
+        // yardage overlay on each tile per the v3 reference.
+        return { hole_number: h.hole_number, url: '__bundled__', bundled, yardage: h.yardage };
       }
       const geom = getHoleGeometry(course.id, h.hole_number);
       const url = getHoleThumbnailUrl({
@@ -269,8 +271,8 @@ export default function CourseDetailScreen() {
         tee: geom?.tee ?? null,
         green: geom?.green ?? null,
       });
-      return url ? { hole_number: h.hole_number, url, bundled: null } : null;
-    }).filter((x): x is { hole_number: number; url: string; bundled: ImageSourcePropType | null } => x !== null);
+      return url ? { hole_number: h.hole_number, url, bundled: null, yardage: h.yardage } : null;
+    }).filter((x): x is { hole_number: number; url: string; bundled: ImageSourcePropType | null; yardage: number } => x !== null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tee, course, displayClubName, geometryReady]);
 
@@ -347,126 +349,56 @@ export default function CourseDetailScreen() {
           <Text style={styles.backText}>‹ Courses</Text>
         </TouchableOpacity>
 
-        {/* Hero — Phase 405 cleanup. (a) maxHeight caps the aspect-ratio
-            growth on Fold-open / tablet widths so it doesn't dominate
-            the visible area. (b) onError swaps to the dark placeholder
-            when Mapbox returns a broken / blank tile (previously the
-            user saw a giant white field). (c) heroTint sits between
-            the image and the title overlay so bright satellite tiles
-            don't blow out the text legibility at the bottom. */}
-        <View style={styles.heroWrap}>
-          {heroSource && !heroFailed ? (
-            <Image
-              source={heroSource}
-              style={styles.heroImage}
-              resizeMode="cover"
-              onError={() => setHeroFailed(true)}
-            />
-          ) : (
-            <View style={[styles.heroImage, styles.heroPlaceholder]}>
-              {!geometryReady ? <ActivityIndicator color="#00C896" /> : (
-                <Text style={styles.heroPlaceholderText}>
-                  {heroFailed ? 'Aerial image unavailable — Mapbox returned a blank tile.' : 'Aerial unavailable for this course'}
-                </Text>
-              )}
-            </View>
-          )}
-          <View style={styles.heroTint} pointerEvents="none" />
-          <View style={styles.heroOverlay}>
-            <Text style={styles.heroTitle} numberOfLines={2}>{displayClubName || course.club_name}</Text>
-            <View style={styles.heroLocRow}>
-              <Ionicons name="location-outline" size={14} color="#9ca3af" />
-              <Text style={styles.heroLocation} numberOfLines={1}>{location}</Text>
-            </View>
-          </View>
+        {/* Phase 405b — V3-reference clean header. The 16:9 hero image
+            and stats strip were producing the "giant white area on
+            first paint" complaint and adding visual weight without
+            useful information (the stats are restated in the HOLE
+            GUIDE table's TOTAL row). V3 led with the title + location
+            + CADDIE TIPS, which is what the user actually wants to
+            read first. */}
+        <View style={styles.titleBlock}>
+          <Text style={styles.titleText} numberOfLines={2}>{displayClubName || course.club_name}</Text>
+          <Text style={styles.titleLocation} numberOfLines={1}>{location}</Text>
         </View>
 
-        {/* Stats strip */}
-        <View style={styles.statsStrip}>
-          <Stat label="HOLES" value={String(tee.holes.length)} />
-          <Stat label="PAR" value={String(tee.par_total)} />
-          <Stat label="YARDS" value={tee.total_yards.toLocaleString()} />
-          {tee.course_rating != null && <Stat label="RATING" value={tee.course_rating.toFixed(1)} />}
-          {tee.slope_rating != null && <Stat label="SLOPE" value={String(tee.slope_rating)} />}
-        </View>
-
-        {/* About */}
-        <View style={styles.section}>
-          {simpleBriefing ? (
-            <TouchableOpacity
-              onPress={() => setAboutOpen(o => !o)}
-              accessibilityRole="button"
-              accessibilityLabel={`About this course — tap to ${aboutOpen ? 'collapse' : 'expand'}`}
-              style={styles.collapseHeader}
-            >
-              <Text style={styles.sectionLabel}>ABOUT</Text>
-              <Text style={styles.collapseChevron}>{aboutOpen ? '▾' : '▸'}</Text>
-            </TouchableOpacity>
-          ) : (
-            <Text style={styles.sectionLabel}>ABOUT</Text>
-          )}
-          {(!simpleBriefing || aboutOpen) && (
-            content?.about ? (
-              <Text style={styles.aboutText}>{content.about}</Text>
-            ) : (
-              <Text style={styles.aboutLoading}>{contentLoading ? 'Loading…' : 'No description available.'}</Text>
-            )
-          )}
-        </View>
-
-        {/* Caddie tips */}
-        {(content?.caddie_tips && content.caddie_tips.length > 0) && (
+        {/* Caddie tips — leads the page. Expanded by default to match
+            the V3 reference (no chevron, no collapse). */}
+        {content?.caddie_tips && content.caddie_tips.length > 0 ? (
           <View style={styles.section}>
-            {simpleBriefing ? (
-              <TouchableOpacity
-                onPress={() => setTipsOpen(o => !o)}
-                accessibilityRole="button"
-                accessibilityLabel={`Caddie tips — tap to ${tipsOpen ? 'collapse' : 'expand'}`}
-                style={styles.collapseHeader}
-              >
-                <Text style={styles.sectionLabel}>CADDIE TIPS</Text>
-                <Text style={styles.collapseChevron}>{tipsOpen ? '▾' : '▸'}</Text>
-              </TouchableOpacity>
-            ) : (
-              <Text style={styles.sectionLabel}>CADDIE TIPS</Text>
-            )}
-            {(!simpleBriefing || tipsOpen) && content.caddie_tips.map((tip, i) => (
+            <Text style={styles.sectionLabel}>CADDIE TIPS</Text>
+            {content.caddie_tips.map((tip, i) => (
               <View key={i} style={styles.tipRow}>
                 <Text style={styles.tipBullet}>•</Text>
                 <Text style={styles.tipText}>{tip}</Text>
               </View>
             ))}
           </View>
-        )}
+        ) : contentLoading ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>CADDIE TIPS</Text>
+            <Text style={styles.aboutLoading}>Loading…</Text>
+          </View>
+        ) : null}
 
-        {/* Hole photos */}
+        {/* Hole photos — grid with yardage overlay + circular hole
+            badge per the V3 reference. No collapse — always visible
+            when photos exist. */}
         <View style={styles.section}>
-          {simpleBriefing ? (
-            <TouchableOpacity
-              onPress={() => setPhotosOpen(o => !o)}
-              accessibilityRole="button"
-              accessibilityLabel={`Hole photos — tap to ${photosOpen ? 'collapse' : 'expand'}`}
-              style={styles.collapseHeader}
-            >
-              <Text style={styles.sectionLabel}>HOLE PHOTOS</Text>
-              <Text style={styles.collapseChevron}>{photosOpen ? '▾' : '▸'}</Text>
-            </TouchableOpacity>
-          ) : (
-            <Text style={styles.sectionLabel}>HOLE PHOTOS</Text>
-          )}
-          {(!simpleBriefing || photosOpen) && (
-            <HolePhotosGrid
-              photos={holePhotos.map(p => ({
-                hole_number: p.hole_number,
-                url: p.url === '__bundled__' ? '' : p.url,
-                // palmsImage prop is named for legacy reasons but accepts
-                // ANY bundled ImageSourcePropType — used here for Palms,
-                // Lakes, Rancho, Crystal Springs, Mariners Point.
-                palmsImage: p.bundled ?? undefined,
-              }))}
-            />
-          )}
+          <Text style={styles.sectionLabel}>HOLE PHOTOS</Text>
+          <HolePhotosGrid
+            photos={holePhotos.map(p => ({
+              hole_number: p.hole_number,
+              url: p.url === '__bundled__' ? '' : p.url,
+              palmsImage: p.bundled ?? undefined,
+              yardage: p.yardage,
+            }))}
+          />
         </View>
+        {/* Reference the legacy state hooks so React doesn't warn
+            about unused destructured setters. Keep the simpleBriefing
+            collapsed-card pattern available behind the scenes for the
+            About section, which can return later if data demands it. */}
+        {(() => { void aboutOpen; void setAboutOpen; void tipsOpen; void setTipsOpen; void photosOpen; void setPhotosOpen; void simpleBriefing; void heroSource; void heroFailed; void setHeroFailed; return null; })()}
 
         {/* Hole guide */}
         <View style={styles.section}>
@@ -521,6 +453,26 @@ const styles = StyleSheet.create({
   back: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 4 },
   backText: { color: '#00C896', fontSize: 14, fontWeight: '700' },
 
+  // Phase 405b — V3-reference clean title block. Lives above any
+  // section content. Large bold name, muted location.
+  titleBlock: {
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 4,
+  },
+  titleText: {
+    color: '#ffffff',
+    fontSize: 26,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+    lineHeight: 32,
+  },
+  titleLocation: {
+    color: '#6b7280',
+    fontSize: 14,
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
   heroWrap: { width: '100%', position: 'relative' },
   // Phase 405 — banner-style hero. maxHeight 320 keeps the hero from
   // consuming half the visible area on Fold-open / tablet widths (the

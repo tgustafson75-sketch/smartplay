@@ -6,6 +6,11 @@ type HolePhoto = {
   url: string;
   /** Optional bundled image (Palms curated screenshots). Wins over url when present. */
   palmsImage?: ImageSourcePropType;
+  /** Phase 405b — yardage overlaid on the tile (matches v3 reference).
+   *  Renders large white shadowed text centered on each photo so the
+   *  user scans yards across the whole course at a glance. Null = no
+   *  overlay (treat as decorative-only). */
+  yardage?: number | null;
 };
 
 type Props = {
@@ -52,6 +57,17 @@ export default function HolePhotosGrid({ photos }: Props) {
             ) : (
               <Image source={{ uri: p.url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
             )}
+            {/* Phase 405b — yardage overlay matching the v3 reference.
+                Centered, white, with a heavy text shadow so it reads on
+                any aerial. Only renders when yardage > 0 (we have a
+                real number to show). */}
+            {p.yardage != null && p.yardage > 0 && (
+              <View style={styles.yardageOverlay} pointerEvents="none">
+                <Text style={styles.yardageOverlayText}>{p.yardage}</Text>
+              </View>
+            )}
+            {/* Hole-number badge — circular dark chip in bottom-left
+                matching the v3 reference. */}
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{p.hole_number}</Text>
             </View>
@@ -98,24 +114,49 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   cell: {
-    borderRadius: 8,
+    // Phase 405b — match v3 reference: rounded white card frame
+    // (border + radius) so the aerial photo reads as a "card" not just
+    // a tile. Subtle white border makes the grid feel more polished.
+    borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: '#0d2418',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
   },
   badge: {
-    // v3-style — chip in BOTTOM-left so it sits on the darker part of
-    // most aerial / hole-photo compositions (sky/horizon up top stays
-    // clean). Tim 2026-05-14: "Look at v3 course info ... it was
-    // beautiful."
+    // v3-style — circular dark chip in BOTTOM-left so it sits on the
+    // darker part of most aerial / hole-photo compositions. Updated
+    // to circular per Tim's reference screenshots.
     position: 'absolute',
     bottom: 6,
     left: 6,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.78)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,200,150,0.4)',
   },
   badgeText: { color: '#ffffff', fontSize: 11, fontWeight: '800' },
+  // Phase 405b — yardage centered overlay. White with strong text
+  // shadow so it reads over any aerial composition. Large enough to
+  // scan from the grid without zooming in.
+  yardageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  yardageOverlayText: {
+    color: '#ffffff',
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(0,0,0,0.85)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+  },
   placeholderWrap: {
     marginHorizontal: 16,
     paddingVertical: 32,
