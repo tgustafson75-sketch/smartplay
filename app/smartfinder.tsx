@@ -924,7 +924,15 @@ const styles = StyleSheet.create({
   headerBtn: { minWidth: 100 },
   headerBtnText: { color: '#00C896', fontSize: 14, fontWeight: '700' },
   title: { color: '#ffffff', fontSize: 16, fontWeight: '800' },
-  scroll: { paddingTop: 12, paddingBottom: 32 },
+  // Phase 406 wave 2 — graceful-landscape SmartFinder. Map / Target /
+  // Standard-without-camera modes route through this ScrollView; the
+  // maxWidth: 720 + alignSelf: center keeps the content readable on
+  // landscape (Fold open inner / phone rotated / tablet) instead of
+  // stretching the SVG canvas + F/M/B cells across the wide axis.
+  // Camera modes (Standard/Putt) use cameraContainer (flex: 1) which
+  // SHOULD fill the wide canvas for the viewfinder, so they're
+  // intentionally not maxWidth-capped.
+  scroll: { paddingTop: 12, paddingBottom: 32, maxWidth: 720, alignSelf: 'center', width: '100%' },
   empty: { color: '#9ca3af', fontSize: 13, textAlign: 'center', paddingHorizontal: 24, marginVertical: 24 },
 
   // Camera mode container
