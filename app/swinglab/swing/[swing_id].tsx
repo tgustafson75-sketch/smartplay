@@ -19,6 +19,7 @@ import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useCageStore, type AnalysisStatus, type CageShot } from '../../../store/cageStore';
+import { getSwingReference } from '../../../services/swingReferences';
 import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, stopSpeaking, configureAudioForSpeech } from '../../../services/voiceService';
@@ -70,7 +71,14 @@ export default function SwingDetail() {
   const [actionShotId, setActionShotId] = useState<string | null>(null);
   // Phase 403b — "See the moment" modal. Holds the URI of the fault
   // frame to display full-size, or null when closed.
-  const [faultFrameModal, setFaultFrameModal] = useState<{ uri: string; observation: string } | null>(null);
+  // Phase 404 — additionally carries detected_issue so the reference
+  // registry can be looked up at open-time; when a reference is
+  // registered, the modal renders side-by-side.
+  const [faultFrameModal, setFaultFrameModal] = useState<{
+    uri: string;
+    observation: string;
+    detected_issue: string | null;
+  } | null>(null);
   const [leftCompareShotId, setLeftCompareShotId] = useState<string | null>(null);
   const [rightCompareShotId, setRightCompareShotId] = useState<string | null>(null);
   const isComparing = leftCompareShotId != null && rightCompareShotId != null;
@@ -548,7 +556,11 @@ export default function SwingDetail() {
                     </TouchableOpacity>
                     {faultUri && (
                       <TouchableOpacity
-                        onPress={() => setFaultFrameModal({ uri: faultUri, observation })}
+                        onPress={() => setFaultFrameModal({
+                          uri: faultUri,
+                          observation,
+                          detected_issue: a?.detected_issue ?? null,
+                        })}
                         style={styles.faultThumbWrap}
                         accessibilityRole="button"
                         accessibilityLabel="See the moment of the fault"
@@ -661,9 +673,14 @@ export default function SwingDetail() {
         multiShotSessionAvailable={session.shots.length > 1}
       />
 
-      {/* Phase 403b — "See the moment" modal. Shows the diagnostic
-          frame full-size with the observation overlaid as a caption.
-          Tap anywhere to dismiss. */}
+      {/* Phase 403b + 404 — "See the moment" modal. Shows the
+          diagnostic frame full-size with the observation overlaid as a
+          caption. Phase 404: when a reference illustration is
+          registered for the fault category, also renders the reference
+          side-by-side with a position label and the per-category
+          callout. When no reference exists (the default until Tim
+          drops in licensed assets), falls back to the single-frame
+          layout — no regression. Tap anywhere to dismiss. */}
       <Modal
         visible={faultFrameModal != null}
         transparent
@@ -677,25 +694,59 @@ export default function SwingDetail() {
           accessibilityRole="button"
           accessibilityLabel="Close fault frame view"
         >
-          {faultFrameModal && (
-            <View style={styles.faultModalContent}>
-              <Image
-                source={{ uri: faultFrameModal.uri }}
-                style={styles.faultModalImage}
-                resizeMode="contain"
-              />
-              {faultFrameModal.observation ? (
-                <View style={styles.faultModalCaption}>
-                  <Text style={styles.faultModalCaptionText}>
-                    {faultFrameModal.observation}
-                  </Text>
+          {faultFrameModal && (() => {
+            const reference = getSwingReference(faultFrameModal.detected_issue);
+            const hasReference = reference != null;
+            return (
+              <View style={styles.faultModalContent}>
+                {hasReference ? (
+                  <View style={styles.faultModalSideBySide}>
+                    <View style={styles.faultModalPane}>
+                      <Text style={styles.faultModalPaneLabel}>YOUR SWING</Text>
+                      <Image
+                        source={{ uri: faultFrameModal.uri }}
+                        style={styles.faultModalPaneImage}
+                        resizeMode="cover"
+                      />
+                    </View>
+                    <View style={styles.faultModalPane}>
+                      <Text style={[styles.faultModalPaneLabel, styles.faultModalPaneLabelRef]}>
+                        REFERENCE{reference.position ? ` · ${reference.position.toUpperCase()}` : ''}
+                      </Text>
+                      <Image
+                        source={reference.image as NonNullable<typeof reference.image>}
+                        style={styles.faultModalPaneImage}
+                        resizeMode="cover"
+                      />
+                    </View>
+                  </View>
+                ) : (
+                  <Image
+                    source={{ uri: faultFrameModal.uri }}
+                    style={styles.faultModalImage}
+                    resizeMode="contain"
+                  />
+                )}
+                {faultFrameModal.observation ? (
+                  <View style={styles.faultModalCaption}>
+                    <Text style={styles.faultModalCaptionText}>
+                      {faultFrameModal.observation}
+                    </Text>
+                  </View>
+                ) : null}
+                {hasReference && reference.callout ? (
+                  <View style={[styles.faultModalCaption, styles.faultModalCalloutRef]}>
+                    <Text style={[styles.faultModalCaptionText, styles.faultModalCalloutRefText]}>
+                      {reference.callout}
+                    </Text>
+                  </View>
+                ) : null}
+                <View style={styles.faultModalCloseHint}>
+                  <Text style={styles.faultModalCloseHintText}>Tap to close</Text>
                 </View>
-              ) : null}
-              <View style={styles.faultModalCloseHint}>
-                <Text style={styles.faultModalCloseHintText}>Tap to close</Text>
               </View>
-            </View>
-          )}
+            );
+          })()}
         </TouchableOpacity>
       </Modal>
     </SafeAreaView>
@@ -780,6 +831,48 @@ const styles = StyleSheet.create({
     width: '100%', aspectRatio: 1024 / 768,
     maxHeight: 480,
     borderRadius: 12, borderWidth: 1, borderColor: 'rgba(0,200,150,0.4)',
+  },
+  // Phase 404 — side-by-side comparison (user's fault frame + reference
+  // illustration). Each pane sizes to half the container width with a
+  // small gutter; aspect ratio preserved via the pane image's own
+  // aspect rule so the modal doesn't squish portrait phone-camera
+  // captures into a landscape pane.
+  faultModalSideBySide: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 10,
+  },
+  faultModalPane: {
+    flex: 1,
+    gap: 6,
+  },
+  faultModalPaneLabel: {
+    color: '#00C896',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+    textAlign: 'center',
+  },
+  faultModalPaneLabelRef: {
+    color: '#fbbf24',
+  },
+  faultModalPaneImage: {
+    width: '100%',
+    aspectRatio: 3 / 4,
+    maxHeight: 420,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0,200,150,0.4)',
+    backgroundColor: '#000',
+  },
+  // Phase 404 — reference callout caption (amber) distinguished from
+  // the observation caption (green) so the two messages don't blur.
+  faultModalCalloutRef: {
+    backgroundColor: 'rgba(251,191,36,0.10)',
+    borderColor: 'rgba(251,191,36,0.5)',
+  },
+  faultModalCalloutRefText: {
+    color: '#fbbf24',
   },
   faultModalCaption: {
     backgroundColor: 'rgba(0,200,150,0.10)',
