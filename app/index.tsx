@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useAuthStore } from '../store/authStore';
 import { recordLaunch } from '../services/kevinGreeting';
 
 // Module-level guard so the greeting only runs once per cold launch.
@@ -28,7 +29,12 @@ export default function Index() {
   const [settingsHydrated, setSettingsHydrated] = useState(
     () => useSettingsStore.persist.hasHydrated(),
   );
-  const hydrated = profileHydrated && settingsHydrated;
+  // Phase 410B — auth hydration is also required. authStore.init resolves
+  // the session from SecureStore; until that finishes we can't tell
+  // signed-in from signed-out.
+  const authHydrated = useAuthStore(s => s.hydrated);
+  const session = useAuthStore(s => s.session);
+  const hydrated = profileHydrated && settingsHydrated && authHydrated;
 
   useEffect(() => {
     const unsubs: (() => void)[] = [];
@@ -59,6 +65,16 @@ export default function Index() {
   }, [hydrated]);
 
   if (!hydrated) return null;
+
+  // Phase 410B — auth gate. No session → sign-in screen. Once signed
+  // in, the existing intro/permissions/welcome/greeting chain runs as
+  // before. We keep the gate active for owner emails too: the owner
+  // override still grants lifetime subscription, but identification
+  // happens through Google sign-in like everyone else (so profile
+  // sync has a userId to anchor to).
+  if (!session) {
+    return <Redirect href={'/auth' as never} />;
+  }
 
   const isDone = has_completed_onboarding || isSetupComplete;
 

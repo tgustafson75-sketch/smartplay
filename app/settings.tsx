@@ -15,6 +15,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../contexts/ThemeContext';
 import type { ThemeColors } from '../theme/tokens';
 import { getCaddieName, ACTIVE_PERSONAS } from '../lib/persona';
@@ -866,9 +867,50 @@ export default function Settings() {
           </View>
         </View>
 
-        {/* Reset / Sign Out — until real auth lands, this is the
-            functional equivalent for testers who want to start fresh
-            (new persona, clear stored profile, fresh trial state). */}
+        {/* Phase 410B — Sign Out: real supabase.auth.signOut() + Google
+            revoke. Keeps local AsyncStorage intact so signing back in on
+            the same device picks up where the user left off (server is
+            authoritative for profile fields and will rehydrate on
+            SIGNED_IN). For a true wipe, use Reset App Data below. */}
+        <SectionHeader title="Account" />
+        <View style={cardStyle}>
+          <TouchableOpacity
+            style={styles.resetRow}
+            accessibilityRole="button"
+            accessibilityLabel="Sign out of this device"
+            onPress={() => {
+              Alert.alert(
+                'Sign out?',
+                'Your profile stays safe in the cloud. Sign back in anytime to restore it.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Sign out',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        await useAuthStore.getState().signOut();
+                        // Routing gate will land on /auth automatically
+                        // once session goes null.
+                      } catch (e) {
+                        Alert.alert('Sign out failed', e instanceof Error ? e.message : String(e));
+                      }
+                    },
+                  },
+                ],
+              );
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Sign Out</Text>
+              <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                Sign out of this device. Your profile stays in the cloud.
+              </Text>
+            </View>
+            <Ionicons name="log-out-outline" size={20} color={colors.text_muted} />
+          </TouchableOpacity>
+        </View>
+
         <SectionHeader title="Reset" />
         <View style={cardStyle}>
           <TouchableOpacity
@@ -886,6 +928,11 @@ export default function Settings() {
                     style: 'destructive',
                     onPress: async () => {
                       try {
+                        // Sign out first so the server-side session is
+                        // revoked too; otherwise the AsyncStorage wipe
+                        // leaves a stale SecureStore session that would
+                        // auto-restore on next launch.
+                        await useAuthStore.getState().signOut();
                         const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
                         const keys = await AsyncStorage.getAllKeys();
                         await AsyncStorage.multiRemove(keys);
