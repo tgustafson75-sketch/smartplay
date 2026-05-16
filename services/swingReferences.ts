@@ -39,6 +39,7 @@
  */
 
 import type { ImageSourcePropType } from 'react-native';
+import { getAuthoredReference } from '../store/referenceAuthoringStore';
 
 // Mirror of api/swing-analysis.ts CanonicalIssue. Local copy so the
 // registry doesn't pull a server file (the API file is bundle-poison —
@@ -134,12 +135,34 @@ const REGISTRY: Record<CanonicalIssue, SwingReference> = {
  * the category has no registered reference OR when the category is
  * 'none' (no fault → nothing to compare). The caller renders
  * side-by-side only when this returns a non-null result.
+ *
+ * Phase 405b — runtime overlay. The authoring store
+ * (store/referenceAuthoringStore.ts) is consulted FIRST so Tank can
+ * capture references in-app and see them appear immediately in the
+ * side-by-side modal. When no authored capture exists for the
+ * category, the function falls through to the bundled REGISTRY's
+ * require() path — the standard production path for every user other
+ * than Tank's device.
  */
 export function getSwingReference(issue: string | null | undefined): SwingReference | null {
   if (!issue || issue === 'none') return null;
-  const entry = REGISTRY[issue as CanonicalIssue];
-  if (!entry || !entry.image) return null;
-  return entry;
+  const baseline = REGISTRY[issue as CanonicalIssue];
+  if (!baseline) return null;
+
+  // Runtime overlay: prefer an authored capture on this device.
+  const authored = getAuthoredReference(issue);
+  if (authored && authored.imageUri) {
+    return {
+      image: { uri: authored.imageUri } as ImageSourcePropType,
+      position: baseline.position,
+      callout: authored.callout && authored.callout.trim().length > 0
+        ? authored.callout
+        : baseline.callout,
+    };
+  }
+
+  if (!baseline.image) return null;
+  return baseline;
 }
 
 /**

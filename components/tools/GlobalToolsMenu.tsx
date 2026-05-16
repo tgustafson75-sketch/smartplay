@@ -253,6 +253,13 @@ export function GlobalToolsMenu() {
               colors={colors}
             />
             <Row
+              icon="construct-outline"
+              label="Reference Authoring"
+              sub="Internal · capture instructor reference assets"
+              onPress={() => nav('/author/reference-assets')}
+              colors={colors}
+            />
+            <Row
               icon="telescope-outline"
               label="SmartVision"
               sub="Analyze the hole"

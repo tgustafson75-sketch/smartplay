@@ -559,6 +559,17 @@ function AppNavigator() {
           name="smartmotion-quick"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
+        {/* Phase 405b — internal authoring tool. Tank (the real
+            instructor behind the persona) uses this to capture
+            per-category swing references that appear instantly in the
+            side-by-side fault modal via the runtime overlay in
+            services/swingReferences.ts. Not surfaced to end users
+            today; reachable via the Tools menu "Reference Authoring"
+            row. */}
+        <Stack.Screen
+          name="author/reference-assets"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
         <Stack.Screen
           name="paywall"
           options={{ animation: 'slide_from_bottom', presentation: 'modal', headerShown: false }}
