@@ -549,6 +549,16 @@ function AppNavigator() {
           name="smartfinder-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
+        {/* Phase 403 — SmartMotion Quick: course-mode simplified swing
+            capture. /swinglab/cage-drill remains the cage-mode flow with
+            full bullseye + calibration setup. This route is for the
+            "open SmartMotion" voice intent and the Tools menu shortcut —
+            camera goes live immediately, acoustic detector arms the
+            stop. */}
+        <Stack.Screen
+          name="smartmotion-quick"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
         <Stack.Screen
           name="paywall"
           options={{ animation: 'slide_from_bottom', presentation: 'modal', headerShown: false }}

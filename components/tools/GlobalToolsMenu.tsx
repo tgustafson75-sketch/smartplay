@@ -246,6 +246,13 @@ export function GlobalToolsMenu() {
               colors={colors}
             />
             <Row
+              icon="flash-outline"
+              label="SmartMotion"
+              sub="Quick swing capture · acoustic auto-stop"
+              onPress={() => nav('/smartmotion-quick')}
+              colors={colors}
+            />
+            <Row
               icon="telescope-outline"
               label="SmartVision"
               sub="Analyze the hole"

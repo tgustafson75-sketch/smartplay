@@ -19,6 +19,14 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // Phase AS — alias so the classifier can also emit tool_name=tightlie
   // and we route the same place. Both names work end-to-end.
   tightlie: { type: 'navigate', path: '/lie-analysis' },
+  // Phase 403 — SmartMotion quick swing capture (course mode). Goes
+  // straight to camera + acoustic-armed stop; no bullseye / distance
+  // calibration setup (that flow lives at /swinglab/cage-drill for
+  // cage-mode practice). Aliases: "smartmotion", "smart_motion",
+  // "smart motion" — the classifier normalizes spaces/underscores so
+  // any of these reaches us as tool_name='smartmotion'.
+  smartmotion: { type: 'navigate', path: '/smartmotion-quick' },
+  smart_motion: { type: 'navigate', path: '/smartmotion-quick' },
 };
 
 const TOOL_LABEL: Record<string, string> = {
@@ -32,6 +40,8 @@ const TOOL_LABEL: Record<string, string> = {
   // lie_analysis to avoid file/route renames.
   lie_analysis: 'TightLie',
   tightlie: 'TightLie',
+  smartmotion: 'SmartMotion',
+  smart_motion: 'SmartMotion',
 };
 
 export const openToolHandler: IntentHandler = {
@@ -47,6 +57,11 @@ export const openToolHandler: IntentHandler = {
     'pull up SwingLab',
     'show my scorecard',
     'open the rangefinder',
+    // Phase 403 — SmartMotion quick swing capture.
+    'open SmartMotion',
+    'start SmartMotion',
+    'record my swing',
+    'capture my swing',
   ],
 
   async execute(intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
