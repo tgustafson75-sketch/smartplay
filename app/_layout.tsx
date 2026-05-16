@@ -509,6 +509,15 @@ function AppNavigator() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="intro" />
         <Stack.Screen name="auth" />
+        {/* Phase 410 — first-launch welcome (single-screen profile
+            capture: name + caddie + optional handicap). Reached on
+            fresh installs with no first_opened_at + no name, and from
+            the Settings → Edit Profile row. fade animation so the
+            transition feels intentional rather than navigational. */}
+        <Stack.Screen
+          name="welcome"
+          options={{ animation: 'fade', headerShown: false }}
+        />
         <Stack.Screen
           name="hole-view"
           options={{ animation: 'slide_from_bottom' }}

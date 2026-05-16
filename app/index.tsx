@@ -92,6 +92,25 @@ export default function Index() {
   // not the greeting. (The greeting is a 'welcome back' moment.)
   if (!isDone) return <Redirect href="/onboarding/welcome" />;
 
+  // Phase 410 — first-launch welcome gate. The legacy multi-step
+  // onboarding is intentionally bypassed (per Tim's "get rid of that
+  // whole stupid onboarding nonsense" rule and the
+  // has_completed_onboarding=true default). But fresh installs with no
+  // captured profile (no first_opened_at AND no name) are dropped on
+  // the Caddie tab with no "welcome to your app" moment — the gap
+  // the beta-tester audit flagged. This single-screen welcome closes
+  // that gap. The check is intentionally narrow: only routes when
+  // BOTH first_opened_at is null AND no name has been set. Returning
+  // users skip it. Owner-email override already mirrors email into
+  // the profile during _layout.tsx's lifetime grant, so the welcome
+  // doesn't pester admins.
+  const profileSnap = usePlayerProfileStore.getState();
+  const hasOpenedBefore = profileSnap.first_opened_at != null;
+  const hasName = (profileSnap.name ?? '').trim().length > 0;
+  if (!hasOpenedBefore && !hasName) {
+    return <Redirect href={'/welcome' as never} />;
+  }
+
   // Cold-launch greeting hop — happens once per process. Warm starts
   // (Index re-renders) hit the flag and route straight to caddie.
   if (kevinGreetingEnabled && !greetingShownThisProcess) {

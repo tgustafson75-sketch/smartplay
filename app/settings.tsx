@@ -737,6 +737,26 @@ export default function Settings() {
         {__DEV__ && <DeveloperToolsSection cardStyle={cardStyle} colors={colors} />}
 
         {/* ABOUT */}
+        {/* Phase 410 — Profile section. Edit Profile routes to the
+            single-screen welcome that captures name + caddie +
+            optional handicap. Discoverable affordance for testers
+            who want to update; replaces the prior "edit each field
+            individually" hunt-and-peck. */}
+        <SectionHeader title="Profile" />
+        <View style={cardStyle}>
+          <TouchableOpacity
+            style={styles.aboutRow}
+            onPress={() => router.push('/welcome' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Edit your profile"
+          >
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Edit Profile</Text>
+            <Text style={[styles.aboutValue, { color: colors.accent }]}>
+              Name · Caddie · Handicap →
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Phase AI — Help / Support section. Single canonical contact. */}
         <SectionHeader title="Help" />
         <View style={cardStyle}>
@@ -756,6 +776,28 @@ export default function Settings() {
             <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Contact Support</Text>
             <Text style={[styles.aboutValue, { color: colors.accent }]}>
               support@smartplaycaddie.com →
+            </Text>
+          </TouchableOpacity>
+          {/* Phase 410 — Privacy disclosure. PGA Hope graduates and any
+              App Store / Play reviewer will look for this. Currently
+              hosted at smartplaycaddie.com/privacy (placeholder URL —
+              swap when the real policy is published). */}
+          <TouchableOpacity
+            style={styles.aboutRow}
+            onPress={() => {
+              Linking.openURL('https://smartplaycaddie.com/privacy').catch(() => {
+                Alert.alert(
+                  'Privacy Policy',
+                  'Couldn\'t open the browser. Visit smartplaycaddie.com/privacy from any browser.',
+                );
+              });
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Open privacy policy"
+          >
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Privacy Policy</Text>
+            <Text style={[styles.aboutValue, { color: colors.accent }]}>
+              smartplaycaddie.com/privacy →
             </Text>
           </TouchableOpacity>
         </View>
@@ -816,9 +858,9 @@ export default function Settings() {
             }}
           >
             <View style={{ flex: 1 }}>
-              <Text style={[styles.rowLabel, { color: '#f87171' }]}>Reset / Sign Out</Text>
+              <Text style={[styles.rowLabel, { color: '#f87171' }]}>Reset App Data</Text>
               <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                Clear all stored data — profile, rounds, settings, swings. Acts as a sign-out for tester rotations until real auth ships.
+                Clear your profile, rounds, settings, and saved swings. Use this to start fresh.
               </Text>
             </View>
             <Ionicons name="trash-outline" size={20} color="#f87171" />

@@ -211,6 +211,40 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
     {
       name: 'player-profile-v2',
       storage: createJSONStorage(() => getPersistStorage()),
+      // Phase 410 — Sentry breadcrumb on profile hydration so future
+      // user-reported "I lost my data" tickets are debuggable. Records
+      // whether the rehydrate succeeded + which key fields were present
+      // (presence flags only — no values, PII-safe).
+      onRehydrateStorage: () => (state, error) => {
+        try {
+          // Dynamic require to avoid pulling Sentry at module-eval
+          // time (the persist config is evaluated before _layout.tsx
+          // wires Sentry.init when EXPO_PUBLIC_SENTRY_DSN is unset).
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const Sentry = require('@sentry/react-native');
+          if (error) {
+            Sentry.addBreadcrumb({
+              category: 'profile_hydrate',
+              level: 'error',
+              message: 'profile rehydrate failed',
+              data: { error: error instanceof Error ? error.message : String(error) },
+            });
+          } else if (state) {
+            Sentry.addBreadcrumb({
+              category: 'profile_hydrate',
+              level: 'info',
+              message: 'profile rehydrated',
+              data: {
+                has_name: !!state.name,
+                has_first_opened_at: state.first_opened_at != null,
+                has_completed_onboarding: !!state.has_completed_onboarding,
+                isSetupComplete: !!state.isSetupComplete,
+                subscription_status: state.subscription_status ?? null,
+              },
+            });
+          }
+        } catch { /* Sentry unavailable — non-fatal */ }
+      },
     },
   ),
 );
