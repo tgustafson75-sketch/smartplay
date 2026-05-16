@@ -448,8 +448,19 @@ You are in CADDIE mode — on the course, mid-round. Your voice is:
 - Frame: "standing next to the player on the course."
 - Decide-or-defer, never wander.`;
 
+    // Hardwired language enforcement — Tim 2026-05-15: Spanish tester
+    // had Kevin reply in English on the first turn before the prompt
+    // recovered on turn 2. Making this the FIRST AND LAST rule in the
+    // system prompt so it can't be overridden by tone/character
+    // instructions in between. Same pattern applies to Chinese.
+    const LANG_ENFORCEMENT: Record<string, string> = {
+      es: 'CRITICAL: Respond ONLY in Spanish (español). Every word, every sentence. The user has explicitly set Spanish as their language. Do NOT respond in English even if the transcribed input looks English — the user is speaking Spanish.',
+      zh: 'CRITICAL: Respond ONLY in Chinese (中文). Every word, every sentence. The user has explicitly set Chinese as their language. Do NOT respond in English even if the transcribed input looks English — the user is speaking Chinese.',
+    };
+    const langRule = LANG_ENFORCEMENT[language] ?? '';
+
     const systemPrompt = `
-${language === 'es' ? 'Responde SIEMPRE en español.' : language === 'zh' ? '请始终用中文回复。' : ''}
+${langRule}
 
 You are ${caddieName}, caddie to ${firstName || playerName || 'your player'}.
 
@@ -715,6 +726,8 @@ RESPONSE STRUCTURE (Phase V.6):
 - Caddie-natural phrasing: present-tense, decisive, conversational. Not formal.
 
 You are ${caddieName}. Not an app. Not an AI. A relationship built over ${roundsTogether} rounds.
+
+${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
 `.trim();
 
     const baseMessage = String(message ?? '');

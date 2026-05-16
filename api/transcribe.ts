@@ -55,10 +55,23 @@ export default async function handler(
 
     console.log('[transcribe] received:', audioFile.size ?? 'unknown', 'bytes, language:', language);
 
+    // Tim 2026-05-15: Spanish tester said Whisper returned English on
+    // the first phrase, then Spanish only after Kevin's reply gave
+    // context. The `language` parameter is a HINT — Whisper can still
+    // auto-detect from accent. The `prompt` parameter is much stronger:
+    // priming text in the target language biases the model decisively
+    // toward that language. Per-language priming below; English path
+    // omits the prompt so accent-thick English speakers still transcribe
+    // cleanly.
+    const PRIMING_PROMPT: Record<string, string> = {
+      es: 'Transcripción en español. Términos de golf: hierro, madera, putter, green, tee, bunker, fairway, swing.',
+      zh: '中文转录。高尔夫术语:铁杆,木杆,推杆,果岭,发球台,沙坑,球道,挥杆。',
+    };
     const transcription = await openai.audio.transcriptions.create({
       file: fs.createReadStream(filePath),
       model: 'whisper-1',
-      language: language === 'zh' ? 'zh' : language,
+      language: language,
+      prompt: PRIMING_PROMPT[language] ?? undefined,
     });
 
     try { fs.unlinkSync(filePath); } catch { /* ignore cleanup errors */ }
