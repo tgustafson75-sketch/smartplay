@@ -132,6 +132,15 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
           persona: useSettingsStore.getState().caddiePersonality,
           personaIntensity: useSettingsStore.getState().personaIntensity?.[useSettingsStore.getState().caddiePersonality] ?? 100,
           tankSoftIntro: useSettingsStore.getState().tankSoftIntro,
+          // Phase 409 — TightLie pending lie analysis. Read straight
+          // from roundStore (NOT a destructured prop) so the latest
+          // value is sent on each request without forcing a re-render
+          // of every consumer of useKevin when the lie changes.
+          pendingLieAnalysis: (() => {
+            try {
+              return useRoundStore.getState().pendingLieAnalysis;
+            } catch { return null; }
+          })(),
         }),
       }).finally(() => clearTimeout(timeout));
 

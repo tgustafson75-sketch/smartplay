@@ -13,6 +13,10 @@ import { bundleLieAnalysisContext, type PlayIntent } from '../services/lieAnalys
 import { analyzeLie, type LieAnalysisResult, type LieAnalysis } from '../services/lieAnalysisService';
 import { speak, stopSpeaking } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
+// Phase 409 — persist the lie analysis onto the pending slot so the
+// next logged shot carries it + the caddie brain can read it for the
+// upcoming "what should I hit" question.
+import { useRoundStore } from '../store/roundStore';
 import { getDialog } from '../services/dialogEngine';
 import { useTrustLevelStore } from '../store/trustLevelStore';
 
@@ -246,7 +250,23 @@ export default function LieAnalysisScreen() {
           analysis={analysis}
           speaking={speaking}
           onReplay={handleReplay}
-          onGotIt={() => safeBack()}
+          onGotIt={() => {
+            // Phase 409 — persist the analysis as the pending lie so
+            // (a) the next shot logged carries this lie on its
+            // shot.lie_analysis record (for recap + stats over time),
+            // and (b) the caddie brain has the lie reality when the
+            // player asks "what should I hit". The pending slot is
+            // cleared by logShot once consumed; if the user re-runs
+            // TightLie before logging a shot, the new analysis
+            // overwrites the prior pending value (one lie per shot).
+            try {
+              const round = useRoundStore.getState();
+              round.setPendingLieAnalysis(analysis);
+            } catch (e) {
+              console.log('[lie-analysis] persist pending failed (non-fatal):', e);
+            }
+            safeBack();
+          }}
           onTryAgain={() => { setAnalysis(null); setImageUri(null); setPhase('camera'); }}
         />
       </SafeAreaView>

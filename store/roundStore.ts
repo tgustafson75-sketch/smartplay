@@ -105,6 +105,12 @@ export interface ShotResult {
   start_location?: ShotLocation | null;
   end_location?: ShotLocation | null;
   hole_number?: number;        // alias of `hole`, populated by new code paths for forward-consistency
+  // Phase 409 — TightLie analysis carried onto the shot record at
+  // logShot time (copied from roundStore.pendingLieAnalysis, then
+  // cleared). Recap + stats over time can correlate shot outcome to
+  // lie category. Optional + nullable for back-compat with legacy
+  // shots logged before Phase 409 shipped.
+  lie_analysis?: import('../services/lieAnalysisService').LieAnalysis | null;
   shot_in_hole_index?: number; // 1, 2, 3 within a hole
   // Phase 110-followup — captured video clip from CaptureOverlay (voice
   // "record this shot"). Back-written by mediaCapture.commitCapture when
@@ -185,6 +191,15 @@ interface RoundState {
   // shows the played tee so the user's score is contextual.
   selectedTee: TeeColor;
 
+  // Phase 409 — TightLie pending result. The lie analysis completes
+  // BEFORE the player hits the shot, so it can't be attached to a
+  // ShotResult that doesn't exist yet. This slot holds the most
+  // recent confirmed analysis until logShot fires (at which point
+  // it's copied onto the shot and cleared). The caddie brain reads
+  // this slot directly so a follow-up "what should I hit" question
+  // gets answered with the lie reality without the user re-stating it.
+  pendingLieAnalysis: import('../services/lieAnalysisService').LieAnalysis | null;
+
   roundStartTime: number | null;
   roundNumber: number;
   roundHistory: RoundRecord[];
@@ -220,6 +235,10 @@ interface RoundState {
     },
   ) => void;
   setSelectedTee: (color: TeeColor) => void;
+
+  // Phase 409 — TightLie pending lie analysis.
+  setPendingLieAnalysis: (analysis: import('../services/lieAnalysisService').LieAnalysis | null) => void;
+  clearPendingLieAnalysis: () => void;
   setActiveCourseId: (id: string | null) => void;
   setCurrentRoundMode: (mode: RoundMode) => void;
   addOrUpdatePlan: (partial: {
@@ -336,7 +355,13 @@ export const useRoundStore = create<RoundState>()(
       // Phase 405 wave 3 — tee box selection. 'unspecified' until user picks.
       selectedTee: 'unspecified',
 
+      // Phase 409 — TightLie pending lie analysis. Cleared when a shot is
+      // logged (its value is copied onto the shot.lie_analysis).
+      pendingLieAnalysis: null,
+
       setSelectedTee: (color) => set({ selectedTee: color }),
+      setPendingLieAnalysis: (analysis) => set({ pendingLieAnalysis: analysis }),
+      clearPendingLieAnalysis: () => set({ pendingLieAnalysis: null }),
 
       startRound: (course, holes, options) => {
         const courseId = options.courseId ?? null;
@@ -700,6 +725,13 @@ export const useRoundStore = create<RoundState>()(
             shot_in_hole_index: shot.shot_in_hole_index ?? shotInHoleIndex,
             shot_in_round_index: shotInRoundIndex,
             player_id: shot.player_id ?? 'primary',
+            // Phase 409 — copy the pending TightLie analysis onto this
+            // shot's record if the user captured a lie before hitting.
+            // Respects an explicit lie_analysis passed in (rare; voice
+            // intent could conceivably attach one directly) — only
+            // falls back to the pending slot when the incoming shot
+            // doesn't carry one.
+            lie_analysis: shot.lie_analysis ?? s.pendingLieAnalysis ?? null,
           };
           let backfilled = s.shots;
           if (incomingStart) {
@@ -716,7 +748,14 @@ export const useRoundStore = create<RoundState>()(
               );
             }
           }
-          return { shots: [...backfilled, enriched] };
+          // Phase 409 — clear the pending lie analysis once consumed
+          // by a shot. If the user captures another lie later in the
+          // round, setPendingLieAnalysis writes a fresh one. This
+          // prevents a stale lie from haunting multiple shots.
+          return {
+            shots: [...backfilled, enriched],
+            pendingLieAnalysis: enriched.lie_analysis ? null : s.pendingLieAnalysis,
+          };
         }),
 
       // Phase 109-followup — edit a previously logged shot. Patch is a

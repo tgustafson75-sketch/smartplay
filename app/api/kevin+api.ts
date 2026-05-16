@@ -141,6 +141,11 @@ export async function POST(request: Request) {
       history = [],
       recentShots = [],
       holeShots = [],
+      // Phase 409 — TightLie pending lie analysis. When set, the
+      // upcoming shot's lie is on-record and the caddie should weave
+      // it into any club / strategy recommendation without waiting
+      // for the player to re-state it.
+      pendingLieAnalysis = null,
     } = body as {
       message?: string;
       language?: string;
@@ -199,6 +204,17 @@ export async function POST(request: Request) {
         feel?: string;
         club?: string;
       }[];
+      // Phase 409 — TightLie pending analysis. Mirrors the LieAnalysis
+      // shape from services/lieAnalysisService.ts.
+      pendingLieAnalysis?: {
+        situation_description: string;
+        tactical_advice: string;
+        recommended_club: string | null;
+        alternative_play: string | null;
+        confidence_level: 'high' | 'medium' | 'low';
+        conservative_call: boolean;
+        goal_aware_note?: string | null;
+      } | null;
     };
 
     // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
@@ -351,6 +367,16 @@ ${(recentShots as { hole: number; shotIndex: number; direction?: string; outcome
       (s.direction ? ` ${s.direction}` : '') +
       (s.outcome ? `, ${s.outcome}` : s.outcomeText ? `, ${s.outcomeText}` : '')
     ).join('\n')}\nIf there's a clear pattern (3+ shots in one direction, repeated contact issues), reference it once when giving tactical advice — don't repeat every shot.`
+  : ''}
+${pendingLieAnalysis ? `\nCURRENT LIE (from TightLie analysis, just captured):
+  Situation: ${pendingLieAnalysis.situation_description}
+  Tactical advice: ${pendingLieAnalysis.tactical_advice}
+  Recommended club: ${pendingLieAnalysis.recommended_club ?? 'open'}
+  Alternative play: ${pendingLieAnalysis.alternative_play ?? 'n/a'}
+  Conservative call: ${pendingLieAnalysis.conservative_call ? 'yes' : 'no'}
+  Confidence: ${pendingLieAnalysis.confidence_level}
+  ${pendingLieAnalysis.goal_aware_note ? `Goal-aware note: ${pendingLieAnalysis.goal_aware_note}` : ''}
+Use this lie reality when the player asks "what should I hit" or for shot strategy on this hole — incorporate the lie, don't make them re-state it. If your tactical advice diverges from the TightLie call, briefly say why; otherwise align.`
   : ''}`
   : 'No active round.'}
 
