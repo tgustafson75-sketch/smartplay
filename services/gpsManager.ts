@@ -17,6 +17,7 @@
 
 import * as Location from 'expo-location';
 import * as Sentry from '@sentry/react-native';
+import { AppState, type AppStateStatus } from 'react-native';
 import { useRoundStore } from '../store/roundStore';
 
 export type GpsMode = 'active' | 'walking' | 'stationary';
@@ -58,7 +59,15 @@ const OUTLIER_JUMP_WINDOW_MS = 5_000;
 // Phase 107 / B3 — rolling smoothing: average the most recent N accepted fixes.
 const SMOOTHING_WINDOW = 3;
 
+// Phase 400-followup — if no fix has arrived for this long while the watch
+// is supposedly running, assume the OS killed the subscription during
+// backgrounding and restart it on next foreground. 30s covers walking-mode
+// (10s) + 3 missed ticks of headroom; stationary (20s) tolerates 1 miss.
+const FIX_STALENESS_MS = 30_000;
+
 let subscription: Location.LocationSubscription | null = null;
+let appStateSub: { remove: () => void } | null = null;
+let lastTickAt = 0;
 let mode: GpsMode = 'walking';
 let lastFix: GpsFix | null = null;
 let lastBumpReason: string | null = null;
@@ -186,6 +195,7 @@ async function startWatchInternal() {
         }
 
       lastFix = fix;
+      lastTickAt = Date.now();
       for (const cb of subscribers) {
         try { cb(fix); } catch {}
       }
@@ -226,6 +236,51 @@ async function startWatchInternal() {
   }
 }
 
+/**
+ * Phase 400-followup — backgrounding kill detection.
+ *
+ * expo-location's watchPositionAsync silently stops delivering fixes when
+ * the OS suspends the app on Android (Doze) or iOS (low-power background).
+ * The subscription object stays non-null so callers can't tell from the
+ * outside; lastFix just goes stale and yardages drift.
+ *
+ * On foreground we check: if the watch is supposedly running but we
+ * haven't received a fix within FIX_STALENESS_MS, tear it down and start
+ * a new one. lastFix is preserved (so the UI doesn't blank out during the
+ * 1–2s the new watch takes to warm) but a fresh tick will overwrite it.
+ */
+async function handleAppStateChange(next: AppStateStatus): Promise<void> {
+  if (next !== 'active') return;
+  if (!subscription) return; // round inactive — stopGpsManager handles
+  const stale = lastTickAt > 0 && Date.now() - lastTickAt > FIX_STALENESS_MS;
+  if (!stale) return;
+  breadcrumb('foreground_restart_stale_watch', {
+    age_ms: Date.now() - lastTickAt,
+    mode,
+  });
+  console.log(`[gps] foreground: watch stale (${Date.now() - lastTickAt}ms) — restarting`);
+  await restartWatch();
+  // Force a one-shot read so consumers don't sit on a stale fix while
+  // the new watch warms up.
+  try {
+    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+    const fresh: GpsFix = {
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+      accuracy_m: pos.coords.accuracy ?? null,
+      speed: pos.coords.speed ?? null,
+      timestamp: pos.timestamp,
+    };
+    lastFix = fresh;
+    lastTickAt = Date.now();
+    for (const cb of subscribers) {
+      try { cb(fresh); } catch {}
+    }
+  } catch (e) {
+    console.log('[gps] foreground one-shot failed:', e);
+  }
+}
+
 function evaluateMode() {
   const now = Date.now();
   // Cool down from active 60s after the most recent bump
@@ -243,8 +298,14 @@ export async function startGpsManager(): Promise<void> {
   if (subscription) return;
   mode = 'walking';
   lastMotionAt = Date.now();
+  lastTickAt = 0;
   await startWatchInternal();
   if (!evalTimer) evalTimer = setInterval(evaluateMode, 5_000);
+  if (!appStateSub) {
+    appStateSub = AppState.addEventListener('change', (next) => {
+      void handleAppStateChange(next);
+    });
+  }
   breadcrumb('manager_start');
 }
 
@@ -258,11 +319,16 @@ export function stopGpsManager(): void {
     clearInterval(evalTimer);
     evalTimer = null;
   }
+  if (appStateSub) {
+    try { appStateSub.remove(); } catch {}
+    appStateSub = null;
+  }
   subscribers.clear();
   lastFix = null;
   smoothingBuffer = [];
   outliersDiscarded = 0;
   batterySaverFloor = null;
+  lastTickAt = 0;
   breadcrumb('manager_stop');
 }
 

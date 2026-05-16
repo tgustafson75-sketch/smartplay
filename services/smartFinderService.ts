@@ -16,11 +16,25 @@ import { getOneShotFix, bumpToActive, subscribe as subscribeGps } from './gpsMan
  * yardage returns null and consumers render a graceful empty state.
  */
 
+/**
+ * Phase 400-followup — `reason` surfaces *why* a yardage triplet is null
+ * so the UI can show actionable error messaging instead of an empty state:
+ *   - 'ok'           — at least one of front/middle/back is populated.
+ *   - 'no_fix'       — GPS has no fix yet (waiting for first watch tick).
+ *   - 'no_hole'      — round store has no record for this hole number.
+ *   - 'no_geometry'  — hole exists but green coordinates are missing
+ *                       (typical when golfcourseapi hasn't been populated
+ *                       for this course). Caller should show "Green
+ *                       coordinates unavailable for this course."
+ */
+export type GreenYardagesReason = 'ok' | 'no_fix' | 'no_hole' | 'no_geometry';
+
 export type GreenYardages = {
   front: number | null;
   middle: number | null;
   back: number | null;
   hole_number: number;
+  reason: GreenYardagesReason;
 };
 
 export type GPSQualityLevel = 'strong' | 'moderate' | 'weak' | 'none';
@@ -175,20 +189,30 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
   const hData = round.courseHoles.find(h => h.hole === hole);
   const fix = lastFix ?? (await refreshFix());
 
-  if (!hData || !fix) {
-    return { front: null, middle: null, back: null, hole_number: hole };
+  if (!hData) {
+    return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_hole' };
+  }
+  if (!fix) {
+    return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_fix' };
   }
 
   const front = safeLoc(hData.frontLat, hData.frontLng);
   const middle = safeLoc(hData.middleLat, hData.middleLng);
   const back = safeLoc(hData.backLat, hData.backLng);
 
-  return {
+  if (!front && !middle && !back) {
+    return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_geometry' };
+  }
+
+  const yards = {
     front: front ? Math.round(haversineYards(fix.location, front)) : null,
     middle: middle ? Math.round(haversineYards(fix.location, middle)) : null,
     back: back ? Math.round(haversineYards(fix.location, back)) : null,
     hole_number: hole,
+    reason: 'ok' as const,
   };
+  logYardageCalc(hole, fix, { front, middle, back }, yards);
+  return yards;
 }
 
 /**
@@ -199,23 +223,107 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
   const round = useRoundStore.getState();
   const hole = holeNumber ?? round.currentHole;
   const hData = round.courseHoles.find(h => h.hole === hole);
-  if (!hData || !lastFix) {
-    return { front: null, middle: null, back: null, hole_number: hole };
+  if (!hData) {
+    return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_hole' };
+  }
+  if (!lastFix) {
+    return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_fix' };
   }
   const front = safeLoc(hData.frontLat, hData.frontLng);
   const middle = safeLoc(hData.middleLat, hData.middleLng);
   const back = safeLoc(hData.backLat, hData.backLng);
-  return {
+  if (!front && !middle && !back) {
+    return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_geometry' };
+  }
+  const yards = {
     front: front ? Math.round(haversineYards(lastFix.location, front)) : null,
     middle: middle ? Math.round(haversineYards(lastFix.location, middle)) : null,
     back: back ? Math.round(haversineYards(lastFix.location, back)) : null,
     hole_number: hole,
+    reason: 'ok' as const,
   };
+  logYardageCalc(hole, lastFix, { front, middle, back }, yards);
+  return yards;
 }
 
 /** Yardage from the player's current location to a tapped/known target point. */
 export async function distanceToPoint(target: ShotLocation): Promise<number | null> {
   const fix = lastFix ?? (await refreshFix());
   if (!fix) return null;
-  return Math.round(haversineYards(fix.location, target));
+  const yards = Math.round(haversineYards(fix.location, target));
+  logYardageCalc(null, fix, { middle: target, front: null, back: null }, {
+    front: null, middle: yards, back: null,
+    hole_number: -1, reason: 'ok',
+  });
+  return yards;
+}
+
+// ─── Empirical validation telemetry ──────────────────────────────────────────
+/**
+ * Phase 400-followup — in-memory ring buffer of every yardage calculation
+ * performed during a round, so Tim can correlate computed SmartFinder
+ * yardages against a real rangefinder on a Z Fold testing pass.
+ *
+ * Captured per call: timestamp, hole, GPS accuracy, source coords, target
+ * coords (F/M/B), computed yards. Buffered to 500 entries (≈ a full round
+ * at 4s polling) then oldest entries drop. Exported via getYardageCalcLog()
+ * for the GPS debug overlay or to dump to AsyncStorage on round-end.
+ *
+ * NOT persisted — round-scoped only. If the buffer needs to survive a
+ * crash, callers must snapshot it themselves.
+ */
+export type YardageCalcEntry = {
+  ts: number;
+  hole: number | null;
+  gps_accuracy_m: number | null;
+  src_lat: number;
+  src_lng: number;
+  front_lat: number | null;
+  front_lng: number | null;
+  middle_lat: number | null;
+  middle_lng: number | null;
+  back_lat: number | null;
+  back_lng: number | null;
+  front_yards: number | null;
+  middle_yards: number | null;
+  back_yards: number | null;
+};
+
+const CALC_LOG_MAX = 500;
+let calcLog: YardageCalcEntry[] = [];
+
+function logYardageCalc(
+  hole: number | null,
+  fix: LastFix,
+  targets: { front: ShotLocation | null; middle: ShotLocation | null; back: ShotLocation | null },
+  result: GreenYardages,
+): void {
+  const entry: YardageCalcEntry = {
+    ts: Date.now(),
+    hole,
+    gps_accuracy_m: fix.accuracy_m,
+    src_lat: fix.location.lat,
+    src_lng: fix.location.lng,
+    front_lat: targets.front?.lat ?? null,
+    front_lng: targets.front?.lng ?? null,
+    middle_lat: targets.middle?.lat ?? null,
+    middle_lng: targets.middle?.lng ?? null,
+    back_lat: targets.back?.lat ?? null,
+    back_lng: targets.back?.lng ?? null,
+    front_yards: result.front,
+    middle_yards: result.middle,
+    back_yards: result.back,
+  };
+  calcLog.push(entry);
+  if (calcLog.length > CALC_LOG_MAX) {
+    calcLog = calcLog.slice(-CALC_LOG_MAX);
+  }
+}
+
+export function getYardageCalcLog(): YardageCalcEntry[] {
+  return calcLog.slice();
+}
+
+export function clearYardageCalcLog(): void {
+  calcLog = [];
 }

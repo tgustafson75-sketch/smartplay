@@ -2362,6 +2362,12 @@ export default function CaddieTab() {
           // Phase AT — Tim wants the strip as LOW as possible. bottom: 0
           // pins it to the very bottom edge of the screen.
           bottomOffset={0}
+          // Phase 400-followup — surface whether the strip's PLAYS yardage
+          // came from live GPS or scorecard fallback. liveYardage is non-null
+          // only when yardageMode='live' AND GPS resolved a haversine yards
+          // value; otherwise we're rendering the static scorecard yardage
+          // and the user deserves to know.
+          yardageSource={displayYardage == null ? null : (liveYardage != null ? 'live' : 'static')}
           onPress={() => setShowShotCard(true)}
         />
       </Animated.View>

@@ -818,6 +818,16 @@ function MapView({
       const breakdown = playsLikeDistance(actual, weather, shotBearingDeg);
       return Math.abs(breakdown.delta_yards) >= 3 ? breakdown.plays_like_yards : null;
     };
+    // Phase 400-followup — explicit message when course geometry is
+    // missing or GPS hasn't locked yet, instead of silent "—" placeholders.
+    // 'no_geometry' is the painful case: hole exists but golfcourseapi
+    // never returned green coordinates. Tell the user, don't pretend.
+    const geometryMsg =
+      yards.reason === 'no_geometry'
+        ? 'Green coordinates unavailable for this course.'
+        : yards.reason === 'no_fix'
+        ? 'Waiting for GPS fix…'
+        : null;
     return (
       <View style={styles.canvasWrap}>
         <View style={styles.standardWrap}>
@@ -828,6 +838,11 @@ function MapView({
             <View style={styles.standardDivider} />
             <BigCell label="BACK" value={yards.back} playsLikeValue={playsLike(yards.back)} />
           </View>
+          {geometryMsg && (
+            <View style={styles.geometryMsgRow}>
+              <Text style={styles.geometryMsgText}>{geometryMsg}</Text>
+            </View>
+          )}
         </View>
         {geometry && geometry.hazards.length > 0 && (
           <View style={styles.hazardList}>
@@ -1070,6 +1085,8 @@ const styles = StyleSheet.create({
   hazardList: { marginTop: 24, alignSelf: 'stretch', paddingHorizontal: 16 },
   hazardHeading: { color: '#00C896', fontSize: 11, fontWeight: '800', letterSpacing: 1.4, marginBottom: 8 },
   hazardItem: { color: '#9ca3af', fontSize: 13, lineHeight: 19 },
+  geometryMsgRow: { marginTop: 16, alignSelf: 'stretch', alignItems: 'center', paddingHorizontal: 16 },
+  geometryMsgText: { color: '#fbbf24', fontSize: 12, fontWeight: '600', letterSpacing: 0.4, textAlign: 'center' },
 
   holeNav: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',

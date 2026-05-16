@@ -19,6 +19,11 @@ export interface CaddieDataStripProps {
   visible: boolean;
   bottomOffset?: number;
   stripLayout?: 'horizontal' | 'grid';
+  // Phase 400-followup — surfaces whether the PLAYS yardage was derived
+  // from live GPS or from the scorecard. Shown as a small pill in the
+  // strip's top-right corner so users never confuse the static fallback
+  // for a live reading. null = pre-round / no data shown yet.
+  yardageSource?: 'live' | 'static' | null;
   onPress: () => void;
 }
 
@@ -31,6 +36,7 @@ export default function CaddieDataStrip({
   visible,
   bottomOffset = 0,
   stripLayout = 'horizontal',
+  yardageSource = null,
   onPress,
 }: CaddieDataStripProps) {
   const mountedOpacity = useRef(new Animated.Value(visible ? 1 : 0)).current;
@@ -272,6 +278,23 @@ export default function CaddieDataStrip({
             style={styles.chevronHint}
           />
         </View>
+        {yardageSource && (
+          <View
+            style={[
+              styles.sourcePill,
+              yardageSource === 'live' ? styles.sourcePillLive : styles.sourcePillStatic,
+            ]}
+          >
+            <Text
+              style={[
+                styles.sourcePillText,
+                yardageSource === 'live' ? styles.sourcePillTextLive : styles.sourcePillTextStatic,
+              ]}
+            >
+              {yardageSource === 'live' ? 'LIVE' : 'STATIC'}
+            </Text>
+          </View>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -369,5 +392,33 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 12,
     top: 10,
+  },
+  sourcePill: {
+    position: 'absolute',
+    top: 4,
+    left: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  sourcePillLive: {
+    borderColor: 'rgba(0, 200, 150, 0.6)',
+    backgroundColor: 'rgba(0, 200, 150, 0.12)',
+  },
+  sourcePillStatic: {
+    borderColor: 'rgba(251, 191, 36, 0.55)',
+    backgroundColor: 'rgba(251, 191, 36, 0.10)',
+  },
+  sourcePillText: {
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  sourcePillTextLive: {
+    color: '#00C896',
+  },
+  sourcePillTextStatic: {
+    color: '#fbbf24',
   },
 });
