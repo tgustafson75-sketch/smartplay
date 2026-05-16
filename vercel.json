@@ -41,6 +41,7 @@
     { "src": "/api/tutorial-analysis", "dest": "/api/tutorial-analysis.ts" },
     { "src": "/api/golfbert-proxy",    "dest": "/api/golfbert-proxy.ts" },
     { "src": "/api/pose-analysis",     "dest": "/api/pose-analysis.ts" },
+    { "src": "/api/acoustic-detect",   "dest": "/api/acoustic-detect.ts" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]

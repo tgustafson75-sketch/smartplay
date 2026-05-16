@@ -49,6 +49,10 @@ export interface ImpactReading {
   peak_db: number;
   /** Confidence 0-1. Derived from peak_db buckets (see header). */
   confidence: number;
+  /** Local filesystem URI of the parallel audio recording. Caller can
+   *  POST this to /api/acoustic-detect for server-side two-peak speed
+   *  detection, or call cleanupImpactRecording(uri) to discard. */
+  audio_uri: string | null;
 }
 
 interface RunningRecorder {
@@ -145,16 +149,12 @@ export async function stopAndDetectImpact(): Promise<ImpactReading | null> {
     // meters we collected.
   }
 
-  // Best-effort cleanup of the discarded audio file. We never need
-  // the WAV/M4A on disk; only the meter samples matter.
+  // Retain the audio file URI so the caller can POST it to the
+  // server-side acoustic detector for two-peak speed analysis.
+  // Caller responsible for cleanup via cleanupImpactRecording().
+  let audio_uri: string | null = null;
   try {
-    const uri = state.recording.getURI();
-    if (uri) {
-      // Don't import expo-file-system here — the file will be cleaned
-      // up by the OS cache eviction soon enough. Keeping this module
-      // dep-free of the filesystem layer.
-      void uri;
-    }
+    audio_uri = state.recording.getURI();
   } catch { /* noop */ }
 
   if (state.meterSamples.length === 0) return null;
@@ -178,7 +178,22 @@ export async function stopAndDetectImpact(): Promise<ImpactReading | null> {
     impact_ms: peak.offset_ms,
     peak_db: peak.db,
     confidence,
+    audio_uri,
   };
+}
+
+/**
+ * Best-effort cleanup of the retained audio file. Call after the
+ * server-side speed detection completes (or fails) so the cache
+ * directory doesn't fill up.
+ */
+export async function cleanupImpactRecording(uri: string | null): Promise<void> {
+  if (!uri) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const FS = require('expo-file-system/legacy');
+    await FS.deleteAsync(uri, { idempotent: true });
+  } catch { /* noop */ }
 }
 
 /**

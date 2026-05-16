@@ -52,8 +52,10 @@ import {
   startImpactRecording,
   stopAndDetectImpact,
   abortImpactRecording,
+  cleanupImpactRecording,
   type ImpactReading,
 } from '../../services/acousticImpactDetector';
+import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
 
 type Phase =
   | 'SETUP'
@@ -121,6 +123,12 @@ export default function CageDrillScreen() {
   const recordingStartedAtRef = useRef<number | null>(null);
   // Acoustic impact detector result for this capture.
   const [impactReading, setImpactReading] = useState<ImpactReading | null>(null);
+  // Server-detected ball speed (lands asynchronously after analyze).
+  const [ballSpeed, setBallSpeed] = useState<BallSpeedResult | null>(null);
+  // Cage distance (yards) — for now, default 8 ft = 2.67 yards which is
+  // the camera-setup default. TODO next session: pipe through the
+  // calibrated distance from cageOverlayCalibrationStore or settings.
+  const cageDistanceYards = 4;
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -240,9 +248,10 @@ export default function CageDrillScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setRecordedSeconds(0);
     setPhase('RECORDING');
-    // Reset any previous watch swing + impact reading.
+    // Reset any previous watch swing + impact reading + ball speed.
     setWatchSwing(null);
     setImpactReading(null);
+    setBallSpeed(null);
 
     // Tick countdown
     const startedAt = Date.now();
@@ -298,8 +307,22 @@ export default function CageDrillScreen() {
     // Phase J.1 — stop the parallel audio recording and run peak
     // detection. Fire in parallel with the video upload below so this
     // ~50ms work doesn't block the user from seeing UPLOADING state.
+    // J.2 hybrid: when on-device impact is found, ALSO POST the WAV to
+    // /api/acoustic-detect for server-side two-peak ball speed.
     void stopAndDetectImpact()
-      .then((reading) => { if (reading) setImpactReading(reading); })
+      .then(async (reading) => {
+        if (!reading) return;
+        setImpactReading(reading);
+        if (reading.audio_uri) {
+          const speed = await detectBallSpeed({
+            audioUri: reading.audio_uri,
+            distance_yards: cageDistanceYards,
+            impact_ms: reading.impact_ms,
+          });
+          if (speed) setBallSpeed(speed);
+          void cleanupImpactRecording(reading.audio_uri);
+        }
+      })
       .catch(() => undefined);
 
     setPhase('UPLOADING');
@@ -383,6 +406,7 @@ export default function CageDrillScreen() {
     setCoach(null);
     setWatchSwing(null);
     setImpactReading(null);
+    setBallSpeed(null);
     setErrorMessage(null);
     setDetailsOpen(false);
     setRecordedSeconds(0);
@@ -654,18 +678,25 @@ export default function CageDrillScreen() {
             )}
 
             {/* Acoustic impact card — shows the detected strike time so
-                users can scrub to the impact frame. Hidden when no
-                acoustic reading came back (quiet mic / no detected peak). */}
+                users can scrub to the impact frame. Ball speed (server-
+                detected) lands asynchronously after the on-device peak.
+                Hidden when no acoustic reading came back. */}
             {impactReading && (
               <View style={styles.impactCard}>
                 <View style={styles.watchHeader}>
                   <Ionicons name="pulse-outline" size={16} color="#F5A623" />
-                  <Text style={[styles.watchHeaderText, { color: '#F5A623' }]}>ACOUSTIC IMPACT</Text>
+                  <Text style={[styles.watchHeaderText, { color: '#F5A623' }]}>ACOUSTIC</Text>
                   <Text style={styles.watchClub}>{Math.round(impactReading.confidence * 100)}% conf</Text>
                 </View>
                 <Text style={styles.impactBody}>
                   Strike at <Text style={styles.impactBold}>{(impactReading.impact_ms / 1000).toFixed(2)}s</Text> · peak {impactReading.peak_db.toFixed(1)} dB
                 </Text>
+                {ballSpeed ? (
+                  <Text style={[styles.impactBody, { marginTop: 6 }]}>
+                    Ball speed <Text style={styles.impactBold}>{ballSpeed.speed_mph} mph</Text>
+                    {ballSpeed.source === 'mock_scaffold' ? ' · (scaffold — real DSP next session)' : ''}
+                  </Text>
+                ) : null}
               </View>
             )}
 
