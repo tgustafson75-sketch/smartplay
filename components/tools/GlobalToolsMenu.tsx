@@ -35,6 +35,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
 import { recalibrateGps } from '../../services/gpsManager';
 import { forceMarkPosition } from '../../services/positionMarkBus';
+import { useToastStore } from '../../store/toastStore';
 
 export function GlobalToolsMenu() {
   const router = useRouter();
@@ -63,6 +64,7 @@ export function GlobalToolsMenu() {
     const next = TRUST_LEVEL_SLIDER_ORDER[(cur + 1) % TRUST_LEVEL_SLIDER_ORDER.length];
     setTrustLevel(next);
     void Haptics.selectionAsync().catch(() => undefined);
+    useToastStore.getState().show(`Now in ${TRUST_LEVEL_META[next].label}`);
     close();
     router.push('/(tabs)/caddie' as never);
   };
@@ -73,6 +75,7 @@ export function GlobalToolsMenu() {
     const next = list[(idx + 1) % list.length];
     setCaddiePersonality(next);
     void Haptics.selectionAsync().catch(() => undefined);
+    useToastStore.getState().show(`Caddie: ${getCaddieName(next)}`);
     close();
   };
 

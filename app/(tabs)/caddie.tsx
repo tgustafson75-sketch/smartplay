@@ -67,6 +67,7 @@ import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
 import { useTrustLevelStore, TRUST_LEVEL_META, TRUST_LEVEL_SLIDER_ORDER, type TrustLevel } from '../../store/trustLevelStore';
+import { useToastStore } from '../../store/toastStore';
 // Phase U2 — KevinAvatar import removed. The L1 SmartPlay-badge mic-trigger
 // it used to wrap was deleted in Phase AU; the import sat as orphan dead
 // code with no JSX consumer. The component file itself is preserved for
@@ -2873,11 +2874,15 @@ export default function CaddieTab() {
               { icon: 'options-outline',     label: `${getCaddieName(caddiePersonality)}'s Presence: ${TRUST_LEVEL_META[trustLevel].label}`, sub: `${TRUST_LEVEL_META[trustLevel].one_liner} · Tap to cycle`, action: () => {
                   // Cycle through the slider display order so Cockpit (L5)
                   // is reachable: Quiet → Cockpit → Companion → Active → Full → Quiet.
-                  // Old `((level % 4) + 1)` skipped 5 entirely and dropped
-                  // L5 → L2 in one tap — exactly the bug Tim reported.
                   const cur = TRUST_LEVEL_SLIDER_ORDER.indexOf(trustLevel);
                   const next = TRUST_LEVEL_SLIDER_ORDER[(cur + 1) % TRUST_LEVEL_SLIDER_ORDER.length];
                   setTrustLevel(next);
+                  // Match GlobalToolsMenu behavior — close modal,
+                  // haptic, toast. Without these the user tapped and
+                  // saw nothing happen except the modal staying open.
+                  setShowMoreMenu(false);
+                  void Haptics.selectionAsync().catch(() => undefined);
+                  useToastStore.getState().show(`Now in ${TRUST_LEVEL_META[next].label}`);
                 } },
               // (Removed from Tools menu per Tim — Log a shot, Penalty
               // Stroke, and Capture Photo don't belong here. Log a shot

@@ -34,6 +34,7 @@ import GpsQualityOverlay from '../components/dev/GpsQualityOverlay';
 import CaptureOverlay from '../components/CaptureOverlay';
 import CaptionStrip from '../components/CaptionStrip';
 import GlobalToolsMenu from '../components/tools/GlobalToolsMenu';
+import GlobalToast from '../components/toast/GlobalToast';
 
 // Phase Y — whenRoundStoreHydrated lives in store/roundStore.ts (was
 // inlined here originally; audit moved it to remove a brittle
@@ -413,6 +414,8 @@ function AppNavigator() {
           BrandHeaderRow. Mounts once here so the modal is reachable from
           anywhere without prop-drilling. State lives in toolsMenuStore. */}
       <GlobalToolsMenu />
+      {/* Tiny snackbar for one-shot confirmations (mode change, etc.). */}
+      <GlobalToast />
       <RoundActiveDevIndicator />
       <Stack
         screenOptions={{
