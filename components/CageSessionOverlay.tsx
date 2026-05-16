@@ -33,6 +33,13 @@ import {
   cleanupImpactRecording,
   type ShotDetection,
 } from '../services/acousticImpactDetector';
+// Phase 402 — vision-based club ID controls + manual picker modal.
+// Audit at docs/audit-402-club-detection-state.md found the vision
+// pipeline (api/club-recognition.ts + services/clubRecognition.ts) was
+// production-ready with zero call sites. These components are the
+// previously-missing UI surface.
+import ClubIdentifyControls from './cage/ClubIdentifyControls';
+import ClubPickerModal from './cage/ClubPickerModal';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -592,6 +599,13 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
         <Text style={styles.manualOnlyBadge}>Auto-detect off — log manually</Text>
       )}
 
+      {/* Phase 402 — current-club chip + ID-club camera button. Always
+          visible during an active recording. Tapping the chip opens the
+          manual picker; tapping ID launches expo-image-picker and routes
+          the Sonnet vision response by confidence (high auto-accepts,
+          medium prompts, low/error falls through to manual). */}
+      <ClubIdentifyControls />
+
       {/* Drill-info strip — only renders when this session was launched
           with a drill context. Shows drill name + current step so the
           player has structure inside the same surface as free practice.
@@ -686,6 +700,11 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Phase 402 — manual club picker. Renders when cageStore.clubMenuOpen
+          is true (set by the chip tap, the ID button's low-confidence
+          fallback, or the club_menu voice intent). */}
+      <ClubPickerModal />
     </SafeAreaView>
   );
 }
