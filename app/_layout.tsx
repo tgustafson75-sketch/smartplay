@@ -50,6 +50,7 @@ import CaptureOverlay from '../components/CaptureOverlay';
 import CaptionStrip from '../components/CaptionStrip';
 import { GlobalToolsMenu } from '../components/tools/GlobalToolsMenu';
 import { GlobalToast } from '../components/toast/GlobalToast';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 // Phase Y — whenRoundStoreHydrated lives in store/roundStore.ts (was
 // inlined here originally; audit moved it to remove a brittle
@@ -750,8 +751,16 @@ function RoundActiveDevIndicator(): React.ReactElement | null {
 }
 
 export default function RootLayout() {
+  // Custom ErrorBoundary replaces Sentry.ErrorBoundary. The Sentry variant
+  // renders `null` when no `fallback` prop is provided AND no DSN is set —
+  // which produces a visually-indistinguishable white screen and was the
+  // PROBABLE cause of "post-permissions white screen" reports through
+  // 2026-05-16. Our boundary always renders a visible error UI with the
+  // stack so we never fly blind again. Sentry breadcrumbs still flow via
+  // explicit Sentry.addBreadcrumb calls elsewhere in the codebase when
+  // EXPO_PUBLIC_SENTRY_DSN is set.
   return (
-    <Sentry.ErrorBoundary>
+    <ErrorBoundary>
     <SmartVisionProvider>
     <KevinPresenceProvider>
     <SafeAreaProvider>
@@ -761,6 +770,6 @@ export default function RootLayout() {
     </SafeAreaProvider>
     </KevinPresenceProvider>
     </SmartVisionProvider>
-    </Sentry.ErrorBoundary>
+    </ErrorBoundary>
   );
 }

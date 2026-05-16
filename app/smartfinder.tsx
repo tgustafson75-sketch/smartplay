@@ -234,18 +234,27 @@ export default function SmartFinder() {
 
 /**
  * Rangefinder-style zoom stops. expo-camera's `zoom` prop is 0..1 where 0 ≈
- * native 1× and 1 ≈ the device's max zoom (often ~10× digital). Capping at
- * 0.35 keeps us in the "useful framing" range (~3–4× on most phones) and
- * prevents weird device defaults from landing at 10–30× (the Fold Z report).
+ * native 1× and 1 ≈ the device's max zoom (varies by phone — Z Fold reports
+ * 30× at the top, most flagship Androids 10–20×, base phones 8×).
  *
  * Stops are intentionally coarse — golfers want quick, repeatable framing,
  * not 0.01-precision sliders. ± buttons cycle through these.
+ *
+ * Original range stopped at 4× to dodge a Z Fold issue where values near
+ * 1.0 produced wild framing. Pushing further now because finding a ball at
+ * 100+ yards genuinely needs the reach; the upper stops may FEEL different
+ * across devices but the labels match what most modern Androids deliver.
+ * If Z Fold or another device misreads the top stops, tune the `value`
+ * column — labels are cosmetic.
  */
 const ZOOM_STOPS: readonly { label: string; value: number }[] = [
-  { label: '1.0x', value: 0.00 },
-  { label: '2.0x', value: 0.12 },
-  { label: '3.0x', value: 0.22 },
-  { label: '4.0x', value: 0.35 },
+  { label: '1.0x',  value: 0.00 },
+  { label: '2.0x',  value: 0.12 },
+  { label: '3.0x',  value: 0.22 },
+  { label: '4.0x',  value: 0.35 },
+  { label: '5.0x',  value: 0.45 },
+  { label: '7.0x',  value: 0.60 },
+  { label: '10.0x', value: 0.80 },
 ];
 
 function CameraSmartFinder({
@@ -517,8 +526,9 @@ function StandardCameraOverlay({
       </View>
 
       {/* Top-right zoom control. ± buttons step through ZOOM_STOPS so the
-          user can frame distant targets like a real rangefinder. Capped at
-          4× to avoid the 30× Fold-Z surprise reported on stock expo-camera. */}
+          user can frame distant targets like a real rangefinder.
+          Range 1× → 10× across 7 stops (1/2/3/4/5/7/10). UI dot is the
+          active marker — the big zoomLabel above is what the user reads. */}
       <View style={[styles.zoomCol, { top: insets.top + 130 }]}>
         <Text style={styles.zoomLabel}>{zoomLabel}</Text>
         <View style={styles.zoomDots}>
