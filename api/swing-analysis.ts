@@ -44,6 +44,13 @@ type SwingAnalysisResponse = {
   confidence: 'high' | 'medium' | 'low';
   observation: string;          // 1-sentence what was visible in the frames
   follow_up_question?: string | null;  // when frames were too poor to read
+  // Phase 403b — 0-based index into the submitted frames identifying the
+  // most diagnostic frame for the detected issue. Used downstream to
+  // persist that exact frame as a JPEG so the review UI can show the
+  // user the moment of the fault. -1 = no specific frame stood out
+  // (e.g. detected_issue='none' or the tendency was uniform across all
+  // frames). Required when detected_issue != 'none'.
+  fault_frame_index?: number;
 };
 
 // Phase BL/U1 — Tentative observation mode. Used by the upload pipeline
@@ -78,6 +85,8 @@ const SYSTEM_PROMPT = `You are a swing analyst looking at golf-swing frames capt
 
 You will see 1-5 frames from a single swing. Identify the most prominent tendency you can see and return it with appropriate confidence. Use the confidence scale to express uncertainty — a low-confidence tendency is more useful than 'none', because the player can confirm or rule it out.
 
+When you identify a fault, also identify WHICH of the submitted frames most clearly shows it. The frames are submitted in time order from address through follow-through — index 0 is the earliest frame, the last index is the latest. The user will see the frame at that index as visual evidence of the diagnosis, so pick the frame that most clearly displays the named tendency.
+
 Canonical issues (pick the one that best matches what you see):
 - club_face_open: clubface looks open at or near impact
 - club_face_closed: clubface looks closed at or near impact
@@ -107,6 +116,7 @@ Output ONLY a JSON object:
   "severity": "minor" | "moderate" | "significant" | "none",
   "confidence": "high" | "medium" | "low",
   "observation": "<one short sentence describing what was actually visible — no advice, just observation>",
+  "fault_frame_index": <0-based integer index into the submitted frames identifying the single most diagnostic frame for the detected issue, or -1 if no specific frame stood out>,
   "follow_up_question": "<short retake suggestion ONLY when frames are genuinely unreadable; else null>"
 }
 
@@ -114,6 +124,8 @@ Rules:
 - Default to NAMING what you see at low confidence rather than returning 'none'. The player can rule out a low-confidence read; they cannot act on silence.
 - 'none' is reserved for: unreadable frames OR a swing that genuinely looks clean across all 5 frames (no recognizable tendency at all).
 - The observation field is the single sentence the user will hear ("Your hips are moving toward the ball through impact"). Specific, factual, no jargon.
+- fault_frame_index: when detected_issue is anything other than 'none', return the integer index of the frame that most clearly shows the tendency. When detected_issue is 'none', return -1.
+- Voice / cadence: when a caddie name is provided in the user context, write the observation in that caddie's voice. Tank = clipped imperative, military cadence ("Weight's hanging back at impact. Not acceptable."). Kevin = neutral conversational technical ("Your weight is still on your back foot at impact"). Serena = precise instructor ("At impact your weight has not transferred forward — about 60 percent still on the trail side"). Harry = warm encouraging ("I can see you're hanging back a bit at impact — that's a common one"). Default (no caddie_name) = neutral technical.
 - Output ONLY valid JSON. No code fences, no preamble.`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -145,6 +157,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (ctx.swing_number != null) ctxLines.push(`Swing ${ctx.swing_number} of session`);
     if (ctx.prior_issues && Array.isArray(ctx.prior_issues) && ctx.prior_issues.length > 0) {
       ctxLines.push(`Prior swings showed: ${(ctx.prior_issues as string[]).join(', ')}`);
+    }
+    // Phase 403b — persona injection. When the client passes the active
+    // caddie name, the analyst writes the observation in that caddie's
+    // cadence (system prompt rule above). Falls back to neutral
+    // technical voice when absent.
+    if (typeof ctx.caddie_name === 'string' && ctx.caddie_name.trim().length > 0) {
+      ctxLines.push(`Caddie voice: ${ctx.caddie_name.trim()}`);
     }
     const userText = mode === 'tentative'
       ? (ctxLines.length > 0 ? ctxLines.join('\n') + '\n\n' : '') +
@@ -196,6 +215,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       parsed.confidence = 'low';
     }
     if (typeof parsed.observation !== 'string') parsed.observation = '';
+    // Phase 403b — normalise fault_frame_index. Must be an integer in
+    // [0, frames.length-1] or -1 (no specific frame stood out). Any
+    // out-of-range value falls back to -1.
+    if (typeof parsed.fault_frame_index !== 'number' || !Number.isInteger(parsed.fault_frame_index)) {
+      parsed.fault_frame_index = -1;
+    } else if (parsed.fault_frame_index < -1 || parsed.fault_frame_index >= frames.length) {
+      parsed.fault_frame_index = -1;
+    }
 
     // Phase BL/U1 — tentative mode forcibly normalises detected_issue and
     // severity so a creative model response can't accidentally produce a
@@ -204,6 +231,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       parsed.detected_issue = 'none';
       parsed.severity = 'none';
       parsed.confidence = 'low';
+      parsed.fault_frame_index = -1;
     }
 
     return res.status(200).json(parsed);

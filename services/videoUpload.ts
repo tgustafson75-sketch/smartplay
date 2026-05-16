@@ -217,11 +217,27 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         boundary_start_sec: boundaries?.startSec ?? null,
         boundary_end_sec: boundaries?.endSec ?? null,
       });
+      // Phase 403b — pass active caddie name so the analyst writes the
+      // observation in that caddie's cadence (Tank: clipped imperative,
+      // Kevin: neutral technical, Serena: precise, Harry: warm). And
+      // pass faultFrameBaseName so a successful analysis persists the
+      // diagnostic frame as a JPEG under documentDirectory/smartmotion/
+      // keyed by shot id — that file is then referenced from
+      // perShotAnalysis.visual_reference_path for the review UI.
+      let caddieName: string | undefined;
+      try {
+        const { getActiveCaddie } = await import('./caddieResolver');
+        const { getCaddieName } = await import('../lib/persona');
+        caddieName = getCaddieName(getActiveCaddie());
+      } catch { /* persona resolver optional */ }
       const r = await analyzeSwing(swing.clipUri, {
         club: swing.club,
         swing_number: i + 1,
         prior_issues: results.slice(-3).map(x => x.analysis.detected_issue),
-      }, boundaries);
+        caddie_name: caddieName,
+      }, boundaries, {
+        faultFrameBaseName: `${sessionId}_${swing.id}_fault`,
+      });
       uploadLog('frame-analysis-complete', {
         index: i,
         kind: r.kind,
@@ -258,11 +274,16 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         useCageStore.getState().setShotIssueTimestamps(sessionId, swing.id, r.frame_timestamps_sec);
         // Phase BW — persist per-shot analysis so the review UI can render
         // a per-swing card for multi-swing live cage sessions.
+        // Phase 403b — additionally persist the fault frame URI and the
+        // 0-based fault_frame_index so the review UI can show the user
+        // the moment of the fault.
         useCageStore.getState().setShotAnalysis(sessionId, swing.id, {
           detected_issue: r.analysis.detected_issue,
           severity: r.analysis.severity,
           confidence: r.analysis.confidence,
           observation: r.analysis.observation,
+          fault_frame_index: r.analysis.fault_frame_index ?? -1,
+          visual_reference_path: r.fault_frame_uri ?? null,
         });
       }
     }

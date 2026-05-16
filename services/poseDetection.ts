@@ -36,10 +36,23 @@ export type SwingAnalysis = {
   confidence: 'high' | 'medium' | 'low';
   observation: string;
   follow_up_question?: string | null;
+  // Phase 403b — 0-based index of the most diagnostic frame, or -1 when
+  // no specific frame stood out. Surfaces the moment of the fault in
+  // the review UI.
+  fault_frame_index?: number;
 };
 
 export type SwingAnalysisResult =
-  | { kind: 'ok'; analysis: SwingAnalysis; frame_timestamps_sec: number[] }
+  | {
+      kind: 'ok';
+      analysis: SwingAnalysis;
+      frame_timestamps_sec: number[];
+      // Phase 403b — local file URI for the persisted fault-frame JPEG.
+      // Null when fault_frame_index was -1 or when persistence failed
+      // (consumers tolerate missing image — text diagnostic still
+      // renders).
+      fault_frame_uri?: string | null;
+    }
   | { kind: 'no_frames' }
   | { kind: 'no_network' }
   | { kind: 'error'; message: string };
@@ -215,8 +228,16 @@ export async function extractKeyFrames(
  */
 export async function analyzeSwing(
   clipUri: string,
-  context: { club: string; swing_number: number; prior_issues?: string[] },
+  // Phase 403b — caddie_name optional; when present, the analyst writes
+  // the observation in that caddie's cadence (Tank/Kevin/Serena/Harry).
+  // Falls back to neutral technical voice when absent.
+  context: { club: string; swing_number: number; prior_issues?: string[]; caddie_name?: string },
   boundaries?: { startSec: number; endSec: number },
+  // Phase 403b — when provided, the persisted fault-frame JPEG will be
+  // saved under this filename (e.g. `${shotId}_fault.jpg`) inside the
+  // app's document directory. Callers in videoUpload.ts pass the shot id
+  // so the resulting URI can be persisted onto perShotAnalysis.
+  persistOpts?: { faultFrameBaseName: string },
 ): Promise<SwingAnalysisResult> {
   V6('STAGE 2 — analyzeSwing enter', {
     club: context.club,
@@ -279,8 +300,44 @@ export async function analyzeSwing(
       confidence: data.confidence,
       observation_head: (data.observation ?? '').slice(0, 200),
       follow_up_question: data.follow_up_question ?? null,
+      fault_frame_index: data.fault_frame_index ?? null,
     });
-    return { kind: 'ok', analysis: data, frame_timestamps_sec: frames.map(f => f.time_sec) };
+
+    // Phase 403b — persist the fault frame as a JPEG so the review UI
+    // can show the user the moment of the fault. We already have the
+    // base64 in `frames[index].b64`; write it once to the document
+    // directory under a stable shot-id-keyed name. Failures are
+    // non-fatal — the text diagnostic still renders.
+    let faultFrameUri: string | null = null;
+    const idx = typeof data.fault_frame_index === 'number' ? data.fault_frame_index : -1;
+    if (idx >= 0 && idx < frames.length && persistOpts?.faultFrameBaseName) {
+      try {
+        const FS = await import('expo-file-system/legacy');
+        const dir = FS.documentDirectory ?? FS.cacheDirectory;
+        if (dir) {
+          const safeName = persistOpts.faultFrameBaseName.replace(/[^a-zA-Z0-9_-]/g, '_');
+          const uri = `${dir}smartmotion/${safeName}.jpg`;
+          await FS.makeDirectoryAsync(`${dir}smartmotion`, { intermediates: true }).catch(() => {});
+          await FS.writeAsStringAsync(uri, frames[idx].b64, { encoding: FS.EncodingType.Base64 });
+          faultFrameUri = uri;
+          V6('STAGE 4 — fault frame persisted', {
+            uri_tail: uri.slice(-40),
+            frame_index: idx,
+          });
+        }
+      } catch (e) {
+        V6('STAGE 4 — fault frame persist failed (non-fatal)', {
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+
+    return {
+      kind: 'ok',
+      analysis: data,
+      frame_timestamps_sec: frames.map(f => f.time_sec),
+      fault_frame_uri: faultFrameUri,
+    };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     V6('STAGE 4 — fetch threw', { error: msg });

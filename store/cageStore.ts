@@ -59,6 +59,15 @@ export interface CageShot {
     severity: 'minor' | 'moderate' | 'significant' | 'none';
     confidence: 'high' | 'medium' | 'low';
     observation: string;
+    // Phase 403b — visual evidence of the diagnosis. fault_frame_index
+    // is the 0-based index into the 5-frame sample (or -1 when no
+    // specific frame stood out). visual_reference_path is the local
+    // file URI of that exact frame persisted as a JPEG (or null when
+    // the index was -1, the persist failed, or the entry predates
+    // Phase 403b). Consumers tolerate missing path — text diagnostic
+    // still renders fully.
+    fault_frame_index?: number;
+    visual_reference_path?: string | null;
   } | null;
 
   // Phase BZ-v1 — user annotations on a captured swing. All optional; absence
@@ -280,6 +289,12 @@ interface CageState {
       severity: 'minor' | 'moderate' | 'significant' | 'none';
       confidence: 'high' | 'medium' | 'low';
       observation: string;
+      // Phase 403b — optional. Persisted under perShotAnalysis so the
+      // review UI can render the fault frame as visual evidence of the
+      // diagnosis. Both fields tolerate absence (callers predating 403b
+      // continue to call setShotAnalysis without them).
+      fault_frame_index?: number;
+      visual_reference_path?: string | null;
     },
   ) => void;
   /** Phase R — patch Phase K analysis onto an existing session, used both

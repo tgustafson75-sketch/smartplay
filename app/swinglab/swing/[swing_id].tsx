@@ -10,7 +10,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Animated, Alert,
+  ActivityIndicator, Animated, Alert, Image, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -68,6 +68,9 @@ export default function SwingDetail() {
 
   // Phase BZ-v1 — per-shot action sheet + compare mode state.
   const [actionShotId, setActionShotId] = useState<string | null>(null);
+  // Phase 403b — "See the moment" modal. Holds the URI of the fault
+  // frame to display full-size, or null when closed.
+  const [faultFrameModal, setFaultFrameModal] = useState<{ uri: string; observation: string } | null>(null);
   const [leftCompareShotId, setLeftCompareShotId] = useState<string | null>(null);
   const [rightCompareShotId, setRightCompareShotId] = useState<string | null>(null);
   const isComparing = leftCompareShotId != null && rightCompareShotId != null;
@@ -470,19 +473,21 @@ export default function SwingDetail() {
             </View>
           )}
 
-          {/* Phase BW — per-swing list for multi-swing live cage sessions.
-              Renders when the session has more than one shot AND any shot
-              has per-shot Phase K analysis attached. Each row jumps the
-              video to the swing's start when tapped. Single-shot uploads
-              (legacy + post-BW upload flow) skip this section so the UI
-              stays simple. */}
-          {session.shots.length > 1 &&
-           session.shots.some(s => s.perShotAnalysis || s.clipStartSeconds != null) && (
+          {/* Phase BW + 403b — per-swing list. Originally gated on
+              session.shots.length > 1 so single-upload sessions saw only
+              the session-level aggregate, but Phase 403b unhid this for
+              single uploads too: a single-shot session with
+              perShotAnalysis now shows its diagnostic row + the fault-
+              frame thumbnail as visual evidence of the read. Multi-shot
+              sessions keep their existing scroll-list-of-rows behavior. */}
+          {session.shots.some(s => s.perShotAnalysis || s.clipStartSeconds != null) && (
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text style={[styles.label, { color: colors.text_muted }]}>
                 {isPickingCompareTarget
                   ? `PICK A SWING TO COMPARE`
-                  : `${session.shots.length} SWINGS · TAP TO JUMP`}
+                  : session.shots.length > 1
+                    ? `${session.shots.length} SWINGS · TAP TO JUMP`
+                    : `THIS SWING`}
               </Text>
               {session.shots.map((s, idx) => {
                 const start = s.clipStartSeconds ?? 0;
@@ -499,6 +504,14 @@ export default function SwingDetail() {
                   s.isGoodRep === false ? 'close-circle-outline' : null;
                 const noteIcon: keyof typeof Ionicons.glyphMap | null =
                   s.userNotes && s.userNotes.length > 0 ? 'document-text' : null;
+                // Phase 403b — fault-frame visual evidence. When the
+                // Phase K result included a visual_reference_path (a
+                // JPEG persisted from the diagnostic frame), surface it
+                // as a small thumbnail beside the row + a "See the
+                // moment" tap target that opens the full-size modal
+                // with the observation. Tolerates absence gracefully.
+                const faultUri = a?.visual_reference_path ?? null;
+                const observation = a?.observation ?? '';
                 return (
                   <View key={s.id} style={[styles.shotRow, { borderColor: colors.border, opacity: isPickingCompareTarget && isLeftPick ? 0.4 : 1 }]}>
                     <TouchableOpacity
@@ -526,8 +539,26 @@ export default function SwingDetail() {
                           {conf ? ` · ${conf} conf` : ''}
                           {s.detectionMethod ? ` · ${s.detectionMethod === 'audio_transient' ? 'auto' : 'manual'}` : ''}
                         </Text>
+                        {observation && (
+                          <Text style={[styles.shotObservation, { color: colors.text_muted }]} numberOfLines={2}>
+                            {observation}
+                          </Text>
+                        )}
                       </View>
                     </TouchableOpacity>
+                    {faultUri && (
+                      <TouchableOpacity
+                        onPress={() => setFaultFrameModal({ uri: faultUri, observation })}
+                        style={styles.faultThumbWrap}
+                        accessibilityRole="button"
+                        accessibilityLabel="See the moment of the fault"
+                      >
+                        <Image source={{ uri: faultUri }} style={styles.faultThumb} resizeMode="cover" />
+                        <View style={styles.faultThumbBadge}>
+                          <Ionicons name="search" size={10} color="#ffffff" />
+                        </View>
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity
                       onPress={() => setActionShotId(s.id)}
                       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -629,6 +660,44 @@ export default function SwingDetail() {
         onStartCompare={handleStartCompare}
         multiShotSessionAvailable={session.shots.length > 1}
       />
+
+      {/* Phase 403b — "See the moment" modal. Shows the diagnostic
+          frame full-size with the observation overlaid as a caption.
+          Tap anywhere to dismiss. */}
+      <Modal
+        visible={faultFrameModal != null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFaultFrameModal(null)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.faultModalBackdrop}
+          onPress={() => setFaultFrameModal(null)}
+          accessibilityRole="button"
+          accessibilityLabel="Close fault frame view"
+        >
+          {faultFrameModal && (
+            <View style={styles.faultModalContent}>
+              <Image
+                source={{ uri: faultFrameModal.uri }}
+                style={styles.faultModalImage}
+                resizeMode="contain"
+              />
+              {faultFrameModal.observation ? (
+                <View style={styles.faultModalCaption}>
+                  <Text style={styles.faultModalCaptionText}>
+                    {faultFrameModal.observation}
+                  </Text>
+                </View>
+              ) : null}
+              <View style={styles.faultModalCloseHint}>
+                <Text style={styles.faultModalCloseHintText}>Tap to close</Text>
+              </View>
+            </View>
+          )}
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -678,6 +747,56 @@ const styles = StyleSheet.create({
   shotChev: { fontSize: 22, fontWeight: '300', width: 14, textAlign: 'right' },
   shotRowTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingRight: 4 },
   shotActionBtn: { padding: 6 },
+  // Phase 403b — observation line under the shot's issue label. Two
+  // lines max; readers get the analyst's specific sentence without
+  // needing to open a detail card.
+  shotObservation: { fontSize: 12, marginTop: 4, lineHeight: 16 },
+  // Phase 403b — fault-frame thumbnail (visual evidence). Tappable to
+  // open the full-size modal. Small magnifier badge in the corner
+  // signals interactivity.
+  faultThumbWrap: {
+    width: 52, height: 52, borderRadius: 8, overflow: 'hidden',
+    borderWidth: 1, borderColor: 'rgba(0,200,150,0.4)',
+    position: 'relative',
+  },
+  faultThumb: { width: '100%', height: '100%' },
+  faultThumbBadge: {
+    position: 'absolute', bottom: 2, right: 2,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 999, width: 16, height: 16,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  // Phase 403b — "See the moment" full-size modal.
+  faultModalBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.93)',
+    alignItems: 'center', justifyContent: 'center',
+    padding: 16,
+  },
+  faultModalContent: {
+    width: '100%', maxWidth: 640,
+    alignItems: 'center', gap: 12,
+  },
+  faultModalImage: {
+    width: '100%', aspectRatio: 1024 / 768,
+    maxHeight: 480,
+    borderRadius: 12, borderWidth: 1, borderColor: 'rgba(0,200,150,0.4)',
+  },
+  faultModalCaption: {
+    backgroundColor: 'rgba(0,200,150,0.10)',
+    borderColor: 'rgba(0,200,150,0.5)',
+    borderWidth: 1, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 10,
+  },
+  faultModalCaptionText: {
+    color: '#e8f5e9', fontSize: 14, fontWeight: '600',
+    textAlign: 'center', lineHeight: 20,
+  },
+  faultModalCloseHint: {
+    paddingVertical: 6, paddingHorizontal: 12,
+  },
+  faultModalCloseHintText: {
+    color: '#6b7280', fontSize: 11, fontWeight: '700', letterSpacing: 1,
+  },
   // Phase BZ-v1 — comparison view styles
   compareBanner: {
     marginHorizontal: 16,
