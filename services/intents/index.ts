@@ -11,6 +11,7 @@ import { setTrustQuietHandler, setTrustCompanionHandler } from './setTrustQuietH
 import { clubChangeHandler, clubQueryHandler, clubMenuHandler } from './clubHandler';
 import { logShotHandler } from './logShotHandler';
 import { mediaCaptureHandler, mediaPlaybackHandler } from './mediaHandlers';
+import { atBallHandler } from './atBallHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
 
@@ -30,6 +31,7 @@ voiceCommandRouter.registerHandler(clubMenuHandler);
 voiceCommandRouter.registerHandler(logShotHandler);
 voiceCommandRouter.registerHandler(mediaCaptureHandler);
 voiceCommandRouter.registerHandler(mediaPlaybackHandler);
+voiceCommandRouter.registerHandler(atBallHandler);
 
 export {
   openToolHandler,
@@ -48,4 +50,5 @@ export {
   logShotHandler,
   mediaCaptureHandler,
   mediaPlaybackHandler,
+  atBallHandler,
 };

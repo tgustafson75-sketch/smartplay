@@ -544,7 +544,12 @@ const styles = StyleSheet.create({
   backBtn: { width: 60 },
   backText: { color: '#00C896', fontSize: 16, fontWeight: '600' },
   headerTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800' },
-  listContent: { paddingBottom: 48 },
+  // Phase 406 wave 2 — graceful-landscape recap. The FlatList content
+  // is a single-column stack of cards; on landscape (Fold open inner /
+  // phone rotated / tablet) cap the column at 720dp and center it so
+  // the layout doesn't stretch to span the full wide canvas. Each card
+  // still reads cleanly; the surrounding canvas just letterboxes.
+  listContent: { paddingBottom: 48, maxWidth: 720, alignSelf: 'center', width: '100%' },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   emptyTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800', marginBottom: 10, textAlign: 'center' },
   emptyText: { color: '#6b7280', textAlign: 'center', fontSize: 14, lineHeight: 21 },

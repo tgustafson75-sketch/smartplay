@@ -294,6 +294,27 @@ export default function PlayTab() {
     return out;
   }, [closestLocal, userPosition]);
 
+  // Phase 405 wave 3 — course auto-detect prompt. When the player is
+  // within ~550 yards (0.3 mi, half a typical golf hole) of a known
+  // course's centroid, surface a small "You're at X" banner above the
+  // list. Distinct from the implicit auto-select that already runs in
+  // closestLocal[0]: the banner is a visible confirmation that GPS
+  // recognized the player's location. Player can tap the banner's
+  // "Use it" to confirm and load that course's data. Null when no
+  // course is close enough or GPS isn't available yet.
+  const atCourse: { course: CourseSummary; yards: number } | null = useMemo(() => {
+    if (!userPosition) return null;
+    let best: { course: CourseSummary; yards: number } | null = null;
+    for (const c of closestLocal) {
+      if (c.lat == null || c.lng == null) continue;
+      const yds = haversineYards(userPosition, { lat: c.lat, lng: c.lng });
+      if (yds <= 550 && (best == null || yds < best.yards)) {
+        best = { course: c, yards: yds };
+      }
+    }
+    return best;
+  }, [closestLocal, userPosition]);
+
   // Default the SELECTED COURSE card to the user's home course on first
   // mount (or Palms — Tim's primary local — if none is set yet). User
   // can still pick anything else from the list above; this just gives
@@ -561,6 +582,25 @@ export default function PlayTab() {
 
         {/* Closest Local */}
         <Text style={styles.sectionLabel}>CLOSEST LOCAL COURSES</Text>
+        {/* Phase 405 wave 3 — auto-detect banner. Only renders when GPS
+            puts the player within ~550y of a known course, so most users
+            never see it (no pollution); when it fires, it's strongly
+            indicative the player is on-site and should use that course.
+            Tap to load. */}
+        {atCourse && selected?.id !== atCourse.course.id && (
+          <TouchableOpacity
+            style={styles.atCourseBanner}
+            onPress={() => selectSummary(atCourse.course)}
+            accessibilityRole="button"
+            accessibilityLabel={`Confirm you are at ${atCourse.course.club_name}`}
+          >
+            <AppIcon name="location" size={14} color="#00C896" />
+            <Text style={styles.atCourseBannerText} numberOfLines={2}>
+              You&apos;re at <Text style={styles.atCourseBannerStrong}>{atCourse.course.club_name}</Text> · tap to use
+            </Text>
+            <AppIcon name="chevron-forward" size={14} color="#00C896" />
+          </TouchableOpacity>
+        )}
         <View style={styles.localList}>
           {closestLocal.map(c => {
             const isActive = selected?.id === c.id || activeCourseId === c.id;
@@ -964,6 +1004,33 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 0.5,
+  },
+  // Phase 405 wave 3 — "You're at X" auto-detect banner. Renders above
+  // the closest-local list when GPS puts the player within ~550y of a
+  // known course. Subtle teal border to read as informational, not as
+  // a primary call-to-action.
+  atCourseBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0,200,150,0.45)',
+    backgroundColor: 'rgba(0,200,150,0.08)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  atCourseBannerText: {
+    flex: 1,
+    color: '#e8f5e9',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  atCourseBannerStrong: {
+    color: '#00C896',
+    fontWeight: '800',
   },
 
   kindRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginBottom: 8 },

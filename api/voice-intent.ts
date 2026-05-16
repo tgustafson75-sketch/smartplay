@@ -192,6 +192,17 @@ Available intents:
    - "play that back" / "show me last shot" / "replay" -> { playback_action: "last" }
    playback_action 'open' = open the media list (most recent on top). 'last' = play the most recent capture immediately.
 
+19. at_my_ball — Player has walked to their ball and wants the app to capture this GPS position as the end_location of the last shot, so the next shot's distance reads honestly.
+   parameters: {}
+   Examples:
+   - "I'm at my ball" -> { intent_type: "at_my_ball" }
+   - "at my ball" -> { intent_type: "at_my_ball" }
+   - "found my ball" -> { intent_type: "at_my_ball" }
+   - "I'm at the ball" -> { intent_type: "at_my_ball" }
+   - "got my ball" -> { intent_type: "at_my_ball" }
+   - "ball position" -> { intent_type: "at_my_ball" }
+   DO NOT match shot-logging phrases ("I hit driver 240 left") — those are log_shot. at_my_ball is the position-capture, not a shot.
+
 7. unknown — Cannot determine intent.
    parameters: {}
    Set follow_up_question to a brief clarifying question ${caddieName} could ask.
@@ -200,7 +211,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "media_capture" | "media_playback" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "media_capture" | "media_playback" | "at_my_ball" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null
