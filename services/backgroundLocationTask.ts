@@ -37,8 +37,15 @@ export const BACKGROUND_LOCATION_TASK = 'smartplay-background-location';
 // Module-load defineTask. Runs once per app process; idempotent.
 // expo-task-manager throws if defineTask is called more than once for
 // the same task name, so guard with isTaskDefined.
-if (!TaskManager.isTaskDefined(BACKGROUND_LOCATION_TASK)) {
-  TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async (event) => {
+//
+// Wrapped in try/catch so that ANY module-load failure (older device
+// without TaskManager support, hot-reload edge case, native module
+// not linked yet on first install) can't crash the app boot. The
+// _layout.tsx side-effect import would otherwise propagate the throw
+// up the entire render tree on first launch.
+try {
+  if (!TaskManager.isTaskDefined(BACKGROUND_LOCATION_TASK)) {
+    TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async (event) => {
     if (event.error) {
       console.log('[bgLocation] task error:', event.error.message);
       return;
@@ -66,8 +73,11 @@ if (!TaskManager.isTaskDefined(BACKGROUND_LOCATION_TASK)) {
         console.log('[bgLocation] ingest failed:', e);
       }
     })();
-  });
-  console.log('[bgLocation] task defined:', BACKGROUND_LOCATION_TASK);
+    });
+    console.log('[bgLocation] task defined:', BACKGROUND_LOCATION_TASK);
+  }
+} catch (e) {
+  console.log('[bgLocation] defineTask threw at module load (non-fatal):', e);
 }
 
 /**

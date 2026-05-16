@@ -518,6 +518,15 @@ function AppNavigator() {
           name="welcome"
           options={{ animation: 'fade', headerShown: false }}
         />
+        {/* Phase 411 — in-app Quick Start Guide. Reachable from
+            Settings → Help → Quick Start Guide and from the welcome
+            screen's "Quick tour" button. Same content as the PDF
+            tester guide. slide_from_bottom for the "reference doc"
+            feel — feels like a sheet you can dismiss. */}
+        <Stack.Screen
+          name="quick-start"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
         <Stack.Screen
           name="hole-view"
           options={{ animation: 'slide_from_bottom' }}

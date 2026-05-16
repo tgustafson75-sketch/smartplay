@@ -760,6 +760,52 @@ export default function Settings() {
         {/* Phase AI — Help / Support section. Single canonical contact. */}
         <SectionHeader title="Help" />
         <View style={cardStyle}>
+          {/* Phase 411 — Quick Start Guide. Same content as the PDF
+              tester guide, available in-app so testers can refer back
+              during use without hunting for the email attachment. */}
+          <TouchableOpacity
+            style={styles.aboutRow}
+            onPress={() => router.push('/quick-start' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Open the Quick Start Guide"
+          >
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Quick Start Guide</Text>
+            <Text style={[styles.aboutValue, { color: colors.accent }]}>
+              How to use the app →
+            </Text>
+          </TouchableOpacity>
+          {/* Phase 411 — Share Feedback shortcut. Pre-fills email
+              client with subject + helpful body prompts so testers
+              don't stare at a blank message. */}
+          <TouchableOpacity
+            style={styles.aboutRow}
+            onPress={() => {
+              const url = 'mailto:support@smartplaycaddie.com?subject=' +
+                encodeURIComponent('SmartPlay Caddie Beta Feedback') +
+                '&body=' +
+                encodeURIComponent(
+                  "Hi Tim,\n\n" +
+                  "What worked:\n\n\n" +
+                  "What didn't:\n\n\n" +
+                  "What surprised me:\n\n\n" +
+                  "Phone / OS:\n" +
+                  "Round count so far:\n"
+                );
+              Linking.openURL(url).catch(() => {
+                Alert.alert(
+                  'Email',
+                  'Could not open your email client. Reach support at support@smartplaycaddie.com',
+                );
+              });
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Share feedback with the SmartPlay Caddie team"
+          >
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Share Feedback</Text>
+            <Text style={[styles.aboutValue, { color: colors.accent }]}>
+              Email with prompts pre-filled →
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.aboutRow}
             onPress={() => {

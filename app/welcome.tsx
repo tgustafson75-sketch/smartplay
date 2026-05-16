@@ -174,6 +174,20 @@ export default function WelcomeScreen() {
           >
             <Text style={styles.ctaText}>Get started</Text>
           </TouchableOpacity>
+
+          {/* Phase 411 — opt-in tour. Lower-profile button so it
+              doesn't compete with "Get started". Testers who want
+              orientation tap here; everyone else proceeds directly. */}
+          <TouchableOpacity
+            style={styles.tourBtn}
+            onPress={() => router.push('/quick-start' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Open the Quick Start Guide"
+          >
+            <Text style={[styles.tourBtnText, { color: colors.text_muted }]}>
+              First time? Read the Quick Start guide →
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -214,5 +228,14 @@ function makeStyles(
       marginTop: s.xl,
     },
     ctaText: { color: '#ffffff', fontSize: 16, fontWeight: '900', letterSpacing: 0.3 },
+    tourBtn: {
+      paddingVertical: s.sm,
+      alignItems: 'center',
+      marginTop: s.sm,
+    },
+    tourBtnText: {
+      fontSize: 13,
+      fontWeight: '600',
+    },
   });
 }
