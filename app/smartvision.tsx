@@ -53,6 +53,7 @@ import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../serv
 import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbertApi';
 import { hasGolfbertCourseMapping } from '../constants/golfbertCourses';
 import { fetchHoleImagery, computeFitView } from '../services/mapboxImagery';
+import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { getLocalHoleImage } from '../data/localCourseImages';
 
 // ─── Geo helpers ──────────────────────────────────────────────────
@@ -269,8 +270,18 @@ export default function SmartVisionScreen() {
   // yardage panel at bottom. Square-ish on phones, full-height on tablets.
   const TOP_BAR_H = 56;
   const BOTTOM_PANEL_H = 96;
-  const imageW = W;
-  const imageH = H - insets.top - insets.bottom - TOP_BAR_H - BOTTOM_PANEL_H;
+  // Phase 406 — split-screen on landscape (Fold-open inner, phone
+  // rotated, tablet). The hole image takes 65% of the width on the
+  // left and the F/M/B panel becomes a 35% right-side column, both
+  // occupying the full available height (no bottom panel chrome).
+  // Portrait keeps the existing top-stack-bottom layout exactly.
+  const layout = useDeviceLayout();
+  const isSplit = layout.isLandscape;
+  const SIDE_PANEL_W = isSplit ? Math.floor(W * 0.35) : 0;
+  const imageW = isSplit ? W - SIDE_PANEL_W : W;
+  const imageH = isSplit
+    ? H - insets.top - insets.bottom - TOP_BAR_H
+    : H - insets.top - insets.bottom - TOP_BAR_H - BOTTOM_PANEL_H;
 
   const [geometry, setGeometry] = useState<HoleGeometry | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -706,6 +717,11 @@ export default function SmartVisionScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Phase 406 — split-screen container. On landscape, image
+          canvas + bottom panel sit side-by-side in a row so the panel
+          becomes a right-side column. On portrait, vertical flow is
+          unchanged. */}
+      <View style={{ flexDirection: isSplit ? 'row' : 'column', flex: 1 }}>
       {/* Image canvas + markers */}
       <View style={{ width: imageW, height: imageH, backgroundColor: '#0d2418' }}>
         {/* Premium course data badge — visible only when Golfbert
@@ -850,23 +866,45 @@ export default function SmartVisionScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Bottom panel — F/M/B yardages from yellow target */}
-      <View style={[styles.bottomPanel, { height: BOTTOM_PANEL_H, paddingBottom: insets.bottom }]}>
-        <YdCell label="FRONT" value={yardages.front} />
-        <View style={styles.divider} />
-        <YdCell label="MIDDLE" value={yardages.middle} emphasis />
-        <View style={styles.divider} />
-        <YdCell label="BACK" value={yardages.back} />
+      {/* Bottom panel — F/M/B yardages from yellow target. Phase 406:
+          on landscape, this becomes a right-side column (flexDirection
+          column, fixed width = SIDE_PANEL_W, fills available height);
+          on portrait, the existing bottom-strip layout is unchanged. */}
+      <View
+        style={[
+          isSplit ? styles.sidePanel : styles.bottomPanel,
+          isSplit
+            ? { width: SIDE_PANEL_W, height: imageH, paddingBottom: insets.bottom + 12 }
+            : { height: BOTTOM_PANEL_H, paddingBottom: insets.bottom },
+        ]}
+      >
+        <YdCell label="FRONT" value={yardages.front} stacked={isSplit} />
+        <View style={isSplit ? styles.dividerHorizontal : styles.divider} />
+        <YdCell label="MIDDLE" value={yardages.middle} emphasis stacked={isSplit} />
+        <View style={isSplit ? styles.dividerHorizontal : styles.divider} />
+        <YdCell label="BACK" value={yardages.back} stacked={isSplit} />
       </View>
+      </View>{/* close split-screen container */}
     </GestureHandlerRootView>
   );
 }
 
-function YdCell({ label, value, emphasis = false }: { label: string; value: number | null; emphasis?: boolean }) {
+function YdCell({ label, value, emphasis = false, stacked = false }: {
+  label: string; value: number | null; emphasis?: boolean;
+  // Phase 406 — stacked layout for the landscape side-panel where the
+  // cells run vertically with bigger numbers (more vertical real
+  // estate available than the portrait bottom-strip).
+  stacked?: boolean;
+}) {
   return (
-    <View style={styles.ydCell}>
+    <View style={[styles.ydCell, stacked && styles.ydCellStacked]}>
       <Text style={styles.ydLabel}>{label}</Text>
-      <Text style={[styles.ydValue, emphasis && styles.ydValueEmph]}>
+      <Text style={[
+        styles.ydValue,
+        emphasis && styles.ydValueEmph,
+        stacked && styles.ydValueStacked,
+        stacked && emphasis && styles.ydValueStackedEmph,
+      ]}>
         {value != null ? value : '—'}
       </Text>
     </View>
@@ -966,4 +1004,23 @@ const styles = StyleSheet.create({
   ydValue: { color: '#e8f5e9', fontSize: 26, fontWeight: '900', fontVariant: ['tabular-nums'] },
   ydValueEmph: { color: '#ffffff', fontSize: 32 },
   divider: { width: 1, height: 36, backgroundColor: '#1f2937' },
+  // Phase 406 — landscape split-screen side panel for SmartVision.
+  // Replaces the horizontal bottomPanel when the device is landscape;
+  // hosts F/M/B stacked vertically with larger numbers.
+  sidePanel: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    justifyContent: 'space-evenly',
+    backgroundColor: '#000000',
+    paddingHorizontal: 20, paddingTop: 16,
+    borderLeftWidth: 1, borderLeftColor: '#1f2937',
+  },
+  ydCellStacked: {
+    flex: 0,
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  ydValueStacked: { fontSize: 44, marginTop: 4 },
+  ydValueStackedEmph: { fontSize: 58 },
+  dividerHorizontal: { height: 1, backgroundColor: '#1f2937', marginVertical: 4 },
 });
