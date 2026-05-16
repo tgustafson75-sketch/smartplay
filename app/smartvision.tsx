@@ -52,7 +52,7 @@ import { useSmartVision } from '../contexts/SmartVisionContext';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbertApi';
 import { hasGolfbertCourseMapping } from '../constants/golfbertCourses';
-import { fetchHoleImagery } from '../services/mapboxImagery';
+import { fetchHoleImagery, computeFitView } from '../services/mapboxImagery';
 import { getLocalHoleImage } from '../data/localCourseImages';
 
 // ─── Geo helpers ──────────────────────────────────────────────────
@@ -354,6 +354,22 @@ export default function SmartVisionScreen() {
 
       // GPS tile only when allowed AND geometry has tee+green coords.
       if (imageryMode !== 'curated' && geo?.green && courseId) {
+        // Phase 401 — cap Mapbox request dims at 1280 (API limit) while
+        // preserving the container's aspect ratio. Without this, a
+        // Galaxy Fold unfolded container (1800×1660) requests
+        // 1800×1660, Mapbox clamps to 1280×1280 (square), and resizeMode
+        // "cover" then re-scales the square to fill the portrait
+        // container — cropping the top+bottom of the hole. Capped dims
+        // keep image aspect = container aspect, so cover = contain and
+        // no cropping occurs.
+        const MAX = 1280;
+        let reqW = imageW;
+        let reqH = imageH;
+        if (reqW > MAX || reqH > MAX) {
+          const scale = Math.min(MAX / reqW, MAX / reqH);
+          reqW = Math.floor(reqW * scale);
+          reqH = Math.floor(reqH * scale);
+        }
         const uri = await fetchHoleImagery(
           {
             courseId,
@@ -363,7 +379,7 @@ export default function SmartVisionScreen() {
             tee: geo.tee,
             green: geo.green,
           },
-          { width: imageW, height: imageH },
+          { width: reqW, height: reqH },
         );
         if (cancelled) return;
         setImageUri(uri);
@@ -376,16 +392,40 @@ export default function SmartVisionScreen() {
   }, [courseId, holeIndex, imageW, imageH, imageryMode]);
 
   // ── Derived projection ──────────────────────────────────────────
+  // Phase 401 — single source of truth for center/zoom/bearing, shared
+  // with mapboxImagery.getHoleImageryUrl(). computeFitView picks the
+  // zoom that guarantees the entire tee→green axis plus 15% margin
+  // fits the container height — no more long-hole tee clipping.
+  //
+  // Tee coordinate fallback ladder:
+  //   1. geometry.tee (golfcourseapi) — preferred
+  //   2. courseHoles[holeIndex].teeLat/teeLng (round store; local courses
+  //      Palms/Lakes/Rancho have these populated)
+  //   3. null — projection unavailable; static fallback path runs
+  const teeCoord = useMemo(() => {
+    if (geometry?.tee) return geometry.tee;
+    const h = courseHoles.find(x => x.hole === holeIndex);
+    if (h && h.teeLat !== 0 && h.teeLng !== 0) {
+      console.log(`[smartvision] hole ${holeIndex}: tee from courseHoles fallback (golfcourseapi had no tee)`);
+      return { lat: h.teeLat, lng: h.teeLng };
+    }
+    return null;
+  }, [geometry, courseHoles, holeIndex]);
+
+  const greenCoord = useMemo(() => geometry?.green ?? null, [geometry]);
+
   const projection = useMemo(() => {
-    if (!geometry?.tee || !geometry?.green) return null;
-    const center = {
-      lat: geometry.tee.lat + (geometry.green.lat - geometry.tee.lat) * 0.55,
-      lng: geometry.tee.lng + (geometry.green.lng - geometry.tee.lng) * 0.55,
-    };
-    const bearing = bearingDeg(geometry.tee, geometry.green);
-    const zoom = autoZoom(geometry.yardage, geometry.par);
-    return { center, bearing, zoom };
-  }, [geometry]);
+    if (!teeCoord || !greenCoord) return null;
+    const fit = computeFitView({
+      tee: teeCoord,
+      green: greenCoord,
+      width: imageW,
+      height: imageH,
+    });
+    if (!fit) return null;
+    return fit;
+  }, [teeCoord, greenCoord, imageW, imageH]);
+  void bearingDeg; void autoZoom; // legacy helpers retained for future use
 
   // Marker positions in CANVAS-LOCAL pixel coordinates (top-left origin,
   // x increases right, y increases DOWN).
@@ -408,19 +448,19 @@ export default function SmartVisionScreen() {
   const teeOverride = teeByHole[holeIndex];
   const teeCanvas = useMemo(() => {
     if (teeOverride) return teeOverride;
-    if (geometry?.tee && projection) {
-      const off = projectToPixels(geometry.tee, projection.center, projection.zoom, projection.bearing);
+    if (teeCoord && projection) {
+      const off = projectToPixels(teeCoord, projection.center, projection.zoom, projection.bearing);
       return { x: imageW / 2 + off.x, y: imageH / 2 - off.y };
     }
     return { x: imageW / 2, y: imageH * 0.85 };
-  }, [teeOverride, geometry, projection, imageW, imageH]);
+  }, [teeOverride, teeCoord, projection, imageW, imageH]);
   const pinDefaultCanvas = useMemo(() => {
-    if (geometry?.green && projection) {
-      const off = projectToPixels(geometry.green, projection.center, projection.zoom, projection.bearing);
+    if (greenCoord && projection) {
+      const off = projectToPixels(greenCoord, projection.center, projection.zoom, projection.bearing);
       return { x: imageW / 2 + off.x, y: imageH / 2 - off.y };
     }
     return { x: imageW / 2, y: imageH * 0.15 };
-  }, [geometry, projection, imageW, imageH]);
+  }, [greenCoord, projection, imageW, imageH]);
 
   // Pin override (user-dragged) — stored in canvas coords.
   const pinOverride = pinByHole[holeIndex];
@@ -436,8 +476,13 @@ export default function SmartVisionScreen() {
     y: Math.max(8, Math.min(imageH - 8, p.y)),
   }), [imageW, imageH]);
 
-  // Make GPS-mode no-op for yardages too (always pixel interpolation).
-  const usingGpsTile = false;
+  // Phase 401 — re-enabled. When projection is computed from real
+  // tee/green coords AND the Mapbox tile is what's rendered, the
+  // pixel→geo inverse is reliable and yardages should come from
+  // haversine on the dragged target's projected lat/lng. We still fall
+  // back to pixel-axis interpolation when no projection (curated mode
+  // or no geometry) — that branch is unchanged.
+  const usingGpsTile = projection != null && !!imageUri;
 
   // Yellow target — defaults to midpoint of tee→pin if no override set.
   // Stored in CANVAS coords (top-left origin, y down) for direct render.
@@ -681,10 +726,12 @@ export default function SmartVisionScreen() {
           <Image source={{ uri: imageUri }} style={{ width: imageW, height: imageH }} resizeMode="cover" />
         ) : curatedImage && imageryMode !== 'gps' ? (
           // Curated bundled hole screenshot (Palms hole-NN.jpg etc).
-          // Used as backdrop when GPS imagery is unavailable or the
-          // user has chosen 'curated' mode. Provides a usable view
-          // even on courses without GPS coords.
-          <Image source={curatedImage} style={{ width: imageW, height: imageH }} resizeMode="cover" />
+          // Phase 401 — resizeMode "contain" (was "cover"). Curated
+          // JPGs are pre-rendered at whatever aspect Tim captured;
+          // cover was cropping top+bottom on more-portrait sources
+          // than the container. Contain guarantees the entire image is
+          // visible, letterboxing if aspect differs.
+          <Image source={curatedImage} style={{ width: imageW, height: imageH }} resizeMode="contain" />
         ) : loading ? (
           <View style={styles.canvasFallback}>
             <ActivityIndicator color="#00C896" />

@@ -75,6 +75,93 @@ function autoZoom(yardage: number, par: number): number {
   return 16;
 }
 
+// Phase 401 — meters-per-pixel at the equator, Mapbox Web Mercator.
+const MAPBOX_BASE_MPP = 156543.03392;
+
+function metersPerPixel(lat: number, zoom: number): number {
+  return (MAPBOX_BASE_MPP * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
+}
+
+function haversineMeters(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number },
+): number {
+  const R = 6371000;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+export type FitView = {
+  center: { lat: number; lng: number };
+  zoom: number;
+  bearing: number;
+};
+
+/**
+ * Phase 401 — compute the Mapbox center/zoom/bearing that fits the
+ * entire tee→green axis plus `marginPct` margin (default 15%) into a
+ * container of size `width × height` pixels. Used as the single source
+ * of truth for both URL-builder and projectToPixels(), so markers
+ * always land on the right pixel of the rendered tile.
+ *
+ * Behavior:
+ *   - center: midpoint of tee→green (50%, NOT the legacy 55%) so
+ *     margin is symmetric above and below the hole axis.
+ *   - bearing: tee→green compass bearing, so Mapbox rotates the camera
+ *     and the hole runs vertically in the rendered tile.
+ *   - zoom: largest integer zoom level at which the hole length plus
+ *     2×margin still fits in the container height. Clamped to [13, 19]
+ *     so we never under- or over-zoom for unusual hole geometries.
+ *
+ * Returns null if tee or green is missing.
+ */
+export function computeFitView(input: {
+  tee: { lat: number; lng: number } | null;
+  green: { lat: number; lng: number };
+  width: number;
+  height: number;
+  marginPct?: number;
+}): FitView | null {
+  const { tee, green, width, height } = input;
+  const marginPct = input.marginPct ?? 0.15;
+  if (!tee) {
+    // No tee — center on green, default zoom.
+    return { center: green, zoom: 17, bearing: 0 };
+  }
+  const center = {
+    lat: tee.lat + (green.lat - tee.lat) * 0.5,
+    lng: tee.lng + (green.lng - tee.lng) * 0.5,
+  };
+  const bearing = bearingDegrees(tee, green);
+  const holeMeters = haversineMeters(tee, green);
+  // Need at least holeMeters * (1 + 2*marginPct) of meters covered along
+  // the container's *height* (since bearing-rotation puts the hole
+  // vertical). Solve for zoom: height * mpp(lat, z) >= required meters.
+  const requiredMeters = holeMeters * (1 + 2 * marginPct);
+  // requiredMeters = height * (BASE_MPP * cos(lat)) / 2^zoom
+  // 2^zoom = height * BASE_MPP * cos(lat) / requiredMeters
+  const cosLat = Math.cos((center.lat * Math.PI) / 180);
+  const targetTwoPow = (height * MAPBOX_BASE_MPP * cosLat) / requiredMeters;
+  const rawZoom = Math.log2(targetTwoPow);
+  // Floor to nearest integer so we err on the side of MORE margin, never less.
+  let zoom = Math.floor(rawZoom);
+  if (!Number.isFinite(zoom)) zoom = 17;
+  zoom = Math.max(13, Math.min(19, zoom));
+  // Sanity: verify the width also fits (a strongly diagonal hole could
+  // demand more horizontal coverage than our container provides after
+  // rotation). bearing-rotation aligns the hole vertically, so width
+  // only needs to cover fairway breadth (~50–80 yds typical). The
+  // height-fit zoom should always be permissive enough for width.
+  void width;
+  return { center, zoom, bearing };
+}
+
 /**
  * Build the Mapbox Static Images URL for a hole. Returns null if Mapbox
  * is not configured or geometry is insufficient.
@@ -95,23 +182,17 @@ export function getHoleImageryUrl(
 
   const width = Math.min(options.width ?? 600, 1280);
   const height = Math.min(options.height ?? 500, 1280);
-  const zoom = options.zoom ?? autoZoom(input.yardage, input.par);
 
-  // Default center: 55% of the way from tee to green so the green sits in
-  // the upper third of the frame (golfers expect this orientation).
-  let center = options.centerOverride;
-  let bearing = options.bearingOverride ?? 0;
-  if (!center) {
-    if (input.tee) {
-      center = {
-        lat: input.tee.lat + (input.green.lat - input.tee.lat) * 0.55,
-        lng: input.tee.lng + (input.green.lng - input.tee.lng) * 0.55,
-      };
-      bearing = bearingDegrees(input.tee, input.green);
-    } else {
-      center = { lat: input.green.lat, lng: input.green.lng };
-    }
-  }
+  // Phase 401 — single source of truth for center/zoom/bearing.
+  // computeFitView() picks the zoom that guarantees the entire hole +
+  // 15% margin fits the requested container height, centers at the
+  // tee→green midpoint (symmetric margin), and bearing-rotates so the
+  // hole renders vertically. Caller can still override any of the three
+  // via options.{centerOverride, zoomOverride, bearingOverride}.
+  const fit = computeFitView({ tee: input.tee, green: input.green, width, height });
+  const center = options.centerOverride ?? fit?.center ?? input.green;
+  const bearing = options.bearingOverride ?? fit?.bearing ?? 0;
+  const zoom = options.zoom ?? fit?.zoom ?? autoZoom(input.yardage, input.par);
 
   return (
     `https://api.mapbox.com/styles/v1/${MAPBOX_STYLE}/static/` +
@@ -143,9 +224,18 @@ export async function fetchHoleImagery(
   const url = getHoleImageryUrl(input, options);
   if (!url) return null;
 
-  const zoom = options.zoom ?? autoZoom(input.yardage, input.par);
+  // Phase 401 — cache key must match the URL's actual zoom. We derive
+  // it from computeFitView() the same way getHoleImageryUrl does, so
+  // the cache lookup hits the file getHoleImageryUrl will eventually
+  // produce. Falling back to autoZoom only when fit cannot be computed.
   const w = Math.min(options.width ?? 600, 1280);
   const h = Math.min(options.height ?? 500, 1280);
+  // url is non-null only if input.green is non-null (see getHoleImageryUrl
+  // early-return); narrow the type for computeFitView's signature.
+  const fit = input.green
+    ? computeFitView({ tee: input.tee, green: input.green, width: w, height: h })
+    : null;
+  const zoom = options.zoom ?? fit?.zoom ?? autoZoom(input.yardage, input.par);
   const cacheFile = cacheFileFor(input.courseId, input.holeNumber, zoom, w, h);
 
   if (cacheFile.exists) return cacheFile.uri;
