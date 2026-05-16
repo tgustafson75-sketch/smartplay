@@ -1,34 +1,45 @@
 import { Tabs } from 'expo-router';
-import { View, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Image, StyleSheet } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoundStore } from '../../store/roundStore';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 interface TabIconProps {
-  iconName: IoniconName;
+  iconName?: IoniconName;
+  mcIconName?: MCIconName;
   label: string;
   focused: boolean;
   showDot?: boolean;
 }
 
-function TabIcon({ iconName, label: _label, focused, showDot }: TabIconProps) {
-  // Phase AR follow-up — labels removed per Tim's "icons only" direction.
-  // The five tabs are recognizable by icon alone (mic / golf / list /
-  // body / stats-chart) and removing labels gives more room on Fold
-  // closed. The label prop is kept for accessibility (announced by
-  // screen readers via accessibilityLabel below) but not rendered.
+function TabIcon({ iconName, mcIconName, label: _label, focused, showDot }: TabIconProps) {
+  const color = focused ? '#00C896' : '#6b7d72';
   return (
     <View style={styles.tabItem} accessibilityLabel={_label}>
-      <Ionicons
-        name={iconName}
-        size={26}
-        color={focused ? '#00C896' : '#6b7d72'}
-      />
+      {iconName && <Ionicons name={iconName} size={26} color={color} />}
+      {mcIconName && <MaterialCommunityIcons name={mcIconName} size={26} color={color} />}
       {showDot && (
         <View style={[styles.tabDot, focused ? styles.tabDotFocused : styles.tabDotLive]} />
       )}
+    </View>
+  );
+}
+
+// Caddie tab uses the brand badge silhouette instead of a stock icon
+// per Tim 2026-05-15: "Caddie tab icon ... center caddie silhouette
+// very cleanly." Image is the same asset BrandHeaderRow uses; tinted
+// here only via opacity/saturation when unfocused.
+function CaddieTabIcon({ focused, label }: { focused: boolean; label: string }) {
+  return (
+    <View style={styles.tabItem} accessibilityLabel={label}>
+      <Image
+        source={require('../../assets/avatars/smartplay_caddie_badge.png')}
+        style={[styles.brandTabIcon, { opacity: focused ? 1 : 0.55 }]}
+        resizeMode="contain"
+      />
     </View>
   );
 }
@@ -69,7 +80,7 @@ export default function TabLayout() {
           // active tab obvious). Previously Play and SwingLab both used
           // 'golf' which made the row read as duplicates.
           tabBarIcon: ({ focused }) => (
-            <TabIcon iconName={focused ? 'mic' : 'mic-outline'} label="Caddie" focused={focused} />
+            <CaddieTabIcon focused={focused} label="Caddie" />
           ),
         }}
       />
@@ -99,8 +110,9 @@ export default function TabLayout() {
         name="swinglab"
         options={{
           tabBarIcon: ({ focused }) => (
-            // body = golfer silhouette, more literal "swing" than videocam
-            <TabIcon iconName={focused ? 'body' : 'body-outline'} label="Swing" focused={focused} />
+            // MaterialCommunityIcons `golf` = swinging golfer with club.
+            // Tim 2026-05-15: "change swinglab icon to swinging golfer."
+            <TabIcon mcIconName="golf" label="Swing" focused={focused} />
           ),
         }}
       />
@@ -117,6 +129,10 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
+  brandTabIcon: {
+    width: 30,
+    height: 30,
+  },
   tabItem: {
     alignItems: 'center',
     gap: 3,

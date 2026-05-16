@@ -40,6 +40,10 @@ export type GreetingFilename =
  * greetings are persona-neutral and don't require substitution.
  */
 export const getGreetingCaption = (file: GreetingFilename, caddieName: string): string => {
+  // Tank gets a Marine-cadence opener on first launch + demo mode per
+  // Tim 2026-05-15. Other personas (Kevin/Serena/Harry) use the
+  // standard friendly opener.
+  const isTank = caddieName === 'Tank';
   switch (file) {
     case 'universal_01.mp3':  return "Welcome back. Let's play some golf.";
     case 'universal_02.mp3':  return 'There you are. Ready when you are.';
@@ -50,9 +54,13 @@ export const getGreetingCaption = (file: GreetingFilename, caddieName: string): 
     case 'evening_02.mp3':    return "Evening light's the best light. Let's play.";
     case 'weekend_01.mp3':    return 'Saturday golf is the right kind of golf.';
     case 'weekend_02.mp3':    return 'Weekend round. My favorite kind.';
-    case 'first_launch.mp3':  return `Welcome to SmartPlay Caddie. I'm ${caddieName} — your golf companion. Let's play some golf.`;
+    case 'first_launch.mp3':  return isTank
+      ? "Let's go Devil Dog! Time to play some golf!"
+      : `Welcome to SmartPlay Caddie. I'm ${caddieName} — your golf companion. Let's play some golf.`;
     case 'returning.mp3':     return "Been a minute. Glad you're back.";
-    case 'demo_mode.mp3':     return `Welcome to SmartPlay Caddie. I'm ${caddieName} — your AI golf companion.`;
+    case 'demo_mode.mp3':     return isTank
+      ? "Let's go Devil Dog! Time to play some golf!"
+      : `Welcome to SmartPlay Caddie. I'm ${caddieName} — your AI golf companion.`;
   }
 };
 
