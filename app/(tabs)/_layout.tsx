@@ -110,9 +110,13 @@ export default function TabLayout() {
         name="swinglab"
         options={{
           tabBarIcon: ({ focused }) => (
-            // MaterialCommunityIcons `golf` = swinging golfer with club.
-            // Tim 2026-05-15: "change swinglab icon to swinging golfer."
-            <TabIcon mcIconName="golf" label="Swing" focused={focused} />
+            // Phase 401 follow-up — Tim 2026-05-15: previous MCI "golf"
+            // (swinging golfer) read too similar to the Play tab's golf
+            // flag at 26px. "bullseye-arrow" is silhouette-distinct
+            // (concentric circles + arrow) and reads as "practice /
+            // precision work" — matches SwingLab's cage + drill theme.
+            // A custom branded asset can replace this later.
+            <TabIcon mcIconName="bullseye-arrow" label="Swing" focused={focused} />
           ),
         }}
       />
