@@ -22,6 +22,26 @@ const ELEVEN_VOICES_BY_PERSONA: Record<string, string> = {
   tank:   TANK_VOICE_ID,
 };
 
+// Phase 408 — per-caddie voice tuning. Mirrors api/voice.ts. Each
+// caddie has tuned ElevenLabs voice_settings that target their
+// character (Kevin warm-upbeat / Serena confident-energetic / Tank
+// intense-commanding / Harry measured-wisdom). See api/voice.ts for
+// the rationale comments — kept in lockstep so both Vercel routes
+// and the Expo Router api+ route produce identical audio.
+type ElevenSettings = {
+  stability: number;
+  similarity_boost: number;
+  style: number;
+  use_speaker_boost: boolean;
+};
+const ELEVEN_SETTINGS_BY_PERSONA: Record<string, ElevenSettings> = {
+  kevin:  { stability: 0.45, similarity_boost: 0.75, style: 0.55, use_speaker_boost: true },
+  serena: { stability: 0.50, similarity_boost: 0.75, style: 0.50, use_speaker_boost: true },
+  tank:   { stability: 0.35, similarity_boost: 0.70, style: 0.70, use_speaker_boost: true },
+  harry:  { stability: 0.65, similarity_boost: 0.80, style: 0.30, use_speaker_boost: true },
+};
+const ELEVEN_SETTINGS_DEFAULT: ElevenSettings = ELEVEN_SETTINGS_BY_PERSONA.kevin;
+
 // Legacy gender_lang fallback for callers that haven't been updated to pass `persona`.
 const ELEVEN_VOICES_BY_GENDER: Record<string, string> = {
   male_en:   KEVIN_VOICE_ID,
@@ -67,6 +87,9 @@ export async function POST(request: Request) {
         const model = language === 'en'
           ? 'eleven_monolingual_v1'
           : 'eleven_multilingual_v2';
+        // Phase 408 — per-persona voice settings.
+        const personaKey = typeof persona === 'string' ? persona.toLowerCase() : '';
+        const voiceSettings = ELEVEN_SETTINGS_BY_PERSONA[personaKey] ?? ELEVEN_SETTINGS_DEFAULT;
 
         const elevenRes = await fetch(
           'https://api.elevenlabs.io/v1/text-to-speech/' + voiceId,
@@ -80,7 +103,7 @@ export async function POST(request: Request) {
             body: JSON.stringify({
               text,
               model_id: model,
-              voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+              voice_settings: voiceSettings,
             }),
           },
         );

@@ -20,6 +20,35 @@ const ELEVEN_VOICES_BY_PERSONA: Record<string, string> = {
   tank:   TANK_VOICE_ID,
 };
 
+// Phase 408 — per-caddie voice tuning. Replaces the prior flat
+// { stability: 0.5, similarity_boost: 0.75 } that produced a uniform
+// slow-neutral delivery across all four personas. Each caddie now has
+// tuned values that target their character:
+//   Kevin  — warm, faster, upbeat (lower stability, lifted style)
+//   Serena — confident, faster, energetic-professional
+//   Tank   — intense, fast, commanding (low stability, high style)
+//   Harry  — measured wisdom with quiet energy (high stability, low style)
+// speaker_boost is on for all four for cleaner output on mobile audio.
+// These values are the Phase 408 starting points; empirical listening
+// passes on the Z Fold inform follow-up adjustments.
+type ElevenSettings = {
+  stability: number;
+  similarity_boost: number;
+  style: number;
+  use_speaker_boost: boolean;
+};
+
+const ELEVEN_SETTINGS_BY_PERSONA: Record<string, ElevenSettings> = {
+  kevin:  { stability: 0.45, similarity_boost: 0.75, style: 0.55, use_speaker_boost: true },
+  serena: { stability: 0.50, similarity_boost: 0.75, style: 0.50, use_speaker_boost: true },
+  tank:   { stability: 0.35, similarity_boost: 0.70, style: 0.70, use_speaker_boost: true },
+  harry:  { stability: 0.65, similarity_boost: 0.80, style: 0.30, use_speaker_boost: true },
+};
+
+// Fallback for legacy callers passing only gender (no persona) — uses
+// Kevin's tuning since the legacy fallback voice IDs are also Kevin's.
+const ELEVEN_SETTINGS_DEFAULT: ElevenSettings = ELEVEN_SETTINGS_BY_PERSONA.kevin;
+
 // Legacy gender_lang map — back-compat fallback for callers that haven't
 // been updated to pass `persona`.
 const ELEVEN_VOICES_BY_GENDER: Record<string, string> = {
@@ -70,6 +99,10 @@ export default async function handler(
           ELEVEN_VOICES_BY_GENDER[gender + '_' + language] ??
           KEVIN_VOICE_ID;
         const model = language === 'en' ? 'eleven_turbo_v2' : 'eleven_multilingual_v2';
+        // Phase 408 — per-persona voice settings. See
+        // ELEVEN_SETTINGS_BY_PERSONA above for the tuning rationale.
+        const voiceSettings =
+          ELEVEN_SETTINGS_BY_PERSONA[personaKey] ?? ELEVEN_SETTINGS_DEFAULT;
 
         const elevenRes = await fetch(
           'https://api.elevenlabs.io/v1/text-to-speech/' + voiceId,
@@ -83,7 +116,7 @@ export default async function handler(
             body: JSON.stringify({
               text,
               model_id: model,
-              voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+              voice_settings: voiceSettings,
             }),
           },
         );

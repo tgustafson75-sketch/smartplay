@@ -31,7 +31,12 @@ function voiceHash(persona: Persona, language: string): string {
   // which meant Tank/Harry users heard Kevin's filler clips. v4
   // keys each persona separately so each character has their own
   // ElevenLabs-rendered filler set.
-  return `${persona}_${language}_v4`;
+  // Phase 408 — bumped v4 -> v5. The ElevenLabs voice_settings tuning
+  // (per-persona stability/similarity/style in api/voice.ts) changes
+  // the actual audio character for every filler. v5 forces regen on
+  // first cold launch so cached v4 clips don't ship the old neutral
+  // delivery alongside the new tuned-character live-TTS clips.
+  return `${persona}_${language}_v5`;
 }
 
 function clipFile(id: string): File {
