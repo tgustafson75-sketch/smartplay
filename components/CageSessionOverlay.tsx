@@ -27,18 +27,19 @@ import { runPhaseKOnSession } from '../services/videoUpload';
 import { cageLog } from '../services/cageTelemetry';
 import { setActiveSurface } from '../services/activeSurfaceRegistry';
 import { evaluateCageEnd } from '../services/teamIntelligence';
+import {
+  startImpactRecording,
+  stopMultiShotRecording,
+  cleanupImpactRecording,
+  type ShotDetection,
+} from '../services/acousticImpactDetector';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// Phase BY-quick — extracted to constants/cageDetection.ts for tunability.
-import {
-  METER_INTERVAL_MS,
-  METER_BUFFER_SAMPLES,
-  NOISE_FLOOR_MIN_SAMPLES,
-  TRANSIENT_THRESHOLD_DB,
-  DECAY_MIN_DB_PER_SAMPLE,
-  DEBOUNCE_MS,
-} from '../constants/cageDetection';
+// METER_INTERVAL_MS retained for the telemetry log line; the rest of
+// the multi-shot validation constants are owned by the shared detector
+// in services/acousticImpactDetector now.
+import { METER_INTERVAL_MS } from '../constants/cageDetection';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -112,20 +113,10 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
   const sessionRef = useRef<CageSession | null>(null);
   const sessionStartRef = useRef<number>(0);
   const videoPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
-  const meteringRecRef = useRef<Audio.Recording | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const meterBufferRef = useRef<number[]>([]);
-  const lastDetectionRef = useRef<number>(0);
-  // Phase BY-quick — pending-peak state for multi-criterion validation.
-  // A sample that exceeds the threshold becomes a candidate; the NEXT
-  // sample either confirms the sharp decay (real impact) or rejects
-  // sustained / slow-decay sounds (voice, machinery, claps).
-  const pendingPeakRef = useRef<{
-    dBFS: number;
-    threshold: number;
-    offsetSec: number;
-    timestamp: number;
-  } | null>(null);
+  // meteringRecRef / meterBufferRef / lastDetectionRef / pendingPeakRef
+  // removed — multi-shot validation now lives in the shared detector
+  // (services/acousticImpactDetector mode: 'multi-shot').
   const isMountedRef = useRef(true);
 
   // Portrait lock — cage recording must be vertical for correct video framing
@@ -184,145 +175,47 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
   }, []);
 
   // ─── Audio Metering ────────────────────────────────────────────────────────
+  // Multi-shot validation (noise-floor + decay verification + debounce)
+  // moved into services/acousticImpactDetector so the same logic backs
+  // cage-drill / on-course / cage-session surfaces. This component is
+  // now a thin caller: start, receive ShotDetection events, stop.
+
+  const handleShotDetected = useCallback((d: ShotDetection) => {
+    if (!isMountedRef.current) return;
+    if (!sessionRef.current || phase !== 'recording') return;
+    const offsetSec = d.offset_ms / 1000;
+    addClipEvent(sessionRef.current.id, offsetSec, 'audio_transient');
+    cageLog('swing-detected', 'ok', {
+      method: 'audio_transient',
+      offset_seconds: Number(offsetSec.toFixed(2)),
+      peak_dBFS: Number(d.peak_db.toFixed(1)),
+      decay_dB: Number(d.decay_db.toFixed(1)),
+      noise_floor_dB: Number(d.noise_floor_db.toFixed(1)),
+      session_id: sessionRef.current.id,
+    });
+    setSwingCount((c) => c + 1);
+  }, [phase]);
 
   const startMetering = useCallback(async () => {
     if (!meterAvailable) return;
-    try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: false,
-      });
-      const rec = new Audio.Recording();
-      await rec.prepareToRecordAsync({
-        ...Audio.RecordingOptionsPresets.LOW_QUALITY,
-        isMeteringEnabled: true,
-        android: {
-          ...Audio.RecordingOptionsPresets.LOW_QUALITY.android,
-          extension: '.m4a',
-        },
-        ios: {
-          ...Audio.RecordingOptionsPresets.LOW_QUALITY.ios,
-          extension: '.m4a',
-        },
-      });
-      rec.setOnRecordingStatusUpdate((status) => {
-        if (!isMountedRef.current) return;
-        if (status.metering !== undefined && status.metering !== null) {
-          handleMeterReading(status.metering);
-        }
-      });
-      // expo-av: set progress update interval on the recording
-      // (setProgressUpdateInterval may not exist on all versions — guard it)
-      if (typeof (rec as unknown as { setProgressUpdateInterval: (ms: number) => void }).setProgressUpdateInterval === 'function') {
-        (rec as unknown as { setProgressUpdateInterval: (ms: number) => void }).setProgressUpdateInterval(METER_INTERVAL_MS);
-      }
-      await rec.startAsync();
-      meteringRecRef.current = rec;
-      console.log('[CageSession] Metering started');
-      cageLog('metering-start', 'ok', { interval_ms: METER_INTERVAL_MS });
-    } catch (e) {
-      console.warn('[CageSession] Audio metering failed to start — manual detection only:', e);
-      cageLog('metering-start', 'fail', { error: e instanceof Error ? e.message : String(e), fallback: 'manual-only' });
+    const ok = await startImpactRecording({
+      mode: 'multi-shot',
+      onShotDetected: handleShotDetected,
+    });
+    if (!ok) {
+      cageLog('metering-start', 'fail', { fallback: 'manual-only' });
       setMeterAvailable(false);
-      meteringRecRef.current = null;
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meterAvailable]);
+    cageLog('metering-start', 'ok', { interval_ms: METER_INTERVAL_MS, via: 'shared-detector' });
+  }, [meterAvailable, handleShotDetected]);
 
   const stopMetering = useCallback(async () => {
-    const rec = meteringRecRef.current;
-    meteringRecRef.current = null;
-    if (!rec) return;
-    try {
-      await rec.stopAndUnloadAsync();
-      // Discard the metering audio file — we captured video with its own audio
-      const uri = rec.getURI();
-      if (uri) {
-        const info = await FileSystem.getInfoAsync(uri);
-        if (info.exists) {
-          await FileSystem.deleteAsync(uri, { idempotent: true });
-        }
-      }
-    } catch (e) {
-      console.warn('[CageSession] Error stopping metering recording:', e);
+    const res = await stopMultiShotRecording();
+    if (res?.audio_uri) {
+      void cleanupImpactRecording(res.audio_uri);
     }
-    try {
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-    } catch (_) { /* ignore */ }
   }, []);
-
-  // ─── Swing Detection ───────────────────────────────────────────────────────
-
-  const handleMeterReading = useCallback((dBFS: number) => {
-    const buf = meterBufferRef.current;
-    const now = Date.now();
-
-    // ─── Phase BY-quick: multi-criterion validation ────────────────────────
-    // Step 1 — verify any pending peak from the previous sample.
-    //   - If next sample is still above threshold → SUSTAINED sound
-    //     (voice, machinery). Reject.
-    //   - If decay ≥ DECAY_MIN_DB_PER_SAMPLE → confirmed SHARP transient
-    //     (golf impact). Emit detection (subject to debounce) using the
-    //     peak's offset, not the verification sample's offset.
-    //   - Otherwise → slow decay (clap, distant boom). Reject.
-    const pending = pendingPeakRef.current;
-    if (pending) {
-      pendingPeakRef.current = null;
-      const decay = pending.dBFS - dBFS;
-      const stillAboveThreshold = dBFS > pending.threshold;
-      const sharpDecay = decay >= DECAY_MIN_DB_PER_SAMPLE;
-
-      if (sharpDecay && !stillAboveThreshold) {
-        if (now - lastDetectionRef.current > DEBOUNCE_MS &&
-            sessionRef.current && phase === 'recording') {
-          lastDetectionRef.current = now;
-          addClipEvent(sessionRef.current.id, pending.offsetSec, 'audio_transient');
-          cageLog('swing-detected', 'ok', {
-            method: 'audio_transient',
-            offset_seconds: Number(pending.offsetSec.toFixed(2)),
-            peak_dBFS: Number(pending.dBFS.toFixed(1)),
-            next_dBFS: Number(dBFS.toFixed(1)),
-            decay_dB: Number(decay.toFixed(1)),
-            threshold_dB: Number(pending.threshold.toFixed(1)),
-            session_id: sessionRef.current.id,
-          });
-          if (isMountedRef.current) {
-            setSwingCount((c) => c + 1);
-          }
-        }
-      } else {
-        cageLog('swing-rejected', 'partial', {
-          reason: stillAboveThreshold ? 'sustained-loudness' : 'slow-decay',
-          peak_dBFS: Number(pending.dBFS.toFixed(1)),
-          next_dBFS: Number(dBFS.toFixed(1)),
-          decay_dB: Number(decay.toFixed(1)),
-          threshold_dB: Number(pending.threshold.toFixed(1)),
-        });
-      }
-    }
-
-    // Step 2 — check current sample for a new candidate. Don't emit yet;
-    // hold as pending until the next sample verifies decay.
-    if (!pendingPeakRef.current && buf.length >= NOISE_FLOOR_MIN_SAMPLES) {
-      const noiseFlorDB = buf.reduce((a, b) => a + b, 0) / buf.length;
-      const threshold = noiseFlorDB + TRANSIENT_THRESHOLD_DB;
-      if (dBFS > threshold) {
-        pendingPeakRef.current = {
-          dBFS,
-          threshold,
-          offsetSec: (now - sessionStartRef.current) / 1000,
-          timestamp: now,
-        };
-      }
-    }
-
-    // Step 3 — add the current sample to the rolling buffer for future
-    // noise-floor calculation.
-    buf.push(dBFS);
-    if (buf.length > METER_BUFFER_SAMPLES) buf.shift();
-  }, [phase]);
 
   // ─── Start Session ─────────────────────────────────────────────────────────
 

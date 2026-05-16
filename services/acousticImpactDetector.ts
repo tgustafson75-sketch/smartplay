@@ -35,15 +35,23 @@
  */
 
 import { Audio } from 'expo-av';
+import {
+  METER_INTERVAL_MS as CAGE_METER_INTERVAL_MS,
+  METER_BUFFER_SAMPLES,
+  NOISE_FLOOR_MIN_SAMPLES,
+  TRANSIENT_THRESHOLD_DB,
+  DECAY_MIN_DB_PER_SAMPLE,
+  DEBOUNCE_MS as MULTISHOT_DEBOUNCE_MS,
+} from '../constants/cageDetection';
 
-const METERING_INTERVAL_MS = 50;
+const SINGLESHOT_METERING_INTERVAL_MS = 50;
 const MIN_IMPACT_DB = -30; // anything quieter doesn't count
 /**
- * Real-time impact threshold for the onImpactDetected callback. Set
- * looser than MIN_IMPACT_DB so a clear strike fires the callback even
- * when the global-peak detection later picks something slightly
- * louder. Callers use this to auto-stop video recording N seconds
- * after the strike instead of running the full fixed window.
+ * Real-time impact threshold for the SINGLE-SHOT onImpactDetected
+ * callback. Set looser than MIN_IMPACT_DB so a clear strike fires the
+ * callback even when the global-peak detection later picks something
+ * slightly louder. Callers use this to auto-stop video N seconds after
+ * the strike instead of running the full fixed window.
  */
 const REALTIME_IMPACT_THRESHOLD_DB = -15;
 
@@ -63,15 +71,40 @@ export interface ImpactReading {
   audio_uri: string | null;
 }
 
+export type DetectorMode = 'single-shot' | 'multi-shot';
+
+/** Multi-shot detection event — emitted via onShotDetected. */
+export interface ShotDetection {
+  /** Offset in ms from recording start when the peak landed. */
+  offset_ms: number;
+  /** Peak dBFS at the strike sample. */
+  peak_db: number;
+  /** Drop in dB from peak to the verifying next sample. Higher = sharper
+   *  transient (cleaner strike). */
+  decay_db: number;
+  /** Computed noise floor at the moment of detection (dBFS). */
+  noise_floor_db: number;
+}
+
 interface RunningRecorder {
   recording: Audio.Recording;
   startedAt: number;
+  mode: DetectorMode;
+  // Single-shot state ─────────────────────────
   meterSamples: { offset_ms: number; db: number }[];
   metersInterval: ReturnType<typeof setInterval> | null;
-  /** One-shot real-time impact callback. Fires the moment a meter
-   *  sample crosses REALTIME_IMPACT_THRESHOLD_DB so callers can
-   *  schedule an early stop. Reset to null after firing once. */
+  /** Single-shot: fires once when meter crosses REALTIME_IMPACT_THRESHOLD_DB. */
   onImpactDetected: ((offset_ms: number) => void) | null;
+  // Multi-shot state ──────────────────────────
+  /** Rolling buffer for noise-floor calculation. */
+  meterBuffer: number[];
+  /** Candidate peak waiting for next-sample verification (multi-shot
+   *  uses peak-then-decay validation to reject sustained sound). */
+  pendingPeak: { db: number; threshold: number; offset_ms: number; ts: number } | null;
+  /** Last accepted detection timestamp — for DEBOUNCE_MS gating. */
+  lastDetectionTs: number;
+  /** Multi-shot: fires for EVERY validated strike. */
+  onShotDetected: ((detection: ShotDetection) => void) | null;
 }
 
 let active: RunningRecorder | null = null;
@@ -86,9 +119,18 @@ let active: RunningRecorder | null = null;
  * so we don't double-prompt here.
  */
 export async function startImpactRecording(opts?: {
-  /** Fires once when the live meter crosses the impact threshold. Used
-   *  by callers that want to auto-stop video N seconds after a strike. */
+  /** Default 'single-shot' — find ONE peak across the recording.
+   *  Used by single-swing captures (cage-drill, on-course shot).
+   *  'multi-shot' uses noise-floor + decay validation to emit
+   *  multiple detection events. Used by cage range sessions. */
+  mode?: DetectorMode;
+  /** Single-shot only: fires once when meter crosses
+   *  REALTIME_IMPACT_THRESHOLD_DB. Use for "auto-stop N seconds
+   *  after strike" flows. */
   onImpactDetected?: (offset_ms: number) => void;
+  /** Multi-shot only: fires for every validated strike. Use for
+   *  range/cage sessions that capture multiple swings per clip. */
+  onShotDetected?: (detection: ShotDetection) => void;
 }): Promise<boolean> {
   if (active) return false;
   try {
@@ -134,37 +176,89 @@ export async function startImpactRecording(opts?: {
     await recording.startAsync();
 
     const startedAt = Date.now();
+    const mode: DetectorMode = opts?.mode ?? 'single-shot';
     const state: RunningRecorder = {
       recording,
       startedAt,
+      mode,
+      // Single-shot state
       meterSamples: [],
       metersInterval: null,
       onImpactDetected: opts?.onImpactDetected ?? null,
+      // Multi-shot state
+      meterBuffer: [],
+      pendingPeak: null,
+      lastDetectionTs: 0,
+      onShotDetected: opts?.onShotDetected ?? null,
     };
+
+    // Single-shot uses a faster cadence (50ms) for tight strike capture;
+    // multi-shot uses the cage detector's tuned 100ms cadence + matching
+    // buffer math.
+    const intervalMs = mode === 'multi-shot'
+      ? CAGE_METER_INTERVAL_MS
+      : SINGLESHOT_METERING_INTERVAL_MS;
 
     state.metersInterval = setInterval(async () => {
       try {
         const status = await recording.getStatusAsync();
-        if (status.isRecording && typeof status.metering === 'number') {
-          const offset = Date.now() - startedAt;
-          state.meterSamples.push({
-            offset_ms: offset,
-            db: status.metering,
-          });
-          // Real-time peak callback — fires ONCE when the meter first
-          // crosses the threshold. Callers schedule an early stop from
-          // here ("video keeps running N seconds after the strike").
-          if (state.onImpactDetected && status.metering >= REALTIME_IMPACT_THRESHOLD_DB) {
+        if (!status.isRecording || typeof status.metering !== 'number') return;
+        const offset = Date.now() - state.startedAt;
+        const db = status.metering;
+
+        if (state.mode === 'single-shot') {
+          state.meterSamples.push({ offset_ms: offset, db });
+          if (state.onImpactDetected && db >= REALTIME_IMPACT_THRESHOLD_DB) {
             const cb = state.onImpactDetected;
             state.onImpactDetected = null; // one-shot
             try { cb(offset); } catch (e) { console.log('[acoustic] onImpactDetected callback threw', e); }
           }
+        } else {
+          // ─── Multi-shot pipeline (ported from CageSessionOverlay) ─
+          // 1. Verify any pending peak from prior sample. Sharp decay +
+          //    not-still-loud = real golf strike. Else reject.
+          const pending = state.pendingPeak;
+          if (pending) {
+            state.pendingPeak = null;
+            const decay = pending.db - db;
+            const stillAboveThreshold = db > pending.threshold;
+            const sharpDecay = decay >= DECAY_MIN_DB_PER_SAMPLE;
+            if (sharpDecay && !stillAboveThreshold) {
+              const ts = Date.now();
+              if (ts - state.lastDetectionTs > MULTISHOT_DEBOUNCE_MS && state.onShotDetected) {
+                state.lastDetectionTs = ts;
+                const noiseFloor = pending.threshold - TRANSIENT_THRESHOLD_DB;
+                try {
+                  state.onShotDetected({
+                    offset_ms: pending.offset_ms,
+                    peak_db: pending.db,
+                    decay_db: decay,
+                    noise_floor_db: noiseFloor,
+                  });
+                } catch (e) {
+                  console.log('[acoustic] onShotDetected callback threw', e);
+                }
+              }
+            }
+          }
+          // 2. Check current sample for a new candidate. Hold as pending
+          //    until next-sample decay verification.
+          if (!state.pendingPeak && state.meterBuffer.length >= NOISE_FLOOR_MIN_SAMPLES) {
+            const noiseFloor = state.meterBuffer.reduce((a, b) => a + b, 0) / state.meterBuffer.length;
+            const threshold = noiseFloor + TRANSIENT_THRESHOLD_DB;
+            if (db > threshold) {
+              state.pendingPeak = { db, threshold, offset_ms: offset, ts: Date.now() };
+            }
+          }
+          // 3. Add current sample to the rolling buffer.
+          state.meterBuffer.push(db);
+          if (state.meterBuffer.length > METER_BUFFER_SAMPLES) state.meterBuffer.shift();
         }
       } catch {
         // Recording stopped between our setInterval tick and the
         // getStatusAsync call — ignore; the stop path clears the timer.
       }
-    }, METERING_INTERVAL_MS);
+    }, intervalMs);
 
     active = state;
     return true;
@@ -231,6 +325,28 @@ export async function stopAndDetectImpact(): Promise<ImpactReading | null> {
     confidence,
     audio_uri,
   };
+}
+
+/**
+ * Multi-shot stop — tears down the parallel recording and returns the
+ * audio file URI. Detections were already emitted in real-time via
+ * onShotDetected, so this just cleans up. Returns null when nothing
+ * was running OR the audio file is missing.
+ */
+export async function stopMultiShotRecording(): Promise<{ audio_uri: string | null } | null> {
+  if (!active) return null;
+  const state = active;
+  active = null;
+  if (state.metersInterval) {
+    clearInterval(state.metersInterval);
+    state.metersInterval = null;
+  }
+  try {
+    await state.recording.stopAndUnloadAsync();
+  } catch { /* noop */ }
+  let audio_uri: string | null = null;
+  try { audio_uri = state.recording.getURI(); } catch { /* noop */ }
+  return { audio_uri };
 }
 
 /**
