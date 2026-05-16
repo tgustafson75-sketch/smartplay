@@ -394,6 +394,33 @@ function AppNavigator() {
       // yardages reflect the new position immediately instead of waiting
       // for the next watch tick.
       setMarkedFix(mark.lat, mark.lng, mark.accuracy_m);
+      // Phase 405 wave 4 — manual shot-location correction. When the
+      // user taps Mark within 60s of logging a shot, treat the Mark
+      // position as a correction of that shot's end_location (the
+      // "ball location" after the swing). Same semantics as the
+      // "I'm at my ball" voice intent, but bound to the Mark button
+      // so users who don't use voice still have a manual correction
+      // path. The 60s window matches the typical walk-to-ball time
+      // and prevents Marks-for-other-reasons from accidentally
+      // mutating shot records far after the fact.
+      try {
+        const round = useRoundStore.getState();
+        if (round.isRoundActive) {
+          const hole = round.currentHole;
+          const lastShotOnHole = [...round.shots]
+            .reverse()
+            .find(s => s.hole === hole);
+          if (lastShotOnHole) {
+            const ageMs = Date.now() - lastShotOnHole.timestamp;
+            if (ageMs < 60_000 && !lastShotOnHole.end_location) {
+              round.closeHoleEndLocation(hole, { lat: mark.lat, lng: mark.lng });
+              console.log(`[mark] shot-location correction applied to shot ${lastShotOnHole.id} (${Math.round(ageMs / 1000)}s old)`);
+            }
+          }
+        }
+      } catch (e) {
+        console.log('[mark] shot-location correction skipped:', e);
+      }
       // Hole detection: trigger an immediate evaluate by nudging
       // currentHole to itself (no-op store write that fires the
       // subscriber chain). The actual hole-recheck happens inside
