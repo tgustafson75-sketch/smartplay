@@ -15,11 +15,14 @@
  * API results in the closest-local section so Tim's home course is one tap.
  */
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet,
   Image, ActivityIndicator, Alert, type ImageSourcePropType,
 } from 'react-native';
+import * as Location from 'expo-location';
+// Phase 407 — distance helper for course-locator GPS sort
+import { haversineYards } from '../../utils/geoDistance';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useRoundStore } from '../../store/roundStore';
@@ -49,6 +52,13 @@ type CourseSummary = {
   slope: number | null;
   isLocal?: boolean;
   thumbnail?: ImageSourcePropType | { uri: string } | null;
+  // Phase 407 — approximate course-centroid coordinates used for the
+  // GPS-distance default sort. Courses without lat/lng fall to the end
+  // of the sorted list (alphabetical among themselves). Local catalog
+  // entries get hardcoded values; API search results enrich
+  // opportunistically when course.location.gps is available.
+  lat?: number;
+  lng?: number;
 };
 
 // Curated local courses (Tim's playtest set). These render in the closest-local
@@ -64,6 +74,9 @@ const LOCAL_COURSES: CourseSummary[] = [
     slope: 119,
     isLocal: true,
     thumbnail: PALMS_IMAGES[1] as ImageSourcePropType,
+    // Phase 407 — coords from data/courses.ts PALMS_HOLES[0] tee
+    lat: 33.6953922,
+    lng: -117.1504551,
   },
   {
     id: 'local:lakes',
@@ -73,6 +86,9 @@ const LOCAL_COURSES: CourseSummary[] = [
     slope: 119,
     isLocal: true,
     thumbnail: (LAKES_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    // Phase 407 — coords from data/courses.ts LAKES_HOLES[0] tee
+    lat: 33.6913348,
+    lng: -117.1573364,
   },
   {
     id: 'local:rancho',
@@ -82,6 +98,11 @@ const LOCAL_COURSES: CourseSummary[] = [
     slope: 127,
     isLocal: true,
     thumbnail: (RANCHO_CALIFORNIA_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    // Phase 407 — Rancho lacks hole-1 tee coords in courses.ts; use
+    // approximate clubhouse centroid from public records. Good enough
+    // for distance-sort (any error <500m is invisible at city scale).
+    lat: 33.4910,
+    lng: -117.1390,
   },
   {
     id: 'local:crystal-springs',
@@ -91,6 +112,8 @@ const LOCAL_COURSES: CourseSummary[] = [
     slope: 128,
     isLocal: true,
     thumbnail: (CRYSTAL_SPRINGS_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    lat: 37.5120,
+    lng: -122.3580,
   },
   {
     id: 'local:mariners-point',
@@ -100,6 +123,8 @@ const LOCAL_COURSES: CourseSummary[] = [
     slope: 74,
     isLocal: true,
     thumbnail: (MARINERS_POINT_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    lat: 37.5480,
+    lng: -122.2750,
   },
   // Added 2026-05-14 — Tim is in the San Jose area for the next 3-6
   // months and asked to test against his local muni. All 18 hole photos
@@ -113,6 +138,8 @@ const LOCAL_COURSES: CourseSummary[] = [
     slope: 122,
     isLocal: true,
     thumbnail: (SAN_JOSE_MUNI_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    lat: 37.3670,
+    lng: -121.9310,
   },
 ];
 
@@ -154,6 +181,11 @@ export default function PlayTab() {
   const [selected, setSelected] = useState<Course | null>(null);
   const [selectedLoading, setSelectedLoading] = useState(false);
   const [selectedHero, setSelectedHero] = useState<string | null>(null);
+  // Phase 407 — GPS position for course-locator default sort.
+  // One-shot Balanced-accuracy fix at mount; refreshed when the tab
+  // regains focus. Null when permission denied or fix unavailable —
+  // course list falls back to catalog order in that case.
+  const [userPosition, setUserPosition] = useState<{ lat: number; lng: number } | null>(null);
 
   // Pre-beta — clear stale search error on every entry to the tab so a
   // failed search from a prior visit doesn't keep "Course search unavailable"
@@ -161,6 +193,33 @@ export default function PlayTab() {
   useFocusEffect(
     useCallback(() => {
       setSearchError(null);
+    }, []),
+  );
+
+  // Phase 407 — refresh GPS position when tab regains focus so the
+  // course-locator default sort updates to the user's actual location.
+  // One-shot Balanced-accuracy fix (fast, low battery) — distance-to-
+  // course sorting tolerates >100m error at city scale. Permission
+  // denial / failure leaves userPosition null and the catalog
+  // falls back to its existing order.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void (async () => {
+        try {
+          const { granted } = await Location.requestForegroundPermissionsAsync();
+          if (!granted || cancelled) return;
+          const pos = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          if (cancelled) return;
+          setUserPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        } catch (e) {
+          // Non-fatal — list just falls back to catalog order.
+          console.log('[play] gps fix for course sort failed:', e);
+        }
+      })();
+      return () => { cancelled = true; };
     }, []),
   );
 
@@ -188,10 +247,48 @@ export default function PlayTab() {
     return () => { cancelled = true; };
   }, [recentCourseIds]);
 
-  const closestLocal: CourseSummary[] = [
-    ...LOCAL_COURSES,
-    ...recentCourses.filter(r => !LOCAL_COURSES.some(l => l.id === r.id)),
-  ];
+  // Phase 407 — GPS-driven default sort. When userPosition is known,
+  // sort the combined catalog ascending by distance from the player.
+  // Courses without lat/lng fall to the end (alphabetical among
+  // themselves). When userPosition is null (no permission / no fix
+  // yet), the previous catalog-then-recent insertion order is kept
+  // exactly, so the behavior is no-regression at first paint.
+  const closestLocal: CourseSummary[] = useMemo(() => {
+    const combined: CourseSummary[] = [
+      ...LOCAL_COURSES,
+      ...recentCourses.filter(r => !LOCAL_COURSES.some(l => l.id === r.id)),
+    ];
+    if (!userPosition) return combined;
+    const YARDS_PER_MILE = 1760;
+    type Annotated = { course: CourseSummary; miles: number | null };
+    const annotated: Annotated[] = combined.map(c => {
+      if (c.lat == null || c.lng == null) return { course: c, miles: null };
+      const yds = haversineYards(userPosition, { lat: c.lat, lng: c.lng });
+      return { course: c, miles: yds / YARDS_PER_MILE };
+    });
+    annotated.sort((a, b) => {
+      // Courses without coords sink to the bottom, then alphabetical.
+      if (a.miles == null && b.miles == null) return a.course.club_name.localeCompare(b.course.club_name);
+      if (a.miles == null) return 1;
+      if (b.miles == null) return -1;
+      return a.miles - b.miles;
+    });
+    return annotated.map(a => a.course);
+  }, [recentCourses, userPosition]);
+
+  // Phase 407 — per-course distance label keyed by id. Computed once
+  // alongside the sort so the row renderer just looks up.
+  const distanceLabelById: Record<string, string | null> = useMemo(() => {
+    if (!userPosition) return {};
+    const YARDS_PER_MILE = 1760;
+    const out: Record<string, string | null> = {};
+    for (const c of closestLocal) {
+      if (c.lat == null || c.lng == null) { out[c.id] = null; continue; }
+      const miles = haversineYards(userPosition, { lat: c.lat, lng: c.lng }) / YARDS_PER_MILE;
+      out[c.id] = miles < 10 ? `${miles.toFixed(1)} mi` : `${Math.round(miles)} mi`;
+    }
+    return out;
+  }, [closestLocal, userPosition]);
 
   // Default the SELECTED COURSE card to the user's home course on first
   // mount (or Palms — Tim's primary local — if none is set yet). User
@@ -213,12 +310,19 @@ export default function PlayTab() {
     const homeMatch = homeName
       ? LOCAL_COURSES.find(l => l.club_name.toLowerCase().includes(homeName) || l.id.toLowerCase().includes(homeName))
       : null;
-    const defaultPick = homeMatch ?? LOCAL_COURSES[0];  // LOCAL_COURSES[0] = Palms
+    // Phase 407 — default to the NEAREST course (closestLocal[0]) when
+    // the GPS sort has run. Falls through to the configured home
+    // course (if set) and then to the static catalog top when GPS
+    // hasn't resolved yet. Honest about which it's using: when
+    // userPosition is null, the sort hasn't run so closestLocal[0]
+    // still equals LOCAL_COURSES[0] (Palms) — no regression.
+    const gpsNearest = userPosition ? closestLocal[0] : null;
+    const defaultPick = gpsNearest ?? homeMatch ?? LOCAL_COURSES[0];
     if (defaultPick) void selectSummary(defaultPick);
     // selectSummary is intentionally not in deps — it'd retrigger on every
-    // closure refresh. We only want this once per mount.
+    // closure refresh. We only want this once per mount + once GPS resolves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homeCourse, isRoundActive, activeCourseId, activeCourse]);
+  }, [homeCourse, isRoundActive, activeCourseId, activeCourse, userPosition]);
 
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
@@ -480,6 +584,14 @@ export default function PlayTab() {
                     {c.slope != null && ` · Slope ${c.slope}`}
                   </Text>
                 </View>
+                {/* Phase 407 — distance-from-player chip. Only renders
+                    when the GPS sort has computed a value for this
+                    course. Courses missing coords show no chip. */}
+                {distanceLabelById[c.id] && (
+                  <View style={styles.distancePill}>
+                    <Text style={styles.distancePillText}>{distanceLabelById[c.id]}</Text>
+                  </View>
+                )}
                 {isActive && <AppIcon name="checkmark" size={18} color="#00C896" />}
                 <TouchableOpacity
                   onPress={() => onTapInfo(c)}
@@ -791,6 +903,24 @@ const styles = StyleSheet.create({
   localName: { color: '#fff', fontSize: 15, fontWeight: '800' },
   localMeta: { color: '#6b7d72', fontSize: 12, marginTop: 2 },
   infoBtn: { padding: 6 },
+  // Phase 407 — distance-from-player pill on each course row. Sits
+  // between the meta text and the active-state checkmark. Subtle teal
+  // border to read as a chip, not a button.
+  distancePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0,200,150,0.45)',
+    backgroundColor: 'rgba(0,200,150,0.08)',
+    marginRight: 4,
+  },
+  distancePillText: {
+    color: '#00C896',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
 
   kindRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginBottom: 8 },
   kindBtn: {
