@@ -19,11 +19,17 @@ import { startHoleDetection, stopHoleDetection, subscribeToHoleDetection } from 
 import { startOffCourseDetector, stopOffCourseDetector } from '../services/offCourseDetector';
 import { startMovementModeDetector, stopMovementModeDetector } from '../services/movementModeDetector';
 import { subscribePoorSignal } from '../services/gpsManager';
-// Phase 405 wave 4 — side-effect import so TaskManager.defineTask
-// registers the background location handler at app boot, before any
-// Location.startLocationUpdatesAsync call could deliver a fix.
-// expo-task-manager silently drops updates for an undefined task.
-import '../services/backgroundLocationTask';
+// Phase 411-hotfix — REMOVED the side-effect import of
+// services/backgroundLocationTask. That module's TaskManager.defineTask
+// at module load was the root cause of a white-screen boot crash on
+// the Phase 405 wave 4 EAS build: when defineTask threw (native binding
+// issue or task-name conflict), the throw propagated through the
+// _layout.tsx module load and the entire render tree failed to mount.
+// Lazy-registered now from inside startBackgroundLocation() instead.
+// Background updates can't fire until startBackgroundLocation is
+// called anyway (which only happens after the user starts a round),
+// so the lazy pattern is equivalent for normal use AND eliminates the
+// boot risk.
 import { useToastStore } from '../store/toastStore';
 import { consumeDeferredPaywall } from '../services/paywallGuard';
 import { initAudioLifecycle } from '../services/audioLifecycle';

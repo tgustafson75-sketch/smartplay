@@ -1,5 +1,5 @@
 /**
- * Phase 405 wave 4 — Background location task.
+ * Phase 405 wave 4 + Phase 411-hotfix — Background location task.
  *
  * Closes the audit's CRITICAL gap: today watchPositionAsync silently
  * stops when the OS suspends the app (Android Doze, iOS low-power
@@ -7,77 +7,89 @@
  * and GPS drops out; hole transitions and yardages freeze until they
  * pull the phone out and the app foregrounds again.
  *
- * Architecture: dual-source. The existing watchPositionAsync in
- * gpsManager remains the high-cadence foreground source (1Hz /
- * BestForNavigation during active mode). On top of that, we ALSO start
- * Location.startLocationUpdatesAsync with `foregroundService` config.
- * That:
- *   - Shows a persistent notification on Android ("SmartPlay tracking
- *     your round") so the OS keeps the location subsystem alive.
- *   - Holds the iOS UIBackgroundModes 'location' entitlement so iOS
- *     keeps delivering fixes when backgrounded.
- *   - Routes each fix through a TaskManager-registered handler that
- *     feeds the manager's subscribers — same data path as
- *     watchPositionAsync, so consumers see no difference.
+ * # Hot-fix history
  *
- * The two subscriptions can each fire fixes; the gpsManager outlier-
- * rejection + smoothing path handles dedup naturally (a near-identical
- * timestamp+location pair is discarded by the jump-distance check).
+ * The original Phase 405 wave 4 pattern called TaskManager.defineTask
+ * at module load via a side-effect import in app/_layout.tsx. When the
+ * native binding for expo-task-manager threw on Phase 405 wave 4's
+ * first EAS build, the throw propagated through _layout.tsx's module
+ * load and the entire app rendered a white screen at boot.
  *
- * TaskManager.defineTask MUST run at module load, before any update is
- * delivered, or updates are silently dropped. This file is imported
- * for side-effect from app/_layout.tsx at boot.
+ * # Current architecture — lazy defineTask
+ *
+ * defineTask is now called LAZILY inside startBackgroundLocation,
+ * just before Location.startLocationUpdatesAsync. The native shell
+ * delivers task data only AFTER startLocationUpdatesAsync is invoked
+ * (which only happens on round-start), so registering the task at
+ * that moment is sufficient. Tradeoff: if the OS resurrects the app
+ * from a background task delivery while the JS bundle is unloaded,
+ * defineTask isn't registered and the delivery is silently dropped.
+ * For v1.1 beta that's acceptable — foreground GPS still works and
+ * a user opening the app resumes the round normally.
+ *
+ * Every external surface is wrapped in try/catch so a native binding
+ * failure CANNOT crash the boot path.
  */
 
-import * as TaskManager from 'expo-task-manager';
 import * as Location from 'expo-location';
 
 export const BACKGROUND_LOCATION_TASK = 'smartplay-background-location';
 
-// Module-load defineTask. Runs once per app process; idempotent.
-// expo-task-manager throws if defineTask is called more than once for
-// the same task name, so guard with isTaskDefined.
-//
-// Wrapped in try/catch so that ANY module-load failure (older device
-// without TaskManager support, hot-reload edge case, native module
-// not linked yet on first install) can't crash the app boot. The
-// _layout.tsx side-effect import would otherwise propagate the throw
-// up the entire render tree on first launch.
-try {
-  if (!TaskManager.isTaskDefined(BACKGROUND_LOCATION_TASK)) {
-    TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async (event) => {
-    if (event.error) {
-      console.log('[bgLocation] task error:', event.error.message);
-      return;
+let taskDefined = false;
+
+/**
+ * Lazy registration. Called from startBackgroundLocation immediately
+ * before startLocationUpdatesAsync. Idempotent — only registers once
+ * per app process.
+ *
+ * Dynamic require of expo-task-manager so any native-binding failure
+ * is caught and logged instead of throwing at module-load time. The
+ * task body itself ingests fixes back into gpsManager via the public
+ * ingestExternalFix path so the existing outlier + smoothing pipeline
+ * handles background fixes identically to foreground.
+ */
+function ensureTaskDefined(): boolean {
+  if (taskDefined) return true;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const TaskManager = require('expo-task-manager') as typeof import('expo-task-manager');
+    if (TaskManager.isTaskDefined(BACKGROUND_LOCATION_TASK)) {
+      taskDefined = true;
+      return true;
     }
-    const data = event.data as { locations?: Location.LocationObject[] } | undefined;
-    const locs = data?.locations ?? [];
-    if (locs.length === 0) return;
-    // Feed each fix into gpsManager via the public ingest API. Lazy
-    // import avoids a top-level cycle (gpsManager imports nothing from
-    // this file, but defining the task at module load before
-    // gpsManager has resolved its own subscribers would still race).
-    void (async () => {
-      try {
-        const { ingestExternalFix } = await import('./gpsManager');
-        for (const l of locs) {
-          ingestExternalFix({
-            lat: l.coords.latitude,
-            lng: l.coords.longitude,
-            accuracy_m: l.coords.accuracy ?? null,
-            speed: l.coords.speed ?? null,
-            timestamp: l.timestamp,
-          });
-        }
-      } catch (e) {
-        console.log('[bgLocation] ingest failed:', e);
+    TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async (event) => {
+      if (event.error) {
+        console.log('[bgLocation] task error:', event.error.message);
+        return;
       }
-    })();
+      const data = event.data as { locations?: Location.LocationObject[] } | undefined;
+      const locs = data?.locations ?? [];
+      if (locs.length === 0) return;
+      // Feed each fix into gpsManager via the public ingest API.
+      void (async () => {
+        try {
+          const { ingestExternalFix } = await import('./gpsManager');
+          for (const l of locs) {
+            ingestExternalFix({
+              lat: l.coords.latitude,
+              lng: l.coords.longitude,
+              accuracy_m: l.coords.accuracy ?? null,
+              speed: l.coords.speed ?? null,
+              timestamp: l.timestamp,
+            });
+          }
+        } catch (e) {
+          console.log('[bgLocation] ingest failed:', e);
+        }
+      })();
     });
+    taskDefined = true;
     console.log('[bgLocation] task defined:', BACKGROUND_LOCATION_TASK);
+    return true;
+  } catch (e) {
+    console.log('[bgLocation] ensureTaskDefined failed (non-fatal):', e);
+    return false;
   }
-} catch (e) {
-  console.log('[bgLocation] defineTask threw at module load (non-fatal):', e);
 }
 
 /**
@@ -93,6 +105,11 @@ try {
  */
 export async function startBackgroundLocation(): Promise<void> {
   try {
+    const registered = ensureTaskDefined();
+    if (!registered) {
+      console.log('[bgLocation] task registration failed; skipping start');
+      return;
+    }
     const already = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
     if (already) return;
     await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
