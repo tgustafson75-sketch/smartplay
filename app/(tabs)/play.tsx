@@ -400,8 +400,9 @@ export default function PlayTab() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Shared v3 brand row — logo tap opens the listening session. */}
-      <BrandHeaderRow onLogoPress={() => { void toggleListening(); }} />
+      {/* Shared v3 brand row — logo tap opens the listening session
+          (default behavior across every tab). */}
+      <BrandHeaderRow />
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Active-round banner — End Round lives here so the user doesn't

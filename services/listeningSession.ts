@@ -62,6 +62,23 @@ let cancelMic: (() => void) | null = null;
 let unsubEarbud: (() => void) | null = null;
 
 /**
+ * Helper: every internal state change goes through this so the
+ * listeningSessionStore (subscribed by BrandHeaderRow + other UI
+ * surfaces) sees every transition. Without this mirror the badge halo
+ * stays dark even when listening is active.
+ */
+function setSessionStateMirror(next: SessionState): void {
+  state = next;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useListeningSessionStore } = require('../store/listeningSessionStore');
+    useListeningSessionStore.getState().setState(next);
+  } catch (e) {
+    console.log('[listeningSession] state mirror failed', e);
+  }
+}
+
+/**
  * Start listening for earbud taps (called once on app boot or by the first
  * surface that wants to receive them).
  */
@@ -109,7 +126,7 @@ function pickOpener(): string {
 }
 
 async function openSession() {
-  state = 'opening';
+  setSessionStateMirror('opening');
   const settings = useSettingsStore.getState();
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   console.log(`[path4:voice] tap_open trust=${getTrustLevel()}`);
@@ -139,7 +156,7 @@ async function openSession() {
   }
 
   // Phase 2 — open mic for utterance
-  state = 'listening';
+  setSessionStateMirror('listening');
   console.log('[audit:voice] listening engaged');
   let utterance: string | null = null;
   try {
@@ -157,12 +174,12 @@ async function openSession() {
   if (state !== 'listening') return;
 
   if (!utterance || !utterance.trim()) {
-    state = 'idle';
+    setSessionStateMirror('idle');
     return;
   }
 
   // Phase 3 — classify + respond
-  state = 'thinking';
+  setSessionStateMirror('thinking');
   // Phase P — TTFA instrumentation. t0 = capture end.
   const t0 = Date.now();
   try {
@@ -190,14 +207,14 @@ async function openSession() {
       body: JSON.stringify({ text: utterance, voiceGender: settings.voiceGender ?? 'male' }),
     });
     if (!parseRes.ok) {
-      state = 'idle';
+      setSessionStateMirror('idle');
       return;
     }
     const intent = await parseRes.json();
     const t_intent = Date.now();
-    if (state !== 'thinking') return;
+    if ((state as SessionState) !== 'thinking') return;
 
-    state = 'responding';
+    setSessionStateMirror('responding');
 
     // Phase P — fire filler (if router prescribes one) in parallel with handler.
     // playLocalFile is non-blocking start; we await it later before speak() so
@@ -289,7 +306,7 @@ async function openSession() {
       } catch (e) {
         console.log('[listeningSession] in_round_diagnostic failed', e);
       }
-      state = 'idle';
+      setSessionStateMirror('idle');
       return;
     }
 
@@ -301,7 +318,7 @@ async function openSession() {
     // and the magic moment was gone. Now: if intent has a clarifying
     // follow_up_question, speak that. Otherwise route the raw utterance
     // to /api/kevin for a conversational reply.
-    if (!voiceCommandRouter.getHandler(intent.intent_type) && state === 'responding') {
+    if (!voiceCommandRouter.getHandler(intent.intent_type) && (state as SessionState) === 'responding') {
       const responseAllowed =
         settings.voiceEnabled &&
         (route !== 'phone_speaker' || allowPhoneSpeaker);
@@ -337,7 +354,7 @@ async function openSession() {
           }
         }
       }
-      state = 'idle';
+      setSessionStateMirror('idle');
       return;
     }
 
@@ -357,7 +374,7 @@ async function openSession() {
       await fillerP;
 
       if (ttsAllowed) {
-        for (let i = 0; i < 2 && !resultReady && state === 'responding'; i++) {
+        for (let i = 0; i < 2 && !resultReady && (state as SessionState) === 'responding'; i++) {
           const ext = getClipForCategory('extension');
           if (ext) {
             await playLocalFile(ext.audio_path, ext.duration_ms).catch(() => {});
@@ -423,7 +440,7 @@ async function openSession() {
     console.log('[listeningSession] respond failed', e);
   }
 
-  state = 'idle';
+  setSessionStateMirror('idle');
 }
 
 function closeSession() {
@@ -440,5 +457,5 @@ function closeSession() {
   }
   // Belt + suspenders: ensure no orphan recording survives.
   void stopCapture().catch(() => {});
-  state = 'idle';
+  setSessionStateMirror('idle');
 }
