@@ -30,7 +30,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 // below is byte-identical to pre-Cockpit when the toggle is off.
 import CockpitCaddieScreen from '../../components/caddie/CockpitCaddieScreen';
 import { DistanceCard, type FrontMiddleBack } from '../../components/caddie/cockpit/DistanceCard';
-import BrandHeaderRow from '../../components/brand/BrandHeaderRow';
+import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useShallow } from 'zustand/react/shallow';
 import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
@@ -66,7 +66,7 @@ import { fetchCourseGeometry } from '../../services/courseGeometryService';
 import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
-import { useTrustLevelStore, TRUST_LEVEL_META, TRUST_LEVEL_SLIDER_ORDER, type TrustLevel } from '../../store/trustLevelStore';
+import { useTrustLevelStore, TRUST_LEVEL_META, TRUST_LEVEL_SLIDER_ORDER } from '../../store/trustLevelStore';
 import { useToastStore } from '../../store/toastStore';
 import { useToolsMenuStore } from '../../store/toolsMenuStore';
 // Phase U2 — KevinAvatar import removed. The L1 SmartPlay-badge mic-trigger

@@ -23,7 +23,6 @@ import React, { useMemo } from 'react';
 import {
   View,
   Text,
-  Image,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -41,7 +40,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { detectPatternShift } from '../../services/patternDetection';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import AppIcon from '../../components/AppIcon';
-import BrandHeaderRow from '../../components/brand/BrandHeaderRow';
+import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 
 export default function Dashboard() {
   const router = useRouter();

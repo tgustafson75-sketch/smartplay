@@ -90,7 +90,7 @@ const CONFIDENCE_DOT: Record<CoachReviewResponse['confidence'], string> = {
 export default function CageDrillScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width: W, height: H } = useWindowDimensions();
+  const { width: W } = useWindowDimensions();
   // Phase BI — Fold-open detection via width threshold (not aspect ratio).
   // Z Fold open W ≈ 673; closed W ≈ 412; standard phone W ≈ 390. The prior
   // `aspect < 1.5` heuristic mis-fired in portrait-locked mode (Fold open

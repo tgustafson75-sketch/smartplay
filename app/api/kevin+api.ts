@@ -178,8 +178,8 @@ export async function POST(request: Request) {
       } | null;
       voiceGender?: VoiceGender;
       persona?: string | null;
-      history?: Array<{ role: 'user' | 'assistant'; content: string }>;
-      recentShots?: Array<{
+      history?: { role: 'user' | 'assistant'; content: string }[];
+      recentShots?: {
         hole: number;
         shotIndex: number;
         direction?: string;
@@ -188,8 +188,8 @@ export async function POST(request: Request) {
         outcomeText?: string;
         feel?: string;
         club?: string;
-      }>;
-      holeShots?: Array<{
+      }[];
+      holeShots?: {
         hole: number;
         shotIndex: number;
         direction?: string;
@@ -198,7 +198,7 @@ export async function POST(request: Request) {
         outcomeText?: string;
         feel?: string;
         club?: string;
-      }>;
+      }[];
     };
 
     // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.

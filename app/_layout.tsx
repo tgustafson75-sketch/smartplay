@@ -36,8 +36,8 @@ import CaddieSuggestionCard from '../components/CaddieSuggestionCard';
 import GpsQualityOverlay from '../components/dev/GpsQualityOverlay';
 import CaptureOverlay from '../components/CaptureOverlay';
 import CaptionStrip from '../components/CaptionStrip';
-import GlobalToolsMenu from '../components/tools/GlobalToolsMenu';
-import GlobalToast from '../components/toast/GlobalToast';
+import { GlobalToolsMenu } from '../components/tools/GlobalToolsMenu';
+import { GlobalToast } from '../components/toast/GlobalToast';
 
 // Phase Y — whenRoundStoreHydrated lives in store/roundStore.ts (was
 // inlined here originally; audit moved it to remove a brittle

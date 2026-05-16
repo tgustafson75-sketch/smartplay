@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet,
-  Image, useWindowDimensions, type ImageSourcePropType,
+  useWindowDimensions,
+  type ImageSourcePropType,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,9 +17,8 @@ import { useSettingsStore, getEffectiveSimpleBriefing } from '../../store/settin
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getCourseImageryUrl, getHoleThumbnailUrl } from '../../services/mapboxImagery';
+import { getHoleThumbnailUrl } from '../../services/mapboxImagery';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
-import PALMS_IMAGES from '../../data/palmsImages';
 import { getLocalHoleImage } from '../../data/localCourseImages';
 import type { Course } from '../../types/course';
 
@@ -46,21 +46,17 @@ export default function CourseDetailScreen() {
   // useWindowDimensions subscribes to device-config changes — Galaxy Z Fold
   // reconfigure (open ↔ closed) re-renders this screen with the new width
   // instead of keeping the stale module-load value.
-  const { width: screenW } = useWindowDimensions();
-  // Re-sim P1 — when simpleBriefing is on (auto for first 5 rounds OR
-  // explicit), collapse the dense ABOUT / CADDIE TIPS / HOLE PHOTOS
-  // sections behind expandable headers. Mark + Priya from the gen-pop
-  // re-sim asked for this, and Joel from the original HOPE trial got
-  // stuck on the same screen.
-  const roundsTogether = useRelationshipStore(s => s.roundsTogether);
-  const _rawSimple = useSettingsStore(s => s.simpleBriefing);
-  const _userTouched = useSettingsStore(s => s.simpleBriefingUserTouched);
-  const simpleBriefing = (() => { void _rawSimple; void _userTouched;
-    return getEffectiveSimpleBriefing(roundsTogether);
-  })();
-  const [aboutOpen, setAboutOpen] = useState(false);
-  const [tipsOpen, setTipsOpen] = useState(false);
-  const [photosOpen, setPhotosOpen] = useState(false);
+  // useWindowDimensions kept for the subscribe-on-rotation behavior
+  // (Z Fold open/closed reconfigures don't keep stale module-load width)
+  // even though the V3 redesign no longer reads the width value here.
+  useWindowDimensions();
+  // Phase 405b — V3 redesign dropped the collapsible ABOUT / CADDIE
+  // TIPS / HOLE PHOTOS sections (no longer needed because the page is
+  // shorter overall). The simpleBriefing / aboutOpen / tipsOpen /
+  // photosOpen / heroFailed state hooks that supported the collapse
+  // pattern are removed in the Phase 500 cleanup; if the personalization
+  // branch returns later it lives in roundsTogether + getEffectiveSimpleBriefing.
+  void useRelationshipStore; void getEffectiveSimpleBriefing; void useSettingsStore;
   // Bottom CTA bar adapts to active theme so Light mode doesn't show
   // a dark sliver under a dark border under a teal fill (Tim flagged
   // the Start Round button "overlapping borders in lighter modes").
@@ -74,11 +70,6 @@ export default function CourseDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(true);
   const [geometryReady, setGeometryReady] = useState(false);
-  // Phase 405 — hero image error fallback. Previously a broken Mapbox
-  // tile or a CDN white-fill would render as an enormous blank area
-  // because <Image source={{uri: ...}} /> doesn't expose its load
-  // status. Catch the error and swap to the placeholder.
-  const [heroFailed, setHeroFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -227,7 +218,6 @@ export default function CourseDetailScreen() {
     localSlug === 'san-jose-muni' ? 'San Jose Municipal' :
     null;
   const displayClubName = localFriendlyName ?? course?.club_name ?? '';
-  const isPalms = localSlug === 'palms' || displayClubName.toLowerCase().includes('palms');
   const noteByHole = useMemo(() => {
     const m = new Map<number, string>();
     (content?.hole_notes ?? []).forEach(n => m.set(n.hole_number, n.note));
@@ -276,26 +266,9 @@ export default function CourseDetailScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tee, course, displayClubName, geometryReady]);
 
-  // Course hero — bundled hole-1 for any curated local course, else
-  // Mapbox course-wide aerial. Previously only Palms had a bundled hero
-  // path; everything else fell back to Mapbox which fails when
-  // geometry is missing → "Aerial unavailable" placeholder. Lakes,
-  // Rancho, Crystal Springs, Mariners Point all now show their hole-1
-  // photo as the hero.
-  const heroSource: ImageSourcePropType | { uri: string } | null = useMemo(() => {
-    if (!course) return null;
-    const bundledHero = getLocalHoleImage(displayClubName, 1);
-    if (bundledHero) return bundledHero;
-    if (!tee || !geometryReady) return null;
-    const url = getCourseImageryUrl({
-      courseId: course.id,
-      holes: tee.holes.map(h => {
-        const g = getHoleGeometry(course.id, h.hole_number);
-        return { tee: g?.tee ?? null, green: g?.green ?? null };
-      }),
-    }, Math.round(screenW), Math.round(screenW * 0.55));
-    return url ? { uri: url } : null;
-  }, [course, tee, displayClubName, geometryReady, screenW]);
+  // Phase 405b — heroSource useMemo + getCourseImageryUrl fallback
+  // were removed in the V3-reference redesign. The page no longer
+  // renders a hero image at all; the course name leads via titleBlock.
 
   const handleStartRound = () => {
     if (!course) return;
@@ -394,11 +367,6 @@ export default function CourseDetailScreen() {
             }))}
           />
         </View>
-        {/* Reference the legacy state hooks so React doesn't warn
-            about unused destructured setters. Keep the simpleBriefing
-            collapsed-card pattern available behind the scenes for the
-            About section, which can return later if data demands it. */}
-        {(() => { void aboutOpen; void setAboutOpen; void tipsOpen; void setTipsOpen; void photosOpen; void setPhotosOpen; void simpleBriefing; void heroSource; void heroFailed; void setHeroFailed; return null; })()}
 
         {/* Hole guide */}
         <View style={styles.section}>
@@ -436,14 +404,9 @@ export default function CourseDetailScreen() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
+// Phase 500 - Stat() component removed alongside the stats strip
+// dropped in the V3 redesign. The course's totals are restated in
+// the HOLE GUIDE table's TOTAL row.
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#060f09' },

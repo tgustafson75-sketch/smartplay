@@ -22,7 +22,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { loadRecap } from '../../services/planStorage';
 import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
 import AppIcon from '../../components/AppIcon';
-import BrandHeaderRow from '../../components/brand/BrandHeaderRow';
+import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import type { ShotResult } from '../../store/roundStore';
 import type { RoundRecap } from '../../types/plan';
 

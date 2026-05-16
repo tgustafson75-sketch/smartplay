@@ -27,12 +27,12 @@
  */
 
 import React from 'react';
-import { View, Text, Pressable, ScrollView, Image, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
-import BrandHeaderRow from '../../components/brand/BrandHeaderRow';
+import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 
 type Status = 'LIVE' | 'BETA' | 'SOON';
 

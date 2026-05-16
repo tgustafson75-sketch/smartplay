@@ -31,7 +31,6 @@ import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse } from '../../services/golfCourseApi';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { getCourseImageryUrl } from '../../services/mapboxImagery';
-import { toggle as toggleListening } from '../../services/listeningSession';
 import PALMS_IMAGES from '../../data/palmsImages';
 import {
   CRYSTAL_SPRINGS_HOLE_IMAGES,
@@ -41,7 +40,7 @@ import {
   SAN_JOSE_MUNI_HOLE_IMAGES,
 } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
-import BrandHeaderRow from '../../components/brand/BrandHeaderRow';
+import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import type { Course } from '../../types/course';
 
 type CourseSummary = {
