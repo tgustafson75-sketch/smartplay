@@ -29,83 +29,105 @@ import { useTheme } from '../contexts/ThemeContext';
 type Card = {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   title: string;
-  body: string;
+  /** Optional intro line above the bullet list. */
+  body?: string;
+  /** Optional closing line below the bullets. */
+  footer?: string;
   bullets?: string[];
+  /** Optional named sub-bullets (term — body). Used for the caddie
+   *  roster card so each caddie's label + tagline reads cleanly. */
+  named?: { name: string; body: string }[];
 };
 
+// Phase 411-followup — Tim's canonical Beta Tester Quick Start content,
+// verbatim from the PDF tester guide so the in-app reference is the
+// single source of truth. Section order and copy match the PDF.
 const CARDS: Card[] = [
   {
     icon: 'people-circle-outline',
     title: 'Your Caddie Team',
-    body:
-      "SmartPlay Caddie has four caddies, each with a distinct voice and approach. You pick the one that fits how you want to be coached.",
-    bullets: [
-      'Kevin — warm, balanced, decisive. The default. Good place to start.',
-      'Tank — Marine cadence, intense, demanding standards. For players who want to be pushed.',
-      'Serena — precise instructor, confident, energetic-professional. Technical clarity.',
-      'Harry — Army medic, measured wisdom, partnership tone. Calm authority.',
+    body: 'SmartPlay gives you four AI caddies. Each one shines in a different part of your game.',
+    named: [
+      { name: 'Kevin — The Steady Hand',        body: 'Warm, knowledgeable, balanced. Your default caddie on the course.' },
+      { name: 'Serena — The Composed Professional', body: 'Confident, supportive, precise. Good for technical drill work.' },
+      { name: 'Tank — The Intense Coach',       body: 'Marine vet intensity. Direct, motivating. Cage practice specialist.' },
+      { name: 'Harry — The Wise Counsel',       body: 'Decades of golf wisdom. Calm authority. Course play alternative.' },
     ],
+    footer:
+      'Pick your caddie team in Settings → Caddie Team. Defaults work fine to start. Change anytime.',
   },
   {
     icon: 'apps-outline',
     title: 'Three Pillars',
-    body:
-      "Everything in the app maps to one of three pillars. Same caddie team across all three; you can assign a different lead per pillar in Settings.",
-    bullets: [
-      'Play — on-course rounds. SmartFinder yardages, hole-to-hole flow, real-time coaching.',
-      'Practice — Cage Mode + SwingLab. Swing analysis with fault-frame visual evidence.',
-      'Drills — guided technique work. Tutorials, drill catalog, focused practice.',
+    named: [
+      { name: 'ROUND — Play on the course',  body: 'GPS yardages, hole graphics, voice flow through earbuds, shot tracking.' },
+      { name: 'PRACTICE — Get better',       body: 'Cage Mode for swing analysis. Drill library. Tutorial integration.' },
+      { name: 'PLAY — Have fun',             body: 'Games and growth modes (expanding in future updates).' },
     ],
   },
   {
     icon: 'flag-outline',
     title: 'Getting Started',
-    body: "First round in under two minutes.",
     bullets: [
-      '1. Play tab → pick your course (the app sorts by distance from you).',
-      '2. Tap "Start Round Here". Permissions prompts come up — accept Location and Mic.',
-      '3. Caddie tab is your in-round home. Talk to your caddie, tap to log shots.',
-      '4. End of round → recap surfaces hole-by-hole + shot-tracking insights.',
+      '1. Open the app',
+      '2. Complete onboarding (takes about 90 seconds)',
+      '3. Connect Bluetooth earbuds if you want voice interaction',
+      '4. Tap Play tab → select a course → start a round',
     ],
+    footer: 'For practice: SwingLab tab → Cage Mode → set up phone → record swings.',
   },
   {
     icon: 'mic-outline',
     title: 'Essential Controls',
-    body: "The fastest paths through the app.",
-    bullets: [
-      'Voice — tap the caddie portrait OR tap the brand badge on any tab to talk.',
-      'Tools menu — three dots top-right. Quick access to SmartFinder, SmartVision, Cage Mode, SmartMotion, TightLie.',
-      'Mark — bottom of Caddie tab. Tap when you arrive at your ball to lock GPS.',
-      'I\'m at my ball — say it out loud, same effect as tapping Mark.',
-      'Open SmartMotion — fast swing capture with acoustic auto-stop.',
-      'Check my lie — opens TightLie for lie analysis + shot strategy.',
+    named: [
+      { name: 'EARBUD TAP', body: 'Single-tap your Bluetooth earbud to talk to your caddie anytime.' },
+      { name: 'VOICE QUERIES', body: '"What should I hit?" / "How far to the green?" / "Mark my position" / "Record this shot"' },
+      { name: 'SMARTFINDER', body: 'Front, middle, back yardages on every hole. Updates as you walk.' },
+      { name: 'SMARTVISION', body: 'Tap to see hole graphic. Drag the yellow Y marker for layup distances.' },
+      { name: 'TIGHTLIE', body: 'Tap to capture your lie. Caddie advice adjusts for rough, slopes, divots.' },
+      { name: 'MARK MY SPOT', body: 'Tap to capture exact position. Useful before walking forward to scout.' },
     ],
   },
   {
     icon: 'construct-outline',
-    title: 'What to Expect (Beta Context)',
+    title: 'What to Expect',
     body:
-      "This is a local-device beta. Real things you should know up front:",
+      "This is early beta. You'll see things working well and things that need work. That's the point. Your feedback shapes the product.",
     bullets: [
-      'Your profile lives on this phone. No cloud sync yet — switching phones means starting over. v1.2 ships real accounts.',
-      'No login required. Open the app, use it. Settings → Reset App Data wipes everything if you want a fresh start.',
-      'GPS in background works when you accept the "Allow all the time" prompt at round start. You\'ll see a persistent notification while a round is active.',
-      'Caddie voice may sound slightly slow on first launch while the voice library regenerates. Restart the app once after install for the tuned voices.',
-      'Things will be rough. That\'s the point. Honest feedback over polite — see "Share Feedback" below.',
+      'Voice recognition occasionally mishears',
+      'Some courses have incomplete data (caddie will say so honestly)',
+      'Auto club detection works best with light-colored irons in good lighting',
+      'Some features are deeper than others — round play and cage practice are most developed',
     ],
+  },
+  {
+    icon: 'mail-outline',
+    title: 'How to Give Feedback',
+    body: 'Anything that surprises you, breaks, confuses, or impresses you — tell us.',
+    named: [
+      { name: 'Email',         body: 'support@smartplaycaddie.com' },
+      { name: 'Text / Direct', body: "Tim's contact (he'll send separately)" },
+    ],
+    bullets: [
+      'What worked well',
+      "What didn't work or felt off",
+      'What you wish it did',
+      'Any crashes (with what you were doing when it happened)',
+    ],
+    footer: 'Quick observations beat polished reports. Send them as they happen.',
   },
   {
     icon: 'lock-closed-outline',
     title: 'Privacy',
     body:
-      "What leaves your device + what we collect.",
-    bullets: [
-      'GPS, swing audio, lie photos, and voice transcripts are sent to AI providers (Anthropic + OpenAI + Mapbox) to power the caddie. Standard service-provider data flow.',
-      'No personal identifiers leave the device — no name, no email, no PII attached to the AI calls.',
-      'No third-party analytics, no ad tracking, no data sale.',
-      'Full Privacy Policy at smartplaycaddie.com/privacy.',
-      'Reset App Data in Settings clears everything stored on your device.',
-    ],
+      "Your data is yours. SmartPlay stores your profile, round history, and practice analysis to make your caddie smarter over time. We don't share or sell your data. See full privacy policy at smartplaycaddie.com/privacy.",
+  },
+  {
+    icon: 'heart-outline',
+    title: 'Thank You',
+    body:
+      "You're testing something I've been building for months. Your time and honest feedback matters more than I can express. Whatever you find — good, bad, broken, surprising — please share it.",
+    footer: '— Tim',
   },
 ];
 
@@ -169,7 +191,19 @@ export default function QuickStartScreen() {
                 {i + 1}. {card.title}
               </Text>
             </View>
-            <Text style={[styles.cardBody, { color: colors.text_primary }]}>{card.body}</Text>
+            {card.body ? (
+              <Text style={[styles.cardBody, { color: colors.text_primary }]}>{card.body}</Text>
+            ) : null}
+            {card.named && card.named.length > 0 && (
+              <View style={styles.namedList}>
+                {card.named.map((n, idx) => (
+                  <View key={idx} style={styles.namedRow}>
+                    <Text style={[styles.namedName, { color: colors.accent }]}>{n.name}</Text>
+                    <Text style={[styles.namedBody, { color: colors.text_primary }]}>{n.body}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
             {card.bullets && card.bullets.length > 0 && (
               <View style={styles.bulletList}>
                 {card.bullets.map((b, idx) => (
@@ -180,6 +214,9 @@ export default function QuickStartScreen() {
                 ))}
               </View>
             )}
+            {card.footer ? (
+              <Text style={[styles.cardFooter, { color: colors.text_muted }]}>{card.footer}</Text>
+            ) : null}
           </View>
         ))}
 
@@ -240,6 +277,11 @@ function makeStyles(
     },
     bulletDot: { fontSize: 14, fontWeight: '900', lineHeight: 20 },
     bulletText: { flex: 1, fontSize: 13, lineHeight: 19 },
+    namedList: { gap: 10, marginTop: 4 },
+    namedRow: { gap: 2 },
+    namedName: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
+    namedBody: { fontSize: 13, lineHeight: 19 },
+    cardFooter: { fontSize: 12, marginTop: 8, fontStyle: 'italic', lineHeight: 17 },
     feedbackCta: {
       marginTop: s.lg,
       borderRadius: r.lg, paddingVertical: 14,
