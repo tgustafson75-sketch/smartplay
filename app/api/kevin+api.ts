@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { getCaddieName, type VoiceGender } from '../../lib/persona';
+import type { LieAnalysis } from '../../services/lieAnalysisService';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 });
@@ -204,17 +205,10 @@ export async function POST(request: Request) {
         feel?: string;
         club?: string;
       }[];
-      // Phase 409 — TightLie pending analysis. Mirrors the LieAnalysis
-      // shape from services/lieAnalysisService.ts.
-      pendingLieAnalysis?: {
-        situation_description: string;
-        tactical_advice: string;
-        recommended_club: string | null;
-        alternative_play: string | null;
-        confidence_level: 'high' | 'medium' | 'low';
-        conservative_call: boolean;
-        goal_aware_note?: string | null;
-      } | null;
+      // Phase 409 — TightLie pending analysis. Type-only import from
+      // lieAnalysisService keeps both call sites in lockstep without
+      // dragging the service's runtime deps into the API route.
+      pendingLieAnalysis?: LieAnalysis | null;
     };
 
     // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
