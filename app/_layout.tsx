@@ -17,6 +17,8 @@ import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
 import { activateMediaSession, deactivateMediaSession } from '../services/mediaKeyBridge';
 import { startHoleDetection, stopHoleDetection, subscribeToHoleDetection } from '../services/holeDetection';
 import { startOffCourseDetector, stopOffCourseDetector } from '../services/offCourseDetector';
+import { subscribePoorSignal } from '../services/gpsManager';
+import { useToastStore } from '../store/toastStore';
 import { consumeDeferredPaywall } from '../services/paywallGuard';
 import { initAudioLifecycle } from '../services/audioLifecycle';
 import { initBatteryMonitor } from '../services/batteryMonitor';
@@ -333,6 +335,17 @@ function AppNavigator() {
       const round = useRoundStore.getState();
       if (round.currentHole !== nextHole) round.setCurrentHole(nextHole);
     });
+    // Phase 405 wave 2 — sustained-poor-signal callout. Fires once
+     // when accuracy has been weak for 45s during an active round; the
+     // listener pops a toast so the user gets actionable feedback
+     // ("step into open sky") instead of just a passive dot color
+     // change in SmartFinder. Subscription is process-lifetime — the
+     // service itself only emits during active rounds (evaluateMode
+     // only ticks while the watch is running).
+    const unsubPoor = subscribePoorSignal((info) => {
+      const acc = info.accuracy_m != null ? `~${Math.round(info.accuracy_m)}m` : 'unknown';
+      useToastStore.getState().show(`GPS weak (${acc}) — step into open sky or tap Mark.`);
+    });
     let active = useRoundStore.getState().isRoundActive;
     if (active) { startHoleDetection(); startOffCourseDetector(); }
     const unsubRound = useRoundStore.subscribe((s) => {
@@ -352,6 +365,7 @@ function AppNavigator() {
     return () => {
       unsubDetect();
       unsubRound();
+      unsubPoor();
       stopHoleDetection();
       stopOffCourseDetector();
     };

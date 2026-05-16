@@ -177,6 +177,36 @@ export function detectCurrentHole(
     };
   }
 
+  // Phase 405 wave 2 — hole re-entry safeguard. The forward loop above
+  // skips already-played holes, which is correct for normal play. But
+  // when the player legitimately walks BACK to a previously-played
+  // hole (forgot a club, retrieving a lost ball, replaying after a
+  // restart, twosome catches up to a tied match), the forward
+  // detector silently leaves currentHole pointing at the wrong hole.
+  // The loop-back check: when the player is >50y from the current
+  // hole's green AND <20y from a previously-played hole's tee, signal
+  // a re-entry transition. The 20y inner-radius prevents drift; the
+  // sequence-aware forward detector above still wins when the player
+  // is genuinely advancing.
+  if (distFromCurrentGreen > 50) {
+    for (const playedHoleStr of Object.keys(scoresByHole)) {
+      const playedHole = Number(playedHoleStr);
+      if (!Number.isFinite(playedHole) || playedHole === currentHole) continue;
+      const playedGeom = getHoleGeometry(courseId, playedHole);
+      const playedTee = playedGeom?.tee;
+      if (!playedTee) continue;
+      const d = haversineYards(position, playedTee);
+      if (d < 20) {
+        return {
+          hole_number: playedHole,
+          confidence: 'medium',
+          transition_recommended: true,
+          reason: `re-entry to hole ${playedHole} (${Math.round(d)}y from tee, ${Math.round(distFromCurrentGreen)}y from hole ${currentHole} green)`,
+        };
+      }
+    }
+  }
+
   return {
     hole_number: currentHole, confidence: 'medium', transition_recommended: false,
     reason: `still closest to hole ${currentHole} green`,

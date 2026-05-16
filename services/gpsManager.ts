@@ -65,9 +65,23 @@ const SMOOTHING_WINDOW = 3;
 // (10s) + 3 missed ticks of headroom; stationary (20s) tolerates 1 miss.
 const FIX_STALENESS_MS = 30_000;
 
+// Phase 405 wave 2 — "GPS signal weak" callout. When accuracy stays at
+// weak (>15m) or none for this long during an active round, fire the
+// onPoorSignal callbacks so the caddie / UI can speak a recovery hint.
+const POOR_SIGNAL_SUSTAINED_MS = 45_000;
+
 let subscription: Location.LocationSubscription | null = null;
 let appStateSub: { remove: () => void } | null = null;
 let lastTickAt = 0;
+// Phase 405 wave 2 — poor-signal callout state. poorSinceTs is null when
+// the current fix is acceptable; once accuracy goes weak (>15m) we
+// record the timestamp and fire the listeners after the sustained
+// window elapses. poorAlertedAt prevents spamming the same alert more
+// than once per recovery cycle.
+let poorSinceTs: number | null = null;
+let poorAlertedAt: number | null = null;
+type PoorSignalListener = (info: { accuracy_m: number | null; duration_ms: number }) => void;
+const poorSignalListeners = new Set<PoorSignalListener>();
 let mode: GpsMode = 'walking';
 let lastFix: GpsFix | null = null;
 let lastBumpReason: string | null = null;
@@ -291,6 +305,37 @@ function evaluateMode() {
   if (mode !== 'stationary' && lastMotionAt > 0 && now - lastMotionAt > STATIONARY_AFTER) {
     if (mode !== 'active') setMode('stationary', 'no_motion_90s');
   }
+  // Phase 405 wave 2 — sustained-poor-signal detector. Smartfinder
+  // already shows a quality indicator; this fires a one-shot voice/UI
+  // callout when the signal has been weak for POOR_SIGNAL_SUSTAINED_MS
+  // so the player gets actionable feedback ("step into open sky") not
+  // just a passive dot color change. Reset when the fix recovers.
+  const acc = lastFix?.accuracy_m ?? null;
+  const isPoor = acc == null || acc > 15;
+  if (isPoor) {
+    if (poorSinceTs == null) poorSinceTs = now;
+    else if (poorAlertedAt == null && now - poorSinceTs >= POOR_SIGNAL_SUSTAINED_MS) {
+      poorAlertedAt = now;
+      const info = { accuracy_m: acc, duration_ms: now - poorSinceTs };
+      for (const cb of poorSignalListeners) {
+        try { cb(info); } catch (e) { console.log('[gps] poor-signal listener threw', e); }
+      }
+    }
+  } else {
+    poorSinceTs = null;
+    poorAlertedAt = null;
+  }
+}
+
+/**
+ * Phase 405 wave 2 — subscribe to sustained-poor-signal events. Fires
+ * once when accuracy has been weak (>15m) for POOR_SIGNAL_SUSTAINED_MS.
+ * Listener fires again only after signal recovers (accuracy drops back
+ * under 15m) so the caddie doesn't loop the same callout.
+ */
+export function subscribePoorSignal(cb: PoorSignalListener): () => void {
+  poorSignalListeners.add(cb);
+  return () => { poorSignalListeners.delete(cb); };
 }
 
 /** Called by round-start. No-op if already running. */
