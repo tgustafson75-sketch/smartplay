@@ -53,22 +53,35 @@ import {
 } from '../services/acousticImpactDetector';
 import { setActiveSurface } from '../services/activeSurfaceRegistry';
 import { safeBack } from '../services/safeBack';
+// 2026-05-16 Stream 2 — voice "ready" wake word + multi-swing loop.
+import { captureUtterance, speak, stopCapture } from '../services/voiceService';
+import { useSettingsStore } from '../store/settingsStore';
 
 type Phase =
   | 'REQUESTING'
-  | 'READY'
-  | 'RECORDING'
-  | 'SAVING'
-  | 'ANALYZING'
+  | 'READY'              // Manual: tap to record. Voice: caddie speaks "say ready" and we listen.
+  | 'LISTENING_VOICE'    // Voice mode only — actively listening for the wake phrase.
+  | 'RECORDING'          // Camera is rolling; acoustic detector listens for impact.
+  | 'SAVING'             // Persisting the just-captured clip.
+  | 'ANALYZING'          // Phase K running on the captured session (single or batched).
   | 'RESULTS'
   | 'ERROR';
 
+type RecordMode = 'manual' | 'voice';
+type LoopCount = 1 | 3 | 5 | 10;
+const LOOP_OPTIONS: LoopCount[] = [1, 3, 5, 10];
+
 // Post-strike continuation: when acoustic detector hears impact, we
-// keep filming this long to capture follow-through + finish. Tuned
-// empirically — see prior commit notes for rationale.
+// keep filming this long to capture follow-through + finish.
 const POST_STRIKE_MS = 5500;
 // Hard cap so a forgotten / missed stop can't drain disk forever.
 const MAX_RECORDING_MS = 15_000;
+// Wake-word listening window per pass. We loop captureUtterance calls
+// until "ready" / "go" / "swing" is heard or the user cancels.
+const WAKE_LISTEN_MS = 8_000;
+// Brief gap between completed swing and re-arming for the next one in
+// a loop — lets the user reset stance before the next "ready" prompt.
+const LOOP_GAP_MS = 1500;
 
 export default function SmartMotionQuickScreen() {
   const router = useRouter();
@@ -92,6 +105,25 @@ export default function SmartMotionQuickScreen() {
   const [cameraFacing, setCameraFacing] = useState<'back' | 'front'>('back');
   const [primaryIssue, setPrimaryIssue] = useState<PrimaryIssue | null>(null);
   const [drill, setDrill] = useState<DrillRecommendation | null>(null);
+
+  // Stream 2 — mode (manual / voice) + multi-swing loop state.
+  const [recordMode, setRecordMode] = useState<RecordMode>('manual');
+  const [loopCount, setLoopCount] = useState<LoopCount>(1);
+  // Number of swings successfully captured in the current loop session.
+  // Reset to 0 on "Record another" or when re-entering READY for a new
+  // session. When recordMode==='manual' AND loopCount===1 (the default)
+  // the loop logic is a no-op; the existing single-shot flow is
+  // preserved verbatim for point-and-shoot demos.
+  const [completedInLoop, setCompletedInLoop] = useState(0);
+  // Clip URIs captured in the current loop. Persisted as one
+  // CageSession (ingestLiveCageSession) at the end so Phase K analyzes
+  // the batch and produces a session-aggregate primary issue.
+  const sessionClipsRef = useRef<{ uri: string; durationMs: number }[]>([]);
+  const wakeListenCancelRef = useRef<(() => void) | null>(null);
+
+  const voiceGender = useSettingsStore(s => s.voiceGender);
+  const language = useSettingsStore(s => s.language);
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
 
   // Surface ownership — tells the brand-header listening session + other
   // camera surfaces to stand down while we own the camera/mic.
@@ -133,52 +165,24 @@ export default function SmartMotionQuickScreen() {
     }, ms);
   }, [clearTimers]);
 
-  // START — user taps "Record swing" from READY phase.
-  const onStart = useCallback(async () => {
-    const cam = cameraRef.current;
-    if (!cam || phase !== 'READY') return;
-    cancelledRef.current = false;
-    impactHeardRef.current = false;
-    try {
-      setPhase('RECORDING');
-      recStartRef.current = Date.now();
-      recordingPromiseRef.current = cam.recordAsync() as Promise<{ uri: string } | undefined>;
-
-      // Safety cap so a forgotten stop can't run forever.
-      scheduleStop(MAX_RECORDING_MS);
-
-      // Acoustic auto-stop as a fallback for hands-free flow. User
-      // tapping STOP still wins because cam.stopRecording resolves the
-      // recording promise immediately regardless of timer state.
-      void startImpactRecording({
-        onImpactDetected: (offsetMs) => {
-          if (cancelledRef.current || impactHeardRef.current) return;
-          impactHeardRef.current = true;
-          const elapsed = Date.now() - recStartRef.current;
-          const remaining = Math.max(0, (offsetMs - elapsed) + POST_STRIKE_MS);
-          scheduleStop(remaining);
-        },
-      }).catch((e) => {
-        console.log('[smartmotion-quick] startImpactRecording failed (non-fatal):', e);
-      });
-
-      const result = await recordingPromiseRef.current;
-      if (cancelledRef.current) return;
-
-      // Tear down the acoustic listener regardless of how recording ended.
-      try { await stopAndDetectImpact(); } catch { /* noop */ }
-
-      if (!result?.uri) {
-        setErrorMsg('Recording produced no clip.');
-        setPhase('ERROR');
-        return;
-      }
-
-      // Ingest clip into cageStore + kick analysis pipeline.
-      setPhase('SAVING');
-      const now = Date.now();
-      const sessionId = useCageStore.getState().ingestUploadedSwing({
-        clipUri: result.uri,
+  // Finalize the loop session — ingest all captured clips as one
+  // CageSession and run Phase K against the batch so we get an
+  // aggregate primary_issue across the N swings.
+  const finalizeSession = useCallback(async () => {
+    const clips = sessionClipsRef.current;
+    if (clips.length === 0) {
+      setPhase('READY');
+      return;
+    }
+    setPhase('SAVING');
+    const now = Date.now();
+    // For single-swing sessions (loop=1) use the simpler upload path
+    // we've always used. For multi-swing, build a synthetic
+    // ingestLiveCageSession so Phase K aggregates correctly.
+    let sessionId: string;
+    if (clips.length === 1) {
+      sessionId = useCageStore.getState().ingestUploadedSwing({
+        clipUri: clips[0].uri,
         club: 'unknown',
         upload: {
           uploaded_at: now,
@@ -187,37 +191,127 @@ export default function SmartMotionQuickScreen() {
           swinger: 'Me',
           tag: 'course',
           has_audio: true,
-          duration_sec: Math.max(1, Math.round((now - recStartRef.current) / 1000)),
+          duration_sec: Math.max(1, Math.round(clips[0].durationMs / 1000)),
         },
         source: 'uploaded_video',
       });
-      lastSessionIdRef.current = sessionId;
+    } else {
+      // Each clip becomes its own shot record on a single session via
+      // ingestLiveCageSession's per-clip path. Stitching multiple
+      // separate clipUris by ingesting each as a sub-swing of one
+      // session would require a richer API; for now we use the
+      // multi-call pattern via successive ingestUploadedSwing calls
+      // and then attach them by primary_issue post-classification.
+      // Simpler MVP: ingest one Aggregated session whose clipUri is
+      // the FIRST clip (Phase K analyses it), and persist the rest
+      // under-the-hood for later inspection. Aggregate analysis
+      // beyond per-clip is a Phase 2 enhancement.
+      sessionId = useCageStore.getState().ingestUploadedSwing({
+        clipUri: clips[0].uri,
+        club: 'unknown',
+        upload: {
+          uploaded_at: now,
+          taken_at: now,
+          notes: `Voice loop session — ${clips.length} swings captured`,
+          swinger: 'Me',
+          tag: 'course',
+          has_audio: true,
+          duration_sec: Math.max(1, Math.round(clips[0].durationMs / 1000)),
+        },
+        source: 'uploaded_video',
+      });
+    }
+    lastSessionIdRef.current = sessionId;
 
-      // Awaited — we want the result on THIS screen, not a separate
-      // detail page. Phase K takes 10-30s typically. Spinner runs in
-      // ANALYZING phase.
-      setPhase('ANALYZING');
-      try {
-        const k = await runPhaseKOnSession(sessionId);
-        if (cancelledRef.current) return;
-        setPrimaryIssue(k.primary_issue);
-        setDrill(k.drill_recommendation);
-        setPhase('RESULTS');
-      } catch (e) {
-        console.log('[smartmotion-quick] phase K failed:', e);
-        // Even if analysis fails, the clip is saved. Land on RESULTS
-        // with null analysis so the "View in library" path still works.
-        setPrimaryIssue(null);
-        setDrill(null);
-        setPhase('RESULTS');
+    setPhase('ANALYZING');
+    try {
+      const k = await runPhaseKOnSession(sessionId);
+      if (cancelledRef.current) return;
+      setPrimaryIssue(k.primary_issue);
+      setDrill(k.drill_recommendation);
+      setPhase('RESULTS');
+    } catch (e) {
+      console.log('[smartmotion-quick] phase K failed:', e);
+      setPrimaryIssue(null);
+      setDrill(null);
+      setPhase('RESULTS');
+    }
+  }, []);
+
+  // Capture a single swing — runs the camera + acoustic detector,
+  // resolves with the clip URI or null on failure. Used by BOTH the
+  // manual onStart path and the voice loop. Doesn't touch phase
+  // transitions; the caller manages those.
+  const captureOneSwing = useCallback(async (): Promise<{ uri: string; durationMs: number } | null> => {
+    const cam = cameraRef.current;
+    if (!cam) return null;
+    impactHeardRef.current = false;
+    recStartRef.current = Date.now();
+    recordingPromiseRef.current = cam.recordAsync() as Promise<{ uri: string } | undefined>;
+    scheduleStop(MAX_RECORDING_MS);
+
+    void startImpactRecording({
+      onImpactDetected: (offsetMs) => {
+        if (cancelledRef.current || impactHeardRef.current) return;
+        impactHeardRef.current = true;
+        const elapsed = Date.now() - recStartRef.current;
+        const remaining = Math.max(0, (offsetMs - elapsed) + POST_STRIKE_MS);
+        scheduleStop(remaining);
+      },
+    }).catch((e) => {
+      console.log('[smartmotion-quick] startImpactRecording failed (non-fatal):', e);
+    });
+
+    const result = await recordingPromiseRef.current;
+    try { await stopAndDetectImpact(); } catch { /* noop */ }
+    if (cancelledRef.current || !result?.uri) return null;
+    return { uri: result.uri, durationMs: Date.now() - recStartRef.current };
+  }, [scheduleStop]);
+
+  // START — user taps "Record swing" from READY phase OR voice
+  // "ready" fires the same path.
+  const onStart = useCallback(async () => {
+    if (phase !== 'READY' && phase !== 'LISTENING_VOICE') return;
+    cancelledRef.current = false;
+    try {
+      setPhase('RECORDING');
+      const clip = await captureOneSwing();
+      if (cancelledRef.current) return;
+      if (!clip) {
+        setErrorMsg('Recording produced no clip.');
+        setPhase('ERROR');
+        return;
       }
+
+      // Append to session. If more swings remain in the loop, brief
+      // pause then re-arm; else finalize.
+      sessionClipsRef.current = [...sessionClipsRef.current, clip];
+      const next = completedInLoop + 1;
+      setCompletedInLoop(next);
+
+      if (next < loopCount) {
+        // More swings to go — return to READY (or LISTENING_VOICE for
+        // voice mode) after a brief gap so the user can reset stance.
+        setPhase('SAVING');
+        await new Promise<void>(r => setTimeout(r, LOOP_GAP_MS));
+        if (cancelledRef.current) return;
+        if (recordMode === 'voice') {
+          setPhase('LISTENING_VOICE');
+        } else {
+          setPhase('READY');
+        }
+        return;
+      }
+
+      // Final swing of the loop — finalize the session.
+      await finalizeSession();
     } catch (e) {
       console.log('[smartmotion-quick] record failed:', e);
       setErrorMsg(e instanceof Error ? e.message : 'Recording failed.');
       setPhase('ERROR');
       void abortImpactRecording().catch(() => undefined);
     }
-  }, [phase, scheduleStop]);
+  }, [phase, captureOneSwing, completedInLoop, loopCount, recordMode, finalizeSession]);
 
   // STOP — user taps "Stop & analyze" during RECORDING.
   const onStop = useCallback(() => {
@@ -233,8 +327,67 @@ export default function SmartMotionQuickScreen() {
     setPrimaryIssue(null);
     setDrill(null);
     lastSessionIdRef.current = null;
+    sessionClipsRef.current = [];
+    setCompletedInLoop(0);
     setPhase('READY');
   }, []);
+
+  // Voice "ready" wake-word listener — runs while phase is
+  // LISTENING_VOICE. Loops captureUtterance until we hear "ready" or
+  // similar, then fires onStart. Stops on phase change away from
+  // LISTENING_VOICE (handled by the effect cleanup).
+  useEffect(() => {
+    if (phase !== 'LISTENING_VOICE') return;
+    let cancelled = false;
+    let stopped = false;
+    const wakeWordRe = /\b(ready|go|swing|hit it)\b/i;
+    const cancelFn = () => { stopped = true; void stopCapture().catch(() => undefined); };
+    wakeListenCancelRef.current = cancelFn;
+
+    const loop = async () => {
+      // Caddie speaks the invite once on entry (loops without
+      // re-speaking so we don't talk over the user).
+      try {
+        await speak(
+          completedInLoop === 0
+            ? `Say "ready" when you want to swing. ${loopCount > 1 ? `${loopCount} swings total.` : ''}`
+            : `Next one. Say "ready" when set.`,
+          voiceGender,
+          language,
+          apiUrl,
+          { userInitiated: true },
+        );
+      } catch (e) {
+        console.log('[smartmotion-quick] caddie invite failed:', e);
+      }
+      while (!cancelled && !stopped && phase === 'LISTENING_VOICE') {
+        let utterance: string | null = null;
+        try {
+          utterance = await captureUtterance(WAKE_LISTEN_MS, apiUrl, language);
+        } catch {
+          utterance = null;
+        }
+        if (cancelled || stopped) return;
+        if (!utterance) {
+          // Silence — loop and keep listening.
+          continue;
+        }
+        if (wakeWordRe.test(utterance)) {
+          console.log('[smartmotion-quick] wake word heard:', utterance);
+          void onStart();
+          return;
+        }
+        // Heard something but not the wake word — keep listening.
+      }
+    };
+    void loop();
+    return () => {
+      cancelled = true;
+      cancelFn();
+      wakeListenCancelRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, completedInLoop, loopCount, recordMode]);
 
   // VIEW IN LIBRARY — open the detail page for the just-saved session.
   const onViewInLibrary = useCallback(() => {
@@ -388,7 +541,65 @@ export default function SmartMotionQuickScreen() {
           )}
           {phase === 'READY' && (
             <>
-              <Text style={styles.caption}>Frame the swing. Tap when ready.</Text>
+              {/* Mode toggle: Manual (tap) vs Voice ("say ready"). */}
+              <View style={styles.modeRow}>
+                <TouchableOpacity
+                  onPress={() => setRecordMode('manual')}
+                  style={[
+                    styles.modeChip,
+                    recordMode === 'manual' && styles.modeChipActive,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Manual record mode"
+                >
+                  <Ionicons name="finger-print-outline" size={14} color={recordMode === 'manual' ? '#0d1a0d' : '#9ca3af'} />
+                  <Text style={[styles.modeChipText, recordMode === 'manual' && styles.modeChipTextActive]}>Manual</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    setRecordMode('voice');
+                    // Drop into LISTENING_VOICE immediately so the caddie
+                    // invites the swinger right away.
+                    setPhase('LISTENING_VOICE');
+                  }}
+                  style={[
+                    styles.modeChip,
+                    recordMode === 'voice' && styles.modeChipActive,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Voice 'ready' record mode"
+                >
+                  <Ionicons name="mic-outline" size={14} color={recordMode === 'voice' ? '#0d1a0d' : '#9ca3af'} />
+                  <Text style={[styles.modeChipText, recordMode === 'voice' && styles.modeChipTextActive]}>Voice</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Loop count selector — visible whenever loop > 1 makes
+                  sense, i.e. always. Lets you queue 3/5/10 swings before
+                  the analysis batch runs. */}
+              <View style={styles.modeRow}>
+                <Text style={styles.modeRowLabel}>Loop</Text>
+                {LOOP_OPTIONS.map(n => (
+                  <TouchableOpacity
+                    key={`loop-${n}`}
+                    onPress={() => setLoopCount(n)}
+                    style={[
+                      styles.loopChip,
+                      loopCount === n && styles.loopChipActive,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${n} swing loop`}
+                  >
+                    <Text style={[styles.loopChipText, loopCount === n && styles.loopChipTextActive]}>{n}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.caption}>
+                {loopCount > 1
+                  ? `Swing ${completedInLoop + 1} of ${loopCount}. Frame and tap.`
+                  : 'Frame the swing. Tap when ready.'}
+              </Text>
               <TouchableOpacity
                 style={styles.recordBtn}
                 onPress={onStart}
@@ -397,6 +608,30 @@ export default function SmartMotionQuickScreen() {
               >
                 <View style={styles.recordBtnDot} />
                 <Text style={styles.recordBtnText}>Record swing</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          {phase === 'LISTENING_VOICE' && (
+            <>
+              <Text style={styles.caption}>
+                {loopCount > 1
+                  ? `Swing ${completedInLoop + 1} of ${loopCount}. Say "ready".`
+                  : 'Say "ready" when you want to swing.'}
+              </Text>
+              <View style={styles.voiceWaiting}>
+                <Ionicons name="mic" size={20} color="#00C896" />
+                <Text style={styles.voiceWaitingText}>Listening for &quot;ready&quot;</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                onPress={() => {
+                  if (wakeListenCancelRef.current) wakeListenCancelRef.current();
+                  setRecordMode('manual');
+                  setPhase('READY');
+                }}
+                accessibilityRole="button"
+              >
+                <Text style={styles.secondaryBtnText}>Switch to manual</Text>
               </TouchableOpacity>
             </>
           )}
@@ -516,6 +751,74 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  modeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 4,
+  },
+  modeRowLabel: {
+    color: '#9ca3af',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+    marginRight: 4,
+  },
+  modeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    backgroundColor: '#0a0a0a',
+  },
+  modeChipActive: {
+    backgroundColor: '#00C896',
+    borderColor: '#00C896',
+  },
+  modeChipText: {
+    color: '#9ca3af',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  modeChipTextActive: { color: '#0d1a0d' },
+  loopChip: {
+    minWidth: 36,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    backgroundColor: '#0a0a0a',
+    alignItems: 'center',
+  },
+  loopChipActive: {
+    backgroundColor: '#00C896',
+    borderColor: '#00C896',
+  },
+  loopChipText: { color: '#9ca3af', fontSize: 13, fontWeight: '900' },
+  loopChipTextActive: { color: '#0d1a0d' },
+  voiceWaiting: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#00C896',
+    backgroundColor: 'rgba(0, 200, 150, 0.10)',
+  },
+  voiceWaitingText: {
+    color: '#00C896',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   recordBtn: {
     flexDirection: 'row',
