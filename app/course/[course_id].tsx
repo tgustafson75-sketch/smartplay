@@ -10,6 +10,12 @@ import CourseDetailBanner from '../../components/course/CourseDetailBanner';
 import HoleGuide from '../../components/course/HoleGuide';
 import HolePhotosGrid from '../../components/course/HolePhotosGrid';
 import { getCourse, searchCourses } from '../../services/golfCourseApi';
+// 2026-05-16 — pull real hole-by-hole data (par, yardage) from the
+// bundled local-courses catalog so the stub built for a local: course
+// reflects the actual layout instead of a default 18-hole / par-4 /
+// 380y placeholder. Reported: Mariners Point showed 18 holes at 380y
+// each, when it's actually 9 par-3 holes maxing at ~160y.
+import { getCourse as getLocalCourseData } from '../../data/courses';
 import { fetchCourseContent, getCachedContent, type CourseContent } from '../../services/courseContentService';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { useRoundStore } from '../../store/roundStore';
@@ -95,14 +101,51 @@ export default function CourseDetailScreen() {
           slug === 'san-jose-muni' ? 'San Jose Municipal Golf Course' :
           slug === 'sunnyvale' ? 'Sunnyvale Golf Course' :
           slug;
-        const stubHoles = Array.from({ length: 18 }, (_, i): import('../../types/course').Hole => ({
-          hole_number: i + 1,
-          par: 4,
-          yardage: 380,
-          handicap: null,
-          gps: null,
-          hazards: [],
-        }));
+        // 2026-05-16 — Pull real per-hole data from data/courses.ts when
+        // we have it. The slug map below resolves the route's local
+        // slug to that file's course id (mostly identity, but
+        // 'rancho-california' -> 'rancho').
+        const dataCourseId =
+          slug === 'rancho-california' ? 'rancho' :
+          slug === 'palms' ? 'palms' :
+          slug === 'lakes' ? 'lakes' :
+          slug === 'crystal-springs' ? 'crystal-springs' :
+          slug === 'mariners-point' ? 'mariners-point' :
+          null;
+        const dataCourse = dataCourseId ? getLocalCourseData(dataCourseId) : null;
+
+        // Build the holes array. Prefer the bundled per-hole data (with
+        // correct par + yardage per hole) over the legacy generic
+        // 18 × par-4 × 380y stub. Falls through to the generic stub
+        // ONLY for courses we don't have data for yet (currently
+        // Sunnyvale + San Jose Muni until we hand-code or fetch their
+        // per-hole records).
+        const realHoles: import('../../types/course').Hole[] | null = dataCourse
+          ? dataCourse.holes.map(h => ({
+              hole_number: h.hole,
+              par: h.par,
+              yardage: h.distance,
+              handicap: null,
+              gps: h.teeLat !== 0 && h.teeLng !== 0 ? { lat: h.teeLat, lng: h.teeLng } : null,
+              hazards: [],
+            }))
+          : null;
+        const stubHoles = realHoles ?? Array.from(
+          { length: 18 },
+          (_, i): import('../../types/course').Hole => ({
+            hole_number: i + 1,
+            par: 4,
+            yardage: 380,
+            handicap: null,
+            gps: null,
+            hazards: [],
+          }),
+        );
+        const totalPar = dataCourse?.par ?? 72;
+        const totalYards = dataCourse?.totalYards ?? 6840;
+        const ratingNumber = dataCourse ? parseFloat(dataCourse.rating) : null;
+        const slopeNumber = dataCourse ? parseInt(dataCourse.slope, 10) : null;
+
         const stubCourse: Course = {
           id: course_id,
           club_name: friendly,
@@ -120,10 +163,10 @@ export default function CourseDetailScreen() {
           },
           tees: [{
             tee_name: 'White',
-            total_yards: 6840,
-            course_rating: null,
-            slope_rating: null,
-            par_total: 72,
+            total_yards: totalYards,
+            course_rating: ratingNumber != null && Number.isFinite(ratingNumber) ? ratingNumber : null,
+            slope_rating: slopeNumber != null && Number.isFinite(slopeNumber) ? slopeNumber : null,
+            par_total: totalPar,
             holes: stubHoles,
           }],
           cached_at: Date.now(),
