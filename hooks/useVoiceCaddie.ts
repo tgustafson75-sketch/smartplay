@@ -640,8 +640,9 @@ export const useVoiceCaddie = ({
 
   // ── PROCESS AUDIO URI (shared by manual + VAD) ────
 
-  const processAudioUri = useCallback(async (uri: string): Promise<void> => {
+  const processAudioUri = useCallback(async (uri: string, opts?: { source?: 'manual' | 'vad' }): Promise<void> => {
     if (isProcessingRef.current) return;
+    const source = opts?.source ?? 'manual';
     try {
       isProcessingRef.current = true;
       wrappedOnVoiceStateChange('thinking');
@@ -684,13 +685,34 @@ export const useVoiceCaddie = ({
       console.log('[voice] transcript:', transcript);
 
       if (!transcript.trim()) {
-        // Silent / unintelligible audio. Common when the mic was too
-        // far away or background noise drowned the user out. Tell them
-        // so they know to try again louder/closer.
+        // VAD-triggered silent capture is a non-event (cart partner cleared
+        // throat etc.) — silently return without prompting. Manual mic-tap
+        // silence still warrants the "try again closer" feedback so the
+        // user knows the tap registered.
+        if (source === 'vad') {
+          wrappedOnVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
+        }
         onResponseReceived("Didn't catch that — try once more, a bit closer to the mic.");
         wrappedOnVoiceStateChange('idle');
         isProcessingRef.current = false;
         return;
+      }
+
+      // Wake-word gate for VAD-captured speech. Active Listening fires on
+      // ANY speech above the noise floor (cart partner, spectator, you
+      // talking to your group). Without this gate the caddie would try to
+      // respond to all of it. Manual mic-tap is exempt — intent was
+      // explicit. Tank/Kevin/Serena/Harry/"caddie" all count as wake words.
+      if (source === 'vad') {
+        const wakeRe = /\b(tank|kevin|serena|harry|caddie|caddy)\b/i;
+        if (!wakeRe.test(transcript)) {
+          console.log('[voice] vad-utterance dropped (no wake word):', transcript);
+          wrappedOnVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
+        }
       }
 
       // Phase AR — record user turn into the conversation buffer so any

@@ -100,6 +100,43 @@ export const mediaCaptureHandler: IntentHandler = {
   },
 };
 
+// PuttWatch v1 — voice cue for the spectator-friendly putt/chip recording
+// flow. Meta Ray-Ban glasses are the intended capture surface (their
+// SDK doesn't let us start their recorder programmatically, so this
+// handler just ACKs and reminds the user to fire the "Hey Meta, record
+// a video" capture themselves). After the round, the user pulls the
+// clip from Meta View into their phone library and uploads it via
+// SwingLab → Upload with the 'putt' or 'chip' tag for analysis.
+export const puttWatchHandler: IntentHandler = {
+  intent_type: 'putt_watch',
+
+  parameter_schema: {
+    shot_type: '"putt" | "chip"',
+  },
+
+  examples: [
+    'watch this putt',
+    'PuttWatch',
+    'analyze this putt',
+    'watch this chip',
+    'watch this bunker shot',
+  ],
+
+  async execute(intent): Promise<IntentResult> {
+    const raw = String((intent.parameters as { shot_type?: unknown }).shot_type ?? '').toLowerCase();
+    const isChip = raw === 'chip' || raw === 'bunker';
+    track('putt_watch_handler_ack', { shot_type: isChip ? 'chip' : 'putt' });
+    return {
+      success: true,
+      voice_response: isChip
+        ? "Eyes on you. Record it on the glasses and I'll break it down after."
+        : "Got it — watch you putt. Record it on the glasses and I'll analyze it after.",
+      side_effects: [`putt_watch:ack:${isChip ? 'chip' : 'putt'}`],
+      follow_up_needed: false,
+    };
+  },
+};
+
 export const mediaPlaybackHandler: IntentHandler = {
   intent_type: 'media_playback',
 

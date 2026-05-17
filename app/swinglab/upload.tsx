@@ -26,6 +26,8 @@ const TAGS: { id: SwingTag; label: string }[] = [
   { id: 'cage', label: 'Cage' },
   { id: 'indoor', label: 'Indoor' },
   { id: 'course', label: 'Course' },
+  { id: 'putt', label: 'Putt' },
+  { id: 'chip', label: 'Chip' },
   { id: 'other', label: 'Other' },
 ];
 

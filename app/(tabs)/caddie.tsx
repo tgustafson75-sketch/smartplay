@@ -1059,7 +1059,10 @@ export default function CaddieTab() {
     },
     onSpeechEnd: (uri) => {
       setKevinEmotion(null);
-      processAudioUri(uri);
+      // source: 'vad' enables the wake-word gate — utterances without
+      // tank/kevin/serena/harry/caddie are silently dropped so spectators
+      // and cart partners don't accidentally route through the brain.
+      processAudioUri(uri, { source: 'vad' });
     },
   });
 

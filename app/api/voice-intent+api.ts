@@ -117,6 +117,13 @@ Available intents:
     - "show me last shot" / "play that back" / "replay" -> { playback_action: "last" }
     - "open video" / "show me my videos" / "pull up videos" -> { playback_action: "open" }
 
+13. putt_watch — PuttWatch v1. User wants the caddie to ACK that they're about to putt or chip and the user will record it on their glasses (Meta Ray-Ban). The caddie does NOT start a recording itself (Meta doesn't expose the glasses' camera to third-party apps); it just acknowledges. After the round the user uploads the clip via SwingLab with the 'putt' or 'chip' tag for analysis.
+    parameters: { shot_type: "putt" | "chip" }
+    Examples:
+    - "watch this putt" / "${caddieName} watch this putt" / "PuttWatch" / "analyze this putt" -> { shot_type: "putt" }
+    - "watch this chip" / "watch this bunker shot" / "watch this chip out of the bunker" -> { shot_type: "chip" }
+    Use putt_watch ONLY when the user explicitly says putt/chip/bunker. Generic "watch this" without that qualifier is media_capture (highlight kind).
+
 7. unknown — Cannot determine intent.
    parameters: {}
    Set follow_up_question to a brief clarifying question ${caddieName} could ask.
@@ -125,7 +132,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null

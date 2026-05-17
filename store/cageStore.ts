@@ -101,7 +101,7 @@ export interface ClubSegment {
 }
 
 export type SwingSource = 'live_cage' | 'uploaded_video';
-export type SwingTag = 'range' | 'cage' | 'indoor' | 'course' | 'other';
+export type SwingTag = 'range' | 'cage' | 'indoor' | 'course' | 'putt' | 'chip' | 'other';
 
 export interface UploadMetadata {
   uploaded_at: number;
