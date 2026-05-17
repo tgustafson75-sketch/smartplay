@@ -396,32 +396,44 @@ export default function SmartVisionScreen() {
         setImageUri(uri);
       } else if (imageryMode !== 'curated') {
         // 2026-05-16 — Centroid fallback for local courses that lack
-        // per-hole geometry (Sunnyvale, San Jose Muni). Replaces the
-        // chromed Golfshot screenshots Tim originally bundled. Same wide
-        // course view repeats across all 18 holes until per-hole green
-        // coords are added; not per-hole specific but clean (no UI
-        // overlay) and uses the same Mapbox tile pipeline.
-        const slug = getLocalCourseSlug(courseName);
-        const centroid = slug ? LOCAL_COURSE_CENTROIDS[slug] : null;
-        if (centroid) {
-          const MAX = 1280;
-          let reqW = imageW;
-          let reqH = imageH;
-          if (reqW > MAX || reqH > MAX) {
-            const scale = Math.min(MAX / reqW, MAX / reqH);
-            reqW = Math.floor(reqW * scale);
-            reqH = Math.floor(reqH * scale);
+        // BOTH per-hole geometry AND a bundled curated image. Replaces
+        // the chromed Golfshot screenshots for Sunnyvale + San Jose
+        // Muni only. CRITICAL: must check getLocalHoleImage first —
+        // courses with bundled images (Palms, Lakes, Rancho, Crystal
+        // Springs, Mariners Point) MUST NOT get centroid imagery
+        // assigned here; if we did, imageUri would be set and the
+        // render path would pick it over the curated bundled image,
+        // showing a generic Mapbox tile instead of the hand-curated
+        // hole photo. That regression was caught immediately on
+        // Mariners ("measuring tool on a green screen").
+        const hasCurated = getLocalHoleImage(courseName, holeIndex) != null;
+        if (!hasCurated) {
+          const slug = getLocalCourseSlug(courseName);
+          const centroid = slug ? LOCAL_COURSE_CENTROIDS[slug] : null;
+          if (centroid) {
+            const MAX = 1280;
+            let reqW = imageW;
+            let reqH = imageH;
+            if (reqW > MAX || reqH > MAX) {
+              const scale = Math.min(MAX / reqW, MAX / reqH);
+              reqW = Math.floor(reqW * scale);
+              reqH = Math.floor(reqH * scale);
+            }
+            const uri = getCenteredImageryUrl({
+              lat: centroid.lat,
+              lng: centroid.lng,
+              zoom: 15,
+              width: reqW,
+              height: reqH,
+            });
+            if (cancelled) return;
+            setImageUri(uri);
+          } else {
+            setImageUri(null);
           }
-          const uri = getCenteredImageryUrl({
-            lat: centroid.lat,
-            lng: centroid.lng,
-            zoom: 15,
-            width: reqW,
-            height: reqH,
-          });
-          if (cancelled) return;
-          setImageUri(uri);
         } else {
+          // Bundled image exists for this hole — leave imageUri null so
+          // the render path picks up `curatedImage` from line ~292.
           setImageUri(null);
         }
       } else {

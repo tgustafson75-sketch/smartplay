@@ -571,9 +571,41 @@ export const useRoundStore = create<RoundState>()(
           shots: [...s.shots],
           round_photos: s.currentRoundPhotos.length > 0 ? [...s.currentRoundPhotos] : undefined,
         };
+        // 2026-05-16 — Full in-round state reset on round end. Was
+        // only flipping isRoundActive false + appending to roundHistory,
+        // which left currentHole / scores / shots / activeCourse stale.
+        // Reported: after ending a Mariners round, the Caddie tab still
+        // showed "Hole 10" (Mariners has 9 holes anyway). Now the next
+        // round starts from a clean slate AND the in-between display has
+        // no stale state to surface.
+        // KEEP: roundHistory (the persisted record we just appended),
+        //       roundNumber (incremented by startRound on next round),
+        //       recentCourseIds (locator UX context).
         set(state => ({
           isRoundActive: false,
           roundHistory: [...state.roundHistory, record],
+          currentHole: 1,
+          currentYardage: null,
+          activeCourse: null,
+          activeCourseId: null,
+          courseHoles: [],
+          scores: {},
+          putts: {},
+          penalties: {},
+          shots: [],
+          holeStats: [],
+          plans: [],
+          currentRoundPhotos: [],
+          emotionalLog: [],
+          pendingLieAnalysis: null,
+          selectedTee: 'unspecified',
+          nineHoleMode: false,
+          isCompetition: false,
+          roundNotes: '',
+          goal: null,
+          mode: 'free_play' as RoundMode,
+          currentRoundId: null,
+          roundStartTime: null,
         }));
         const total = Object.values(s.scores).reduce((a, b) => a + b, 0);
         const holesPlayed = Object.keys(s.scores).length;

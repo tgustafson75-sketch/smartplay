@@ -216,15 +216,23 @@ export default function CockpitCaddieScreen({
 
         {/* Minimal sub-row: hole / course. Mirrors v3's SubHeaderBar
             left-side content. Right-side thumbnail intentionally omitted
-            (the DistanceCard below shows the same yardage with more room). */}
-        <View style={[styles.subRow, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.holeLabel, { color: colors.accent }]}>
-            Hole {currentHole}/18
-          </Text>
-          <Text style={[styles.courseName, { color: colors.text_muted }]} numberOfLines={1}>
-            {activeCourse ?? 'No course selected'}
-          </Text>
-        </View>
+            (the DistanceCard below shows the same yardage with more room).
+            2026-05-16 — sub-row only renders DURING an active round.
+            After endRound, the Caddie tab should show no stale hole
+            data ("Hole 10 / Mariners Point" persisted after a round
+            end at a 9-hole course). Hole count comes from courseHoles
+            length instead of hardcoded /18 so 9-hole courses read
+            correctly. */}
+        {isRoundActive && (
+          <View style={[styles.subRow, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.holeLabel, { color: colors.accent }]}>
+              Hole {currentHole}/{courseHoles.length || 18}
+            </Text>
+            <Text style={[styles.courseName, { color: colors.text_muted }]} numberOfLines={1}>
+              {activeCourse ?? ''}
+            </Text>
+          </View>
+        )}
 
         <StepperPair
           holeNumber={currentHole}
