@@ -22,6 +22,12 @@ interface DetectorConfig {
   stationaryRadiusMeters: number; // GPS jitter tolerance during "still"
   minDisplacementYards: number;   // displacement that counts as a shot
   maxCartSpeedMs: number;         // suppress when sustained speed is over this
+  /** When true, suppression checks the LATEST sample's speed only (is the
+   *  user moving right now?) rather than the rolling 5-sample average.
+   *  Stationary window also drops to ~8s so a typical cart pre-shot stop
+   *  (5–15s at the ball) actually clears the gate. Trade-off: slightly
+   *  more false positives when a cart parks for 8s without a swing. */
+  cartMode: boolean;
   promptDelayMinMs: number;       // 5-15s window per spec
   promptDelayMaxMs: number;
   pollIntervalMs: number;
@@ -32,9 +38,25 @@ const DEFAULT_CONFIG: DetectorConfig = {
   stationaryRadiusMeters: 8,
   minDisplacementYards: 30,
   maxCartSpeedMs: 4.0,            // ~9 mph — anything sustained above this is cart, not walk-after-shot
+  cartMode: false,
   promptDelayMinMs: 5_000,
   promptDelayMaxMs: 15_000,
   pollIntervalMs: 2_500,
+};
+
+/** Tuning applied when configure({ cartMode: true }) is called. */
+const CART_OVERRIDES: Partial<DetectorConfig> = {
+  stationaryWindowMs: 8_000,
+  stationaryRadiusMeters: 12,
+  cartMode: true,
+};
+
+/** Tuning applied when configure({ cartMode: false }) is called (the walking
+ *  default). Mirrors DEFAULT_CONFIG so toggling resets cleanly. */
+const WALK_OVERRIDES: Partial<DetectorConfig> = {
+  stationaryWindowMs: 20_000,
+  stationaryRadiusMeters: 8,
+  cartMode: false,
 };
 
 const METERS_PER_YARD = 0.9144;
@@ -61,7 +83,15 @@ class ShotDetector {
   private readonly EMIT_COOLDOWN_MS = 30_000;
 
   configure(partial: Partial<DetectorConfig>): void {
-    this.config = { ...this.config, ...partial };
+    // When toggling cartMode, apply the bundled overrides so the caller
+    // doesn't have to know which thresholds shift with it.
+    if (partial.cartMode === true) {
+      this.config = { ...this.config, ...CART_OVERRIDES, ...partial };
+    } else if (partial.cartMode === false) {
+      this.config = { ...this.config, ...WALK_OVERRIDES, ...partial };
+    } else {
+      this.config = { ...this.config, ...partial };
+    }
   }
 
   on(listener: Listener): () => void {
@@ -157,10 +187,19 @@ class ShotDetector {
 
     const latest = this.samples[this.samples.length - 1];
 
-    // Suppress: sustained cart speed
-    const recentSpeeds = this.samples.slice(-5).map(s => s.speed ?? 0).filter(s => s >= 0);
-    const avgSpeed = recentSpeeds.length > 0 ? recentSpeeds.reduce((a, b) => a + b, 0) / recentSpeeds.length : 0;
-    if (avgSpeed > this.config.maxCartSpeedMs) return;
+    // Suppress: user currently moving (or sustained moving in walking mode).
+    // In cartMode we look at JUST the most recent sample's speed — the
+    // whole point of cart play is that the rolling avg WILL include
+    // recent cart driving, but if the user is stopped right now, a
+    // shot is possible.
+    if (this.config.cartMode) {
+      const latestSpeed = latest.speed ?? 0;
+      if (latestSpeed > this.config.maxCartSpeedMs) return;
+    } else {
+      const recentSpeeds = this.samples.slice(-5).map(s => s.speed ?? 0).filter(s => s >= 0);
+      const avgSpeed = recentSpeeds.length > 0 ? recentSpeeds.reduce((a, b) => a + b, 0) / recentSpeeds.length : 0;
+      if (avgSpeed > this.config.maxCartSpeedMs) return;
+    }
 
     // Find a stationary window earlier in the buffer
     const stationaryEndCutoff = latest.timestamp - this.config.stationaryWindowMs;

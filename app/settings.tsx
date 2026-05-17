@@ -42,6 +42,7 @@ export default function Settings() {
     highContrast,
     watchConnected,
     autoListenEnabled,
+    cartMode,
     skip_briefings,
     proactive_kevin_enabled,
     distance_unit,
@@ -77,6 +78,7 @@ export default function Settings() {
     setTankSoftIntro,
     setWatchConnected,
     setAutoListenEnabled,
+    setCartMode,
     setSkipBriefings,
     setProactiveKevinEnabled,
     setDistanceUnit,
@@ -510,6 +512,12 @@ export default function Settings() {
             sub={`${caddieName} fills the pause while thinking — 'let me see', 'hmm...'`}
             value={fillerEnabled}
             onValueChange={setFillerEnabled}
+          />
+          <ToggleRow
+            label="Riding in a cart"
+            sub="Tunes shot detection for cart play — shorter at-ball pause, suppresses only while the cart is moving (not for ~12s after it stops). Walking default is more conservative."
+            value={cartMode}
+            onValueChange={setCartMode}
           />
         </View>
 

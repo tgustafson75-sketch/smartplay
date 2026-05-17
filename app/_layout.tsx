@@ -446,6 +446,11 @@ function AppNavigator() {
     let active = useRoundStore.getState().isRoundActive;
     const apply = (next: boolean) => {
       if (next) {
+        // Apply cart-aware thresholds at every round-start so a toggle
+        // flipped mid-session takes effect on the next round without a
+        // relaunch. Walking mode resets the defaults; cart mode shortens
+        // the stationary window and switches to current-speed suppression.
+        shotDetectionService.configure({ cartMode: useSettingsStore.getState().cartMode });
         shotDetectionService.start().catch(() => {});
         conversationalLoggingOrchestrator.start();
       } else {
@@ -459,8 +464,17 @@ function AppNavigator() {
       active = s.isRoundActive;
       apply(active);
     });
+    // Reconfigure live when cartMode toggles during an active round so the
+    // change takes effect immediately (next sample evaluation cycle).
+    const unsubSettings = useSettingsStore.subscribe((s, prev) => {
+      if (s.cartMode === prev.cartMode) return;
+      if (useRoundStore.getState().isRoundActive) {
+        shotDetectionService.configure({ cartMode: s.cartMode });
+      }
+    });
     return () => {
       unsub();
+      unsubSettings();
       conversationalLoggingOrchestrator.stop();
       shotDetectionService.stop();
     };

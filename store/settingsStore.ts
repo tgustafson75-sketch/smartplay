@@ -88,6 +88,10 @@ interface SettingsState {
   autoListenEnabled: boolean;
   skip_briefings: boolean;
   proactive_kevin_enabled: boolean;
+  /** When true, GPS shot detection switches to cart-friendly thresholds —
+   *  shorter stationary window (~8s) and current-speed-only suppression
+   *  so a sustained cart drive doesn't gate detection forever. */
+  cartMode: boolean;
   distance_unit: 'yards' | 'meters';
 
   tutorialsSeen: Record<string, boolean>;
@@ -152,6 +156,7 @@ interface SettingsState {
   setWatchConnected: (v: boolean) => void;
   setGlassesConnected: (v: boolean) => void;
   setAutoListenEnabled: (v: boolean) => void;
+  setCartMode: (v: boolean) => void;
   setSkipBriefings: (v: boolean) => void;
   setProactiveKevinEnabled: (v: boolean) => void;
   setDistanceUnit: (u: 'yards' | 'meters') => void;
@@ -205,6 +210,7 @@ export const useSettingsStore = create<SettingsState>()(
       watchConnected: false,
       glassesConnected: false,
       autoListenEnabled: false,
+      cartMode: false,
       skip_briefings: false,
       proactive_kevin_enabled: true,
       distance_unit: 'yards' as const,
@@ -294,6 +300,7 @@ export const useSettingsStore = create<SettingsState>()(
       setWatchConnected: (v) => set({ watchConnected: v }),
       setGlassesConnected: (v) => set({ glassesConnected: v }),
       setAutoListenEnabled: (v) => set({ autoListenEnabled: v }),
+      setCartMode: (v) => set({ cartMode: v }),
       setSkipBriefings: (v) => set({ skip_briefings: v }),
       setProactiveKevinEnabled: (v) => set({ proactive_kevin_enabled: v }),
       setDistanceUnit: (u) => set({ distance_unit: u }),
@@ -417,6 +424,7 @@ export const useSettingsStore = create<SettingsState>()(
         personaIntensity: s.personaIntensity,
         tankSoftIntro: s.tankSoftIntro,
         autoListenEnabled: s.autoListenEnabled,
+        cartMode: s.cartMode,
         skip_briefings: s.skip_briefings,
         proactive_kevin_enabled: s.proactive_kevin_enabled,
         distance_unit: s.distance_unit,
