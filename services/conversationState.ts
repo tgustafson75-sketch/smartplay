@@ -73,6 +73,28 @@ export function isInActiveConversation(): boolean {
   return buffer.length > 0;
 }
 
+/**
+ * 2026-05-16 — True when Kevin's most recent turn ended with a question
+ * (within decay window). Used by the voice pipeline to short-circuit
+ * intent routing: when Kevin just asked "lay up or send it home?", the
+ * next user utterance is almost certainly an answer to THAT question,
+ * not a fresh standalone intent. Without this check, the voice intent
+ * classifier mis-routes phrases like "send it home" to `navigate home`
+ * (Tim's Mariners report) and the brain never sees the reply.
+ *
+ * Tightly scoped: returns true only when the LAST buffer entry is a
+ * Kevin turn AND its text ends with a question. Any user turn after
+ * Kevin's question clears the flag (the reply was consumed; the next
+ * utterance is fresh).
+ */
+export function isAwaitingFollowUp(): boolean {
+  evictIfStale();
+  if (buffer.length === 0) return false;
+  const last = buffer[buffer.length - 1];
+  if (last.role !== 'kevin') return false;
+  return /[?？]\s*$/.test(last.text.trim());
+}
+
 /** Force-clear the buffer (e.g. on user-explicit close, or test setup). */
 export function clearConversation(reason: string): void {
   if (buffer.length > 0) {

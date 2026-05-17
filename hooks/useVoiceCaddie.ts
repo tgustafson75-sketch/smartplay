@@ -29,7 +29,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 import { useCageStore } from '../store/cageStore';
-import { getRecentTurns, recordUserTurn, recordKevinTurn } from '../services/conversationState';
+import { getRecentTurns, recordUserTurn, recordKevinTurn, isAwaitingFollowUp } from '../services/conversationState';
 import { buildFullPracticeContext } from '../services/tutorialContext';
 import { useWatchStore } from '../store/watchStore';
 import { VoiceState } from '../components/CaddieAvatar';
@@ -723,6 +723,19 @@ export const useVoiceCaddie = ({
         return;
       }
 
+      // 2026-05-16 — Follow-up bypass. If Kevin's most recent turn was
+      // a question (text ends with '?'), the next user utterance is the
+      // answer to THAT question, not a fresh intent. Skip voice-command
+      // routing entirely so phrases like "send it home" (Tim's Mariners
+      // report — after Kevin asked "lay up or send it home?") don't get
+      // mis-classified as `navigate home`. The brain receives the full
+      // conversation buffer and resolves the follow-up against Kevin's
+      // own prior turn.
+      const skipIntentRouter = isAwaitingFollowUp();
+      if (skipIntentRouter) {
+        console.log('[voice] follow-up bypass: Kevin asked a question, routing reply straight to brain');
+      }
+
       // ── Voice command routing — runs after bypasses, before brain ──
       // Builds a snapshot of app state and parses the transcript into a structured
       // intent. If a handler matches with sufficient confidence, we execute it and
@@ -743,7 +756,9 @@ export const useVoiceCaddie = ({
         trust_spectrum_level: 2,
       };
 
-      try {
+      // Run intent routing only when we're NOT awaiting a follow-up.
+      // The follow-up case routes straight to the brain below.
+      if (!skipIntentRouter) try {
         let { intent, result } = await voiceCommandRouter.route(transcript, appContext, apiUrl);
 
         // Phase A.3 ambiguity resolution: if router asks a follow-up, capture one more
