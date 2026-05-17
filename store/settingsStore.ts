@@ -217,7 +217,7 @@ export const useSettingsStore = create<SettingsState>()(
       tutorialsSeen: {},
       fillerEnabled: true,
       earbudTapToTalk: true,
-      voiceOnPhoneSpeaker: false,
+      voiceOnPhoneSpeaker: true,
       kevinGreetingEnabled: true,
       smartVisionImagery: 'auto' as const,
       yardageMode: 'live' as const,
@@ -349,7 +349,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 6,
+      version: 7,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -399,6 +399,15 @@ export const useSettingsStore = create<SettingsState>()(
             });
             p.caddieAssignments = reassigned;
           }
+        }
+        // v7 — flip voiceOnPhoneSpeaker default to TRUE for existing users.
+        // The old default (false) silently blocked the caddie's voice
+        // whenever the user wasn't paired to earbuds/glasses — a confusing
+        // failure mode ("avatar acknowledges but doesn't speak"). New
+        // default lets the phone speaker play voice; users who want to
+        // mute on speaker can flip the toggle off in Settings → Voice.
+        if (version < 7) {
+          p.voiceOnPhoneSpeaker = true;
         }
         return p as SettingsState;
       },

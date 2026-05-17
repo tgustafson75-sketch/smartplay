@@ -48,6 +48,7 @@ import Svg, { Line as SvgLine } from 'react-native-svg';
 
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbertApi';
@@ -242,18 +243,40 @@ export default function SmartVisionScreen() {
   // fires (which doesn't clear existing plans).
   const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
   const previewCourseId = useRoundStore(s => s.previewCourseId);
-  // Resolution chain: live round → about-to-start → currently-selected-on-Play.
-  // previewCourseId is the "user picked this on Play tab but hasn't tapped
-  // Start Round yet" hint — it lets us render the chosen hole imagery
-  // pre-round instead of falling through to the green-canvas placeholder.
-  const effectiveCourseId = activeCourseId ?? pendingStartCourseId ?? previewCourseId;
-  const derivedCourseLabel = effectiveCourseId
-    ? (effectiveCourseId.startsWith('local:')
-        ? effectiveCourseId.slice('local:'.length).replace(/-/g, ' ')
-        : effectiveCourseId)
-    : null;
+  const homeCourseName = usePlayerProfileStore(s => s.homeCourse);
+  // Resolution chain (most-specific → most-default):
+  //   1. activeCourseId — live round
+  //   2. pendingStartCourseId — about to launch (Play tab "Start Round")
+  //   3. previewCourseId — picked on Play tab, render-only hint
+  //   4. homeCourse — player profile fallback
+  //   5. 'local:sunnyvale' — final hard fallback so the screen NEVER renders
+  //      "No course" / "No geometry" when bundled imagery is available. The
+  //      user can swipe to any hole; if nothing matches, the green canvas
+  //      with friendly hint copy renders instead of a broken-looking state.
+  // homeCourse is a NAME (string), not an id, so we resolve to id via
+  // a fuzzy substring match against LOCAL_COURSE_SLUG_BY_NAME below.
+  const homeCourseIdFromProfile: string | null = (() => {
+    if (!homeCourseName) return null;
+    const n = homeCourseName.toLowerCase();
+    if (n.includes('sunnyvale')) return 'local:sunnyvale';
+    if (n.includes('san jose')) return 'local:san-jose-muni';
+    if (n.includes('palms')) return 'local:palms';
+    if (n.includes('lakes')) return 'local:lakes';
+    if (n.includes('rancho')) return 'local:rancho-california';
+    if (n.includes('crystal')) return 'local:crystal-springs';
+    if (n.includes('mariner')) return 'local:mariners-point';
+    return null;
+  })();
+  // Hard fallback: Palms is the first entry in LOCAL_COURSES and ships
+  // with full 18-hole bundled imagery — guaranteed to render.
+  const effectiveCourseId =
+    activeCourseId ?? pendingStartCourseId ?? previewCourseId ?? homeCourseIdFromProfile ?? 'local:palms';
+  const derivedCourseLabel =
+    effectiveCourseId.startsWith('local:')
+      ? effectiveCourseId.slice('local:'.length).replace(/-/g, ' ')
+      : effectiveCourseId;
   const courseId = effectiveCourseId;
-  const courseName = activeCourseName ?? derivedCourseLabel;
+  const courseName = activeCourseName ?? homeCourseName ?? derivedCourseLabel;
   const totalHoles = courseHoles.length || 18;
   const addOrUpdatePlan = useRoundStore(s => s.addOrUpdatePlan);
   const existingPlan = useRoundStore(s => s.plans.find(p => p.hole_number === currentHole));

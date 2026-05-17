@@ -57,11 +57,11 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
   const previewCourseId = useRoundStore(s => s.previewCourseId);
   const homeCourseName = usePlayerProfileStore(s => s.homeCourse);
-  // For preview, derive a course label that getLocalHoleImage can
-  // resolve. Live round wins; else about-to-start; else currently-selected
-  // on Play tab; else home course. previewCourseId is set by Play tab
-  // selection (does NOT trigger a round auto-start, unlike pending).
-  const previewCourseLabel: string | null = (() => {
+  // Cascade: active round → about-to-start → preview pick → home course →
+  // hard fallback "palms" (LOCAL_COURSES[0], full 18-hole bundled imagery
+  // ships in every build). Guarantees the preview never renders empty —
+  // there's always SOMETHING for getLocalHoleImage to match.
+  const previewCourseLabel: string = (() => {
     if (activeCourse) return activeCourse;
     const candidate = pendingStartCourseId ?? previewCourseId;
     if (candidate) {
@@ -70,7 +70,8 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
       }
       return candidate;
     }
-    return homeCourseName;
+    if (homeCourseName) return homeCourseName;
+    return 'palms';
   })();
 
   const [geometry, setGeometry] = useState<HoleGeometry | null>(null);
