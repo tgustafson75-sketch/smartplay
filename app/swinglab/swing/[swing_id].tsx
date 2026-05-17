@@ -28,6 +28,7 @@ import { uploadLog } from '../../../services/uploadDiagnostic';
 import PrimaryIssueCard from '../../../components/swinglab/PrimaryIssueCard';
 import DrillCard from '../../../components/swinglab/DrillCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
+import SwingBodyOverlay from '../../../components/swinglab/SwingBodyOverlay';
 
 type AudioSource = 'coach' | 'kevin';
 
@@ -107,6 +108,11 @@ export default function SwingDetail() {
   );
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState<number | null>(session?.upload?.duration_sec ?? null);
+  const [showSkeleton, setShowSkeleton] = useState(true);
+  const [showTrace, setShowTrace] = useState(true);
+
+  const poseFrames = session?.biomechanics?.frames ?? [];
+  const hasPose = poseFrames.length >= 2;
 
   // Toggle audio source: muting video for kevin mode, unmuting for coach.
   //
@@ -155,6 +161,27 @@ export default function SwingDetail() {
       analysis_error: session?.analysis_error ?? null,
     }, swing_id);
   }, [analysisStatus, swing_id, session?.primary_issue, session?.drill_recommendation, session?.analysis_error]);
+
+  // Backfill biomechanics for older swings captured before the pose pipeline
+  // shipped. Fires once per swing_id; failure is silent (pose API is opt-in
+  // and known to be flaky — same posture as the upload pipeline's branch).
+  const poseBackfillRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!swing_id || !shot?.clipUri) return;
+    if (session?.biomechanics !== undefined) return;
+    if (poseBackfillRef.current === swing_id) return;
+    poseBackfillRef.current = swing_id;
+    const durationMs = (session?.upload?.duration_sec ?? 3) * 1000;
+    void (async () => {
+      try {
+        const poseMod = await import('../../../services/poseAnalysisApi');
+        const biomech = await poseMod.analyzeSwingFromVideo(shot.clipUri!, durationMs);
+        useCageStore.getState().setSessionBiomechanics(swing_id, biomech);
+      } catch (e) {
+        console.log('[swing-detail] pose backfill failed', e);
+      }
+    })();
+  }, [swing_id, shot?.clipUri, session?.biomechanics, session?.upload?.duration_sec]);
 
   useEffect(() => {
     if (analysisStatus === 'ok') {
@@ -385,18 +412,50 @@ export default function SwingDetail() {
         )}
 
         {!isComparing && (
-          <View style={styles.videoWrap}>
-            <Video
-              ref={videoRef}
-              source={{ uri: shot.clipUri }}
-              style={styles.video}
-              resizeMode={ResizeMode.CONTAIN}
-              useNativeControls
-              shouldPlay={false}
-              isMuted={audioSource === 'kevin'}
-              onPlaybackStatusUpdate={onPlaybackStatusUpdate}
-            />
-          </View>
+          <>
+            <View style={styles.videoWrap}>
+              <Video
+                ref={videoRef}
+                source={{ uri: shot.clipUri }}
+                style={styles.video}
+                resizeMode={ResizeMode.CONTAIN}
+                useNativeControls
+                shouldPlay={false}
+                isMuted={audioSource === 'kevin'}
+                onPlaybackStatusUpdate={onPlaybackStatusUpdate}
+              />
+              {hasPose && (showSkeleton || showTrace) && (
+                <SwingBodyOverlay
+                  frames={poseFrames}
+                  currentTimeMs={position * 1000}
+                  showSkeleton={showSkeleton}
+                  showTrace={showTrace}
+                />
+              )}
+            </View>
+            {hasPose && (
+              <View style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, { flexDirection: 'row' }, showSkeleton && { backgroundColor: colors.accent }]}
+                  onPress={() => setShowSkeleton(v => !v)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Toggle body overlay"
+                >
+                  <Ionicons name="body-outline" size={14} color={showSkeleton ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
+                  <Text style={[styles.toggleText, showSkeleton && { color: '#fff' }]}>Body</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, { flexDirection: 'row' }, showTrace && { backgroundColor: colors.accent }]}
+                  onPress={() => setShowTrace(v => !v)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Toggle swing trace"
+                >
+                  <Ionicons name="analytics-outline" size={14} color={showTrace ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
+                  <Text style={[styles.toggleText, showTrace && { color: '#fff' }]}>Swing Trace</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
         )}
 
         {/* Audio source toggle */}
