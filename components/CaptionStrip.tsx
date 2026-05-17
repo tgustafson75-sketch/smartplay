@@ -14,6 +14,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, useWindowDimensions, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { usePathname } from 'expo-router';
 import { subscribeToCaption, getCurrentCaption, subscribeToSpeaking } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
 import { getCurrentRoute, subscribeRouteChanges, type AudioRoute } from '../services/audioRoutingService';
@@ -24,6 +25,16 @@ export default function CaptionStrip(): React.ReactElement | null {
   const ttsCaptions = useSettingsStore(s => s.ttsCaptions);
   const largeText = useSettingsStore(s => s.largeText);
   const [caption, setCaption] = useState<string | null>(getCurrentCaption());
+  // 2026-05-16 — Suppress the global caption pill on the Caddie tab.
+  // The Caddie tab's Cockpit screen renders its OWN speech bubble for
+  // Kevin's latest line (displayText = caddieResponse || openingPrompt),
+  // positioned over Kevin's avatar. Showing the global pill on top of
+  // that AND the brand row is a visible duplicate (Tim's screenshot
+  // showed "Good evening Tim..." rendered twice on the Caddie tab).
+  // Every other screen keeps the global caption because they don't have
+  // their own speech surface.
+  const pathname = usePathname();
+  const suppressOnCaddieTab = pathname === '/' || pathname === '/(tabs)/caddie' || pathname.endsWith('/caddie');
   // Re-sim P1 — when audio routes through Bluetooth we surface captions
   // automatically *for the duration of the BT connection only*, then ask
   // the user once whether to keep them on permanently. This avoids the
@@ -71,6 +82,8 @@ export default function CaptionStrip(): React.ReactElement | null {
   const effectiveCaptionsOn = ttsCaptions || bluetoothAutoOn;
   if (!effectiveCaptionsOn) return null;
   if (!caption) return null;
+  // Suppress on Caddie tab — Cockpit speech bubble handles this surface.
+  if (suppressOnCaddieTab) return null;
 
   return (
     <View
