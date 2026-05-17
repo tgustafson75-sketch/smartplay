@@ -18,6 +18,13 @@ export interface LibraryEntry {
   primary_issue_name: string | null;
   swing_count: number;
   display_label: string;
+  /** 2026-05-16 — Local file:// URI of the persisted fault frame from
+   *  Phase K analysis. Used by the library list as a per-row thumbnail
+   *  so the user can scan their swings visually instead of by date.
+   *  Null when analysis hasn't completed yet or no specific frame stood
+   *  out. Prefers PrimaryIssue.visual_reference_path; falls back to the
+   *  first shot's perShotAnalysis.visual_reference_path. */
+  thumbnail_uri: string | null;
 }
 
 function describe(session: CageSession): string {
@@ -37,14 +44,20 @@ export function getLibrary(filter: LibraryFilter = 'all'): LibraryEntry[] {
       if (filter === 'uploads') return s.source === 'uploaded_video';
       return s.source !== 'uploaded_video'; // 'cage' includes legacy entries with no source
     })
-    .map<LibraryEntry>(session => ({
-      session,
-      source: session.source ?? 'live_cage',
-      date_ms: session.date,
-      primary_issue_name: session.primary_issue?.name ?? null,
-      swing_count: session.shots.length,
-      display_label: describe(session),
-    }))
+    .map<LibraryEntry>(session => {
+      const primaryThumb = session.primary_issue?.visual_reference_path ?? null;
+      const perShotThumb = session.shots.find(s => s.perShotAnalysis?.visual_reference_path)
+        ?.perShotAnalysis?.visual_reference_path ?? null;
+      return {
+        session,
+        source: session.source ?? 'live_cage',
+        date_ms: session.date,
+        primary_issue_name: session.primary_issue?.name ?? null,
+        swing_count: session.shots.length,
+        display_label: describe(session),
+        thumbnail_uri: primaryThumb ?? perShotThumb ?? null,
+      };
+    })
     .sort((a, b) => b.date_ms - a.date_ms);
 }
 

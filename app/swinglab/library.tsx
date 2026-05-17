@@ -1,21 +1,26 @@
 /**
- * Phase R — My Swing Library.
+ * Swing Library — unified browse across cage sessions + uploaded videos.
  *
- * Unified browse across cage sessions and uploaded videos. Filter chips,
- * tap-to-detail, long-press to delete. Empty state pivots to Upload CTA.
- *
- * Phase BZ-v1 — Adds date-range and club filters layered on top of the
- * existing source filter (all/uploads/cage). All three apply
- * intersection-style; only sessions matching every active dimension
- * appear.
+ * 2026-05-16 UI cleanup pass:
+ *   - Header: chevron icon (was bare "‹ Back" text) + upload icon button
+ *     (was "+ Upload" text link). Title centered + bolder.
+ *   - Single filter chip strip (was THREE stacked horizontal scrolls).
+ *     Date + Club filters are now collapsed behind a "Filters" chip
+ *     that toggles them in/out — chrome stays minimal until needed.
+ *   - List rows now show a 56×56 thumbnail (the persisted fault frame
+ *     from Phase K analysis when available; placeholder icon otherwise).
+ *     Better visual hierarchy: title prominent, meta + source badge
+ *     less weight. Long-press still deletes.
+ *   - Empty states: cleaner copy + correct CTA per context.
  */
 
 import React, { useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useCageStore } from '../../store/cageStore';
 import { getLibrary, type LibraryFilter } from '../../services/swingLibrary';
@@ -43,14 +48,12 @@ export default function SwingLibrary() {
   const [filter, setFilter] = useState<LibraryFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [clubFilter, setClubFilter] = useState<string>('all');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Reading via getLibrary so the helper is the single source of sort/filter logic
-  const _ = sessionHistory; // re-render trigger when sessions change
+  const _ = sessionHistory; void _; // re-render trigger when sessions change
   const sourceFilteredEntries = getLibrary(filter);
 
-  // Phase BZ-v1 — derive available club options from the source-filtered
-  // set so users only see clubs that are actually represented in the
-  // current source slice. "all" included always.
   const availableClubs = useMemo(() => {
     const set = new Set<string>();
     sourceFilteredEntries.forEach(e => {
@@ -60,12 +63,7 @@ export default function SwingLibrary() {
     return ['all', ...Array.from(set).sort()];
   }, [sourceFilteredEntries]);
 
-  // Reset clubFilter to 'all' if the previously-selected club is no
-  // longer in the visible set (e.g., user switched source filter).
   if (clubFilter !== 'all' && !availableClubs.includes(clubFilter)) {
-    // Note: this is safe within the render — setState during render is
-    // legal in React when used to bail out of stale state, and React
-    // schedules a re-render. The next render will see clubFilter='all'.
     setClubFilter('all');
   }
 
@@ -82,28 +80,59 @@ export default function SwingLibrary() {
     });
   }, [sourceFilteredEntries, dateFilter, clubFilter]);
 
-  const filtersActive = filter !== 'all' || dateFilter !== 'all' || clubFilter !== 'all';
+  const advancedFiltersActive = dateFilter !== 'all' || clubFilter !== 'all';
+  const filtersActive = filter !== 'all' || advancedFiltersActive;
 
   const onLongPress = (id: string) => {
-    Alert.alert('Delete swing?', 'This removes it from your library. The original video on your phone is unaffected.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteSession(id) },
-    ]);
+    Alert.alert(
+      'Delete swing?',
+      'This removes it from your library. The original video on your phone is unaffected.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteSession(id) },
+      ],
+    );
+  };
+
+  const clearAllFilters = () => {
+    setFilter('all');
+    setDateFilter('all');
+    setClubFilter('all');
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      {/* HEADER — chevron / centered title / upload icon button */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Text style={[styles.back, { color: colors.accent }]}>‹ Back</Text>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          style={styles.headerIcon}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
+          <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>My Swing Library</Text>
-        <TouchableOpacity onPress={() => router.push('/swinglab/upload' as never)}>
-          <Text style={[styles.add, { color: colors.accent }]}>+ Upload</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>Swing Library</Text>
+        <TouchableOpacity
+          onPress={() => router.push('/swinglab/upload' as never)}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          style={styles.headerIcon}
+          accessibilityRole="button"
+          accessibilityLabel="Upload a swing"
+        >
+          <Ionicons name="cloud-upload-outline" size={22} color={colors.accent} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterStrip}>
+      {/* FILTER STRIP — Source chips + Filters toggle. Date/Club live
+          behind the Filters chip to keep the default state quiet. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterStripContent}
+        style={styles.filterStrip}
+      >
         {FILTERS.map(f => (
           <TouchableOpacity
             key={f.id}
@@ -113,88 +142,131 @@ export default function SwingLibrary() {
               { borderColor: colors.border, backgroundColor: colors.surface },
               filter === f.id && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
             ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Filter: ${f.label}`}
           >
             <Text style={[
               styles.chipText,
               { color: colors.text_muted },
-              filter === f.id && { color: colors.accent, fontWeight: '700' },
+              filter === f.id && { color: colors.accent, fontWeight: '800' },
             ]}>{f.label}</Text>
           </TouchableOpacity>
         ))}
+        {/* Divider */}
+        <View style={[styles.chipDivider, { backgroundColor: colors.border }]} />
+        <TouchableOpacity
+          onPress={() => setShowAdvancedFilters(v => !v)}
+          style={[
+            styles.chip,
+            { borderColor: colors.border, backgroundColor: colors.surface },
+            (showAdvancedFilters || advancedFiltersActive) && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Toggle advanced filters"
+        >
+          <Ionicons
+            name="options-outline"
+            size={14}
+            color={(showAdvancedFilters || advancedFiltersActive) ? colors.accent : colors.text_muted}
+            style={{ marginRight: 4 }}
+          />
+          <Text style={[
+            styles.chipText,
+            { color: colors.text_muted },
+            (showAdvancedFilters || advancedFiltersActive) && { color: colors.accent, fontWeight: '800' },
+          ]}>
+            Filters{advancedFiltersActive ? ' •' : ''}
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterStrip}>
-        {DATE_FILTERS.map(f => (
-          <TouchableOpacity
-            key={`date-${f.id}`}
-            onPress={() => setDateFilter(f.id)}
-            style={[
-              styles.chip,
-              { borderColor: colors.border, backgroundColor: colors.surface },
-              dateFilter === f.id && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
-            ]}
-          >
-            <Text style={[
-              styles.chipText,
-              { color: colors.text_muted },
-              dateFilter === f.id && { color: colors.accent, fontWeight: '700' },
-            ]}>{f.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {availableClubs.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterStrip}>
-          {availableClubs.map(c => (
-            <TouchableOpacity
-              key={`club-${c}`}
-              onPress={() => setClubFilter(c)}
-              style={[
-                styles.chip,
-                { borderColor: colors.border, backgroundColor: colors.surface },
-                clubFilter === c && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
-              ]}
-            >
-              <Text style={[
-                styles.chipText,
-                { color: colors.text_muted },
-                clubFilter === c && { color: colors.accent, fontWeight: '700' },
-              ]}>{c === 'all' ? 'Any club' : c}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+      {/* ADVANCED FILTERS — date + club, only when toggled. */}
+      {showAdvancedFilters && (
+        <View style={styles.advancedFilters}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterStripContent}>
+            {DATE_FILTERS.map(f => (
+              <TouchableOpacity
+                key={`date-${f.id}`}
+                onPress={() => setDateFilter(f.id)}
+                style={[
+                  styles.chipSmall,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  dateFilter === f.id && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
+                ]}
+              >
+                <Text style={[
+                  styles.chipSmallText,
+                  { color: colors.text_muted },
+                  dateFilter === f.id && { color: colors.accent, fontWeight: '800' },
+                ]}>{f.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          {availableClubs.length > 1 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterStripContent}>
+              {availableClubs.map(c => (
+                <TouchableOpacity
+                  key={`club-${c}`}
+                  onPress={() => setClubFilter(c)}
+                  style={[
+                    styles.chipSmall,
+                    { borderColor: colors.border, backgroundColor: colors.surface },
+                    clubFilter === c && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
+                  ]}
+                >
+                  <Text style={[
+                    styles.chipSmallText,
+                    { color: colors.text_muted },
+                    clubFilter === c && { color: colors.accent, fontWeight: '800' },
+                  ]}>{c === 'all' ? 'Any club' : c}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </View>
       )}
 
       {entries.length === 0 ? (
         <View style={styles.emptyWrap}>
+          <View style={[styles.emptyIcon, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Ionicons
+              name={filtersActive ? 'funnel-outline' : 'film-outline'}
+              size={32}
+              color={colors.text_muted}
+            />
+          </View>
           <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>
-            {filtersActive ? 'No swings match these filters' : 'No swings yet'}
+            {filtersActive ? 'No swings match' : 'No swings yet'}
           </Text>
           <Text style={[styles.emptyBody, { color: colors.text_muted }]}>
             {filtersActive
-              ? 'Try widening the time range or clearing the club filter.'
-              : 'Upload a video from your phone or run a Cage Session to start your swing library.'}
+              ? 'Try clearing filters or widening the time range.'
+              : 'Record one in SmartMotion or upload a video to start building your library.'}
           </Text>
           {filtersActive ? (
             <TouchableOpacity
               style={[styles.cta, { backgroundColor: colors.accent }]}
-              onPress={() => { setFilter('all'); setDateFilter('all'); setClubFilter('all'); }}
+              onPress={clearAllFilters}
             >
               <Text style={styles.ctaText}>Clear filters</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
               style={[styles.cta, { backgroundColor: colors.accent }]}
-              onPress={() => router.push('/swinglab/upload' as never)}
+              onPress={() => router.push('/smartmotion-quick' as never)}
             >
-              <Text style={styles.ctaText}>Upload a swing</Text>
+              <Ionicons name="videocam" size={18} color="#0d1a0d" style={{ marginRight: 8 }} />
+              <Text style={styles.ctaText}>Record a swing</Text>
             </TouchableOpacity>
           )}
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
           {entries.map(entry => {
-            const dateStr = new Date(entry.date_ms).toLocaleDateString();
+            const dateStr = new Date(entry.date_ms).toLocaleDateString(undefined, {
+              month: 'short', day: 'numeric',
+            });
+            const isUpload = entry.source === 'uploaded_video';
             return (
               <TouchableOpacity
                 key={entry.session.id}
@@ -202,23 +274,51 @@ export default function SwingLibrary() {
                 onPress={() => router.push(`/swinglab/swing/${entry.session.id}` as never)}
                 onLongPress={() => onLongPress(entry.session.id)}
                 delayLongPress={500}
+                accessibilityRole="button"
+                accessibilityLabel={`${entry.display_label}, ${dateStr}, ${entry.swing_count} swings`}
               >
+                {/* Thumbnail — fault frame from Phase K analysis when
+                    available; icon placeholder otherwise. */}
+                <View style={[styles.thumb, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
+                  {entry.thumbnail_uri ? (
+                    <Image source={{ uri: entry.thumbnail_uri }} style={styles.thumbImage} resizeMode="cover" />
+                  ) : (
+                    <Ionicons
+                      name={isUpload ? 'film-outline' : 'golf-outline'}
+                      size={24}
+                      color={colors.text_muted}
+                    />
+                  )}
+                </View>
                 <View style={styles.rowMain}>
                   <Text style={[styles.rowTitle, { color: colors.text_primary }]} numberOfLines={1}>
                     {entry.display_label}
                   </Text>
-                  <Text style={[styles.rowMeta, { color: colors.text_muted }]}>
+                  <Text style={[styles.rowMeta, { color: colors.text_muted }]} numberOfLines={1}>
                     {dateStr} · {entry.swing_count} swing{entry.swing_count === 1 ? '' : 's'}
-                    {entry.primary_issue_name ? ` · ${entry.primary_issue_name}` : ''}
                   </Text>
+                  {entry.primary_issue_name && (
+                    <Text style={[styles.rowIssue, { color: colors.accent }]} numberOfLines={1}>
+                      {entry.primary_issue_name}
+                    </Text>
+                  )}
                 </View>
-                <View style={[
-                  styles.sourceBadge,
-                  { backgroundColor: entry.source === 'uploaded_video' ? colors.accent_muted : colors.surface_elevated, borderColor: colors.border },
-                ]}>
-                  <Text style={[styles.sourceText, { color: entry.source === 'uploaded_video' ? colors.accent : colors.text_muted }]}>
-                    {entry.source === 'uploaded_video' ? 'UPLOAD' : 'CAGE'}
-                  </Text>
+                <View style={styles.rowTrailing}>
+                  <View style={[
+                    styles.sourceBadge,
+                    {
+                      backgroundColor: isUpload ? colors.accent_muted : colors.surface_elevated,
+                      borderColor: colors.border,
+                    },
+                  ]}>
+                    <Text style={[
+                      styles.sourceText,
+                      { color: isUpload ? colors.accent : colors.text_muted },
+                    ]}>
+                      {isUpload ? 'UPLOAD' : 'CAGE'}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
                 </View>
               </TouchableOpacity>
             );
@@ -232,30 +332,142 @@ export default function SwingLibrary() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
-  back: { fontSize: 16, fontWeight: '600' },
-  add: { fontSize: 15, fontWeight: '700' },
-  title: { fontSize: 20, fontWeight: '900' },
-  filterStrip: { paddingHorizontal: 12, paddingBottom: 8, maxHeight: 50 },
-  chip: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, marginHorizontal: 4 },
+  headerIcon: {
+    width: 44, height: 44,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  title: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  filterStrip: {
+    maxHeight: 50,
+  },
+  filterStripContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+    gap: 8,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
   chipText: { fontSize: 13, fontWeight: '600' },
-  list: { paddingHorizontal: 12, paddingBottom: 40 },
+  chipDivider: { width: 1, height: 20, marginHorizontal: 4 },
+  chipSmall: {
+    paddingVertical: 5,
+    paddingHorizontal: 11,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  chipSmallText: { fontSize: 12, fontWeight: '600' },
+  advancedFilters: {
+    gap: 4,
+    paddingBottom: 4,
+  },
+  list: {
+    paddingHorizontal: 12,
+    paddingTop: 4,
+    paddingBottom: 40,
+    gap: 8,
+  },
   row: {
-    flexDirection: 'row', alignItems: 'center',
-    padding: 14, borderRadius: 12, borderWidth: 1, marginVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 12,
   },
-  rowMain: { flex: 1, paddingRight: 10 },
-  rowTitle: { fontSize: 15, fontWeight: '700' },
-  rowMeta: { fontSize: 12, marginTop: 4 },
+  thumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 10,
+    borderWidth: 1,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  rowMain: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  rowTitle: { fontSize: 15, fontWeight: '800' },
+  rowMeta: { fontSize: 12, fontWeight: '600' },
+  rowIssue: { fontSize: 12, fontWeight: '700', marginTop: 2 },
+  rowTrailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   sourceBadge: {
-    paddingVertical: 4, paddingHorizontal: 8, borderRadius: 6, borderWidth: 1,
+    paddingVertical: 3,
+    paddingHorizontal: 7,
+    borderRadius: 6,
+    borderWidth: 1,
   },
-  sourceText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  emptyWrap: { padding: 40, alignItems: 'center' },
-  emptyTitle: { fontSize: 18, fontWeight: '800', marginTop: 20 },
-  emptyBody: { fontSize: 14, textAlign: 'center', marginTop: 10, lineHeight: 21 },
-  cta: { marginTop: 24, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12 },
-  ctaText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  sourceText: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  emptyWrap: {
+    padding: 32,
+    paddingTop: 60,
+    alignItems: 'center',
+  },
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: -0.2,
+  },
+  emptyBody: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 21,
+    maxWidth: 280,
+  },
+  cta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    borderRadius: 12,
+  },
+  ctaText: {
+    color: '#0d1a0d',
+    fontWeight: '900',
+    fontSize: 14,
+    letterSpacing: 0.3,
+  },
 });
