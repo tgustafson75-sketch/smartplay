@@ -680,13 +680,22 @@ export default function CaddieTab() {
   // results were never read.
 
   // Derived early so animation effects can reference it.
-  // Phase AB — also gate on voiceState !== 'speaking' so VAD pauses while
+  // 2026-05-16 — Reported at Mariners: active listening was either
+  // hot-mic'd on TV noise (working as designed) OR push-to-talk taps
+  // got no response. Root cause for the no-response side: VAD and
+  // push-to-talk both call Audio.Recording.createAsync; whoever
+  // doesn't own the mic right now silently fails. The old condition
+  // (voiceState !== 'speaking') kept VAD active during 'listening',
+  // 'thinking', and 'responding' — exactly the states where the
+  // other path needs the mic. Now VAD only runs when voiceState
+  // is 'idle' so push-to-talk can take the mic cleanly.
+  // Phase AB — also gate on voiceState === 'idle' so VAD pauses while
   // Kevin is talking. Otherwise VAD picks up Kevin's TTS as user input
   // (and a fast 1.5–2.5s silence after Kevin's last word would trigger an
   // empty submission). VAD restarts naturally once voiceState returns to
   // 'idle' via the useEffect dep on `vadEnabled` in
   // useVoiceActivityDetection.
-  const vadEnabled = autoListenEnabled && isRoundActive && appActive && voiceState !== 'speaking';
+  const vadEnabled = autoListenEnabled && isRoundActive && appActive && voiceState === 'idle';
 
   // ── Keep Vercel warm ────────────────────
   useEffect(() => {

@@ -916,12 +916,24 @@ export const useVoiceCaddie = ({
         micPermissionGranted = true;
       }
 
+      // 2026-05-16 — Flip state to 'listening' BEFORE configuring the
+      // audio session + creating the new Recording. This tells the VAD
+      // hook (whose `enabled` depends on voiceState === 'idle') to
+      // release the mic via its cleanup effect. Without this ordering,
+      // VAD still owns the mic when Audio.Recording.createAsync fires
+      // and the second recording fails silently — exactly Tim's
+      // Mariners report of "tap Kevin / no response" while active
+      // listening was on. The 80ms delay gives React + the VAD
+      // useEffect cleanup time to actually release Audio before we
+      // ask for it.
+      wrappedOnVoiceStateChange('listening');
+      await new Promise<void>(r => setTimeout(r, 80));
+
       await configureAudioForRecording();
 
       const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
 
       recordingRef.current = recording;
-      wrappedOnVoiceStateChange('listening');
       console.log('[voice] recording started');
 
       // Auto-stop after AUTO_STOP_MS
