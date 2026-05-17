@@ -684,20 +684,30 @@ export const useRoundStore = create<RoundState>()(
 
       setCurrentHole: (hole) => {
         const state = get();
+        // 2026-05-16 — Clamp to the course's actual hole count so the
+        // stepper / auto-detection / voice "next hole" can't overshoot
+        // (Tim's Mariners report: tab showed "Hole 10" at a 9-hole
+        // course). Also clamp the low end to 1 in case anything ever
+        // calls setCurrentHole(0) or a negative.
+        const maxHole = state.courseHoles.length > 0 ? state.courseHoles.length : 18;
+        const clamped = Math.max(1, Math.min(hole, maxHole));
+        if (clamped !== hole) {
+          console.log(`[roundStore] setCurrentHole(${hole}) clamped to ${clamped} (course max=${maxHole})`);
+        }
         // Phase B + Phase Q.5b — close out the previous hole's last shot
         // end_location to that hole's green centroid before advancing.
         // Component 3: green now sourced from courseGeometryService (single
         // source of truth) with courseHoles records as legacy fallback.
         const prevHole = state.currentHole;
-        if (prevHole !== hole) {
+        if (prevHole !== clamped) {
           const green = greenForHole(state.activeCourseId, prevHole, state.courseHoles);
           if (green) get().closeHoleEndLocation(prevHole, green);
         }
-        const holeData = state.courseHoles.find(h => h.hole === hole);
-        set({ currentHole: hole, currentYardage: holeData?.distance ?? null });
-        if (prevHole !== hole) {
-          console.log(`[path2:round] hole transition prev=${prevHole} next=${hole}`);
-          console.log(`[audit:round-active] hole-transition prev=${prevHole} next=${hole} yardage=${holeData?.distance ?? 'null'}`);
+        const holeData = state.courseHoles.find(h => h.hole === clamped);
+        set({ currentHole: clamped, currentYardage: holeData?.distance ?? null });
+        if (prevHole !== clamped) {
+          console.log(`[path2:round] hole transition prev=${prevHole} next=${clamped}`);
+          console.log(`[audit:round-active] hole-transition prev=${prevHole} next=${clamped} yardage=${holeData?.distance ?? 'null'}`);
         }
         // Notify holeDetection of manual override so its sustained-position
         // window doesn't immediately race against the user's pick.
