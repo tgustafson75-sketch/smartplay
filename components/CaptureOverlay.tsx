@@ -19,8 +19,11 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Video, ResizeMode } from 'expo-av';
+import * as Sharing from 'expo-sharing';
+import { Ionicons } from '@expo/vector-icons';
 import { useRoundStore } from '../store/roundStore';
 import {
   subscribeCapture,
@@ -62,6 +65,11 @@ export default function CaptureOverlay() {
   const [permission, requestPermission] = useCameraPermissions();
   const [active, setActive] = useState<ActiveCapture | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Post-capture review pane — shows the clip with Share/Done so a
+  // spectator hero-shot can be replayed and sent without leaving the
+  // course view. Highlight kind only; routine "shot" captures still
+  // auto-dismiss to keep the round flow tight.
+  const [review, setReview] = useState<{ uri: string; kind: CaptureKind } | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
@@ -194,6 +202,12 @@ export default function CaptureOverlay() {
             impact_ms: acousticImpactMs,
             impact_confidence: acousticConfidence,
           });
+          // Highlight = hero shot. Hold a review pane open with Share +
+          // Done so Tim can immediately replay for whoever's watching
+          // and text/share the clip without navigating away.
+          if (active.kind === 'highlight' && !cancelled) {
+            setReview({ uri: result.uri, kind: active.kind });
+          }
         } else {
           console.warn('[captureOverlay] recordAsync returned no uri');
         }
@@ -229,6 +243,55 @@ export default function CaptureOverlay() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
+
+  // Post-capture hero-shot review pane.
+  if (review) {
+    return (
+      <View style={styles.overlay} pointerEvents="box-only">
+        <Video
+          source={{ uri: review.uri }}
+          style={styles.camera}
+          resizeMode={ResizeMode.CONTAIN}
+          shouldPlay
+          isLooping
+          useNativeControls={false}
+        />
+        <View style={styles.reviewHeader}>
+          <Text style={styles.reviewTitle}>Hero shot</Text>
+        </View>
+        <View style={styles.reviewActions}>
+          <TouchableOpacity
+            style={styles.reviewBtnSecondary}
+            onPress={() => setReview(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Done — close hero shot review"
+          >
+            <Text style={styles.reviewBtnSecondaryText}>Done</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.reviewBtnPrimary}
+            onPress={async () => {
+              try {
+                const available = await Sharing.isAvailableAsync();
+                if (!available) return;
+                await Sharing.shareAsync(review.uri, {
+                  mimeType: 'video/mp4',
+                  dialogTitle: 'Share hero shot',
+                });
+              } catch (e) {
+                console.warn('[captureOverlay] share failed', e);
+              }
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Share hero shot"
+          >
+            <Ionicons name="share-outline" size={18} color="#000" style={{ marginRight: 6 }} />
+            <Text style={styles.reviewBtnPrimaryText}>Share</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   if (!active) return null;
   // Render only when round-active to avoid mounting CameraView on
@@ -302,5 +365,63 @@ const styles = StyleSheet.create({
     left: '50%',
     marginLeft: -10,
     marginTop: -10,
+  },
+  reviewHeader: {
+    position: 'absolute',
+    top: 60,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  reviewTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  reviewActions: {
+    position: 'absolute',
+    bottom: 36,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    gap: 12,
+  },
+  reviewBtnPrimary: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#22d3ee',
+  },
+  reviewBtnPrimaryText: {
+    color: '#000',
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  reviewBtnSecondary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  reviewBtnSecondaryText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.4,
   },
 });

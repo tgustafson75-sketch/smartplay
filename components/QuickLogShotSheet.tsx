@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useRoundStore, type ShotResult, type ShotLocation } from '../store/roundStore';
 import { getLastFix as getSmartFinderLastFix } from '../services/smartFinderService';
-import { getLastFix as getGpsLastFix } from '../services/gpsManager';
+import { getLastFix as getGpsLastFix, getOneShotFix } from '../services/gpsManager';
 import { track } from '../services/analytics';
 import type { ShotOutcome } from '../types/shot';
 
@@ -52,12 +52,24 @@ const DIRECTIONS: { label: string; value: ShotResult['direction'] }[] = [
   { label: '↷ Right', value: 'right' },
 ];
 
-function snapshotLocation(): ShotLocation | null {
+function snapshotLocation(): { loc: ShotLocation | null; ageMs: number | null; accuracy: number | null } {
   const sf = getSmartFinderLastFix();
-  if (sf) return sf.location;
+  if (sf) {
+    return {
+      loc: sf.location,
+      ageMs: typeof sf.timestamp === 'number' ? Date.now() - sf.timestamp : null,
+      accuracy: sf.accuracy_m ?? null,
+    };
+  }
   const gps = getGpsLastFix();
-  if (gps) return { lat: gps.lat, lng: gps.lng };
-  return null;
+  if (gps) {
+    return {
+      loc: { lat: gps.lat, lng: gps.lng },
+      ageMs: Date.now() - gps.timestamp,
+      accuracy: gps.accuracy_m ?? null,
+    };
+  }
+  return { loc: null, ageMs: null, accuracy: null };
 }
 
 export default function QuickLogShotSheet({ visible, onClose }: Props) {
@@ -65,6 +77,8 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
   const { colors } = useTheme();
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const currentHole = useRoundStore(s => s.currentHole);
+  const courseHolesCount = useRoundStore(s => s.courseHoles.length || 18);
+  const setCurrentHole = useRoundStore(s => s.setCurrentHole);
   const logShot = useRoundStore(s => s.logShot);
   const shotsCount = useRoundStore(s => s.shots.filter(x => (x.hole_number ?? x.hole) === s.currentHole).length);
 
@@ -72,9 +86,35 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
   const [distance, setDistance] = useState('');
   const [outcome, setOutcome] = useState<ShotOutcome>('clean');
   const [direction, setDirection] = useState<ShotResult['direction']>(null);
+  const [holeOverride, setHoleOverride] = useState<number | null>(null);
+  // Pinned location from a manual "Get fresh fix" tap. When set, overrides
+  // the cached gpsManager / smartFinder lastFix at submit time. Useful for
+  // ground-truth marking when riding in a cart (cached fix may be from a
+  // previous waypoint).
+  const [pinnedLoc, setPinnedLoc] = useState<{ loc: ShotLocation; ageMs: 0; accuracy: number | null } | null>(null);
+  const [pinning, setPinning] = useState(false);
+
+  const refreshFix = async () => {
+    if (pinning) return;
+    setPinning(true);
+    try {
+      const fix = await getOneShotFix({ maxAgeMs: 0 });
+      if (fix) {
+        setPinnedLoc({
+          loc: { lat: fix.lat, lng: fix.lng },
+          ageMs: 0,
+          accuracy: fix.accuracy_m ?? null,
+        });
+      }
+    } finally {
+      setPinning(false);
+    }
+  };
 
   const reset = () => {
     setClub(null);
+    setPinnedLoc(null);
+    setHoleOverride(null);
     setDistance('');
     setOutcome('clean');
     setDirection(null);
@@ -83,11 +123,15 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
   const submit = useMemo(() => () => {
     if (!club) return;
     const distNum = distance.trim() ? parseInt(distance, 10) : NaN;
-    const location = snapshotLocation();
+    // Prefer the manually-pinned fix when present; otherwise fall back to
+    // the cached gpsManager / smartFinder lastFix.
+    const location = pinnedLoc ? pinnedLoc.loc : snapshotLocation().loc;
+    const effectiveHole = holeOverride ?? currentHole;
+    if (holeOverride && holeOverride !== currentHole) setCurrentHole(holeOverride);
     const shot: ShotResult = {
       id: `${Date.now()}_tap`,
-      hole: currentHole,
-      hole_number: currentHole,
+      hole: effectiveHole,
+      hole_number: effectiveHole,
       club,
       timestamp: Date.now(),
       feel: null,
@@ -109,10 +153,12 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
       outcome,
       direction,
       had_gps: location != null,
+      manual_fresh_fix: pinnedLoc != null,
+      hole_overridden: holeOverride != null && holeOverride !== currentHole,
     });
     reset();
     onClose();
-  }, [club, distance, outcome, direction, currentHole, shotsCount, logShot, onClose]);
+  }, [club, distance, outcome, direction, currentHole, holeOverride, shotsCount, logShot, onClose, pinnedLoc, setCurrentHole]);
 
   if (!isRoundActive) return null;
 
@@ -127,7 +173,7 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
         >
           <View style={styles.headerRow}>
             <Text style={[styles.title, { color: colors.text_primary }]}>
-              Log shot · hole {currentHole}
+              Log shot · hole {holeOverride ?? currentHole}
             </Text>
             <TouchableOpacity onPress={onClose}>
               <Text style={[styles.cancel, { color: colors.text_muted }]}>Cancel</Text>
@@ -135,7 +181,70 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={[styles.label, { color: colors.text_muted }]}>Club</Text>
+            {/* GPS fix freshness + manual refresh — for ground-truth marking
+                under cart play (cached fix may be from a previous waypoint). */}
+            {(() => {
+              const snap = pinnedLoc ?? snapshotLocation();
+              const ageLabel = pinnedLoc
+                ? 'fresh fix'
+                : snap.ageMs == null ? 'no fix yet'
+                : snap.ageMs < 1000 ? '<1s old'
+                : `${Math.round(snap.ageMs / 1000)}s old`;
+              const accLabel = snap.accuracy != null ? ` · ±${Math.round(snap.accuracy)}m` : '';
+              return (
+                <TouchableOpacity
+                  onPress={refreshFix}
+                  disabled={pinning}
+                  style={[
+                    styles.input,
+                    {
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      borderColor: pinnedLoc ? colors.accent : colors.border,
+                      backgroundColor: colors.background,
+                      opacity: pinning ? 0.6 : 1,
+                      marginTop: 0,
+                    },
+                  ]}
+                >
+                  <Text style={{ color: colors.text_primary, fontSize: 13, fontWeight: '700' }}>
+                    {pinning ? 'Locking…' : pinnedLoc ? '📍 Pinned' : '↺ Use fresh GPS fix'}
+                  </Text>
+                  <Text style={{ color: colors.text_muted, fontSize: 12 }}>
+                    {ageLabel}{accLabel}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })()}
+
+            <Text style={[styles.label, { color: colors.text_muted, marginTop: 12 }]}>Hole</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={[styles.chipRow, { flexWrap: 'nowrap' }]}>
+                {Array.from({ length: courseHolesCount }, (_, i) => i + 1).map(h => {
+                  const active = (holeOverride ?? currentHole) === h;
+                  return (
+                    <TouchableOpacity
+                      key={h}
+                      onPress={() => setHoleOverride(h)}
+                      style={[
+                        styles.chip,
+                        { borderColor: colors.border, minWidth: 38, alignItems: 'center' },
+                        active && { backgroundColor: colors.accent, borderColor: colors.accent },
+                      ]}
+                    >
+                      <Text style={[
+                        styles.chipText,
+                        { color: colors.text_primary, fontWeight: '700' },
+                        active && { color: '#000' },
+                      ]}>{h}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            <Text style={[styles.label, { color: colors.text_muted, marginTop: 12 }]}>Club</Text>
             <View style={styles.chipRow}>
               {CLUBS.map(c => (
                 <TouchableOpacity

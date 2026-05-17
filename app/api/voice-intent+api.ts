@@ -97,6 +97,23 @@ Available intents:
     - "note this: Sunnyvale hole 7 yardage looks wrong" -> { note: "Sunnyvale hole 7 yardage looks wrong" }
     The note should contain the substantive description ONLY — no "log this" / "report a bug" prefix, no caddie name. Pass empty string only if the user said "log this" with nothing after.
 
+11. media_capture — User wants to record a short video clip of the next shot/swing/moment so it can be replayed and shared (hero shot for spectators).
+    parameters: { capture_type: "shot" | "swing" | "highlight", raw_utterance: string }
+    Examples:
+    - "watch this" -> { capture_type: "highlight" }
+    - "check this out" -> { capture_type: "highlight" }
+    - "look at this" -> { capture_type: "highlight" }
+    - "hero shot" -> { capture_type: "highlight" }
+    - "record this shot" / "capture this shot" -> { capture_type: "shot" }
+    - "record my swing" / "record this swing" -> { capture_type: "swing" }
+    Use "highlight" by default for spectator-style "watch this" / "check this out" phrasings — that path opens a replay+share pane after recording.
+
+12. media_playback — User wants to replay / share a previously captured clip.
+    parameters: { playback_action: "open" | "last" }
+    Examples:
+    - "show me last shot" / "play that back" / "replay" -> { playback_action: "last" }
+    - "open video" / "show me my videos" / "pull up videos" -> { playback_action: "open" }
+
 7. unknown — Cannot determine intent.
    parameters: {}
    Set follow_up_question to a brief clarifying question ${caddieName} could ask.
@@ -105,7 +122,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null
