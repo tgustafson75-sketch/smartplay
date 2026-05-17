@@ -149,14 +149,47 @@ export function GlobalToolsMenu() {
   });
 
   const endRoundAction = () => fire(() => {
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-    // 2026-05-16 — endRound returns the just-saved round_id; navigate
-    // to the recap surface so the user sees a post-round summary
-    // instead of nothing happening.
-    const roundId = endRound();
-    useToastStore.getState().show('Round ended');
-    try { router.push(`/recap/${roundId}` as never); }
-    catch (e) { console.log('[tools] recap nav failed', e); }
+    // 2026-05-17 — offer Save vs Discard at end-of-round. Save path
+    // appends to roundHistory + pushes differential + routes to recap.
+    // Discard path resets everything without persisting.
+    Alert.alert(
+      'End round?',
+      'Save the scorecard to your history, or discard everything?',
+      [
+        { text: 'Keep playing', style: 'cancel' },
+        {
+          text: 'Save & end',
+          onPress: () => {
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+            const roundId = endRound();
+            useToastStore.getState().show('Round saved');
+            try { router.push(`/recap/${roundId}` as never); }
+            catch (e) { console.log('[tools] recap nav failed', e); }
+          },
+        },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Discard this round?',
+              'All shots, scores, and plans from this round will be deleted. This cannot be undone.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Discard everything',
+                  style: 'destructive',
+                  onPress: () => {
+                    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+                    useRoundStore.getState().discardRound();
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
   });
 
   const navOrPaywall = (feature: FeatureKey, path: string) => fire(() => {

@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
-import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
 import { useTheme } from '../contexts/ThemeContext';
 import type { ThemeColors } from '../theme/tokens';
 import { getCaddieName, ACTIVE_PERSONAS } from '../lib/persona';
@@ -865,6 +865,41 @@ export default function Settings() {
             </Text>
           </View>
         </View>
+
+        {/* 2026-05-17 — Owner-only Issue Log. Tim asked for a way to
+            voice-capture app feedback during testing ("Kevin, log this:
+            ..."). Surface shown only when the active profile email
+            matches the owner allow-list (isOwnerEmail). Tappable row
+            opens the log viewer at /owner-logs. */}
+        {(() => {
+          try {
+            const profile = usePlayerProfileStore.getState();
+            const showOwner = isOwnerEmail(profile.email);
+            if (!showOwner) return null;
+            return (
+              <>
+                <SectionHeader title="Owner Tools" />
+                <View style={cardStyle}>
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/owner-logs' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="View owner issue log"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Issue Log</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Say &quot;{caddieName}, log this: ...&quot; or &quot;report a bug: ...&quot; to capture feedback.
+                        Tap to review the running log.
+                      </Text>
+                    </View>
+                    <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
+                </View>
+              </>
+            );
+          } catch { return null; }
+        })()}
 
         {/* Reset / Sign Out — until real auth lands, this is the
             functional equivalent for testers who want to start fresh

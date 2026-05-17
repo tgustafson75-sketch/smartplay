@@ -534,6 +534,10 @@ function AppNavigator() {
           name="quick-start"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
+        {/* 2026-05-17 — Owner-only issue log surface. Gated to the
+            owner email inside the screen itself; non-owners see a
+            polite placeholder. Reachable from Settings -> Owner Tools. */}
+        <Stack.Screen name="owner-logs" options={{ headerShown: false }} />
         <Stack.Screen
           name="hole-view"
           options={{ animation: 'slide_from_bottom' }}

@@ -12,6 +12,7 @@ import { clubChangeHandler, clubQueryHandler, clubMenuHandler } from './clubHand
 import { logShotHandler } from './logShotHandler';
 import { mediaCaptureHandler, mediaPlaybackHandler } from './mediaHandlers';
 import { atBallHandler } from './atBallHandler';
+import { logIssueHandler } from './logIssueHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
 
@@ -32,6 +33,7 @@ voiceCommandRouter.registerHandler(logShotHandler);
 voiceCommandRouter.registerHandler(mediaCaptureHandler);
 voiceCommandRouter.registerHandler(mediaPlaybackHandler);
 voiceCommandRouter.registerHandler(atBallHandler);
+voiceCommandRouter.registerHandler(logIssueHandler);
 
 export {
   openToolHandler,
@@ -51,4 +53,5 @@ export {
   mediaCaptureHandler,
   mediaPlaybackHandler,
   atBallHandler,
+  logIssueHandler,
 };

@@ -258,6 +258,15 @@ interface RoundState {
    * recomputes handicap_index when course rating/slope are available.
    */
   endRound: () => string;
+  /**
+   * 2026-05-17 — Discard the active round WITHOUT saving. Resets all
+   * in-round state the same way endRound() does, but does NOT append
+   * to roundHistory, does NOT push a score differential, does NOT
+   * update handicap_index, and does NOT trigger recap generation.
+   * Use when the user started a round by mistake or wants to abandon
+   * a practice / test session that shouldn't count.
+   */
+  discardRound: () => void;
   // Phase AQ — append a synthesized round insight (rolling 10).
   addRoundInsight: (round_id: string, course: string, insight: string) => void;
   /** Phase R — capture a memory photo at the current hole during an active round. */
@@ -501,6 +510,55 @@ export const useRoundStore = create<RoundState>()(
             console.log('[audit:round-active] GPS + shot detection orchestrated start complete');
           } catch (e) {
             console.log('[roundStore] round-start orchestration failed (non-fatal):', e);
+          }
+        })();
+      },
+
+      // 2026-05-17 — Discard the in-flight round without saving anything.
+      // Same state reset as endRound's success path, but no roundHistory
+      // append, no differential push, no recap generation, no toast.
+      // Tim's "End and Delete Round" path — for accidental starts or
+      // practice sessions that shouldn't count toward his record.
+      discardRound: () => {
+        const s = get();
+        console.log(`[roundStore] discardRound — abandoning ${s.currentRoundId ?? 'unknown'}`);
+        set({
+          isRoundActive: false,
+          currentHole: 1,
+          currentYardage: null,
+          activeCourse: null,
+          activeCourseId: null,
+          courseHoles: [],
+          scores: {},
+          putts: {},
+          penalties: {},
+          shots: [],
+          holeStats: [],
+          plans: [],
+          currentRoundPhotos: [],
+          emotionalLog: [],
+          pendingLieAnalysis: null,
+          selectedTee: 'unspecified',
+          nineHoleMode: false,
+          isCompetition: false,
+          roundNotes: '',
+          goal: null,
+          mode: 'free_play' as RoundMode,
+          currentRoundId: null,
+          roundStartTime: null,
+        });
+        try {
+          const toast = require('./toastStore');
+          toast.useToastStore.getState().show('Round discarded — nothing saved.');
+        } catch { /* non-fatal */ }
+        // Same orchestrated teardown as endRound (GPS / shot detection /
+        // hole detection). Fire-and-forget on its own microtask.
+        void (async () => {
+          try {
+            const { shotDetectionService } = await import('../services/shotDetectionService');
+            shotDetectionService.stop();
+          } catch (e) {
+            console.log('[roundStore] discard teardown failed (non-fatal):', e);
           }
         })();
       },

@@ -87,6 +87,16 @@ Available intents:
    parameters: {}
    Examples: "${caddieName} come back", "${caddieName} speak up", "${caddieName} talk to me", "${caddieName} un-quiet", "back to normal"
 
+10. log_issue — User (Tim, in his owner-tester role) wants to capture a bug / feedback / observation about the app itself for later review. Triggered by wake phrases that mean "save this note for me". The descriptive note follows the wake phrase.
+    parameters: { note: string — the actual issue/feedback text with the wake phrase already stripped }
+    Examples:
+    - "${caddieName} log this — the recap screen is slow" -> { note: "the recap screen is slow" }
+    - "log an issue: SmartFinder white-screened at 10x" -> { note: "SmartFinder white-screened at 10x" }
+    - "I have feedback about the active listening pill — it covered the brand row" -> { note: "active listening pill covered the brand row" }
+    - "report a bug — Tank cut me off mid-sentence" -> { note: "Tank cut me off mid-sentence" }
+    - "note this: Sunnyvale hole 7 yardage looks wrong" -> { note: "Sunnyvale hole 7 yardage looks wrong" }
+    The note should contain the substantive description ONLY — no "log this" / "report a bug" prefix, no caddie name. Pass empty string only if the user said "log this" with nothing after.
+
 7. unknown — Cannot determine intent.
    parameters: {}
    Set follow_up_question to a brief clarifying question ${caddieName} could ask.
@@ -95,7 +105,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null

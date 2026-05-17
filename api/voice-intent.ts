@@ -129,6 +129,16 @@ Available intents:
    parameters: {}
    Examples: "${caddieName} come back", "${caddieName} speak up", "${caddieName} talk to me", "${caddieName} un-quiet", "back to normal"
 
+20. log_issue — Owner-tester capture of a bug / feedback / observation for later review. The note text is the substantive description with the wake phrase stripped.
+   parameters: { note: string }
+   Examples:
+   - "${caddieName} log this — recap is slow" -> { note: "recap is slow" }
+   - "log an issue: SmartFinder white-screened at 10x" -> { note: "SmartFinder white-screened at 10x" }
+   - "I have feedback — active listening pill covers the brand row" -> { note: "active listening pill covers the brand row" }
+   - "report a bug — Tank cut me off mid-sentence" -> { note: "Tank cut me off mid-sentence" }
+   - "note this: Sunnyvale hole 7 yardage looks wrong" -> { note: "Sunnyvale hole 7 yardage looks wrong" }
+   Trigger phrases: "log this", "log an issue", "log a bug", "report a bug", "I have feedback", "note this", "save this note", "make a note". Always followed by the description.
+
 12. in_round_diagnostic — User is mid-round and asking ${caddieName} to REASON about a multi-shot pattern. Distinct from a tactical question ("what club here?") because it asks WHY something is happening across multiple shots / clubs / patterns.
    parameters: { pattern_text: string, wants_card?: boolean }
    Trigger requires BOTH:
@@ -218,7 +228,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "media_capture" | "media_playback" | "at_my_ball" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null

@@ -170,6 +170,7 @@ export default function PlayTab() {
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const activeCourse = useRoundStore(s => s.activeCourse);
   const endRound = useRoundStore(s => s.endRound);
+  const discardRound = useRoundStore(s => s.discardRound);
   const homeCourse = usePlayerProfileStore(s => s.homeCourse);
 
   // Pre-beta — legacy round factors restored to the Play tab so the user
@@ -593,18 +594,33 @@ export default function PlayTab() {
               onPress={() => {
                 Alert.alert(
                   'End round?',
-                  'Your scorecard saves to history. Anything in progress this hole will be finalized.',
+                  'Save the scorecard to your history (updates handicap), or discard everything and start fresh.',
                   [
                     { text: 'Keep playing', style: 'cancel' },
-                    { text: 'End round', style: 'destructive', onPress: () => {
-                      // 2026-05-16 — endRound now returns the just-saved
-                      // round_id; auto-route to /recap/<id> so the user
-                      // lands on the post-round summary instead of being
-                      // dropped on a quiet Play tab with no feedback.
-                      const roundId = endRound();
-                      try { router.push(`/recap/${roundId}` as never); }
-                      catch (e) { console.log('[play] recap nav failed', e); }
-                    } },
+                    {
+                      text: 'Save & end',
+                      onPress: () => {
+                        const roundId = endRound();
+                        try { router.push(`/recap/${roundId}` as never); }
+                        catch (e) { console.log('[play] recap nav failed', e); }
+                      },
+                    },
+                    {
+                      text: 'Discard',
+                      style: 'destructive',
+                      onPress: () => {
+                        // 2026-05-17 — confirm-twice on destructive so a
+                        // misfire doesn't nuke a round in progress.
+                        Alert.alert(
+                          'Discard this round?',
+                          'All shots, scores, and plans from this round will be deleted. This cannot be undone.',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Discard everything', style: 'destructive', onPress: () => { discardRound(); } },
+                          ],
+                        );
+                      },
+                    },
                   ],
                 );
               }}
