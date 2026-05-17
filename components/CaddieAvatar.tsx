@@ -107,35 +107,46 @@ const HARRY_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
   kevin_self_critical: require('../assets/avatars/harry_moods_downcast.png'),
 };
 
-// Tank counterparts. Refreshed with Tim's "tank_v2_*" set — personality-
-// rich Marine-flavored portraits (Encouraging, Lets go Marine, Semper Fi,
-// wtf, you got this, etc) mapped to the closest avatar slot. Slots that
-// don't have a matching v2 image fall back to the original tank_emotions_*
-// set for coverage. To upgrade further, drop a tank_v2_<emotion>.png into
-// assets/avatars/ and point the slot below at it.
+// Tank counterparts. 2026-05-16 — fully migrated to the clean tank_v2_*
+// set. The legacy tank_emotions_*.png and tank_expressive_*.png images
+// have a text label baked into the bottom of the image itself ("Relief",
+// "Facepalm", "Confusion" etc) — Tim reported them visible on Caddie tab
+// while testing with Tank as the active persona. The v2 set has no
+// baked-in labels, so this map now exclusively uses v2. Some emotion
+// slots reuse the same v2 image because we have 22 emotion keys but
+// only ~11 v2 portraits; that's fine — the slot mapping is best-fit by
+// character feel, not 1:1 unique imagery.
 const TANK_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
-  kevin_course:        require('../assets/avatars/tank_v2_portrait.png'),       // primary portrait — v2
-  kevin_dark:          require('../assets/avatars/tank_v2_lets_go_marine.png'), // intense Marine cadence
-  kevin_nod:           require('../assets/avatars/tank_v2_here_we_go.png'),     // ready-to-roll affirmation
-  kevin_idle:          require('../assets/avatars/tank_v2_here_we_go.png'),     // attentive idle
-  kevin_listening:     require('../assets/avatars/tank_expressive_thinking.png'), // v1 fallback (no v2 thinking pose)
-  kevin_explaining:    require('../assets/avatars/tank_v2_you_got_this.png'),   // mentor "you got this" gesture
-  kevin_focused:       require('../assets/avatars/tank_v2_lets_go_marine.png'), // shares with kevin_dark — intense
-  kevin_determined:    require('../assets/avatars/tank_v2_lets_go.png'),        // "Lets Go" — full determination
-  kevin_pensive:       require('../assets/avatars/tank_expressive_contemplative.png'), // v1 fallback (no v2 contemplative)
-  kevin_inquisitive:   require('../assets/avatars/tank_v2_questioning.png'),    // explicitly questioning
-  kevin_mentorship:    require('../assets/avatars/tank_v2_you_got_this.png'),   // mentor reassurance
-  kevin_humble:        require('../assets/avatars/tank_emotions_relief.png'),   // v1 fallback (no v2 relief)
-  kevin_supportive:    require('../assets/avatars/tank_v2_encouraging.png'),    // "Encouraging" portrait
+  kevin_course:        require('../assets/avatars/tank_v2_portrait.png'),
+  kevin_dark:          require('../assets/avatars/tank_v2_lets_go_marine.png'),
+  kevin_nod:           require('../assets/avatars/tank_v2_here_we_go.png'),
+  kevin_idle:          require('../assets/avatars/tank_v2_here_we_go.png'),
+  // Listening / pensive both read as "attentive default" — the
+  // neutral portrait is the most honest Tank-listening pose.
+  kevin_listening:     require('../assets/avatars/tank_v2_portrait.png'),
+  kevin_explaining:    require('../assets/avatars/tank_v2_you_got_this.png'),
+  kevin_focused:       require('../assets/avatars/tank_v2_lets_go_marine.png'),
+  kevin_determined:    require('../assets/avatars/tank_v2_lets_go.png'),
+  kevin_pensive:       require('../assets/avatars/tank_v2_portrait.png'),
+  kevin_inquisitive:   require('../assets/avatars/tank_v2_questioning.png'),
+  kevin_mentorship:    require('../assets/avatars/tank_v2_you_got_this.png'),
+  // Humble — softer mentor moment. "You got this" carries it without
+  // any v1 fallback. Could also use encouraging; you-got-this is more
+  // post-good-shot acknowledgment, which fits humble's vibe.
+  kevin_humble:        require('../assets/avatars/tank_v2_you_got_this.png'),
+  kevin_supportive:    require('../assets/avatars/tank_v2_encouraging.png'),
   kevin_happy:         require('../assets/avatars/tank_v2_happy.png'),
   kevin_enthusiastic:  require('../assets/avatars/tank_v2_excited.png'),
-  kevin_surprised:     require('../assets/avatars/tank_v2_wtf.png'),            // "wtf" reads as surprised
-  kevin_celebrating:   require('../assets/avatars/tank_v2_semper_fi.png'),      // Marine pride moment
-  kevin_confident:     require('../assets/avatars/tank_v2_semper_fi.png'),      // shares with celebrating — pride
-  kevin_gameface:      require('../assets/avatars/tank_v2_lets_go.png'),        // shares with determined
-  kevin_curious:       require('../assets/avatars/tank_v2_questioning.png'),    // shares with inquisitive
-  kevin_wincing:       require('../assets/avatars/tank_emotions_frustration.png'), // v1 fallback (no v2 frustration)
-  kevin_self_critical: require('../assets/avatars/tank_expressive_facepalm.png'), // v1 fallback (no v2 facepalm)
+  kevin_surprised:     require('../assets/avatars/tank_v2_wtf.png'),
+  kevin_celebrating:   require('../assets/avatars/tank_v2_semper_fi.png'),
+  kevin_confident:     require('../assets/avatars/tank_v2_semper_fi.png'),
+  kevin_gameface:      require('../assets/avatars/tank_v2_lets_go.png'),
+  kevin_curious:       require('../assets/avatars/tank_v2_questioning.png'),
+  // Wincing + self-critical — "wtf" reads as the displeased reaction
+  // beat without a labeled bottom strip. Both share for now; if Tim
+  // wants a distinct self-critical pose later we can add a v2 image.
+  kevin_wincing:       require('../assets/avatars/tank_v2_wtf.png'),
+  kevin_self_critical: require('../assets/avatars/tank_v2_wtf.png'),
 };
 
 type Persona = 'kevin' | 'serena' | 'harry' | 'tank';
