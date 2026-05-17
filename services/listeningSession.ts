@@ -1,5 +1,5 @@
 import { Linking } from 'react-native';
-import { speak, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture } from './voiceService';
+import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture } from './voiceService';
 import { getDialog } from './dialogEngine';
 import { getTrustLevel } from './trustLevelService';
 import { useRoundStore } from '../store/roundStore';
@@ -344,12 +344,23 @@ async function openSession() {
               }),
             });
             if (chatRes.ok) {
-              const chatJson = await chatRes.json();
-              const reply = typeof chatJson?.response === 'string' ? chatJson.response : null;
+              const chatJson = await chatRes.json() as { text?: string; audioBase64?: string | null };
+              // /api/kevin returns { text, audioBase64, toolAction } — not
+              // { response }. The earlier shape mismatch silently dropped
+              // every small-talk fallback ("hey Tank, how are you") through
+              // the listening pill. Prefer the audioBase64 path so the
+              // user hears the canonical persona voice when present.
+              const reply = typeof chatJson?.text === 'string' ? chatJson.text : null;
+              const replyAudio = typeof chatJson?.audioBase64 === 'string' ? chatJson.audioBase64 : null;
               if (reply) {
                 await stopSpeaking().catch(() => {});
-                await speak(reply, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
-                  .catch((e) => console.log('[listeningSession] chat fallback speak failed', e));
+                if (replyAudio) {
+                  await speakFromBase64(replyAudio, { userInitiated: true })
+                    .catch((e) => console.log('[listeningSession] chat fallback speakFromBase64 failed', e));
+                } else {
+                  await speak(reply, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
+                    .catch((e) => console.log('[listeningSession] chat fallback speak failed', e));
+                }
               }
             }
           } catch (e) {

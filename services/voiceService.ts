@@ -414,7 +414,20 @@ export const playLocalFile = async (
     await Promise.race([
       new Promise<void>((resolve) => {
         sound.setOnPlaybackStatusUpdate((s) => {
-          if (!s.isLoaded) return;
+          // Sound externally unloaded (typically by stopSpeaking() to
+          // make room for the real response). Resolve immediately so the
+          // serialized speak-queue can advance to the next body instead
+          // of waiting for the full clip-duration timeout below — that
+          // wait was producing up-to-5s of perceived dead air between
+          // filler and the real reply.
+          if (!s.isLoaded) {
+            if (myId === currentSpeechId) {
+              currentSound = null;
+              notifySpeaking(false);
+            }
+            resolve();
+            return;
+          }
           if (s.didJustFinish) {
             sound.unloadAsync().catch(() => {});
             if (myId === currentSpeechId) {
@@ -512,7 +525,16 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
     await Promise.race([
       new Promise<void>((resolve) => {
         sound.setOnPlaybackStatusUpdate((s) => {
-          if (!s.isLoaded) return;
+          if (!s.isLoaded) {
+            // Externally unloaded (stopSpeaking) — release the queue.
+            try { audioFile.delete(); } catch {}
+            if (myId === currentSpeechId) {
+              currentSound = null;
+              notifySpeaking(false);
+            }
+            resolve();
+            return;
+          }
           if (s.didJustFinish) {
             sound.unloadAsync().catch(() => {});
             try { audioFile.delete(); } catch {}
@@ -647,7 +669,17 @@ export const speak = async (
     await Promise.race([
       new Promise<void>((resolve) => {
         sound.setOnPlaybackStatusUpdate((status) => {
-          if (!status.isLoaded) return;
+          if (!status.isLoaded) {
+            // Externally unloaded (stopSpeaking) — release the queue.
+            try { audioFile.delete(); } catch {}
+            if (myId === currentSpeechId) {
+              currentSound = null;
+              notifySpeaking(false);
+              notifyCaption(null);
+            }
+            resolve();
+            return;
+          }
           if (status.didJustFinish) {
             sound.unloadAsync().catch(() => {});
             try { audioFile.delete(); } catch {}
