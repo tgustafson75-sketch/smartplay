@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ImageBackground, Image, StyleSheet } from 'react-native';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
 import { useRoundStore } from '../../store/roundStore';
+import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { getHoleGeometry, fetchCourseGeometry, type HoleGeometry } from '../../services/courseGeometryService';
 import { refreshFix, getLastFix } from '../../services/smartFinderService';
 import { haversineYards, projectToAxis } from '../../utils/geoDistance';
@@ -45,6 +46,29 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   const currentHole = useRoundStore(s => s.currentHole);
   const activeCourseId = useRoundStore(s => s.activeCourseId);
   const activeCourse = useRoundStore(s => s.activeCourse);
+  // 2026-05-17 — pre-round planning context. When there's no active
+  // round but the user has picked a course on the Play tab (sets
+  // pendingStartCourseId) or has a home course set, use that course's
+  // hole 1 imagery in the L1 preview AND drop the "Start a round to
+  // see your hole" gate. Tim's point: "we have save in the upper right
+  // corner... I wanted to be able to see the whole view images to
+  // preplan around using the measuring tool. Right now, pre round,
+  // it's just green screens."
+  const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
+  const homeCourseName = usePlayerProfileStore(s => s.homeCourse);
+  // For preview, derive a course label that getLocalHoleImage can
+  // resolve. activeCourse (when set) wins; else use a friendly name
+  // derived from pendingStartCourseId; else homeCourse.
+  const previewCourseLabel: string | null = (() => {
+    if (activeCourse) return activeCourse;
+    if (pendingStartCourseId) {
+      if (pendingStartCourseId.startsWith('local:')) {
+        return pendingStartCourseId.slice('local:'.length).replace(/-/g, ' ');
+      }
+      return pendingStartCourseId;
+    }
+    return homeCourseName;
+  })();
 
   const [geometry, setGeometry] = useState<HoleGeometry | null>(null);
   const [, setTick] = useState(0);
@@ -90,18 +114,24 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
 
   const wrapDims = { width: W, height: H };
 
-  // Default preview when no active round — show Tim's home course (Palms)
-  // hole 1 image so the SmartVision card is never empty/green.
+  // 2026-05-17 — Pre-round path. Show the selected/planned course's
+  // hole 1 imagery if available (so the user can tap into SmartVision
+  // and pre-plan with the measuring tool), otherwise fall back to the
+  // default preview. The "Start a round to see your hole" copy is
+  // replaced with "Tap to plan" — Tim's preplanning workflow.
   if (!isRoundActive) {
+    const previewImg = previewCourseLabel ? getLocalHoleImage(previewCourseLabel, 1) : null;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const defaultImg = require('../../data/localCourseImages').getDefaultPreviewImage();
+    const defaultImg = previewImg ?? require('../../data/localCourseImages').getDefaultPreviewImage();
     if (defaultImg) {
       return (
         <SmartVisionTap>
           <ImageBackground source={defaultImg} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
             <View style={styles.imageOverlay}>
               <Text style={styles.imageHoleLabel}>SMARTVISION</Text>
-              <Text style={styles.placeholderSubLight}>Start a round to see your hole.</Text>
+              <Text style={styles.placeholderSubLight}>
+                {previewImg ? 'Tap to plan this hole.' : 'Pick a course to plan.'}
+              </Text>
             </View>
           </ImageBackground>
         </SmartVisionTap>
@@ -111,7 +141,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
       <SmartVisionTap>
         <View style={[styles.wrap, wrapDims, styles.placeholder]}>
           <Text style={styles.placeholderText}>SMARTVISION</Text>
-          <Text style={styles.placeholderSub}>Start a round to see the hole.</Text>
+          <Text style={styles.placeholderSub}>Pick a course on the Play tab to plan.</Text>
         </View>
       </SmartVisionTap>
     );

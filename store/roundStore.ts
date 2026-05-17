@@ -378,11 +378,21 @@ export const useRoundStore = create<RoundState>()(
           ? [courseId, ...prev.recentCourseIds.filter(id => id !== courseId)].slice(0, 5)
           : prev.recentCourseIds;
         const roundId = Date.now().toString();
+        // 2026-05-17 — preserve any pre-round plans the user saved for
+        // THIS course's holes. Plans for other courses are dropped at
+        // round start (they belong to a different course context). Each
+        // surviving plan gets re-keyed to the new round_id so the recap
+        // pipeline associates them with this round's shots correctly.
+        const carriedPlans = courseId
+          ? prev.plans
+              .filter(p => p.course_id === courseId)
+              .map(p => ({ ...p, round_id: roundId }))
+          : [];
         set({
           isRoundActive: true,
           mode: options.mode ?? 'free_play',
           currentRoundId: roundId,
-          plans: [],
+          plans: carriedPlans,
           activeCourse: course,
           activeCourseId: courseId,
           recentCourseIds: updatedRecent,
@@ -510,10 +520,17 @@ export const useRoundStore = create<RoundState>()(
             ),
           }));
         } else {
+          // 2026-05-17 — course_id fallback chain: active round id ->
+          // pending start course (pre-round planning) -> 'local' sentinel.
+          // Without the pending fallback, every pre-round plan got
+          // tagged 'local' and couldn't be filtered back to the right
+          // course when startRound fires.
+          const effectiveCourseId =
+            state.activeCourseId ?? state.pendingStartCourseId ?? 'local';
           const newPlan: HolePlan = {
             id: Date.now().toString() + '_h' + partial.hole_number,
             round_id: state.currentRoundId ?? 'unknown',
-            course_id: state.activeCourseId ?? 'local',
+            course_id: effectiveCourseId,
             hole_number: partial.hole_number,
             player_id: 'primary',
             created_at: Date.now(),
