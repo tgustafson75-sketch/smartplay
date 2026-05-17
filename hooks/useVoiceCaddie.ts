@@ -685,35 +685,19 @@ export const useVoiceCaddie = ({
       console.log('[voice] transcript:', transcript);
 
       if (!transcript.trim()) {
-        // VAD-triggered silent capture is a non-event (cart partner cleared
-        // throat etc.) — silently return without prompting. Manual mic-tap
-        // silence still warrants the "try again closer" feedback so the
-        // user knows the tap registered.
-        if (source === 'vad') {
-          wrappedOnVoiceStateChange('idle');
-          isProcessingRef.current = false;
-          return;
-        }
+        // Silent / unintelligible audio. Common when the mic was too
+        // far away or background noise drowned the user out. Tell them
+        // so they know to try again louder/closer.
         onResponseReceived("Didn't catch that — try once more, a bit closer to the mic.");
         wrappedOnVoiceStateChange('idle');
         isProcessingRef.current = false;
         return;
       }
-
-      // Wake-word gate for VAD-captured speech. Active Listening fires on
-      // ANY speech above the noise floor (cart partner, spectator, you
-      // talking to your group). Without this gate the caddie would try to
-      // respond to all of it. Manual mic-tap is exempt — intent was
-      // explicit. Tank/Kevin/Serena/Harry/"caddie" all count as wake words.
-      if (source === 'vad') {
-        const wakeRe = /\b(tank|kevin|serena|harry|caddie|caddy)\b/i;
-        if (!wakeRe.test(transcript)) {
-          console.log('[voice] vad-utterance dropped (no wake word):', transcript);
-          wrappedOnVoiceStateChange('idle');
-          isProcessingRef.current = false;
-          return;
-        }
-      }
+      // Note: source-based wake-word filtering removed 2026-05-17 after
+      // breaking conversational requests like "how are you" that don't
+      // include a caddie name. Spectator-noise filtering returns as an
+      // opt-in setting in a follow-up rather than default-on behavior.
+      void source;
 
       // Phase AR — record user turn into the conversation buffer so any
       // follow-up reply that flows out of this query has the prior turn
