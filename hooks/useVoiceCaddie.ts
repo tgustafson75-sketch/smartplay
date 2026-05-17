@@ -828,6 +828,12 @@ export const useVoiceCaddie = ({
       // available as conversational antecedent.
       recordKevinTurn(kevinResponse.text);
       wrappedOnVoiceStateChange('speaking');
+      // Cancel any still-playing / queued filler so the user doesn't hear
+      // the bridge phrase ("Okay, let me think about that...") in full
+      // before the real answer. stopSpeaking() bumps the speak-queue
+      // generation, which both stops the currently-playing clip and
+      // causes any queued not-yet-running bodies to skip.
+      await stopSpeaking();
       if (kevinResponse.audioBase64 && voiceEnabled && !discreteMode) {
         // Phase V.7+ — user-initiated reply, plays at L1 too.
         await speakFromBase64(kevinResponse.audioBase64, { userInitiated: true });

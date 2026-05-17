@@ -438,13 +438,13 @@ export default function CourseDetailScreen() {
           mode (visual "overlap" reported in user testing). */}
       <View style={[styles.ctaBar, { backgroundColor: colors.background, borderTopColor: colors.border, paddingBottom: 12 + insets.bottom }]}>
         <TouchableOpacity
-          style={[styles.cta, styles.ctaBook]}
+          style={[styles.cta, { backgroundColor: colors.surface_elevated, borderWidth: 1, borderColor: colors.border }]}
           onPress={handleBookTeeTime}
           accessibilityRole="button"
           accessibilityLabel="Book a tee time at this course"
         >
-          <Ionicons name="calendar-outline" size={16} color="#F5A623" style={{ marginRight: 6 }} />
-          <Text style={styles.ctaBookText}>Book Tee Time</Text>
+          <Ionicons name="calendar-outline" size={16} color={colors.text_primary} style={{ marginRight: 6 }} />
+          <Text style={[styles.ctaBookText, { color: colors.text_primary }]}>Book Tee Time</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.cta, styles.ctaStart]}
@@ -555,8 +555,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: '#1e3a28',
   },
   cta: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', overflow: 'hidden' },
-  ctaBook: { backgroundColor: '#3a2a08', borderWidth: 1, borderColor: '#F5A623' },
-  ctaBookText: { color: '#F5A623', fontSize: 14, fontWeight: '800' },
+  ctaBookText: { fontSize: 14, fontWeight: '800' },
   // Match the Book Tee Time sibling: solid fill + a 1px outline of the
   // same color so the rounded edge stays crisp on light surfaces and the
   // two CTAs visually align. Without the border, the teal fill on a

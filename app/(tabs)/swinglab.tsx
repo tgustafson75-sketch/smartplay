@@ -34,16 +34,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 
-type Status = 'LIVE' | 'BETA' | 'SOON';
-
 interface LauncherCardSpec {
   key: string;
   icon: React.ComponentProps<typeof Ionicons>['name'];
   title: string;
-  status: Status;
   sub: string;
-  /** Route to push on tap. null = non-navigable (status SOON). */
-  route: string | null;
+  /** Route to push on tap. */
+  route: string;
 }
 
 const CARDS: LauncherCardSpec[] = [
@@ -51,18 +48,13 @@ const CARDS: LauncherCardSpec[] = [
     key: 'drills',
     icon: 'library-outline',
     title: 'Drills',
-    status: 'LIVE',
     sub: 'Primary Issue · Common Faults · pro instructor videos',
-    // Diagnostic catalog (v3-style — issue → fix mapping).
-    // Pro's prior prescriptive drills are still reachable at
-    // /swinglab/drills-legacy if a power user wants them.
     route: '/drills',
   },
   {
     key: 'range',
     icon: 'videocam-outline',
     title: 'Range Mode',
-    status: 'BETA',
     sub: 'Multi-shot session: range, studio, or backyard cage',
     route: '/swinglab/range',
   },
@@ -70,28 +62,20 @@ const CARDS: LauncherCardSpec[] = [
     key: 'smartmotion',
     icon: 'camera-outline',
     title: 'SmartMotion',
-    status: 'BETA',
     sub: 'Single-swing video + audio narration',
-    // Routes through the Camera Setup gate first; user proceeds to
-    // the actual capture (cage-drill) after the 5-item checklist passes.
     route: '/swinglab/camera-setup?next=%2Fswinglab%2Fcage-drill',
   },
   {
     key: 'arena',
     icon: 'trophy-outline',
     title: 'Arena',
-    status: 'LIVE',
     sub: 'Bag distances · tempo trainer · putting clock',
-    // v3-style practice-drills launcher. Pro's gameplay challenges
-    // (CTP / Scramble / Sim / Skills) are still reachable via the
-    // "Open Arena →" footer link on the practice screen.
     route: '/arena/practice',
   },
   {
     key: 'library',
     icon: 'albums-outline',
     title: 'Swing Library',
-    status: 'BETA',
     sub: 'Captured swings, uploads from camera roll',
     route: '/swinglab/library',
   },
@@ -99,7 +83,6 @@ const CARDS: LauncherCardSpec[] = [
     key: 'acoustic',
     icon: 'pulse-outline',
     title: 'Acoustic Test Bench',
-    status: 'BETA',
     sub: 'Validate strike-detection pipeline before the range',
     route: '/acoustic-test',
   },
@@ -139,29 +122,17 @@ interface LauncherCardProps {
 }
 
 function LauncherCard({ spec, colors, onPress }: LauncherCardProps) {
-  const disabled = spec.route == null;
-  const statusColor =
-    spec.status === 'LIVE' ? colors.accent
-    : spec.status === 'BETA' ? '#F0C030'
-    : colors.text_muted;
-  const statusBg =
-    spec.status === 'LIVE' ? colors.accent_muted
-    : spec.status === 'BETA' ? 'rgba(240,192,48,0.12)'
-    : 'rgba(156,163,175,0.10)';
-
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={`${spec.title}. ${spec.sub}`}
-      accessibilityState={{ disabled }}
       style={({ pressed }) => [
         styles.card,
         {
           backgroundColor: colors.surface_elevated,
           borderColor: colors.border,
-          opacity: disabled ? 0.6 : pressed ? 0.85 : 1,
+          opacity: pressed ? 0.85 : 1,
         },
       ]}
     >
@@ -169,19 +140,12 @@ function LauncherCard({ spec, colors, onPress }: LauncherCardProps) {
         <Ionicons name={spec.icon} size={26} color={colors.accent} />
       </View>
       <View style={styles.cardText}>
-        <View style={styles.cardTitleRow}>
-          <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{spec.title}</Text>
-          <View style={[styles.statusPill, { backgroundColor: statusBg, borderColor: statusColor }]}>
-            <Text style={[styles.statusPillText, { color: statusColor }]}>{spec.status}</Text>
-          </View>
-        </View>
+        <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{spec.title}</Text>
         <Text style={[styles.cardSub, { color: colors.text_muted }]} numberOfLines={2}>
           {spec.sub}
         </Text>
       </View>
-      {!disabled && (
-        <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
-      )}
+      <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
     </Pressable>
   );
 }
@@ -232,19 +196,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardText: { flex: 1, minWidth: 0 },
-  cardTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 4,
-  },
-  cardTitle: { fontSize: 17, fontWeight: '800' },
-  statusPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  statusPillText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
+  cardTitle: { fontSize: 17, fontWeight: '800', marginBottom: 4 },
   cardSub: { fontSize: 12, lineHeight: 17 },
 });

@@ -50,30 +50,24 @@ export default function HolePhotosGrid({ photos }: Props) {
             key={p.hole_number}
             style={[
               styles.cell,
-              { width: cellW, height: cellH, backgroundColor: colors.surface, borderColor: colors.border },
+              { width: cellW, height: cellH, borderColor: colors.border },
             ]}
             onPress={() => setActiveIdx(i)}
             activeOpacity={0.85}
           >
             {p.palmsImage ? (
               <Image source={p.palmsImage} style={StyleSheet.absoluteFill} resizeMode="cover" />
-            ) : (
+            ) : p.url ? (
               <Image source={{ uri: p.url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-            )}
-            {/* Phase 405b — yardage overlay matching the v3 reference.
-                Centered, white, with a heavy text shadow so it reads on
-                any aerial. Only renders when yardage > 0 (we have a
-                real number to show). */}
-            {p.yardage != null && p.yardage > 0 && (
-              <View style={styles.yardageOverlay} pointerEvents="none">
-                <Text style={styles.yardageOverlayText}>{p.yardage}</Text>
-              </View>
-            )}
-            {/* Hole-number badge — circular dark chip in bottom-left
-                matching the v3 reference. */}
+            ) : null}
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{p.hole_number}</Text>
             </View>
+            {p.yardage != null && p.yardage > 0 && (
+              <View style={styles.yardageChip} pointerEvents="none">
+                <Text style={styles.yardageChipText}>{p.yardage}y</Text>
+              </View>
+            )}
           </TouchableOpacity>
         ))}
       </View>
@@ -83,10 +77,16 @@ export default function HolePhotosGrid({ photos }: Props) {
           <FlatList
             horizontal
             pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            snapToInterval={width}
+            snapToAlignment="start"
+            decelerationRate="fast"
+            disableIntervalMomentum
             data={photos}
             keyExtractor={p => String(p.hole_number)}
             initialScrollIndex={activeIdx ?? 0}
             getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
+            style={{ width }}
             renderItem={({ item }) => (
               <View style={[styles.viewerSlide, { width }]}>
                 {item.palmsImage ? (
@@ -143,22 +143,20 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,200,150,0.4)',
   },
   badgeText: { color: '#ffffff', fontSize: 11, fontWeight: '800' },
-  // Phase 405b — yardage centered overlay. White with strong text
-  // shadow so it reads over any aerial composition. Large enough to
-  // scan from the grid without zooming in.
-  yardageOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
+  yardageChip: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.72)',
   },
-  yardageOverlayText: {
+  yardageChipText: {
     color: '#ffffff',
-    fontSize: 30,
+    fontSize: 11,
     fontWeight: '800',
-    letterSpacing: -0.5,
-    textShadowColor: 'rgba(0,0,0,0.85)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
+    letterSpacing: 0.2,
   },
   placeholderWrap: {
     marginHorizontal: 16,

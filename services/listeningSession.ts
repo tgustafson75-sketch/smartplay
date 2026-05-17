@@ -288,6 +288,7 @@ async function openSession() {
         if (r.ok) {
           const j = await r.json() as { text?: string; audioBase64?: string };
           if (j.text && ttsAllowed) {
+            await stopSpeaking().catch(() => {});
             await speak(j.text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true });
           }
           // If user wanted card, push to the new diagnostic-card screen
@@ -325,6 +326,7 @@ async function openSession() {
       await fillerP;
       if (responseAllowed) {
         if (intent.follow_up_question) {
+          await stopSpeaking().catch(() => {});
           await speak(intent.follow_up_question, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
             .catch((e) => console.log('[listeningSession] follow_up speak failed', e));
         } else {
@@ -345,6 +347,7 @@ async function openSession() {
               const chatJson = await chatRes.json();
               const reply = typeof chatJson?.response === 'string' ? chatJson.response : null;
               if (reply) {
+                await stopSpeaking().catch(() => {});
                 await speak(reply, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
                   .catch((e) => console.log('[listeningSession] chat fallback speak failed', e));
               }
@@ -405,6 +408,10 @@ async function openSession() {
           filler_start_ms: t_filler_start != null ? t_filler_start - t0 : null,
           response_start_ms: t_response_start - t0,
         }));
+        // Cancel any in-flight / queued filler so the real response
+        // doesn't queue behind a long conversational bridge — Tim's
+        // "generic-then-relevant" disconnect on the 2nd question.
+        await stopSpeaking().catch(() => {});
         await speak(result.voice_response, settings.voiceGender, settings.language, apiUrl, { userInitiated: true });
       }
       // Phase R/S — dispatch tool_action.open_url. Internal routes (e.g.
