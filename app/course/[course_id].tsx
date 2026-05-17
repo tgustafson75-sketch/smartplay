@@ -111,6 +111,8 @@ export default function CourseDetailScreen() {
           slug === 'lakes' ? 'lakes' :
           slug === 'crystal-springs' ? 'crystal-springs' :
           slug === 'mariners-point' ? 'mariners-point' :
+          slug === 'sunnyvale' ? 'sunnyvale' :
+          slug === 'san-jose-muni' ? 'san-jose-muni' :
           null;
         const dataCourse = dataCourseId ? getLocalCourseData(dataCourseId) : null;
 

@@ -386,6 +386,58 @@ const CRYSTAL_SPRINGS_HOLES: CourseHole[] = [
   { hole: 18, par: 5, distance: 507, front: 496, back: 518, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
 ];
 
+// 2026-05-17 — Sunnyvale Golf Course (Sunnyvale, CA). 18-hole par 70.
+// Hand-coded estimates from public scorecard + Tim's Golfshot
+// screenshots (hole 1 green-center 368y confirmed). Marked
+// estimated: true so the UI / Kevin's prompt can disclose imprecise
+// numbers. Refine when Golfshot OCR or hand-pass produces exact
+// per-hole figures.
+const SUNNYVALE_HOLES: CourseHole[] = [
+  { hole: 1,  par: 4, distance: 368, front: 352, back: 383, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 2,  par: 4, distance: 353, front: 339, back: 367, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 3,  par: 3, distance: 168, front: 154, back: 182, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 4,  par: 5, distance: 488, front: 472, back: 504, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 5,  par: 4, distance: 341, front: 325, back: 357, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 6,  par: 4, distance: 386, front: 370, back: 402, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 7,  par: 3, distance: 144, front: 130, back: 158, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 8,  par: 4, distance: 379, front: 363, back: 395, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 9,  par: 4, distance: 311, front: 295, back: 327, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 10, par: 4, distance: 355, front: 339, back: 371, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 11, par: 4, distance: 397, front: 381, back: 413, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 12, par: 3, distance: 157, front: 143, back: 171, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 13, par: 4, distance: 374, front: 358, back: 390, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 14, par: 5, distance: 504, front: 488, back: 520, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 15, par: 4, distance: 327, front: 311, back: 343, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 16, par: 3, distance: 175, front: 161, back: 189, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 17, par: 4, distance: 363, front: 347, back: 379, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 18, par: 4, distance: 410, front: 394, back: 426, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+];
+
+// 2026-05-17 — San Jose Municipal Golf Course (San Jose, CA). 18-hole
+// par 72. Hand-coded estimates from public scorecard / Golfshot
+// screenshot data (hole 1 green-center 421y confirmed). Marked
+// estimated: true; refine when exact per-hole figures available.
+const SAN_JOSE_MUNI_HOLES: CourseHole[] = [
+  { hole: 1,  par: 4, distance: 421, front: 405, back: 437, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 2,  par: 5, distance: 514, front: 498, back: 530, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 3,  par: 3, distance: 178, front: 164, back: 192, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 4,  par: 4, distance: 387, front: 371, back: 403, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 5,  par: 4, distance: 412, front: 396, back: 428, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 6,  par: 4, distance: 369, front: 353, back: 385, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 7,  par: 3, distance: 156, front: 142, back: 170, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 8,  par: 5, distance: 537, front: 521, back: 553, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 9,  par: 4, distance: 398, front: 382, back: 414, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 10, par: 4, distance: 432, front: 416, back: 448, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 11, par: 3, distance: 188, front: 174, back: 202, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 12, par: 4, distance: 405, front: 389, back: 421, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 13, par: 5, distance: 519, front: 503, back: 535, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 14, par: 4, distance: 376, front: 360, back: 392, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 15, par: 3, distance: 162, front: 148, back: 176, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 16, par: 4, distance: 391, front: 375, back: 407, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 17, par: 4, distance: 358, front: 342, back: 374, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 18, par: 5, distance: 525, front: 509, back: 541, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+];
+
 // Phase BL — Mariners Point Golf Center (Burlingame, CA). 9-hole
 // executive par-3 course; all holes par 3 with center yardages 90-160y.
 // Total par 27, total middle yardage 1041y.
@@ -451,5 +503,25 @@ export const COURSES: Course[] = [
     par: 27,
     totalYards: 1134,
     holes: MARINERS_POINT_HOLES,
+  },
+  {
+    id: 'sunnyvale',
+    name: 'Sunnyvale Golf Course',
+    fullName: 'Sunnyvale Golf Course — Sunnyvale, CA',
+    rating: '69.8',
+    slope: '117',
+    par: 70,
+    totalYards: 6172, // sum of distance column
+    holes: SUNNYVALE_HOLES,
+  },
+  {
+    id: 'san-jose-muni',
+    name: 'San Jose Municipal',
+    fullName: 'San Jose Municipal Golf Course — San Jose, CA',
+    rating: '70.2',
+    slope: '122',
+    par: 72,
+    totalYards: 6948, // sum of distance column
+    holes: SAN_JOSE_MUNI_HOLES,
   },
 ];

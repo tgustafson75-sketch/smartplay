@@ -27,6 +27,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse } from '../../services/golfCourseApi';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
@@ -180,6 +181,30 @@ export default function PlayTab() {
   const [setupCompetition, setSetupCompetition] = useState(false);
   const [setupMental, setSetupMental] = useState<'fresh' | 'neutral' | 'tense'>('neutral');
   const [setupNotes, setSetupNotes] = useState('');
+  // 2026-05-17 — voice dictation for the pre-round notes field. Without
+  // a mic and explicit "done" affordance, Tim reported typed notes
+  // "just sit there" — easy to leave the screen with unsaved text. The
+  // mic appends transcribed speech to the existing notes; the check
+  // button dismisses the keyboard cleanly.
+  const [notesDictating, setNotesDictating] = useState(false);
+  const notesInputRef = React.useRef<TextInput>(null);
+  const apiUrlForNotes = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const notesLanguage = useSettingsStore(s => s.language);
+  const handleDictateNotes = React.useCallback(async () => {
+    if (notesDictating) return;
+    setNotesDictating(true);
+    try {
+      const { captureUtterance } = await import('../../services/voiceService');
+      const transcript = await captureUtterance(15_000, apiUrlForNotes, notesLanguage);
+      if (transcript && transcript.trim()) {
+        setSetupNotes(prev => (prev ? prev.trim() + ' ' : '') + transcript.trim());
+      }
+    } catch (e) {
+      console.log('[play] notes dictation failed', e);
+    } finally {
+      setNotesDictating(false);
+    }
+  }, [notesDictating, apiUrlForNotes, notesLanguage]);
   // Phase 405 wave 3 — tee box color selection. 'unspecified' until the
   // user picks. Survives the Play tab lifetime so navigating away and
   // back doesn't lose the selection.
@@ -892,14 +917,43 @@ export default function PlayTab() {
             </View>
 
             <Text style={[styles.sectionLabel, { marginTop: 18 }]}>NOTES (optional)</Text>
-            <TextInput
-              style={styles.notesInput}
-              value={setupNotes}
-              onChangeText={setSetupNotes}
-              placeholder="Anything Kevin should know going into this round?"
-              placeholderTextColor="#3a5a40"
-              multiline
-            />
+            <View style={styles.notesRow}>
+              <TextInput
+                ref={notesInputRef}
+                style={[styles.notesInput, styles.notesInputInRow]}
+                value={setupNotes}
+                onChangeText={setSetupNotes}
+                placeholder="Anything Kevin should know going into this round?"
+                placeholderTextColor="#3a5a40"
+                multiline
+                returnKeyType="done"
+                blurOnSubmit
+                onSubmitEditing={() => { notesInputRef.current?.blur(); }}
+              />
+              <View style={styles.notesActionsCol}>
+                <TouchableOpacity
+                  style={[styles.notesActionBtn, notesDictating && styles.notesActionBtnActive]}
+                  onPress={handleDictateNotes}
+                  disabled={notesDictating}
+                  accessibilityRole="button"
+                  accessibilityLabel={notesDictating ? 'Listening for notes' : 'Dictate notes by voice'}
+                >
+                  <AppIcon
+                    name={notesDictating ? 'mic' : 'mic-outline'}
+                    size={18}
+                    color={notesDictating ? '#0d1a0d' : '#00C896'}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.notesActionBtn}
+                  onPress={() => { notesInputRef.current?.blur(); }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Done editing notes"
+                >
+                  <AppIcon name="checkmark" size={18} color="#00C896" />
+                </TouchableOpacity>
+              </View>
+            </View>
 
             <TouchableOpacity
               style={[styles.actionBtnPrimary, styles.startBigBtn]}
@@ -993,6 +1047,36 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d1a0d', borderColor: '#1e3a28', borderWidth: 1,
     borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
     color: '#fff', fontSize: 13, minHeight: 56, textAlignVertical: 'top',
+  },
+  notesRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginHorizontal: 16,
+    marginTop: 4,
+    gap: 6,
+  },
+  notesInputInRow: {
+    flex: 1,
+    marginHorizontal: 0,
+    marginTop: 0,
+    minHeight: 72,
+  },
+  notesActionsCol: {
+    gap: 6,
+  },
+  notesActionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    backgroundColor: '#0d1a0d',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notesActionBtnActive: {
+    backgroundColor: '#00C896',
+    borderColor: '#00C896',
   },
   startBigBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
