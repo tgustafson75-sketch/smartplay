@@ -89,10 +89,11 @@ export default function RangeMode() {
   const startingClubAvgYds = startingClub === 'Driver' ? 240 : null;
 
   const handleStartSession = () => {
-    // Route to the existing single-swing capture; future work can
-    // build a dedicated multi-shot range-session screen and swap
-    // this route without changing this UI.
-    router.push('/swinglab/cage-drill' as never);
+    // Range Mode is multi-shot by design — route to CageSessionOverlay's
+    // multi-shot capture (/cage/session) rather than the single-swing
+    // /swinglab/cage-drill screen. The detector backing both is the same
+    // (services/acousticImpactDetector); only the mode differs.
+    router.push('/cage/session' as never);
   };
 
   return (

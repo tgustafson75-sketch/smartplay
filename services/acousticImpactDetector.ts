@@ -109,6 +109,43 @@ interface RunningRecorder {
 
 let active: RunningRecorder | null = null;
 
+// ─── Global strike event bus ─────────────────────────────────────────────
+// Every detection (single-shot real-time impact OR multi-shot validated
+// strike) is broadcast through this emitter. Lets passive surfaces
+// (dashboards, drill scorers, on-round caddie tips) subscribe without
+// owning the recorder. The direct callback parameters on
+// startImpactRecording remain the primary path for the surface that
+// started the recording — the broadcast is additive, not a replacement.
+
+export interface StrikeEvent {
+  /** Which detector mode produced this — single-shot real-time threshold
+   *  crossing vs multi-shot validated peak-then-decay. */
+  source: 'single-shot' | 'multi-shot';
+  /** Offset in ms from the start of the current recording session. */
+  offset_ms: number;
+  /** Peak dBFS at impact, when available. Null for the single-shot
+   *  real-time threshold trigger (we only get the global peak after
+   *  stopAndDetectImpact runs). */
+  peak_db: number | null;
+  timestamp: number;
+}
+
+type StrikeListener = (event: StrikeEvent) => void;
+const strikeListeners: Set<StrikeListener> = new Set();
+
+/** Subscribe to every strike event from any active recording. Returns an
+ *  unsubscribe function. Safe to call from React component effects. */
+export function onStrike(listener: StrikeListener): () => void {
+  strikeListeners.add(listener);
+  return () => { strikeListeners.delete(listener); };
+}
+
+function emitStrike(event: StrikeEvent): void {
+  for (const l of strikeListeners) {
+    try { l(event); } catch (e) { console.log('[acoustic] strike listener threw', e); }
+  }
+}
+
 /**
  * Start a parallel audio recording with metering. Returns a token used
  * by stopAndDetectImpact(). No-op (returns null) if a recording is
@@ -212,6 +249,7 @@ export async function startImpactRecording(opts?: {
             const cb = state.onImpactDetected;
             state.onImpactDetected = null; // one-shot
             try { cb(offset); } catch (e) { console.log('[acoustic] onImpactDetected callback threw', e); }
+            emitStrike({ source: 'single-shot', offset_ms: offset, peak_db: db, timestamp: Date.now() });
           }
         } else {
           // ─── Multi-shot pipeline (ported from CageSessionOverlay) ─
@@ -225,19 +263,27 @@ export async function startImpactRecording(opts?: {
             const sharpDecay = decay >= DECAY_MIN_DB_PER_SAMPLE;
             if (sharpDecay && !stillAboveThreshold) {
               const ts = Date.now();
-              if (ts - state.lastDetectionTs > MULTISHOT_DEBOUNCE_MS && state.onShotDetected) {
+              if (ts - state.lastDetectionTs > MULTISHOT_DEBOUNCE_MS) {
                 state.lastDetectionTs = ts;
                 const noiseFloor = pending.threshold - TRANSIENT_THRESHOLD_DB;
-                try {
-                  state.onShotDetected({
-                    offset_ms: pending.offset_ms,
-                    peak_db: pending.db,
-                    decay_db: decay,
-                    noise_floor_db: noiseFloor,
-                  });
-                } catch (e) {
-                  console.log('[acoustic] onShotDetected callback threw', e);
+                if (state.onShotDetected) {
+                  try {
+                    state.onShotDetected({
+                      offset_ms: pending.offset_ms,
+                      peak_db: pending.db,
+                      decay_db: decay,
+                      noise_floor_db: noiseFloor,
+                    });
+                  } catch (e) {
+                    console.log('[acoustic] onShotDetected callback threw', e);
+                  }
                 }
+                emitStrike({
+                  source: 'multi-shot',
+                  offset_ms: pending.offset_ms,
+                  peak_db: pending.db,
+                  timestamp: ts,
+                });
               }
             }
           }
