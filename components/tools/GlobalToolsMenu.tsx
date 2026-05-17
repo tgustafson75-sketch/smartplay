@@ -40,6 +40,7 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useToastStore } from '../../store/toastStore';
 import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
 import { recalibrateGps } from '../../services/gpsManager';
+import { markGpsRefreshNow, useLastGpsRefresh, formatRefreshAge } from '../../services/lastGpsRefresh';
 import { forceMarkPosition } from '../../services/positionMarkBus';
 import { canAccess, type FeatureKey } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
@@ -50,6 +51,7 @@ export function GlobalToolsMenu() {
   const { colors } = useTheme();
   const isOpen = useToolsMenuStore((s) => s.isOpen);
   const close = useToolsMenuStore((s) => s.close);
+  const lastGpsRefreshAt = useLastGpsRefresh();
 
   // Trust + persona
   const trustLevel = useTrustLevelStore((s) => s.level);
@@ -137,8 +139,10 @@ export function GlobalToolsMenu() {
       const fix = await recalibrateGps();
       void forceMarkPosition().catch(() => undefined);
       if (fix?.accuracy_m != null) {
+        void markGpsRefreshNow();
         Alert.alert('GPS refreshed', `Fresh fix at ±${Math.round(fix.accuracy_m)}m.`);
       } else if (fix) {
+        void markGpsRefreshNow();
         Alert.alert('GPS refreshed', 'Fresh fix acquired.');
       } else {
         Alert.alert('GPS Refresh', "Couldn't get a fresh fix. Step into the open and try again.");
@@ -264,7 +268,7 @@ export function GlobalToolsMenu() {
             <Row
               icon="compass-outline"
               label="GPS Refresh"
-              sub="Pull a fresh fix and refresh yardages"
+              sub={`Last refresh: ${formatRefreshAge(lastGpsRefreshAt)}`}
               onPress={refreshGps}
               colors={colors}
             />

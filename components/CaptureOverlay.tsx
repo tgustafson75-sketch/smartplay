@@ -38,6 +38,7 @@ import {
   abortImpactRecording,
   cleanupImpactRecording,
 } from '../services/acousticImpactDetector';
+import VideoWatermark from './swinglab/VideoWatermark';
 
 /**
  * Maximum recording duration (ms) if no acoustic strike is detected.
@@ -256,6 +257,7 @@ export default function CaptureOverlay() {
           isLooping
           useNativeControls={false}
         />
+        <VideoWatermark position="bottomRight" size={40} />
         <View style={styles.reviewHeader}>
           <Text style={styles.reviewTitle}>Hero shot</Text>
         </View>

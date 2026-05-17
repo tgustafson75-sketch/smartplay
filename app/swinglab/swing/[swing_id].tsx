@@ -29,6 +29,7 @@ import PrimaryIssueCard from '../../../components/swinglab/PrimaryIssueCard';
 import DrillCard from '../../../components/swinglab/DrillCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay from '../../../components/swinglab/SwingBodyOverlay';
+import VideoWatermark from '../../../components/swinglab/VideoWatermark';
 
 // Phase BW — short mm:ss formatter for the per-swing list rows.
 function formatMmSs(seconds: number): string {
@@ -410,6 +411,7 @@ export default function SwingDetail() {
                   showTrace={showTrace}
                 />
               )}
+              <VideoWatermark position="bottomRight" size={36} />
             </View>
             {hasPose && (
               <View style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
