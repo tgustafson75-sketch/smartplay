@@ -40,7 +40,12 @@ const PERMISSIONS = [
   {
     icon: 'location-outline' as const,
     label: 'Location',
-    why: 'For GPS yardages, hole detection, SmartFinder, and shot tracking. Always foreground-only — never tracked when the app is closed.',
+    why: 'For GPS yardages, hole detection, SmartFinder, and shot tracking. Required for almost everything during a round.',
+  },
+  {
+    icon: 'walk-outline' as const,
+    label: 'Background Location',
+    why: 'So GPS keeps working when your phone is in your pocket between shots. Without this, yardages freeze when the screen turns off.',
   },
   {
     icon: 'images-outline' as const,
@@ -122,6 +127,7 @@ export default function PermissionsScreen() {
               ? (i === 0 ? result.camera.granted
                 : i === 1 ? result.microphone.granted
                 : i === 2 ? result.location.granted
+                : i === 3 ? result.backgroundLocation.granted
                 : result.mediaLibrary.granted)
               : undefined;
             return (

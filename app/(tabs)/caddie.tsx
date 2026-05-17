@@ -23,6 +23,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import { useKeepAwake } from 'expo-keep-awake';
 import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
 import { ActiveListeningPill } from '../../components/caddie/ActiveListeningPill';
+import { PermissionBanner } from '../../components/PermissionBanner';
 import { useRoundStore } from '../../store/roundStore';
 import type { ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -1946,13 +1947,17 @@ export default function CaddieTab() {
         </View>
       </View>
 
-      {/* 2026-05-16 — Active Listening visible status pill. Only renders
-          when VAD is actually live (autoListen ON + round active). Tap
-          to mute. Sits just below the topNav so the mic-hot signal is
-          impossible to miss but doesn't fight Kevin's avatar for focus. */}
-      <View style={{ position: 'absolute', top: insets.top + 78, left: 0, right: 0, alignItems: 'center', zIndex: 18 }}
+      {/* 2026-05-16 — Permission banner (location ungranted) + Active
+          Listening pill (mic hot). Both sit just below the topNav so the
+          user always knows whether GPS is on AND whether the mic is hot.
+          Banner only renders when foreground location is denied; pill
+          only renders when VAD is actually live. */}
+      <View style={{ position: 'absolute', top: insets.top + 78, left: 0, right: 0, zIndex: 18, gap: 6 }}
             pointerEvents="box-none">
-        <ActiveListeningPill />
+        <PermissionBanner />
+        <View style={{ alignItems: 'center' }}>
+          <ActiveListeningPill />
+        </View>
       </View>
 
       {/* Phase AL — Mark button. Yellow accent (capture/action treatment).

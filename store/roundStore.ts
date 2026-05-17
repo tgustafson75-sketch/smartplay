@@ -447,18 +447,30 @@ export const useRoundStore = create<RoundState>()(
             const Location = await import('expo-location');
             const perm = await Location.requestForegroundPermissionsAsync();
             if (!perm.granted) {
-              console.log('[roundStore] foreground location permission denied at round start — GPS features will be degraded');
+              // 2026-05-16 — was silently returning here, leaving the
+              // user with a "round started" toast but no actual GPS
+              // tracking. The visible PermissionBanner on the Caddie
+              // tab covers the recovery affordance, but we also surface
+              // a toast at this exact moment so the user understands
+              // why yardages aren't populating.
+              console.log('[roundStore] foreground location permission denied at round start');
+              try {
+                const { useToastStore } = await import('./toastStore');
+                useToastStore.getState().show(
+                  'Location off — tap the GPS banner on the Caddie tab to enable.',
+                );
+              } catch {}
               return;
             }
             // Phase 405 wave 4 — also request background-location
-            // permission so phone-in-pocket play keeps GPS active. On
-            // both platforms this is a second, separate prompt that
-            // appears only after foreground is granted. Denial is
+            // permission so phone-in-pocket play keeps GPS active. The
+            // pre-flight /permissions screen now also requests this,
+            // but we keep the re-prompt here as a belt-and-suspenders
+            // safety net for users who skipped the pre-flight or
+            // installed before the pre-flight included it. Denial is
             // non-fatal — foreground-service notification on Android
             // still keeps the subsystem warm; iOS just won't track
-            // when truly backgrounded. The honest UX (the OS shows a
-            // clear "Allow all the time?" choice) lands with the
-            // next build that carries NSLocationAlwaysAndWhenInUseUsageDescription.
+            // when truly backgrounded.
             try {
               await Location.requestBackgroundPermissionsAsync();
             } catch (e) {
