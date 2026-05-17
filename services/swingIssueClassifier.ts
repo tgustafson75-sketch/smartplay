@@ -13,8 +13,18 @@ import type { PrimaryIssue } from '../store/cageStore';
  * - When the top issue is `none` or has fewer than 2 occurrences across the
  *   session, return null Primary Issue (Mike sees "no clear primary issue
  *   from this session" — honest, not a forced call).
- * - When a primary issue is identified, mechanical_breakdown and feel_cue
- *   come from `ISSUE_COACH_VOICE` (per-issue authored copy below).
+ * - When a primary issue is identified:
+ *     - mechanical_breakdown = the LLM's per-swing observation (specific
+ *       to what was actually visible in THAT swing's frames). Falls back
+ *       to ISSUE_COACH_VOICE.mechanical only if observation is missing.
+ *     - feel_cue = ISSUE_COACH_VOICE.feel (canonical per-fault drill cue;
+ *       the LLM doesn't generate feel cues).
+ *
+ * 2026-05-16 — Tim reported five swings from three golfers producing the
+ * same spoken analysis. Root cause was the classifier discarding each
+ * swing's observation and substituting the canonical per-issue breakdown
+ * string, so any two over_the_top swings (a common amateur fault) spoke
+ * IDENTICALLY. Now the LLM's observation comes through verbatim.
  */
 
 export const ISSUE_DISPLAY_NAME: Record<CanonicalIssue, string> = {
@@ -133,6 +143,7 @@ export function classifySession(
     console.log('[classifier] single: detected=' + only.analysis.detected_issue + ' conf=' + only.analysis.confidence);
     if (only.analysis.detected_issue === 'none') return null;
     const voice = ISSUE_COACH_VOICE[only.analysis.detected_issue];
+    const observationText = (only.analysis.observation ?? '').trim();
     return {
       issue_id: only.analysis.detected_issue,
       name: ISSUE_DISPLAY_NAME[only.analysis.detected_issue],
@@ -140,7 +151,9 @@ export function classifySession(
       severity: only.analysis.severity === 'none' ? 'minor' : only.analysis.severity,
       occurrence_count: 1,
       visual_reference_path: null,
-      mechanical_breakdown: voice.mechanical,
+      // 2026-05-16 — per-swing observation if the LLM produced one;
+      // canonical fallback only when it didn't.
+      mechanical_breakdown: observationText || voice.mechanical,
       feel_cue: voice.feel,
       detected_in_shots: [only.swing_id],
       confidence: only.analysis.confidence,
@@ -172,6 +185,10 @@ export function classifySession(
 
   if (top && swingAnalyses.length >= MIN_SESSION_SWINGS_FOR_PRIMARY && top.count >= MIN_OCCURRENCES_FOR_PRIMARY) {
     const voice = ISSUE_COACH_VOICE[top.issue];
+    // 2026-05-16 — pick the most diagnostic observation from the swings
+    // that detected the consensus issue. Highest-confidence first; falls
+    // back to canonical only if no swing produced a usable observation.
+    const observation = pickBestObservation(swingAnalyses, top.issue);
     return {
       issue_id: top.issue,
       name: ISSUE_DISPLAY_NAME[top.issue],
@@ -179,7 +196,7 @@ export function classifySession(
       severity: top.severity === 'none' ? 'minor' : top.severity,
       occurrence_count: top.count,
       visual_reference_path: null,
-      mechanical_breakdown: voice.mechanical,
+      mechanical_breakdown: observation || voice.mechanical,
       feel_cue: voice.feel,
       detected_in_shots: top.swing_ids,
       confidence: 'high',
@@ -200,6 +217,7 @@ export function classifySession(
   const fallback = usable[0];
   console.log('[classifier] tentative fallback: ' + fallback.analysis.detected_issue);
   const voice = ISSUE_COACH_VOICE[fallback.analysis.detected_issue];
+  const fallbackObservation = (fallback.analysis.observation ?? '').trim();
   return {
     issue_id: fallback.analysis.detected_issue,
     name: ISSUE_DISPLAY_NAME[fallback.analysis.detected_issue],
@@ -207,9 +225,31 @@ export function classifySession(
     severity: fallback.analysis.severity === 'none' ? 'minor' : fallback.analysis.severity,
     occurrence_count: 1,
     visual_reference_path: null,
-    mechanical_breakdown: voice.mechanical,
+    mechanical_breakdown: fallbackObservation || voice.mechanical,
     feel_cue: voice.feel,
     detected_in_shots: [fallback.swing_id],
     confidence: 'low',
   };
+}
+
+// 2026-05-16 — Pick the highest-confidence per-swing observation that
+// matches the consensus issue. The user hears specific commentary on
+// THEIR swing instead of canned per-issue text.
+function pickBestObservation(
+  swingAnalyses: { swing_id: string; analysis: SwingAnalysis }[],
+  consensusIssue: CanonicalIssue,
+): string {
+  const matches = swingAnalyses
+    .filter(s => s.analysis.detected_issue === consensusIssue)
+    .filter(s => (s.analysis.observation ?? '').trim().length > 0);
+  if (matches.length === 0) return '';
+  // Higher confidence wins; ties broken by severity (more severe first).
+  const confRank: Record<SwingAnalysis['confidence'], number> = { high: 3, medium: 2, low: 1 };
+  const sevRank: Record<SwingAnalysis['severity'], number> = { significant: 3, moderate: 2, minor: 1, none: 0 };
+  matches.sort((a, b) => {
+    const c = confRank[b.analysis.confidence] - confRank[a.analysis.confidence];
+    if (c !== 0) return c;
+    return sevRank[b.analysis.severity] - sevRank[a.analysis.severity];
+  });
+  return (matches[0].analysis.observation ?? '').trim();
 }

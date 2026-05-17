@@ -109,31 +109,26 @@ export default function SwingDetail() {
   const [duration, setDuration] = useState<number | null>(session?.upload?.duration_sec ?? null);
 
   // Toggle audio source: muting video for kevin mode, unmuting for coach.
-  // Phase V.7 — skip the auto-speak on the *initial* mount; the dedicated
-  // first-completion effect below already narrates once. Without this guard,
-  // mounting with default audioSource='kevin' fired both effects and the
-  // second speak() cancelled the first mid-sentence.
-  const initialAudioMountRef = useRef(true);
+  //
+  // 2026-05-16 — Removed the speak() block from this effect. Two bugs:
+  //   1. session?.primary_issue was in the dep array, so when analysis
+  //      landed the effect re-fired and spoke a SECOND time alongside the
+  //      auto-narrate effect below. Tim's "Kevin is speaking twice" report.
+  //   2. The text shape ("name. breakdown feel") was different from the
+  //      auto-narrate text shape ("Okay I watched it. Your primary issue is
+  //      ..."), so the two voices overlapped with different transcripts.
+  // Now this effect ONLY toggles the video's mute state. Speaking is the
+  // job of the dedicated auto-narrate effect below — one source of truth.
   useEffect(() => {
     void videoRef.current?.setIsMutedAsync(audioSource === 'kevin');
-    if (initialAudioMountRef.current) {
-      initialAudioMountRef.current = false;
-      return;
-    }
-    if (audioSource === 'kevin') {
-      const issue = session?.primary_issue;
-      if (issue && apiUrl) {
-        const text = `${issue.name}. ${issue.mechanical_breakdown} ${issue.feel_cue}`;
-        void (async () => {
-          await configureAudioForSpeech();
-          await speak(text, voiceGender, language, apiUrl);
-        })();
-      }
-    } else {
+    if (audioSource === 'coach') {
+      // Switching TO coach audio explicitly silences any in-flight Kevin
+      // narration (Kevin was probably mid-sentence when the user tapped
+      // the toggle).
       void stopSpeaking();
     }
     return () => { void stopSpeaking(); };
-  }, [audioSource, session?.primary_issue, apiUrl, voiceGender, language]);
+  }, [audioSource]);
 
   // Phase V — automatic Kevin voice when analysis FIRST completes for this
   // session. Fires once per swing_id transition into 'ok' so the player
