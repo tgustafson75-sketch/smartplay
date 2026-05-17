@@ -2,6 +2,98 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ShotLocation } from '../store/roundStore';
 
 /**
+ * 2026-05-16 — Local-course → golfcourseapi search hint table.
+ *
+ * Bundled "local:" courses don't have golfcourseapi IDs hardcoded
+ * (and we can't ship them — Tim added Sunnyvale + San Jose Muni
+ * empirically without knowing the IDs upstream). For those courses we
+ * lazily resolve the upstream ID by running searchCourses() with a
+ * tight hint string + optional city filter, picking the top match,
+ * and caching the resolved ID.
+ *
+ * Why this exists: golfcourseapi free tier gives per-hole tee + front/
+ * middle/back of green coords, which is everything SmartVision needs
+ * to render per-hole Mapbox satellite tiles oriented along the
+ * tee→green axis. Paid sources (Golfbert at $300/mo) only matter for
+ * polygon data — fairway/green outlines — which we don't render yet.
+ *
+ * Adding a new "local:" course later is one line in this map.
+ */
+type LocalCourseHint = {
+  /** Free-text search string passed to searchCourses() — the more
+   *  specific, the better the match. Include city/state in the string
+   *  if the bare course name is ambiguous. */
+  search: string;
+  /** Optional substring matched against each search result's
+   *  `location` field to disambiguate when the top match is wrong
+   *  (e.g. another "Sunnyvale GC" elsewhere). Lowercase. */
+  expectedCity?: string;
+};
+
+const LOCAL_COURSE_API_HINTS: Record<string, LocalCourseHint> = {
+  sunnyvale: { search: 'Sunnyvale Golf Course', expectedCity: 'sunnyvale' },
+  'san-jose-muni': { search: 'San Jose Municipal Golf Course', expectedCity: 'san jose' },
+};
+
+const RESOLVED_ID_KEY_PREFIX = 'local-courseapi-id-v1::';
+const resolvedIdMem: Map<string, string> = new Map();
+
+async function readResolvedId(localSlug: string): Promise<string | null> {
+  if (resolvedIdMem.has(localSlug)) return resolvedIdMem.get(localSlug)!;
+  try {
+    const v = await AsyncStorage.getItem(RESOLVED_ID_KEY_PREFIX + localSlug);
+    if (v) resolvedIdMem.set(localSlug, v);
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+async function writeResolvedId(localSlug: string, upstreamId: string): Promise<void> {
+  resolvedIdMem.set(localSlug, upstreamId);
+  try { await AsyncStorage.setItem(RESOLVED_ID_KEY_PREFIX + localSlug, upstreamId); } catch {}
+}
+
+/**
+ * Resolve a "local:<slug>" courseId to its golfcourseapi upstream ID,
+ * lazily searching the API on first call and caching the result.
+ * Returns null when no hint exists or the search yields no usable
+ * match — caller should fall back to centroid imagery in that case.
+ */
+async function resolveLocalCourseId(localSlug: string): Promise<string | null> {
+  const cached = await readResolvedId(localSlug);
+  if (cached) return cached;
+
+  const hint = LOCAL_COURSE_API_HINTS[localSlug];
+  if (!hint) {
+    console.log('[courseGeometry] no API hint for local slug:', localSlug);
+    return null;
+  }
+
+  try {
+    const { searchCourses } = await import('./golfCourseApi');
+    const results = await searchCourses(hint.search);
+    // Skip the sentinel error result shape
+    const real = results.filter(r => r.id && !r._error);
+    if (real.length === 0) {
+      console.log('[courseGeometry] no search hits for', hint.search);
+      return null;
+    }
+    // Prefer city match if hint provides one
+    const top = hint.expectedCity
+      ? real.find(r => (r.location ?? '').toLowerCase().includes(hint.expectedCity!)) ?? real[0]
+      : real[0];
+    if (!top?.id) return null;
+    console.log('[courseGeometry] resolved', localSlug, '→', top.id, '(' + top.club_name + ')');
+    await writeResolvedId(localSlug, top.id);
+    return top.id;
+  } catch (e) {
+    console.warn('[courseGeometry] resolveLocalCourseId failed:', e);
+    return null;
+  }
+}
+
+/**
  * Phase B — Course geometry fetch and cache.
  *
  * The current upstream (golfcourseapi.com) only exposes per-hole *points*: tee location and
@@ -81,6 +173,12 @@ async function writePersistedCache(geo: CourseGeometry): Promise<void> {
  * Fetch course geometry, returning a cached copy if it's fresh (<7 days). Falls back to a
  * stale cached copy if the network fetch fails. Returns null only when no data is
  * available at all.
+ *
+ * 2026-05-16 — For "local:<slug>" courseIds (Sunnyvale, San Jose Muni)
+ * we lazily resolve the upstream golfcourseapi ID via searchCourses,
+ * then fetch geometry by that real ID. Cache stays keyed by the local
+ * courseId so the rest of the app (which uses "local:sunnyvale" as
+ * the active courseId) gets the cached hit on subsequent lookups.
  */
 export async function fetchCourseGeometry(courseId: string): Promise<CourseGeometry | null> {
   if (!courseId) return null;
@@ -94,8 +192,24 @@ export async function fetchCourseGeometry(courseId: string): Promise<CourseGeome
     if (Date.now() - persisted.fetched_at < REFRESH_AFTER_MS) return persisted;
   }
 
+  // Resolve "local:<slug>" → real upstream golfcourseapi ID, if we have
+  // a hint for this slug. Result is cached so subsequent rounds skip
+  // the search round-trip.
+  let upstreamId = courseId;
+  if (courseId.startsWith('local:')) {
+    const slug = courseId.slice('local:'.length);
+    const real = await resolveLocalCourseId(slug);
+    if (real) {
+      upstreamId = real;
+    } else {
+      // No mapping — return the stale cache if any, otherwise null.
+      // SmartVision falls through to LOCAL_COURSE_CENTROIDS imagery.
+      return persisted ?? null;
+    }
+  }
+
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
-  const url = `${apiUrl}/api/course-geometry?courseId=${encodeURIComponent(courseId)}`;
+  const url = `${apiUrl}/api/course-geometry?courseId=${encodeURIComponent(upstreamId)}`;
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
     if (!res.ok) {
@@ -104,6 +218,12 @@ export async function fetchCourseGeometry(courseId: string): Promise<CourseGeome
     }
     const geo = (await res.json()) as CourseGeometry;
     geo.fetched_at = Date.now();
+    // Force-key the result by the LOCAL courseId so getHoleGeometry()
+    // and downstream consumers can read by the same id the rest of the
+    // app uses. Without this, the cache stores under the upstream id
+    // and SmartVision's getHoleGeometry(courseId='local:sunnyvale')
+    // would miss the cache forever.
+    geo.course_id = courseId;
     memCache.set(courseId, geo);
     await writePersistedCache(geo);
     return geo;
