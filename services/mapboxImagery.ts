@@ -331,6 +331,36 @@ export function getCourseImageryUrl(
 }
 
 /**
+ * 2026-05-16 — Centered satellite tile from a single lat/lng. Used as the
+ * fallback when a course has only a centroid (no per-hole tee/green
+ * geometry) — e.g. Sunnyvale + San Jose Muni — so we can stop relying on
+ * the Golfshot screenshots Tim originally bundled. Every hole on those
+ * courses shows the same wide course view until per-hole geometry exists.
+ * Pure URL construction; no Mapbox-token side effects.
+ */
+export type CenteredImageryInput = {
+  lat: number;
+  lng: number;
+  zoom?: number;
+  width?: number;
+  height?: number;
+};
+
+export function getCenteredImageryUrl(input: CenteredImageryInput): string | null {
+  if (!MAPBOX_TOKEN) return null;
+  const zoom = input.zoom ?? 16;
+  const w = Math.min(input.width ?? 800, 1280);
+  const h = Math.min(input.height ?? 600, 1280);
+  return (
+    `https://api.mapbox.com/styles/v1/${MAPBOX_STYLE}/static/` +
+    `${input.lng.toFixed(6)},${input.lat.toFixed(6)},${zoom},0/` +
+    `${w}x${h}` +
+    `?access_token=${MAPBOX_TOKEN}` +
+    `&attribution=false&logo=false`
+  );
+}
+
+/**
  * Tiny per-hole thumbnail for the Course Detail modal's hole-by-hole list.
  * Same projection as getHoleImageryUrl but at a smaller size — keeps cost
  * to one tile per hole regardless of how many users browse the modal.

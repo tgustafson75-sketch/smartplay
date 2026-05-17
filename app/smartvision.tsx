@@ -52,9 +52,9 @@ import { useSmartVision } from '../contexts/SmartVisionContext';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbertApi';
 import { hasGolfbertCourseMapping } from '../constants/golfbertCourses';
-import { fetchHoleImagery, computeFitView } from '../services/mapboxImagery';
+import { fetchHoleImagery, computeFitView, getCenteredImageryUrl } from '../services/mapboxImagery';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
-import { getLocalHoleImage } from '../data/localCourseImages';
+import { getLocalHoleImage, LOCAL_COURSE_CENTROIDS, getLocalCourseSlug } from '../data/localCourseImages';
 
 // ─── Geo helpers ──────────────────────────────────────────────────
 
@@ -394,13 +394,43 @@ export default function SmartVisionScreen() {
         );
         if (cancelled) return;
         setImageUri(uri);
+      } else if (imageryMode !== 'curated') {
+        // 2026-05-16 — Centroid fallback for local courses that lack
+        // per-hole geometry (Sunnyvale, San Jose Muni). Replaces the
+        // chromed Golfshot screenshots Tim originally bundled. Same wide
+        // course view repeats across all 18 holes until per-hole green
+        // coords are added; not per-hole specific but clean (no UI
+        // overlay) and uses the same Mapbox tile pipeline.
+        const slug = getLocalCourseSlug(courseName);
+        const centroid = slug ? LOCAL_COURSE_CENTROIDS[slug] : null;
+        if (centroid) {
+          const MAX = 1280;
+          let reqW = imageW;
+          let reqH = imageH;
+          if (reqW > MAX || reqH > MAX) {
+            const scale = Math.min(MAX / reqW, MAX / reqH);
+            reqW = Math.floor(reqW * scale);
+            reqH = Math.floor(reqH * scale);
+          }
+          const uri = getCenteredImageryUrl({
+            lat: centroid.lat,
+            lng: centroid.lng,
+            zoom: 15,
+            width: reqW,
+            height: reqH,
+          });
+          if (cancelled) return;
+          setImageUri(uri);
+        } else {
+          setImageUri(null);
+        }
       } else {
         setImageUri(null);
       }
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [courseId, holeIndex, imageW, imageH, imageryMode]);
+  }, [courseId, courseName, holeIndex, imageW, imageH, imageryMode]);
 
   // ── Derived projection ──────────────────────────────────────────
   // Phase 401 — single source of truth for center/zoom/bearing, shared

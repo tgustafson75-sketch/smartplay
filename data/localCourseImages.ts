@@ -179,9 +179,46 @@ export const LOCAL_COURSE_IMAGES: Record<LocalCourseSlug, Record<number, ImageSo
 };
 
 /**
+ * 2026-05-16 — Centroid lat/lng for each LOCAL_COURSES entry. Used as
+ * the input to the Mapbox centered-imagery fallback for courses that
+ * don't have per-hole tee/green geometry. Mirrors the lat/lng values
+ * declared in app/(tabs)/play.tsx LOCAL_COURSES so play-tab thumbnails
+ * and SmartVision hole previews stay in lockstep.
+ */
+export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng: number }> = {
+  'palms':            { lat: 33.6953922, lng: -117.1504551 },
+  'lakes':            { lat: 33.6913348, lng: -117.1573364 },
+  'rancho-california':{ lat: 33.4910,    lng: -117.1390 },
+  'crystal-springs':  { lat: 37.5120,    lng: -122.3580 },
+  'mariners-point':   { lat: 37.5480,    lng: -122.2750 },
+  'san-jose-muni':    { lat: 37.3670,    lng: -121.9310 },
+  'sunnyvale':        { lat: 37.3777,    lng: -122.0357 },
+};
+
+/**
+ * Resolve a course name to a LOCAL_COURSE_CENTROIDS key. Mirrors the
+ * substring-matching logic in getLocalHoleImage so consumers can ask
+ * either function from the same `courseName` value.
+ */
+export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug | null {
+  if (!courseName) return null;
+  const c = courseName.toLowerCase();
+  if (c.includes('crystal') && c.includes('spring')) return 'crystal-springs';
+  if (c.includes('mariner')) return 'mariners-point';
+  if (c.includes('palms')) return 'palms';
+  if (c.includes('lakes') && !c.includes('palms')) return 'lakes';
+  if (c.includes('rancho')) return 'rancho-california';
+  if (c.includes('san jose')) return 'san-jose-muni';
+  if (c.includes('sunnyvale')) return 'sunnyvale';
+  return null;
+}
+
+/**
  * Resolve a course name to its bundled hole image, if available.
- * Falls back to Palms when name is missing — Palms is Tim's home course
- * and the safest curated default for previews.
+ * Returns null for Sunnyvale + San Jose Muni — those bundled JPGs are
+ * Golfshot screenshots with yardage chrome overlaid and shouldn't be
+ * shown as hole imagery. Consumers should fall back to the Mapbox
+ * centroid URL (see getLocalCourseSlug + getCenteredImageryUrl).
  */
 export function getLocalHoleImage(courseName: string | null, holeNumber: number): ImageSourcePropType | null {
   if (!courseName) return null;
@@ -191,8 +228,12 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   if (c.includes('palms')) return PALMS_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('lakes') && !c.includes('palms')) return LAKES_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('rancho')) return RANCHO_CALIFORNIA_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('san jose')) return SAN_JOSE_MUNI_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('sunnyvale')) return SUNNYVALE_HOLE_IMAGES[holeNumber] ?? null;
+  // 2026-05-16 — San Jose Muni + Sunnyvale intentionally fall through.
+  // Their bundled JPGs are Golfshot screenshots with the yardage UI
+  // overlaid and should NOT be shown as hole imagery. The registries
+  // (SAN_JOSE_MUNI_HOLE_IMAGES / SUNNYVALE_HOLE_IMAGES) remain exported
+  // so existing code references still compile, but this helper returns
+  // null so consumers route through the Mapbox centroid fallback.
   return null;
 }
 
