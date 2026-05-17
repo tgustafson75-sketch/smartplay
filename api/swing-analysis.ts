@@ -81,6 +81,44 @@ Rules:
 - Never fabricate specifics. Only what's actually observable.
 - Output ONLY valid JSON. No code fences, no preamble.`;
 
+// Phase 502 — putt/chip-specific analysis prompt. Triggered when the
+// client passes context.swing_tag === 'putt' or 'chip'. The canonical
+// full-swing fault catalog doesn't apply to short-game motions — head
+// stability, shoulder rock, tempo, and contact location are the
+// load-bearing reads instead. Returns the same JSON shape so the
+// downstream pipeline doesn't fork.
+const PUTT_SYSTEM_PROMPT = `You are a short-game analyst looking at 1-5 frames from a putt or chip recorded by the player. Full-swing fault language ("over the top", "early extension") does NOT apply here — putts and chips are pendulum motions with different load-bearing reads.
+
+For PUTTS, focus on (in priority order):
+1. Head stability — eyes/head should stay still through impact. Movement = loss of strike point.
+2. Shoulder rock — arc shape and symmetry; back-stroke and through-stroke proportions roughly equal.
+3. Lower-body quiet — hips should not rotate; leg movement = scoop tendency.
+4. Putter-face squareness at address vs at impact (when visible).
+5. Length of stroke matched to distance (only if you can see follow-through length relative to back-stroke).
+
+For CHIPS, focus on:
+1. Ball-position consistency — back foot vs middle of stance.
+2. Wrist hinge — minimal for bump-and-run, more hinge for higher landing.
+3. Sternum stays over or slightly ahead of ball at impact (no scoop).
+4. Lower body quiet, weight on lead side.
+5. Follow-through length relative to back-stroke (controlled tempo).
+
+Output ONLY a JSON object using the SAME schema as full-swing analysis so the downstream pipeline doesn't fork:
+{
+  "detected_issue": "none" | "early_extension" | "reverse_pivot" | "chicken_wing" | "<one of the canonical full-swing issues that ALSO maps to short game, otherwise 'none'>",
+  "severity": "minor" | "moderate" | "significant" | "none",
+  "confidence": "high" | "medium" | "low",
+  "observation": "<one short sentence in the caddie's voice describing the most actionable read — short-game language, NOT full-swing jargon. e.g. 'Your head moves with the stroke — that's pulling your strike point off the sweet spot.' or 'Lovely arc, tempo's a beat slow on the back — try matching back and through.' >",
+  "fault_frame_index": <integer index or -1>,
+  "follow_up_question": null
+}
+
+Rules:
+- detected_issue: prefer 'none' for putts/chips unless a full-swing issue is genuinely visible. The observation field is where the real value lives.
+- observation MUST be in short-game language. Never say "swing path outside-in" on a putt — that's a tee shot read.
+- Voice: when caddie_name is provided, use that cadence (Tank clipped, Kevin neutral, Serena precise, Harry warm).
+- Output ONLY valid JSON. No code fences, no preamble.`;
+
 const SYSTEM_PROMPT = `You are a swing analyst looking at golf-swing frames captured during a Cage Session. The player wants honest swing-fault classification, not encouragement.
 
 You will see 1-5 frames from a single swing. Identify the most prominent tendency you can see and return it with appropriate confidence. Use the confidence scale to express uncertainty — a low-confidence tendency is more useful than 'none', because the player can confirm or rule it out.
@@ -126,6 +164,7 @@ Rules:
 - The observation field is the single sentence the user will hear ("Your hips are moving toward the ball through impact"). Specific, factual, no jargon.
 - fault_frame_index: when detected_issue is anything other than 'none', return the integer index of the frame that most clearly shows the tendency. When detected_issue is 'none', return -1.
 - Voice / cadence: when a caddie name is provided in the user context, write the observation in that caddie's voice. Tank = clipped imperative, military cadence ("Weight's hanging back at impact. Not acceptable."). Kevin = neutral conversational technical ("Your weight is still on your back foot at impact"). Serena = precise instructor ("At impact your weight has not transferred forward — about 60 percent still on the trail side"). Harry = warm encouraging ("I can see you're hanging back a bit at impact — that's a common one"). Default (no caddie_name) = neutral technical.
+- Personalization: when player_context is provided, tailor the read. Higher handicap (≥20) — favor plain language, biggest single fault; do NOT pile on. Lower handicap (≤10) — get technical, name secondary tendencies. When dominant_miss is named (e.g. "slice"), bias your priority toward the fault most consistent with that miss pattern. When experience signals beginner, skip jargon. Default (no player_context) = neutral technical.
 - Output ONLY valid JSON. No code fences, no preamble.`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -158,12 +197,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (ctx.prior_issues && Array.isArray(ctx.prior_issues) && ctx.prior_issues.length > 0) {
       ctxLines.push(`Prior swings showed: ${(ctx.prior_issues as string[]).join(', ')}`);
     }
-    // Phase 403b — persona injection. When the client passes the active
-    // caddie name, the analyst writes the observation in that caddie's
-    // cadence (system prompt rule above). Falls back to neutral
-    // technical voice when absent.
     if (typeof ctx.caddie_name === 'string' && ctx.caddie_name.trim().length > 0) {
       ctxLines.push(`Caddie voice: ${ctx.caddie_name.trim()}`);
+    }
+    // Phase 502 — player_context. When the client passes profile fields
+    // (handicap, dominant_miss, experience), the analyst tailors the
+    // read. This was Tim's "every golfer gets the same analysis" finding.
+    if (ctx.player_context && typeof ctx.player_context === 'object') {
+      const pc = ctx.player_context as Record<string, unknown>;
+      if (typeof pc.handicap === 'number' && Number.isFinite(pc.handicap)) {
+        ctxLines.push(`Player handicap: ${pc.handicap}`);
+      }
+      if (typeof pc.dominant_miss === 'string' && pc.dominant_miss.trim().length > 0) {
+        ctxLines.push(`Known dominant miss: ${pc.dominant_miss.trim()}`);
+      }
+      if (typeof pc.experience === 'string' && pc.experience.trim().length > 0) {
+        ctxLines.push(`Player experience: ${pc.experience.trim()}`);
+      }
+      if (typeof pc.first_name === 'string' && pc.first_name.trim().length > 0) {
+        ctxLines.push(`Player first name: ${pc.first_name.trim()}`);
+      }
+    }
+    // Phase 502 — swing_tag routes putt/chip uploads to PUTT_SYSTEM_PROMPT
+    // (short-game-specific reads) instead of full-swing fault classification.
+    const swingTag = typeof ctx.swing_tag === 'string' ? ctx.swing_tag.toLowerCase() : '';
+    const isShortGame = swingTag === 'putt' || swingTag === 'chip';
+    if (isShortGame) {
+      ctxLines.push(`Shot type: ${swingTag}`);
     }
     const userText = mode === 'tentative'
       ? (ctxLines.length > 0 ? ctxLines.join('\n') + '\n\n' : '') +
@@ -187,7 +247,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       model: 'claude-sonnet-4-6',
       max_tokens: 400,
       temperature: 0.2,
-      system: mode === 'tentative' ? TENTATIVE_PROMPT : SYSTEM_PROMPT,
+      system: mode === 'tentative'
+        ? TENTATIVE_PROMPT
+        : isShortGame
+          ? PUTT_SYSTEM_PROMPT
+          : SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userContent }],
     });
 

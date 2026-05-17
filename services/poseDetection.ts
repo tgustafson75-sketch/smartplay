@@ -230,8 +230,23 @@ export async function analyzeSwing(
   clipUri: string,
   // Phase 403b — caddie_name optional; when present, the analyst writes
   // the observation in that caddie's cadence (Tank/Kevin/Serena/Harry).
-  // Falls back to neutral technical voice when absent.
-  context: { club: string; swing_number: number; prior_issues?: string[]; caddie_name?: string },
+  // Phase 502 — player_context (handicap, dominant_miss, height) and
+  // swing_tag (putt/chip route through a short-game-specific analysis
+  // branch) let the analyst tailor the read per player and per shot type
+  // instead of giving every golfer the same canned full-swing fault.
+  context: {
+    club: string;
+    swing_number: number;
+    prior_issues?: string[];
+    caddie_name?: string;
+    player_context?: {
+      handicap?: number | null;
+      dominant_miss?: string | null;
+      experience?: string | null;
+      first_name?: string | null;
+    };
+    swing_tag?: string | null;
+  },
   boundaries?: { startSec: number; endSec: number },
   // Phase 403b — when provided, the persisted fault-frame JPEG will be
   // saved under this filename (e.g. `${shotId}_fault.jpg`) inside the
@@ -266,6 +281,8 @@ export async function analyzeSwing(
     const res = await fetch(`${apiUrl}/api/swing-analysis`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      // context now includes player_context + swing_tag for personalized
+      // + short-game-aware analysis per Phase 502.
       body: JSON.stringify({ frames: wireFrames, context }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });

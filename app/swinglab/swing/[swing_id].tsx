@@ -30,8 +30,6 @@ import DrillCard from '../../../components/swinglab/DrillCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay from '../../../components/swinglab/SwingBodyOverlay';
 
-type AudioSource = 'coach' | 'kevin';
-
 // Phase BW — short mm:ss formatter for the per-swing list rows.
 function formatMmSs(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
@@ -99,13 +97,6 @@ export default function SwingDetail() {
   const rightCompareVideoRef = useRef<Video>(null);
   // Phase V.7+ — default to Kevin analysis. The has_audio probe in
   // videoUpload.probeVideo is unreliable (it returns true for any video with
-  // a decoded duration, including silent gym clips), so previously every
-  // upload landed on the coach-audio toggle and Tim heard silence instead
-  // of Kevin. The user can still flip to Coach Audio if a real coach track
-  // is present.
-  const [audioSource, setAudioSource] = useState<AudioSource>(
-    trustLevel === 1 && session?.upload?.has_audio ? 'coach' : 'kevin'
-  );
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState<number | null>(session?.upload?.duration_sec ?? null);
   const [showSkeleton, setShowSkeleton] = useState(true);
@@ -114,27 +105,15 @@ export default function SwingDetail() {
   const poseFrames = session?.biomechanics?.frames ?? [];
   const hasPose = poseFrames.length >= 2;
 
-  // Toggle audio source: muting video for kevin mode, unmuting for coach.
-  //
-  // 2026-05-16 — Removed the speak() block from this effect. Two bugs:
-  //   1. session?.primary_issue was in the dep array, so when analysis
-  //      landed the effect re-fired and spoke a SECOND time alongside the
-  //      auto-narrate effect below. Tim's "Kevin is speaking twice" report.
-  //   2. The text shape ("name. breakdown feel") was different from the
-  //      auto-narrate text shape ("Okay I watched it. Your primary issue is
-  //      ..."), so the two voices overlapped with different transcripts.
-  // Now this effect ONLY toggles the video's mute state. Speaking is the
-  // job of the dedicated auto-narrate effect below — one source of truth.
+  // 2026-05-17 — dropped the Coach Audio / Kevin Analysis toggle.
+  // The dual-audio path was confusing and the coach-audio detection was
+  // unreliable (has_audio probe returned true for silent clips). Now the
+  // video is always muted and the caddie's analysis auto-narrates once
+  // per swing via the effect below. Single source of truth.
   useEffect(() => {
-    void videoRef.current?.setIsMutedAsync(audioSource === 'kevin');
-    if (audioSource === 'coach') {
-      // Switching TO coach audio explicitly silences any in-flight Kevin
-      // narration (Kevin was probably mid-sentence when the user tapped
-      // the toggle).
-      void stopSpeaking();
-    }
+    void videoRef.current?.setIsMutedAsync(true);
     return () => { void stopSpeaking(); };
-  }, [audioSource]);
+  }, []);
 
   // Phase V — automatic Kevin voice when analysis FIRST completes for this
   // session. Fires once per swing_id transition into 'ok' so the player
@@ -293,7 +272,6 @@ export default function SwingDetail() {
     );
   }
 
-  const hasAudio = session.upload?.has_audio === true;
   const issueTimestamps = shot.detected_issue_timestamps_sec ?? [];
 
   // Phase V.7 — Re-run Phase K on this session with the post-V.6 pipeline.
@@ -421,7 +399,7 @@ export default function SwingDetail() {
                 resizeMode={ResizeMode.CONTAIN}
                 useNativeControls
                 shouldPlay={false}
-                isMuted={audioSource === 'kevin'}
+                isMuted
                 onPlaybackStatusUpdate={onPlaybackStatusUpdate}
               />
               {hasPose && (showSkeleton || showTrace) && (
@@ -458,23 +436,8 @@ export default function SwingDetail() {
           </>
         )}
 
-        {/* Audio source toggle */}
-        {hasAudio && (
-          <View style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-            <TouchableOpacity
-              style={[styles.toggleBtn, audioSource === 'coach' && { backgroundColor: colors.accent }]}
-              onPress={() => setAudioSource('coach')}
-            >
-              <Text style={[styles.toggleText, audioSource === 'coach' && { color: '#fff' }]}>Coach Audio</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.toggleBtn, audioSource === 'kevin' && { backgroundColor: colors.accent }]}
-              onPress={() => setAudioSource('kevin')}
-            >
-              <Text style={[styles.toggleText, audioSource === 'kevin' && { color: '#fff' }]}>Kevin Analysis</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Audio source toggle removed 2026-05-17 — analysis always plays
+            via the auto-narrate effect; video is always muted. */}
 
         {/* Issue timestamp anchors */}
         {issueTimestamps.length > 0 && session.primary_issue && (
@@ -817,7 +780,10 @@ const styles = StyleSheet.create({
   },
   back: { fontSize: 16, fontWeight: '600', width: 60 },
   title: { fontSize: 17, fontWeight: '800', flex: 1, textAlign: 'center' },
-  videoWrap: { width: '100%', aspectRatio: 9 / 16, maxHeight: 460, backgroundColor: '#000' },
+  // 2026-05-17 — bumped from maxHeight 460 to 640 so the video reads as
+  // the hero of the screen instead of a postage stamp. Tim's "video takes
+  // half the screen in Pro vs V3 full screen" feedback.
+  videoWrap: { width: '100%', aspectRatio: 9 / 16, maxHeight: 640, backgroundColor: '#000' },
   video: { width: '100%', height: '100%' },
   toggleRow: {
     flexDirection: 'row', marginHorizontal: 16, marginTop: 12, padding: 4,

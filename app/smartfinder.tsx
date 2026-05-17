@@ -518,11 +518,20 @@ function StandardCameraOverlay({
         <View style={[styles.focusCorner, styles.focusCornerBR]} />
       </View>
 
-      {/* Yellow crosshair reticle (legacy v2) */}
+      {/* Phase 502 — reticle with corner brackets ported from V3's
+          TargetingOverlay. The 4 L-shaped brackets frame the crosshair
+          so the target "lock" feels tactile and intentional, not a
+          floating dot. Same yellow accent palette throughout. */}
       <View style={styles.reticleContainer} pointerEvents="none">
-        <View style={styles.reticleH} />
-        <View style={styles.reticleV} />
-        <View style={styles.reticleCenterDot} />
+        <View style={styles.reticleFrame}>
+          <View style={styles.reticleH} />
+          <View style={styles.reticleV} />
+          <View style={styles.reticleCenterDot} />
+          <View style={[styles.reticleBracket, styles.reticleBracketTL]} />
+          <View style={[styles.reticleBracket, styles.reticleBracketTR]} />
+          <View style={[styles.reticleBracket, styles.reticleBracketBL]} />
+          <View style={[styles.reticleBracket, styles.reticleBracketBR]} />
+        </View>
       </View>
 
       {/* Top-right zoom control. ± buttons step through ZOOM_STOPS so the
@@ -964,9 +973,22 @@ const styles = StyleSheet.create({
 
   // Reticle
   reticleContainer: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  reticleH: { position: 'absolute', width: 36, height: 2, backgroundColor: '#F5A623' },
-  reticleV: { position: 'absolute', width: 2, height: 36, backgroundColor: '#F5A623' },
-  reticleCenterDot: { position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: '#F5A623' },
+  // Phase 502 — 80px frame matches V3's CROSS_SIZE so corner brackets
+  // sit at the outer edges of the reticle area.
+  reticleFrame: { width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
+  reticleH: { position: 'absolute', width: 60, height: 1.5, backgroundColor: 'rgba(245,166,35,0.7)' },
+  reticleV: { position: 'absolute', width: 1.5, height: 60, backgroundColor: 'rgba(245,166,35,0.7)' },
+  reticleCenterDot: { position: 'absolute', width: 7, height: 7, borderRadius: 4, backgroundColor: '#F5A623' },
+  reticleBracket: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderColor: '#F5A623',
+  },
+  reticleBracketTL: { top: 0, left: 0, borderTopWidth: 2.5, borderLeftWidth: 2.5 },
+  reticleBracketTR: { top: 0, right: 0, borderTopWidth: 2.5, borderRightWidth: 2.5 },
+  reticleBracketBL: { bottom: 0, left: 0, borderBottomWidth: 2.5, borderLeftWidth: 2.5 },
+  reticleBracketBR: { bottom: 0, right: 0, borderBottomWidth: 2.5, borderRightWidth: 2.5 },
 
   // Legacy v2 yellow corner focus brackets
   focusFrame: {

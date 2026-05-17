@@ -230,11 +230,36 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         const { getCaddieName } = await import('../lib/persona');
         caddieName = getCaddieName(getActiveCaddie());
       } catch { /* persona resolver optional */ }
+      // Phase 502 — pull player profile so the analyst tailors the read
+      // (handicap level, known miss, beginner skip-jargon, first name)
+      // instead of every golfer getting the same canned full-swing read.
+      let playerContext: {
+        handicap?: number | null;
+        dominant_miss?: string | null;
+        experience?: string | null;
+        first_name?: string | null;
+      } | undefined;
+      try {
+        const profileMod = await import('../store/playerProfileStore');
+        const p = profileMod.usePlayerProfileStore.getState();
+        playerContext = {
+          handicap: typeof p.handicap_index === 'number' ? p.handicap_index : (typeof p.handicap === 'number' ? p.handicap : null),
+          dominant_miss: p.dominantMiss ?? null,
+          experience: p.experienceContext ?? null,
+          first_name: p.firstName ?? p.name ?? null,
+        };
+      } catch { /* profile lookup optional */ }
+      // Phase 502 — swing_tag routes putt/chip uploads to the short-game
+      // analysis prompt. Tag is set in the upload UI per Tim's Putt/Chip
+      // tag chips (PuttWatch v1) shipped earlier.
+      const swingTag = session.upload?.tag ?? null;
       const r = await analyzeSwing(swing.clipUri, {
         club: swing.club,
         swing_number: i + 1,
         prior_issues: results.slice(-3).map(x => x.analysis.detected_issue),
         caddie_name: caddieName,
+        player_context: playerContext,
+        swing_tag: swingTag,
       }, boundaries, {
         faultFrameBaseName: `${sessionId}_${swing.id}_fault`,
       });
