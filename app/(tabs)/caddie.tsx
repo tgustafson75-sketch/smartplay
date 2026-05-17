@@ -22,6 +22,7 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { useKeepAwake } from 'expo-keep-awake';
 import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
+import { ActiveListeningPill } from '../../components/caddie/ActiveListeningPill';
 import { useRoundStore } from '../../store/roundStore';
 import type { ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -1943,6 +1944,15 @@ export default function CaddieTab() {
               Mode is still displayed (and editable) in the Tools dropdown
               status row. */}
         </View>
+      </View>
+
+      {/* 2026-05-16 — Active Listening visible status pill. Only renders
+          when VAD is actually live (autoListen ON + round active). Tap
+          to mute. Sits just below the topNav so the mic-hot signal is
+          impossible to miss but doesn't fight Kevin's avatar for focus. */}
+      <View style={{ position: 'absolute', top: insets.top + 78, left: 0, right: 0, alignItems: 'center', zIndex: 18 }}
+            pointerEvents="box-none">
+        <ActiveListeningPill />
       </View>
 
       {/* Phase AL — Mark button. Yellow accent (capture/action treatment).

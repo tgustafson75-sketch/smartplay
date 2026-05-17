@@ -534,8 +534,8 @@ export default function Settings() {
             onValueChange={setDiscreteMode}
           />
           <ToggleRow
-            label="Auto-Listen During Round"
-            sub={`${caddieName} listens automatically. Just talk.`}
+            label="Active Listening"
+            sub={`${caddieName} listens automatically during rounds. Just talk. Tap the pill on the Caddie tab to mute, or say "${caddieName}, turn off active listening".`}
             value={autoListenEnabled}
             onValueChange={setAutoListenEnabled}
           />

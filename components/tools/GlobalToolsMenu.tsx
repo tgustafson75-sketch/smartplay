@@ -64,6 +64,11 @@ export function GlobalToolsMenu() {
   const setCastMode = useSettingsStore((s) => s.setCastMode);
   const yardageMode = useSettingsStore((s) => s.yardageMode);
   const setYardageMode = useSettingsStore((s) => s.setYardageMode);
+  // 2026-05-16 — surface Active Listening one tap away from the Tools
+  // menu (was previously buried in Settings, leading to Tim's "Kevin is
+  // responding to my TV and I can't find the mute" report).
+  const autoListenEnabled = useSettingsStore((s) => s.autoListenEnabled);
+  const setAutoListenEnabled = useSettingsStore((s) => s.setAutoListenEnabled);
   // Round
   const isRoundActive = useRoundStore((s) => s.isRoundActive);
   const endRound = useRoundStore((s) => s.endRound);
@@ -111,6 +116,12 @@ export function GlobalToolsMenu() {
   const toggleCast = () => {
     setCastMode(!castMode);
     useToastStore.getState().show(castMode ? 'Cast Mode off' : 'Cast Mode on');
+    fire(() => undefined);
+  };
+
+  const toggleActiveListening = () => {
+    setAutoListenEnabled(!autoListenEnabled);
+    useToastStore.getState().show(autoListenEnabled ? 'Active Listening off' : 'Active Listening on');
     fire(() => undefined);
   };
 
@@ -191,6 +202,15 @@ export function GlobalToolsMenu() {
               label={voiceEnabled ? 'Voice: ON' : 'Voice: OFF'}
               sub={voiceEnabled ? 'Caddie speaks responses aloud' : 'Caddie is silent — tap to enable'}
               onPress={toggleVoice}
+              colors={colors}
+            />
+            <Row
+              icon={autoListenEnabled ? 'mic' : 'mic-off-outline'}
+              label={autoListenEnabled ? 'Active Listening: ON' : 'Active Listening: OFF'}
+              sub={autoListenEnabled
+                ? `${caddieName} listens automatically during rounds. Tap to mute.`
+                : `Tap so ${caddieName} listens for voice commands during rounds.`}
+              onPress={toggleActiveListening}
               colors={colors}
             />
             <Row

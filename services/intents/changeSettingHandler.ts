@@ -1,7 +1,8 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettingsStore, type Persona } from '../../store/settingsStore';
 import { useRoundStore } from '../../store/roundStore';
 import type { RoundMode } from '../../types/patterns';
+import { getCaddieName } from '../../lib/persona';
 
 function asBool(v: unknown): boolean | null {
   if (typeof v === 'boolean') return v;
@@ -17,16 +18,19 @@ export const changeSettingHandler: IntentHandler = {
   intent_type: 'change_setting',
 
   parameter_schema: {
-    setting_name: 'one of: theme, voice_enabled, discrete_mode, auto_listen, language, response_mode',
-    new_value: 'theme: light|dark|system; voice_enabled/discrete_mode/auto_listen: boolean; language: en|es|zh; response_mode: short|neutral|detailed',
+    setting_name: 'one of: theme, voice_enabled, discrete_mode, auto_listen, language, response_mode, caddie_persona',
+    new_value: 'theme: light|dark|system; voice_enabled/discrete_mode/auto_listen: boolean; language: en|es|zh; response_mode: short|neutral|detailed; caddie_persona: kevin|tank|serena|harry',
   },
 
   examples: [
     'switch to dark mode',
-    'turn on always-listening',
+    'turn on active listening',
     'mute Kevin',
     'switch to Spanish',
     'be more concise',
+    'switch to Tank',
+    'change caddie to Serena',
+    'put Harry in charge',
   ],
 
   async execute(intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
@@ -94,6 +98,19 @@ export const changeSettingHandler: IntentHandler = {
         round.setCurrentRoundMode(v as RoundMode);
         const label = v === 'free_play' ? 'free play' : v.replace('_', ' ');
         return ack(`Switched to ${label}.`, ['round_mode:' + v]);
+      }
+
+      case 'caddie_persona':
+      case 'caddie':
+      case 'persona': {
+        const v = String(rawValue ?? '').toLowerCase();
+        const valid: Persona[] = ['kevin', 'tank', 'serena', 'harry'];
+        if (!valid.includes(v as Persona)) {
+          return clarify('Kevin, Tank, Serena, or Harry?');
+        }
+        settings.setCaddiePersonality(v as Persona);
+        const newName = getCaddieName(v as Persona);
+        return ack(`${newName} here. I've got you.`, ['caddie_persona:' + v]);
       }
 
       default:
