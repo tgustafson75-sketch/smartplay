@@ -47,6 +47,7 @@ import { initTeamIntelligenceForSession } from '../services/teamIntelligence';
 import CaddieSuggestionCard from '../components/CaddieSuggestionCard';
 import GpsQualityOverlay from '../components/dev/GpsQualityOverlay';
 import CaptureOverlay from '../components/CaptureOverlay';
+import { UpdateAvailableBanner } from '../components/UpdateAvailableBanner';
 import CaptionStrip from '../components/CaptionStrip';
 import { GlobalToolsMenu } from '../components/tools/GlobalToolsMenu';
 import { GlobalToast } from '../components/toast/GlobalToast';
@@ -484,6 +485,11 @@ function AppNavigator() {
     <>
       <StatusBar style="auto" />
       <BatteryPrompt />
+      {/* Auto-update banner — slides in from the top safe area when EAS
+          Update has a newer JS bundle fetched and ready. Tap "Update" to
+          reload. Suppressed mid-round and during voice interaction so
+          the user isn't yanked off mid-hole / mid-conversation. */}
+      <UpdateAvailableBanner />
       {/* Phase 106 — caddie team handoff suggestion overlay. */}
       <CaddieSuggestionCard />
       {/* Phase 107 — GPS quality debug overlay (gated by settings flag). */}
