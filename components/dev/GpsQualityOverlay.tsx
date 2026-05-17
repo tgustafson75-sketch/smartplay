@@ -34,10 +34,16 @@ export default function GpsQualityOverlay() {
   // current hole so Tim can verify the whole Phase 405 ecosystem is
   // wired correctly during his Z Fold empirical pass. All reads are
   // O(1) lookups against in-memory Zustand state; no GPS-side cost.
-  const offCourseInfo = useOffCourseStore(s => ({
-    isOff: s.isOffCourse,
-    yards: s.yardsToNearestHole,
-  }));
+  // 2026-05-16 BUGFIX — these were one combined selector returning a new
+  // object literal each render. Zustand's internal useSyncExternalStore
+  // saw the always-changing reference as a state change and rescheduled,
+  // looping until React threw "Maximum update depth exceeded". That bug
+  // was the actual cause of "post-permissions white screen" reports —
+  // GpsQualityOverlay mounts globally at the app root, so the loop fires
+  // before any tab renders. Split into primitive selectors so each
+  // reads a stable value.
+  const isOff = useOffCourseStore(s => s.isOffCourse);
+  const yardsToNearestHole = useOffCourseStore(s => s.yardsToNearestHole);
   const movementMode = useMovementModeStore(s => s.mode);
   const movementSpeed = useMovementModeStore(s => s.avg_speed_mps);
   const selectedTee = useRoundStore(s => s.selectedTee);
@@ -74,9 +80,9 @@ export default function GpsQualityOverlay() {
     movementMode === 'cart' ? `cart (${movementSpeed.toFixed(1)} m/s)` :
     movementMode === 'walking' ? `walk (${movementSpeed.toFixed(1)} m/s)` :
     'still';
-  const offStr = offCourseInfo.isOff
-    ? `OFF ${offCourseInfo.yards ?? '?'}y`
-    : offCourseInfo.yards != null ? `~${offCourseInfo.yards}y` : 'on';
+  const offStr = isOff
+    ? `OFF ${yardsToNearestHole ?? '?'}y`
+    : yardsToNearestHole != null ? `~${yardsToNearestHole}y` : 'on';
   const teeStr = selectedTee === 'unspecified' ? '—' : selectedTee;
 
   return (
