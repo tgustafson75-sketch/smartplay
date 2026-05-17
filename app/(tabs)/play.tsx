@@ -571,7 +571,15 @@ export default function PlayTab() {
                   'Your scorecard saves to history. Anything in progress this hole will be finalized.',
                   [
                     { text: 'Keep playing', style: 'cancel' },
-                    { text: 'End round', style: 'destructive', onPress: () => endRound() },
+                    { text: 'End round', style: 'destructive', onPress: () => {
+                      // 2026-05-16 — endRound now returns the just-saved
+                      // round_id; auto-route to /recap/<id> so the user
+                      // lands on the post-round summary instead of being
+                      // dropped on a quiet Play tab with no feedback.
+                      const roundId = endRound();
+                      try { router.push(`/recap/${roundId}` as never); }
+                      catch (e) { console.log('[play] recap nav failed', e); }
+                    } },
                   ],
                 );
               }}

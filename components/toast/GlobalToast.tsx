@@ -13,7 +13,11 @@ import { Animated, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToastStore } from '../../store/toastStore';
 
-const TOAST_DURATION_MS = 1500;
+// 2026-05-16 — bumped from 1500 to 2400ms after Tim reported the
+// round-end toast was easy to miss when looking away from the phone.
+// Recap auto-route handles long-term feedback; this just makes the
+// transient confirmation visible long enough to register.
+const TOAST_DURATION_MS = 2400;
 const FADE_MS = 180;
 
 export function GlobalToast() {

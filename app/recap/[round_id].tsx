@@ -182,12 +182,35 @@ export default function RecapScreen() {
   const [sharing, setSharing] = useState(false);
   const [highlightedHole, setHighlightedHole] = useState<number | null>(null);
 
+  // 2026-05-16 — Poll for the recap file. endRound now fires Sonnet
+  // recap generation fire-and-forget; the file lands a few seconds after
+  // the user navigates here. Previously this was a single load that
+  // captured the not-yet-existing state and left the screen blank
+  // forever. Polls every 1s for up to 30s; stops as soon as recap loads.
   useEffect(() => {
     if (!round_id) return;
-    loadRecap(round_id).then(r => {
-      setRecap(r);
-      setLoading(false);
-    });
+    let cancelled = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 30;
+    const tick = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      const r = await loadRecap(round_id);
+      if (cancelled) return;
+      if (r) {
+        setRecap(r);
+        setLoading(false);
+        return;
+      }
+      if (attempts >= MAX_ATTEMPTS) {
+        // Give up — leave loading false so the empty-state UI renders.
+        setLoading(false);
+        return;
+      }
+      setTimeout(() => { void tick(); }, 1000);
+    };
+    void tick();
+    return () => { cancelled = true; };
   }, [round_id]);
 
   const handleShare = useCallback(async () => {

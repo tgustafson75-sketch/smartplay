@@ -197,7 +197,15 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
           trial_started_at: null,
           subscription_status: 'lifetime',
         })),
-      setHandicapIndex: (idx) => set({ handicap_index: idx }),
+      setHandicapIndex: (idx) => set(s => {
+        // 2026-05-16 — Keep the legacy integer `handicap` field in
+        // lockstep with handicap_index so consumers that read either
+        // (e.g. dashboard, Kevin's prompt) stay current. Rounded to
+        // the nearest whole number; null index clears handicap only
+        // when the user hasn't manually entered a non-default value.
+        const rounded = idx == null ? s.handicap : Math.max(0, Math.min(54, Math.round(idx)));
+        return { handicap_index: idx, handicap: rounded };
+      }),
       setHandicapGender: (g) => set({ handicap_gender: g }),
       pushDifferential: (diff) =>
         set(s => ({ recent_differentials: [...s.recent_differentials, diff].slice(-20) })),

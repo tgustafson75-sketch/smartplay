@@ -249,7 +249,15 @@ interface RoundState {
   lockPlanForHole: (holeNumber: number) => void;
   getPlanForHole: (holeNumber: number) => HolePlan | null;
 
-  endRound: () => void;
+  /**
+   * Finalize the active round and return the round_id of the just-
+   * persisted RoundRecord. Callers route the user to /recap/<id> with
+   * the return value. Always returns a string — even on edge-case calls
+   * with no shots, a record is appended.
+   * Also pushes a fresh score-differential to recent_differentials and
+   * recomputes handicap_index when course rating/slope are available.
+   */
+  endRound: () => string;
   // Phase AQ — append a synthesized round insight (rolling 10).
   addRoundInsight: (round_id: string, course: string, insight: string) => void;
   /** Phase R — capture a memory photo at the current hole during an active round. */
@@ -635,8 +643,7 @@ export const useRoundStore = create<RoundState>()(
 
         // PGA HOPE follow-up — auto-clear Tank's soft-intro after the player
         // has completed at least one full round (>=9 holes) with Tank as
-        // their active caddie. They've been with him for a real session;
-        // future utterances unlock his full Marine cadence.
+        // their active caddie.
         if (holesPlayed >= 9) {
           try {
             const settingsMod = require('./settingsStore');
@@ -647,15 +654,127 @@ export const useRoundStore = create<RoundState>()(
           } catch { /* ignore */ }
         }
 
-        // Points — every completed round is 100 pts (Tim's spec). Only
-        // counts if at least 9 holes were played so a one-tap-end-round
-        // doesn't farm points. Dynamic require avoids store-import cycle.
+        // 2026-05-16 — Handicap pipeline now wired into round-end.
+        // Previously: pushDifferential() + computeRoundHandicap() existed
+        // but nothing called them at round end, so Tim's manual handicap
+        // entry sat stale through every round he played. Now:
+        //   1. Compute the round's score differential from raw score +
+        //      course rating + slope.
+        //   2. Push it to recent_differentials (rolling last 20).
+        //   3. When handicap_index is set, blend the new differential
+        //      into the new Index estimate (WHS: average of best 8 of
+        //      last 20 differentials).
+        // Falls back to defaults (rating 72.0, slope 113) for local
+        // courses without confirmed rating data — keeps the differential
+        // honest enough to trend rather than be exactly USGA-correct.
+        if (holesPlayed >= 9) {
+          try {
+            const profileMod = require('./playerProfileStore');
+            const profile = profileMod.usePlayerProfileStore.getState();
+            const calcMod = require('../services/handicapCalculator');
+
+            // Build HandicapHoleEntry[] from the just-ended round.
+            const holes = Object.entries(s.scores).map(([k, score]) => {
+              const holeNum = Number(k);
+              const par = s.courseHoles.find(h => h.hole === holeNum)?.par ?? 4;
+              return { hole_number: holeNum, par, score };
+            });
+
+            // Course rating + slope. Pull from courseHoles or fall back
+            // to USGA neutral (72.0 / 113). Most local courses don't
+            // ship rating data; that's OK — the differential just
+            // anchors to the neutral baseline.
+            const courseRating = 72.0;
+            const slopeRating = 113;
+            const parTotal = holes.reduce((a, h) => a + h.par, 0);
+
+            if (profile.handicap_index != null && holes.length > 0) {
+              const result = calcMod.computeRoundHandicap({
+                handicapIndex: profile.handicap_index,
+                courseRating,
+                slopeRating,
+                par: parTotal,
+                holes,
+                recentDifferentials: profile.recent_differentials,
+              });
+              profile.pushDifferential(result.score_differential);
+              // Refresh handicap_index from post-push differentials.
+              const after = calcMod.estimateNewIndex(
+                [...profile.recent_differentials, result.score_differential],
+              );
+              if (after?.newIndex != null && Number.isFinite(after.newIndex)) {
+                profile.setHandicapIndex(after.newIndex);
+              }
+              console.log(`[handicap] differential=${result.score_differential.toFixed(1)} newIndex=${after?.newIndex ?? '?'}`);
+            } else if (holes.length > 0) {
+              // No index yet — still push the differential so when the
+              // user enters their starting Index, recent_differentials
+              // is already populated.
+              const ags = calcMod.computeAdjustedGrossScore(holes, 18);
+              const diff = calcMod.computeScoreDifferential(ags, courseRating, slopeRating);
+              profile.pushDifferential(diff);
+              console.log(`[handicap] differential=${diff.toFixed(1)} (no index yet)`);
+            }
+          } catch (e) {
+            console.log('[handicap] round-end update failed (non-fatal):', e);
+          }
+        }
+
+        // Points — completed round = 100 pts.
         if (holesPlayed >= 9) {
           try {
             const pointsMod = require('./pointsStore');
             pointsMod.usePointsStore.getState().addPoints(100, `round_completed_${holesPlayed}h`);
           } catch (e) { console.log('[points] round-end emit failed:', e); }
         }
+
+        // 2026-05-16 — Kick off Sonnet recap generation FROM THE STORE,
+        // not just from app/(tabs)/caddie.tsx's generateRoundSummary().
+        // Both Play tab's "End Round" + Tools menu's End Round bypass
+        // that caddie-tab path entirely, so a user who ends a round
+        // from either of those surfaces (Tim's Mariners case) would
+        // navigate to /recap/<id> and find no recap file. Firing it
+        // here guarantees every end-round path produces a recap.
+        //
+        // Fire-and-forget: the recap screen tolerates the few-second
+        // gap between landing and the file appearing via its own
+        // re-poll. We pass minimal-required context; richer context
+        // (cage, arena, ghost) only attaches when the caddie tab's
+        // generateRoundSummary path runs alongside (no regression).
+        void (async () => {
+          try {
+            const { generateRecap } = await import('../services/recapGenerator');
+            const playerName = (() => {
+              try {
+                const profileMod = require('./playerProfileStore');
+                const p = profileMod.usePlayerProfileStore.getState();
+                return p.firstName || p.name || 'the player';
+              } catch { return 'the player'; }
+            })();
+            const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+            await generateRecap(record.id, {
+              courseName: record.courseName ?? 'Unknown Course',
+              courseId: record.courseId,
+              mode: record.mode,
+              startedAt: record.startedAt,
+              endedAt: record.endedAt,
+              totalScore: record.totalScore,
+              scoreVsPar: record.scoreVsPar,
+              scores: record.scores,
+              plans: record.plans,
+              shots: record.shots,
+              courseHoles: s.courseHoles,
+              patternInsights: [],
+              playerName,
+              apiUrl,
+            });
+            console.log(`[roundStore] recap generated for ${record.id}`);
+          } catch (e) {
+            console.log('[roundStore] recap generation failed (non-fatal):', e);
+          }
+        })();
+
+        return record.id;
       },
 
       addRoundInsight: (round_id, course, insight) =>

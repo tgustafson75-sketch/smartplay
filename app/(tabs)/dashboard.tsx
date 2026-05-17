@@ -94,6 +94,7 @@ export default function Dashboard() {
     firstName,
     name,
     handicap,
+    handicap_index,
     personalBest,
     goal,
     dominantMiss,
@@ -102,6 +103,7 @@ export default function Dashboard() {
       firstName: s.firstName,
       name: s.name,
       handicap: s.handicap,
+      handicap_index: s.handicap_index,
       personalBest: s.personalBest,
       goal: s.goal,
       dominantMiss: s.dominantMiss,
@@ -193,7 +195,7 @@ export default function Dashboard() {
               {welcomeName}
             </Text>
             <Text style={[styles.profileMeta, { color: colors.text_muted }]} numberOfLines={1}>
-              Handicap {handicap || '—'} · Goal {goal || '—'}
+              Handicap {handicap_index != null ? handicap_index.toFixed(1) : (handicap || '—')} · Goal {goal || '—'}
             </Text>
           </View>
           <TouchableOpacity

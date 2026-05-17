@@ -150,8 +150,13 @@ export function GlobalToolsMenu() {
 
   const endRoundAction = () => fire(() => {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-    endRound();
+    // 2026-05-16 — endRound returns the just-saved round_id; navigate
+    // to the recap surface so the user sees a post-round summary
+    // instead of nothing happening.
+    const roundId = endRound();
     useToastStore.getState().show('Round ended');
+    try { router.push(`/recap/${roundId}` as never); }
+    catch (e) { console.log('[tools] recap nav failed', e); }
   });
 
   const navOrPaywall = (feature: FeatureKey, path: string) => fire(() => {
