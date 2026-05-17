@@ -93,6 +93,7 @@ export default function CourseDetailScreen() {
           slug === 'crystal-springs' ? 'Crystal Springs Golf Course' :
           slug === 'mariners-point' ? 'Mariners Point Golf Center' :
           slug === 'san-jose-muni' ? 'San Jose Municipal Golf Course' :
+          slug === 'sunnyvale' ? 'Sunnyvale Golf Course' :
           slug;
         const stubHoles = Array.from({ length: 18 }, (_, i): import('../../types/course').Hole => ({
           hole_number: i + 1,
@@ -112,6 +113,7 @@ export default function CourseDetailScreen() {
               slug === 'crystal-springs' ? 'Burlingame' :
               slug === 'mariners-point' ? 'Foster City' :
               slug === 'san-jose-muni' ? 'San Jose' :
+              slug === 'sunnyvale' ? 'Sunnyvale' :
               'Menifee',
             state: 'CA',
             country: 'USA',
@@ -172,10 +174,16 @@ export default function CourseDetailScreen() {
       setContentLoading(false);
       return;
     }
+    // 2026-05-16 — hard timeout so "loading…" can't stick visible
+    // forever if the network is slow or the endpoint hangs. After 15s
+    // we flip contentLoading false regardless; HoleGuide notes then
+    // show "—" instead of "loading…". The actual fetch still resolves
+    // when it can and sets `content` once it returns.
+    const loadTimeout = setTimeout(() => {
+      if (!cancelled) setContentLoading(false);
+    }, 15_000);
     fetchCourseContent({
       courseId: course.id,
-      // Use the local-friendly name when present so AI-generated About
-      // and Caddie Tips reflect the layout the user actually picked.
       courseName: localFriendlyName ?? course.club_name,
       location: [course.location.city, course.location.state].filter(Boolean).join(', '),
       par: tee.par_total,
@@ -185,16 +193,18 @@ export default function CourseDetailScreen() {
       holes: tee.holes.map(h => ({ hole_number: h.hole_number, par: h.par, yardage: h.yardage })),
     })
       .then(c => {
+        clearTimeout(loadTimeout);
         if (!cancelled) {
           setContent(c);
           setContentLoading(false);
         }
       })
       .catch(e => {
+        clearTimeout(loadTimeout);
         console.log('[course-detail] content fetch failed:', e);
         if (!cancelled) setContentLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; clearTimeout(loadTimeout); };
     // localFriendlyName is derived from course_id (route param, stable
     // for the screen lifetime); listing it as a dep would cause an
     // infinite refetch on first render. Course is the real trigger.
@@ -216,6 +226,7 @@ export default function CourseDetailScreen() {
     localSlug === 'crystal-springs' ? 'Crystal Springs' :
     localSlug === 'mariners-point' ? 'Mariners Point' :
     localSlug === 'san-jose-muni' ? 'San Jose Municipal' :
+    localSlug === 'sunnyvale' ? 'Sunnyvale Golf Course' :
     null;
   const displayClubName = localFriendlyName ?? course?.club_name ?? '';
   const noteByHole = useMemo(() => {

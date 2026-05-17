@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useTheme } from '../../contexts/ThemeContext';
 
 type HoleRow = {
   hole_number: number;
@@ -23,38 +24,62 @@ type Props = {
  * while the numeric columns stay fixed.
  */
 export default function HoleGuide({ holes, notesLoading }: Props) {
+  const { colors } = useTheme();
   const sorted = [...holes].sort((a, b) => a.hole_number - b.hole_number);
   const parTotal = sorted.reduce((a, h) => a + h.par, 0);
   const ydsTotal = sorted.reduce((a, h) => a + h.yardage, 0);
 
+  // 2026-05-16 — theme-aware. Pre-existing hardcoded dark colors
+  // rendered the table as washed-out white cards in light mode (Tim's
+  // "dog shit" report). Pull from the active theme palette so the
+  // table reads correctly in both light and dark themes.
+  const dynamicStyles = useMemo(() => ({
+    headerBorder: { borderBottomColor: colors.border },
+    header: { color: colors.text_muted },
+    cell: { color: colors.text_primary },
+    rowBorder: { borderBottomColor: colors.border },
+    rowAlt: { backgroundColor: colors.surface },
+    note: { color: colors.text_muted },
+    noteLoading: { color: colors.text_muted, fontStyle: 'italic' as const, opacity: 0.6 },
+    badgeBorder: { borderColor: colors.accent },
+    badgeText: { color: colors.text_primary },
+    totalBorder: { borderTopColor: colors.border },
+    totalLabel: { color: colors.text_muted },
+    totalVal: { color: colors.accent },
+  }), [colors]);
+
   return (
     <View style={styles.wrap}>
-      <View style={styles.headerRow}>
-        <Text style={[styles.h, styles.colHole]}>#</Text>
-        <Text style={[styles.h, styles.colPar]}>PAR</Text>
-        <Text style={[styles.h, styles.colYds]}>YDS</Text>
-        <Text style={[styles.h, styles.colNote]}>NOTE</Text>
+      <View style={[styles.headerRow, dynamicStyles.headerBorder]}>
+        <Text style={[styles.h, dynamicStyles.header, styles.colHole]}>#</Text>
+        <Text style={[styles.h, dynamicStyles.header, styles.colPar]}>PAR</Text>
+        <Text style={[styles.h, dynamicStyles.header, styles.colYds]}>YDS</Text>
+        <Text style={[styles.h, dynamicStyles.header, styles.colNote]}>NOTE</Text>
       </View>
       {sorted.map((h, i) => {
-        // Phase 405 — par-tinted hole badge so the eye reads par at a
-        // glance. Par 3 = dim teal, Par 4 = mid teal, Par 5 = bright
-        // teal. Keeps the column scannable without spelling out par
-        // twice (it's already in the next column).
         const parTint =
           h.par === 3 ? 'rgba(0,200,150,0.18)' :
           h.par === 5 ? 'rgba(0,200,150,0.45)' :
                         'rgba(0,200,150,0.30)';
         return (
-          <View key={h.hole_number} style={[styles.row, i % 2 === 1 && styles.rowAlt]}>
+          <View
+            key={h.hole_number}
+            style={[styles.row, dynamicStyles.rowBorder, i % 2 === 1 && dynamicStyles.rowAlt]}
+          >
             <View style={styles.colHole}>
-              <View style={[styles.holeBadge, { backgroundColor: parTint }]}>
-                <Text style={styles.holeBadgeText}>{h.hole_number}</Text>
+              <View style={[styles.holeBadge, dynamicStyles.badgeBorder, { backgroundColor: parTint }]}>
+                <Text style={[styles.holeBadgeText, dynamicStyles.badgeText]}>{h.hole_number}</Text>
               </View>
             </View>
-            <Text style={[styles.cell, styles.colPar]}>{h.par}</Text>
-            <Text style={[styles.cell, styles.colYds]}>{h.yardage > 0 ? h.yardage : '—'}</Text>
+            <Text style={[styles.cell, dynamicStyles.cell, styles.colPar]}>{h.par}</Text>
+            <Text style={[styles.cell, dynamicStyles.cell, styles.colYds]}>
+              {h.yardage > 0 ? h.yardage : '—'}
+            </Text>
             <Text
-              style={[styles.cell, styles.colNote, styles.note, notesLoading && !h.note && styles.noteLoading]}
+              style={[
+                styles.cell, styles.colNote, dynamicStyles.note,
+                notesLoading && !h.note && dynamicStyles.noteLoading,
+              ]}
               numberOfLines={2}
             >
               {h.note ?? (notesLoading ? 'loading…' : '—')}
@@ -62,10 +87,10 @@ export default function HoleGuide({ holes, notesLoading }: Props) {
           </View>
         );
       })}
-      <View style={[styles.row, styles.totalRow]}>
-        <Text style={[styles.cell, styles.colHole, styles.totalLabel]}>TOTAL</Text>
-        <Text style={[styles.cell, styles.colPar, styles.totalVal]}>{parTotal}</Text>
-        <Text style={[styles.cell, styles.colYds, styles.totalVal]}>{ydsTotal}</Text>
+      <View style={[styles.row, styles.totalRow, dynamicStyles.totalBorder]}>
+        <Text style={[styles.cell, styles.colHole, dynamicStyles.totalLabel]}>TOTAL</Text>
+        <Text style={[styles.cell, styles.colPar, dynamicStyles.totalVal, styles.totalValSize]}>{parTotal}</Text>
+        <Text style={[styles.cell, styles.colYds, dynamicStyles.totalVal, styles.totalValSize]}>{ydsTotal}</Text>
         <Text style={[styles.cell, styles.colNote]} />
       </View>
     </View>
@@ -78,46 +103,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#1e3a28',
   },
-  h: { color: '#6b7280', fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
+  h: { fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
   row: {
     flexDirection: 'row',
     paddingVertical: 8,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#0f1f15',
     alignItems: 'flex-start',
   },
-  // v3-style alternating row tint — every other row gets a subtle dark
-  // band so the eye can track left→right across 18 holes without losing
-  // place. Tim 2026-05-14: "look at v3 course info ... it was beautiful."
-  rowAlt: {
-    backgroundColor: '#0a1612',
-  },
-  cell: { color: '#e8f5e9', fontSize: 13 },
-  // Phase 405 — colHole now hosts a circular badge instead of bare
-  // text. Width widened a touch (32 -> 36 inc padding) so the 2-digit
-  // hole-numbers (10-18) don't crowd the badge.
+  cell: { fontSize: 13 },
   colHole: { width: 36, alignItems: 'center' },
   holeBadge: {
     width: 26, height: 26, borderRadius: 13,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: 'rgba(0,200,150,0.45)',
+    borderWidth: 1,
   },
-  holeBadgeText: { color: '#e8f5e9', fontSize: 12, fontWeight: '900' },
+  holeBadgeText: { fontSize: 12, fontWeight: '900' },
   colPar: { width: 36 },
   colYds: { width: 52 },
-  colNote: { flex: 1 },
-  note: { color: '#9ca3af', fontSize: 12, lineHeight: 16 },
-  noteLoading: { color: '#4b5563', fontStyle: 'italic' },
+  colNote: { flex: 1, fontSize: 12, lineHeight: 16 },
   totalRow: {
     borderBottomWidth: 0,
     borderTopWidth: 1,
-    borderTopColor: '#1e3a28',
     paddingTop: 10,
     marginTop: 4,
   },
-  totalLabel: { color: '#6b7280', fontSize: 10, letterSpacing: 1.2 },
-  totalVal: { color: '#00C896', fontSize: 14, fontWeight: '800' },
+  totalValSize: { fontSize: 14, fontWeight: '800' },
 });

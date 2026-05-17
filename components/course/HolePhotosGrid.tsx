@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Image, TouchableOpacity, Modal, StyleSheet, useWindowDimensions, FlatList, type ImageSourcePropType } from 'react-native';
+import { useTheme } from '../../contexts/ThemeContext';
 
 type HolePhoto = {
   hole_number: number;
@@ -26,18 +27,17 @@ type Props = {
  */
 export default function HolePhotosGrid({ photos }: Props) {
   const { width } = useWindowDimensions();
+  const { colors } = useTheme();
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
 
   // v3-style: 4:3 landscape tiles read more cinematic than squares.
-  // Width = (screen − horizontal padding − two gutters) / 3.
-  // Height = width / 1.4 (4:3-ish).
   const cellW = Math.floor((width - 16 * 2 - 8 * 2) / 3);
   const cellH = Math.round(cellW / 1.4);
 
   if (photos.length === 0) {
     return (
-      <View style={styles.placeholderWrap}>
-        <Text style={styles.placeholderText}>Hole photos coming soon.</Text>
+      <View style={[styles.placeholderWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.placeholderText, { color: colors.text_muted }]}>Hole photos coming soon.</Text>
       </View>
     );
   }
@@ -48,7 +48,10 @@ export default function HolePhotosGrid({ photos }: Props) {
         {photos.map((p, i) => (
           <TouchableOpacity
             key={p.hole_number}
-            style={[styles.cell, { width: cellW, height: cellH }]}
+            style={[
+              styles.cell,
+              { width: cellW, height: cellH, backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
             onPress={() => setActiveIdx(i)}
             activeOpacity={0.85}
           >
