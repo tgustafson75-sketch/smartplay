@@ -34,6 +34,7 @@ import { haversineYards, projectToAxis } from '../utils/geoDistance';
 import { computeDistance, buildLock } from '../services/rangefinder';
 import GPSQuality from '../components/smartfinder/GPSQuality';
 import SmartFinderModeToggle from '../components/smartfinder/SmartFinderModeToggle';
+import TargetingOverlay from '../components/smartfinder/TargetingOverlay';
 import { useCurrentWeather } from '../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../utils/playsLike';
 import type { WeatherSnapshot } from '../services/weatherService';
@@ -151,8 +152,12 @@ export default function SmartFinder() {
     });
   }, [isRoundActive, voiceEnabled, trustLevel, yards.middle, caddieWeather, shotBearingDeg, voiceGender, language, apiUrl]);
 
-  // Camera modes share the camera view + need permission gate
-  const isCameraMode = mode === 'standard' || mode === 'putt';
+  // Camera modes share the camera view + need permission gate. Phase 502
+  // added TARGET to this set — V3-style camera-with-draggable-reticle.
+  // The old flat-canvas TargetView is retained below the route for
+  // surfaces that explicitly ask for top-down, but the default TARGET
+  // path is now camera + overlay.
+  const isCameraMode = mode === 'standard' || mode === 'putt' || mode === 'target';
 
   if (isCameraMode) {
     return (
@@ -160,6 +165,7 @@ export default function SmartFinder() {
         mode={mode}
         currentHole={currentHole}
         gps={gps}
+        yards={yards}
         onModeChange={setMode}
         onClose={() => safeBack()}
         height={height}
@@ -185,9 +191,12 @@ export default function SmartFinder() {
       <ScrollView contentContainerStyle={styles.scroll}>
         {!isRoundActive ? (
           <Text style={styles.empty}>Start a round to see yardages.</Text>
-        ) : mode === 'target' ? (
-          <TargetView geometry={geometry} width={width * CANVAS_W_FRACTION} />
         ) : (
+          // Phase 502 — target is now a camera mode (handled by
+          // CameraSmartFinder above); the only remaining non-camera mode
+          // is map. The legacy TargetView is left in the file below as
+          // dead code in case a future surface wants the flat top-down
+          // canvas back without re-deriving the geometry math.
           <MapView
             geometry={geometry}
             yards={yards}
@@ -258,11 +267,12 @@ const ZOOM_STOPS: readonly { label: string; value: number }[] = [
 ];
 
 function CameraSmartFinder({
-  mode, currentHole, gps, onModeChange, onClose, height,
+  mode, currentHole, gps, yards, onModeChange, onClose, height,
 }: {
   mode: SmartFinderMode;
   currentHole: number;
   gps: GPSQualityReading;
+  yards: GreenYardages;
   onModeChange: (m: SmartFinderMode) => void;
   onClose: () => void;
   height: number;
@@ -352,6 +362,8 @@ function CameraSmartFinder({
           onZoomIn={() => stepZoom(1)}
           onZoomOut={() => stepZoom(-1)}
         />
+      ) : mode === 'target' ? (
+        <TargetCameraOverlay yards={yards} />
       ) : (
         <PuttCameraOverlay locationGranted={locationGranted} />
       )}
@@ -610,6 +622,56 @@ function StandardCameraOverlay({
 }
 
 // ─── Putt mode (camera + 2 taps + simple slope hint) ─────────────────────────
+
+// ─── Target mode (camera + draggable target reticle + F/M/B strip) ──────────
+//
+// Phase 502 port from V3. The user drags the yellow corner-bracket reticle
+// across the screen; yardage updates live based on the F/M/B yardages.
+// Bottom strip shows TO TARGET <yds> with Front / Middle / Back of green
+// distances. Replaces the old top-down flat-canvas TargetView.
+
+function TargetCameraOverlay({ yards }: { yards: GreenYardages }) {
+  const insets = useSafeAreaInsets();
+  const [targetYards, setTargetYards] = useState<number | null>(yards.middle);
+
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <TargetingOverlay
+        gpsDistances={{ front: yards.front, middle: yards.middle, back: yards.back }}
+        baseYardage={yards.middle}
+        onTargetDistance={(v) => setTargetYards(v)}
+      />
+
+      {/* Bottom F/M/B strip — port of V3's TO TARGET row. */}
+      <View
+        style={[styles.targetBottomStrip, { paddingBottom: insets.bottom + 16 }]}
+        pointerEvents="none"
+      >
+        {targetYards != null && (
+          <Text style={styles.targetToLabel}>
+            <Text style={styles.targetToLabelMuted}>⊕ TO TARGET </Text>
+            <Text style={styles.targetToYards}>{targetYards}</Text>
+            <Text style={styles.targetToLabelMuted}> yds</Text>
+          </Text>
+        )}
+        <View style={styles.targetFmbRow}>
+          <View style={styles.targetFmbCol}>
+            <Text style={styles.targetFmbHeader}>F</Text>
+            <Text style={styles.targetFmbValue}>{yards.front ?? '—'}</Text>
+          </View>
+          <View style={styles.targetFmbCol}>
+            <Text style={styles.targetFmbHeaderMid}>M</Text>
+            <Text style={styles.targetFmbValueMid}>{yards.middle ?? '—'}</Text>
+          </View>
+          <View style={styles.targetFmbCol}>
+            <Text style={styles.targetFmbHeader}>B</Text>
+            <Text style={styles.targetFmbValue}>{yards.back ?? '—'}</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
 
 function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGranted: boolean }) {
   const insets = useSafeAreaInsets();
@@ -989,6 +1051,32 @@ const styles = StyleSheet.create({
   reticleBracketTR: { top: 0, right: 0, borderTopWidth: 2.5, borderRightWidth: 2.5 },
   reticleBracketBL: { bottom: 0, left: 0, borderBottomWidth: 2.5, borderLeftWidth: 2.5 },
   reticleBracketBR: { bottom: 0, right: 0, borderBottomWidth: 2.5, borderRightWidth: 2.5 },
+  // Phase 502 — TARGET-mode bottom F/M/B strip.
+  targetBottomStrip: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.78)',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    alignItems: 'center',
+  },
+  targetToLabel: {
+    color: '#FFE600',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    marginBottom: 8,
+  },
+  targetToLabelMuted: { color: 'rgba(255,230,0,0.85)' },
+  targetToYards: { color: '#FFE600', fontSize: 18 },
+  targetFmbRow: { flexDirection: 'row', justifyContent: 'space-around', alignSelf: 'stretch' },
+  targetFmbCol: { alignItems: 'center', minWidth: 70 },
+  targetFmbHeader: { color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '900', letterSpacing: 1.4 },
+  targetFmbHeaderMid: { color: '#00C896', fontSize: 12, fontWeight: '900', letterSpacing: 1.4 },
+  targetFmbValue: { color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: 0.4, marginTop: 2 },
+  targetFmbValueMid: { color: '#00C896', fontSize: 20, fontWeight: '900', letterSpacing: 0.4, marginTop: 2 },
 
   // Legacy v2 yellow corner focus brackets
   focusFrame: {
