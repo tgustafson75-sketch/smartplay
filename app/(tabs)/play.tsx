@@ -30,17 +30,15 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse } from '../../services/golfCourseApi';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
-import { getCourseImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
+import { getCourseImageryUrl } from '../../services/mapboxImagery';
 import PALMS_IMAGES from '../../data/palmsImages';
-// 2026-05-16 — SAN_JOSE_MUNI_HOLE_IMAGES + SUNNYVALE_HOLE_IMAGES
-// intentionally NOT imported. Those bundled JPGs are Golfshot
-// screenshots with yardage UI overlaid; we use Mapbox centroid tiles
-// for those courses now (see thumbnail entries below).
 import {
   CRYSTAL_SPRINGS_HOLE_IMAGES,
   MARINERS_POINT_HOLE_IMAGES,
   LAKES_HOLE_IMAGES,
   RANCHO_CALIFORNIA_HOLE_IMAGES,
+  SAN_JOSE_MUNI_HOLE_IMAGES,
+  SUNNYVALE_HOLE_IMAGES,
 } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
@@ -139,9 +137,8 @@ const LOCAL_COURSES: CourseSummary[] = [
     rating: 70.2,
     slope: 122,
     isLocal: true,
-    // 2026-05-16 — Mapbox centroid tile (clean satellite) instead of the
-    // previously-bundled chromed Golfshot screenshot.
-    thumbnail: { uri: getCenteredImageryUrl({ lat: 37.3670, lng: -121.9310, zoom: 15, width: 320, height: 180 }) ?? '' },
+    // 2026-05-16 — cropped Golfshot screenshot (chrome removed via PIL).
+    thumbnail: (SAN_JOSE_MUNI_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
     lat: 37.3670,
     lng: -121.9310,
   },
@@ -156,9 +153,8 @@ const LOCAL_COURSES: CourseSummary[] = [
     rating: 69.8,
     slope: 117,
     isLocal: true,
-    // 2026-05-16 — Mapbox centroid tile (clean satellite) instead of the
-    // previously-bundled chromed Golfshot screenshot.
-    thumbnail: { uri: getCenteredImageryUrl({ lat: 37.3777, lng: -122.0357, zoom: 15, width: 320, height: 180 }) ?? '' },
+    // 2026-05-16 — cropped Golfshot screenshot (chrome removed via PIL).
+    thumbnail: (SUNNYVALE_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
     lat: 37.3777,
     lng: -122.0357,
   },

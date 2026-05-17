@@ -215,10 +215,14 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
 
 /**
  * Resolve a course name to its bundled hole image, if available.
- * Returns null for Sunnyvale + San Jose Muni — those bundled JPGs are
- * Golfshot screenshots with yardage chrome overlaid and shouldn't be
- * shown as hole imagery. Consumers should fall back to the Mapbox
- * centroid URL (see getLocalCourseSlug + getCenteredImageryUrl).
+ *
+ * 2026-05-16 update: San Jose Muni + Sunnyvale ARE matched again now
+ * that their JPGs were programmatically cropped (Python/PIL) to remove
+ * the Golfshot yardage UI, "Get Pro!" banner, Android status bars, and
+ * info/edit buttons. What remains is the actual per-hole aerial strip
+ * with tee at bottom, green at top, and a baked-in green-center
+ * yardage label. Net result: ~24MB asset-bundle reduction PLUS the
+ * imagery is finally usable.
  */
 export function getLocalHoleImage(courseName: string | null, holeNumber: number): ImageSourcePropType | null {
   if (!courseName) return null;
@@ -228,12 +232,8 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   if (c.includes('palms')) return PALMS_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('lakes') && !c.includes('palms')) return LAKES_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('rancho')) return RANCHO_CALIFORNIA_HOLE_IMAGES[holeNumber] ?? null;
-  // 2026-05-16 — San Jose Muni + Sunnyvale intentionally fall through.
-  // Their bundled JPGs are Golfshot screenshots with the yardage UI
-  // overlaid and should NOT be shown as hole imagery. The registries
-  // (SAN_JOSE_MUNI_HOLE_IMAGES / SUNNYVALE_HOLE_IMAGES) remain exported
-  // so existing code references still compile, but this helper returns
-  // null so consumers route through the Mapbox centroid fallback.
+  if (c.includes('san jose')) return SAN_JOSE_MUNI_HOLE_IMAGES[holeNumber] ?? null;
+  if (c.includes('sunnyvale')) return SUNNYVALE_HOLE_IMAGES[holeNumber] ?? null;
   return null;
 }
 
