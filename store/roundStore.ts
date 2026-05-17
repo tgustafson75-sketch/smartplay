@@ -275,6 +275,12 @@ interface RoundState {
    *  for Caddie tab to consume on focus. Set then auto-cleared. */
   pendingStartCourseId: string | null;
   setPendingStartCourse: (id: string | null) => void;
+  /** Render-only "selected on Play tab" hint. Distinct from pending* —
+   *  setting this does NOT auto-launch a round; it just lets pre-round
+   *  surfaces (SmartVision preview, L1HolePreview) resolve the course
+   *  the user is currently considering. Overwritten on next selection. */
+  previewCourseId: string | null;
+  setPreviewCourse: (id: string | null) => void;
   /** Pre-beta — pending round factors set on the Play tab alongside the
    *  course pick. Caddie reads these when consuming the pendingStart
    *  signal so the round launches with the user's strategy/mental/format
@@ -862,6 +868,8 @@ export const useRoundStore = create<RoundState>()(
 
       pendingStartCourseId: null,
       setPendingStartCourse: (id) => set({ pendingStartCourseId: id }),
+      previewCourseId: null,
+      setPreviewCourse: (id) => set({ previewCourseId: id }),
       pendingStartFactors: null,
       setPendingStartFactors: (f) => set({ pendingStartFactors: f }),
 

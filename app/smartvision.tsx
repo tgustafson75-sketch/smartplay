@@ -241,15 +241,19 @@ export default function SmartVisionScreen() {
   // roundStore.plans and flows into the active round when startRound
   // fires (which doesn't clear existing plans).
   const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
-  // Derive a friendly course label for getLocalHoleImage lookup when
-  // activeCourse is null but we have a pending course id.
-  const pendingCourseLabel = pendingStartCourseId
-    ? (pendingStartCourseId.startsWith('local:')
-        ? pendingStartCourseId.slice('local:'.length).replace(/-/g, ' ')
-        : pendingStartCourseId)
+  const previewCourseId = useRoundStore(s => s.previewCourseId);
+  // Resolution chain: live round → about-to-start → currently-selected-on-Play.
+  // previewCourseId is the "user picked this on Play tab but hasn't tapped
+  // Start Round yet" hint — it lets us render the chosen hole imagery
+  // pre-round instead of falling through to the green-canvas placeholder.
+  const effectiveCourseId = activeCourseId ?? pendingStartCourseId ?? previewCourseId;
+  const derivedCourseLabel = effectiveCourseId
+    ? (effectiveCourseId.startsWith('local:')
+        ? effectiveCourseId.slice('local:'.length).replace(/-/g, ' ')
+        : effectiveCourseId)
     : null;
-  const courseId = activeCourseId ?? pendingStartCourseId;
-  const courseName = activeCourseName ?? pendingCourseLabel;
+  const courseId = effectiveCourseId;
+  const courseName = activeCourseName ?? derivedCourseLabel;
   const totalHoles = courseHoles.length || 18;
   const addOrUpdatePlan = useRoundStore(s => s.addOrUpdatePlan);
   const existingPlan = useRoundStore(s => s.plans.find(p => p.hole_number === currentHole));

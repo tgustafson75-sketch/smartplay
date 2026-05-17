@@ -38,6 +38,7 @@ Available intents:
    - "voice_enabled" (true/false)
    - "discrete_mode" (true/false)
    - "auto_listen" (true/false) — also recognized as "active listening" / "always listening" / "auto-listen" / "hands-free mode"
+   - "cart_mode" (true/false) — toggle when the player is riding in a golf cart. Also: "cart mode", "riding cart", "in a cart", "walking mode" (false), "I'm walking" (false)
    - "language" (en/es/zh)
    - "response_mode" (short/neutral/detailed)
    - "round_mode" (break_100/break_90/break_80/free_play) — the player's score-target mode for the round
@@ -51,6 +52,8 @@ Available intents:
    - "free play" -> { setting_name: "round_mode", new_value: "free_play" }
    - "turn off active listening" / "stop listening to me" / "stop active listening" -> { setting_name: "auto_listen", new_value: false }
    - "turn on active listening" / "active listening on" / "hands-free mode" -> { setting_name: "auto_listen", new_value: true }
+   - "cart mode on" / "I'm in a cart" / "riding in a cart" / "turn on cart mode" -> { setting_name: "cart_mode", new_value: true }
+   - "cart mode off" / "walking mode" / "I'm walking" / "turn off cart mode" -> { setting_name: "cart_mode", new_value: false }
    - "switch to Tank" / "change caddie to Tank" / "put Tank in" -> { setting_name: "caddie_persona", new_value: "tank" }
    - "switch to Serena" / "I want Serena" -> { setting_name: "caddie_persona", new_value: "serena" }
    - "switch to Harry" / "let me hear Harry" -> { setting_name: "caddie_persona", new_value: "harry" }

@@ -474,6 +474,12 @@ export default function PlayTab() {
         cached_at: Date.now(),
       });
       setSelectedHero(null);
+      // Mirror the selection into previewCourseId so pre-round surfaces
+      // (SmartVision preview, L1HolePreview, hole-view) can resolve the
+      // chosen course BEFORE the user taps Start Round. Distinct from
+      // pendingStartCourseId — which triggers an auto-launch round when
+      // the Caddie tab sees it. previewCourseId is a render-only hint.
+      useRoundStore.getState().setPreviewCourse(s.id);
       return;
     }
     setSelectedLoading(true);
@@ -481,6 +487,7 @@ export default function PlayTab() {
       const c = await getCourse(s.id);
       if (c) {
         setSelected(c);
+        useRoundStore.getState().setPreviewCourse(c.id);
         try {
           await fetchCourseGeometry(c.id);
           const tee = c.tees[0];

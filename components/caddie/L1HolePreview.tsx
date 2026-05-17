@@ -55,17 +55,20 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   // preplan around using the measuring tool. Right now, pre round,
   // it's just green screens."
   const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
+  const previewCourseId = useRoundStore(s => s.previewCourseId);
   const homeCourseName = usePlayerProfileStore(s => s.homeCourse);
   // For preview, derive a course label that getLocalHoleImage can
-  // resolve. activeCourse (when set) wins; else use a friendly name
-  // derived from pendingStartCourseId; else homeCourse.
+  // resolve. Live round wins; else about-to-start; else currently-selected
+  // on Play tab; else home course. previewCourseId is set by Play tab
+  // selection (does NOT trigger a round auto-start, unlike pending).
   const previewCourseLabel: string | null = (() => {
     if (activeCourse) return activeCourse;
-    if (pendingStartCourseId) {
-      if (pendingStartCourseId.startsWith('local:')) {
-        return pendingStartCourseId.slice('local:'.length).replace(/-/g, ' ');
+    const candidate = pendingStartCourseId ?? previewCourseId;
+    if (candidate) {
+      if (candidate.startsWith('local:')) {
+        return candidate.slice('local:'.length).replace(/-/g, ' ');
       }
-      return pendingStartCourseId;
+      return candidate;
     }
     return homeCourseName;
   })();

@@ -69,6 +69,17 @@ export const changeSettingHandler: IntentHandler = {
         return ack(v ? 'Always-listening on.' : 'Always-listening off.', ['auto_listen:' + v]);
       }
 
+      case 'cart_mode': {
+        const v = asBool(rawValue);
+        if (v === null) return clarify('Cart mode on or off?');
+        settings.setCartMode(v);
+        return ack(
+          v ? 'Cart mode on — tightened up shot detection for the cart.'
+            : 'Cart mode off — back to walking defaults.',
+          ['cart_mode:' + v],
+        );
+      }
+
       case 'language': {
         const v = String(rawValue ?? '').toLowerCase();
         if (v !== 'en' && v !== 'es' && v !== 'zh') {
