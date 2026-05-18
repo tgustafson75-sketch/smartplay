@@ -153,6 +153,22 @@ export interface RoundRecord {
   shots: ShotResult[];
   // Phase R — round memory photos captured during play, displayed in recap collage.
   round_photos?: RoundPhoto[];
+  // 2026-05-17 — Phase 413 — wearable / health-data round enrichment.
+  // Populated at round-end when Health Connect (Android) is granted
+  // and returned data. All optional — older rounds and rounds without
+  // watch data omit these fields. Round summary copy and Kevin's
+  // recap context can incorporate them when present.
+  health?: {
+    totalSteps: number;
+    distanceMeters: number;
+    heartRateAvg: number | null;
+    heartRateMax: number | null;
+    activeCalories: number;
+    durationMin: number;
+    /** True when at least one watch sample landed during the round
+     *  (vs zero because permission was denied or no watch present). */
+    hasWatchData: boolean;
+  };
 }
 
 // ─── STATE ────────────────────────────────
@@ -258,6 +274,15 @@ interface RoundState {
    * recomputes handicap_index when course rating/slope are available.
    */
   endRound: () => string;
+  /**
+   * 2026-05-17 — Phase 413 — attach a health-data snapshot to the most
+   * recently saved RoundRecord. Called by the round-end flow AFTER
+   * endRound() returns the id, since reading from Health Connect is
+   * async and endRound is sync. Idempotent: if the snapshot has
+   * hasWatchData=false the record is left untouched (no point
+   * filling fields with zeros that masquerade as real data).
+   */
+  enrichLastRoundWithHealth: (health: NonNullable<RoundRecord['health']>) => void;
   /**
    * 2026-05-17 — Discard the active round WITHOUT saving. Resets all
    * in-round state the same way endRound() does, but does NOT append
@@ -435,6 +460,48 @@ export const useRoundStore = create<RoundState>()(
         });
         console.log(`[path2:round] start course=${course} holes=${holes.length} courseId=${courseId ?? 'none'}`);
         console.log(`[audit:round-active] state=true roundId=${roundId} hole=1 course="${course}"`);
+        // 2026-05-17 — Phase 413 — Just-in-time Health Connect
+        // permission ask. The first time a round starts, we politely
+        // ask for steps/HR/distance/exercise read access. Asked only
+        // once per device (the persisted `hasAskedHealthPermission`
+        // flag in settingsStore gates it). If declined, the round
+        // proceeds normally with no degraded experience — health
+        // enrich just no-ops at end-round.
+        void (async () => {
+          try {
+            const settings = require('./settingsStore');
+            const s = settings.useSettingsStore.getState();
+            if (s.hasAskedHealthPermission) return;
+            const health = await import('../services/healthData');
+            const available = await health.isHealthAvailable();
+            if (!available) {
+              // Mark asked even when unavailable, so we don't poll
+              // every round start on devices without Health Connect.
+              s.setHasAskedHealthPermission(true);
+              return;
+            }
+            await health.requestHealthPermissions([
+              'steps', 'distance', 'heartRate', 'exercise', 'activeCalories',
+            ]);
+            s.setHasAskedHealthPermission(true);
+          } catch (e) {
+            console.log('[roundStore] health-permission JIT ask failed:', e);
+          }
+        })();
+        // 2026-05-17 — Phase 413 — start the walking-vs-cart detector
+        // ticker. Refreshes every 30s during the round; the
+        // orchestrator reads getCachedReading() / isEffectiveCartMode()
+        // synchronously when deciding whether to auto-fire on a
+        // GPS-displacement event. Stopped at round end.
+        void (async () => {
+          try {
+            const wd = await import('../services/walkingDetector');
+            const gps = await import('../services/gpsManager');
+            wd.startActivityTicker(() => gps.getLastFix()?.speed ?? 0);
+          } catch (e) {
+            console.log('[roundStore] activity ticker start failed:', e);
+          }
+        })();
         // Phase 405 wave 3 — visible round-start confirmation. Dynamic
         // require avoids a circular dep when toastStore re-imports
         // anything that touches roundStore.
@@ -525,6 +592,21 @@ export const useRoundStore = create<RoundState>()(
       // append, no differential push, no recap generation, no toast.
       // Tim's "End and Delete Round" path — for accidental starts or
       // practice sessions that shouldn't count toward his record.
+      enrichLastRoundWithHealth: (health) => {
+        if (!health.hasWatchData) return;
+        const s = get();
+        if (s.roundHistory.length === 0) return;
+        const updated = s.roundHistory.map((r, idx) =>
+          idx === s.roundHistory.length - 1 ? { ...r, health } : r,
+        );
+        set({ roundHistory: updated });
+        console.log('[roundStore] enrichLastRoundWithHealth:', {
+          steps: health.totalSteps,
+          dist: health.distanceMeters,
+          hr_avg: health.heartRateAvg,
+        });
+      },
+
       discardRound: () => {
         const s = get();
         console.log(`[roundStore] discardRound — abandoning ${s.currentRoundId ?? 'unknown'}`);
@@ -852,6 +934,50 @@ export const useRoundStore = create<RoundState>()(
             console.log(`[roundStore] recap generated for ${record.id}`);
           } catch (e) {
             console.log('[roundStore] recap generation failed (non-fatal):', e);
+          }
+        })();
+
+        // 2026-05-17 — Phase 413 — stop the walking-vs-cart ticker
+        // started in startRound. Cleans up the interval and resets
+        // the cached reading so a future round starts fresh.
+        void (async () => {
+          try {
+            const wd = await import('../services/walkingDetector');
+            wd.stopActivityTicker();
+          } catch (e) {
+            console.log('[roundStore] activity ticker stop failed:', e);
+          }
+        })();
+
+        // 2026-05-17 — Phase 413 — async health-snapshot read +
+        // enrichLastRoundWithHealth. Same fire-and-forget pattern as
+        // recap above; if Health Connect isn't installed / not
+        // permissioned / not Android, the read returns hasData=false
+        // and the enrich call no-ops. Round summary copy and Kevin's
+        // recap context use the data when present. Gated on the
+        // user's Settings → Health Data toggle so an explicit off
+        // skips the read entirely (faster end-round + zero Health
+        // Connect access).
+        void (async () => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const settingsMod = require('./settingsStore');
+            if (!settingsMod.useSettingsStore.getState().healthDataEnabled) return;
+            const { readHealthSnapshot } = await import('../services/healthData');
+            const snap = await readHealthSnapshot(record.startedAt, record.endedAt);
+            if (!snap.hasData) return;
+            const durationMin = Math.max(1, Math.round((record.endedAt - record.startedAt) / 60_000));
+            get().enrichLastRoundWithHealth({
+              totalSteps: snap.steps,
+              distanceMeters: snap.distanceMeters,
+              heartRateAvg: snap.heartRateAvg,
+              heartRateMax: snap.heartRateMax,
+              activeCalories: snap.activeCalories,
+              durationMin,
+              hasWatchData: true,
+            });
+          } catch (e) {
+            console.log('[roundStore] health enrich failed (non-fatal):', e);
           }
         })();
 

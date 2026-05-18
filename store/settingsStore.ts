@@ -92,6 +92,17 @@ interface SettingsState {
    *  shorter stationary window (~8s) and current-speed-only suppression
    *  so a sustained cart drive doesn't gate detection forever. */
   cartMode: boolean;
+  // 2026-05-17 — Phase 413 — Health Connect just-in-time permission
+  // marker. Set to true the first time we ask (whether granted or
+  // declined or Health Connect unavailable). Prevents re-asking on
+  // every round start. User can clear it from Settings → Health Data
+  // → "Re-ask on next round" if they want to grant later.
+  hasAskedHealthPermission: boolean;
+  /** User-controlled toggle: when on, the active round queries Health
+   *  Connect at round-end to attach steps/HR/distance to the
+   *  RoundRecord and to inform walking-vs-cart detection. Default true
+   *  on Android; iOS users see it disabled with explanatory copy. */
+  healthDataEnabled: boolean;
   distance_unit: 'yards' | 'meters';
 
   tutorialsSeen: Record<string, boolean>;
@@ -157,6 +168,8 @@ interface SettingsState {
   setGlassesConnected: (v: boolean) => void;
   setAutoListenEnabled: (v: boolean) => void;
   setCartMode: (v: boolean) => void;
+  setHasAskedHealthPermission: (v: boolean) => void;
+  setHealthDataEnabled: (v: boolean) => void;
   setSkipBriefings: (v: boolean) => void;
   setProactiveKevinEnabled: (v: boolean) => void;
   setDistanceUnit: (u: 'yards' | 'meters') => void;
@@ -211,6 +224,8 @@ export const useSettingsStore = create<SettingsState>()(
       glassesConnected: false,
       autoListenEnabled: false,
       cartMode: false,
+      hasAskedHealthPermission: false,
+      healthDataEnabled: true,
       skip_briefings: false,
       proactive_kevin_enabled: true,
       distance_unit: 'yards' as const,
@@ -301,6 +316,8 @@ export const useSettingsStore = create<SettingsState>()(
       setGlassesConnected: (v) => set({ glassesConnected: v }),
       setAutoListenEnabled: (v) => set({ autoListenEnabled: v }),
       setCartMode: (v) => set({ cartMode: v }),
+      setHasAskedHealthPermission: (v) => set({ hasAskedHealthPermission: v }),
+      setHealthDataEnabled: (v) => set({ healthDataEnabled: v }),
       setSkipBriefings: (v) => set({ skip_briefings: v }),
       setProactiveKevinEnabled: (v) => set({ proactive_kevin_enabled: v }),
       setDistanceUnit: (u) => set({ distance_unit: u }),

@@ -118,9 +118,20 @@ class ConversationalLoggingOrchestrator {
     // voice "log a shot ...", cockpit Distance/Direction buttons, or
     // triggerManual via voice intent) still work the same way — they
     // route through this.runFlow directly rather than this auto-path.
+    //
+    // 2026-05-17 — Phase 413: also suppress when the walking detector
+    // (Health Connect steps + GPS speed) reports cart with HIGH
+    // confidence. Catches the case where the user forgot to flip the
+    // manual cartMode toggle but is clearly riding. The detector
+    // never overrides a manual "walking" choice — manual setting wins
+    // when it says "walking" (cartMode=false) but the detector says
+    // "cart"; we only ADD suppression, never remove it.
     const settings = useSettingsStore.getState();
-    if (settings.cartMode) {
-      console.log('[orchestrator] auto-fire suppressed (cart mode) — use manual log');
+    // Lazy import to avoid pulling Health Connect at module-load time.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { isEffectiveCartMode } = require('./walkingDetector') as typeof import('./walkingDetector');
+    if (isEffectiveCartMode(settings.cartMode)) {
+      console.log('[orchestrator] auto-fire suppressed (cart mode effective) — use manual log');
       return;
     }
 

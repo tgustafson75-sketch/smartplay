@@ -128,6 +128,11 @@ export default function Settings() {
     useToastStore.getState().show(`${label}: ${v ? 'ON' : 'OFF'}`);
   };
 
+  // 2026-05-17 — Phase 413 health-data settings hooks.
+  const healthDataEnabled = useSettingsStore(s => s.healthDataEnabled);
+  const setHealthDataEnabled = useSettingsStore(s => s.setHealthDataEnabled);
+  const setHasAskedHealthPermission = useSettingsStore(s => s.setHasAskedHealthPermission);
+
   const {
     name,
     handicap,
@@ -806,6 +811,45 @@ export default function Settings() {
               </Text>
             </View>
           </View>
+        </View>
+
+        {/* 2026-05-17 — Phase 413 — Health Data privacy section.
+            Master toggle for the Health Connect integration plus an
+            explicit re-ask button if the user wants to grant
+            permissions after declining them earlier. */}
+        <SectionHeader title="Health Data" />
+        <View style={cardStyle}>
+          <View style={rowDivStyle}>
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>Use Health Connect during rounds</Text>
+              <Text style={subStyle}>
+                Reads step count, heart rate, distance walked, and active calories during your round (Galaxy Watch, Fitbit, or phone pedometer via Android Health Connect). Used for the walking-vs-cart detector, automatic shot detection, and round-summary stats. All data stays on your phone unless you opt into backend sync. Android only today; iOS / HealthKit comes later.
+              </Text>
+            </View>
+            <Switch
+              value={healthDataEnabled}
+              onValueChange={confirmToggle('Health Connect', setHealthDataEnabled)}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={colors.text_primary}
+            />
+          </View>
+          <TouchableOpacity
+            style={rowDivStyle}
+            onPress={() => {
+              setHasAskedHealthPermission(false);
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+              useToastStore.getState().show('Will re-ask on next round start');
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Re-ask Health Connect permission on next round"
+          >
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>Re-ask permission on next round</Text>
+              <Text style={subStyle}>
+                If you declined the Health Connect grant earlier, tap here and the prompt will reappear when you start your next round.
+              </Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* DEVELOPER TOOLS — dev builds only */}
