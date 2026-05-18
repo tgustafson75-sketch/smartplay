@@ -193,13 +193,12 @@ Available intents:
    raw_utterance: pass the verbatim user phrase so the handler can store it for context.
    ONLY match when the user is reporting a shot they just hit (past tense or present-narrative). DO NOT match generic queries about clubs ("what club here") — those are open_tool / query_status. DO NOT match cage-mode club switches ("switching to 6-iron") — those are club_change.
 
-17. media_capture — User wants to capture video of an upcoming shot, swing, or moment.
-   parameters: { capture_type: "shot" | "swing" | "highlight", raw_utterance: string }
+17. media_capture — User wants to capture video of an upcoming shot or swing.
+   parameters: { capture_type: "shot" | "swing", raw_utterance: string }
    Examples:
-   - "record this shot" / "capture this" / "record my shot" -> { capture_type: "shot" }
+   - "record this shot" / "capture this" / "record my shot" / "record this" -> { capture_type: "shot" }
    - "record my swing" / "watch my swing" / "record this swing" -> { capture_type: "swing" }
-   - "watch this" / "look at this" / "check this out" -> { capture_type: "highlight" }
-   capture_type 'shot' = on-course shot capture (~5s). 'swing' = full swing for review (~8s, saves to swing library). 'highlight' = memorable moment, tags for highlight collection.
+   capture_type 'shot' = on-course shot capture (~5s). 'swing' = full swing for review (~8s, saves to swing library). The clip lands in the swing library and on the shot's clip_uri for later playback/share; there is no auto-opening "hero shot" review pane (intentionally removed 2026-05-17).
    DO NOT match commands that are about playback ("show me video", "replay") — those are media_playback.
 
 18. media_playback — User wants to open or play back captured media.

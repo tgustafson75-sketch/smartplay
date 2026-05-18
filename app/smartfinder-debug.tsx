@@ -15,6 +15,7 @@ import { confidenceMargin } from '../services/rangefinder';
 import { useSettingsStore } from '../store/settingsStore';
 import { useSmartFinderStore } from '../store/smartFinderStore';
 import type { RangefinderLock } from '../types/smartfinder';
+import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
 
 const MOCK_DISTANCES = [
   { label: '50 yds (near)',              yards: 50  },
@@ -26,7 +27,9 @@ const MOCK_DISTANCES = [
 ];
 
 export default function SmartFinderDebug() {
+  const _gateAllowed = useDebugRouteGate();
   const router = useRouter();
+  if (!_gateAllowed) return null;
   const { distance_unit } = useSettingsStore();
 
   const [gps, setGps] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);

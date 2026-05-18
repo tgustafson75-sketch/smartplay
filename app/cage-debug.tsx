@@ -31,6 +31,7 @@ import {
 import { playLocalFile } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
 import type { FillerCategory } from '../types/filler';
+import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -53,7 +54,9 @@ function formatDuration(s: number): string {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CageDebug() {
+  const _gateAllowed = useDebugRouteGate();
   const router = useRouter();
+  if (!_gateAllowed) return null;
   const { sessionId: focusSessionId } = useLocalSearchParams<{ sessionId?: string }>();
 
   const [sessions, setSessions] = useState<CageSession[]>([]);

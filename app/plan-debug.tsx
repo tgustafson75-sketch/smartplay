@@ -14,11 +14,14 @@ import { useRoundStore } from '../store/roundStore';
 import { listArchivedRecaps } from '../services/planStorage';
 import { generateRecap } from '../services/recapGenerator';
 import type { RoundRecap } from '../types/plan';
+import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
 export default function PlanDebugScreen() {
+  const _gateAllowed = useDebugRouteGate();
   const router = useRouter();
+  if (!_gateAllowed) return null;
   const {
     isRoundActive,
     currentRoundId,

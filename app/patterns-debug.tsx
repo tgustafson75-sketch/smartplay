@@ -15,6 +15,7 @@ import { generatePatternInsights } from '../services/patternDetection';
 import { ROUND_MODE_LABELS } from '../types/patterns';
 import type { PatternInsights } from '../types/patterns';
 import type { ShotResult } from '../store/roundStore';
+import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
 
 // ─── Mock factory ─────────────────────────────────────────────────────────────
 
@@ -51,7 +52,9 @@ function makeMixedShots(count: number): ShotResult[] {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function PatternsDebug() {
+  const _gateAllowed = useDebugRouteGate();
   const router = useRouter();
+  if (!_gateAllowed) return null;
 
   const {
     shots,

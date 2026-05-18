@@ -110,21 +110,17 @@ Available intents:
     - "remember this — SmartFinder white-screened at 10x zoom" -> { note: "SmartFinder white-screened at 10x zoom" }
     - "save this for me: Sunnyvale hole 7 yardage looks wrong" -> { note: "Sunnyvale hole 7 yardage looks wrong" }
     - "make a note that Tank cut me off mid-sentence" -> { note: "Tank cut me off mid-sentence" }
-    - "this is broken: hero shot share button does nothing" -> { note: "hero shot share button does nothing" }
+    - "this is broken: cockpit log shot button doesn't fire" -> { note: "cockpit log shot button doesn't fire" }
     - "${caddieName} log this — the recap screen is slow" -> { note: "the recap screen is slow" }
     - "I want you to know the GPS data bar is static" -> { note: "GPS data bar is static" }
     The note should contain the substantive description ONLY — no wake phrase prefix, no caddie name. Pass empty string only if the user said a wake phrase with nothing meaningful after.
 
-11. media_capture — User wants to record a short video clip of the next shot/swing/moment so it can be replayed and shared (hero shot for spectators).
-    parameters: { capture_type: "shot" | "swing" | "highlight", raw_utterance: string }
+11. media_capture — User wants to record a short video clip of a shot or swing for later review/analysis.
+    parameters: { capture_type: "shot" | "swing", raw_utterance: string }
     Examples:
-    - "watch this" -> { capture_type: "highlight" }
-    - "check this out" -> { capture_type: "highlight" }
-    - "look at this" -> { capture_type: "highlight" }
-    - "hero shot" -> { capture_type: "highlight" }
-    - "record this shot" / "capture this shot" -> { capture_type: "shot" }
+    - "record this shot" / "capture this shot" / "record this" -> { capture_type: "shot" }
     - "record my swing" / "record this swing" -> { capture_type: "swing" }
-    Use "highlight" by default for spectator-style "watch this" / "check this out" phrasings — that path opens a replay+share pane after recording.
+    The clip lands in the swing library and on the shot record; user can replay/share later from the library — there is no auto-opening "hero shot" review pane (intentionally removed 2026-05-17).
 
 12. media_playback — User wants to replay / share a previously captured clip.
     parameters: { playback_action: "open" | "last" }
@@ -137,7 +133,7 @@ Available intents:
     Examples:
     - "watch this putt" / "${caddieName} watch this putt" / "PuttWatch" / "analyze this putt" -> { shot_type: "putt" }
     - "watch this chip" / "watch this bunker shot" / "watch this chip out of the bunker" -> { shot_type: "chip" }
-    Use putt_watch ONLY when the user explicitly says putt/chip/bunker. Generic "watch this" without that qualifier is media_capture (highlight kind).
+    Use putt_watch ONLY when the user explicitly says putt/chip/bunker. Generic "watch this" with no qualifier is ambiguous — prefer putt_watch when context (recent putter use, on/near a green) leans putting; otherwise default to media_capture with shot kind.
 
 14. log_score — User reports their FINAL TOTAL strokes on a hole. Different from log_shot (which is one swing at a time). Strokes is an integer 1..12. Hole number is optional; defaults to currentHole.
     parameters: { strokes: integer | word, hole_number?: integer 1..18 }

@@ -514,7 +514,7 @@ function AppNavigator() {
       {/* Phase 107 — GPS quality debug overlay (gated by settings flag). */}
       <GpsQualityOverlay />
       {/* Phase 110-followup — Round-side capture surface. Subscribes for
-          'shot' / 'highlight' kinds; renders CameraView only when active. */}
+          'shot' kind; renders CameraView only when active. */}
       <CaptureOverlay />
       {/* PGA HOPE follow-up (A2) — pinned TTS caption strip for hearing
           accessibility. Renders only while TTS is playing AND ttsCaptions

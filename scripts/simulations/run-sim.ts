@@ -278,7 +278,9 @@ check('isCaptureWired iterates registrations', mediaCaptureSrc.includes('for (co
 
 const captureOverlayPath = path.resolve(__dirname, '../../components/CaptureOverlay.tsx');
 const captureOverlaySrc = fs.readFileSync(captureOverlayPath, 'utf-8');
-check('CaptureOverlay subscribes for shot+highlight', captureOverlaySrc.includes("subscribeCapture(['shot', 'highlight']"), 'subscribed kinds correct');
+// 2026-05-17 — 'highlight' (hero shot) kind removed. CaptureOverlay
+// now subscribes for 'shot' only; cage flow owns 'swing' separately.
+check('CaptureOverlay subscribes for shot', captureOverlaySrc.includes("subscribeCapture(['shot']"), 'subscribed kinds correct');
 
 // ─── Scenario 8: AbortSignal polyfill is Hermes-safe ───────────────────────────
 

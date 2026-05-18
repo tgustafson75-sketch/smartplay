@@ -13,6 +13,7 @@ import { useRoundStore, type RoundRecord } from '../store/roundStore';
 import { useGhostStore } from '../store/ghostStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { generateRecap } from '../services/recapGenerator';
+import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
@@ -47,7 +48,9 @@ const MOCK_PARS: Record<number, number> = {
 };
 
 export default function GhostDebugScreen() {
+  const _gateAllowed = useDebugRouteGate();
   const router = useRouter();
+  if (!_gateAllowed) return null;
   const { roundHistory } = useRoundStore();
   const ghost = useGhostStore();
   const [commentary, setCommentary] = useState<string | null>(null);

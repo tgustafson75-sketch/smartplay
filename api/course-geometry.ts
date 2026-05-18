@@ -58,9 +58,18 @@ out geom;`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
   try {
+    // 2026-05-17 — explicit Accept + User-Agent. Without these Overpass
+    // returns 406 Not Acceptable from undici-based fetch environments
+    // (verified against production: status 406 from Vercel us-east-1).
+    // The Overpass docs ask for a User-Agent; the Accept header tells
+    // their content negotiator we'll take JSON.
     const res = await fetch(OVERPASS_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+        'User-Agent': 'SmartPlayCaddie/1.0 (https://smartplay-beta.vercel.app)',
+      },
       body: 'data=' + encodeURIComponent(query),
       signal: controller.signal,
     });

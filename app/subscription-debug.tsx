@@ -13,10 +13,13 @@ import * as Sentry from '@sentry/react-native';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { trialDaysLeft } from '../services/featureAccess';
 import { forcePaywall } from '../services/paywallGuard';
+import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
 
 export default function SubscriptionDebugScreen() {
+  const _gateAllowed = useDebugRouteGate();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  if (!_gateAllowed) return null;
   const {
     subscription_status,
     first_opened_at,

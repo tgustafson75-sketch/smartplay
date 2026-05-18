@@ -23,25 +23,24 @@ import { track } from '../analytics';
 function normalizeKind(raw: unknown): CaptureKind {
   const v = String(raw ?? '').toLowerCase().trim();
   if (v === 'swing') return 'swing';
-  if (v === 'highlight') return 'highlight';
-  return 'shot'; // default
+  // 2026-05-17 — legacy 'highlight' (hero shot) collapses to 'shot'.
+  // Removes the auto-open replay/share pane; clip still lands on the
+  // shot's clip_uri for later review.
+  return 'shot';
 }
 
 export const mediaCaptureHandler: IntentHandler = {
   intent_type: 'media_capture',
 
   parameter_schema: {
-    capture_type: '"shot" | "swing" | "highlight"',
+    capture_type: '"shot" | "swing"',
     raw_utterance: 'verbatim phrase from the user',
   },
 
   examples: [
     'record this shot',
     'record my swing',
-    'watch this',
     'capture this',
-    'check this out',
-    'look at this',
   ],
 
   async execute(intent): Promise<IntentResult> {

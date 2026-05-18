@@ -46,7 +46,7 @@ export const logIssueHandler: IntentHandler = {
     'make a note that Tank cut me off mid-sentence',
     'track this — the active listening pill covers the brand row',
     'I want you to know the GPS data bar is static',
-    'this is broken: hero shot share button does nothing',
+    'this is broken: cockpit log shot button does nothing',
     'this doesn\'t work — voice score is not understood',
     "Kevin, log this — the recap auto-route feels slow",
     'log an issue: yardage stuck at 250',

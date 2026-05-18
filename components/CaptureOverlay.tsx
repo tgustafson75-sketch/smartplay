@@ -1,8 +1,8 @@
 /**
  * Phase 110-followup — Round-side capture surface.
  *
- * Subscribes to mediaCapture for 'shot' and 'highlight' kinds. When a
- * voice command fires (e.g. "record this shot"), this overlay:
+ * Subscribes to mediaCapture for the 'shot' kind. When a voice command
+ * fires (e.g. "record this shot"), this overlay:
  *   1. Spins up CameraView full-screen
  *   2. Records video for ~5 seconds
  *   3. Saves the file to the app's document directory
@@ -13,17 +13,20 @@
  * existing session recording flow. mediaCapture's subscriber registration
  * is kind-aware so the routing is clean.
  *
+ * 2026-05-17 — 'highlight' (hero shot) capture kind removed. The auto-
+ * opening replay+share pane was a ChatGPT-era idea Tim never liked.
+ * The plain 'shot' path stays — clip lands in the swing library and on
+ * the most recent shot's clip_uri, where it can be replayed/shared
+ * later from a less interruptive surface.
+ *
  * Camera permission is requested lazily on first use; cached after grant.
  * If the user denies, the next capture request shows a brief inline error
  * and dismisses (no UI loop).
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { Video, ResizeMode } from 'expo-av';
-import * as Sharing from 'expo-sharing';
-import { Ionicons } from '@expo/vector-icons';
 import { useRoundStore } from '../store/roundStore';
 import {
   subscribeCapture,
@@ -38,7 +41,6 @@ import {
   abortImpactRecording,
   cleanupImpactRecording,
 } from '../services/acousticImpactDetector';
-import VideoWatermark from './swinglab/VideoWatermark';
 
 /**
  * Maximum recording duration (ms) if no acoustic strike is detected.
@@ -49,7 +51,6 @@ import VideoWatermark from './swinglab/VideoWatermark';
 const DURATION_BY_KIND: Record<CaptureKind, number> = {
   shot: 5_000,
   swing: 8_000,
-  highlight: 5_000,
 };
 /** Trail after the strike before stopping. 1.5s captures follow-through
  *  + ball flight start, then trims dead air at the end. */
@@ -66,18 +67,13 @@ export default function CaptureOverlay() {
   const [permission, requestPermission] = useCameraPermissions();
   const [active, setActive] = useState<ActiveCapture | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  // Post-capture review pane — shows the clip with Share/Done so a
-  // spectator hero-shot can be replayed and sent without leaving the
-  // course view. Highlight kind only; routine "shot" captures still
-  // auto-dismiss to keep the round flow tight.
-  const [review, setReview] = useState<{ uri: string; kind: CaptureKind } | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
 
   const handleRequest = useCallback((req: CaptureRequest) => {
     // Defensive: only the kinds we declared.
-    if (req.kind !== 'shot' && req.kind !== 'highlight') return;
+    if (req.kind !== 'shot') return;
     // Defensive: round-context kinds need an active round.
     if (!useRoundStore.getState().isRoundActive) {
       console.warn('[captureOverlay] capture request outside active round; ignoring');
@@ -106,7 +102,7 @@ export default function CaptureOverlay() {
 
   // Subscribe once on mount.
   useEffect(() => {
-    const unsub = subscribeCapture(['shot', 'highlight'], handleRequest);
+    const unsub = subscribeCapture(['shot'], handleRequest);
     return () => { unsub(); };
   }, [handleRequest]);
 
@@ -203,12 +199,6 @@ export default function CaptureOverlay() {
             impact_ms: acousticImpactMs,
             impact_confidence: acousticConfidence,
           });
-          // Highlight = hero shot. Hold a review pane open with Share +
-          // Done so Tim can immediately replay for whoever's watching
-          // and text/share the clip without navigating away.
-          if (active.kind === 'highlight' && !cancelled) {
-            setReview({ uri: result.uri, kind: active.kind });
-          }
         } else {
           console.warn('[captureOverlay] recordAsync returned no uri');
         }
@@ -245,56 +235,6 @@ export default function CaptureOverlay() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  // Post-capture hero-shot review pane.
-  if (review) {
-    return (
-      <View style={styles.overlay} pointerEvents="box-only">
-        <Video
-          source={{ uri: review.uri }}
-          style={styles.camera}
-          resizeMode={ResizeMode.CONTAIN}
-          shouldPlay
-          isLooping
-          useNativeControls={false}
-        />
-        <VideoWatermark position="bottomRight" size={40} />
-        <View style={styles.reviewHeader}>
-          <Text style={styles.reviewTitle}>Hero shot</Text>
-        </View>
-        <View style={styles.reviewActions}>
-          <TouchableOpacity
-            style={styles.reviewBtnSecondary}
-            onPress={() => setReview(null)}
-            accessibilityRole="button"
-            accessibilityLabel="Done — close hero shot review"
-          >
-            <Text style={styles.reviewBtnSecondaryText}>Done</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.reviewBtnPrimary}
-            onPress={async () => {
-              try {
-                const available = await Sharing.isAvailableAsync();
-                if (!available) return;
-                await Sharing.shareAsync(review.uri, {
-                  mimeType: 'video/mp4',
-                  dialogTitle: 'Share hero shot',
-                });
-              } catch (e) {
-                console.warn('[captureOverlay] share failed', e);
-              }
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Share hero shot"
-          >
-            <Ionicons name="share-outline" size={18} color="#000" style={{ marginRight: 6 }} />
-            <Text style={styles.reviewBtnPrimaryText}>Share</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
   if (!active) return null;
   // Render only when round-active to avoid mounting CameraView on
   // surfaces that don't expect it (e.g. Settings, About).
@@ -314,7 +254,7 @@ export default function CaptureOverlay() {
       <View style={styles.hud}>
         <View style={styles.recDot} />
         <Text style={styles.hudLabel}>
-          {active.kind === 'highlight' ? 'Highlight' : 'Shot'} · {elapsedSec}s / {totalSec}s
+          Shot · {elapsedSec}s / {totalSec}s
         </Text>
         {errorMsg ? <Text style={styles.errText}>{errorMsg}</Text> : null}
       </View>
@@ -367,63 +307,5 @@ const styles = StyleSheet.create({
     left: '50%',
     marginLeft: -10,
     marginTop: -10,
-  },
-  reviewHeader: {
-    position: 'absolute',
-    top: 60,
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  reviewTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 0.4,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  reviewActions: {
-    position: 'absolute',
-    bottom: 36,
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
-    gap: 12,
-  },
-  reviewBtnPrimary: {
-    flex: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: '#22d3ee',
-  },
-  reviewBtnPrimaryText: {
-    color: '#000',
-    fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 0.4,
-  },
-  reviewBtnSecondary: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.4)',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  reviewBtnSecondaryText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.4,
   },
 });

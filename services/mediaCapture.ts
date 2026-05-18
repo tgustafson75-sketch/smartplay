@@ -25,7 +25,11 @@ import { useSettingsStore } from '../store/settingsStore';
 import { getActiveCaddie } from './caddieResolver';
 import { track } from './analytics';
 
-export type CaptureKind = 'shot' | 'swing' | 'highlight';
+// 2026-05-17 — 'highlight' (a.k.a. hero shot) removed. The replay+share
+// pane was a ChatGPT-era idea Tim never liked; the useful video paths
+// stay (shot for on-course, swing for cage drills) and the captures
+// still land in the swing library where they can be reviewed later.
+export type CaptureKind = 'shot' | 'swing';
 
 export interface CaptureRequest {
   kind: CaptureKind;
@@ -43,7 +47,6 @@ export interface CapturedMedia {
   hole: number | null;
   roundId: string | null;
   persona: string;
-  isHighlight: boolean;
   raw_utterance?: string;
   /** Acoustic-detector impact offset (ms from record start). Null when
    *  no detectable strike (no acoustic detector wired, or too quiet). */
@@ -56,7 +59,6 @@ export interface CapturedMedia {
 const DURATION_BY_KIND: Record<CaptureKind, number> = {
   shot: 5,
   swing: 8,
-  highlight: 5,
 };
 
 // Subscribers (CaptureRequest listeners) — UI components register so the
@@ -67,8 +69,8 @@ const DURATION_BY_KIND: Record<CaptureKind, number> = {
 //
 // Phase 110-followup — subscribers declare WHICH kinds they handle so
 // isCaptureWired() can answer per-kind honestly. CaptureOverlay at app
-// root handles 'shot' + 'highlight' for round-side captures; cage
-// session flow continues to handle 'swing' through its own session loop.
+// root handles 'shot' for round-side captures; cage session flow
+// continues to handle 'swing' through its own session loop.
 type CaptureListener = (req: CaptureRequest) => void;
 interface SubscriberRegistration {
   kinds: readonly CaptureKind[];
@@ -88,11 +90,11 @@ export function subscribeCapture(kinds: readonly CaptureKind[], cb: CaptureListe
  * handlers gate on this to avoid falsely claiming "Recording" when no
  * surface will pick it up.
  *
- *   'shot' / 'highlight' — wired iff CaptureOverlay (mounted at app root)
- *                          has subscribed (it does so during round-active).
- *   'swing'              — wired by Cage Session flow (session-recording
- *                          captures all swings already; voice command is
- *                          redundant during an active session).
+ *   'shot'  — wired iff CaptureOverlay (mounted at app root) has
+ *             subscribed (it does so during round-active).
+ *   'swing' — wired by Cage Session flow (session-recording captures
+ *             all swings already; voice command is redundant during an
+ *             active session).
  */
 export function isCaptureWired(kind: CaptureKind): boolean {
   for (const reg of captureSubscribers) {
@@ -135,7 +137,6 @@ export async function requestCapture(req: CaptureRequest): Promise<CapturedMedia
     hole: round.isRoundActive ? round.currentHole : null,
     roundId: round.currentRoundId,
     persona,
-    isHighlight: req.kind === 'highlight',
     raw_utterance: req.raw_utterance,
   };
 
@@ -202,7 +203,7 @@ export function commitCapture(
   // Phase 110-followup — back-reference the URI onto the most recent
   // shot on the current hole for round-side captures during an active
   // round. Recap can render "shot 3: 7-iron 165 + clip" later.
-  if ((c.kind === 'shot' || c.kind === 'highlight') && c.hole != null) {
+  if (c.kind === 'shot' && c.hole != null) {
     try {
       const round = useRoundStore.getState();
       if (round.isRoundActive) {
@@ -211,10 +212,7 @@ export function commitCapture(
           .sort((a, b) => a.timestamp - b.timestamp);
         const last = shotsOnHole[shotsOnHole.length - 1];
         if (last && last.id) {
-          round.editShot(last.id, {
-            clip_uri: uri,
-            is_highlight: c.kind === 'highlight',
-          });
+          round.editShot(last.id, { clip_uri: uri });
         }
       }
     } catch (e) { console.warn('[mediaCapture] round shot back-ref failed:', e); }
@@ -234,22 +232,18 @@ export function buildCaddieAck(kind: CaptureKind): string {
     kevin: {
       shot: 'Got it, recording.',
       swing: 'Alright, capturing the swing.',
-      highlight: "Watching — let's see it.",
     },
     serena: {
       shot: 'Recording.',
       swing: 'Capturing the swing.',
-      highlight: 'Let it happen.',
     },
     harry: {
       shot: 'Recording. Take a breath, hit your shot.',
       swing: "Got the camera. Let's see the swing.",
-      highlight: 'Alright. Worth watching.',
     },
     tank: {
       shot: 'Locked in. Send it.',
       swing: 'Camera up. Execute.',
-      highlight: "Watching. Let's see it.",
     },
   };
   return lines[persona]?.[kind] ?? 'Recording.';
@@ -274,10 +268,10 @@ export function canCapture(kind: CaptureKind): { ok: boolean; reason?: string } 
     return { ok: false, reason: 'Voice is off in Settings.' };
   }
   const round = useRoundStore.getState();
-  // 'shot' and 'highlight' presume an active round (course context).
+  // 'shot' presumes an active round (course context).
   // 'swing' is fine outside round (cage / drill / range).
-  if ((kind === 'shot' || kind === 'highlight') && !round.isRoundActive) {
-    return { ok: false, reason: "You're not in a round yet — start one and I'll record shots and highlights." };
+  if (kind === 'shot' && !round.isRoundActive) {
+    return { ok: false, reason: "You're not in a round yet — start one and I'll record your shots." };
   }
   // Camera permission check is delegated to the surface that actually
   // drives the camera (CageSessionOverlay already has permission

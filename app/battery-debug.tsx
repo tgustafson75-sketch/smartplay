@@ -24,9 +24,12 @@ import {
   type BatteryState,
 } from '../services/batteryMonitor';
 import { safeBack } from '../services/safeBack';
+import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
 
 export default function BatteryDebugScreen() {
+  const _gateAllowed = useDebugRouteGate();
   const insets = useSafeAreaInsets();
+  if (!_gateAllowed) return null;
   const [_tick, setTick] = useState(0);
   const [bs, setBs] = useState<BatteryState | null>(null);
 
