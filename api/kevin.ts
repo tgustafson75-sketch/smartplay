@@ -338,6 +338,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // send only voiceGender ('male'|'female'); supported as fallback.
       voiceGender = 'male',
       persona = null,
+      // 2026-05-19 — top user phrases from the client-side vocabulary
+      // profile. The caddie has been silently logging what the user
+      // says to him; surfacing those phrases here lets him pick up the
+      // user's shorthand. Capped at 20 phrases / ~400 chars by client.
+      playerVocabulary = null,
     } = body;
 
     // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
@@ -548,6 +553,8 @@ ${physicalLimitation ? `PHYSICAL NOTE: ${physicalLimitation} — never suggest m
 ${todBlock}
 
 ${_kevinContext ? `ABOUT THIS GOLFER (private; never read aloud — use as background):\n${_kevinContext}` : ''}
+
+${Array.isArray(playerVocabulary) && playerVocabulary.length > 0 ? `PHRASES THIS PLAYER USES (private; mirror their vocabulary, do not list these out loud):\n${(playerVocabulary as unknown[]).filter(p => typeof p === 'string').slice(0, 20).join(', ')}` : ''}
 
 ${_persistentPatterns ? `EMERGING PATTERNS (private; reference naturally if they fit, never list them):\n${_persistentPatterns}` : ''}
 

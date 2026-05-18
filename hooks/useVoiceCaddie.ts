@@ -547,6 +547,20 @@ export const useVoiceCaddie = ({
           // in the next reply without app restart.
           kevinContext: usePlayerProfileStore.getState().kevinContext,
           persistentPatterns: usePlayerProfileStore.getState().persistentPatterns,
+          // 2026-05-19 — pipe the player's learned vocabulary into the
+          // brain so phrases they've used before inform replies. Tim's
+          // "I saw Kevin learned 22 phrases — can he use them?" The
+          // top phrases are the ones Kevin has heard most; sending them
+          // as background grounding lets the caddie pick up Tim's
+          // shorthand instead of staying generic.
+          playerVocabulary: (() => {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const vocab = require('../store/vocabularyProfileStore');
+              const top = vocab.useVocabularyProfileStore.getState().getTopPhrases(20);
+              return Array.isArray(top) && top.length > 0 ? top : null;
+            } catch { return null; }
+          })(),
           // Phase BR — active practice context from tutorialStore. Null
           // when no tutorials are flagged active. Capped at 3 active.
           practice_context: buildFullPracticeContext(),

@@ -142,6 +142,9 @@ export async function POST(request: Request) {
       history = [],
       recentShots = [],
       holeShots = [],
+      // 2026-05-19 — see api/kevin.ts comment. Top phrases from the
+      // user's vocabulary profile, surfaced as mirror-able shorthand.
+      playerVocabulary = null,
       // Phase 409 — TightLie pending lie analysis. When set, the
       // upcoming shot's lie is on-record and the caddie should weave
       // it into any club / strategy recommendation without waiting
@@ -205,6 +208,8 @@ export async function POST(request: Request) {
         feel?: string;
         club?: string;
       }[];
+      // 2026-05-19 — see destructure comment.
+      playerVocabulary?: string[] | null;
       // Phase 409 — TightLie pending analysis. Type-only import from
       // lieAnalysisService keeps both call sites in lockstep without
       // dragging the service's runtime deps into the API route.
@@ -387,6 +392,8 @@ ${mentalState === 'tight' ? 'Mental state is tight. Keep it simple and reassurin
 
 HERO REEL:
 If the player says anything like "did you get that", "save that", "hero reel", "that's a keeper" — respond with exactly and only: "Got it. That's yours."
+
+${Array.isArray(playerVocabulary) && playerVocabulary.length > 0 ? `PHRASES THIS PLAYER USES (private; mirror their vocabulary when natural, don't list these out loud):\n${(playerVocabulary as unknown[]).filter(p => typeof p === 'string').slice(0, 20).join(', ')}` : ''}
 
 RESPONSE LENGTH:
 ${responseMode === 'short' ? 'Maximum 15 words. Be extremely brief.' : responseMode === 'detailed' ? 'Up to 4 sentences if genuinely needed.' : 'Maximum 2 sentences. Be concise.'}
