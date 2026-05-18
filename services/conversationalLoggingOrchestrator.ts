@@ -72,6 +72,12 @@ class ConversationalLoggingOrchestrator {
     if (this.subscriptionDispose) { this.subscriptionDispose(); this.subscriptionDispose = null; }
     if (this.pendingTimer) { clearTimeout(this.pendingTimer); this.pendingTimer = null; }
     this.state = { kind: 'idle' };
+    // 2026-05-17 — reset cadence log at round-end so the debug surface
+    // shows only this round's cadence, not a rolling buffer across
+    // rounds. The 50-entry slice cap protected against unbounded
+    // growth, but conceptually cadence is a per-round concern.
+    this.cadenceLog = [];
+    this.suspended = false;
     console.log('[orchestrator] stopped');
   }
 

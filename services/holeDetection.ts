@@ -114,6 +114,14 @@ export function stopHoleDetection(): void {
     markUnsub = null;
   }
   positionHistory.length = 0;
+  // 2026-05-17 — Reset all module-level bookkeeping so round N+1
+  // doesn't inherit candidateHole / lastTransitionAt / manualOverrideAt
+  // from round N. The 20s manual-override window and the
+  // transition-debounce window were both bleeding across rounds.
+  lastTransitionAt = 0;
+  manualOverrideAt = 0;
+  candidateHole = null;
+  candidateSince = 0;
 }
 
 let markUnsub: (() => void) | null = null;

@@ -20,6 +20,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -49,8 +50,15 @@ function formatAge(ms: number): string {
 }
 
 export default function MarkGreenScreen() {
+  // 2026-05-17 — Owner+__DEV__ gate. OSM auto-detect now handles
+  // most courses; Mark Green is the fallback when OSM is wrong or
+  // missing. Kept reachable for owner accounts (Settings → Owner
+  // Tools row, GlobalToolsMenu row) but no longer deep-linkable by
+  // arbitrary users.
+  const _gateAllowed = useDebugRouteGate();
   const router = useRouter();
   const { colors } = useTheme();
+  if (!_gateAllowed) return null;
   const activeCourseId = useRoundStore(s => s.activeCourseId);
   const activeCourse = useRoundStore(s => s.activeCourse);
   const currentHole = useRoundStore(s => s.currentHole);

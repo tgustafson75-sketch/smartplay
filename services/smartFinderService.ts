@@ -108,6 +108,15 @@ export function startSmartFinderGpsTracking(): void {
 }
 export function stopSmartFinderGpsTracking(): void {
   if (gpsUnsub) { gpsUnsub(); gpsUnsub = null; }
+  // 2026-05-17 — reset cached fix + the calc-log ring buffer at round
+  // end. Previously lastFix carried over (UI showed yardages from the
+  // PREVIOUS round's last fix until the new round's first tick) and
+  // calcLog accumulated across rounds unbounded by round boundary
+  // (only bounded by total size). fixChangeListeners is intentionally
+  // NOT cleared — subscribers (cockpit data strip, smartfinder)
+  // remain mounted across rounds and should keep their subscriptions.
+  lastFix = null;
+  calcLog = [];
 }
 
 export function getLastFix(): LastFix | null {
