@@ -38,6 +38,7 @@ import VectorHoleView from '../components/smartvision/VectorHoleView';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import PALMS_IMAGES from '../data/palmsImages';
+import { getLocalHoleImageById, getLocalHoleImage } from '../data/localCourseImages';
 import { getHoleImageryUrl } from '../services/mapboxImagery';
 import {
   getLandmarksForHole,
@@ -353,17 +354,18 @@ export default function HoleView() {
 
   const satelliteUrl = getSatelliteUrl();
 
-  // Phase S — 'bundled' kept in the union but no longer produced. The
-  // hardcoded Palms screenshot path was removed; SmartVision now relies
-  // entirely on satellite imagery (Mapbox primary, Google Maps fallback).
-  // The dead 'bundled' branches below are kept as no-ops to minimize
-  // diff surface; a follow-up cleanup can prune them.
-  // Phase S — bundled screenshots retained for The Palms only as a curated
-  // override (Tim's home course). Other courses fall through to satellite
-  // imagery via Mapbox / Google Maps.
-  const bundledImage = courseName.toLowerCase().includes('palms')
-    ? (PALMS_IMAGES[hole] ?? null)
-    : null;
+  // 2026-05-17 — bundled imagery generalized to every local course (was
+  // hardcoded to Palms only, which is why a Crystal Springs round whose
+  // courseName fell through to the home-course label rendered Palms hole 1
+  // with the T/A/P shot-planning markers). Now resolves by courseId
+  // first (canonical) and only falls back to substring-matching when no
+  // local:* id is present. PALMS_IMAGES kept as an explicit alias for
+  // the Palms set since the shot-planning marker calibration was tuned
+  // against that course's aspect ratio.
+  const bundledImage: ReturnType<typeof require> | null =
+    getLocalHoleImageById(courseId, hole) ??
+    getLocalHoleImage(courseName, hole) ??
+    (courseName.toLowerCase().includes('palms') ? (PALMS_IMAGES[hole] ?? null) : null);
 
   // Phase AN — when we have real tee + green coords (from anchor capture
   // or course geometry API), prefer the stylized vector renderer over

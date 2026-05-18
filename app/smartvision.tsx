@@ -55,7 +55,7 @@ import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbe
 import { hasGolfbertCourseMapping } from '../constants/golfbertCourses';
 import { fetchHoleImagery, computeFitView, getCenteredImageryUrl } from '../services/mapboxImagery';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
-import { getLocalHoleImage, LOCAL_COURSE_CENTROIDS, getLocalCourseSlug } from '../data/localCourseImages';
+import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS, getLocalCourseSlug } from '../data/localCourseImages';
 
 // ─── Geo helpers ──────────────────────────────────────────────────
 
@@ -267,16 +267,27 @@ export default function SmartVisionScreen() {
     if (n.includes('mariner')) return 'local:mariners-point';
     return null;
   })();
-  // Hard fallback: Palms is the first entry in LOCAL_COURSES and ships
-  // with full 18-hole bundled imagery — guaranteed to render.
+  // 2026-05-17 — Removed the 'local:palms' hard fallback. It was
+  // intended to guarantee SOMETHING rendered, but in practice it leaked
+  // Palms imagery into non-Palms rounds whenever activeCourseId was
+  // briefly null during state transitions. We now allow a null
+  // courseId and let the empty-state UI render explicitly.
   const effectiveCourseId =
-    activeCourseId ?? pendingStartCourseId ?? previewCourseId ?? homeCourseIdFromProfile ?? 'local:palms';
+    activeCourseId ?? pendingStartCourseId ?? previewCourseId ?? homeCourseIdFromProfile ?? null;
   const derivedCourseLabel =
-    effectiveCourseId.startsWith('local:')
+    effectiveCourseId && effectiveCourseId.startsWith('local:')
       ? effectiveCourseId.slice('local:'.length).replace(/-/g, ' ')
-      : effectiveCourseId;
+      : effectiveCourseId ?? '';
   const courseId = effectiveCourseId;
-  const courseName = activeCourseName ?? homeCourseName ?? derivedCourseLabel;
+  // 2026-05-17 — Resolve courseName from courseId FIRST, not from the
+  // user's homeCourse. The previous cascade fell through to
+  // homeCourseName whenever activeCourseName was briefly null, which
+  // leaked the home course's label into substring-matching everywhere
+  // downstream (e.g. a Crystal Springs round whose courseName fell to
+  // "Menifee Lakes — Palms" would substring-match getLocalHoleImage as
+  // palms and render the wrong hole). courseId-derived label is the
+  // canonical source.
+  const courseName = activeCourseName ?? derivedCourseLabel ?? homeCourseName ?? '';
   const totalHoles = courseHoles.length || 18;
   const addOrUpdatePlan = useRoundStore(s => s.addOrUpdatePlan);
   const existingPlan = useRoundStore(s => s.plans.find(p => p.hole_number === currentHole));
@@ -330,9 +341,16 @@ export default function SmartVisionScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Curated bundled image (Palms hole-01.jpg etc) — used as backdrop
-  // when GPS imagery is unavailable or the user has chosen 'curated'.
-  const curatedImage = useMemo(() => getLocalHoleImage(courseName, holeIndex), [courseName, holeIndex]);
+  // 2026-05-17 — Curated bundled image. Prefer the courseId-keyed lookup
+  // (canonical) and fall back to courseName-based substring matching
+  // only when courseId is missing. Without the ID-first lookup, a brief
+  // null on activeCourseName during state transitions caused Palms
+  // imagery to leak into Crystal Springs / SJM / Mariners rounds via
+  // the home-course-name fallback.
+  const curatedImage = useMemo(
+    () => getLocalHoleImageById(courseId, holeIndex) ?? getLocalHoleImage(courseName, holeIndex),
+    [courseId, courseName, holeIndex],
+  );
 
   // Per-hole yellow target marker offset (relative to image center, in pixels).
   // Defaults to the midpoint of the bearing axis (50% of the way from tee

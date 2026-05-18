@@ -13,7 +13,7 @@ import { getHoleThumbnailUrl } from '../../services/mapboxImagery';
 // registered as empty so dropping `assets/courses/lakes/hole-XX.jpg` /
 // `assets/courses/rancho-california/hole-XX.jpg` files later picks them
 // up without further code changes (just add the require() entries here).
-import { getLocalHoleImage } from '../../data/localCourseImages';
+import { getLocalHoleImage, getLocalHoleImageById } from '../../data/localCourseImages';
 
 const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
@@ -57,21 +57,24 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
   const previewCourseId = useRoundStore(s => s.previewCourseId);
   const homeCourseName = usePlayerProfileStore(s => s.homeCourse);
-  // Cascade: active round → about-to-start → preview pick → home course →
-  // hard fallback "palms" (LOCAL_COURSES[0], full 18-hole bundled imagery
-  // ships in every build). Guarantees the preview never renders empty —
-  // there's always SOMETHING for getLocalHoleImage to match.
-  const previewCourseLabel: string = (() => {
+  // 2026-05-17 — Removed the hard "palms" fallback at the tail of the
+  // cascade. Previously when there was no active round, no pending
+  // course, no preview, and no home-course set, we'd return the literal
+  // string "palms" and getLocalHoleImage would resolve to Palms hole 1.
+  // That leaked Palms imagery into every empty state, and in active
+  // rounds where activeCourse briefly read null during a state
+  // transition. Empty state now renders the explicit "pick a course"
+  // copy instead.
+  const previewCourseId_resolved: string | null =
+    activeCourseId ?? pendingStartCourseId ?? previewCourseId ?? null;
+  const previewCourseLabel: string | null = (() => {
     if (activeCourse) return activeCourse;
-    const candidate = pendingStartCourseId ?? previewCourseId;
-    if (candidate) {
-      if (candidate.startsWith('local:')) {
-        return candidate.slice('local:'.length).replace(/-/g, ' ');
-      }
-      return candidate;
+    if (previewCourseId_resolved && previewCourseId_resolved.startsWith('local:')) {
+      return previewCourseId_resolved.slice('local:'.length).replace(/-/g, ' ');
     }
+    if (previewCourseId_resolved) return previewCourseId_resolved;
     if (homeCourseName) return homeCourseName;
-    return 'palms';
+    return null;
   })();
 
   const [geometry, setGeometry] = useState<HoleGeometry | null>(null);
@@ -124,9 +127,14 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   // default preview. The "Start a round to see your hole" copy is
   // replaced with "Tap to plan" — Tim's preplanning workflow.
   if (!isRoundActive) {
-    const previewImg = previewCourseLabel ? getLocalHoleImage(previewCourseLabel, 1) : null;
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const defaultImg = previewImg ?? require('../../data/localCourseImages').getDefaultPreviewImage();
+    // 2026-05-17 — courseId-first lookup so a planning preview for a
+    // local course resolves to that course's imagery (not the
+    // home-course substring-match leak). Name-based fallback only when
+    // we don't have a local: id.
+    const previewImg =
+      getLocalHoleImageById(previewCourseId_resolved, 1) ??
+      (previewCourseLabel ? getLocalHoleImage(previewCourseLabel, 1) : null);
+    const defaultImg = previewImg;
     if (defaultImg) {
       return (
         <SmartVisionTap>
@@ -152,9 +160,11 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   }
 
   if (!geometry || !geometry.tee || !geometry.green) {
-    // Curated screenshot fallback when geometry is missing — Palms today;
-    // Lakes / Rancho California land here once Tim drops their JPGs.
-    const localImg = getLocalHoleImage(activeCourse, currentHole);
+    // 2026-05-17 — courseId-first lookup. Falls back to name-based only
+    // when no local: id is set (e.g. golfcourseapi-only rounds).
+    const localImg =
+      getLocalHoleImageById(activeCourseId, currentHole) ??
+      getLocalHoleImage(activeCourse, currentHole);
     if (localImg) {
       return (
         <SmartVisionTap>

@@ -241,8 +241,13 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   const c = courseName.toLowerCase();
   if (c.includes('crystal') && c.includes('spring')) return CRYSTAL_SPRINGS_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('mariner')) return MARINERS_POINT_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('palms')) return PALMS_HOLE_IMAGES[holeNumber] ?? null;
+  // "palms" check must follow "lakes" handling — Tim's home-course label
+  // is often "Menifee Lakes — Palms" which contains both words. Without
+  // anchoring on "palms" appearing in the suffix, a Crystal Springs round
+  // whose courseName falls through to homeCourse would be substring-
+  // matched as palms and render the wrong imagery.
   if (c.includes('lakes') && !c.includes('palms')) return LAKES_HOLE_IMAGES[holeNumber] ?? null;
+  if (c.includes('palms')) return PALMS_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('rancho')) return RANCHO_CALIFORNIA_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('san jose')) return SAN_JOSE_MUNI_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('sunnyvale')) return SUNNYVALE_HOLE_IMAGES[holeNumber] ?? null;
@@ -250,9 +255,32 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
 }
 
 /**
+ * 2026-05-17 — Canonical courseId-keyed hole image lookup. Preferred
+ * over getLocalHoleImage(courseName, ...) wherever the caller knows the
+ * `local:<slug>` id, because substring-matching against a free-text
+ * courseName is fragile (e.g. a Crystal Springs round whose
+ * courseName fell through to the user's "Menifee Lakes — Palms" home
+ * course would be matched as Palms and render the wrong hole).
+ * Returns null when the slug isn't a known local course or the hole
+ * number is out of range.
+ */
+export function getLocalHoleImageById(
+  courseId: string | null | undefined,
+  holeNumber: number,
+): ImageSourcePropType | null {
+  if (!courseId || !courseId.startsWith('local:')) return null;
+  const slug = courseId.slice('local:'.length) as LocalCourseSlug;
+  const set = LOCAL_COURSE_IMAGES[slug];
+  return set?.[holeNumber] ?? null;
+}
+
+/**
  * Default preview image used by SmartVision when no round is active and
- * no course context exists yet. Palms hole 1 — Tim's home course.
+ * no course context exists yet. Returns null — callers should render
+ * an explicit "pick a course" empty state rather than fall back to a
+ * specific course's imagery (which previously was Palms hole 1; that
+ * leaked Palms screenshots into non-Palms contexts).
  */
 export function getDefaultPreviewImage(): ImageSourcePropType | null {
-  return PALMS_HOLE_IMAGES[1] ?? null;
+  return null;
 }
