@@ -255,23 +255,59 @@ function resolveGreenCoords(holeNumber: number): {
  * the round's current hole). Each is null when either the player's location or
  * that green-point's coordinates are unknown.
  */
+// 2026-05-17 — Resolve the hole data with a bundled-courses fallback
+// so pre-round previews (no active round → roundStore.courseHoles is
+// empty) still surface real scorecard yardages. Active round wins
+// when populated; otherwise fall back to bundled per-slug data from
+// data/courses.ts. activeCourseId | pendingStartCourseId | previewCourseId
+// is the preview courseId for slug resolution.
+function resolveHoleDataWithFallback(hole: number): import('../store/roundStore').CourseHole | null {
+  const round = useRoundStore.getState();
+  const live = round.courseHoles.find(h => h.hole === hole);
+  if (live) return live;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getBundledHoles } = require('../data/courses') as typeof import('../data/courses');
+  const previewId = round.activeCourseId ?? round.pendingStartCourseId ?? round.previewCourseId ?? null;
+  const bundled = getBundledHoles(previewId);
+  return bundled.find(h => h.hole === hole) ?? null;
+}
+
+// 2026-05-17 — Static yardages from the bundled scorecard (h.front /
+// h.distance / h.back are tee→green distances). Used pre-round AND
+// during active-round when GPS hasn't landed yet, so the user sees
+// real numbers immediately instead of dashes. Per Tim: "pre-round in
+// static, would adjust to GPS once active."
+function staticYardages(hData: import('../store/roundStore').CourseHole, hole: number): GreenYardages {
+  return {
+    front: typeof hData.front === 'number' ? hData.front : null,
+    middle: typeof hData.distance === 'number' ? hData.distance : null,
+    back: typeof hData.back === 'number' ? hData.back : null,
+    hole_number: hole,
+    reason: 'ok',
+  };
+}
+
 export async function getGreenYardages(holeNumber?: number): Promise<GreenYardages> {
   const round = useRoundStore.getState();
   const hole = holeNumber ?? round.currentHole;
-  const hData = round.courseHoles.find(h => h.hole === hole);
+  const hData = resolveHoleDataWithFallback(hole);
   const fix = lastFix ?? (await refreshFix());
 
   if (!hData) {
     return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_hole' };
   }
   if (!fix) {
-    return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_fix' };
+    // No GPS yet (pre-round, cold-start, indoor) — render the
+    // bundled scorecard yardages so the user has SOMETHING.
+    return staticYardages(hData, hole);
   }
 
   const { front, middle, back, source } = resolveGreenCoords(hole);
 
   if (!front && !middle && !back) {
-    return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_geometry' };
+    // GPS available but no green coords — still better to show
+    // scorecard yardages than blanks.
+    return staticYardages(hData, hole);
   }
 
   const yards = {
@@ -293,16 +329,16 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
 export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
   const round = useRoundStore.getState();
   const hole = holeNumber ?? round.currentHole;
-  const hData = round.courseHoles.find(h => h.hole === hole);
+  const hData = resolveHoleDataWithFallback(hole);
   if (!hData) {
     return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_hole' };
   }
   if (!lastFix) {
-    return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_fix' };
+    return staticYardages(hData, hole);
   }
   const { front, middle, back, source } = resolveGreenCoords(hole);
   if (!front && !middle && !back) {
-    return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_geometry' };
+    return staticYardages(hData, hole);
   }
   const yards = {
     front: front ? Math.round(haversineYards(lastFix.location, front)) : null,

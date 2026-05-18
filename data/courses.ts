@@ -21,6 +21,23 @@ export const getCourse = (
     c.id === name
   ) ?? null;
 
+/**
+ * 2026-05-17 — Resolve a `local:<slug>` courseId (the canonical form used
+ * by Play tab / round state / SmartVision) to the bundled CourseHole[]
+ * array. Used by pre-round surfaces (SmartVision, SmartFinder) so F/M/B
+ * yardages render from static data BEFORE the round goes active (Tim's
+ * spec: "pre-round in static, would adjust to GPS once active").
+ *
+ * Returns empty array when the slug isn't known. Pure read; no side
+ * effects on the round store.
+ */
+export function getBundledHoles(courseId: string | null | undefined): CourseHole[] {
+  if (!courseId || !courseId.startsWith('local:')) return [];
+  const slug = courseId.slice('local:'.length);
+  const course = COURSES.find(c => c.id === slug);
+  return course?.holes ?? [];
+}
+
 export const getHole = (
   courseName: string,
   holeNumber: number
@@ -481,7 +498,11 @@ export const COURSES: Course[] = [
     holes: LAKES_HOLES,
   },
   {
-    id: 'rancho',
+    // 2026-05-17 — was 'rancho'; renamed for consistency with the
+    // 'local:rancho-california' slug used everywhere else. The
+    // app/course/[course_id].tsx workaround map can be simplified
+    // separately once verified in the field.
+    id: 'rancho-california',
     name: 'Rancho California',
     fullName: 'The Golf Club at Rancho California',
     rating: '70.9',

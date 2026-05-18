@@ -67,13 +67,19 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   // copy instead.
   const previewCourseId_resolved: string | null =
     activeCourseId ?? pendingStartCourseId ?? previewCourseId ?? null;
+  // 2026-05-17 — Removed the trailing `homeCourseName` fallback. Tim's
+  // homeCourse is "Menifee Lakes — Palms", so when the user opens the
+  // app WITHOUT first selecting a course on the Play tab, this branch
+  // returned a string containing "palms" and getLocalHoleImage
+  // substring-matched to PALMS_HOLE_IMAGES — rendering Palms imagery
+  // for whatever the user actually thought they were looking at. The
+  // empty state is more honest.
   const previewCourseLabel: string | null = (() => {
     if (activeCourse) return activeCourse;
     if (previewCourseId_resolved && previewCourseId_resolved.startsWith('local:')) {
       return previewCourseId_resolved.slice('local:'.length).replace(/-/g, ' ');
     }
     if (previewCourseId_resolved) return previewCourseId_resolved;
-    if (homeCourseName) return homeCourseName;
     return null;
   })();
 

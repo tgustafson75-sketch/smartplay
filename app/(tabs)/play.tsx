@@ -141,6 +141,9 @@ const LOCAL_COURSES: CourseSummary[] = [
     slope: 122,
     isLocal: true,
     // 2026-05-16 — cropped Golfshot screenshot (chrome removed via PIL).
+    // 2026-05-17 — thumbnail field was dropped during a prior centroid
+    // edit, leaving Play tab to render the generic icon. Restored.
+    thumbnail: (SAN_JOSE_MUNI_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
     // 2026-05-17 — corrected from OSM golf_course centroid (was 4.5 km
     // off, in the wrong neighborhood entirely)
     lat: 37.3771789,

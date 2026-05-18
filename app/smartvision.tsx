@@ -57,6 +57,7 @@ import { fetchHoleImagery, computeFitView, getCenteredImageryUrl } from '../serv
 import YardageBookPanel from '../components/smartvision/YardageBookPanel';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS, getLocalCourseSlug } from '../data/localCourseImages';
+import { getBundledHoles } from '../data/courses';
 
 // ─── Geo helpers ──────────────────────────────────────────────────
 
@@ -233,7 +234,7 @@ export default function SmartVisionScreen() {
 
   const activeCourseId = useRoundStore(s => s.activeCourseId);
   const activeCourseName = useRoundStore(s => s.activeCourse);
-  const courseHoles = useRoundStore(s => s.courseHoles);
+  const liveCourseHoles = useRoundStore(s => s.courseHoles);
   const currentHole = useRoundStore(s => s.currentHole);
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   // 2026-05-17 — pre-round planning context. When no active round but
@@ -268,13 +269,20 @@ export default function SmartVisionScreen() {
     if (n.includes('mariner')) return 'local:mariners-point';
     return null;
   })();
-  // 2026-05-17 — Removed the 'local:palms' hard fallback. It was
-  // intended to guarantee SOMETHING rendered, but in practice it leaked
-  // Palms imagery into non-Palms rounds whenever activeCourseId was
-  // briefly null during state transitions. We now allow a null
-  // courseId and let the empty-state UI render explicitly.
+  // 2026-05-17 — Removed BOTH the 'local:palms' hard fallback AND the
+  // homeCourseIdFromProfile fallback. The home-course leg was the
+  // remaining Palms leak: when a user with homeCourse="Menifee Lakes
+  // — Palms" hits SmartVision without first selecting a course on
+  // the Play tab, the cascade silently returned 'local:palms' and
+  // rendered Palms imagery for whatever the user thought they were
+  // looking at. SmartVision now requires an actual context
+  // (activeCourseId | pendingStartCourseId | previewCourseId);
+  // otherwise courseId stays null and the empty-state UI renders.
   const effectiveCourseId =
-    activeCourseId ?? pendingStartCourseId ?? previewCourseId ?? homeCourseIdFromProfile ?? null;
+    activeCourseId ?? pendingStartCourseId ?? previewCourseId ?? null;
+  // homeCourseIdFromProfile still computed for any read-only consumer
+  // below that wants it; it's no longer in the cascade.
+  void homeCourseIdFromProfile;
   const derivedCourseLabel =
     effectiveCourseId && effectiveCourseId.startsWith('local:')
       ? effectiveCourseId.slice('local:'.length).replace(/-/g, ' ')
@@ -288,7 +296,25 @@ export default function SmartVisionScreen() {
   // "Menifee Lakes — Palms" would substring-match getLocalHoleImage as
   // palms and render the wrong hole). courseId-derived label is the
   // canonical source.
-  const courseName = activeCourseName ?? derivedCourseLabel ?? homeCourseName ?? '';
+  // 2026-05-17 — Also removed homeCourseName from the courseName
+  // cascade. Same leak as effectiveCourseId above: if Tim's home is
+  // "Menifee Lakes — Palms", any null effectiveCourseId fell here and
+  // substring-matched Palms via the name-based getLocalHoleImage
+  // path. Empty string when no real context exists — let downstream
+  // render the explicit empty state.
+  const courseName = activeCourseName ?? derivedCourseLabel ?? '';
+  // 2026-05-17 — pre-round F/M/B yardages need real course data. The
+  // live `courseHoles` slice from roundStore is empty until
+  // startRound() fires; before that, the bundled holes for the
+  // previewed local course are the right source. Tim's spec: F/M/B
+  // works in static pre-round, then GPS overrides once round is
+  // active. This memo picks the live slice when it's populated
+  // (active round), else falls back to the bundled holes resolved
+  // from the previewed courseId.
+  const courseHoles = useMemo(() => {
+    if (liveCourseHoles.length > 0) return liveCourseHoles;
+    return getBundledHoles(courseId);
+  }, [liveCourseHoles, courseId]);
   const totalHoles = courseHoles.length || 18;
   const addOrUpdatePlan = useRoundStore(s => s.addOrUpdatePlan);
   const existingPlan = useRoundStore(s => s.plans.find(p => p.hole_number === currentHole));
