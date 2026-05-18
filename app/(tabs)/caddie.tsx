@@ -1073,10 +1073,16 @@ export default function CaddieTab() {
   });
 
   // ── Round summary ────────────────────────
-  const generateRoundSummary = async () => {
-    const total = getTotalScore();
-    const vspar = getScoreVsPar();
-    const played = getHolesPlayed();
+  // 2026-05-19 — accept the snapshot as params. Caller MUST capture
+  // total/vspar/played BEFORE calling endRound(), because endRound resets
+  // scores to {} and getTotalScore/getScoreVsPar/getHolesPlayed would
+  // all return 0 afterward. Previously this read straight from the
+  // store and always saw 0, so every round-end fired the < 9 "Short
+  // round" branch even when 18 holes were filled.
+  const generateRoundSummary = async (snapshot?: { total: number; vspar: number; played: number }) => {
+    const total = snapshot?.total ?? getTotalScore();
+    const vspar = snapshot?.vspar ?? getScoreVsPar();
+    const played = snapshot?.played ?? getHolesPlayed();
     const relState = useRelationshipStore.getState();
 
     let summary = '';
@@ -1426,9 +1432,18 @@ export default function CaddieTab() {
 
     if (nextHole > maxHole) {
       clearShotPending();
+      // Snapshot the score state BEFORE endRound() resets it. The summary
+      // copy ("Short round" / "Even par" / etc.) is driven by these
+      // three values; reading them after the reset always yields zero
+      // and triggered the "Short round" branch on completed rounds.
+      const snapshot = {
+        total: getTotalScore(),
+        vspar: getScoreVsPar(),
+        played: getHolesPlayed(),
+      };
       endRound();
       setShowShotCard(false);
-      await generateRoundSummary();
+      await generateRoundSummary(snapshot);
       return;
     }
 
@@ -2855,10 +2870,16 @@ export default function CaddieTab() {
                 style={styles.endRoundBtn}
                 onPress={async () => {
                   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                  // Snapshot scores BEFORE endRound zeroes them.
+                  const snapshot = {
+                    total: getTotalScore(),
+                    vspar: getScoreVsPar(),
+                    played: getHolesPlayed(),
+                  };
                   endRound();
                   clearShotPending();
                   setShowShotCard(false);
-                  await generateRoundSummary();
+                  await generateRoundSummary(snapshot);
                 }}
               >
                 <Text style={styles.endRoundText}>End Round</Text>
@@ -2986,7 +3007,18 @@ export default function CaddieTab() {
               { icon: 'telescope-outline',   label: 'SmartVision',      sub: 'Analyze the hole',         action: () => { setShowMoreMenu(false); openSmartVision(); } },
               { icon: 'locate-outline',      label: 'SmartFinder',      sub: 'Tap-to-lock rangefinder',  action: () => { setShowMoreMenu(false); if (!canAccess('smartfinder', subscription_status)) { void triggerPaywall('smartfinder', () => router.push('/paywall' as never)); return; } router.push('/smartfinder' as never); } },
               ...(isRoundActive ? [{
-                icon: 'flag-outline' as IconName, label: 'End Round',   sub: 'Finish and get summary',   action: async () => { setShowMoreMenu(false); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {}); clearShotPending(); endRound(); await generateRoundSummary(); },
+                icon: 'flag-outline' as IconName, label: 'End Round',   sub: 'Finish and get summary',   action: async () => {
+                  setShowMoreMenu(false);
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                  clearShotPending();
+                  const snapshot = {
+                    total: getTotalScore(),
+                    vspar: getScoreVsPar(),
+                    played: getHolesPlayed(),
+                  };
+                  endRound();
+                  await generateRoundSummary(snapshot);
+                },
               }] : []),
               { icon: 'tv-outline',          label: castMode ? 'Cast Mode On' : 'Cast Mode',     sub: 'Mirror to TV',                  action: () => { setShowMoreMenu(false); setCastMode(!castMode); } },
               { icon: voiceEnabled ? 'volume-high-outline' : 'volume-mute-outline', label: voiceEnabled ? 'Voice On' : 'Voice Off',  sub: "Toggle Kevin's voice", action: () => { setShowMoreMenu(false); setVoiceEnabled(!voiceEnabled); } },

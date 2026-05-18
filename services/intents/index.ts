@@ -10,6 +10,7 @@ import { handicapQueryHandler } from './handicapQueryHandler';
 import { setTrustQuietHandler, setTrustCompanionHandler } from './setTrustQuietHandler';
 import { clubChangeHandler, clubQueryHandler, clubMenuHandler } from './clubHandler';
 import { logShotHandler } from './logShotHandler';
+import { logScoreHandler } from './logScoreHandler';
 import { mediaCaptureHandler, mediaPlaybackHandler, puttWatchHandler } from './mediaHandlers';
 import { atBallHandler } from './atBallHandler';
 import { logIssueHandler } from './logIssueHandler';
@@ -30,6 +31,7 @@ voiceCommandRouter.registerHandler(clubChangeHandler);
 voiceCommandRouter.registerHandler(clubQueryHandler);
 voiceCommandRouter.registerHandler(clubMenuHandler);
 voiceCommandRouter.registerHandler(logShotHandler);
+voiceCommandRouter.registerHandler(logScoreHandler);
 voiceCommandRouter.registerHandler(mediaCaptureHandler);
 voiceCommandRouter.registerHandler(mediaPlaybackHandler);
 voiceCommandRouter.registerHandler(puttWatchHandler);
@@ -51,6 +53,7 @@ export {
   clubQueryHandler,
   clubMenuHandler,
   logShotHandler,
+  logScoreHandler,
   mediaCaptureHandler,
   mediaPlaybackHandler,
   puttWatchHandler,

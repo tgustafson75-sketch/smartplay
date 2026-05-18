@@ -108,6 +108,22 @@ class ConversationalLoggingOrchestrator {
     const round = useRoundStore.getState();
     if (!round.isRoundActive) return;
 
+    // 2026-05-19 — suppress auto-fire in cart mode. Tim's finding from
+    // yesterday's Sunnyvale round: "every time the cart moves we record
+    // a shot is faulty — you don't just stop the cart when hitting."
+    // Cart stops happen for many non-shot reasons (waiting on the group,
+    // talking, lost ball, breaks). GPS-displacement-after-stop is too
+    // noisy to drive the orchestrator's "what shot did you take?"
+    // prompt without spurious fires. Manual triggers (Tools → Log shot,
+    // voice "log a shot ...", cockpit Distance/Direction buttons, or
+    // triggerManual via voice intent) still work the same way — they
+    // route through this.runFlow directly rather than this auto-path.
+    const settings = useSettingsStore.getState();
+    if (settings.cartMode) {
+      console.log('[orchestrator] auto-fire suppressed (cart mode) — use manual log');
+      return;
+    }
+
     const delay = getPromptDelayMs();
     this.state = { kind: 'waiting_for_prompt', shotEvent: event, firesAt: Date.now() + delay };
     this.pendingTimer = setTimeout(() => {

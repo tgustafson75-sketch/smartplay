@@ -15,6 +15,8 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
+import { useToastStore } from '../store/toastStore';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
 import type { ThemeColors } from '../theme/tokens';
 import { getCaddieName, ACTIVE_PERSONAS } from '../lib/persona';
@@ -105,6 +107,20 @@ export default function Settings() {
   // Persona-aware display name. Settings labels reference the active caddie
   // by name (Kevin / Serena / Harry / Tank) consistently with the rest of the app.
   const caddieName = getCaddieName(caddiePersonality);
+
+  /**
+   * 2026-05-19 — Toggle wrapper that fires a Medium haptic and a toast
+   * on every state change. Previously the bare setters gave no visible
+   * confirmation — the switch thumb sliding was the only signal that the
+   * change took. Tim's "we go to change settings but you get no
+   * confirmations of what's actually taking place." Now every wrapped
+   * toggle says, in one line, what just happened.
+   */
+  const confirmToggle = (label: string, setter: (v: boolean) => void) => (v: boolean) => {
+    setter(v);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    useToastStore.getState().show(`${label}: ${v ? 'ON' : 'OFF'}`);
+  };
 
   const {
     name,
@@ -499,25 +515,25 @@ export default function Settings() {
             label="Skip Pre-Round Briefing"
             sub={`Go straight to the round without ${caddieName}'s intro`}
             value={skip_briefings}
-            onValueChange={setSkipBriefings}
+            onValueChange={confirmToggle('Skip Pre-Round Briefing', setSkipBriefings)}
           />
           <ToggleRow
             label={`Proactive ${caddieName}`}
             sub={`${caddieName} speaks up between holes — streaks, patterns, ghost updates`}
             value={proactive_kevin_enabled}
-            onValueChange={setProactiveKevinEnabled}
+            onValueChange={confirmToggle(`Proactive ${caddieName}`, setProactiveKevinEnabled)}
           />
           <ToggleRow
             label="Voice Filler"
             sub={`${caddieName} fills the pause while thinking — 'let me see', 'hmm...'`}
             value={fillerEnabled}
-            onValueChange={setFillerEnabled}
+            onValueChange={confirmToggle('Voice Filler', setFillerEnabled)}
           />
           <ToggleRow
             label="Riding in a cart"
             sub="Tunes shot detection for cart play — shorter at-ball pause, suppresses only while the cart is moving (not for ~12s after it stops). Walking default is more conservative."
             value={cartMode}
-            onValueChange={setCartMode}
+            onValueChange={confirmToggle('Cart Mode', setCartMode)}
           />
         </View>
 
@@ -528,24 +544,24 @@ export default function Settings() {
             label="Voice Enabled"
             sub={`${caddieName} speaks responses aloud`}
             value={voiceEnabled}
-            onValueChange={(v) => {
+            onValueChange={confirmToggle('Voice', (v) => {
               setVoiceEnabled(v);
               // Phase A.4: re-enabling voice clears any prior mic denial so prompts
               // resume in subsequent rounds.
               if (v) clearMicDenial();
-            }}
+            })}
           />
           <ToggleRow
             label="Discrete Mode"
             sub="Haptic only — no audio"
             value={discreteMode}
-            onValueChange={setDiscreteMode}
+            onValueChange={confirmToggle('Discrete Mode', setDiscreteMode)}
           />
           <ToggleRow
             label="Active Listening"
             sub={`${caddieName} listens automatically during rounds. Just talk. Tap the pill on the Caddie tab to mute, or say "${caddieName}, turn off active listening".`}
             value={autoListenEnabled}
-            onValueChange={setAutoListenEnabled}
+            onValueChange={confirmToggle('Active Listening', setAutoListenEnabled)}
           />
           <ToggleRow
             label="Earbud Tap-to-Talk · Coming soon"
@@ -558,7 +574,7 @@ export default function Settings() {
             label="Voice on Phone Speaker"
             sub={`Allow ${caddieName}'s voice when no earbuds are connected`}
             value={voiceOnPhoneSpeaker}
-            onValueChange={setVoiceOnPhoneSpeaker}
+            onValueChange={confirmToggle('Voice on Phone Speaker', setVoiceOnPhoneSpeaker)}
           />
         </View>
 
@@ -917,6 +933,20 @@ export default function Settings() {
                       </Text>
                     </View>
                     <Ionicons name="locate-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/kevin-learning' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${caddieName} learning log`}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{caddieName} Learning</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Vocabulary {caddieName} has picked up from your shot phrasing. Review entries, correct miscoded meanings.
+                      </Text>
+                    </View>
+                    <Ionicons name="library-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
                 </View>
               </>

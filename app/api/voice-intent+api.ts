@@ -124,6 +124,18 @@ Available intents:
     - "watch this chip" / "watch this bunker shot" / "watch this chip out of the bunker" -> { shot_type: "chip" }
     Use putt_watch ONLY when the user explicitly says putt/chip/bunker. Generic "watch this" without that qualifier is media_capture (highlight kind).
 
+14. log_score — User reports their FINAL TOTAL strokes on a hole. Different from log_shot (which is one swing at a time). Strokes is an integer 1..12. Hole number is optional; defaults to currentHole.
+    parameters: { strokes: integer | word, hole_number?: integer 1..18 }
+    Examples:
+    - "I made a five" -> { strokes: 5 }
+    - "I shot a 7" -> { strokes: 7 }
+    - "I had a six" -> { strokes: 6 }
+    - "score me a 4" / "put me down for a 4" -> { strokes: 4 }
+    - "five on this hole" -> { strokes: 5 }
+    - "score me a 5 on hole 7" -> { strokes: 5, hole_number: 7 }
+    - "I bogeyed seven" -> { strokes: <par+1 — leave as null, the handler computes par-relative; but if you can resolve, fine> }
+    Prefer log_score over log_shot when the user is reporting a TOTAL ("I made a five") rather than a single swing.
+
 7. unknown — Cannot determine intent.
    parameters: {}
    Set follow_up_question to a brief clarifying question ${caddieName} could ask.
@@ -132,7 +144,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null

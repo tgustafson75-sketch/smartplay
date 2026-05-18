@@ -32,6 +32,7 @@ import * as Haptics from 'expo-haptics';
 
 import { useRoundStore, type ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useToastStore } from '../../store/toastStore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getCaddieName } from '../../lib/persona';
 import {
@@ -154,7 +155,13 @@ export default function CockpitCaddieScreen({
   // direction+outcome into one shot at the moment; consistent with
   // the conversational logging path).
   const handleLogDistance = (result: ShotDistanceResult) => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    // 2026-05-19 — bumped Light → Medium haptic and added toast confirm.
+    // Previously the only feedback was a sub-perceptible Light vibration
+    // and the shot was written silently to roundStore. Tim's "I tap and
+    // nothing happens" report — the data was being captured but no
+    // visible signal said so. Now: heavier haptic + a one-line toast
+    // naming what was logged.
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     const outcomeText =
       result === 'good'  ? 'good distance'
       : result === 'short' ? 'short of target'
@@ -170,10 +177,11 @@ export default function CockpitCaddieScreen({
       outcome_text: outcomeText,
     };
     logShot(shot);
+    useToastStore.getState().show(`Logged: ${outcomeText}`);
   };
 
   const handleLogDirection = (result: ShotDirectionResult) => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     const shot: ShotResult = {
       hole: currentHole,
       timestamp: Date.now(),
@@ -184,6 +192,8 @@ export default function CockpitCaddieScreen({
       acousticContact: null,
     };
     logShot(shot);
+    const dirLabel = result === 'left' ? 'left' : result === 'right' ? 'right' : 'straight';
+    useToastStore.getState().show(`Logged: ${dirLabel}`);
   };
 
   // Mark = "I'm standing where my shot landed." Pro's canonical Mark
