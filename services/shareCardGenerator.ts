@@ -37,11 +37,14 @@ export function pickHeroStat(recap: RoundRecap): string {
     if (bestVariance === 0) return `Par on hole ${bestHole.hole_number}`;
   }
 
-  // Score vs par
-  const totalPar = comparisons.reduce((sum, hc) => {
-    const par = hc.plan?.markers?.tee ? 4 : 4;
-    return sum + par;
-  }, 0);
+  // 2026-05-17 — Score vs par. Was: ternary `hc.plan?.markers?.tee ?
+  // 4 : 4` which returned 4 either way, breaking the hero stat for
+  // every non-par-72 round. RoundRecap doesn't carry course par per
+  // hole; the next-best signal is total_planned_score (user's planned
+  // total for the round, set in pre-round). Falls back to 4-per-hole
+  // when the player skipped pre-round planning, which is the same
+  // intent the previous buggy ternary was reaching for.
+  const totalPar = recap.total_planned_score ?? comparisons.length * 4;
   const svp = recap.total_score - totalPar;
   if (svp <= 0) return `${Math.abs(svp)} under for the round`;
   if (svp <= 5) return `${svp} over for the round`;

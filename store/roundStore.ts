@@ -718,8 +718,16 @@ export const useRoundStore = create<RoundState>()(
           }
         }
 
+        // 2026-05-17 — gate on score > 0 to match getScoreVsPar()'s
+        // semantics. Previously this counted 0-scores against par
+        // (an in-progress hole that was never finalized inflated the
+        // over-par total), while the getter skipped them. The
+        // RoundRecord.scoreVsPar drives the handicap differential
+        // push, so a 0 in the scores map was silently biasing the
+        // user's handicap calculation toward over-par.
         let scoreVsPar = 0;
         for (const [holeNum, score] of Object.entries(s.scores)) {
+          if (!score || score <= 0) continue;
           const par = s.courseHoles.find(h => h.hole === Number(holeNum))?.par ?? 0;
           scoreVsPar += score - par;
         }
@@ -1070,6 +1078,12 @@ export const useRoundStore = create<RoundState>()(
       addPenalty: (hole) => {
         // Unified path: creates a ShotResult so the penalty flows through computeHoleScore,
         // pattern detection, and recap — same as all other penalty outcomes.
+        // 2026-05-17 — preserve `pendingLieAnalysis` across this call.
+        // logShot consumes the pending slot when a shot is logged
+        // without its own lie_analysis; a penalty isn't really a swing
+        // and shouldn't steal a lie capture the user took for their
+        // next real shot. Snapshot before, restore after.
+        const pendingLieBefore = get().pendingLieAnalysis;
         const syntheticShot: ShotResult = {
           id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
           feel: null,
@@ -1084,6 +1098,7 @@ export const useRoundStore = create<RoundState>()(
           rules_decision: undefined,
         };
         get().logShot(syntheticShot);
+        if (pendingLieBefore != null) set({ pendingLieAnalysis: pendingLieBefore });
         // Bump scores[hole] by 1 so the scorecard reflects this penalty immediately.
         const currentScore = get().scores[hole] ?? 0;
         get().logScore(hole, currentScore + 1);
@@ -1309,6 +1324,14 @@ export const useRoundStore = create<RoundState>()(
         currentRoundPhotos: s.currentRoundPhotos,
         roundStartTime: s.roundStartTime,
         emotionalLog: s.emotionalLog,
+        // 2026-05-17 — second audit pass found two more in-round
+        // fields that were initialized + mutated but missing from
+        // partialize, so a crash mid-round lost them:
+        // pendingLieAnalysis (TightLie capture awaiting next shot)
+        // + selectedTee (Play tab tee picker). `goal` is already
+        // partialized above.
+        pendingLieAnalysis: s.pendingLieAnalysis,
+        selectedTee: s.selectedTee,
       }),
     },
   ),

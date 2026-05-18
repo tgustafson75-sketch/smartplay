@@ -196,8 +196,11 @@ export function parseSpokenClub(phrase: string): { club_id: ClubId; club_type: C
   const wood = p.match(/\b([3579])\s*(?:w|wood)\b/);
   if (wood) return { club_id: `${wood[1]}W` as ClubId, club_type: 'wood' };
 
-  // Numbered irons: "6 iron", "6-iron", "my 6"
-  const iron = p.match(/\b([3-9])\s*(?:i|iron)?\b/);
+  // Numbered irons: "6 iron", "6-iron". 2026-05-17 — the bare-digit
+  // form ("my 6") was previously caught here too via an optional
+  // `(?:i|iron)?` group, which over-fired: "3 of us", "ace 7" all
+  // parsed as irons. Iron cue (i / iron) is now required.
+  const iron = p.match(/\b([3-9])\s*(?:i\b|iron\b)/);
   if (iron) return { club_id: `${iron[1]}I` as ClubId, club_type: 'iron' };
 
   return null;

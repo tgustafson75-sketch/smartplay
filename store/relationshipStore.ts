@@ -103,8 +103,14 @@ interface RelationshipState {
 
   updateClubConfidence: (club: string, score: number) => void;
 
-  // Returns top 3 observations for brain prompt
+  // Returns top 3 observations for brain prompt. PURE READ — does
+  // not increment `usedInAdvice`. After the caller has actually
+  // fed these to the brain, it should call markObservationsUsed(ids)
+  // to record the use. Previously this getter mutated state on
+  // every call, which double-counted under StrictMode re-renders
+  // and any caller that read twice for the same prompt.
   getTopObservations: () => Observation[];
+  markObservationsUsed: (ids: string[]) => void;
 
   // Returns recent hero moments
   getRecentHeroMoments: (count: number) => HeroMoment[];
@@ -243,18 +249,14 @@ export const useRelationshipStore = create<RelationshipState>()(
           if (!top.find(t => t.id === o.id)) top.push(o);
         }
 
-        if (top.length > 0) {
-          set(s => ({
-            observations: s.observations.map(o =>
-              top.find(t => t.id === o.id)
-                ? { ...o, usedInAdvice: o.usedInAdvice + 1 }
-                : o
-            ),
-          }));
-        }
-
         return top;
       },
+
+      markObservationsUsed: (ids) => set(s => ({
+        observations: s.observations.map(o =>
+          ids.includes(o.id) ? { ...o, usedInAdvice: o.usedInAdvice + 1 } : o,
+        ),
+      })),
 
       getRecentHeroMoments: (count) =>
         [...get().heroMoments]

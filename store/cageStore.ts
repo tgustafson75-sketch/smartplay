@@ -585,12 +585,18 @@ export const useCageStore = create<CageState>()(
 
       setShotAnalysis: (sessionId, shotId, analysis) =>
         set(s => ({
+          // 2026-05-17 — also flip session.analysis_status to 'ok'
+          // and clear analysis_error. Previously this stayed at
+          // 'pending' forever on per-shot-only paths because only
+          // setSessionAnalysis advanced the status.
           sessionHistory: s.sessionHistory.map(session =>
             session.id !== sessionId ? session : {
               ...session,
               shots: session.shots.map(shot =>
                 shot.id !== shotId ? shot : { ...shot, perShotAnalysis: analysis },
               ),
+              analysis_status: 'ok' as AnalysisStatus,
+              analysis_error: null,
             },
           ),
         })),
@@ -639,10 +645,18 @@ export const useCageStore = create<CageState>()(
 
       deleteShot: (sessionId, shotId) =>
         set(s => ({
+          // 2026-05-17 — also prune the deleted shot id from
+          // clubSegments[].shot_ids. Previously segments retained
+          // pointers to non-existent shots and the per-segment club
+          // aggregation downstream over-counted by one per delete.
           sessionHistory: s.sessionHistory.map(session =>
             session.id !== sessionId ? session : {
               ...session,
               shots: session.shots.filter(shot => shot.id !== shotId),
+              clubSegments: session.clubSegments?.map(seg => ({
+                ...seg,
+                shot_ids: seg.shot_ids.filter(id => id !== shotId),
+              })),
             },
           ),
         })),

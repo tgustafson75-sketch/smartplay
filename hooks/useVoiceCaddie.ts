@@ -337,6 +337,7 @@ export const useVoiceCaddie = ({
   // and including them in the shallow selector would cost nothing
   // either way, but separating clarifies "these are actions, not data."
   const getTopObservations = useRelationshipStore((s) => s.getTopObservations);
+  const markObservationsUsed = useRelationshipStore((s) => s.markObservationsUsed);
   const getRecentHeroMoments = useRelationshipStore((s) => s.getRecentHeroMoments);
   const addHeroMoment = useRelationshipStore((s) => s.addHeroMoment);
 
@@ -410,6 +411,9 @@ export const useVoiceCaddie = ({
   const sendToBrain = async (message: string): Promise<{ text: string; audioBase64: string | null; toolAction: ToolAction | null }> => {
     try {
       const topObs = getTopObservations();
+      // 2026-05-17 — record the use AFTER we read, so the bump
+      // happens exactly once per brain send (not per re-render).
+      if (topObs.length > 0) markObservationsUsed(topObs.map(o => o.id));
       const heroMoments = getRecentHeroMoments(2);
 
       const watchState = useWatchStore.getState();

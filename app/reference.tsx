@@ -29,7 +29,11 @@ type Tab = 'rules' | 'handicap' | 'glossary';
 export default function ReferenceScreen() {
   const router = useRouter();
   const { rule } = useLocalSearchParams<{ rule?: string }>();
-  const [tab, setTab] = useState<Tab>(rule ? 'rules' : 'rules');
+  // 2026-05-17 — Rules tab is the default on mount; deep-link `?rule=`
+  // additionally scrolls + expands the named entry below. Previously
+  // `useState<Tab>(rule ? 'rules' : 'rules')` looked like a tab switch
+  // but both branches were 'rules' (no behavior, just noise).
+  const [tab, setTab] = useState<Tab>('rules');
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<string | null>(rule ?? null);
   const listRef = useRef<FlatList<RuleEntry>>(null);

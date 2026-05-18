@@ -80,7 +80,7 @@ export async function bundleLieAnalysisContext(playIntent: PlayIntent = null): P
   // Lie hint — when the last shot's raw_utterance includes a lie keyword,
   // surface it so the analysis knows what kind of lie the player said
   // they were in last time.
-  const LIE_KEYWORDS = ['rough', 'fairway', 'sand', 'bunker', 'water', 'trees', 'wood', 'rough', 'fescue', 'fluffy', 'tight', 'buried', 'hardpan', 'bare'];
+  const LIE_KEYWORDS = ['rough', 'fairway', 'sand', 'bunker', 'water', 'trees', 'wood', 'fescue', 'fluffy', 'tight', 'buried', 'hardpan', 'bare'];
   const lie_hint = last?.raw_utterance
     ? (LIE_KEYWORDS.find(k => last.raw_utterance!.toLowerCase().includes(k)) ?? null)
     : null;

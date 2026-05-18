@@ -29,7 +29,7 @@ type Listener = (route: AudioRoute) => void;
 
 let currentRoute: AudioRoute = 'unknown';
 const listeners: Set<Listener> = new Set();
-let pollInterval: ReturnType<typeof setInterval> | null = null;
+let audioModeConfigured = false;
 
 /**
  * Returns the most recently detected audio route.
@@ -43,46 +43,27 @@ export function getCurrentRoute(): AudioRoute {
  */
 export function subscribeRouteChanges(listener: Listener): () => void {
   listeners.add(listener);
-  if (pollInterval == null) startPolling();
+  if (!audioModeConfigured) {
+    audioModeConfigured = true;
+    void detectRoute();
+  }
   return () => {
     listeners.delete(listener);
-    if (listeners.size === 0 && pollInterval != null) {
-      clearInterval(pollInterval);
-      pollInterval = null;
-    }
   };
 }
 
-function startPolling() {
-  // Initial check immediately
-  void detectRoute();
-  pollInterval = setInterval(detectRoute, 2_000);
-}
-
 async function detectRoute() {
+  // Configure audio mode once on first subscribe. Done synchronously
+  // here (no polling); no-op when called repeatedly.
   try {
-    // expo-av doesn't surface the active route directly in managed mode.
-    // Best-effort: configure audio mode to honor silent switch + record from
-    // input device, then read back. The input device routing (mic) is a
-    // reasonable proxy for output routing on most modern earbuds (which
-    // pair input + output as a unit).
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: false,
       playsInSilentModeIOS: true,
       staysActiveInBackground: true,
       shouldDuckAndroid: true,
     });
-    // Without a native event listener we can't know the route definitively
-    // through expo-av alone. Default to 'unknown' until a real detector
-    // ships. Consumers fall back to user-pref defaults (suppress TTS on
-    // unknown routing unless the "Voice on phone speaker" pref is on).
-    const next: AudioRoute = 'unknown';
-    if (next !== currentRoute) {
-      currentRoute = next;
-      listeners.forEach(l => { try { l(next); } catch (e) { console.log('[audioRouting] listener err', e); } });
-    }
   } catch (e) {
-    console.log('[audioRouting] detect failed:', e);
+    console.log('[audioRouting] setAudioMode failed:', e);
   }
 }
 

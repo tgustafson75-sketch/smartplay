@@ -10,10 +10,13 @@
  * (Google Maps Static API in current hole-view.tsx) or to "no imagery"
  * graceful degradation.
  *
- * Cache: per-hole on the device file system. Imagery rarely changes
- * (course aerial photography updates on a multi-year cadence), so
- * cached tiles are good for the lifetime of the install. Manual cache
- * clear available via clearImageryCache().
+ * Cache: per-hole via React Native's built-in Image cache (OS-
+ * managed). Imagery rarely changes (course aerial photography
+ * updates on a multi-year cadence), so cached tiles are good for the
+ * lifetime of the install. There is no app-controlled cache clear —
+ * the OS evicts the cache periodically. Don't add a "Clear cache"
+ * button until a real cache layer (FileSystem or a Mapbox SDK) is
+ * wired up.
  *
  * Cost projection (50,000 free tile loads / month):
  *   - 1 tile fetch per hole on first view (cached after)
@@ -265,13 +268,6 @@ export async function prefetchHoles(
   options: HoleImageryOptions = {},
 ): Promise<void> {
   await Promise.all(inputs.map(i => fetchHoleImagery(i, options).catch(() => null)));
-}
-
-/** Manual cache clear — wired into Settings → Cache management. */
-export async function clearImageryCache(): Promise<void> {
-  // expo-file-system File API doesn't enumerate the cache directory by
-  // glob, so we no-op here for now. The OS cache directory gets cleared
-  // by the system periodically, which is acceptable for v1.0.
 }
 
 /**

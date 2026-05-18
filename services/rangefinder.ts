@@ -83,10 +83,13 @@ export function computeDistance(input: DistanceComputeInput): DistanceComputeOut
 
   let distanceM: number;
   if (unmeasurable) {
-    // Back-compat sentinel — the caller MUST check unmeasurable and
-    // ignore this number. Kept at 250 only so callers that didn't
-    // update yet don't crash on undefined.
-    distanceM = 250 * 0.9144;
+    // 2026-05-17 — the previous 250yd back-compat sentinel was a
+    // foot-gun: callers that ignored the `unmeasurable` flag rendered
+    // it as a real measurement (Tim's "every tap shows 250" finding
+    // on a flat-phone STANDARD-mode session). Setting distanceM=0 so
+    // the clamp below pushes the output to MIN_YARDS — clearly not a
+    // real reading, no fake 250 in the UI.
+    distanceM = 0;
   } else {
     const angleRad = degToRad(Math.abs(angleDeg));
     distanceM = EYE_HEIGHT_M / Math.tan(angleRad);

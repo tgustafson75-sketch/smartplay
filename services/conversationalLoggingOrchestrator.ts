@@ -127,10 +127,21 @@ class ConversationalLoggingOrchestrator {
     // when it says "walking" (cartMode=false) but the detector says
     // "cart"; we only ADD suppression, never remove it.
     const settings = useSettingsStore.getState();
-    // Lazy import to avoid pulling Health Connect at module-load time.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { isEffectiveCartMode } = require('./walkingDetector') as typeof import('./walkingDetector');
-    if (isEffectiveCartMode(settings.cartMode)) {
+    // Lazy import to avoid pulling Health Connect at module-load
+    // time. 2026-05-17 — wrap the require itself in try/catch so a
+    // walkingDetector module-load error can't take down the whole
+    // shot-event pipeline (it would have crashed silently and
+    // dropped every auto-fire). On failure we fall back to the
+    // manual cartMode setting only.
+    let effectiveCart = settings.cartMode;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { isEffectiveCartMode } = require('./walkingDetector') as typeof import('./walkingDetector');
+      effectiveCart = isEffectiveCartMode(settings.cartMode);
+    } catch (e) {
+      console.log('[orchestrator] walkingDetector require failed:', e);
+    }
+    if (effectiveCart) {
       console.log('[orchestrator] auto-fire suppressed (cart mode effective) — use manual log');
       return;
     }
