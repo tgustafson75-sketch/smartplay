@@ -50,7 +50,6 @@ const MOCK_PARS: Record<number, number> = {
 export default function GhostDebugScreen() {
   const _gateAllowed = useDebugRouteGate();
   const router = useRouter();
-  if (!_gateAllowed) return null;
   const { roundHistory } = useRoundStore();
   const ghost = useGhostStore();
   const [commentary, setCommentary] = useState<string | null>(null);
@@ -166,6 +165,9 @@ export default function GhostDebugScreen() {
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
+
+  // 2026-05-17 — gate check AFTER all hooks (Rules of Hooks)
+  if (!_gateAllowed) return null;
 
   return (
     <SafeAreaView style={styles.container}>

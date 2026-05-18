@@ -29,7 +29,6 @@ import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
 export default function BatteryDebugScreen() {
   const _gateAllowed = useDebugRouteGate();
   const insets = useSafeAreaInsets();
-  if (!_gateAllowed) return null;
   const [_tick, setTick] = useState(0);
   const [bs, setBs] = useState<BatteryState | null>(null);
 
@@ -46,6 +45,9 @@ export default function BatteryDebugScreen() {
 
   const fmtTs = (ts: number | null) =>
     ts ? new Date(ts).toLocaleTimeString() : '—';
+
+  // 2026-05-17 — gate check AFTER all hooks (Rules of Hooks)
+  if (!_gateAllowed) return null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 16 }]}>

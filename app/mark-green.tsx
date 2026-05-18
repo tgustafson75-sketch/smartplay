@@ -55,10 +55,17 @@ export default function MarkGreenScreen() {
   // missing. Kept reachable for owner accounts (Settings → Owner
   // Tools row, GlobalToolsMenu row) but no longer deep-linkable by
   // arbitrary users.
+  //
+  // CRITICAL — all hooks must run on every render so React's
+  // Rules of Hooks aren't violated. The previous arrangement
+  // (early `return null` between hook calls) crashed with
+  // "Rendered fewer hooks than expected" when the gate's allowed
+  // flag flipped mid-lifecycle (e.g. owner email hydrating async
+  // after first render). All hooks now run first; the gate-deny
+  // branch renders an empty View from the JSX body.
   const _gateAllowed = useDebugRouteGate();
   const router = useRouter();
   const { colors } = useTheme();
-  if (!_gateAllowed) return null;
   const activeCourseId = useRoundStore(s => s.activeCourseId);
   const activeCourse = useRoundStore(s => s.activeCourse);
   const currentHole = useRoundStore(s => s.currentHole);
@@ -115,6 +122,11 @@ export default function MarkGreenScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     useToastStore.getState().show(`Cleared: hole ${currentHole}`);
   }, [courseId, currentHole]);
+
+  // 2026-05-17 — Gate check AFTER all hooks have been declared so
+  // React's hook-count invariant holds across renders even when
+  // _gateAllowed flips. See header comment.
+  if (!_gateAllowed) return null;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>

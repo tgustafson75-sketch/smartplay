@@ -152,6 +152,26 @@ class ConversationalLoggingOrchestrator {
       console.log('[orchestrator] auto-fire suppressed (cart mode effective) — use manual log');
       return;
     }
+    // 2026-05-17 — Audit C "B" P1 fix: also suppress when the latest
+    // raw GPS speed is sustained-cart territory (>4 m/s ≈ 9 mph),
+    // independent of the walkingDetector cache. The detector takes
+    // ~30s + several Health Connect samples to warm up at round
+    // start; before that, isEffectiveCartMode returns the manual
+    // settings value, which is false by default. So a cart round
+    // with cartMode=false would fire false-shot prompts on the
+    // first 1-2 stops before the detector arms. This gate catches
+    // that window using only GPS state.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
+      const speed = getLastFix()?.speed ?? 0;
+      if (speed > 4.0) {
+        console.log(`[orchestrator] auto-fire suppressed (gps speed ${speed.toFixed(1)} m/s)`);
+        return;
+      }
+    } catch (e) {
+      ownerSentinel('orchestrator.gpsSpeedGate', e);
+    }
 
     const delay = getPromptDelayMs();
     this.state = { kind: 'waiting_for_prompt', shotEvent: event, firesAt: Date.now() + delay };

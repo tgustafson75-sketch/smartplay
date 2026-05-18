@@ -19,7 +19,6 @@ export default function SubscriptionDebugScreen() {
   const _gateAllowed = useDebugRouteGate();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  if (!_gateAllowed) return null;
   const {
     subscription_status,
     first_opened_at,
@@ -36,6 +35,9 @@ export default function SubscriptionDebugScreen() {
     { label: 'trial_started_at', value: trial_started_at ? new Date(trial_started_at).toISOString() : 'null' },
     { label: 'trial_days_left', value: daysLeft !== null ? String(daysLeft) : 'N/A' },
   ];
+
+  // 2026-05-17 — gate check AFTER all hooks (Rules of Hooks)
+  if (!_gateAllowed) return null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 16 }]}>

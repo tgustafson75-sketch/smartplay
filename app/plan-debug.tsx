@@ -21,7 +21,6 @@ const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 export default function PlanDebugScreen() {
   const _gateAllowed = useDebugRouteGate();
   const router = useRouter();
-  if (!_gateAllowed) return null;
   const {
     isRoundActive,
     currentRoundId,
@@ -115,6 +114,9 @@ export default function PlanDebugScreen() {
       setListLoading(false);
     }
   };
+
+  // 2026-05-17 — gate check AFTER all hooks (Rules of Hooks)
+  if (!_gateAllowed) return null;
 
   return (
     <SafeAreaView style={styles.container}>

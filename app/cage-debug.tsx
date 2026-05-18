@@ -56,7 +56,6 @@ function formatDuration(s: number): string {
 export default function CageDebug() {
   const _gateAllowed = useDebugRouteGate();
   const router = useRouter();
-  if (!_gateAllowed) return null;
   const { sessionId: focusSessionId } = useLocalSearchParams<{ sessionId?: string }>();
 
   const [sessions, setSessions] = useState<CageSession[]>([]);
@@ -231,6 +230,9 @@ export default function CageDebug() {
   }, [selectedClip]);
 
   // ─── Render ────────────────────────────────────────────────────────────────
+
+  // 2026-05-17 — gate check AFTER all hooks (Rules of Hooks)
+  if (!_gateAllowed) return null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

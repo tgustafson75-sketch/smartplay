@@ -54,7 +54,6 @@ function makeMixedShots(count: number): ShotResult[] {
 export default function PatternsDebug() {
   const _gateAllowed = useDebugRouteGate();
   const router = useRouter();
-  if (!_gateAllowed) return null;
 
   const {
     shots,
@@ -113,6 +112,9 @@ export default function PatternsDebug() {
   }, [shots.length]);
 
   const rs = insights?.raw_stats;
+
+  // 2026-05-17 — gate check AFTER all hooks (Rules of Hooks)
+  if (!_gateAllowed) return null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

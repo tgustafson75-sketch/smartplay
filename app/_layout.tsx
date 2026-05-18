@@ -313,6 +313,36 @@ function AppNavigator() {
     return () => { unsub(); unsubAssign(); };
   }, []);
 
+  // 2026-05-17 — Audit B P0: phantom-round boot guard. Tim's APK-
+  // reinstall workflow leaves AsyncStorage-persisted `isRoundActive:
+  // true` from whatever round was in flight when the prior build
+  // died. The subscribers below (media session, hole detection,
+  // shot detection, orchestrator) all start themselves when they
+  // see isRoundActive=true at boot — meaning a stale persisted
+  // round wakes up the full GPS + shot-detection stack at launch
+  // with no real round behind it. This guard runs FIRST after
+  // rehydration and discards any phantom round whose markers look
+  // wrong (no currentRoundId, no roundStartTime, no activeCourse,
+  // or roundStartTime older than 8 hours). discardRound zeroes all
+  // in-round state without writing a RoundRecord.
+  useEffect(() => whenRoundStoreHydrated(() => {
+    const s = useRoundStore.getState();
+    if (!s.isRoundActive) return;
+    const stale =
+      !s.currentRoundId ||
+      !s.activeCourse ||
+      !s.roundStartTime ||
+      (Date.now() - s.roundStartTime) > 8 * 60 * 60 * 1000;
+    if (stale) {
+      console.log('[boot-guard] discarding phantom round', {
+        currentRoundId: s.currentRoundId,
+        activeCourse: s.activeCourse,
+        ageHours: s.roundStartTime ? (Date.now() - s.roundStartTime) / 3_600_000 : null,
+      });
+      try { s.discardRound(); } catch (e) { console.log('[boot-guard] discardRound failed', e); }
+    }
+  }), []);
+
   // Phase O.5 — activate the native media session only while a round is
   // active, so other media apps (Spotify, podcasts) keep their system
   // controls when SmartPlay isn't the relevant earbud-tap target.

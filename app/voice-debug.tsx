@@ -12,7 +12,6 @@ export default function VoiceDebugScreen() {
   const _gateAllowed = useDebugRouteGate();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  if (!_gateAllowed) return null;
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
   const [text, setText] = useState('');
@@ -63,6 +62,9 @@ export default function VoiceDebugScreen() {
 
   const handlers = voiceCommandRouter.getRegisteredHandlers();
   const history = voiceCommandRouter.getHistory().slice().reverse();
+
+  // 2026-05-17 — gate check AFTER all hooks (Rules of Hooks)
+  if (!_gateAllowed) return null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>

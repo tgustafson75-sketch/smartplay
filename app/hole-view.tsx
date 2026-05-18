@@ -925,12 +925,11 @@ export default function HoleView() {
               </Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            style={styles.btn}
-            onPress={() => router.push({ pathname: '/hole-view-3d', params: { courseName } } as never)}
-          >
-            <Text style={styles.btnText}>🌐 3D View</Text>
-          </TouchableOpacity>
+          {/* 2026-05-17 — 3D View button removed; the /hole-view-3d
+              route was a placeholder that was deleted in commit
+              63ca36e. Button stayed and would have broken navigation
+              for any user who tapped it. Restore the button only
+              alongside a real 3D-view implementation. */}
         </View>
 
         {/* Phase AG followup — anchor capture row. Only renders during an

@@ -158,7 +158,15 @@ function processFix(raw: GpsFix): boolean {
     const moved = haversineMeters(lastFix, fix);
     if (moved >= STATIONARY_DELTA) {
       lastMotionAt = Date.now();
-      if (mode === 'stationary') setMode('walking', 'motion_resumed');
+      if (mode === 'stationary') {
+        // 2026-05-17 — Audit C "A" fix: clear smoothing buffer BEFORE
+        // flipping mode. Otherwise the first 1-3 walking fixes get
+        // averaged with stale stationary samples and yardages lag by
+        // 20-30 yards for ~20s after motion resumes (the previous
+        // buffer entries are from the user's pre-walk location).
+        smoothingBuffer = [];
+        setMode('walking', 'motion_resumed');
+      }
     }
   } else {
     lastMotionAt = Date.now();
@@ -207,7 +215,20 @@ async function startWatchInternal() {
   try {
     const { granted } = await Location.requestForegroundPermissionsAsync();
     if (!granted) {
-      console.log('[gps] permission denied');
+      // 2026-05-17 — Audit C "E" / "L" P1 fix: surface permission
+      // denial as an owner toast AND a user-facing toast. Previously
+      // this was console-log-only, which masked the round-killing
+      // silent-no-GPS failure mode Tim has hit before. Both toasts
+      // fire from this single site so any consumer who calls
+      // startWatchInternal (round start, recalibrate, foreground
+      // recovery) gets the warning.
+      ownerSentinel('gps.startWatch.no_permission',
+        new Error('Location permission denied'));
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { useToastStore } = require('../store/toastStore') as typeof import('../store/toastStore');
+        useToastStore.getState().show('GPS off — enable Location in Settings to keep yardages live.');
+      } catch { /* toast layer unavailable */ }
       return;
     }
     const cfg = POLL_CONFIG[mode];
@@ -264,10 +285,13 @@ async function startWatchInternal() {
       }
     }
     if (!subscription) {
-      console.log('[gps] all accuracy levels failed:', lastWatchErr);
+      // 2026-05-17 — Audit C "L" P1: all-accuracy-rungs-failed was
+      // logging only. Now surfaces via ownerSentinel so a silent
+      // dead-GPS round is at least visible to Tim mid-round.
+      ownerSentinel('gps.startWatch.allAccuracyFailed', lastWatchErr ?? new Error('No subscription'));
     }
   } catch (err) {
-    console.log('[gps] watch error:', err);
+    ownerSentinel('gps.startWatchInternal', err);
   }
 }
 

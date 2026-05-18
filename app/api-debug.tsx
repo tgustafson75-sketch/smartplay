@@ -73,7 +73,6 @@ const BATTERY_TESTS = [
 export default function ApiDebug() {
   const _gateAllowed = useDebugRouteGate();
   const router = useRouter();
-  if (!_gateAllowed) return null;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ id: string; club_name: string; course_name: string; location: string }[]>([]);
@@ -153,6 +152,9 @@ export default function ApiDebug() {
       ],
     );
   };
+
+  // 2026-05-17 — gate check AFTER all hooks (Rules of Hooks)
+  if (!_gateAllowed) return null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

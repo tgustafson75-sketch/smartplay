@@ -29,7 +29,6 @@ const MOCK_DISTANCES = [
 export default function SmartFinderDebug() {
   const _gateAllowed = useDebugRouteGate();
   const router = useRouter();
-  if (!_gateAllowed) return null;
   const { distance_unit } = useSettingsStore();
 
   const [gps, setGps] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
@@ -117,6 +116,9 @@ export default function SmartFinderDebug() {
     if (y >= 10 && y <= 400) return 'medium';
     return 'low';
   };
+
+  // 2026-05-17 — gate check AFTER all hooks (Rules of Hooks)
+  if (!_gateAllowed) return null;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

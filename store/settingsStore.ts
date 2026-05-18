@@ -451,6 +451,12 @@ export const useSettingsStore = create<SettingsState>()(
         tankSoftIntro: s.tankSoftIntro,
         autoListenEnabled: s.autoListenEnabled,
         cartMode: s.cartMode,
+        // 2026-05-17 — audit B P0: both health-permission flags were
+        // missing from partialize, so every cold launch re-asked for
+        // Health Connect access on the first round-start. Persisted
+        // now so the JIT ask happens once per device install.
+        hasAskedHealthPermission: s.hasAskedHealthPermission,
+        healthDataEnabled: s.healthDataEnabled,
         skip_briefings: s.skip_briefings,
         proactive_kevin_enabled: s.proactive_kevin_enabled,
         distance_unit: s.distance_unit,
