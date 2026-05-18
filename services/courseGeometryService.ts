@@ -129,6 +129,28 @@ async function resolveLocalCourseId(localSlug: string): Promise<string | null> {
  *     by future imports.
  */
 
+// 2026-05-17 — Polygon support for Bluegolf-class hole rendering.
+// OSM Overpass tags every golf feature as a polygon (fairway, green,
+// tee box, bunker, water hazard, rough). The geometry endpoint now
+// pulls full polygons (not just centroids) and associates each with
+// its nearest hole's tee→green line. Client renders them as SVG fills
+// on top of the satellite tile, mirroring Bluegolf / Golfshot's
+// stylized hole view from free open data.
+export type Polygon = ShotLocation[];
+
+export type LandmarkFeature = {
+  /** OSM polygon ring. Empty array means we only have a centroid. */
+  polygon: Polygon;
+  /** Centroid for fast distance / labeling. */
+  centroid: ShotLocation;
+  /** Auto-derived side relative to the tee→green line: left, right,
+   *  or greenside (within ~30y of the green). null when no tee/green
+   *  reference is available. */
+  side: 'left' | 'right' | 'greenside' | 'fairway' | null;
+  /** Optional OSM `name` tag — e.g. "Big Bunker", "Pond". */
+  name: string | null;
+};
+
 export type HoleGeometry = {
   hole_number: number;
   par: number;
@@ -141,6 +163,14 @@ export type HoleGeometry = {
   hazards: { label: string; location: ShotLocation | null }[];
   fairway_centerline: ShotLocation[]; // reserved for richer geometry source
   green_outline: ShotLocation[];      // reserved for richer geometry source
+  // 2026-05-17 — Polygon overlays for Bluegolf-style rendering.
+  // All optional — fall through to existing point-only rendering when
+  // upstream doesn't supply polygons.
+  green_polygon?: Polygon | null;
+  tee_polygon?: Polygon | null;
+  fairway_polygons?: Polygon[];
+  bunkers?: LandmarkFeature[];
+  water_hazards?: LandmarkFeature[];
 };
 
 export type CourseGeometry = {
@@ -250,6 +280,14 @@ export async function fetchCourseGeometry(courseId: string): Promise<CourseGeome
   }
   if (upstreamId === '__osm_only__') {
     params.set('osmOnly', '1');
+  }
+  // 2026-05-17 — Always request polygons for local courses. The server
+  // adds ~3-8s to the Overpass fetch (5 polygon queries in parallel) but
+  // the result is cached client-side for a week, so the cost lands once
+  // per course per cache lifetime. Polygons drive the Bluegolf-style
+  // SmartVision hole overlay (fairway/bunker/water/tee/green fills).
+  if (courseId.startsWith('local:')) {
+    params.set('withPolygons', '1');
   }
   const url = `${apiUrl}/api/course-geometry?${params.toString()}`;
   try {

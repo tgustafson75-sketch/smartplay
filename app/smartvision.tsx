@@ -44,7 +44,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import Svg, { Line as SvgLine } from 'react-native-svg';
+import Svg, { Line as SvgLine, Polygon as SvgPolygon, Text as SvgText, G as SvgG } from 'react-native-svg';
 
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -54,6 +54,7 @@ import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../serv
 import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbertApi';
 import { hasGolfbertCourseMapping } from '../constants/golfbertCourses';
 import { fetchHoleImagery, computeFitView, getCenteredImageryUrl } from '../services/mapboxImagery';
+import YardageBookPanel from '../components/smartvision/YardageBookPanel';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS, getLocalCourseSlug } from '../data/localCourseImages';
 
@@ -866,13 +867,84 @@ export default function SmartVisionScreen() {
           </View>
         )}
 
-        {/* SVG overlay — line tee → yellow → pin, drawn beneath markers. */}
+        {/* 2026-05-17 — SVG overlay rebuilt to Bluegolf-class.
+            Bottom: fairway polygons (translucent green tint over satellite).
+            Above that: green polygon (darker fill + bright stroke).
+            Above that: tee polygon (yellow tint).
+            Above that: bunkers (sand fill) and water (blue fill).
+            Above that: tee→target→pin centerline + draggable markers
+                        (in their own layer below).
+            All projected via the same projectToPixels helper that
+            anchors the T/Y/P markers, so polygons align with the
+            satellite tile pixel-for-pixel. */}
         <Svg
           width={imageW}
           height={imageH}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         >
+          {projection && geometry && (() => {
+            const polyToPoints = (poly: { lat: number; lng: number }[]): string => {
+              return poly
+                .map(p => {
+                  const off = projectToPixels(p, projection.center, projection.zoom, projection.bearing);
+                  return `${(imageW / 2 + off.x).toFixed(1)},${(imageH / 2 - off.y).toFixed(1)}`;
+                })
+                .join(' ');
+            };
+            const fairways = geometry.fairway_polygons ?? [];
+            const bunkers = geometry.bunkers ?? [];
+            const water = geometry.water_hazards ?? [];
+            const greenPoly = geometry.green_polygon ?? null;
+            const teePoly = geometry.tee_polygon ?? null;
+            return (
+              <SvgG>
+                {fairways.map((poly, i) => (
+                  <SvgPolygon
+                    key={'fw-' + i}
+                    points={polyToPoints(poly)}
+                    fill="rgba(78,163,106,0.35)"
+                    stroke="rgba(78,163,106,0.85)"
+                    strokeWidth={1}
+                  />
+                ))}
+                {water.map((w, i) => (
+                  <SvgPolygon
+                    key={'wh-' + i}
+                    points={polyToPoints(w.polygon)}
+                    fill="rgba(56,189,248,0.55)"
+                    stroke="rgba(14,116,144,0.95)"
+                    strokeWidth={1.5}
+                  />
+                ))}
+                {bunkers.map((b, i) => (
+                  <SvgPolygon
+                    key={'bk-' + i}
+                    points={polyToPoints(b.polygon)}
+                    fill="rgba(252,211,77,0.7)"
+                    stroke="rgba(180,140,40,0.95)"
+                    strokeWidth={1.5}
+                  />
+                ))}
+                {teePoly && (
+                  <SvgPolygon
+                    points={polyToPoints(teePoly)}
+                    fill="rgba(251,191,36,0.45)"
+                    stroke="rgba(180,140,40,0.95)"
+                    strokeWidth={1.5}
+                  />
+                )}
+                {greenPoly && (
+                  <SvgPolygon
+                    points={polyToPoints(greenPoly)}
+                    fill="rgba(126,211,163,0.7)"
+                    stroke="rgba(255,255,255,0.95)"
+                    strokeWidth={2}
+                  />
+                )}
+              </SvgG>
+            );
+          })()}
           <SvgLine
             x1={teeCanvas.x}
             y1={teeCanvas.y}
@@ -892,6 +964,32 @@ export default function SmartVisionScreen() {
             strokeWidth={2}
             opacity={0.75}
           />
+          {/* 2026-05-17 — Bluegolf-style running yardage labels at the
+              midpoints of (tee→target) and (target→pin) line segments.
+              Stroke-then-fill gives a halo for legibility on whatever
+              the satellite tile happens to be underneath. */}
+          {carryYards != null && (
+            <SvgText
+              x={(teeCanvas.x + targetCanvas.x) / 2 + 14}
+              y={(teeCanvas.y + targetCanvas.y) / 2 + 5}
+              fill="#facc15"
+              stroke="#000"
+              strokeWidth={3}
+              fontSize={18}
+              fontWeight="900"
+            >{carryYards}</SvgText>
+          )}
+          {yardages.middle != null && (
+            <SvgText
+              x={(targetCanvas.x + pinCanvas.x) / 2 + 14}
+              y={(targetCanvas.y + pinCanvas.y) / 2 + 5}
+              fill="#fff"
+              stroke="#000"
+              strokeWidth={3}
+              fontSize={18}
+              fontWeight="900"
+            >{yardages.middle}</SvgText>
+          )}
         </Svg>
 
         {/* Markers — direct canvas coords. */}
@@ -986,6 +1084,13 @@ export default function SmartVisionScreen() {
         <YdCell label="MIDDLE" value={yardages.middle} emphasis stacked={isSplit} />
         <View style={isSplit ? styles.dividerHorizontal : styles.divider} />
         <YdCell label="BACK" value={yardages.back} stacked={isSplit} />
+        {/* 2026-05-17 — Bluegolf-style yardage book. Origin = tee for
+            planning; per-bunker / per-water polygon distances. Only
+            renders on the landscape side panel (vertical space); the
+            portrait bottom strip doesn't have the height. */}
+        {isSplit && (
+          <YardageBookPanel geometry={geometry} origin={teeCoord} />
+        )}
       </View>
       </View>{/* close split-screen container */}
     </GestureHandlerRootView>

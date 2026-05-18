@@ -63,6 +63,72 @@ function isPracticeFeature(tags: Record<string, string> | undefined): boolean {
   return PRACTICE_KEYWORDS.some(k => name.includes(k));
 }
 
+// 2026-05-17 — Full-polygon variant of fetchOsmFeatures. Returns each
+// polygon's ring of points, centroid, and OSM name tag (if any).
+// Used to drive the Bluegolf-style hole view (fairway/bunker/water
+// polygon overlays on top of the satellite tile, plus a yardage-book
+// panel listing landmarks with F/B distances).
+type OsmPolygon = { polygon: Loc[]; centroid: Loc; name: string | null };
+
+async function fetchOsmPolygons(centroid: Loc, feature: string): Promise<OsmPolygon[]> {
+  const query = `[out:json][timeout:20];
+(
+  way[golf=${feature}](around:${OSM_SEARCH_RADIUS_M},${centroid.lat},${centroid.lng});
+  relation[golf=${feature}](around:${OSM_SEARCH_RADIUS_M},${centroid.lat},${centroid.lng});
+);
+out geom;`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
+  try {
+    const res = await fetch(OVERPASS_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+        'User-Agent': 'SmartPlayCaddie/1.0 (https://smartplay-beta.vercel.app)',
+      },
+      body: 'data=' + encodeURIComponent(query),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      console.warn('[course-geometry] OSM polygons', feature, 'status', res.status);
+      return [];
+    }
+    const data = (await res.json()) as { elements?: OsmElement[] };
+    const out: OsmPolygon[] = [];
+    let practiceFiltered = 0;
+    for (const el of data.elements ?? []) {
+      if (isPracticeFeature(el.tags)) {
+        practiceFiltered++;
+        continue;
+      }
+      let ring: { lat: number; lon: number }[] = [];
+      if (el.geometry && el.geometry.length > 0) {
+        ring = el.geometry;
+      } else if (el.members) {
+        for (const m of el.members) {
+          if (m.geometry) ring.push(...m.geometry);
+        }
+      }
+      if (ring.length < 3) continue; // degenerate polygon
+      const c = polygonCentroid(ring);
+      if (!c) continue;
+      out.push({
+        polygon: ring.map(p => ({ lat: p.lat, lng: p.lon })),
+        centroid: c,
+        name: el.tags?.name ?? el.tags?.['name:en'] ?? null,
+      });
+    }
+    console.log(`[course-geometry] OSM ${feature} polygons: ${out.length} (filtered ${practiceFiltered} practice)`);
+    return out;
+  } catch (e) {
+    clearTimeout(timer);
+    console.warn('[course-geometry] OSM polygons exception:', e);
+    return [];
+  }
+}
+
 async function fetchOsmFeatures(centroid: Loc, feature: 'green' | 'tee'): Promise<Loc[]> {
   const query = `[out:json][timeout:20];
 (
@@ -121,6 +187,102 @@ out geom;`;
     console.warn('[course-geometry] OSM Overpass exception:', e);
     return [];
   }
+}
+
+// 2026-05-17 — Distance from a point to a segment (tee→green line),
+// in yards. Used to assign each course-wide polygon (bunker, fairway,
+// water hazard) to the hole whose tee→green segment it's closest to.
+// Bunkers within 30y of the green are tagged 'greenside' for the
+// yardage-book layout; everything else further from the centerline is
+// tagged 'left' / 'right' based on which side of the bearing it sits.
+function pointToSegmentYards(p: Loc, a: Loc, b: Loc): number {
+  // Project onto local-equirectangular meters relative to `a`.
+  const cosLat = Math.cos(toRad(a.lat));
+  const ax = 0;
+  const ay = 0;
+  const bx = (b.lng - a.lng) * cosLat * 111_111;
+  const by = (b.lat - a.lat) * 111_111;
+  const px = (p.lng - a.lng) * cosLat * 111_111;
+  const py = (p.lat - a.lat) * 111_111;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  let t = lenSq > 0 ? ((px - ax) * dx + (py - ay) * dy) / lenSq : 0;
+  t = Math.max(0, Math.min(1, t));
+  const cx = ax + t * dx;
+  const cy = ay + t * dy;
+  const distMeters = Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
+  return distMeters / 0.9144;
+}
+
+// Signed lateral offset: positive = right of bearing tee→green, negative = left.
+function lateralYards(p: Loc, tee: Loc, green: Loc): number {
+  const cosLat = Math.cos(toRad(tee.lat));
+  const tx = 0, ty = 0;
+  const gx = (green.lng - tee.lng) * cosLat * 111_111;
+  const gy = (green.lat - tee.lat) * 111_111;
+  const px = (p.lng - tee.lng) * cosLat * 111_111;
+  const py = (p.lat - tee.lat) * 111_111;
+  // 2D cross product of (G-T) x (P-T) / |G-T|
+  const len = Math.sqrt(gx * gx + gy * gy);
+  if (len === 0) return 0;
+  const cross = gx * py - gy * px;
+  return (cross / len) / 0.9144;
+}
+
+type AssignedPolygon = {
+  polygon: Loc[];
+  centroid: Loc;
+  side: 'left' | 'right' | 'greenside' | 'fairway' | null;
+  name: string | null;
+};
+
+// Assigns each polygon to the hole whose tee→green segment it's closest
+// to, tags side (left/right/greenside) and returns a map of hole_number
+// → polygons. Polygons farther than MAX_HOLE_DIST_YARDS from any hole
+// are dropped (they belong to driving range / cart paths / etc).
+const MAX_HOLE_DIST_YARDS = 60;
+const GREENSIDE_DIST_YARDS = 30;
+function assignPolygonsToHoles<T extends { tee: Loc | null; green: Loc | null; hole_number: number }>(
+  holes: T[],
+  polygons: OsmPolygon[],
+): Map<number, AssignedPolygon[]> {
+  const out = new Map<number, AssignedPolygon[]>();
+  for (const h of holes) out.set(h.hole_number, []);
+
+  for (const poly of polygons) {
+    let bestHole = -1;
+    let bestDist = Infinity;
+    for (const h of holes) {
+      if (!h.tee || !h.green) continue;
+      const d = pointToSegmentYards(poly.centroid, h.tee, h.green);
+      if (d < bestDist) {
+        bestDist = d;
+        bestHole = h.hole_number;
+      }
+    }
+    if (bestHole < 0 || bestDist > MAX_HOLE_DIST_YARDS) continue;
+    const hole = holes.find(x => x.hole_number === bestHole);
+    if (!hole || !hole.tee || !hole.green) continue;
+
+    // Side classification: distance to green centroid, then lateral.
+    const distToGreen = haversineYards(poly.centroid, hole.green);
+    let side: AssignedPolygon['side'];
+    if (distToGreen < GREENSIDE_DIST_YARDS) {
+      side = 'greenside';
+    } else {
+      const lat = lateralYards(poly.centroid, hole.tee, hole.green);
+      if (Math.abs(lat) < 12) side = 'fairway';
+      else side = lat > 0 ? 'right' : 'left';
+    }
+    out.get(bestHole)!.push({
+      polygon: poly.polygon,
+      centroid: poly.centroid,
+      side,
+      name: poly.name,
+    });
+  }
+  return out;
 }
 
 function nearestUnassigned(target: Loc, candidates: Loc[], used: Set<number>): number {
@@ -350,6 +512,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const holeCountQ = Number(req.query.holeCount);
   const holeCount: number =
     isFinite(holeCountQ) && holeCountQ >= 1 && holeCountQ <= 18 ? Math.round(holeCountQ) : 18;
+  // 2026-05-17 — Polygon mode for Bluegolf-style hole rendering.
+  // When set, alongside the standard tee/green centroid fetch we also
+  // pull full polygons for fairway, bunker, water_hazard, etc., and
+  // attach them to each hole by proximity. Adds ~5 Overpass round-
+  // trips (~3-8s) so it's opt-in.
+  const withPolygons = String(req.query.withPolygons ?? '') === '1';
 
   // 2026-05-17 — OSM-only mode: client signals it has no upstream
   // golfcourseapi ID for this course but does know the centroid. We
@@ -410,7 +578,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       hazards: [],
       fairway_centerline: [],
       green_outline: [],
+      green_polygon: null as Loc[] | null,
+      tee_polygon: null as Loc[] | null,
+      fairway_polygons: [] as Loc[][],
+      bunkers: [] as AssignedPolygon[],
+      water_hazards: [] as AssignedPolygon[],
     }));
+
+    // 2026-05-17 — Augment with polygon data when requested. Pulls
+    // full polygons for green/tee/fairway/bunker/water_hazard in
+    // parallel, then assigns each polygon to its nearest hole's
+    // tee→green line. Result drives the Bluegolf-style overlay
+    // rendering on the client.
+    if (withPolygons) {
+      const [greenPolys, teePolys, fairwayPolys, bunkerPolys, waterPolys] = await Promise.all([
+        fetchOsmPolygons(centroid, 'green'),
+        fetchOsmPolygons(centroid, 'tee'),
+        fetchOsmPolygons(centroid, 'fairway'),
+        fetchOsmPolygons(centroid, 'bunker'),
+        fetchOsmPolygons(centroid, 'water_hazard'),
+      ]);
+      // For green/tee polygons, snap to the hole that owns the same
+      // centroid (already paired). For fairway/bunker/water, assign by
+      // proximity to the hole's tee→green segment.
+      for (const h of holes) {
+        if (h.green) {
+          const m = greenPolys.find(p =>
+            haversineYards(p.centroid, h.green!) < 15,
+          );
+          if (m) h.green_polygon = m.polygon;
+        }
+        if (h.tee) {
+          const m = teePolys.find(p =>
+            haversineYards(p.centroid, h.tee!) < 15,
+          );
+          if (m) h.tee_polygon = m.polygon;
+        }
+      }
+      const fairwayAssign = assignPolygonsToHoles(holes, fairwayPolys);
+      const bunkerAssign = assignPolygonsToHoles(holes, bunkerPolys);
+      const waterAssign = assignPolygonsToHoles(holes, waterPolys);
+      for (const h of holes) {
+        h.fairway_polygons = (fairwayAssign.get(h.hole_number) ?? []).map(a => a.polygon);
+        h.bunkers = bunkerAssign.get(h.hole_number) ?? [];
+        h.water_hazards = waterAssign.get(h.hole_number) ?? [];
+      }
+      const totals = {
+        green: holes.filter(h => h.green_polygon).length,
+        tee: holes.filter(h => h.tee_polygon).length,
+        fairway: holes.reduce((n, h) => n + h.fairway_polygons.length, 0),
+        bunker: holes.reduce((n, h) => n + h.bunkers.length, 0),
+        water: holes.reduce((n, h) => n + h.water_hazards.length, 0),
+      };
+      console.log('[course-geometry] polygon attach:', totals);
+    }
+
     return res.status(200).json({
       course_id: courseId,
       course_name: 'OSM-derived',
@@ -528,11 +750,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // 2026-05-17 — Bluegolf-style polygon overlay. Same logic as the
+    // osmOnly branch above; attaches polygons for green/tee/fairway/
+    // bunker/water_hazard to each hole when withPolygons=1.
+    const holesWithPolygons = holes.map(h => ({
+      ...h,
+      green_polygon: null as Loc[] | null,
+      tee_polygon: null as Loc[] | null,
+      fairway_polygons: [] as Loc[][],
+      bunkers: [] as AssignedPolygon[],
+      water_hazards: [] as AssignedPolygon[],
+    }));
+    if (withPolygons && centroid) {
+      const [greenPolys, teePolys, fairwayPolys, bunkerPolys, waterPolys] = await Promise.all([
+        fetchOsmPolygons(centroid, 'green'),
+        fetchOsmPolygons(centroid, 'tee'),
+        fetchOsmPolygons(centroid, 'fairway'),
+        fetchOsmPolygons(centroid, 'bunker'),
+        fetchOsmPolygons(centroid, 'water_hazard'),
+      ]);
+      for (const h of holesWithPolygons) {
+        if (h.green) {
+          const m = greenPolys.find(p => haversineYards(p.centroid, h.green!) < 15);
+          if (m) h.green_polygon = m.polygon;
+        }
+        if (h.tee) {
+          const m = teePolys.find(p => haversineYards(p.centroid, h.tee!) < 15);
+          if (m) h.tee_polygon = m.polygon;
+        }
+      }
+      const fairwayAssign = assignPolygonsToHoles(holesWithPolygons, fairwayPolys);
+      const bunkerAssign = assignPolygonsToHoles(holesWithPolygons, bunkerPolys);
+      const waterAssign = assignPolygonsToHoles(holesWithPolygons, waterPolys);
+      for (const h of holesWithPolygons) {
+        h.fairway_polygons = (fairwayAssign.get(h.hole_number) ?? []).map(a => a.polygon);
+        h.bunkers = bunkerAssign.get(h.hole_number) ?? [];
+        h.water_hazards = waterAssign.get(h.hole_number) ?? [];
+      }
+      console.log('[course-geometry] polygon attach (upstream path):', {
+        green: holesWithPolygons.filter(h => h.green_polygon).length,
+        bunker: holesWithPolygons.reduce((n, h) => n + h.bunkers.length, 0),
+      });
+    }
+
     return res.status(200).json({
       course_id: String(course.id ?? courseId),
       course_name: String(course.club_name ?? course.course_name ?? course.name ?? 'Unknown'),
       fetched_at: Date.now(),
-      holes,
+      holes: holesWithPolygons,
     });
   } catch (e) {
     clearTimeout(timer);
