@@ -219,6 +219,14 @@ Available intents:
    - "ball position" -> { intent_type: "at_my_ball" }
    DO NOT match shot-logging phrases ("I hit driver 240 left") — those are log_shot. at_my_ball is the position-capture, not a shot.
 
+20. sequence — User chained two or more distinct commands in a single utterance, separated by "and", "then", commas, or implicit pause. Each step is a real first-class intent above (open_tool, change_setting, log_shot, etc.). Use this ONLY when the steps are independent actions; do NOT use for a single clause with multiple parameters (e.g. "log driver 240 left" is one log_shot, not a sequence).
+   parameters: { steps: [{ intent_type, parameters }, ...] }
+   Examples:
+   - "tell ${caddieName} I'm on hole 7, then refresh GPS at the tee" -> { steps: [ { intent_type: "change_setting", parameters: { setting: "currentHole", value: 7 } }, { intent_type: "in_round_diagnostic", parameters: { kind: "refresh_gps" } } ] }
+   - "log a 5 on this hole and move to the next tee" -> { steps: [ { intent_type: "log_score", parameters: { strokes: 5 } }, { intent_type: "change_setting", parameters: { setting: "advance_hole" } } ] }
+   - "open SmartFinder and switch to quiet mode" -> { steps: [ { intent_type: "open_tool", parameters: { tool_name: "smartfinder" } }, { intent_type: "set_trust_quiet", parameters: {} } ] }
+   Order matters: emit steps in the order they should execute. Keep steps to 2-3 max — more than that, ask for clarification with unknown.
+
 7. unknown — Cannot determine intent.
    parameters: {}
    Set follow_up_question to a brief clarifying question ${caddieName} could ask.
@@ -227,7 +235,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null

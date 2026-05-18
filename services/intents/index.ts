@@ -14,6 +14,7 @@ import { logScoreHandler } from './logScoreHandler';
 import { mediaCaptureHandler, mediaPlaybackHandler, puttWatchHandler } from './mediaHandlers';
 import { atBallHandler } from './atBallHandler';
 import { logIssueHandler } from './logIssueHandler';
+import { sequenceHandler } from './sequenceHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
 
@@ -37,6 +38,7 @@ voiceCommandRouter.registerHandler(mediaPlaybackHandler);
 voiceCommandRouter.registerHandler(puttWatchHandler);
 voiceCommandRouter.registerHandler(atBallHandler);
 voiceCommandRouter.registerHandler(logIssueHandler);
+voiceCommandRouter.registerHandler(sequenceHandler);
 
 export {
   openToolHandler,
@@ -59,4 +61,5 @@ export {
   puttWatchHandler,
   atBallHandler,
   logIssueHandler,
+  sequenceHandler,
 };

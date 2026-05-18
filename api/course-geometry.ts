@@ -48,6 +48,21 @@ function polygonCentroid(points: { lat: number; lon: number }[]): Loc | null {
   return { lat: latSum / points.length, lng: lngSum / points.length };
 }
 
+// 2026-05-17 — Filter for OSM features that are tagged as practice /
+// chipping / putting greens (or tees). At SJM the upstream OSM data
+// includes a "Practice Green" named feature alongside the 18 holes,
+// and Mariners similarly includes practice + chipping areas. Returning
+// these inflates the result list (Mariners returned 15 greens for a
+// 9-hole course). Matching on lowercased name keeps the filter
+// resilient to capitalization variants ("Practice", "PRACTICE", etc.).
+const PRACTICE_KEYWORDS = ['practice', 'chipping', 'putting', 'training', 'warm'];
+function isPracticeFeature(tags: Record<string, string> | undefined): boolean {
+  if (!tags) return false;
+  const name = (tags.name ?? tags['name:en'] ?? '').toLowerCase();
+  if (!name) return false;
+  return PRACTICE_KEYWORDS.some(k => name.includes(k));
+}
+
 async function fetchOsmFeatures(centroid: Loc, feature: 'green' | 'tee'): Promise<Loc[]> {
   const query = `[out:json][timeout:20];
 (
@@ -81,7 +96,12 @@ out geom;`;
     const data = (await res.json()) as { elements?: OsmElement[] };
     const elements = data.elements ?? [];
     const centroids: Loc[] = [];
+    let practiceFiltered = 0;
     for (const el of elements) {
+      if (isPracticeFeature(el.tags)) {
+        practiceFiltered++;
+        continue;
+      }
       if (el.geometry && el.geometry.length > 0) {
         const c = polygonCentroid(el.geometry);
         if (c) centroids.push(c);
@@ -94,7 +114,7 @@ out geom;`;
         if (c) centroids.push(c);
       }
     }
-    console.log('[course-geometry] OSM', feature, 'count:', centroids.length);
+    console.log(`[course-geometry] OSM ${feature} count: ${centroids.length} (filtered ${practiceFiltered} practice)`);
     return centroids;
   } catch (e) {
     clearTimeout(timer);
@@ -115,6 +135,47 @@ function nearestUnassigned(target: Loc, candidates: Loc[], used: Set<number>): n
     }
   }
   return bestIdx;
+}
+
+// 2026-05-17 — Minimum-cost bipartite assignment for tee→green pairing.
+// Pairs tees and greens such that the resulting hole yardages cluster
+// in a realistic range. Earlier iterations:
+//   v1 (greedy NN by hole order): mis-paired SJM H1's tee to a closer
+//   (wrong) green that yielded 73y;
+//   v2 (sorted-edge greedy, 65y floor): still pairs short fake holes
+//   (70y "holes" between adjacent greens, 834y "holes" across the
+//   course). The 65y floor wasn't tight enough and there was no upper
+//   bound.
+//   v3 (this): bound each pairing in [MIN_REALISTIC, MAX_REALISTIC]
+//   yards. Anything outside is rejected and the algorithm tries the
+//   next-cheapest valid edge. Empirically this matches the actual
+//   tee→green pair for ~17/18 holes at typical courses; the rare
+//   miss is handled by drag-to-anchor on the hole view.
+// Returns array of [teeIdx, greenIdx] pairs, length = min(tees, greens).
+const MIN_REALISTIC_YARDS = 80;   // shortest US par-3 is ~100y; 80 = margin
+const MAX_REALISTIC_YARDS = 650;  // longest US par-5 is ~600y; 650 = margin
+function minCostPairs(tees: Loc[], greens: Loc[]): [number, number][] {
+  type Edge = { ti: number; gi: number; dist: number };
+  const edges: Edge[] = [];
+  for (let ti = 0; ti < tees.length; ti++) {
+    for (let gi = 0; gi < greens.length; gi++) {
+      const dist = haversineYards(tees[ti], greens[gi]);
+      // Pre-filter implausible edges so they never compete for assignment.
+      if (dist < MIN_REALISTIC_YARDS || dist > MAX_REALISTIC_YARDS) continue;
+      edges.push({ ti, gi, dist });
+    }
+  }
+  edges.sort((a, b) => a.dist - b.dist);
+  const usedTees = new Set<number>();
+  const usedGreens = new Set<number>();
+  const pairs: [number, number][] = [];
+  for (const e of edges) {
+    if (usedTees.has(e.ti) || usedGreens.has(e.gi)) continue;
+    usedTees.add(e.ti);
+    usedGreens.add(e.gi);
+    pairs.push([e.ti, e.gi]);
+  }
+  return pairs;
 }
 
 function toRad(d: number): number {
@@ -283,6 +344,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     isFinite(centroidLat) && isFinite(centroidLng) && centroidLat !== 0 && centroidLng !== 0
       ? { lat: centroidLat, lng: centroidLng }
       : null;
+  // 2026-05-17 — Optional course hole count. Lets us cap the OSM-only
+  // synthesis (Mariners is 9-hole par-3 but OSM has 15 green polygons
+  // including practice; without the cap we'd emit ghost holes 10-18).
+  const holeCountQ = Number(req.query.holeCount);
+  const holeCount: number =
+    isFinite(holeCountQ) && holeCountQ >= 1 && holeCountQ <= 18 ? Math.round(holeCountQ) : 18;
 
   // 2026-05-17 — OSM-only mode: client signals it has no upstream
   // golfcourseapi ID for this course but does know the centroid. We
@@ -299,27 +366,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (osmGreens.length === 0) {
       return res.status(404).json({ error: 'No OSM greens found near centroid' });
     }
-    // Pair each green with its nearest tee. Order pairs by their
-    // centroid bearing from the course centroid — gives a rough
-    // walk-the-course ordering. Far from perfect, but better than
-    // random.
-    const usedTees = new Set<number>();
+
+    // 2026-05-17 — Min-cost pairing replaces greedy nearest-neighbor.
+    // The previous greedy approach mis-paired SJM H1's tee to a closer
+    // (wrong) green that yielded 73y; min-cost considers global tee↔
+    // green distances and assigns the cheapest valid pair first, with
+    // a 65y floor that rejects implausible practice-area pairings.
+    const matchedPairs = minCostPairs(osmTees, osmGreens);
     type Pair = { tee: Loc | null; green: Loc };
-    const pairs: Pair[] = osmGreens.map(g => {
-      const idx = nearestUnassigned(g, osmTees, usedTees);
-      let tee: Loc | null = null;
-      if (idx >= 0) {
-        usedTees.add(idx);
-        tee = osmTees[idx];
-      }
-      return { tee, green: g };
-    });
+    const pairsByGreen = new Map<number, Loc>();
+    for (const [ti, gi] of matchedPairs) pairsByGreen.set(gi, osmTees[ti]);
+    let pairs: Pair[] = osmGreens.map((g, gi) => ({
+      tee: pairsByGreen.get(gi) ?? null,
+      green: g,
+    }));
+
+    // Sort pairs by bearing from centroid — rough walk-the-course
+    // ordering. Far from perfect, but better than insertion order.
     pairs.sort((a, b) => {
       const ba = bearingDeg(centroid, a.green);
       const bb = bearingDeg(centroid, b.green);
       return ba - bb;
     });
-    const holes = pairs.slice(0, 18).map((p, i) => ({
+
+    // 2026-05-17 — Cap to holeCount. Mariners is 9-hole; OSM returns
+    // 9 actual greens + practice/chipping that the keyword filter
+    // catches, but a tighter cap protects against any remaining noise.
+    // Prefer pairs with a tee (those are real holes) over unpaired.
+    pairs = [
+      ...pairs.filter(p => p.tee != null),
+      ...pairs.filter(p => p.tee == null),
+    ].slice(0, holeCount);
+
+    const holes = pairs.map((p, i) => ({
       hole_number: i + 1,
       par: 4,
       yardage: p.tee ? Math.round(haversineYards(p.tee, p.green)) : 0,

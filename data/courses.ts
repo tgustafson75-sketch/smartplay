@@ -417,25 +417,31 @@ const SUNNYVALE_HOLES: CourseHole[] = [
 // par 72. Hand-coded estimates from public scorecard / Golfshot
 // screenshot data (hole 1 green-center 421y confirmed). Marked
 // estimated: true; refine when exact per-hole figures available.
+// 2026-05-17 — Updated from Tim's official SJM scorecard. Black tees
+// (men's middle: 69.8/120, total 6253y, par 72). Front+back tee yards
+// derived as ±~5% of middle to give SmartFinder a reasonable
+// pin-position spread until OSM Overpass fills in the front/middle/back
+// green points more precisely. All 18 holes now have authoritative
+// par + yardage; lat/lng come from OSM at round start.
 const SAN_JOSE_MUNI_HOLES: CourseHole[] = [
-  { hole: 1,  par: 4, distance: 421, front: 405, back: 437, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 2,  par: 5, distance: 514, front: 498, back: 530, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 3,  par: 3, distance: 178, front: 164, back: 192, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 4,  par: 4, distance: 387, front: 371, back: 403, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 5,  par: 4, distance: 412, front: 396, back: 428, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 6,  par: 4, distance: 369, front: 353, back: 385, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 7,  par: 3, distance: 156, front: 142, back: 170, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 8,  par: 5, distance: 537, front: 521, back: 553, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 9,  par: 4, distance: 398, front: 382, back: 414, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 10, par: 4, distance: 432, front: 416, back: 448, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 11, par: 3, distance: 188, front: 174, back: 202, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 12, par: 4, distance: 405, front: 389, back: 421, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 13, par: 5, distance: 519, front: 503, back: 535, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 14, par: 4, distance: 376, front: 360, back: 392, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 15, par: 3, distance: 162, front: 148, back: 176, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 16, par: 4, distance: 391, front: 375, back: 407, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 17, par: 4, distance: 358, front: 342, back: 374, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 18, par: 5, distance: 525, front: 509, back: 541, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 1,  par: 5, distance: 480, front: 466, back: 494, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 2,  par: 4, distance: 371, front: 360, back: 382, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 3,  par: 4, distance: 373, front: 362, back: 384, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 4,  par: 3, distance: 129, front: 118, back: 140, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 5,  par: 4, distance: 342, front: 331, back: 353, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 6,  par: 4, distance: 358, front: 347, back: 369, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 7,  par: 3, distance: 160, front: 149, back: 171, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 8,  par: 4, distance: 397, front: 386, back: 408, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 9,  par: 5, distance: 476, front: 462, back: 490, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 10, par: 4, distance: 366, front: 355, back: 377, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 11, par: 5, distance: 514, front: 500, back: 528, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 12, par: 3, distance: 138, front: 127, back: 149, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 13, par: 4, distance: 383, front: 372, back: 394, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 14, par: 4, distance: 350, front: 339, back: 361, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 15, par: 4, distance: 399, front: 388, back: 410, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 16, par: 4, distance: 359, front: 348, back: 370, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 17, par: 3, distance: 161, front: 150, back: 172, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 18, par: 5, distance: 497, front: 483, back: 511, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
 ];
 
 // Phase BL — Mariners Point Golf Center (Burlingame, CA). 9-hole

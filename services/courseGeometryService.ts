@@ -2,6 +2,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ShotLocation } from '../store/roundStore';
 import { LOCAL_COURSE_CENTROIDS, type LocalCourseSlug } from '../data/localCourseImages';
 
+// 2026-05-17 — Known hole count per local course. Passed to the
+// /api/course-geometry endpoint so the OSM-Overpass fallback can cap
+// emitted holes correctly (Mariners is 9-hole par-3; without the cap
+// the server emits 9 real + practice green ghost holes). Defaults to
+// 18 when the slug isn't known.
+const LOCAL_COURSE_HOLE_COUNT: Record<string, number> = {
+  'palms': 18,
+  'lakes': 18,
+  'rancho-california': 18,
+  'crystal-springs': 18,
+  'mariners-point': 9,
+  'san-jose-muni': 18,
+  'sunnyvale': 18,
+};
+
 /**
  * 2026-05-16 — Local-course → golfcourseapi search hint table.
  *
@@ -205,9 +220,11 @@ export async function fetchCourseGeometry(courseId: string): Promise<CourseGeome
   // OSM has the green polygons we need to fill those in automatically.
   let upstreamId = courseId;
   let centroid: { lat: number; lng: number } | null = null;
+  let holeCount: number | null = null;
   if (courseId.startsWith('local:')) {
     const slug = courseId.slice('local:'.length);
     centroid = LOCAL_COURSE_CENTROIDS[slug as LocalCourseSlug] ?? null;
+    holeCount = LOCAL_COURSE_HOLE_COUNT[slug] ?? null;
     const real = await resolveLocalCourseId(slug);
     if (real) {
       upstreamId = real;
@@ -227,6 +244,9 @@ export async function fetchCourseGeometry(courseId: string): Promise<CourseGeome
   if (centroid) {
     params.set('lat', String(centroid.lat));
     params.set('lng', String(centroid.lng));
+  }
+  if (holeCount != null) {
+    params.set('holeCount', String(holeCount));
   }
   if (upstreamId === '__osm_only__') {
     params.set('osmOnly', '1');

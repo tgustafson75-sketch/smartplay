@@ -147,6 +147,14 @@ Available intents:
     - "I bogeyed seven" -> { strokes: <par+1 — leave as null, the handler computes par-relative; but if you can resolve, fine> }
     Prefer log_score over log_shot when the user is reporting a TOTAL ("I made a five") rather than a single swing.
 
+15. sequence — User chained two or more independent commands in one utterance (separated by "and", "then", commas, or implicit pause). Each step is a real first-class intent above. Use ONLY when the steps are distinct actions; don't bundle a single clause that already encodes multiple params.
+   parameters: { steps: [{ intent_type, parameters }, ...] }
+   Examples:
+   - "tell ${caddieName} I'm on hole 7, then refresh GPS" -> { steps: [ { intent_type: "change_setting", parameters: { setting: "currentHole", value: 7 } }, { intent_type: "query_status", parameters: { kind: "refresh_gps" } } ] }
+   - "log a 5 and move to the next tee" -> { steps: [ { intent_type: "log_score", parameters: { strokes: 5 } }, { intent_type: "change_setting", parameters: { setting: "advance_hole" } } ] }
+   - "open SmartFinder and go quiet" -> { steps: [ { intent_type: "open_tool", parameters: { tool_name: "smartfinder" } }, { intent_type: "set_trust_quiet", parameters: {} } ] }
+   Order matters. Cap at 3 steps; if more, fall back to unknown with a clarifying question.
+
 7. unknown — Cannot determine intent.
    parameters: {}
    Set follow_up_question to a brief clarifying question ${caddieName} could ask.
@@ -155,7 +163,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null
