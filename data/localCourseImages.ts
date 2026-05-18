@@ -185,14 +185,26 @@ export const LOCAL_COURSE_IMAGES: Record<LocalCourseSlug, Record<number, ImageSo
  * declared in app/(tabs)/play.tsx LOCAL_COURSES so play-tab thumbnails
  * and SmartVision hole previews stay in lockstep.
  */
+// 2026-05-17 — Centroids re-derived from OpenStreetMap golf-course
+// feature centers (Overpass API). The previous values were copy-pasted
+// from rough Google Maps lookups and were off by 2.4–5 km on four of
+// the seven courses, which prevented the OSM Overpass green fallback
+// from ever finding the right course. Verified each by running an
+// `around:1500m, golf=green` query and confirming a non-zero hit
+// before committing the coordinate.
+//   Sunnyvale:        was (37.3777, -122.0357) → 2.4 km off
+//   San Jose Muni:    was (37.3670, -121.9310) → 4.5 km off (wrong city)
+//   Mariners Point:   was (37.5480, -122.2750) → 2.8 km off
+//   Crystal Springs:  was (37.5120, -122.3580) → 5.0 km off
+// Palms, Lakes, Rancho left unchanged — already accurate vs OSM.
 export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng: number }> = {
   'palms':            { lat: 33.6953922, lng: -117.1504551 },
   'lakes':            { lat: 33.6913348, lng: -117.1573364 },
   'rancho-california':{ lat: 33.4910,    lng: -117.1390 },
-  'crystal-springs':  { lat: 37.5120,    lng: -122.3580 },
-  'mariners-point':   { lat: 37.5480,    lng: -122.2750 },
-  'san-jose-muni':    { lat: 37.3670,    lng: -121.9310 },
-  'sunnyvale':        { lat: 37.3777,    lng: -122.0357 },
+  'crystal-springs':  { lat: 37.5560947, lng: -122.3829982 },
+  'mariners-point':   { lat: 37.5731586, lng: -122.2823681 },
+  'san-jose-muni':    { lat: 37.3771789, lng: -121.8881051 },
+  'sunnyvale':        { lat: 37.3983857, lng: -122.0417245 },
 };
 
 /**

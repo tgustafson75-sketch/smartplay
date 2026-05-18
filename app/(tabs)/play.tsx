@@ -92,7 +92,7 @@ const LOCAL_COURSES: CourseSummary[] = [
     lng: -117.1573364,
   },
   {
-    id: 'local:rancho',
+    id: 'local:rancho-california',
     club_name: 'Rancho California',
     location: 'Temecula, CA',
     rating: 70.9,
@@ -113,8 +113,9 @@ const LOCAL_COURSES: CourseSummary[] = [
     slope: 128,
     isLocal: true,
     thumbnail: (CRYSTAL_SPRINGS_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
-    lat: 37.5120,
-    lng: -122.3580,
+    // 2026-05-17 — corrected from OSM golf_course centroid (was 5 km off)
+    lat: 37.5560947,
+    lng: -122.3829982,
   },
   {
     id: 'local:mariners-point',
@@ -124,8 +125,9 @@ const LOCAL_COURSES: CourseSummary[] = [
     slope: 74,
     isLocal: true,
     thumbnail: (MARINERS_POINT_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
-    lat: 37.5480,
-    lng: -122.2750,
+    // 2026-05-17 — corrected from OSM golf_course centroid (was 2.8 km off)
+    lat: 37.5731586,
+    lng: -122.2823681,
   },
   // Added 2026-05-14 — Tim is in the San Jose area for the next 3-6
   // months and asked to test against his local muni. All 18 hole photos
@@ -139,9 +141,10 @@ const LOCAL_COURSES: CourseSummary[] = [
     slope: 122,
     isLocal: true,
     // 2026-05-16 — cropped Golfshot screenshot (chrome removed via PIL).
-    thumbnail: (SAN_JOSE_MUNI_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
-    lat: 37.3670,
-    lng: -121.9310,
+    // 2026-05-17 — corrected from OSM golf_course centroid (was 4.5 km
+    // off, in the wrong neighborhood entirely)
+    lat: 37.3771789,
+    lng: -121.8881051,
   },
   // Added 2026-05-16 — Sunnyvale Golf Course (Sunnyvale, CA). Tim is
   // playing it tomorrow. All 18 hole photos bundled from his Golfshot
@@ -156,8 +159,9 @@ const LOCAL_COURSES: CourseSummary[] = [
     isLocal: true,
     // 2026-05-16 — cropped Golfshot screenshot (chrome removed via PIL).
     thumbnail: (SUNNYVALE_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
-    lat: 37.3777,
-    lng: -122.0357,
+    // 2026-05-17 — corrected from OSM golf_course centroid (was 2.4 km off)
+    lat: 37.3983857,
+    lng: -122.0417245,
   },
 ];
 

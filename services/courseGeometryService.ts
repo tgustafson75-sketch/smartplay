@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ShotLocation } from '../store/roundStore';
+import { LOCAL_COURSE_CENTROIDS, type LocalCourseSlug } from '../data/localCourseImages';
 
 /**
  * 2026-05-16 — Local-course → golfcourseapi search hint table.
@@ -33,6 +34,9 @@ type LocalCourseHint = {
 const LOCAL_COURSE_API_HINTS: Record<string, LocalCourseHint> = {
   sunnyvale: { search: 'Sunnyvale Golf Course', expectedCity: 'sunnyvale' },
   'san-jose-muni': { search: 'San Jose Municipal Golf Course', expectedCity: 'san jose' },
+  'rancho-california': { search: 'Rancho California Golf Club', expectedCity: 'temecula' },
+  'crystal-springs': { search: 'Crystal Springs Golf Course', expectedCity: 'burlingame' },
+  'mariners-point': { search: 'Mariners Point Golf Center', expectedCity: 'foster city' },
 };
 
 const RESOLVED_ID_KEY_PREFIX = 'local-courseapi-id-v1::';
@@ -195,21 +199,39 @@ export async function fetchCourseGeometry(courseId: string): Promise<CourseGeome
   // Resolve "local:<slug>" → real upstream golfcourseapi ID, if we have
   // a hint for this slug. Result is cached so subsequent rounds skip
   // the search round-trip.
+  // 2026-05-17 — Also resolves the course centroid so we can hand it to
+  // the server-side OSM Overpass fallback. golfcourseapi's free tier
+  // returns null per-hole coords for municipal courses like Sunnyvale;
+  // OSM has the green polygons we need to fill those in automatically.
   let upstreamId = courseId;
+  let centroid: { lat: number; lng: number } | null = null;
   if (courseId.startsWith('local:')) {
     const slug = courseId.slice('local:'.length);
+    centroid = LOCAL_COURSE_CENTROIDS[slug as LocalCourseSlug] ?? null;
     const real = await resolveLocalCourseId(slug);
     if (real) {
       upstreamId = real;
-    } else {
-      // No mapping — return the stale cache if any, otherwise null.
-      // SmartVision falls through to LOCAL_COURSE_CENTROIDS imagery.
+    } else if (!centroid) {
+      // No upstream and no centroid — nothing we can do.
       return persisted ?? null;
+    } else {
+      // No upstream mapping but we know where the course is. Fall
+      // through to an OSM-only request below (the server endpoint
+      // synthesizes holes from OSM greens/tees when osmOnly=1).
+      upstreamId = '__osm_only__';
     }
   }
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
-  const url = `${apiUrl}/api/course-geometry?courseId=${encodeURIComponent(upstreamId)}`;
+  const params = new URLSearchParams({ courseId: upstreamId });
+  if (centroid) {
+    params.set('lat', String(centroid.lat));
+    params.set('lng', String(centroid.lng));
+  }
+  if (upstreamId === '__osm_only__') {
+    params.set('osmOnly', '1');
+  }
+  const url = `${apiUrl}/api/course-geometry?${params.toString()}`;
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
     if (!res.ok) {

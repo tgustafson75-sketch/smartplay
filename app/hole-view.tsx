@@ -767,6 +767,27 @@ export default function HoleView() {
                 : null}
               width={IMAGE_WIDTH}
               height={IMAGE_HEIGHT}
+              // 2026-05-17 — Drag-to-anchor. Only active during a round
+              // where we know the courseId. Dragging the TEE or GRN
+              // marker on the vector view writes the new lat/lng into
+              // courseGeometryOverrideStore, which the yardage pipeline
+              // already reads as the top priority over upstream geometry.
+              // Same mutator path as the "📍 Anchor Tee" button below;
+              // just sourced from a drag instead of current GPS.
+              onTeeAnchor={isRoundActive && courseId
+                ? (latlng) => {
+                    useCourseGeometryOverrideStore.getState().anchorTee(
+                      courseId, hole, latlng.lat, latlng.lng,
+                    );
+                  }
+                : undefined}
+              onGreenAnchor={isRoundActive && courseId
+                ? (latlng) => {
+                    useCourseGeometryOverrideStore.getState().anchorGreen(
+                      courseId, hole, latlng.lat, latlng.lng,
+                    );
+                  }
+                : undefined}
             />
           ) : imageSource ? (
             <Image

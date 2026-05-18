@@ -25,8 +25,8 @@
  * over a single hole). Auto-rotates so tee→green points "up" on screen.
  */
 
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, PanResponder } from 'react-native';
 import Svg, {
   Rect, Circle, Path, Line, G, Defs, LinearGradient, Stop, Polygon,
 } from 'react-native-svg';
@@ -42,6 +42,15 @@ interface Props {
   currentPos: LatLng | null;
   width: number;
   height: number;
+  /**
+   * 2026-05-17 — When supplied, the TEE marker becomes draggable. Long-
+   * press and drag it to where the actual tee box is on screen; on
+   * release the new lat/lng is passed up. Parent should persist via
+   * courseGeometryOverrideStore.anchorTee so subsequent yardages and
+   * the SmartFinder pipeline see the corrected geometry. Same for GRN.
+   */
+  onTeeAnchor?: (latlng: LatLng) => void;
+  onGreenAnchor?: (latlng: LatLng) => void;
 }
 
 const METERS_PER_DEG_LAT = 111_111;
@@ -57,6 +66,7 @@ function metersBetween(a: LatLng, b: LatLng): number {
 
 export default function VectorHoleView({
   hole, par, distance, tee, green, currentPos, width, height,
+  onTeeAnchor, onGreenAnchor,
 }: Props) {
   // Pre-compute projection: rotate so tee→green axis points UP (negative
   // y in SVG coords); player dot inherits the same projection so the
@@ -102,8 +112,88 @@ export default function VectorHoleView({
       };
     };
 
-    return { project, yardsPerPx, teeToGreenYards };
+    // 2026-05-17 — Inverse of `project`. Convert pixel coords back to
+    // lat/lng so a dragged marker can be persisted as the new tee or
+    // green position. Done by reversing each step of the forward
+    // projection (rotation, scaling, equirectangular metres→degrees).
+    const unproject = (x: number, y: number): LatLng => {
+      const xYards = (x - width / 2) * yardsPerPx;
+      const yYards = (height - 35 / yardsPerPx - y) * yardsPerPx;
+      const xRot_m = xYards / YARDS_PER_METER;
+      const yRot_m = yYards / YARDS_PER_METER;
+      // Invert R(-bearing): R(+bearing)
+      const cosBack = Math.cos(bearingRad);
+      const sinBack = Math.sin(bearingRad);
+      const dxMeters = xRot_m * cosBack - yRot_m * sinBack;
+      const dyMeters = xRot_m * sinBack + yRot_m * cosBack;
+      const lng = tee.lng + dxMeters / (METERS_PER_DEG_LAT * Math.cos(tee.lat * Math.PI / 180));
+      const lat = tee.lat + dyMeters / METERS_PER_DEG_LAT;
+      return { lat, lng };
+    };
+
+    return { project, unproject, yardsPerPx, teeToGreenYards };
   }, [tee, green, width, height]);
+
+  // 2026-05-17 — Drag state for tee/green markers. Pixel offset from the
+  // marker's projected position; rendered live as a ghost while the
+  // user drags. On release we invert the projection and call up to
+  // persist the new lat/lng.
+  const [teeDrag, setTeeDrag] = useState<{ dx: number; dy: number } | null>(null);
+  const [greenDrag, setGreenDrag] = useState<{ dx: number; dy: number } | null>(null);
+  const teeDragRef = useRef<{ dx: number; dy: number } | null>(null);
+  const greenDragRef = useRef<{ dx: number; dy: number } | null>(null);
+
+  const teePR = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => onTeeAnchor != null,
+    onMoveShouldSetPanResponder: () => onTeeAnchor != null,
+    onPanResponderGrant: () => {
+      teeDragRef.current = { dx: 0, dy: 0 };
+      setTeeDrag({ dx: 0, dy: 0 });
+    },
+    onPanResponderMove: (_e, g) => {
+      teeDragRef.current = { dx: g.dx, dy: g.dy };
+      setTeeDrag({ dx: g.dx, dy: g.dy });
+    },
+    onPanResponderRelease: () => {
+      const d = teeDragRef.current;
+      teeDragRef.current = null;
+      setTeeDrag(null);
+      if (!d || !projection || !onTeeAnchor) return;
+      if (Math.abs(d.dx) < 4 && Math.abs(d.dy) < 4) return;
+      const tp = projection.project(tee!);
+      onTeeAnchor(projection.unproject(tp.x + d.dx, tp.y + d.dy));
+    },
+    onPanResponderTerminate: () => {
+      teeDragRef.current = null;
+      setTeeDrag(null);
+    },
+  }), [onTeeAnchor, projection, tee]);
+
+  const greenPR = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => onGreenAnchor != null,
+    onMoveShouldSetPanResponder: () => onGreenAnchor != null,
+    onPanResponderGrant: () => {
+      greenDragRef.current = { dx: 0, dy: 0 };
+      setGreenDrag({ dx: 0, dy: 0 });
+    },
+    onPanResponderMove: (_e, g) => {
+      greenDragRef.current = { dx: g.dx, dy: g.dy };
+      setGreenDrag({ dx: g.dx, dy: g.dy });
+    },
+    onPanResponderRelease: () => {
+      const d = greenDragRef.current;
+      greenDragRef.current = null;
+      setGreenDrag(null);
+      if (!d || !projection || !onGreenAnchor) return;
+      if (Math.abs(d.dx) < 4 && Math.abs(d.dy) < 4) return;
+      const gp = projection.project(green!);
+      onGreenAnchor(projection.unproject(gp.x + d.dx, gp.y + d.dy));
+    },
+    onPanResponderTerminate: () => {
+      greenDragRef.current = null;
+      setGreenDrag(null);
+    },
+  }), [onGreenAnchor, projection, green]);
 
   // No coords yet → render a graceful placeholder
   if (!tee || !green || !projection) {
@@ -241,6 +331,50 @@ export default function VectorHoleView({
         )}
       </Svg>
 
+      {/* 2026-05-17 — Draggable tee/green hit-targets. Sized 44pt for
+          fat-finger comfort; transparent by default, dashed green ring
+          + ghost marker once a drag starts. Released-with-no-movement
+          taps are ignored so a casual touch doesn't accidentally
+          re-anchor the marker. */}
+      {onTeeAnchor && tee && (
+        <View
+          {...teePR.panHandlers}
+          style={[
+            styles.dragHandle,
+            { left: teePx.x - 22, top: teePx.y - 22 },
+            teeDrag != null && styles.dragHandleActive,
+          ]}
+        >
+          {teeDrag != null && (
+            <View style={[
+              styles.dragGhost,
+              { left: 22 + teeDrag.dx - 16, top: 22 + teeDrag.dy - 16 },
+            ]}>
+              <Text style={styles.dragGhostLabel}>TEE</Text>
+            </View>
+          )}
+        </View>
+      )}
+      {onGreenAnchor && green && (
+        <View
+          {...greenPR.panHandlers}
+          style={[
+            styles.dragHandle,
+            { left: greenPx.x - 22, top: greenPx.y - 22 },
+            greenDrag != null && styles.dragHandleActive,
+          ]}
+        >
+          {greenDrag != null && (
+            <View style={[
+              styles.dragGhost,
+              { left: 22 + greenDrag.dx - 16, top: 22 + greenDrag.dy - 16 },
+            ]}>
+              <Text style={styles.dragGhostLabel}>GRN</Text>
+            </View>
+          )}
+        </View>
+      )}
+
       {/* Hole label overlay (native text for crisper rendering) */}
       <View style={styles.label}>
         <Text style={styles.labelHole}>HOLE {hole}</Text>
@@ -298,5 +432,33 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     marginTop: 1,
+  },
+  dragHandle: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  dragHandleActive: {
+    backgroundColor: 'rgba(0,200,150,0.15)',
+    borderWidth: 1,
+    borderColor: '#00C896',
+    borderStyle: 'dashed',
+  },
+  dragGhost: {
+    position: 'absolute',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,200,150,0.45)',
+    borderWidth: 2,
+    borderColor: '#00C896',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dragGhostLabel: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '900',
   },
 });

@@ -11,10 +11,102 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
  */
 
 const BASE = 'https://api.golfcourseapi.com';
+const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 const TIMEOUT_MS = 10_000;
+const OVERPASS_TIMEOUT_MS = 15_000;
 const EARTH_RADIUS_M = 6_371_000;
+const OSM_SEARCH_RADIUS_M = 1500;
 
 type Loc = { lat: number; lng: number };
+
+// 2026-05-17 — OpenStreetMap Overpass fallback. golfcourseapi free tier
+// is spotty for municipal courses (Sunnyvale, San Jose Muni return
+// holes with null coords). OSM has `golf=green` and `golf=tee`
+// polygon features for nearly every US course, tagged by community
+// mappers. Querying Overpass for greens within ~1.5km of the course
+// centroid and snapping each null-green hole to its nearest OSM
+// polygon centroid gives us automatic per-hole green coords for free —
+// no licensed data, no user pin-dropping. Same mechanism Garmin/18
+// Birdies/Golf Shot ultimately depend on (Garmin's database is OSM
+// plus an editorial pass).
+type OsmElement = {
+  type: 'way' | 'relation' | 'node';
+  id: number;
+  tags?: Record<string, string>;
+  geometry?: { lat: number; lon: number }[];
+  members?: { geometry?: { lat: number; lon: number }[] }[];
+};
+
+function polygonCentroid(points: { lat: number; lon: number }[]): Loc | null {
+  if (points.length === 0) return null;
+  let latSum = 0;
+  let lngSum = 0;
+  for (const p of points) {
+    latSum += p.lat;
+    lngSum += p.lon;
+  }
+  return { lat: latSum / points.length, lng: lngSum / points.length };
+}
+
+async function fetchOsmFeatures(centroid: Loc, feature: 'green' | 'tee'): Promise<Loc[]> {
+  const query = `[out:json][timeout:20];
+(
+  way[golf=${feature}](around:${OSM_SEARCH_RADIUS_M},${centroid.lat},${centroid.lng});
+  relation[golf=${feature}](around:${OSM_SEARCH_RADIUS_M},${centroid.lat},${centroid.lng});
+);
+out geom;`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
+  try {
+    const res = await fetch(OVERPASS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'data=' + encodeURIComponent(query),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      console.warn('[course-geometry] OSM Overpass', feature, 'status', res.status);
+      return [];
+    }
+    const data = (await res.json()) as { elements?: OsmElement[] };
+    const elements = data.elements ?? [];
+    const centroids: Loc[] = [];
+    for (const el of elements) {
+      if (el.geometry && el.geometry.length > 0) {
+        const c = polygonCentroid(el.geometry);
+        if (c) centroids.push(c);
+      } else if (el.members) {
+        const allPoints: { lat: number; lon: number }[] = [];
+        for (const m of el.members) {
+          if (m.geometry) allPoints.push(...m.geometry);
+        }
+        const c = polygonCentroid(allPoints);
+        if (c) centroids.push(c);
+      }
+    }
+    console.log('[course-geometry] OSM', feature, 'count:', centroids.length);
+    return centroids;
+  } catch (e) {
+    clearTimeout(timer);
+    console.warn('[course-geometry] OSM Overpass exception:', e);
+    return [];
+  }
+}
+
+function nearestUnassigned(target: Loc, candidates: Loc[], used: Set<number>): number {
+  let bestIdx = -1;
+  let bestDist = Infinity;
+  for (let i = 0; i < candidates.length; i++) {
+    if (used.has(i)) continue;
+    const d = haversineYards(target, candidates[i]);
+    if (d < bestDist) {
+      bestDist = d;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
 
 function toRad(d: number): number {
   return (d * Math.PI) / 180;
@@ -170,6 +262,75 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing courseId query parameter' });
   }
 
+  // 2026-05-17 — Optional centroid hint for OSM Overpass fallback.
+  // Client passes `lat`/`lng` from LOCAL_COURSE_CENTROIDS when calling
+  // for a course we know geographically (Sunnyvale, San Jose Muni, etc).
+  // When present and the upstream returns null greens, we query
+  // OpenStreetMap for golf=green polygons within ~1.5km and snap each
+  // null-green hole to its nearest OSM green centroid.
+  const centroidLat = Number(req.query.lat);
+  const centroidLng = Number(req.query.lng);
+  const centroid: Loc | null =
+    isFinite(centroidLat) && isFinite(centroidLng) && centroidLat !== 0 && centroidLng !== 0
+      ? { lat: centroidLat, lng: centroidLng }
+      : null;
+
+  // 2026-05-17 — OSM-only mode: client signals it has no upstream
+  // golfcourseapi ID for this course but does know the centroid. We
+  // synthesize a holes list purely from OSM golf=green / golf=tee
+  // features. Hole numbering is best-effort (proximity-pair order)
+  // since OSM rarely tags hole numbers consistently.
+  const osmOnly = String(req.query.osmOnly ?? '') === '1';
+  if (osmOnly) {
+    if (!centroid) return res.status(400).json({ error: 'osmOnly requires lat/lng' });
+    const [osmGreens, osmTees] = await Promise.all([
+      fetchOsmFeatures(centroid, 'green'),
+      fetchOsmFeatures(centroid, 'tee'),
+    ]);
+    if (osmGreens.length === 0) {
+      return res.status(404).json({ error: 'No OSM greens found near centroid' });
+    }
+    // Pair each green with its nearest tee. Order pairs by their
+    // centroid bearing from the course centroid — gives a rough
+    // walk-the-course ordering. Far from perfect, but better than
+    // random.
+    const usedTees = new Set<number>();
+    type Pair = { tee: Loc | null; green: Loc };
+    const pairs: Pair[] = osmGreens.map(g => {
+      const idx = nearestUnassigned(g, osmTees, usedTees);
+      let tee: Loc | null = null;
+      if (idx >= 0) {
+        usedTees.add(idx);
+        tee = osmTees[idx];
+      }
+      return { tee, green: g };
+    });
+    pairs.sort((a, b) => {
+      const ba = bearingDeg(centroid, a.green);
+      const bb = bearingDeg(centroid, b.green);
+      return ba - bb;
+    });
+    const holes = pairs.slice(0, 18).map((p, i) => ({
+      hole_number: i + 1,
+      par: 4,
+      yardage: p.tee ? Math.round(haversineYards(p.tee, p.green)) : 0,
+      tee: p.tee,
+      green: p.green,
+      green_front: p.green,
+      green_back: p.green,
+      bearing_deg: p.tee ? bearingDeg(p.tee, p.green) : null,
+      hazards: [],
+      fairway_centerline: [],
+      green_outline: [],
+    }));
+    return res.status(200).json({
+      course_id: courseId,
+      course_name: 'OSM-derived',
+      fetched_at: Date.now(),
+      holes,
+    });
+  }
+
   const url = `${BASE}/v1/courses/${encodeURIComponent(courseId)}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -218,6 +379,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const holes = rawHoles
       .map((h, i) => projectHole(h, i + 1))
       .filter(h => h.hole_number > 0);
+
+    // 2026-05-17 — OSM Overpass fallback. When the upstream returned
+    // holes but with null greens (golfcourseapi's free-tier gap for
+    // municipal courses), query OpenStreetMap for nearby golf=green
+    // polygons and snap each null-green hole to its nearest unused
+    // OSM green centroid (anchored on the hole's tee if known, else
+    // on the course centroid). Also fills null tees from golf=tee
+    // polygons where possible.
+    const nullGreens = holes.filter(h => !h.green).length;
+    const nullTees = holes.filter(h => !h.tee).length;
+    if (centroid && (nullGreens > 0 || nullTees > 0)) {
+      console.log(`[course-geometry] OSM fallback triggered: ${nullGreens} null greens, ${nullTees} null tees`);
+      const [osmGreens, osmTees] = await Promise.all([
+        nullGreens > 0 ? fetchOsmFeatures(centroid, 'green') : Promise.resolve([] as Loc[]),
+        nullTees > 0 ? fetchOsmFeatures(centroid, 'tee') : Promise.resolve([] as Loc[]),
+      ]);
+
+      const usedGreens = new Set<number>();
+      const usedTees = new Set<number>();
+
+      // Walk holes in order. Anchor each null-green search on the
+      // hole's tee (best signal), falling back to the previous hole's
+      // green, falling back to the course centroid.
+      let lastAnchor: Loc = centroid;
+      for (const h of holes) {
+        const anchor = h.tee ?? lastAnchor;
+        if (!h.green && osmGreens.length > 0) {
+          const idx = nearestUnassigned(anchor, osmGreens, usedGreens);
+          if (idx >= 0) {
+            usedGreens.add(idx);
+            h.green = osmGreens[idx];
+            h.green_front = osmGreens[idx];
+            h.green_back = osmGreens[idx];
+          }
+        }
+        if (!h.tee && osmTees.length > 0) {
+          const teeAnchor = h.green ?? lastAnchor;
+          const idx = nearestUnassigned(teeAnchor, osmTees, usedTees);
+          if (idx >= 0) {
+            usedTees.add(idx);
+            h.tee = osmTees[idx];
+          }
+        }
+        if (h.tee && h.green) {
+          h.bearing_deg = bearingDeg(h.tee, h.green);
+        }
+        if (h.green) lastAnchor = h.green;
+      }
+      console.log(`[course-geometry] after OSM: ${holes.filter(x => x.green).length}/${holes.length} greens filled`);
+    }
 
     // Distance-from-tee-to-green sanity check, surfaced for debugging
     for (const h of holes) {

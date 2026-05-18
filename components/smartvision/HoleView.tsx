@@ -19,10 +19,10 @@
  * paints them via react-native-svg.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Image, Text, TouchableWithoutFeedback, TouchableOpacity,
-  StyleSheet, Modal, Pressable, ActivityIndicator,
+  StyleSheet, Modal, Pressable, ActivityIndicator, PanResponder,
 } from 'react-native';
 import Svg, { Circle, Line, Text as SvgText, Polygon } from 'react-native-svg';
 import {
@@ -66,16 +66,35 @@ export type HoleViewProps = {
   fallbackUrl?: string | null;
   /** Called when user taps the imagery — receives lat/lng of tap point. */
   onTargetTap?: (latlng: LatLng, distanceFromUser: number) => void;
+  /**
+   * 2026-05-17 — When provided, the TEE marker becomes draggable.
+   * Long-press the marker to grab it, drag to where the tee box is on
+   * the satellite image, release to save. Parent persists the new
+   * location to courseGeometryOverrideStore.anchorTee so it survives
+   * the round and propagates to yardage calcs.
+   */
+  onTeeAnchor?: (latlng: LatLng) => void;
+  /** Same as onTeeAnchor, but for the green marker. */
+  onGreenAnchor?: (latlng: LatLng) => void;
 };
 
 export default function HoleView({
   geometry, userPosition, playerDriverYards = null,
   recentShotPositions = [], width, height,
   fallbackUrl = null, onTargetTap,
+  onTeeAnchor, onGreenAnchor,
 }: HoleViewProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [target, setTarget] = useState<LatLng | null>(null);
   const [annotation, setAnnotation] = useState<StrategicAnnotation | null>(null);
+  // 2026-05-17 — Drag state for tee/green markers. Pixel offset from the
+  // marker's projected position, used to render the ghost during a drag.
+  // Refs hold the live drag delta so PanResponder callbacks can read it
+  // without re-binding on every render.
+  const [teeDrag, setTeeDrag] = useState<{ dx: number; dy: number } | null>(null);
+  const [greenDrag, setGreenDrag] = useState<{ dx: number; dy: number } | null>(null);
+  const teeDragRef = useRef<{ dx: number; dy: number } | null>(null);
+  const greenDragRef = useRef<{ dx: number; dy: number } | null>(null);
 
   // Compute tile rendering parameters once per geometry change
   const { center, bearing, zoom } = useMemo(() => {
@@ -137,6 +156,74 @@ export default function HoleView({
   // Project a lat/lng onto pixel coordinates of this tile
   const project = (p: LatLng) =>
     projectToTilePixels(p, center, zoom, bearing, width, height);
+
+  // 2026-05-17 — Draggable tee/green marker handlers. Active only when
+  // the parent supplies onTeeAnchor / onGreenAnchor. Each PanResponder
+  // tracks the touch delta; on release we unproject the final pixel
+  // position to lat/lng and pass it up. We `useMemo` so the responder
+  // closures see fresh center/zoom/bearing after geometry changes.
+  const teeProjected = geometry.tee ? project(geometry.tee) : null;
+  const greenProjected = geometry.green ? project(geometry.green) : null;
+
+  const teePanResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => onTeeAnchor != null,
+    onMoveShouldSetPanResponder: () => onTeeAnchor != null,
+    onPanResponderGrant: () => {
+      teeDragRef.current = { dx: 0, dy: 0 };
+      setTeeDrag({ dx: 0, dy: 0 });
+    },
+    onPanResponderMove: (_e, g) => {
+      teeDragRef.current = { dx: g.dx, dy: g.dy };
+      setTeeDrag({ dx: g.dx, dy: g.dy });
+    },
+    onPanResponderRelease: () => {
+      const d = teeDragRef.current;
+      teeDragRef.current = null;
+      setTeeDrag(null);
+      if (!d || !teeProjected || !onTeeAnchor) return;
+      if (Math.abs(d.dx) < 4 && Math.abs(d.dy) < 4) return; // ignore taps
+      const newLatLng = unprojectPixel(
+        teeProjected.x + d.dx,
+        teeProjected.y + d.dy,
+        center, zoom, bearing, width, height,
+      );
+      onTeeAnchor(newLatLng);
+    },
+    onPanResponderTerminate: () => {
+      teeDragRef.current = null;
+      setTeeDrag(null);
+    },
+  }), [onTeeAnchor, teeProjected?.x, teeProjected?.y, center, zoom, bearing, width, height]);
+
+  const greenPanResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => onGreenAnchor != null,
+    onMoveShouldSetPanResponder: () => onGreenAnchor != null,
+    onPanResponderGrant: () => {
+      greenDragRef.current = { dx: 0, dy: 0 };
+      setGreenDrag({ dx: 0, dy: 0 });
+    },
+    onPanResponderMove: (_e, g) => {
+      greenDragRef.current = { dx: g.dx, dy: g.dy };
+      setGreenDrag({ dx: g.dx, dy: g.dy });
+    },
+    onPanResponderRelease: () => {
+      const d = greenDragRef.current;
+      greenDragRef.current = null;
+      setGreenDrag(null);
+      if (!d || !greenProjected || !onGreenAnchor) return;
+      if (Math.abs(d.dx) < 4 && Math.abs(d.dy) < 4) return;
+      const newLatLng = unprojectPixel(
+        greenProjected.x + d.dx,
+        greenProjected.y + d.dy,
+        center, zoom, bearing, width, height,
+      );
+      onGreenAnchor(newLatLng);
+    },
+    onPanResponderTerminate: () => {
+      greenDragRef.current = null;
+      setGreenDrag(null);
+    },
+  }), [onGreenAnchor, greenProjected?.x, greenProjected?.y, center, zoom, bearing, width, height]);
 
   // Tap handler: map screen pixels back to lat/lng (inverse projection)
   const onPress = (e: { nativeEvent: { locationX: number; locationY: number } }) => {
@@ -274,6 +361,49 @@ export default function HoleView({
         );
       })}
 
+      {/* 2026-05-17 — Draggable tee/green markers. Rendered as transparent
+          touch targets sized larger than the SVG dot underneath so they
+          catch fat-finger taps. While dragging, a green ghost ring
+          follows the finger to show the proposed new location. */}
+      {onTeeAnchor && teeProjected && (
+        <View
+          {...teePanResponder.panHandlers}
+          style={[
+            styles.dragHandle,
+            { left: teeProjected.x - 22, top: teeProjected.y - 22 },
+            teeDrag != null && styles.dragHandleActive,
+          ]}
+        >
+          {teeDrag != null && (
+            <View style={[
+              styles.dragGhost,
+              { left: 22 + teeDrag.dx - 16, top: 22 + teeDrag.dy - 16 },
+            ]}>
+              <Text style={styles.dragGhostLabel}>TEE</Text>
+            </View>
+          )}
+        </View>
+      )}
+      {onGreenAnchor && greenProjected && (
+        <View
+          {...greenPanResponder.panHandlers}
+          style={[
+            styles.dragHandle,
+            { left: greenProjected.x - 22, top: greenProjected.y - 22 },
+            greenDrag != null && styles.dragHandleActive,
+          ]}
+        >
+          {greenDrag != null && (
+            <View style={[
+              styles.dragGhost,
+              { left: 22 + greenDrag.dx - 16, top: 22 + greenDrag.dy - 16 },
+            ]}>
+              <Text style={styles.dragGhostLabel}>GRN</Text>
+            </View>
+          )}
+        </View>
+      )}
+
       {/* Annotation detail modal */}
       <Modal visible={annotation != null} transparent animationType="fade" onRequestClose={() => setAnnotation(null)}>
         <Pressable style={styles.modalBg} onPress={() => setAnnotation(null)}>
@@ -344,6 +474,22 @@ const styles = StyleSheet.create({
   },
   annotationTap: {
     position: 'absolute', width: 28, height: 28, borderRadius: 14,
+  },
+  dragHandle: {
+    position: 'absolute', width: 44, height: 44, borderRadius: 22,
+  },
+  dragHandleActive: {
+    backgroundColor: 'rgba(0,200,150,0.15)',
+    borderWidth: 1, borderColor: '#00C896', borderStyle: 'dashed',
+  },
+  dragGhost: {
+    position: 'absolute', width: 32, height: 32, borderRadius: 16,
+    backgroundColor: 'rgba(0,200,150,0.45)',
+    borderWidth: 2, borderColor: '#00C896',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  dragGhostLabel: {
+    color: '#fff', fontSize: 9, fontWeight: '900',
   },
   modalBg: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
