@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
 import { useToastStore } from '../store/toastStore';
+import { useTrustLevelStore, TRUST_LEVEL_META, TRUST_LEVEL_SLIDER_ORDER } from '../store/trustLevelStore';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
 import type { ThemeColors } from '../theme/tokens';
@@ -107,6 +108,11 @@ export default function Settings() {
   // Persona-aware display name. Settings labels reference the active caddie
   // by name (Kevin / Serena / Harry / Tank) consistently with the rest of the app.
   const caddieName = getCaddieName(caddiePersonality);
+
+  // 2026-05-19 — trust level read inline in Round Experience instead of
+  // routing to a sub-screen. Same store, same persistence.
+  const trustLevel = useTrustLevelStore(s => s.level);
+  const setTrustLevel = useTrustLevelStore(s => s.setLevel);
 
   /**
    * 2026-05-19 — Toggle wrapper that fires a Medium haptic and a toast
@@ -496,20 +502,48 @@ export default function Settings() {
         {/* ROUND EXPERIENCE */}
         <SectionHeader title="Round Experience" />
         <View style={cardStyle}>
-          {/* Trust Spectrum entry — five modes (Quiet, Cockpit, Companion,
-              Active, Full). Was previously only reachable from inside Cockpit,
-              which made it impossible to find Cockpit in the first place. */}
-          <TouchableOpacity
-            style={rowDivStyle}
-            onPress={() => router.push('/settings/trust-level' as never)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.rowText}>
-              <Text style={labelStyle}>{caddieName}&apos;s presence</Text>
-              <Text style={subStyle}>Quiet · Cockpit · Companion · Active · Full</Text>
+          {/* 2026-05-19 — trust slider moved INLINE here. Was a routed
+              sub-screen at /settings/trust-level that created the
+              settings-within-settings pattern Tim called out. The full
+              slider + descriptions now render directly in this card. */}
+          <View style={[styles.trustBlock, { borderBottomColor: colors.border }]}>
+            <Text style={labelStyle}>{caddieName}&apos;s presence</Text>
+            <Text style={[subStyle, { marginBottom: 10 }]}>How present should {caddieName} be during your round?</Text>
+            <View style={[styles.trustSlider, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              {TRUST_LEVEL_SLIDER_ORDER.map((lvl) => {
+                const meta = TRUST_LEVEL_META[lvl];
+                const active = trustLevel === lvl;
+                return (
+                  <TouchableOpacity
+                    key={lvl}
+                    onPress={() => {
+                      setTrustLevel(lvl);
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+                      useToastStore.getState().show(`${caddieName}'s presence: ${meta.label}`);
+                    }}
+                    style={[
+                      styles.trustCell,
+                      active && { backgroundColor: colors.accent_muted },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text
+                      style={[
+                        styles.trustCellLabel,
+                        { color: active ? colors.accent : colors.text_muted },
+                      ]}
+                    >
+                      {meta.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-            <Text style={[styles.rowSub, { color: colors.text_muted }]}>›</Text>
-          </TouchableOpacity>
+            <Text style={[styles.trustOneLiner, { color: colors.text_primary }]}>
+              {TRUST_LEVEL_META[trustLevel].one_liner}
+            </Text>
+          </View>
 
           <ToggleRow
             label="Skip Pre-Round Briefing"
@@ -760,26 +794,15 @@ export default function Settings() {
         {/* DEVELOPER TOOLS — dev builds only */}
         {__DEV__ && <DeveloperToolsSection cardStyle={cardStyle} colors={colors} />}
 
-        {/* ABOUT */}
-        {/* Phase 410 — Profile section. Edit Profile routes to the
-            single-screen welcome that captures name + caddie +
-            optional handicap. Discoverable affordance for testers
-            who want to update; replaces the prior "edit each field
-            individually" hunt-and-peck. */}
-        <SectionHeader title="Profile" />
-        <View style={cardStyle}>
-          <TouchableOpacity
-            style={styles.aboutRow}
-            onPress={() => router.push('/welcome' as never)}
-            accessibilityRole="button"
-            accessibilityLabel="Edit your profile"
-          >
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Edit Profile</Text>
-            <Text style={[styles.aboutValue, { color: colors.accent }]}>
-              Name · Caddie · Handicap →
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {/* 2026-05-19 — duplicate "Profile" section header removed.
+            The first Profile section near the top of this screen
+            already has all the editable fields inline (name, handicap,
+            personal best, dominant miss, experience, home course, etc).
+            The redundant "Edit Profile →" route to /welcome was leftover
+            from a prior flow and contributed to Tim's settings-within-
+            settings fatigue. The /welcome single-screen onboarding is
+            still reachable via Reset App Data → relaunch for users who
+            need the guided re-do. */}
 
         {/* Phase AI — Help / Support section. Single canonical contact. */}
         <SectionHeader title="Help" />
@@ -1172,6 +1195,34 @@ const styles = StyleSheet.create({
   resetRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingVertical: 12,
+  },
+  // Inline trust-level block in Round Experience.
+  trustBlock: {
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  trustSlider: {
+    flexDirection: 'row',
+    borderRadius: 10,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  trustCell: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  trustCellLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  trustOneLiner: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 10,
+    lineHeight: 18,
   },
   rowText: {
     flex: 1,
