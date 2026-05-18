@@ -19,6 +19,7 @@ import * as Location from 'expo-location';
 import * as Sentry from '@sentry/react-native';
 import { AppState, type AppStateStatus } from 'react-native';
 import { useRoundStore } from '../store/roundStore';
+import { ownerSentinel } from './ownerSentinel';
 
 export type GpsMode = 'active' | 'walking' | 'stationary';
 
@@ -165,7 +166,7 @@ function processFix(raw: GpsFix): boolean {
   lastFix = fix;
   lastTickAt = Date.now();
   for (const cb of subscribers) {
-    try { cb(fix); } catch {}
+    try { cb(fix); } catch (e) { ownerSentinel('gps.subscriber.fix', e); }
   }
   return true;
 }
@@ -308,7 +309,7 @@ async function handleAppStateChange(next: AppStateStatus): Promise<void> {
     lastFix = fresh;
     lastTickAt = Date.now();
     for (const cb of subscribers) {
-      try { cb(fresh); } catch {}
+      try { cb(fresh); } catch (e) { ownerSentinel('gps.subscriber.fresh', e); }
     }
   } catch (e) {
     console.log('[gps] foreground one-shot failed:', e);
@@ -338,7 +339,7 @@ function evaluateMode() {
       poorAlertedAt = now;
       const info = { accuracy_m: acc, duration_ms: now - poorSinceTs };
       for (const cb of poorSignalListeners) {
-        try { cb(info); } catch (e) { console.log('[gps] poor-signal listener threw', e); }
+        try { cb(info); } catch (e) { ownerSentinel('gps.poorSignal.listener', e); }
       }
     }
   } else {
@@ -554,7 +555,7 @@ export async function recalibrateGps(): Promise<GpsFix | null> {
     if (!evalTimer) evalTimer = setInterval(evaluateMode, 5_000);
     // Notify subscribers immediately so on-screen yardages refresh.
     for (const cb of subscribers) {
-      try { cb(fresh); } catch {}
+      try { cb(fresh); } catch (e) { ownerSentinel('gps.subscriber.fresh', e); }
     }
     breadcrumb('manager_recalibrate_ok', {
       accuracy_m: fresh.accuracy_m,

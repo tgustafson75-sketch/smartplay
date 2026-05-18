@@ -28,6 +28,7 @@ import { useRoundStore } from '../store/roundStore';
 import { fetchCourseGeometry, getHoleGeometry } from './courseGeometryService';
 import { getLastFix, classifyAccuracy } from './smartFinderService';
 import { haversineYards } from '../utils/geoDistance';
+import { ownerSentinel } from './ownerSentinel';
 
 // ─── Tunables ─────────────────────────────────────────────────────────
 
@@ -96,7 +97,7 @@ export function startHoleDetection(): void {
         void tick();
       });
     } catch (e) {
-      console.log('[holeDetection] mark bus subscribe failed:', e);
+      ownerSentinel('holeDetection.markBus', e);
     }
   }
   // Fire one immediate tick so we don't wait the first interval.
@@ -302,7 +303,7 @@ async function tick(): Promise<void> {
     candidateSince = 0;
     console.log('[holeDetection] auto-transition:', next, '·', result.reason);
     listeners.forEach(l => {
-      try { l(next, result.reason); } catch (e) { console.log('[holeDetection] listener err', e); }
+      try { l(next, result.reason); } catch (e) { ownerSentinel('holeDetection.listener', e); }
     });
   }
 }

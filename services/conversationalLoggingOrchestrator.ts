@@ -10,6 +10,7 @@ import { getFirstShotPrompt, recordVoiceLoggedShot } from './voiceOnboardingServ
 import { getCurrentLocation } from './shotLocationService';
 import { fetchWeatherAt, getCachedWeather } from './weatherService';
 import { getDialog } from './dialogEngine';
+import { ownerSentinel } from './ownerSentinel';
 
 // Phase F — shot prompt variations now live in
 // constants/dialogTemplates/caddieTemplates.ts under the 'shot_prompt'
@@ -145,7 +146,7 @@ class ConversationalLoggingOrchestrator {
       const { isEffectiveCartMode } = require('./walkingDetector') as typeof import('./walkingDetector');
       effectiveCart = isEffectiveCartMode(settings.cartMode);
     } catch (e) {
-      console.log('[orchestrator] walkingDetector require failed:', e);
+      ownerSentinel('orchestrator.walkingDetector', e);
     }
     if (effectiveCart) {
       console.log('[orchestrator] auto-fire suppressed (cart mode effective) — use manual log');
@@ -157,7 +158,7 @@ class ConversationalLoggingOrchestrator {
     this.pendingTimer = setTimeout(() => {
       this.pendingTimer = null;
       this.runFlow(event, round.currentHole).catch(err => {
-        console.log('[orchestrator] flow error:', err);
+        ownerSentinel('orchestrator.flow', err);
         this.state = { kind: 'idle' };
       });
     }, delay);
@@ -185,7 +186,7 @@ class ConversationalLoggingOrchestrator {
     try {
       await speak(prompt, this.deps.voiceGender ?? settings.voiceGender, this.deps.language ?? settings.language, this.deps.apiUrl);
     } catch (err) {
-      console.log('[orchestrator] prompt speak error — falling back:', err);
+      ownerSentinel('orchestrator.promptSpeak', err);
       this.recordCadence(event, prompt, false, false, null, null);
       this.deps.onFallbackToManual?.(event);
       this.state = { kind: 'idle' };
@@ -197,7 +198,7 @@ class ConversationalLoggingOrchestrator {
     try {
       utterance = await this.deps.captureUtterance(8000);
     } catch (err) {
-      console.log('[orchestrator] capture error:', err);
+      ownerSentinel('orchestrator.captureUtterance', err);
       utterance = null;
     }
 
@@ -239,7 +240,7 @@ class ConversationalLoggingOrchestrator {
           lieQuality = (lieParsed as unknown as { lie_quality?: string })?.lie_quality ?? null;
         }
       } catch (err) {
-        console.log('[orchestrator] lie followup error:', err);
+        ownerSentinel('orchestrator.lieFollowup', err);
       }
     }
 
@@ -269,10 +270,13 @@ class ConversationalLoggingOrchestrator {
         }),
       }).finally(() => clearTimeout(timeout));
 
-      if (!res.ok) return null;
+      if (!res.ok) {
+        ownerSentinel('orchestrator.parseShot.http', new Error(`HTTP ${res.status}`));
+        return null;
+      }
       return await res.json() as ParsedShotRecord;
     } catch (err) {
-      console.log('[orchestrator] parse error:', err);
+      ownerSentinel('orchestrator.parseShot', err);
       return null;
     }
   }

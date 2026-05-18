@@ -1,6 +1,7 @@
 import * as Location from 'expo-location';
 import { startGpsManager, subscribe as subscribeGps, stopGpsManager } from './gpsManager';
 import { startSmartFinderGpsTracking, stopSmartFinderGpsTracking } from './smartFinderService';
+import { ownerSentinel } from './ownerSentinel';
 
 export interface GPSSample {
   lat: number;
@@ -129,7 +130,7 @@ class ShotDetector {
       console.log('[shotDetection] started (via gpsManager)');
       return true;
     } catch (err) {
-      console.log('[shotDetection] start error:', err);
+      ownerSentinel('shotDetection.start', err);
       return false;
     }
   }
@@ -240,7 +241,7 @@ class ShotDetector {
   private emit(event: ShotEvent): void {
     console.log('[shotDetection] shot_likely', event);
     this.listeners.forEach(l => {
-      try { l(event); } catch (err) { console.log('[shotDetection] listener error:', err); }
+      try { l(event); } catch (err) { ownerSentinel('shotDetection.listener', err); }
     });
   }
 }
