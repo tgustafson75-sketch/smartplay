@@ -598,13 +598,11 @@ export default function Settings() {
             value={autoListenEnabled}
             onValueChange={confirmToggle('Active Listening', setAutoListenEnabled)}
           />
-          <ToggleRow
-            label="Earbud Tap-to-Talk · Coming soon"
-            sub={`OS-level Bluetooth media-key support is on the roadmap. For now, tap ${caddieName}'s badge on the Caddie tab to talk.`}
-            value={false}
-            onValueChange={() => {}}
-            disabled
-          />
+          {/* 2026-05-19 — the "Earbud Tap-to-Talk · Coming soon" row
+              moved to the Connected Hardware section below where all
+              not-yet-wired hardware integrations are listed together
+              with honest copy. Voice section now only carries actually-
+              live voice settings. */}
           <ToggleRow
             label="Voice on Phone Speaker"
             sub={`Allow ${caddieName}'s voice when no earbuds are connected`}
@@ -763,39 +761,51 @@ export default function Settings() {
           />
         </View>
 
-        {/* CONNECTED HARDWARE (renamed from "Galaxy Watch" 2026-05-19 —
-            this is the umbrella section for any future smart-glasses,
-            earbuds, or watch integration, not Samsung-specific). */}
+        {/* CONNECTED HARDWARE — every row honestly labels what's actually
+            wired vs scaffolded. Tim was getting bitten by toggling
+            "Watch Connected" thinking it pulled real Samsung Health data
+            when it was sim-only. Now: label is explicit, toggle is
+            disabled, and the description names exactly what's missing. */}
         <SectionHeader title="Connected Hardware" />
         <View style={cardStyle}>
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Watch Connected</Text>
+              <Text style={labelStyle}>Samsung Galaxy Watch · Not wired</Text>
               <Text style={subStyle}>
-                {watchConnected
-                  ? 'Tempo + transition tracking active'
-                  : 'Connect for swing tempo analysis'}
+                Samsung Health SDK integration is a native module that ships in a future APK build. The toggle is parked in simulation mode for dev testing only — it does not pull real tempo / club-speed data from your watch today.
               </Text>
             </View>
             <Switch
               value={watchConnected}
-              onValueChange={setWatchConnected}
+              onValueChange={() => {}}
               trackColor={{ false: colors.border, true: colors.accent }}
               thumbColor={colors.text_primary}
+              disabled
             />
           </View>
-
-          {watchConnected && (
-            <View style={styles.watchInfo}>
-              <Text style={styles.watchInfoTitle}>What Watch Tracking Adds</Text>
-              <Text style={styles.watchInfoBody}>Tempo ratio — backswing to downswing timing.</Text>
-              <Text style={styles.watchInfoBody}>Transition detection — early or on time.</Text>
-              <Text style={styles.watchInfoBody}>Estimated club head speed.</Text>
-              <Text style={[styles.watchInfoBody, { color: '#6b7280', marginTop: 8, fontStyle: 'italic' }]}>
-                Samsung Health SDK integration coming soon. Currently runs in simulation mode for testing.
+          <View style={rowDivStyle}>
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>Earbud / BT remote tap · Not wired</Text>
+              <Text style={subStyle}>
+                Hardware play/pause press for tap-to-talk needs a native media-key listener (react-native-track-player or equivalent) that was stripped earlier for New-Arch compat. Requires a new APK build to re-enable.
               </Text>
             </View>
-          )}
+            <Switch
+              value={false}
+              onValueChange={() => {}}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={colors.text_primary}
+              disabled
+            />
+          </View>
+          <View style={rowDivStyle}>
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>Ray-Ban Meta temple tap · Blocked</Text>
+              <Text style={subStyle}>
+                Meta has not exposed an SDK that lets third-party apps subscribe to the glasses' touchpad / temple-tap events. Until that ships, glasses-as-mic + Active Listening is the path: pair the glasses for Bluetooth audio and the caddie hears you hands-free.
+              </Text>
+            </View>
+          </View>
         </View>
 
         {/* DEVELOPER TOOLS — dev builds only */}
@@ -977,6 +987,20 @@ export default function Settings() {
                       </Text>
                     </View>
                     <Ionicons name="library-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/mark-green' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open Mark Green tool"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Mark Green</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Walk to a green center, capture its real GPS coords. Fixes yardages for any course that ships with placeholder data (Sunnyvale, SJ Muni).
+                      </Text>
+                    </View>
+                    <Ionicons name="flag" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
                 </View>
               </>

@@ -9,6 +9,12 @@ import { getOneShotFix, bumpToActive, subscribe as subscribeGps } from './gpsMan
 // and caches them; without this fallback the live API result was being
 // ignored and yardages stayed null forever.
 import { getHoleGeometry } from './courseGeometryService';
+// 2026-05-19 — user-captured green overrides win over EVERYTHING.
+// Captured via the Mark Green tool when the user is standing at the
+// center of an actual green. Persists per (courseId, hole) so the
+// next round on the same course gets accurate yardages out of the
+// gate without depending on golfcourseapi data.
+import { getGreenOverride } from './courseGreenOverrides';
 
 /**
  * Phase D-2 — SmartFinder data layer.
@@ -199,9 +205,26 @@ function resolveGreenCoords(holeNumber: number): {
   front: ShotLocation | null;
   middle: ShotLocation | null;
   back: ShotLocation | null;
-  source: 'courseHoles' | 'geometryCache' | 'none';
+  source: 'override' | 'courseHoles' | 'geometryCache' | 'none';
 } {
   const round = useRoundStore.getState();
+  const courseId = round.activeCourseId ?? null;
+  // 2026-05-19 — user-captured Mark Green override wins. F/B are
+  // approximated as middle ± 12 yards along the bearing axis only if
+  // we have a tee anchor to compute bearing from; otherwise F/B stay
+  // null and the smartFinder strip just shows middle.
+  if (courseId) {
+    const ov = getGreenOverride(courseId, holeNumber);
+    if (ov) {
+      const middleLoc: ShotLocation = { lat: ov.lat, lng: ov.lng };
+      let front: ShotLocation | null = null;
+      let back: ShotLocation | null = null;
+      // Optional F/B if user marked them
+      if (ov.frontLat != null && ov.frontLng != null) front = { lat: ov.frontLat, lng: ov.frontLng };
+      if (ov.backLat != null && ov.backLng != null) back = { lat: ov.backLat, lng: ov.backLng };
+      return { front, middle: middleLoc, back, source: 'override' };
+    }
+  }
   const hData = round.courseHoles.find(h => h.hole === holeNumber);
   let front = hData ? safeLoc(hData.frontLat, hData.frontLng) : null;
   let middle = hData ? safeLoc(hData.middleLat, hData.middleLng) : null;
@@ -213,7 +236,6 @@ function resolveGreenCoords(holeNumber: number): {
   // is populated by fetchCourseGeometry which fires at round start. If
   // the API returned real coords for Sunnyvale / SJ Muni this is where
   // they live.
-  const courseId = round.activeCourseId ?? null;
   if (courseId) {
     const geo = getHoleGeometry(courseId, holeNumber);
     if (geo) {

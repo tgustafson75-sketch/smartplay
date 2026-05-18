@@ -11,18 +11,23 @@ const buildSystemPrompt = (g: Persona | VoiceGender) => {
 Available intents:
 
 1. open_tool — User wants to launch a tool or screen.
-   parameters: { tool_name: "smartvision" | "smartfinder" | "swinglab" | "scorecard" | "dashboard" | "settings" }
+   parameters: { tool_name: "smartvision" | "smartfinder" | "swinglab" | "scorecard" | "dashboard" | "settings" | "smartmotion" | "tightlie" | "acoustic" | "gps_test" }
    Examples:
    - "open SmartVision" -> { tool_name: "smartvision" }
    - "show me the smart finder" -> { tool_name: "smartfinder" }
    - "let me see SwingLab" -> { tool_name: "swinglab" }
    - "open the rangefinder" -> { tool_name: "smartfinder" }
    - "pull up my scorecard" -> { tool_name: "scorecard" }
-   - "I want to record a swing" -> { tool_name: "swinglab" }
+   - "I want to record a swing" -> { tool_name: "smartmotion" }
    - "show my dashboard" -> { tool_name: "dashboard" }
    - "open dashboard" -> { tool_name: "dashboard" }
    - "open settings" -> { tool_name: "settings" }
    - "go to settings" -> { tool_name: "settings" }
+   - "open SmartMotion" / "record my swing" / "capture my swing" -> { tool_name: "smartmotion" }
+   - "open TightLie" / "check my lie" / "what's the play" / "analyze my lie" -> { tool_name: "tightlie" }
+   - "open acoustic test" / "acoustic test bench" / "test bench" / "test the mic" -> { tool_name: "acoustic" }
+   - "open GPS test" / "GPS test bench" / "test the GPS" -> { tool_name: "gps_test" }
+   - "mark the green" / "mark green" / "I'm at the green" / "open Mark Green" -> { tool_name: "mark_green" }
 
 2. query_status — User wants information about current state.
    parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" }

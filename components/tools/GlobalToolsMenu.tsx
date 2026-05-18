@@ -283,6 +283,17 @@ export function GlobalToolsMenu() {
                 />
                 <Row
                   icon="flag-outline"
+                  label="Mark Green"
+                  sub="Walk to the green center, capture real coords for this hole"
+                  onPress={() => {
+                    useToolsMenuStore.getState().close();
+                    try { router.push('/mark-green' as never); }
+                    catch (e) { console.log('[tools] mark-green nav failed', e); }
+                  }}
+                  colors={colors}
+                />
+                <Row
+                  icon="flag-outline"
                   label="End Round"
                   sub="Finish and save the scorecard"
                   onPress={endRoundAction}
