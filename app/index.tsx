@@ -88,9 +88,12 @@ export default function Index() {
     return <Redirect href={'/permissions' as never} />;
   }
 
-  // Onboarding always wins — first-run users go through the welcome flow,
-  // not the greeting. (The greeting is a 'welcome back' moment.)
-  if (!isDone) return <Redirect href="/onboarding/welcome" />;
+  // 2026-05-17 — Onboarding subtree removed (was dead per the
+  // standing "has_completed_onboarding=true default" rule). The
+  // welcome screen below handles the single-screen first-launch
+  // capture; if a user somehow lands here without isDone=true,
+  // route to /welcome instead.
+  if (!isDone) return <Redirect href={'/welcome' as never} />;
 
   // Phase 410 — first-launch welcome gate. The legacy multi-step
   // onboarding is intentionally bypassed (per Tim's "get rid of that

@@ -20,7 +20,6 @@ export {
   resetProactiveState,
 } from '../proactiveKevin';
 export type { ProactiveTrigger, ProactiveTriggerType } from '../proactiveKevin';
-export { relationshipEngine } from '../relationshipEngine';
 export {
   initFillerLibrary,
   isLibraryGenerated,

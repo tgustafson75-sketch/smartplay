@@ -408,6 +408,18 @@ export function stopGpsManager(): void {
   outliersDiscarded = 0;
   batterySaverFloor = null;
   lastTickAt = 0;
+  // 2026-05-17 — reset module-level book-keeping that otherwise
+  // bleeds across round boundaries. Previously poorAlertedAt /
+  // lastBumpReason / lastMotionAt / lastActiveBumpAt / mode all
+  // survived stop+restart, so the first poor-signal callout of
+  // round N+1 was suppressed if round N had just alerted.
+  poorSinceTs = null;
+  poorAlertedAt = null;
+  lastBumpReason = null;
+  lastBumpAt = null;
+  lastActiveBumpAt = 0;
+  lastMotionAt = 0;
+  mode = 'walking';
   breadcrumb('manager_stop');
   // Phase 405 wave 4 — also stop the background-location task so the
   // foreground-service notification dismisses and the OS releases the
@@ -553,6 +565,13 @@ export async function recalibrateGps(): Promise<GpsFix | null> {
     breadcrumb('manager_recalibrate_error', {
       error: err instanceof Error ? err.message : String(err),
     });
+    // 2026-05-17 — reset mode + active-bump bookkeeping before
+    // restarting the watch. Previously the highest-accuracy fetch
+    // failure path left mode='active' set with no fresh fix landing,
+    // which orphaned the active state until the next bumpToActive.
+    mode = 'walking';
+    lastActiveBumpAt = 0;
+    lastBumpReason = null;
     // Try to leave something running even on failure.
     try { await startWatchInternal(); } catch {}
     return null;

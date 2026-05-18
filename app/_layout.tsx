@@ -553,8 +553,11 @@ function AppNavigator() {
           options={{ animation: 'fade', headerShown: false, gestureEnabled: false }}
         />
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="intro" />
-        <Stack.Screen name="auth" />
+        {/* 2026-05-17 — intro / auth / hole-view-3d / smartfinder-camera
+            / onboarding stack screens removed alongside their .tsx
+            files. None had inbound router.push from the rest of the
+            app; the welcome / permissions / index.tsx flow owns first-
+            launch routing. */}
         {/* Phase 410 — first-launch welcome (single-screen profile
             capture: name + caddie + optional handicap). Reached on
             fresh installs with no first_opened_at + no name, and from
@@ -586,15 +589,7 @@ function AppNavigator() {
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
-          name="hole-view-3d"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
           name="cage"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="arena"
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
@@ -666,10 +661,6 @@ function AppNavigator() {
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
         <Stack.Screen
-          name="onboarding"
-          options={{ animation: 'fade', headerShown: false }}
-        />
-        <Stack.Screen
           name="round/briefing"
           options={{ animation: 'fade', headerShown: false }}
         />
@@ -731,14 +722,6 @@ function AppNavigator() {
         <Stack.Screen
           name="lie-analysis"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
-        />
-        <Stack.Screen
-          name="smartfinder-camera"
-          options={{ animation: 'slide_from_bottom', headerShown: false }}
-        />
-        <Stack.Screen
-          name="settings/trust-level"
-          options={{ animation: 'slide_from_right', headerShown: false }}
         />
         <Stack.Screen
           name="course/[course_id]"

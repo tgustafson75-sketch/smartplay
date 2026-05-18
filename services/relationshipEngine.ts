@@ -71,9 +71,5 @@ export function processSwingAnalysis(args: {
   store.addObservation({ type: 'technical', content });
 }
 
-// Legacy stubs — kept for back-compat. Migrate callers to processSwingAnalysis
-// (or new typed events) over time.
-export const relationshipEngine = {
-  processRound: (_roundId: string): void => {},
-  generateInsight: (): string | null => null,
-};
+// 2026-05-17 — Legacy `relationshipEngine` no-op stubs removed.
+// No callers existed; the live API is `processSwingAnalysis` above.

@@ -55,7 +55,6 @@ import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
-import { useVolumeButtonTrigger } from '../../hooks/useVolumeButtonTrigger';
 import { speak, configureAudioForSpeech, captureUtterance } from '../../services/voiceService';
 // Phase Y — shotDetectionService lifecycle moved to app/_layout.tsx so it
 // survives tab focus changes. Only the orchestrator's runtime configure()
@@ -1066,11 +1065,9 @@ export default function CaddieTab() {
     },
   });
 
-  // ── Volume button trigger ────────────────
-  useVolumeButtonTrigger({
-    enabled: isRoundActive,
-    onTrigger: handleMicPress,
-  });
+  // 2026-05-17 — useVolumeButtonTrigger removed. The native
+  // react-native-volume-manager dep was stripped earlier and the
+  // hook body was a no-op; the import + call were dead weight here.
 
   // ── Round summary ────────────────────────
   // 2026-05-19 — accept the snapshot as params. Caller MUST capture

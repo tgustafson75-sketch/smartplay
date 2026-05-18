@@ -8,8 +8,8 @@
  * so the data shape is in place for Phase K consumers; the real detector
  * lands in a refinement bundle when reliable detection tech is in hand.
  *
- * The existing services/acousticEngine.ts also stubs `analyze()` — both
- * remain stub-shaped until the real DSP work happens.
+ * Remains stub-shaped until the real DSP work happens. (Previous
+ * sibling stub services/acousticEngine.ts was deleted 2026-05-17.)
  *
  * Output is clearly tagged `confidence: 0.3, source: 'club_typical_stub'`
  * so downstream consumers (and any future analytics) can distinguish
