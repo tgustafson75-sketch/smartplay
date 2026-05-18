@@ -485,17 +485,18 @@ export default function Settings() {
             onSelect={(v) => setResponseMode(v as 'short' | 'neutral' | 'detailed')}
           />
 
-          <TouchableOpacity
-            style={rowDivStyle}
-            onPress={() => router.push('/kevin-learning' as never)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.rowText}>
-              <Text style={labelStyle}>What {caddieName}&apos;s learning</Text>
-              <Text style={subStyle}>Phrases {caddieName} has picked up from you</Text>
-            </View>
-            <Text style={[styles.rowSub, { color: colors.text_muted }]}>›</Text>
-          </TouchableOpacity>
+          {/* 2026-05-19 — removed duplicate "What ${caddieName} is
+              learning" link. The same /kevin-learning surface is
+              already exposed via Settings → Owner Tools and is now
+              the sole entry point. Surfacing it twice in one screen
+              compounds the settings-within-settings fatigue. */}
+
+          <ToggleRow
+            label="Greet me on launch"
+            sub={`${caddieName} says hello when you open the app`}
+            value={kevinGreetingEnabled}
+            onValueChange={confirmToggle('Launch Greeting', setKevinGreetingEnabled)}
+          />
 
         </View>
 
@@ -623,19 +624,16 @@ export default function Settings() {
           />
         </View>
 
-        {/* CADDIE */}
-        <SectionHeader title={caddieName} />
-        <View style={cardStyle}>
-          <ToggleRow
-            label="Greet me on launch"
-            sub={`${caddieName} says hello when you open the app`}
-            value={kevinGreetingEnabled}
-            onValueChange={setKevinGreetingEnabled}
-          />
-        </View>
+        {/* 2026-05-19 — single-row "Caddie ${caddieName}" section folded
+            into the Caddie's Voice card above. The "Greet me on launch"
+            toggle now lives there alongside the other persona controls.
+            Reduces section count + colocates related settings. */}
 
-        {/* DISPLAY */}
-        <SectionHeader title="Display" />
+        {/* DISPLAY & ACCESSIBILITY (combined 2026-05-19 — the two cards
+            below used to live under separate "Display" and
+            "Accessibility & Pacing" headers; merged into one header
+            since both control how you SEE or HEAR the app. */}
+        <SectionHeader title="Display & Accessibility" />
         <View style={cardStyle}>
 
           <PillRow
@@ -673,8 +671,11 @@ export default function Settings() {
 
         {/* ACCESSIBILITY — captions, simpler briefings, and the
             per-persona intensity dial all live together so participants
-            and pros can find them in one place. */}
-        <SectionHeader title="Accessibility & Pacing" />
+            and pros can find them in one place.
+            2026-05-19 — dropped the standalone "Accessibility & Pacing"
+            header here; the row group is now visually part of the same
+            "Display & Accessibility" section above it. Cards still
+            persist independently for layout breathing room. */}
         <View style={cardStyle}>
           <ToggleRow
             label="Caption caddie speech"
@@ -701,8 +702,11 @@ export default function Settings() {
         </View>
 
         {/* PER-PERSONA INTENSITY DIAL — slider per caddie. Default Tank=70,
-            Harry=90, Kevin/Serena=100. Floor 0, ceiling 100. */}
-        <SectionHeader title="Caddie Intensity" />
+            Harry=90, Kevin/Serena=100. Floor 0, ceiling 100.
+            2026-05-19 — folded under "Display & Accessibility" (it
+            controls the same things as Tank soft-intro et al — how
+            each caddie SHOWS UP). Removes the dedicated "Caddie
+            Intensity" header. */}
         <View style={cardStyle}>
           {/* Drives off ACTIVE_PERSONAS so dormant personas (Harry) don't
               show up here. The persisted intensity entry stays — see
@@ -744,8 +748,9 @@ export default function Settings() {
           ))}
         </View>
 
-        {/* MEASUREMENT */}
-        <SectionHeader title="Measurement" />
+        {/* 2026-05-19 — single-row "Measurement" section folded into
+            "Display & Accessibility" above. Distance unit is one
+            line; doesn't deserve its own header. */}
         <View style={cardStyle}>
           <PillRow
             label="Distance Unit"
@@ -758,8 +763,10 @@ export default function Settings() {
           />
         </View>
 
-        {/* GALAXY WATCH */}
-        <SectionHeader title="Galaxy Watch" />
+        {/* CONNECTED HARDWARE (renamed from "Galaxy Watch" 2026-05-19 —
+            this is the umbrella section for any future smart-glasses,
+            earbuds, or watch integration, not Samsung-specific). */}
+        <SectionHeader title="Connected Hardware" />
         <View style={cardStyle}>
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
