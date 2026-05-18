@@ -40,11 +40,19 @@ export const logIssueHandler: IntentHandler = {
   },
 
   examples: [
-    'Kevin, log this — the recap auto-route feels slow',
-    'log an issue: SmartFinder white-screened when I tapped 10x zoom',
-    'I have feedback for you about the active listening pill',
-    'report a bug — Tank cut me off mid-sentence',
-    'note this — Sunnyvale hole 7 yardage looks wrong',
+    'we have an issue with the recap screen',
+    'remember this — SmartFinder white-screened at 10x zoom',
+    'save this for me: Sunnyvale hole 7 yardage looks wrong',
+    'make a note that Tank cut me off mid-sentence',
+    'track this — the active listening pill covers the brand row',
+    'I want you to know the GPS data bar is static',
+    'this is broken: hero shot share button does nothing',
+    'this doesn\'t work — voice score is not understood',
+    "Kevin, log this — the recap auto-route feels slow",
+    'log an issue: yardage stuck at 250',
+    'I have feedback for you',
+    'report a bug',
+    'note this for later',
   ],
 
   async execute(intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
@@ -52,29 +60,25 @@ export const logIssueHandler: IntentHandler = {
     if (!rawNote) {
       return {
         success: false,
-        voice_response: "I didn't catch what you wanted me to log. Say it again with the issue after.",
+        voice_response: "I didn't catch the issue. Say it again with what's wrong after.",
         side_effects: ['log_issue:empty'],
         follow_up_needed: true,
       };
     }
 
-    // Owner gate — non-owner sessions silently no-op so a tester
-    // accidentally hitting "log this" doesn't write to a personal debug
-    // log they can't see.
-    if (!ownerCheck()) {
-      return {
-        success: true,
-        voice_response: "Got it.",
-        side_effects: ['log_issue:non_owner_skip'],
-        follow_up_needed: false,
-      };
-    }
+    // 2026-05-19 — non-owner branch previously said "Got it" silently
+    // and dropped the note. Tim hit this when his profile.email wasn't
+    // set on the preview build, and concluded the feature was broken.
+    // Now: always save (storage is local + cheap), and tell the owner
+    // explicitly when their owner gate isn't active so they know what
+    // happened. Beta-tester clutter risk is acceptable.
+    const isOwner = ownerCheck();
 
     // Build context snapshot.
     const round = useRoundStore.getState();
     const settings = useSettingsStore.getState();
     const context = {
-      route: null as string | null, // active surface registry is read by caller; left null here for now
+      route: null as string | null, // active surface registry read at caller
       persona: settings.caddiePersonality ?? null,
       isRoundActive: round.isRoundActive,
       courseId: round.activeCourseId,
@@ -84,10 +88,21 @@ export const logIssueHandler: IntentHandler = {
 
     useIssueLogStore.getState().addEntry(rawNote, context);
 
+    // Echo back the first ~8 words so the user has CONCRETE evidence
+    // the right thing was captured. Previously "Got it" / "Logged" gave
+    // no clue whether the transcription got the actual issue or some
+    // mangled fragment. Now if the echo is wrong, the user can correct
+    // immediately ("no, I said X").
+    const words = rawNote.split(/\s+/).filter(Boolean);
+    const echo = words.slice(0, 8).join(' ') + (words.length > 8 ? '…' : '');
+    const reply = isOwner
+      ? `Saved. I'll remember: ${echo}`
+      : `Saved a note: ${echo}. Owner mode isn't active — set your email in Settings to file it in the Issue Log.`;
+
     return {
       success: true,
-      voice_response: "Logged. We'll review it later.",
-      side_effects: ['log_issue:saved'],
+      voice_response: reply,
+      side_effects: [isOwner ? 'log_issue:saved' : 'log_issue:saved_non_owner'],
       follow_up_needed: false,
     };
   },

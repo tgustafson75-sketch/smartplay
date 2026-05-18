@@ -8,7 +8,7 @@ import * as Sentry from '@sentry/react-native';
 import { SmartVisionProvider } from '../contexts/SmartVisionContext';
 import { KevinPresenceProvider } from '../contexts/KevinPresenceContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
-import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerEmail, OWNER_EMAILS } from '../store/playerProfileStore';
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { useSettingsStore, type Persona } from '../store/settingsStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
@@ -90,6 +90,29 @@ function AppNavigator() {
     const profile = usePlayerProfileStore.getState();
     const { first_opened_at, trial_started_at, subscription_status, initTrial, setSubscriptionStatus, grantLifetime } = profile;
 
+    // 2026-05-19 — Owner email auto-mirror. Runs BEFORE the
+    // subscriptions kill-switch so Owner Tools (Settings → Owner Tools)
+    // are reachable even when SUBSCRIPTIONS_ENABLED is false. Previously
+    // the kill-switch returned early before the env-mirror code at line
+    // 106 ran, so profile.email stayed blank and isOwnerEmail() returned
+    // false → Owner Tools section never rendered for Tim on the preview
+    // build (env var EXPO_PUBLIC_OWNER_EMAIL only lives in .env.local,
+    // not in the preview eas.json profile).
+    //
+    // Mirror order: explicit env var > single-entry OWNER_EMAILS default.
+    // The single-entry default catches the single-tester beta case so
+    // owner mode works without env or build-config hassle. When the
+    // allowlist grows past one entry, the auto-set stops and email must
+    // be set explicitly via setEmail (login / Settings text input).
+    if (!profile.email) {
+      const envOwner = (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim();
+      if (envOwner.length > 0) {
+        profile.setEmail(envOwner);
+      } else if (OWNER_EMAILS.length === 1) {
+        profile.setEmail(OWNER_EMAILS[0]);
+      }
+    }
+
     // 0) Global kill-switch — make everyone lifetime, skip everything else.
     if (!SUBSCRIPTIONS_ENABLED) {
       if (subscription_status !== 'lifetime') grantLifetime();
@@ -97,13 +120,9 @@ function AppNavigator() {
     }
 
     // 1) Lifetime override wins over everything. Re-asserts every boot
-    // so a corrupted/manually-edited status snaps back. Honors both the
-    // stored email and the env-var fallback. When env-var is set and
-    // there's no stored email yet, mirror it into the profile so other
-    // surfaces (Settings "About me") read the right value.
+    // so a corrupted/manually-edited status snaps back.
     const envOwner = (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim();
     if (isOwnerEmail(profile.email) || envOwner.length > 0) {
-      if (!profile.email && envOwner) profile.setEmail(envOwner);
       if (subscription_status !== 'lifetime') grantLifetime();
       return;
     }

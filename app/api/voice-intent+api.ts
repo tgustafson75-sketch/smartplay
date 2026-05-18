@@ -90,15 +90,25 @@ Available intents:
    parameters: {}
    Examples: "${caddieName} come back", "${caddieName} speak up", "${caddieName} talk to me", "${caddieName} un-quiet", "back to normal"
 
-10. log_issue — User (Tim, in his owner-tester role) wants to capture a bug / feedback / observation about the app itself for later review. Triggered by wake phrases that mean "save this note for me". The descriptive note follows the wake phrase.
+10. log_issue — User wants to capture a bug / feedback / observation / "remember this" note about the app itself for later review. Match LIBERALLY on intent; this is the catch-all "save this thought" path. The descriptive note follows the wake phrase.
     parameters: { note: string — the actual issue/feedback text with the wake phrase already stripped }
+    Triggering phrases (treat as semantically equivalent):
+    - "we have an issue", "we have a problem", "there's an issue", "this is an issue"
+    - "remember this", "store this", "save this", "track this", "make a note", "note this", "note for later"
+    - "I want you to know", "I want you to remember", "for the record"
+    - "this is broken", "this doesn't work", "this isn't working", "this is wrong"
+    - "log this", "log an issue", "log a bug"
+    - "report a bug", "I have feedback", "I have a problem"
+    - "fix this", "watch out for"
     Examples:
+    - "we have an issue with the recap screen, it feels slow" -> { note: "recap screen feels slow" }
+    - "remember this — SmartFinder white-screened at 10x zoom" -> { note: "SmartFinder white-screened at 10x zoom" }
+    - "save this for me: Sunnyvale hole 7 yardage looks wrong" -> { note: "Sunnyvale hole 7 yardage looks wrong" }
+    - "make a note that Tank cut me off mid-sentence" -> { note: "Tank cut me off mid-sentence" }
+    - "this is broken: hero shot share button does nothing" -> { note: "hero shot share button does nothing" }
     - "${caddieName} log this — the recap screen is slow" -> { note: "the recap screen is slow" }
-    - "log an issue: SmartFinder white-screened at 10x" -> { note: "SmartFinder white-screened at 10x" }
-    - "I have feedback about the active listening pill — it covered the brand row" -> { note: "active listening pill covered the brand row" }
-    - "report a bug — Tank cut me off mid-sentence" -> { note: "Tank cut me off mid-sentence" }
-    - "note this: Sunnyvale hole 7 yardage looks wrong" -> { note: "Sunnyvale hole 7 yardage looks wrong" }
-    The note should contain the substantive description ONLY — no "log this" / "report a bug" prefix, no caddie name. Pass empty string only if the user said "log this" with nothing after.
+    - "I want you to know the GPS data bar is static" -> { note: "GPS data bar is static" }
+    The note should contain the substantive description ONLY — no wake phrase prefix, no caddie name. Pass empty string only if the user said a wake phrase with nothing meaningful after.
 
 11. media_capture — User wants to record a short video clip of the next shot/swing/moment so it can be replayed and shared (hero shot for spectators).
     parameters: { capture_type: "shot" | "swing" | "highlight", raw_utterance: string }
