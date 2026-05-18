@@ -17,6 +17,16 @@ export interface DistanceComputeOutput {
   target_lat: number;
   target_lng: number;
   confidence: 'high' | 'medium' | 'low';
+  /**
+   * 2026-05-19 — true when the phone is held near-level and the
+   * tilt-based math has no usable input. Previously the function
+   * stubbed 250yd in this case and the UI displayed it. Callers must
+   * branch on this and show a helpful hint instead of rendering a
+   * fake number. The distance_yards / target_lat / target_lng fields
+   * are still populated for back-compat (with the same 250 fallback
+   * value) but should be ignored when unmeasurable is true.
+   */
+  unmeasurable: boolean;
 }
 
 const EYE_HEIGHT_M = 1.6;
@@ -64,13 +74,19 @@ export function computeDistance(input: DistanceComputeInput): DistanceComputeOut
   const tapOffsetDeg = (0.5 - tap_y_normalized) * CAMERA_VFOV_DEG;
   const angleDeg = device_pitch_degrees + tapOffsetDeg;
 
-  let distanceM: number;
-  let confidence: 'high' | 'medium' | 'low';
+  // 2026-05-19 — when the phone is held near-level the tilt-based math
+  // has no usable input (eye-height / tan(angle) requires a downward
+  // angle). Previously this branch stubbed 250yd and the UI displayed
+  // it as a real measurement. Now we flag the result as unmeasurable
+  // so the caller can show a helpful hint instead of a fake number.
+  const unmeasurable = angleDeg >= -2;
 
-  if (angleDeg >= -2) {
-    // Nearly level — target is far away
+  let distanceM: number;
+  if (unmeasurable) {
+    // Back-compat sentinel — the caller MUST check unmeasurable and
+    // ignore this number. Kept at 250 only so callers that didn't
+    // update yet don't crash on undefined.
     distanceM = 250 * 0.9144;
-    confidence = 'low';
   } else {
     const angleRad = degToRad(Math.abs(angleDeg));
     distanceM = EYE_HEIGHT_M / Math.tan(angleRad);
@@ -81,7 +97,8 @@ export function computeDistance(input: DistanceComputeInput): DistanceComputeOut
   const distYards = clampedM / 0.9144;
 
   // Confidence classification
-  if (angleDeg >= -2) {
+  let confidence: 'high' | 'medium' | 'low';
+  if (unmeasurable) {
     confidence = 'low';
   } else if (distYards >= 50 && distYards <= 250 && angleDeg >= -30 && angleDeg <= -5) {
     confidence = 'high';
@@ -104,6 +121,7 @@ export function computeDistance(input: DistanceComputeInput): DistanceComputeOut
     target_lat: target.lat,
     target_lng: target.lng,
     confidence,
+    unmeasurable,
   };
 }
 

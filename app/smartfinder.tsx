@@ -482,6 +482,17 @@ function StandardCameraOverlay({
         tap_y_normalized: tapYNorm,
         device_pitch_degrees: pitchRef.current,
       });
+      // 2026-05-19 — when the phone is held near-level, the tilt math
+      // can't compute distance. Previously the rangefinder stubbed 250yd
+      // and the user saw it as a real lock. Now: surface the limit and
+      // point them at a tool that actually works for far targets.
+      if (result.unmeasurable) {
+        Alert.alert(
+          "Can't measure this target",
+          "Tilt the phone DOWN at the ground in front of the target, OR switch to TARGET mode for far targets (uses GPS).",
+        );
+        return;
+      }
       const newLock = buildLock({
         user_position: userPos,
         compass_heading: headingRef.current,

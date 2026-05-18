@@ -2,6 +2,13 @@ import * as Location from 'expo-location';
 import { useRoundStore, type ShotLocation } from '../store/roundStore';
 import { haversineYards } from '../utils/geoDistance';
 import { getOneShotFix, bumpToActive, subscribe as subscribeGps } from './gpsManager';
+// 2026-05-19 — fall back to courseGeometryService cache when the local
+// courseHoles record has zeroed coords. data/courses.ts ships placeholder
+// zeros for courses we haven't hand-coded (Sunnyvale, SJ Muni). When the
+// round starts, fetchCourseGeometry pulls real coords from golfcourseapi
+// and caches them; without this fallback the live API result was being
+// ignored and yardages stayed null forever.
+import { getHoleGeometry } from './courseGeometryService';
 
 /**
  * Phase D-2 — SmartFinder data layer.
@@ -179,6 +186,49 @@ function safeLoc(lat: number, lng: number): ShotLocation | null {
 }
 
 /**
+ * 2026-05-19 — Resolve front/middle/back for a hole, preferring the
+ * roundStore courseHoles record (which is what golfcourseapi populates
+ * for fully-coded courses) but falling back to the geometry cache for
+ * local courses we ship with placeholder zeros (Sunnyvale, SJ Muni).
+ *
+ * Returns { front, middle, back, source } so callers can log which
+ * path produced the coords. source='none' when no usable coords exist
+ * in either place.
+ */
+function resolveGreenCoords(holeNumber: number): {
+  front: ShotLocation | null;
+  middle: ShotLocation | null;
+  back: ShotLocation | null;
+  source: 'courseHoles' | 'geometryCache' | 'none';
+} {
+  const round = useRoundStore.getState();
+  const hData = round.courseHoles.find(h => h.hole === holeNumber);
+  let front = hData ? safeLoc(hData.frontLat, hData.frontLng) : null;
+  let middle = hData ? safeLoc(hData.middleLat, hData.middleLng) : null;
+  let back = hData ? safeLoc(hData.backLat, hData.backLng) : null;
+  if (front || middle || back) {
+    return { front, middle, back, source: 'courseHoles' };
+  }
+  // courseHoles record is all-zero — try the geometry cache. The cache
+  // is populated by fetchCourseGeometry which fires at round start. If
+  // the API returned real coords for Sunnyvale / SJ Muni this is where
+  // they live.
+  const courseId = round.activeCourseId ?? null;
+  if (courseId) {
+    const geo = getHoleGeometry(courseId, holeNumber);
+    if (geo) {
+      front = geo.green_front ?? null;
+      middle = geo.green ?? null;
+      back = geo.green_back ?? null;
+      if (front || middle || back) {
+        return { front, middle, back, source: 'geometryCache' };
+      }
+    }
+  }
+  return { front: null, middle: null, back: null, source: 'none' };
+}
+
+/**
  * Returns front/middle/back yardages to the green of `holeNumber` (defaults to
  * the round's current hole). Each is null when either the player's location or
  * that green-point's coordinates are unknown.
@@ -196,9 +246,7 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
     return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_fix' };
   }
 
-  const front = safeLoc(hData.frontLat, hData.frontLng);
-  const middle = safeLoc(hData.middleLat, hData.middleLng);
-  const back = safeLoc(hData.backLat, hData.backLng);
+  const { front, middle, back, source } = resolveGreenCoords(hole);
 
   if (!front && !middle && !back) {
     return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_geometry' };
@@ -212,6 +260,7 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
     reason: 'ok' as const,
   };
   logYardageCalc(hole, fix, { front, middle, back }, yards);
+  void source;
   return yards;
 }
 
@@ -229,9 +278,7 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
   if (!lastFix) {
     return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_fix' };
   }
-  const front = safeLoc(hData.frontLat, hData.frontLng);
-  const middle = safeLoc(hData.middleLat, hData.middleLng);
-  const back = safeLoc(hData.backLat, hData.backLng);
+  const { front, middle, back, source } = resolveGreenCoords(hole);
   if (!front && !middle && !back) {
     return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_geometry' };
   }
@@ -243,6 +290,7 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
     reason: 'ok' as const,
   };
   logYardageCalc(hole, lastFix, { front, middle, back }, yards);
+  void source;
   return yards;
 }
 

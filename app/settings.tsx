@@ -903,6 +903,21 @@ export default function Settings() {
                     </View>
                     <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/gps-test' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open GPS Test Bench"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>GPS Test Bench</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Drop an anchor at your current position, walk, watch the yards tick.
+                        Use this in a parking lot to verify GPS independent of course geometry.
+                      </Text>
+                    </View>
+                    <Ionicons name="locate-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
                 </View>
               </>
             );

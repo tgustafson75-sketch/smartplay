@@ -1280,6 +1280,15 @@ export default function CaddieTab() {
       const local = getCourse(localId);
       courseName = local?.name ?? picked.name;
       holes = local?.holes ?? [];
+      // 2026-05-19 — pass the full picked.id (e.g. 'local:sunnyvale') as
+      // courseId for local courses. Previously left null, which silently
+      // broke fetchCourseGeometry (never fired), the SmartVision image
+      // cascade (fell through to homeCourse → Palms images on Sunnyvale),
+      // hole-detection course matching, voice-intent course context, and
+      // the smartFinder geometry-cache fallback. Local courses route
+      // through 'local:slug' downstream — courseGeometryService strips the
+      // prefix and resolves to the upstream golfcourseapi id.
+      courseId = picked.id;
     } else {
       courseId = picked.id;
       courseName = picked.name;
