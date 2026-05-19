@@ -243,6 +243,20 @@ function tick(): void {
           console.log(`[simGPS] H${b.holeNumber} synthetic score: ${score} (${label})`);
           logHarnessEvent('score', `H${b.holeNumber} = ${score} (${label}) on par ${b.par}`);
         }
+        // 2026-05-19 — Auto-advance currentHole when the simulator
+        // reaches a green. holeDetection's polling-based auto-transition
+        // is too dependent on pace/timing for the harness (Tim hit
+        // 18/18 scores but current_hole stuck at 1/18). Advance
+        // deterministically here so the entire downstream chain
+        // (Caddie data strip, F/M/B yardage, SmartVision hole image)
+        // updates as the harness walks through the round. Capped at
+        // courseHoles.length so we don't index past hole 18.
+        const nextHole = b.holeNumber + 1;
+        const totalHoles = round.courseHoles.length;
+        if (round.isRoundActive && round.currentHole !== nextHole && nextHole <= totalHoles) {
+          round.setCurrentHole(nextHole);
+          logHarnessEvent('transition', `→ hole ${nextHole} (synthetic advance from H${b.holeNumber} green)`);
+        }
       } catch (e) {
         console.log('[simGPS] synthetic score log failed:', e);
         logHarnessEvent('error', `score log failed: ${e instanceof Error ? e.message : String(e)}`);

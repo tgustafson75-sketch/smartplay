@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ImageBackground, Image, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -193,24 +194,39 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     if (fix && teeLatLng) {
       const total = haversineYards(teeLatLng.tee, teeLatLng.green);
       const fromPlayer = haversineYards(fix.location, teeLatLng.green);
-      if (total > 0 && Number.isFinite(fromPlayer)) {
+      // 2026-05-19 — Sanity guard. If the player is more than 1500y
+      // from the green, it's not a real position — usually means a
+      // prior simulator session's fix leaked into a new course's
+      // round, or a real GPS coord landed in a synthetic round. Hide
+      // the overlay instead of rendering "629,441y" which is
+      // meaningless and alarming to the user.
+      if (total > 0 && Number.isFinite(fromPlayer) && fromPlayer < 1500) {
         yardsToGreen = Math.round(fromPlayer);
         pctAlong = Math.max(0, Math.min(1, 1 - fromPlayer / total));
       }
     }
+    // Vertical position along the photo: hole photos are framed
+    // tee-at-bottom, green-at-top. pctAlong=0 at tee → dot near bottom.
+    // pctAlong=1 at green → dot near top.
+    const padTop = 8;
+    const padBottom = 8;
+    const trackHeight = wrapDims.height - padTop - padBottom;
+    const cartY = pctAlong != null ? (padBottom + (1 - pctAlong) * trackHeight) : null;
     return (
       <SmartVisionTap>
         <ImageBackground source={curatedImage} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
           <View style={styles.imageOverlay}>
             <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
           </View>
-          {pctAlong != null && yardsToGreen != null ? (
+          {cartY != null && yardsToGreen != null ? (
             <>
-              <View style={[styles.playerTrackBar, { width: wrapDims.width - 16 }]}>
-                <View style={styles.playerTrackTee} />
-                <View style={styles.playerTrackGreen} />
-                <View style={[styles.playerTrackDot, { left: `${pctAlong * 100}%` }]} />
+              {/* Cart icon — centered horizontally, moves vertically
+                  along the photo from tee (bottom) to pin (top). */}
+              <View style={[styles.playerCartOnImage, { bottom: cartY, left: wrapDims.width / 2 - 12 }]}>
+                <Ionicons name="navigate" size={14} color="#0d1a0d" />
               </View>
+              {/* Yards-to-green readout — top-left so it doesn't crowd
+                  the HOLE N label in top-right. */}
               <View style={styles.playerYardageBadge}>
                 <Text style={styles.playerYardageText}>{yardsToGreen}y</Text>
               </View>
@@ -434,12 +450,26 @@ const styles = StyleSheet.create({
   },
   playerYardageBadge: {
     position: 'absolute',
-    bottom: 24,
+    top: 8,
     left: 8,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.75)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
   playerYardageText: { color: '#F5A623', fontSize: 11, fontWeight: '800', fontFamily: 'monospace' },
+  // 2026-05-19 — Live player cart icon overlaid on the curated hole
+  // photo. Moves vertically from tee (bottom) to pin (top) as the
+  // player progresses along the GPS axis. Position computed inline at
+  // render time.
+  playerCartOnImage: {
+    position: 'absolute',
+    width: 24, height: 24,
+    borderRadius: 12,
+    backgroundColor: '#F5A623',
+    borderWidth: 2, borderColor: '#ffffff',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.6, shadowRadius: 3, elevation: 8,
+  },
 });
