@@ -13,6 +13,7 @@ import {
   Linking,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PinchGestureHandler, State, type PinchGestureHandlerGestureEvent, type PinchGestureHandlerStateChangeEvent } from 'react-native-gesture-handler';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
 import { safeBack } from '../services/safeBack';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -242,29 +243,37 @@ export default function SmartFinder() {
 // ─── Camera-mode wrapper (Standard + Putt) ────────────────────────────────────
 
 /**
- * Rangefinder-style zoom stops. expo-camera's `zoom` prop is 0..1 where 0 ≈
- * native 1× and 1 ≈ the device's max zoom (varies by phone — Z Fold reports
- * 30× at the top, most flagship Androids 10–20×, base phones 8×).
+ * Continuous zoom via two-finger pinch. expo-camera's `zoom` prop is 0..1
+ * where 0 ≈ native 1× and 1 ≈ the device's max zoom (varies by phone —
+ * Z Fold reports 30× at the top, most flagship Androids 10–20×, base
+ * phones 8×).
  *
- * Stops are intentionally coarse — golfers want quick, repeatable framing,
- * not 0.01-precision sliders. ± buttons cycle through these.
- *
- * Original range stopped at 4× to dodge a Z Fold issue where values near
- * 1.0 produced wild framing. Pushing further now because finding a ball at
- * 100+ yards genuinely needs the reach; the upper stops may FEEL different
- * across devices but the labels match what most modern Androids deliver.
- * If Z Fold or another device misreads the top stops, tune the `value`
- * column — labels are cosmetic.
+ * 2026-05-18 — replaced the previous ZOOM_STOPS index + ± buttons with
+ * pinch-to-zoom (matches native camera apps). Labels are cosmetic and
+ * approximate the visual zoom factor at each `zoom` value; tuned for
+ * Z Fold but should read sensibly on any device.
  */
-const ZOOM_STOPS: readonly { label: string; value: number }[] = [
-  { label: '1.0x',  value: 0.00 },
-  { label: '2.0x',  value: 0.12 },
-  { label: '3.0x',  value: 0.22 },
-  { label: '4.0x',  value: 0.35 },
-  { label: '5.0x',  value: 0.45 },
-  { label: '7.0x',  value: 0.60 },
-  { label: '10.0x', value: 0.80 },
-];
+const PINCH_SENSITIVITY = 0.4; // 1.0× pinch delta → 0.4 zoom delta
+
+function zoomLabelFor(zoom: number): string {
+  // Approximate the visible zoom factor across the 0..1 range. Anchors:
+  // 0 → 1.0x, 0.12 → 2x, 0.22 → 3x, 0.35 → 4x, 0.45 → 5x, 0.60 → 7x, 0.80 → 10x.
+  // Interpolate linearly between anchors.
+  const anchors: [number, number][] = [
+    [0.00, 1], [0.12, 2], [0.22, 3], [0.35, 4],
+    [0.45, 5], [0.60, 7], [0.80, 10], [1.00, 15],
+  ];
+  for (let i = 0; i < anchors.length - 1; i++) {
+    const [z0, x0] = anchors[i];
+    const [z1, x1] = anchors[i + 1];
+    if (zoom <= z1) {
+      const t = (zoom - z0) / (z1 - z0);
+      const x = x0 + t * (x1 - x0);
+      return `${x.toFixed(1)}x`;
+    }
+  }
+  return '15.0x';
+}
 
 function CameraSmartFinder({
   mode, currentHole, gps, yards, onModeChange, onClose, height,
@@ -280,14 +289,20 @@ function CameraSmartFinder({
   const insets = useSafeAreaInsets();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [locationGranted, setLocationGranted] = useState(false);
-  // Default to 1.0x (native lens, no digital zoom). Persists for the
-  // lifetime of the SmartFinder screen; resets on close — matches how a
-  // real rangefinder powers up at its base magnification.
-  const [zoomIdx, setZoomIdx] = useState(0);
-  const zoom = ZOOM_STOPS[zoomIdx].value;
-  const zoomLabel = ZOOM_STOPS[zoomIdx].label;
-  const stepZoom = useCallback((delta: 1 | -1) => {
-    setZoomIdx((i) => Math.max(0, Math.min(ZOOM_STOPS.length - 1, i + delta)));
+  // Continuous zoom in [0, 1]. baseZoom captures the value at the start
+  // of a pinch so subsequent pinches feel relative, not absolute. Resets
+  // to 1.0× when the screen mounts (matches a real rangefinder power-on).
+  const [zoom, setZoom] = useState(0);
+  const baseZoomRef = useRef(0);
+  const zoomLabel = zoomLabelFor(zoom);
+  const handlePinch = useCallback((e: PinchGestureHandlerGestureEvent) => {
+    const next = Math.max(0, Math.min(1, baseZoomRef.current + (e.nativeEvent.scale - 1) * PINCH_SENSITIVITY));
+    setZoom(next);
+  }, []);
+  const handlePinchStateChange = useCallback((e: PinchGestureHandlerStateChangeEvent) => {
+    if (e.nativeEvent.state === State.END || e.nativeEvent.state === State.CANCELLED) {
+      baseZoomRef.current = Math.max(0, Math.min(1, baseZoomRef.current + (e.nativeEvent.scale - 1) * PINCH_SENSITIVITY));
+    }
   }, []);
 
   useEffect(() => {
@@ -350,17 +365,21 @@ function CameraSmartFinder({
 
   return (
     <View style={styles.cameraContainer}>
-      <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={zoom} />
+      <PinchGestureHandler
+        onGestureEvent={handlePinch}
+        onHandlerStateChange={handlePinchStateChange}
+      >
+        <View style={StyleSheet.absoluteFill} collapsable={false}>
+          <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={zoom} />
+        </View>
+      </PinchGestureHandler>
 
       {mode === 'standard' ? (
         <StandardCameraOverlay
           locationGranted={locationGranted}
           height={height}
           zoomLabel={zoomLabel}
-          zoomIdx={zoomIdx}
-          zoomMaxIdx={ZOOM_STOPS.length - 1}
-          onZoomIn={() => stepZoom(1)}
-          onZoomOut={() => stepZoom(-1)}
+          yards={yards}
         />
       ) : mode === 'target' ? (
         <TargetCameraOverlay yards={yards} />
@@ -393,16 +412,12 @@ function CameraSmartFinder({
 // ─── Standard mode (camera AR, tilt-based distance lock) ─────────────────────
 
 function StandardCameraOverlay({
-  locationGranted, height,
-  zoomLabel, zoomIdx, zoomMaxIdx, onZoomIn, onZoomOut,
+  locationGranted, height, zoomLabel, yards,
 }: {
   locationGranted: boolean;
   height: number;
   zoomLabel: string;
-  zoomIdx: number;
-  zoomMaxIdx: number;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
+  yards: GreenYardages;
 }) {
   const insets = useSafeAreaInsets();
   const headingRef = useRef(0);
@@ -557,41 +572,40 @@ function StandardCameraOverlay({
         </View>
       </View>
 
-      {/* Top-right zoom control. ± buttons step through ZOOM_STOPS so the
-          user can frame distant targets like a real rangefinder.
-          Range 1× → 10× across 7 stops (1/2/3/4/5/7/10). UI dot is the
-          active marker — the big zoomLabel above is what the user reads. */}
-      <View style={[styles.zoomCol, { top: insets.top + 130 }]}>
+      {/* 2026-05-18 — Zoom is now pinch-driven (two-finger gesture on
+          the camera surface). The ± buttons + dot row were removed
+          per Tim's request — feels more like a real rangefinder /
+          native camera app. The readout label is kept so the user
+          knows the current magnification at a glance. */}
+      <View pointerEvents="none" style={[styles.zoomCol, { top: insets.top + 130 }]}>
         <Text style={styles.zoomLabel}>{zoomLabel}</Text>
-        <View style={styles.zoomDots}>
-          <TouchableOpacity
-            onPress={onZoomOut}
-            disabled={zoomIdx === 0}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel="Zoom out"
-            style={[styles.zoomDotBg, zoomIdx === 0 && styles.zoomDotBgDisabled]}
-          >
-            <Text style={styles.zoomDotMinus}>−</Text>
-          </TouchableOpacity>
-          <View style={styles.zoomDotActive} />
-          <TouchableOpacity
-            onPress={onZoomIn}
-            disabled={zoomIdx === zoomMaxIdx}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel="Zoom in"
-            style={[styles.zoomDotBg, zoomIdx === zoomMaxIdx && styles.zoomDotBgDisabled]}
-          >
-            <Text style={styles.zoomDotPlus}>+</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
       {/* Bottom panel — legacy v2 layout: locked badge + big yardage row,
            "club · commit to the shot" yellow-bordered pill, big shutter
-           capture button. */}
+           capture button.
+           2026-05-18 — F/M/B reference strip added above the lock /
+           instruction text so the user always sees GPS yardages to
+           the green, whether or not they've locked a target. Mirrors
+           the Target mode strip. */}
       <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
+        <View style={styles.fmbStrip}>
+          <View style={styles.fmbItem}>
+            <Text style={styles.fmbLabel}>F</Text>
+            <Text style={styles.fmbValue}>{yards.front ?? '—'}</Text>
+          </View>
+          <View style={styles.fmbDivider} />
+          <View style={styles.fmbItem}>
+            <Text style={styles.fmbLabel}>M</Text>
+            <Text style={[styles.fmbValue, styles.fmbValueAccent]}>{yards.middle ?? '—'}</Text>
+          </View>
+          <View style={styles.fmbDivider} />
+          <View style={styles.fmbItem}>
+            <Text style={styles.fmbLabel}>B</Text>
+            <Text style={styles.fmbValue}>{yards.back ?? '—'}</Text>
+          </View>
+        </View>
+
         {lock ? (
           <>
             <View style={styles.distanceRow}>
@@ -1165,6 +1179,23 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)',
   },
   instructionText: { color: 'rgba(255,255,255,0.85)', fontSize: 15, textAlign: 'center', paddingBottom: 10 },
+  // 2026-05-18 — F/M/B strip used in Standard mode's bottom panel.
+  fmbStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 4,
+    paddingBottom: 10,
+    marginBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.10)',
+  },
+  fmbItem: { flex: 1, alignItems: 'center' },
+  fmbLabel: { color: '#9ca3af', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginBottom: 2 },
+  fmbValue: { color: '#ffffff', fontSize: 22, fontWeight: '800' },
+  fmbValueAccent: { color: '#00C896' },
+  fmbDivider: { width: 1, height: 28, backgroundColor: 'rgba(255,255,255,0.15)' },
   distanceRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
   lockedBadge: { color: '#F5A623', fontSize: 13, fontWeight: '900', letterSpacing: 1.4, marginRight: 6, alignSelf: 'center' },
   distanceNumber: { fontSize: 64, fontWeight: '900', lineHeight: 70 },
