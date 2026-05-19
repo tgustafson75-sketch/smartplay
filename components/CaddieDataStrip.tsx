@@ -45,21 +45,17 @@ export default function CaddieDataStrip({
   bottomOffset = 0,
   stripLayout = 'horizontal',
   yardageSource = null,
-  totalScore = null,
-  scoreVsPar = null,
+  // 2026-05-19 — totalScore/scoreVsPar accepted as props for forward
+  // compat but NOT rendered in the strip per Tim's "don't show the
+  // score the whole time, mentals matter" call. Scoring lives in the
+  // expandable tool arrow only.
+  totalScore: _totalScore = null,
+  scoreVsPar: _scoreVsPar = null,
   onPress,
 }: CaddieDataStripProps) {
-  // 2026-05-19 — When any hole has been scored (totalScore > 0), the
-  // last cell switches from STROKE to SCORE so the user sees the
-  // running round total in the always-visible strip. Pre-round and
-  // pre-first-score the cell stays STROKE.
-  const showScore = totalScore != null && totalScore > 0;
-  const lastCellLabel = showScore ? 'SCORE' : 'STROKE';
-  const lastCellValue = showScore
-    ? (scoreVsPar != null && scoreVsPar !== 0
-        ? `${totalScore} ${scoreVsPar > 0 ? '+' : ''}${scoreVsPar}`
-        : String(totalScore))
-    : String(stroke);
+  void _totalScore; void _scoreVsPar;
+  const lastCellLabel = 'STROKE';
+  const lastCellValue = String(stroke);
   // Phase 405 — off-course badge. When the offCourseDetector observes
   // the player >200y from every hole's reference points for 20s, this
   // store flips and the strip shows an amber "OFF COURSE · ~Xy" badge
@@ -271,7 +267,7 @@ export default function CaddieDataStrip({
     { label: 'HOLE',   value: `${hole.current}/${hole.total}`,             fontSize: 20 },
     { label: 'PLAYS',  value: playsLike != null ? String(playsLike) : '—', fontSize: 20 },
     { label: 'TARGET', value: targetDirection,                             fontSize: 14 },
-    { label: lastCellLabel, value: lastCellValue,                          fontSize: showScore && lastCellValue.length > 4 ? 16 : 20 },
+    { label: lastCellLabel, value: lastCellValue,                          fontSize: 20 },
   ];
 
   return (
