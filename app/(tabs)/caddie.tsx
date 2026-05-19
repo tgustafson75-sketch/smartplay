@@ -2443,6 +2443,13 @@ export default function CaddieTab() {
           // value; otherwise we're rendering the static scorecard yardage
           // and the user deserves to know.
           yardageSource={displayYardage == null ? null : (liveYardage != null ? 'live' : 'static')}
+          // 2026-05-19 — Surface running round totals on the data strip
+          // so the harness (and real-round) scoring shows up without
+          // leaving the Caddie tab. Pulled fresh on every render via
+          // the store getters; markTick already triggers re-renders on
+          // GPS-change so the strip stays in sync.
+          totalScore={getTotalScore()}
+          scoreVsPar={getScoreVsPar()}
           onPress={() => setShowShotCard(true)}
         />
       </Animated.View>

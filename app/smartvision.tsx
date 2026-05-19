@@ -1059,17 +1059,20 @@ export default function SmartVisionScreen() {
         </Svg>
 
         {/* Markers — direct canvas coords. */}
-        {/* Phase 108-followup — T marker is draggable when no round is
-            active so the user can compensate for course-geometry tee
-            position errors. Locked during a round to prevent fat-finger
-            adjustments while the player is using the view tactically. */}
+        {/* 2026-05-19 — T marker now draggable in active rounds too.
+            Tim's report: geometry.tee often lands off the actual tee
+            box on curated photos because the image framing isn't
+            pixel-mapped to the GPS axis. Locking T mid-round forced
+            the user to live with a misplaced marker. Letting them
+            re-anchor it on the fly is the right call — fat-finger
+            risk is minimal (T isn't a high-tap-frequency element). */}
         <Marker
           kind="T"
           x={teeCanvas.x}
           y={teeCanvas.y}
-          draggable={!isRoundActive}
-          onDrag={!isRoundActive ? onTeeDrag : undefined}
-          onDragEnd={!isRoundActive ? () => { teeDragStartRef.current = null; } : undefined}
+          draggable
+          onDrag={onTeeDrag}
+          onDragEnd={() => { teeDragStartRef.current = null; }}
         />
         <Marker
           kind="P"

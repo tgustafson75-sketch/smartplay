@@ -26,6 +26,12 @@ export interface CaddieDataStripProps {
   // strip's top-right corner so users never confuse the static fallback
   // for a live reading. null = pre-round / no data shown yet.
   yardageSource?: 'live' | 'static' | null;
+  // 2026-05-19 — Running round totals. When at least one hole has been
+  // scored, the strip swaps the STROKE cell for SCORE (e.g. "12 +1")
+  // so the user sees the round total without leaving the Caddie tab.
+  // null = no scores yet → fall back to STROKE display.
+  totalScore?: number | null;
+  scoreVsPar?: number | null;
   onPress: () => void;
 }
 
@@ -39,8 +45,21 @@ export default function CaddieDataStrip({
   bottomOffset = 0,
   stripLayout = 'horizontal',
   yardageSource = null,
+  totalScore = null,
+  scoreVsPar = null,
   onPress,
 }: CaddieDataStripProps) {
+  // 2026-05-19 — When any hole has been scored (totalScore > 0), the
+  // last cell switches from STROKE to SCORE so the user sees the
+  // running round total in the always-visible strip. Pre-round and
+  // pre-first-score the cell stays STROKE.
+  const showScore = totalScore != null && totalScore > 0;
+  const lastCellLabel = showScore ? 'SCORE' : 'STROKE';
+  const lastCellValue = showScore
+    ? (scoreVsPar != null && scoreVsPar !== 0
+        ? `${totalScore} ${scoreVsPar > 0 ? '+' : ''}${scoreVsPar}`
+        : String(totalScore))
+    : String(stroke);
   // Phase 405 — off-course badge. When the offCourseDetector observes
   // the player >200y from every hole's reference points for 20s, this
   // store flips and the strip shows an amber "OFF COURSE · ~Xy" badge
@@ -175,7 +194,7 @@ export default function CaddieDataStrip({
     ];
     const row2 = [
       { label: 'TARGET', value: targetDirection, dotIdx: 2 },
-      { label: 'STROKE', value: String(stroke),  dotIdx: null },
+      { label: lastCellLabel, value: lastCellValue, dotIdx: null },
       null,
     ];
 
@@ -252,7 +271,7 @@ export default function CaddieDataStrip({
     { label: 'HOLE',   value: `${hole.current}/${hole.total}`,             fontSize: 20 },
     { label: 'PLAYS',  value: playsLike != null ? String(playsLike) : '—', fontSize: 20 },
     { label: 'TARGET', value: targetDirection,                             fontSize: 14 },
-    { label: 'STROKE', value: String(stroke),                              fontSize: 20 },
+    { label: lastCellLabel, value: lastCellValue,                          fontSize: showScore && lastCellValue.length > 4 ? 16 : 20 },
   ];
 
   return (
