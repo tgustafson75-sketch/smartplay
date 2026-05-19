@@ -636,20 +636,38 @@ export default function SmartVisionScreen() {
   const pinPx = useMemo(() => ({ x: pinCanvas.x - imageW / 2, y: imageH / 2 - pinCanvas.y }), [pinCanvas, imageW, imageH]);
 
   // 2026-05-19 — Live player position (you-are-here cart marker).
-  // Reads getLastFix on every markBumpTick (fix-change subscription
-  // above) so the marker moves as GPS or the synthetic simulator
-  // updates the cached fix. Returns null when no fix yet OR when
-  // projection isn't available (no geometry → can't map lat/lng to
-  // pixels). Falls outside the image bounds visibly when the player
-  // is genuinely off the hole's framing — that's the correct UX cue.
+  // Splits its positioning logic by render substrate:
+  //   - Aerial / Golfbert satellite tile: projection-based math —
+  //     image is bearing-aligned to tee→green so the lat/lng→pixel
+  //     projection lands accurately under the player.
+  //   - Curated bundled hole photo: vertical-track positioning —
+  //     curated photos are framed tee-bottom / pin-top with no
+  //     bearing alignment, so the projection math inverted on Tim's
+  //     view ("opposite direction" report). Use pctAlong along the
+  //     hole's GPS axis to slide a centered marker vertically from
+  //     bottom (tee) to top (pin) — matches L1HolePreview's behavior.
   const playerCanvas = useMemo(() => {
     const fix = getLastFix();
-    if (!fix || !projection) return null;
+    if (!fix) return null;
+    const onCurated = !golfbertHole?.imageryUrl && !imageUri && !!curatedImage;
+    if (onCurated && teeCoord && greenCoord) {
+      const total = haversineYards(teeCoord.lat, teeCoord.lng, greenCoord.lat, greenCoord.lng);
+      const fromPlayer = haversineYards(fix.location.lat, fix.location.lng, greenCoord.lat, greenCoord.lng);
+      if (total <= 0 || !Number.isFinite(fromPlayer) || fromPlayer > 1500) return null;
+      const pctAlong = Math.max(0, Math.min(1, 1 - fromPlayer / total));
+      const padTop = 12;
+      const padBottom = 12;
+      const trackHeight = imageH - padTop - padBottom;
+      // pctAlong=0 (at tee) → near bottom, pctAlong=1 (at green) → near top.
+      // Screen y increases downward, so y = padTop + (1 - pctAlong) * trackHeight.
+      return { x: imageW / 2, y: padTop + (1 - pctAlong) * trackHeight };
+    }
+    if (!projection) return null;
     const off = projectToPixels(fix.location, projection.center, projection.zoom, projection.bearing);
     return { x: imageW / 2 + off.x, y: imageH / 2 - off.y };
     // markBumpTick listed so the memo recomputes when fix-change fires.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projection, imageW, imageH, markBumpTick]);
+  }, [projection, imageW, imageH, markBumpTick, golfbertHole, imageUri, curatedImage, teeCoord, greenCoord]);
 
   // Bounds clamper used in drag handlers — keep markers visible.
   const clampToCanvas = useCallback((p: { x: number; y: number }) => ({
