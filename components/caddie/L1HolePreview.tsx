@@ -208,10 +208,14 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     // Vertical position along the photo: hole photos are framed
     // tee-at-bottom, green-at-top. pctAlong=0 at tee → dot near bottom.
     // pctAlong=1 at green → dot near top.
+    // 2026-05-19 — Direction was inverted (used 1-pctAlong by mistake).
+    // bottom: cartY positions the icon `cartY` px from the bottom of
+    // the container, so AT TEE (pctAlong=0) we want cartY small, and
+    // AT GREEN (pctAlong=1) we want cartY large.
     const padTop = 8;
     const padBottom = 8;
     const trackHeight = wrapDims.height - padTop - padBottom;
-    const cartY = pctAlong != null ? (padBottom + (1 - pctAlong) * trackHeight) : null;
+    const cartY = pctAlong != null ? (padBottom + pctAlong * trackHeight) : null;
     return (
       <SmartVisionTap>
         <ImageBackground source={curatedImage} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">

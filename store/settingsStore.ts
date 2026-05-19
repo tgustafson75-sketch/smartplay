@@ -282,6 +282,33 @@ export const useSettingsStore = create<SettingsState>()(
           } catch { /* ignore */ }
         }
         set({ caddiePersonality: p, voiceGender: gender });
+        // 2026-05-19 — Persona handoff welcome. When the active caddie
+        // changes (manual or via team handoff), the new persona should
+        // briefly introduce themselves so the user knows who's on the
+        // bag now. userInitiated:true so it bypasses L1 Quiet's
+        // scripted-speech gate — switching caddies IS a user-initiated
+        // action. 500ms delay lets the prior caddie's stopSpeaking
+        // settle before the new voice fires.
+        if (prev !== p) {
+          const intros: Record<string, string> = {
+            kevin: "Hey, Kevin back on the bag. Let's go.",
+            serena: "Hi, Serena here. Let's read this together.",
+            tank: "Tank stepping in. We're locked in.",
+            harry: "Harry here. Show me what you've got.",
+          };
+          const text = intros[p] ?? `${p} stepping in.`;
+          setTimeout(() => {
+            try {
+              const voiceMod = require('../services/voiceService');
+              const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+              const lang = get().language ?? 'en';
+              voiceMod.speak?.(text, gender, lang, apiUrl, { userInitiated: true })
+                ?.catch?.((e: unknown) => console.log('[persona-handoff] speak failed', e));
+            } catch (e) {
+              console.log('[persona-handoff] speak setup failed', e);
+            }
+          }, 500);
+        }
         // Persona switch invalidates the persona-keyed audio caches so
         // the user doesn't keep hearing the prior caddie's filler clips
         // or a cached briefing in the prior caddie's voice. Dynamic
