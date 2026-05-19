@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "courseName": "Menifee Lakes \u2014 Palms",
   "courseId": "menifee-lakes-palms-mock",
-  "totalHoles": 9,
+  "totalHoles": 18,
   "compressionRatio": 60,
   "shotIntervalMs": 240000,
   "betweenHoleWalkMs": 720000,
@@ -174,6 +174,177 @@
         "lat": 33.6883,
         "lng": -117.1597,
         "timestampMs": 1716009840000
+      },
+      "hazards": [],
+      "shotsPlanned": 4
+    },
+    {
+      "holeNumber": 10,
+      "par": 4,
+      "expectedYardage": 249,
+      "computedYardage": 249,
+      "bearingDeg": 210.0,
+      "tee": {
+        "lat": 33.68837,
+        "lng": -117.16047,
+        "timestampMs": 1716010800000
+      },
+      "green": {
+        "lat": 33.6866,
+        "lng": -117.1617,
+        "timestampMs": 1716011040000
+      },
+      "hazards": [],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 11,
+      "par": 3,
+      "expectedYardage": 150,
+      "computedYardage": 150,
+      "bearingDeg": 168.7,
+      "tee": {
+        "lat": 33.68651,
+        "lng": -117.16239,
+        "timestampMs": 1716012000000
+      },
+      "green": {
+        "lat": 33.6853,
+        "lng": -117.1621,
+        "timestampMs": 1716012240000
+      },
+      "hazards": [],
+      "shotsPlanned": 2
+    },
+    {
+      "holeNumber": 12,
+      "par": 5,
+      "expectedYardage": 332,
+      "computedYardage": 332,
+      "bearingDeg": 150.6,
+      "tee": {
+        "lat": 33.68498,
+        "lng": -117.16261,
+        "timestampMs": 1716013200000
+      },
+      "green": {
+        "lat": 33.6826,
+        "lng": -117.161,
+        "timestampMs": 1716013440000
+      },
+      "hazards": [],
+      "shotsPlanned": 4
+    },
+    {
+      "holeNumber": 13,
+      "par": 4,
+      "expectedYardage": 207,
+      "computedYardage": 207,
+      "bearingDeg": 197.9,
+      "tee": {
+        "lat": 33.68292,
+        "lng": -117.16147,
+        "timestampMs": 1716014400000
+      },
+      "green": {
+        "lat": 33.6813,
+        "lng": -117.1621,
+        "timestampMs": 1716014640000
+      },
+      "hazards": [],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 14,
+      "par": 4,
+      "expectedYardage": 189,
+      "computedYardage": 189,
+      "bearingDeg": 125.0,
+      "tee": {
+        "lat": 33.68089,
+        "lng": -117.16263,
+        "timestampMs": 1716015600000
+      },
+      "green": {
+        "lat": 33.68,
+        "lng": -117.1611,
+        "timestampMs": 1716015840000
+      },
+      "hazards": [],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 15,
+      "par": 3,
+      "expectedYardage": 148,
+      "computedYardage": 148,
+      "bearingDeg": 186.7,
+      "tee": {
+        "lat": 33.68031,
+        "lng": -117.16158,
+        "timestampMs": 1716016800000
+      },
+      "green": {
+        "lat": 33.6791,
+        "lng": -117.16175,
+        "timestampMs": 1716017040000
+      },
+      "hazards": [],
+      "shotsPlanned": 2
+    },
+    {
+      "holeNumber": 16,
+      "par": 4,
+      "expectedYardage": 270,
+      "computedYardage": 270,
+      "bearingDeg": 313.3,
+      "tee": {
+        "lat": 33.67928,
+        "lng": -117.16116,
+        "timestampMs": 1716018000000
+      },
+      "green": {
+        "lat": 33.6808,
+        "lng": -117.1631,
+        "timestampMs": 1716018240000
+      },
+      "hazards": [],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 17,
+      "par": 4,
+      "expectedYardage": 235,
+      "computedYardage": 235,
+      "bearingDeg": 356.1,
+      "tee": {
+        "lat": 33.68077,
+        "lng": -117.16249,
+        "timestampMs": 1716019200000
+      },
+      "green": {
+        "lat": 33.6827,
+        "lng": -117.16265,
+        "timestampMs": 1716019440000
+      },
+      "hazards": [],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 18,
+      "par": 5,
+      "expectedYardage": 451,
+      "computedYardage": 451,
+      "bearingDeg": 16.2,
+      "tee": {
+        "lat": 33.68269,
+        "lng": -117.16204,
+        "timestampMs": 1716020400000
+      },
+      "green": {
+        "lat": 33.68625,
+        "lng": -117.1608,
+        "timestampMs": 1716020640000
       },
       "hazards": [],
       "shotsPlanned": 4
