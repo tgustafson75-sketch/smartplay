@@ -22,7 +22,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -373,6 +373,61 @@ export default function GpsTestScreen() {
               })
             )}
           </View>
+
+          {/* 2026-05-19 — Export Report. Bundles the full harness state
+              (events + scores + shots + putts + current round metadata
+              + emit count + final position) into a JSON report and
+              opens the native share sheet. Tim can copy/paste into our
+              chat so I can see EXACTLY what happened without asking
+              him to read off the event log row-by-row. */}
+          <TouchableOpacity
+            onPress={async () => {
+              try {
+                const fullEvents = events.map(e => ({
+                  ts: e.ts, iso: new Date(e.ts).toISOString(), kind: e.kind, detail: e.detail,
+                }));
+                const round = useRoundStore.getState();
+                const report = {
+                  generated_at: new Date().toISOString(),
+                  bundle_commit: '1024770', // matches latest at write time
+                  walk_state: walkState,
+                  emit_count: emitCount,
+                  last_emit_ms: lastEmitMs,
+                  last_emit_age_s: lastEmitMs ? Math.round((Date.now() - lastEmitMs) / 1000) : null,
+                  off_course: isOffCourse,
+                  yards_to_nearest_hole: yardsToNearestHole,
+                  round: {
+                    isRoundActive,
+                    currentHole,
+                    activeCourse: activeCourseName,
+                    courseHolesCount: courseHoles.length,
+                    scores,
+                    putts: round.putts,
+                    shotsCount: round.shots.length,
+                    shots: round.shots.map(s => ({
+                      hole: s.hole, club: s.club, feel: s.feel, direction: s.direction,
+                      shape: s.shape, distance_yards: s.distance_yards,
+                      shot_in_hole_index: s.shot_in_hole_index, ts: s.timestamp,
+                    })),
+                  },
+                  events: fullEvents,
+                };
+                const json = JSON.stringify(report, null, 2);
+                await Share.share({
+                  message: json,
+                  title: `Harness report · ${new Date().toLocaleString()}`,
+                });
+              } catch (e) {
+                Alert.alert('Export failed', e instanceof Error ? e.message : String(e));
+              }
+            }}
+            style={[styles.btnPrimary, { backgroundColor: '#3b82f6', marginTop: 10 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Export harness report as JSON"
+          >
+            <Ionicons name="share-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+            <Text style={[styles.btnPrimaryText, { color: '#fff' }]}>Export Harness Report</Text>
+          </TouchableOpacity>
         </View>
 
         <Text style={[styles.hint, { color: colors.text_muted }]}>
