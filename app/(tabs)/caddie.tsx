@@ -2443,13 +2443,13 @@ export default function CaddieTab() {
           // value; otherwise we're rendering the static scorecard yardage
           // and the user deserves to know.
           yardageSource={displayYardage == null ? null : (liveYardage != null ? 'live' : 'static')}
-          // 2026-05-19 — Surface running round totals on the data strip
-          // so the harness (and real-round) scoring shows up without
-          // leaving the Caddie tab. Pulled fresh on every render via
-          // the store getters; markTick already triggers re-renders on
-          // GPS-change so the strip stays in sync.
-          totalScore={getTotalScore()}
-          scoreVsPar={getScoreVsPar()}
+          // 2026-05-19 — totalScore/scoreVsPar wiring temporarily removed.
+          // Strip displays STROKE only (per Tim's "don't show score in
+          // the data bar, scoring goes in the expandable tool arrow"
+          // call). The props remain on CaddieDataStripProps for future
+          // use; passing them on every render kept getTotalScore/
+          // getScoreVsPar running through inline reads on every state
+          // change, suspected as a source of end-round re-render churn.
           onPress={() => setShowShotCard(true)}
         />
       </Animated.View>
