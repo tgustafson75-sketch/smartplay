@@ -142,3 +142,92 @@ function tick(): void {
 }
 
 export { isSimulatedActive };
+
+// 2026-05-17 — JSON-driven synthetic round playback.
+//
+// Loads __mocks__/mockRound.json and converts each hole into a 4-point
+// waypoint trace (tee → 1/3 fairway → 2/3 fairway → green). Time
+// between waypoints is compressed by the JSON's compressionRatio so a
+// real 4-hour round plays in ~4 minutes by default. Pure dev tool —
+// production builds can call this too (no native deps) but the entry
+// point is hidden behind Settings → Owner Tools → "Simulate Round".
+
+interface MockRoundHole {
+  holeNumber: number;
+  par: number;
+  expectedYardage: number;
+  computedYardage: number;
+  bearingDeg: number;
+  tee: { lat: number; lng: number; timestampMs: number };
+  green: { lat: number; lng: number; timestampMs: number };
+  hazards: string[];
+  shotsPlanned: number;
+}
+
+export interface MockRound {
+  schemaVersion: number;
+  courseName: string;
+  courseId: string;
+  totalHoles: number;
+  compressionRatio: number;
+  shotIntervalMs: number;
+  betweenHoleWalkMs: number;
+  holes: MockRoundHole[];
+}
+
+/** Convert a MockRound JSON object into a SimulatedWalk that
+ *  startSimulatedWalk understands. Each hole expands to:
+ *    [tee] → [1/3 fairway] → [2/3 fairway] → [green] → [next hole tee]
+ *  with the last hole's green capped (no next-tee continuation). */
+export function buildWalkFromMockRound(round: MockRound): SimulatedWalk {
+  const points: SimulatedWalkPoint[] = [];
+  for (let i = 0; i < round.holes.length; i++) {
+    const h = round.holes[i];
+    const { tee, green } = h;
+    // Tee position
+    points.push({ lat: tee.lat, lng: tee.lng, label: `H${h.holeNumber} tee` });
+    // Fairway interpolations to seed sustained-position windows
+    points.push({
+      lat: tee.lat + (green.lat - tee.lat) * 0.34,
+      lng: tee.lng + (green.lng - tee.lng) * 0.34,
+      label: `H${h.holeNumber} mid-fairway`,
+    });
+    points.push({
+      lat: tee.lat + (green.lat - tee.lat) * 0.67,
+      lng: tee.lng + (green.lng - tee.lng) * 0.67,
+      label: `H${h.holeNumber} approach`,
+    });
+    // Green
+    points.push({ lat: green.lat, lng: green.lng, label: `H${h.holeNumber} green` });
+  }
+  // Pace tuned so the whole round completes in ~ totalHoles * 2s at
+  // the default compression. Effective: speed-up walking pace so the
+  // simulator interpolates each segment in ~250ms instead of ~5min.
+  const segmentMeters = 60; // rough mean per segment
+  const targetSegmentMs = 250;
+  const pace = (segmentMeters * 1000) / targetSegmentMs; // m/s — much faster than real walking
+  return {
+    id: `mock-round-${round.courseId}`,
+    display_name: `Synthetic: ${round.courseName} (${round.totalHoles} holes)`,
+    course_name_hint: round.courseName.toLowerCase(),
+    description: 'Synthetic 18-hole round from __mocks__/mockRound.json. Compressed time.',
+    pace_mps: pace,
+    points,
+  };
+}
+
+/** Start a synthetic round from a JSON-loaded MockRound object.
+ *  Returns the walk_id so callers can subscribe / stop. */
+export function startSyntheticRound(round: MockRound): string {
+  const walk = buildWalkFromMockRound(round);
+  // Register the synthetic walk so startSimulatedWalk can find it.
+  // We push directly into SIMULATED_WALKS via a tiny mutation — safe
+  // because SIMULATED_WALKS is a module-local array and the harness
+  // is a dev-only entry point.
+  // (Idempotent: if already registered, replace by id.)
+  const existingIdx = SIMULATED_WALKS.findIndex(w => w.id === walk.id);
+  if (existingIdx >= 0) SIMULATED_WALKS[existingIdx] = walk;
+  else SIMULATED_WALKS.push(walk);
+  startSimulatedWalk(walk.id);
+  return walk.id;
+}

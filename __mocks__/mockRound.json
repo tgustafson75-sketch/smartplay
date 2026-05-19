@@ -1,0 +1,402 @@
+{
+  "schemaVersion": 1,
+  "courseName": "Pebble Beach Golf Links",
+  "courseId": "test:pebble-beach",
+  "tees": "Black",
+  "totalHoles": 18,
+  "compressionRatio": 60,
+  "shotIntervalMs": 240000,
+  "betweenHoleWalkMs": 720000,
+  "createdAt": "2026-05-17",
+  "notes": "Synthetic round for GPS pipeline test harness. Coords approximate from public data; suitable for distance/bearing math and sustained-position hole-detection logic verification. NOT a pin-perfect course map.",
+  "holes": [
+    {
+      "holeNumber": 1,
+      "par": 4,
+      "expectedYardage": 380,
+      "computedYardage": 396,
+      "bearingDeg": 153.3,
+      "tee": {
+        "lat": 36.56891,
+        "lng": -121.94842,
+        "timestampMs": 1716350400000
+      },
+      "green": {
+        "lat": 36.566,
+        "lng": -121.9466,
+        "timestampMs": 1716351120000
+      },
+      "hazards": [
+        "fairway bunker right",
+        "greenside bunker left"
+      ],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 2,
+      "par": 5,
+      "expectedYardage": 502,
+      "computedYardage": 420,
+      "bearingDeg": 125.4,
+      "tee": {
+        "lat": 36.566,
+        "lng": -121.9466,
+        "timestampMs": 1716351840000
+      },
+      "green": {
+        "lat": 36.564,
+        "lng": -121.9431,
+        "timestampMs": 1716352800000
+      },
+      "hazards": [
+        "fairway bunker left",
+        "water short right"
+      ],
+      "shotsPlanned": 4
+    },
+    {
+      "holeNumber": 3,
+      "par": 4,
+      "expectedYardage": 390,
+      "computedYardage": 328,
+      "bearingDeg": 38.8,
+      "tee": {
+        "lat": 36.564,
+        "lng": -121.9431,
+        "timestampMs": 1716353520000
+      },
+      "green": {
+        "lat": 36.5661,
+        "lng": -121.941,
+        "timestampMs": 1716354240000
+      },
+      "hazards": [
+        "fairway bunker left at 240"
+      ],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 4,
+      "par": 4,
+      "expectedYardage": 331,
+      "computedYardage": 308,
+      "bearingDeg": 18.5,
+      "tee": {
+        "lat": 36.5661,
+        "lng": -121.941,
+        "timestampMs": 1716354960000
+      },
+      "green": {
+        "lat": 36.5685,
+        "lng": -121.94,
+        "timestampMs": 1716355680000
+      },
+      "hazards": [
+        "ocean right edge",
+        "greenside bunker right"
+      ],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 5,
+      "par": 3,
+      "expectedYardage": 188,
+      "computedYardage": 160,
+      "bearingDeg": 326.7,
+      "tee": {
+        "lat": 36.5685,
+        "lng": -121.94,
+        "timestampMs": 1716356400000
+      },
+      "green": {
+        "lat": 36.5696,
+        "lng": -121.9409,
+        "timestampMs": 1716356880000
+      },
+      "hazards": [
+        "front bunker",
+        "back bunker"
+      ],
+      "shotsPlanned": 2
+    },
+    {
+      "holeNumber": 6,
+      "par": 5,
+      "expectedYardage": 513,
+      "computedYardage": 449,
+      "bearingDeg": 229.5,
+      "tee": {
+        "lat": 36.5696,
+        "lng": -121.9409,
+        "timestampMs": 1716357600000
+      },
+      "green": {
+        "lat": 36.5672,
+        "lng": -121.9444,
+        "timestampMs": 1716358560000
+      },
+      "hazards": [
+        "water carry tee",
+        "ocean right"
+      ],
+      "shotsPlanned": 4
+    },
+    {
+      "holeNumber": 7,
+      "par": 3,
+      "expectedYardage": 106,
+      "computedYardage": 131,
+      "bearingDeg": 222.1,
+      "tee": {
+        "lat": 36.5672,
+        "lng": -121.9444,
+        "timestampMs": 1716359280000
+      },
+      "green": {
+        "lat": 36.5664,
+        "lng": -121.9453,
+        "timestampMs": 1716359760000
+      },
+      "hazards": [
+        "greenside bunker x3",
+        "ocean wind"
+      ],
+      "shotsPlanned": 2
+    },
+    {
+      "holeNumber": 8,
+      "par": 4,
+      "expectedYardage": 428,
+      "computedYardage": 362,
+      "bearingDeg": 216.4,
+      "tee": {
+        "lat": 36.5664,
+        "lng": -121.9453,
+        "timestampMs": 1716360480000
+      },
+      "green": {
+        "lat": 36.564,
+        "lng": -121.9475,
+        "timestampMs": 1716361200000
+      },
+      "hazards": [
+        "cliff carry approach"
+      ],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 9,
+      "par": 4,
+      "expectedYardage": 481,
+      "computedYardage": 343,
+      "bearingDeg": 227.7,
+      "tee": {
+        "lat": 36.564,
+        "lng": -121.9475,
+        "timestampMs": 1716361920000
+      },
+      "green": {
+        "lat": 36.5621,
+        "lng": -121.9501,
+        "timestampMs": 1716362640000
+      },
+      "hazards": [
+        "fairway bunker right",
+        "ocean left"
+      ],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 10,
+      "par": 4,
+      "expectedYardage": 446,
+      "computedYardage": 367,
+      "bearingDeg": 225.9,
+      "tee": {
+        "lat": 36.5621,
+        "lng": -121.9501,
+        "timestampMs": 1716363360000
+      },
+      "green": {
+        "lat": 36.56,
+        "lng": -121.9528,
+        "timestampMs": 1716364080000
+      },
+      "hazards": [
+        "ocean left"
+      ],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 11,
+      "par": 4,
+      "expectedYardage": 384,
+      "computedYardage": 302,
+      "bearingDeg": 345.0,
+      "tee": {
+        "lat": 36.56,
+        "lng": -121.9528,
+        "timestampMs": 1716364800000
+      },
+      "green": {
+        "lat": 36.5624,
+        "lng": -121.9536,
+        "timestampMs": 1716365520000
+      },
+      "hazards": [
+        "fairway bunker left"
+      ],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 12,
+      "par": 3,
+      "expectedYardage": 202,
+      "computedYardage": 264,
+      "bearingDeg": 345.0,
+      "tee": {
+        "lat": 36.5624,
+        "lng": -121.9536,
+        "timestampMs": 1716366240000
+      },
+      "green": {
+        "lat": 36.5645,
+        "lng": -121.9543,
+        "timestampMs": 1716366720000
+      },
+      "hazards": [
+        "front bunker"
+      ],
+      "shotsPlanned": 2
+    },
+    {
+      "holeNumber": 13,
+      "par": 4,
+      "expectedYardage": 399,
+      "computedYardage": 341,
+      "bearingDeg": 21.9,
+      "tee": {
+        "lat": 36.5645,
+        "lng": -121.9543,
+        "timestampMs": 1716367440000
+      },
+      "green": {
+        "lat": 36.5671,
+        "lng": -121.953,
+        "timestampMs": 1716368160000
+      },
+      "hazards": [
+        "fairway bunker left"
+      ],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 14,
+      "par": 5,
+      "expectedYardage": 580,
+      "computedYardage": 391,
+      "bearingDeg": 224.4,
+      "tee": {
+        "lat": 36.5671,
+        "lng": -121.953,
+        "timestampMs": 1716368880000
+      },
+      "green": {
+        "lat": 36.5648,
+        "lng": -121.9558,
+        "timestampMs": 1716369840000
+      },
+      "hazards": [
+        "water carry second",
+        "greenside bunkers"
+      ],
+      "shotsPlanned": 4
+    },
+    {
+      "holeNumber": 15,
+      "par": 4,
+      "expectedYardage": 397,
+      "computedYardage": 288,
+      "bearingDeg": 346.3,
+      "tee": {
+        "lat": 36.5648,
+        "lng": -121.9558,
+        "timestampMs": 1716370560000
+      },
+      "green": {
+        "lat": 36.5671,
+        "lng": -121.9565,
+        "timestampMs": 1716371280000
+      },
+      "hazards": [
+        "fairway bunker right"
+      ],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 16,
+      "par": 4,
+      "expectedYardage": 403,
+      "computedYardage": 314,
+      "bearingDeg": 345.6,
+      "tee": {
+        "lat": 36.5671,
+        "lng": -121.9565,
+        "timestampMs": 1716372000000
+      },
+      "green": {
+        "lat": 36.5696,
+        "lng": -121.9573,
+        "timestampMs": 1716372720000
+      },
+      "hazards": [
+        "fairway bunker right at 230"
+      ],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 17,
+      "par": 3,
+      "expectedYardage": 178,
+      "computedYardage": 207,
+      "bearingDeg": 325.5,
+      "tee": {
+        "lat": 36.5696,
+        "lng": -121.9573,
+        "timestampMs": 1716373440000
+      },
+      "green": {
+        "lat": 36.571,
+        "lng": -121.9585,
+        "timestampMs": 1716373920000
+      },
+      "hazards": [
+        "ocean right",
+        "hourglass green"
+      ],
+      "shotsPlanned": 2
+    },
+    {
+      "holeNumber": 18,
+      "par": 5,
+      "expectedYardage": 543,
+      "computedYardage": 671,
+      "bearingDeg": 233.2,
+      "tee": {
+        "lat": 36.571,
+        "lng": -121.9585,
+        "timestampMs": 1716374640000
+      },
+      "green": {
+        "lat": 36.5677,
+        "lng": -121.964,
+        "timestampMs": 1716375600000
+      },
+      "hazards": [
+        "ocean entire left",
+        "tree at 280"
+      ],
+      "shotsPlanned": 4
+    }
+  ]
+}

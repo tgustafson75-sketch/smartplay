@@ -34,6 +34,9 @@ import {
   type GpsFix,
 } from '../services/gpsManager';
 import { haversineYards } from '../utils/geoDistance';
+import { startSyntheticRound, stopSimulatedWalk, isSimulatedActive, type MockRound } from '../services/simulatedGPS';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const MOCK_ROUND: MockRound = require('../__mocks__/mockRound.json');
 
 interface Anchor {
   lat: number;
@@ -193,6 +196,32 @@ export default function GpsTestScreen() {
         >
           <Ionicons name="refresh" size={18} color="#000" style={{ marginRight: 6 }} />
           <Text style={styles.btnPrimaryText}>{pulling ? 'Pulling…' : 'Refresh GPS'}</Text>
+        </TouchableOpacity>
+
+        {/* 2026-05-17 — Synthetic round playback. Loads
+            __mocks__/mockRound.json and feeds it through the existing
+            simulatedGPS pipeline. Drives the same gpsManager →
+            smartFinderService → holeDetection chain as real GPS so
+            this validates the WHOLE pipeline, not just the math.
+            Owner-only via this screen's existing gate. */}
+        <TouchableOpacity
+          onPress={() => {
+            if (isSimulatedActive()) {
+              stopSimulatedWalk();
+              Alert.alert('Stopped', 'Synthetic round playback stopped.');
+            } else {
+              const id = startSyntheticRound(MOCK_ROUND);
+              Alert.alert('Started', `Playing ${MOCK_ROUND.totalHoles}-hole synthetic round (${id}).\nWatch the live fix + DataStrip update.`);
+            }
+          }}
+          style={[styles.btnPrimary, { backgroundColor: '#F5A623', marginTop: 12 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Toggle synthetic round playback"
+        >
+          <Ionicons name="play-circle-outline" size={18} color="#000" style={{ marginRight: 6 }} />
+          <Text style={styles.btnPrimaryText}>
+            {isSimulatedActive() ? 'Stop Synthetic Round' : `Play ${MOCK_ROUND.totalHoles}-Hole Synthetic Round`}
+          </Text>
         </TouchableOpacity>
 
         <Text style={[styles.sectionLabel, { color: colors.text_muted, marginTop: 24 }]}>ANCHOR</Text>
