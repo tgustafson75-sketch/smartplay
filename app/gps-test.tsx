@@ -50,6 +50,47 @@ interface Anchor {
   setAt: number;
 }
 
+// 2026-05-19 — In-app bundle freshness indicator. Reads the EAS update
+// metadata (updateId, createdAt) so Tim can confirm in one glance
+// whether the device is running the latest pushed bundle. If the ID
+// matches the most recent OTA group ID I told him about, he's good.
+// If it doesn't, the bundle hasn't been picked up — swipe-from-recents
+// to reload.
+function BundleBadge() {
+  const [info, setInfo] = useState<{ updateId: string | null; createdAt: string | null; channel: string | null }>({
+    updateId: null, createdAt: null, channel: null,
+  });
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const Updates = await import('expo-updates');
+        if (cancelled) return;
+        setInfo({
+          updateId: (Updates.updateId as string | null) ?? null,
+          createdAt: Updates.createdAt instanceof Date ? Updates.createdAt.toISOString() : null,
+          channel: (Updates.channel as string | null) ?? null,
+        });
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const shortId = info.updateId ? info.updateId.slice(0, 8) : 'dev';
+  const ageStr = info.createdAt
+    ? new Date(info.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '—';
+  return (
+    <Text style={{
+      color: '#9ca3af', fontSize: 10, fontFamily: 'monospace',
+      paddingHorizontal: 6, paddingVertical: 3,
+      backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 4,
+      marginBottom: 8, alignSelf: 'flex-start',
+    }}>
+      bundle: {shortId} · {info.channel ?? 'unknown'} · {ageStr}
+    </Text>
+  );
+}
+
 function formatAge(ms: number): string {
   if (ms < 1000) return '<1s';
   if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
@@ -204,6 +245,12 @@ export default function GpsTestScreen() {
             <Ionicons name="flask-outline" size={18} color={colors.accent} />
             <Text style={[styles.harnessTitle, { color: colors.accent }]}>SYNTHETIC ROUND HARNESS</Text>
           </View>
+          {/* 2026-05-19 — Bundle SHA + EAS update ID visible so Tim can
+              tell in one glance which JS bundle is loaded. If the SHA
+              doesn't match the latest commit I told him about, the
+              OTA hasn't reached the device — relaunch via swipe-from-
+              recents. */}
+          <BundleBadge />
           <Text style={[styles.empty, { color: colors.text_muted, marginBottom: 8 }]}>
             Pick a course to play. Only one round can run at a time. Telemetry below shows what the simulator is doing.
           </Text>
