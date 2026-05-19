@@ -320,6 +320,38 @@ function tick(): void {
     // randomized score for that hole so the scorecard + recap pipeline
     // populates end-to-end. Only fires when the round-active state
     // hasn't been changed (e.g. user discarded mid-walk).
+    // 2026-05-19 — Mid-fairway arrival logs the tee shot for this hole.
+    // Lets the STROKE counter on the data strip tick up to 2 while the
+    // simulator is still walking through the hole, instead of staying
+    // at 1 until the green-burst fires every shot at once.
+    if (!b.isGreen && b.label?.includes('mid-fairway') && b.holeNumber != null && b.par != null) {
+      try {
+        const { useRoundStore } = require('../store/roundStore');
+        const round = useRoundStore.getState();
+        if (round.isRoundActive && !round.shots.some((s: ShotResult) => s.hole === b.holeNumber)) {
+          const holeRecord = round.courseHoles.find((c: { hole: number }) => c.hole === b.holeNumber);
+          const yardage = holeRecord?.distance ?? (b.par === 3 ? 150 : b.par === 4 ? 380 : 510);
+          const teeClub = b.par === 3 ? clubForDistance(yardage) : 'Driver';
+          round.logShot({
+            feel: Math.random() < 0.7 ? 'solid' : (Math.random() < 0.5 ? 'flush' : 'thin'),
+            direction: Math.random() < 0.65 ? 'straight' : (Math.random() < 0.5 ? 'left' : 'right'),
+            shape: Math.random() < 0.6 ? 'straight' : (Math.random() < 0.5 ? 'draw' : 'fade'),
+            club: teeClub,
+            hole: b.holeNumber,
+            timestamp: Date.now(),
+            acousticContact: null,
+            distance_yards: b.par === 3 ? Math.min(yardage, 220) : 240,
+            logged_via: 'tap',
+            shot_in_hole_index: 1,
+            hole_number: b.holeNumber,
+          });
+          logHarnessEvent('shot', `H${b.holeNumber} #1 ${teeClub} (tee)`);
+        }
+      } catch (e) {
+        console.log('[simGPS] tee shot log failed:', e);
+      }
+    }
+
     if (b.isGreen && b.holeNumber != null && b.par != null) {
       try {
         const { useRoundStore } = require('../store/roundStore');
@@ -331,30 +363,34 @@ function tick(): void {
           const label = offset === -1 ? 'birdie' : offset === 0 ? 'par' : offset === 1 ? 'bogey' : offset === 2 ? 'double' : `+${offset}`;
           console.log(`[simGPS] H${b.holeNumber} synthetic score: ${score} (${label})`);
           logHarnessEvent('score', `H${b.holeNumber} = ${score} (${label}) on par ${b.par}`);
-          // 2026-05-19 — Synthesize realistic shots (club, feel,
-          // direction, shape, distance) so the recap pipeline sees a
-          // populated shots[] array. Drives club distribution stats,
-          // pattern detection ("your 7i goes right"), and per-hole
-          // shot trace. Putts also logged via logPutts so the
-          // scorecard's putts column populates.
+          // 2026-05-19 — Synthesize the REMAINING shots (the tee shot
+          // was already logged at the mid-fairway waypoint above).
+          // Drives club distribution stats, pattern detection, per-hole
+          // shot trace. Putts logged via logPutts for the scorecard's
+          // putts column.
           const holeRecord = round.courseHoles.find((c: { hole: number }) => c.hole === b.holeNumber);
           const yardage = holeRecord?.distance ?? (b.par === 3 ? 150 : b.par === 4 ? 380 : 510);
           const synthShots = synthesizeShots(b.par, score, yardage);
+          const existingShotCount = round.shots.filter((s: ShotResult) => s.hole === b.holeNumber).length;
           let putts = 0;
+          // Skip the first `existingShotCount` non-putt shots (we already
+          // logged the tee shot at mid-fairway).
+          let skipped = 0;
           for (let i = 0; i < synthShots.length; i++) {
             const s = synthShots[i];
             if (s.club === 'Putter') { putts += 1; continue; }
+            if (skipped < existingShotCount) { skipped += 1; continue; }
             round.logShot({
               feel: s.feel as ShotResult['feel'],
               direction: s.direction,
               shape: s.shape,
               club: s.club,
               hole: b.holeNumber,
-              timestamp: Date.now() + i, // unique per shot for stable id
+              timestamp: Date.now() + i,
               acousticContact: null,
               distance_yards: s.distance_yards,
               logged_via: 'tap',
-              shot_in_hole_index: i + 1,
+              shot_in_hole_index: existingShotCount + (i - skipped) + 1,
               hole_number: b.holeNumber,
             });
           }
@@ -443,11 +479,19 @@ export function buildWalkFromMockRound(round: MockRound): SimulatedWalk {
       lat: tee.lat + (green.lat - tee.lat) * 0.34,
       lng: tee.lng + (green.lng - tee.lng) * 0.34,
       label: `H${h.holeNumber} mid-fairway`,
+      // 2026-05-19 — Tag fairway waypoints with their hole so the
+      // simulator can log a tee shot when the player arrives here.
+      // STROKE counter on the data strip then increments mid-hole
+      // instead of staying at 1 until the green burst-logs everything.
+      holeNumber: h.holeNumber,
+      par: h.par,
     });
     points.push({
       lat: tee.lat + (green.lat - tee.lat) * 0.67,
       lng: tee.lng + (green.lng - tee.lng) * 0.67,
       label: `H${h.holeNumber} approach`,
+      holeNumber: h.holeNumber,
+      par: h.par,
     });
     // Green
     points.push({
