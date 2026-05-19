@@ -37,6 +37,7 @@ import { haversineYards } from '../utils/geoDistance';
 import { startSyntheticRound, stopSyntheticRound, isSimulatedActive, subscribeToWalk, subscribeHarnessEvents, clearHarnessEvents, type MockRound, type SimulatedWalkState, type HarnessEvent } from '../services/simulatedGPS';
 import { useRoundStore } from '../store/roundStore';
 import { useOffCourseStore } from '../services/offCourseDetector';
+import { runComprehensiveAudit, type AuditReport } from '../services/gpsAudit';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const PEBBLE_MOCK_ROUND: MockRound = require('../__mocks__/mockRound.json');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -87,6 +88,9 @@ export default function GpsTestScreen() {
   const [emitCount, setEmitCount] = useState(0);
   const [lastEmitMs, setLastEmitMs] = useState<number | null>(null);
   const [events, setEvents] = useState<HarnessEvent[]>([]);
+  const [auditRunning, setAuditRunning] = useState(false);
+  const [auditProgress, setAuditProgress] = useState<{ msg: string; fraction: number }>({ msg: '', fraction: 0 });
+  const [auditReport, setAuditReport] = useState<AuditReport | null>(null);
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const currentHole = useRoundStore(s => s.currentHole);
   const activeCourseName = useRoundStore(s => s.activeCourse);
@@ -372,6 +376,97 @@ export default function GpsTestScreen() {
                 );
               })
             )}
+          </View>
+
+          {/* 2026-05-19 — Comprehensive Audit runner. Auto-executes a
+              series of GPS scenarios sequentially (clean baseline,
+              pace variation, fix-change propagation, yardage math
+              sanity, pause/resume) and produces a structured pass/fail
+              report. Atomic catch-all harness — tap once, get a JSON
+              you can paste to me. */}
+          <View style={[styles.telemetryBox, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 10 }]}>
+            <Text style={[styles.telemetryLabel, { color: colors.text_muted }]}>COMPREHENSIVE AUDIT</Text>
+            <TouchableOpacity
+              disabled={auditRunning}
+              onPress={async () => {
+                setAuditRunning(true);
+                setAuditReport(null);
+                setAuditProgress({ msg: 'Starting audit…', fraction: 0 });
+                try {
+                  const report = await runComprehensiveAudit({
+                    onProgress: (msg, fraction) => setAuditProgress({ msg, fraction }),
+                    startMockRound: async () => {
+                      const id = startSyntheticRound(MENIFEE_MOCK_ROUND);
+                      return id;
+                    },
+                    stopMockRound: async () => {
+                      stopSyntheticRound();
+                    },
+                  });
+                  setAuditReport(report);
+                  setAuditProgress({ msg: `Done · ${report.total_pass} pass / ${report.total_fail} fail`, fraction: 1 });
+                } catch (e) {
+                  const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+                  Alert.alert('Audit error', msg);
+                } finally {
+                  setAuditRunning(false);
+                }
+              }}
+              style={[
+                styles.btnPrimary,
+                {
+                  backgroundColor: auditRunning ? '#3a3a3a' : '#9333ea',
+                  marginTop: 4,
+                  opacity: auditRunning ? 0.7 : 1,
+                },
+              ]}
+            >
+              <Ionicons name={auditRunning ? 'hourglass-outline' : 'play-circle'} size={18} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={[styles.btnPrimaryText, { color: '#fff' }]}>
+                {auditRunning ? 'Running audit…' : 'Run Comprehensive Audit'}
+              </Text>
+            </TouchableOpacity>
+            {auditRunning || auditReport ? (
+              <View style={{ marginTop: 8 }}>
+                <Text style={{ color: colors.text_muted, fontSize: 11, fontFamily: 'monospace' }}>
+                  {auditProgress.msg} · {Math.round(auditProgress.fraction * 100)}%
+                </Text>
+                {auditReport ? (
+                  <View style={{ marginTop: 6, gap: 4 }}>
+                    {auditReport.scenarios.map(s => (
+                      <View key={s.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View style={{
+                          width: 8, height: 8, borderRadius: 4,
+                          backgroundColor: s.overall === 'pass' ? '#00C896' : s.overall === 'warn' ? '#F5A623' : '#ef4444',
+                        }} />
+                        <Text style={{ color: colors.text_primary, fontSize: 11, fontFamily: 'monospace', flex: 1 }}>
+                          {s.name}
+                        </Text>
+                        <Text style={{ color: colors.text_muted, fontSize: 10, fontFamily: 'monospace' }}>
+                          {s.assertions.filter(a => a.pass).length}/{s.assertions.length}
+                        </Text>
+                      </View>
+                    ))}
+                    <TouchableOpacity
+                      onPress={async () => {
+                        try {
+                          await Share.share({
+                            message: JSON.stringify(auditReport, null, 2),
+                            title: `GPS Audit · ${new Date().toLocaleString()}`,
+                          });
+                        } catch (e) {
+                          Alert.alert('Export failed', e instanceof Error ? e.message : String(e));
+                        }
+                      }}
+                      style={[styles.btnPrimary, { backgroundColor: '#9333ea', marginTop: 6 }]}
+                    >
+                      <Ionicons name="share-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
+                      <Text style={[styles.btnPrimaryText, { color: '#fff' }]}>Export Audit JSON</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
           </View>
 
           {/* 2026-05-19 — Export Report. Bundles the full harness state
