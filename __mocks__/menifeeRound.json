@@ -1,0 +1,182 @@
+{
+  "schemaVersion": 1,
+  "courseName": "Menifee Lakes \u2014 Palms",
+  "courseId": "menifee-lakes-palms-mock",
+  "totalHoles": 9,
+  "compressionRatio": 60,
+  "shotIntervalMs": 240000,
+  "betweenHoleWalkMs": 720000,
+  "holes": [
+    {
+      "holeNumber": 1,
+      "par": 4,
+      "expectedYardage": 296,
+      "computedYardage": 296,
+      "bearingDeg": 189.8,
+      "tee": {
+        "lat": 33.6882,
+        "lng": -117.1599,
+        "timestampMs": 1716000000000
+      },
+      "green": {
+        "lat": 33.6858,
+        "lng": -117.1604,
+        "timestampMs": 1716000240000
+      },
+      "hazards": [],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 2,
+      "par": 4,
+      "expectedYardage": 238,
+      "computedYardage": 238,
+      "bearingDeg": 154.0,
+      "tee": {
+        "lat": 33.68556,
+        "lng": -117.16093,
+        "timestampMs": 1716001200000
+      },
+      "green": {
+        "lat": 33.6838,
+        "lng": -117.1599,
+        "timestampMs": 1716001440000
+      },
+      "hazards": [],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 3,
+      "par": 4,
+      "expectedYardage": 241,
+      "computedYardage": 241,
+      "bearingDeg": 291.7,
+      "tee": {
+        "lat": 33.68417,
+        "lng": -117.15949,
+        "timestampMs": 1716002400000
+      },
+      "green": {
+        "lat": 33.6849,
+        "lng": -117.1617,
+        "timestampMs": 1716002640000
+      },
+      "hazards": [],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 4,
+      "par": 5,
+      "expectedYardage": 371,
+      "computedYardage": 371,
+      "bearingDeg": 216.9,
+      "tee": {
+        "lat": 33.68534,
+        "lng": -117.1622,
+        "timestampMs": 1716003600000
+      },
+      "green": {
+        "lat": 33.6829,
+        "lng": -117.1644,
+        "timestampMs": 1716003840000
+      },
+      "hazards": [],
+      "shotsPlanned": 4
+    },
+    {
+      "holeNumber": 5,
+      "par": 4,
+      "expectedYardage": 238,
+      "computedYardage": 238,
+      "bearingDeg": 132.0,
+      "tee": {
+        "lat": 33.68251,
+        "lng": -117.16495,
+        "timestampMs": 1716004800000
+      },
+      "green": {
+        "lat": 33.6812,
+        "lng": -117.1632,
+        "timestampMs": 1716005040000
+      },
+      "hazards": [],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 6,
+      "par": 4,
+      "expectedYardage": 229,
+      "computedYardage": 229,
+      "bearingDeg": 17.8,
+      "tee": {
+        "lat": 33.68111,
+        "lng": -117.16259,
+        "timestampMs": 1716006000000
+      },
+      "green": {
+        "lat": 33.6829,
+        "lng": -117.1619,
+        "timestampMs": 1716006240000
+      },
+      "hazards": [],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 7,
+      "par": 4,
+      "expectedYardage": 229,
+      "computedYardage": 229,
+      "bearingDeg": 20.7,
+      "tee": {
+        "lat": 33.68284,
+        "lng": -117.1613,
+        "timestampMs": 1716007200000
+      },
+      "green": {
+        "lat": 33.6846,
+        "lng": -117.1605,
+        "timestampMs": 1716007440000
+      },
+      "hazards": [],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 8,
+      "par": 4,
+      "expectedYardage": 233,
+      "computedYardage": 233,
+      "bearingDeg": 20.3,
+      "tee": {
+        "lat": 33.68455,
+        "lng": -117.1599,
+        "timestampMs": 1716008400000
+      },
+      "green": {
+        "lat": 33.68635,
+        "lng": -117.1591,
+        "timestampMs": 1716008640000
+      },
+      "hazards": [],
+      "shotsPlanned": 3
+    },
+    {
+      "holeNumber": 9,
+      "par": 5,
+      "expectedYardage": 231,
+      "computedYardage": 231,
+      "bearingDeg": 328.0,
+      "tee": {
+        "lat": 33.68669,
+        "lng": -117.15849,
+        "timestampMs": 1716009600000
+      },
+      "green": {
+        "lat": 33.6883,
+        "lng": -117.1597,
+        "timestampMs": 1716009840000
+      },
+      "hazards": [],
+      "shotsPlanned": 4
+    }
+  ]
+}

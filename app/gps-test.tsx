@@ -36,7 +36,9 @@ import {
 import { haversineYards } from '../utils/geoDistance';
 import { startSyntheticRound, stopSyntheticRound, isSimulatedActive, type MockRound } from '../services/simulatedGPS';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const MOCK_ROUND: MockRound = require('../__mocks__/mockRound.json');
+const PEBBLE_MOCK_ROUND: MockRound = require('../__mocks__/mockRound.json');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const MENIFEE_MOCK_ROUND: MockRound = require('../__mocks__/menifeeRound.json');
 
 interface Anchor {
   lat: number;
@@ -198,42 +200,50 @@ export default function GpsTestScreen() {
           <Text style={styles.btnPrimaryText}>{pulling ? 'Pulling…' : 'Refresh GPS'}</Text>
         </TouchableOpacity>
 
-        {/* 2026-05-17 — Synthetic round playback. Loads
-            __mocks__/mockRound.json and feeds it through the existing
-            simulatedGPS pipeline. Drives the same gpsManager →
-            smartFinderService → holeDetection chain as real GPS so
-            this validates the WHOLE pipeline, not just the math.
-            Owner-only via this screen's existing gate. */}
-        <TouchableOpacity
-          onPress={() => {
-            try {
-              if (isSimulatedActive()) {
-                stopSyntheticRound();
-                Alert.alert('Stopped', 'Synthetic round playback stopped and round discarded.');
-              } else {
-                const id = startSyntheticRound(MOCK_ROUND);
-                Alert.alert(
-                  'Round Started',
-                  `Pebble Beach · ${MOCK_ROUND.totalHoles} holes (${id}).\n\nCheck Caddie tab + Scorecard for live updates.`,
-                );
+        {/* 2026-05-17 — Synthetic round playback. Loads a course-mock
+            JSON and feeds it through the existing simulatedGPS pipeline.
+            Drives the same gpsManager → smartFinderService → holeDetection
+            chain as real GPS so this validates the WHOLE pipeline, not
+            just the math. Owner-only via this screen's existing gate.
+            2026-05-18 — added Menifee Lakes Palms (Tim's home course)
+            as a second option so the harness can rehearse on the same
+            layout Tim actually plays. */}
+        {([
+          { round: MENIFEE_MOCK_ROUND, label: 'Menifee Palms', color: '#00C896' },
+          { round: PEBBLE_MOCK_ROUND, label: 'Pebble Beach', color: '#F5A623' },
+        ] as const).map(({ round, label, color }) => (
+          <TouchableOpacity
+            key={round.courseId}
+            onPress={() => {
+              try {
+                if (isSimulatedActive()) {
+                  stopSyntheticRound();
+                  Alert.alert('Stopped', 'Synthetic round playback stopped and round discarded.');
+                } else {
+                  const id = startSyntheticRound(round);
+                  Alert.alert(
+                    'Round Started',
+                    `${round.courseName} · ${round.totalHoles} holes (${id}).\n\nCheck Caddie tab + Scorecard for live updates.`,
+                  );
+                }
+              } catch (e) {
+                const msg = e instanceof Error
+                  ? `${e.name}: ${e.message}\n\n${(e.stack ?? '').split('\n').slice(0, 6).join('\n')}`
+                  : String(e);
+                Alert.alert('Synthetic round error', msg);
+                console.log('[gps-test] synthetic round button error:', e);
               }
-            } catch (e) {
-              const msg = e instanceof Error
-                ? `${e.name}: ${e.message}\n\n${(e.stack ?? '').split('\n').slice(0, 6).join('\n')}`
-                : String(e);
-              Alert.alert('Synthetic round error', msg);
-              console.log('[gps-test] synthetic round button error:', e);
-            }
-          }}
-          style={[styles.btnPrimary, { backgroundColor: '#F5A623', marginTop: 12 }]}
-          accessibilityRole="button"
-          accessibilityLabel="Toggle synthetic round playback"
-        >
-          <Ionicons name="play-circle-outline" size={18} color="#000" style={{ marginRight: 6 }} />
-          <Text style={styles.btnPrimaryText}>
-            {isSimulatedActive() ? 'Stop Synthetic Round' : `Play ${MOCK_ROUND.totalHoles}-Hole Synthetic Round`}
-          </Text>
-        </TouchableOpacity>
+            }}
+            style={[styles.btnPrimary, { backgroundColor: color, marginTop: 12 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`Toggle ${label} synthetic round playback`}
+          >
+            <Ionicons name="play-circle-outline" size={18} color="#000" style={{ marginRight: 6 }} />
+            <Text style={styles.btnPrimaryText}>
+              {isSimulatedActive() ? 'Stop Synthetic Round' : `Play ${label} (${round.totalHoles} holes)`}
+            </Text>
+          </TouchableOpacity>
+        ))}
 
         <Text style={[styles.sectionLabel, { color: colors.text_muted, marginTop: 24 }]}>ANCHOR</Text>
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>

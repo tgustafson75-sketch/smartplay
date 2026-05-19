@@ -234,16 +234,24 @@ export default function Settings() {
         <TouchableOpacity
           onPress={() => !isSearching && toggleSection(title)}
           activeOpacity={isSearching ? 1 : 0.7}
-          style={styles.collapsibleHeader}
+          style={[
+            styles.collapsibleHeader,
+            {
+              backgroundColor: colors.surface_elevated,
+              borderColor: open ? colors.accent : colors.border,
+            },
+          ]}
           accessibilityRole="button"
           accessibilityLabel={`${title} section, ${open ? 'expanded' : 'collapsed'}`}
         >
-          <Text style={[styles.sectionHeader, { color: colors.text_muted, marginBottom: 0 }]}>{title}</Text>
+          <Text style={[styles.collapsibleHeaderText, { color: open ? colors.accent : colors.text_primary }]}>
+            {title}
+          </Text>
           {!isSearching && (
             <Ionicons
               name={open ? 'chevron-up' : 'chevron-down'}
-              size={16}
-              color={colors.text_muted}
+              size={18}
+              color={open ? colors.accent : colors.text_muted}
             />
           )}
         </TouchableOpacity>
@@ -1346,9 +1354,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingRight: 20,
-    marginTop: 20,
-    marginBottom: 8,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  collapsibleHeaderText: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.4,
   },
   searchWrap: {
     flexDirection: 'row',
