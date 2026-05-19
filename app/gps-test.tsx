@@ -34,7 +34,7 @@ import {
   type GpsFix,
 } from '../services/gpsManager';
 import { haversineYards } from '../utils/geoDistance';
-import { startSyntheticRound, stopSyntheticRound, isSimulatedActive, subscribeToWalk, type MockRound, type SimulatedWalkState } from '../services/simulatedGPS';
+import { startSyntheticRound, stopSyntheticRound, isSimulatedActive, subscribeToWalk, subscribeHarnessEvents, clearHarnessEvents, type MockRound, type SimulatedWalkState, type HarnessEvent } from '../services/simulatedGPS';
 import { useRoundStore } from '../store/roundStore';
 import { useOffCourseStore } from '../services/offCourseDetector';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -86,6 +86,7 @@ export default function GpsTestScreen() {
   const [walkState, setWalkState] = useState<SimulatedWalkState | null>(null);
   const [emitCount, setEmitCount] = useState(0);
   const [lastEmitMs, setLastEmitMs] = useState<number | null>(null);
+  const [events, setEvents] = useState<HarnessEvent[]>([]);
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const currentHole = useRoundStore(s => s.currentHole);
   const activeCourseName = useRoundStore(s => s.activeCourse);
@@ -105,6 +106,10 @@ export default function GpsTestScreen() {
         setLastEmitMs(Date.now());
       }
     });
+    return () => { unsub(); };
+  }, []);
+  useEffect(() => {
+    const unsub = subscribeHarnessEvents(setEvents);
     return () => { unsub(); };
   }, []);
 
@@ -318,6 +323,55 @@ export default function GpsTestScreen() {
                 </View>
               </View>
             ) : null}
+          </View>
+
+          {/* 2026-05-19 — Live event log. Color-coded by event kind so
+              Tim can see at a glance whether transitions fire, scores
+              log, off-course flips, errors, etc. Shows last 20 events
+              newest-on-top. */}
+          <View style={[styles.telemetryBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <Text style={[styles.telemetryLabel, { color: colors.text_muted, marginBottom: 0 }]}>EVENT LOG · {events.length}</Text>
+              {events.length > 0 ? (
+                <TouchableOpacity onPress={() => clearHarnessEvents()} hitSlop={8}>
+                  <Text style={{ color: colors.text_muted, fontSize: 11, fontWeight: '700' }}>clear</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            {events.length === 0 ? (
+              <Text style={[styles.empty, { color: colors.text_muted, fontSize: 11, paddingVertical: 4 }]}>
+                No events yet. Start a synthetic round to populate.
+              </Text>
+            ) : (
+              events.slice(-20).reverse().map((e, i) => {
+                const kindColors: Record<string, string> = {
+                  start: '#00C896',
+                  stop: '#9ca3af',
+                  walk_complete: '#00C896',
+                  waypoint: '#9ca3af',
+                  transition: '#F5A623',
+                  score: '#3b82f6',
+                  off_course: '#ef4444',
+                  gps: '#9ca3af',
+                  error: '#ef4444',
+                };
+                const c = kindColors[e.kind] ?? colors.text_primary;
+                const time = new Date(e.ts).toLocaleTimeString();
+                return (
+                  <View key={`${e.ts}-${i}`} style={{ flexDirection: 'row', paddingVertical: 2 }}>
+                    <Text style={{ color: c, fontSize: 10, fontFamily: 'monospace', width: 80 }}>
+                      [{e.kind}]
+                    </Text>
+                    <Text style={{ color: colors.text_muted, fontSize: 10, fontFamily: 'monospace', width: 70 }}>
+                      {time}
+                    </Text>
+                    <Text style={{ color: colors.text_primary, fontSize: 10, fontFamily: 'monospace', flex: 1 }}>
+                      {e.detail}
+                    </Text>
+                  </View>
+                );
+              })
+            )}
           </View>
         </View>
 
