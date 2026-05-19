@@ -21,6 +21,14 @@ export interface SimulatedWalkPoint {
   lng: number;
   /** Optional label for console-log readability (e.g., "Hole 3 tee"). */
   label?: string;
+  // 2026-05-18 — When the simulator reaches a waypoint tagged with
+  // {holeNumber, par, isGreen=true}, it logs a randomized score for
+  // that hole. Lets the synthetic round populate scorecards + recap
+  // without manual entry. Only the green waypoint of each hole should
+  // carry these — fairway points leave them undefined.
+  holeNumber?: number;
+  par?: number;
+  isGreen?: boolean;
 }
 
 export interface SimulatedWalk {

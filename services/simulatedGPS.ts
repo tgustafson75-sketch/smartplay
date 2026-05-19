@@ -102,6 +102,43 @@ export function stopSimulatedWalk(): void {
   emit(null);
 }
 
+// 2026-05-18 — Randomized score generator for synthetic rounds. The
+// per-par distributions roughly mimic a bogey-handicap recreational
+// player so the recap surface gets realistic variance (not all-pars
+// every time). Picked by Tim's "mix it up — don't get consistent one
+// for one par" feedback. Weights sum to 100.
+function rollSyntheticScore(par: number): number {
+  type Roll = { offset: number; weight: number };
+  const distribution: Roll[] =
+    par === 3 ? [
+      { offset: -1, weight: 5 },
+      { offset: 0,  weight: 50 },
+      { offset: 1,  weight: 35 },
+      { offset: 2,  weight: 8 },
+      { offset: 3,  weight: 2 },
+    ] :
+    par === 4 ? [
+      { offset: -1, weight: 8 },
+      { offset: 0,  weight: 40 },
+      { offset: 1,  weight: 35 },
+      { offset: 2,  weight: 12 },
+      { offset: 3,  weight: 5 },
+    ] : /* par 5 */ [
+      { offset: -1, weight: 15 },
+      { offset: 0,  weight: 35 },
+      { offset: 1,  weight: 30 },
+      { offset: 2,  weight: 15 },
+      { offset: 3,  weight: 5 },
+    ];
+  const r = Math.random() * 100;
+  let cum = 0;
+  for (const { offset, weight } of distribution) {
+    cum += weight;
+    if (r <= cum) return Math.max(1, par + offset);
+  }
+  return par;
+}
+
 function tick(): void {
   if (!activeWalk) return;
   const points = activeWalk.points;
@@ -128,6 +165,25 @@ function tick(): void {
     segmentStartTs = Date.now();
     const reached = b.label ?? `wp ${waypointIdx}`;
     console.log('[simGPS] reached:', reached);
+    // 2026-05-18 — If this waypoint is a tagged green, log a
+    // randomized score for that hole so the scorecard + recap pipeline
+    // populates end-to-end. Only fires when the round-active state
+    // hasn't been changed (e.g. user discarded mid-walk).
+    if (b.isGreen && b.holeNumber != null && b.par != null) {
+      try {
+        const { useRoundStore } = require('../store/roundStore');
+        const round = useRoundStore.getState();
+        if (round.isRoundActive && round.scores[b.holeNumber] == null) {
+          const score = rollSyntheticScore(b.par);
+          round.logScore(b.holeNumber, score);
+          const offset = score - b.par;
+          const label = offset === -1 ? 'birdie' : offset === 0 ? 'par' : offset === 1 ? 'bogey' : offset === 2 ? 'double' : `+${offset}`;
+          console.log(`[simGPS] H${b.holeNumber} synthetic score: ${score} (${label})`);
+        }
+      } catch (e) {
+        console.log('[simGPS] synthetic score log failed:', e);
+      }
+    }
   }
 
   emit({
@@ -198,7 +254,14 @@ export function buildWalkFromMockRound(round: MockRound): SimulatedWalk {
       label: `H${h.holeNumber} approach`,
     });
     // Green
-    points.push({ lat: green.lat, lng: green.lng, label: `H${h.holeNumber} green` });
+    points.push({
+      lat: green.lat,
+      lng: green.lng,
+      label: `H${h.holeNumber} green`,
+      holeNumber: h.holeNumber,
+      par: h.par,
+      isGreen: true,
+    });
   }
   // Pace tuned so the whole round completes in ~ totalHoles * 2s at
   // the default compression. Effective: speed-up walking pace so the
