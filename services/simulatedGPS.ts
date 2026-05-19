@@ -327,18 +327,23 @@ export function buildWalkFromMockRound(round: MockRound): SimulatedWalk {
       isGreen: true,
     });
   }
-  // Pace tuned so the whole round completes in ~ totalHoles * 2s at
-  // the default compression. Effective: speed-up walking pace so the
-  // simulator interpolates each segment in ~250ms instead of ~5min.
-  const segmentMeters = 60; // rough mean per segment
-  const targetSegmentMs = 250;
-  const pace = (segmentMeters * 1000) / targetSegmentMs; // m/s — much faster than real walking
+  // 2026-05-19 — Pace dropped from 240 m/s (fast-forward, ~7s/round)
+  // to 4 m/s (~brisk jog). Reason: at 240 m/s the simulator passed
+  // through each green→next-tee transition zone in <1 second, well
+  // below holeDetection's 10s SUSTAINED_TRANSITION_MS window. Auto-
+  // transitions never fired and the round stayed pinned on hole 1
+  // forever. At 4 m/s:
+  //   - within-hole segments (~60m): ~15s walking
+  //   - green→next-tee segment (~50m): ~12s — clears the 10s window
+  //   - per-hole total: ~57s, 18 holes ≈ 17 min, 9 holes ≈ 9 min
+  // Slow but functional. Pace overrides via setSimulatorPace() let
+  // the dev switch back to fast-forward for pure math validation.
   return {
     id: `mock-round-${round.courseId}`,
     display_name: `Synthetic: ${round.courseName} (${round.totalHoles} holes)`,
     course_name_hint: round.courseName.toLowerCase(),
-    description: 'Synthetic 18-hole round from __mocks__/mockRound.json. Compressed time.',
-    pace_mps: pace,
+    description: 'Synthetic round from a MockRound JSON. Pace tuned to clear holeDetection sustained-position gates.',
+    pace_mps: 4,
     points,
   };
 }

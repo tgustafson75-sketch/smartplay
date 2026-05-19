@@ -51,6 +51,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
+import { getLastFix, subscribeFixChange } from '../services/smartFinderService';
 import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbertApi';
 import { hasGolfbertCourseMapping } from '../constants/golfbertCourses';
 import { fetchHoleImagery, computeFitView, getCenteredImageryUrl } from '../services/mapboxImagery';
@@ -331,6 +332,14 @@ export default function SmartVisionScreen() {
   // but the subscription is in place so adding a "you-are-here" dot
   // only requires reading getLastFix() in the render.
   const [markBumpTick, setMarkBumpTick] = useState(0);
+  // 2026-05-19 — Subscribe to fix-change so the player marker (added
+  // below) recomputes whenever the simulator or real GPS moves the
+  // cached lastFix. Without this, SmartVision's player marker would
+  // stay frozen on whatever fix was current when the screen mounted.
+  useEffect(() => {
+    const unsub = subscribeFixChange(() => setMarkBumpTick(t => t + 1));
+    return () => { unsub(); };
+  }, []);
   useEffect(() => {
     let unsub: (() => void) | null = null;
     void (async () => {
@@ -625,6 +634,22 @@ export default function SmartVisionScreen() {
   // Pixel-relative (+y up) versions for legacy yardage interpolation.
   const teePx = useMemo(() => ({ x: teeCanvas.x - imageW / 2, y: imageH / 2 - teeCanvas.y }), [teeCanvas, imageW, imageH]);
   const pinPx = useMemo(() => ({ x: pinCanvas.x - imageW / 2, y: imageH / 2 - pinCanvas.y }), [pinCanvas, imageW, imageH]);
+
+  // 2026-05-19 — Live player position (you-are-here cart marker).
+  // Reads getLastFix on every markBumpTick (fix-change subscription
+  // above) so the marker moves as GPS or the synthetic simulator
+  // updates the cached fix. Returns null when no fix yet OR when
+  // projection isn't available (no geometry → can't map lat/lng to
+  // pixels). Falls outside the image bounds visibly when the player
+  // is genuinely off the hole's framing — that's the correct UX cue.
+  const playerCanvas = useMemo(() => {
+    const fix = getLastFix();
+    if (!fix || !projection) return null;
+    const off = projectToPixels(fix.location, projection.center, projection.zoom, projection.bearing);
+    return { x: imageW / 2 + off.x, y: imageH / 2 - off.y };
+    // markBumpTick listed so the memo recomputes when fix-change fires.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projection, imageW, imageH, markBumpTick]);
 
   // Bounds clamper used in drag handlers — keep markers visible.
   const clampToCanvas = useCallback((p: { x: number; y: number }) => ({
@@ -1063,6 +1088,23 @@ export default function SmartVisionScreen() {
           onDragEnd={() => { targetDragStartRef.current = null; }}
         />
 
+        {/* 2026-05-19 — Live player-position marker. Distinct from the
+            T/Y/P set: filled orange disc with a white ring + tiny cart
+            icon, smaller than the planning markers so it doesn't fight
+            them visually. Renders only when a fix + projection are
+            both available. */}
+        {playerCanvas ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.playerCart,
+              { left: playerCanvas.x - 12, top: playerCanvas.y - 12 },
+            ]}
+          >
+            <Ionicons name="navigate" size={14} color="#0d1a0d" />
+          </View>
+        ) : null}
+
         {/* Measure label — floats above-right of yellow marker. */}
         {carryYards != null && yardages.middle != null && (
           <View
@@ -1205,6 +1247,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5, shadowRadius: 4, elevation: 6,
   },
   markerText: { fontWeight: '900', letterSpacing: 0.5 },
+  // 2026-05-19 — Player-position cart marker. Distinct visual from
+  // the T/Y/P planning markers (smaller, no letter, ringed in white).
+  playerCart: {
+    position: 'absolute',
+    width: 24, height: 24,
+    borderRadius: 12,
+    backgroundColor: '#F5A623',
+    borderWidth: 2, borderColor: '#ffffff',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.6, shadowRadius: 3, elevation: 8,
+    zIndex: 25,
+  },
   measureLabel: {
     position: 'absolute',
     backgroundColor: 'rgba(0,0,0,0.85)',
