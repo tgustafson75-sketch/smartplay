@@ -1584,13 +1584,19 @@ export default function CaddieTab() {
   const targetDirection = 'CENTER';
 
   const currentStroke = useMemo(() => {
-    // All penalties now flow through ShotResult (including More Menu addPenalty).
-    // Legacy penalties[] field is no longer written to, so we read only from shots.
+    // 2026-05-19 — STROKE = "the next stroke you're about to hit",
+    // = shots_taken + penalties + 1. Previously this returned
+    // `holeShots.length + penalties` (just the count of shots taken),
+    // which meant the strip showed STROKE=1 both before AND after the
+    // first shot — never ticked during the hole. Tim hit this on the
+    // harness: tee shot logged at mid-fairway but the strip stayed
+    // at 1 the whole way. The +1 makes the strip read like a real
+    // stroke counter (1 before hitting tee, 2 after, etc.).
     const holeShots = shots.filter(s => s.hole === currentHole);
     if (holeShots.length > 0) {
-      return holeShots.length + holeShots.reduce((acc, s) => acc + (s.penalty_strokes ?? 0), 0);
+      return holeShots.length + 1 + holeShots.reduce((acc, s) => acc + (s.penalty_strokes ?? 0), 0);
     }
-    return 1; // no shots yet — first stroke
+    return 1; // no shots yet — first stroke upcoming
   }, [shots, currentHole]);
 
   // ── Cross-transition: strip ↔ start-round CTA ───
