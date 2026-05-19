@@ -22,7 +22,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Share } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Share, Platform, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,7 +37,8 @@ import { haversineYards } from '../utils/geoDistance';
 import { startSyntheticRound, stopSyntheticRound, isSimulatedActive, subscribeToWalk, subscribeHarnessEvents, clearHarnessEvents, type MockRound, type SimulatedWalkState, type HarnessEvent } from '../services/simulatedGPS';
 import { useRoundStore } from '../store/roundStore';
 import { useOffCourseStore } from '../services/offCourseDetector';
-import { runComprehensiveAudit, type AuditReport } from '../services/gpsAudit';
+import { runAuditV2 } from '../services/audit/scenarioRunner';
+import type { AuditReport } from '../services/audit/types';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const PEBBLE_MOCK_ROUND: MockRound = require('../__mocks__/mockRound.json');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -76,6 +77,7 @@ function compassLabel(deg: number): string {
 export default function GpsTestScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { width: winW, height: winH } = useWindowDimensions();
   const [fix, setFix] = useState<GpsFix | null>(getGpsLastFix());
   const [tick, setTick] = useState(0);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
@@ -89,7 +91,7 @@ export default function GpsTestScreen() {
   const [lastEmitMs, setLastEmitMs] = useState<number | null>(null);
   const [events, setEvents] = useState<HarnessEvent[]>([]);
   const [auditRunning, setAuditRunning] = useState(false);
-  const [auditProgress, setAuditProgress] = useState<{ msg: string; fraction: number }>({ msg: '', fraction: 0 });
+  const [auditProgress, setAuditProgress] = useState<{ msg: string; fraction: number; tally: { passed: number; failed: number } }>({ msg: '', fraction: 0, tally: { passed: 0, failed: 0 } });
   const [auditReport, setAuditReport] = useState<AuditReport | null>(null);
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const currentHole = useRoundStore(s => s.currentHole);
@@ -391,10 +393,11 @@ export default function GpsTestScreen() {
               onPress={async () => {
                 setAuditRunning(true);
                 setAuditReport(null);
-                setAuditProgress({ msg: 'Starting audit…', fraction: 0 });
+                setAuditProgress({ msg: 'Starting audit…', fraction: 0, tally: { passed: 0, failed: 0 } });
                 try {
-                  const report = await runComprehensiveAudit({
-                    onProgress: (msg, fraction) => setAuditProgress({ msg, fraction }),
+                  const report = await runAuditV2({
+                    onProgress: (msg, fraction, tally) =>
+                      setAuditProgress({ msg, fraction, tally: tally ?? { passed: 0, failed: 0 } }),
                     startMockRound: async () => {
                       const id = startSyntheticRound(MENIFEE_MOCK_ROUND);
                       return id;
@@ -402,9 +405,18 @@ export default function GpsTestScreen() {
                     stopMockRound: async () => {
                       stopSyntheticRound();
                     },
+                    windowDims: { w: winW, h: winH },
+                    platform: Platform.OS,
                   });
                   setAuditReport(report);
-                  setAuditProgress({ msg: `Done · ${report.total_pass} pass / ${report.total_fail} fail`, fraction: 1 });
+                  setAuditProgress({
+                    msg: `Done · ${report.summary.scenarios_passed} pass / ${report.summary.scenarios_failed} fail`,
+                    fraction: 1,
+                    tally: {
+                      passed: report.summary.assertions_passed,
+                      failed: report.summary.assertions_failed,
+                    },
+                  });
                 } catch (e) {
                   const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
                   Alert.alert('Audit error', msg);
@@ -423,13 +435,16 @@ export default function GpsTestScreen() {
             >
               <Ionicons name={auditRunning ? 'hourglass-outline' : 'play-circle'} size={18} color="#fff" style={{ marginRight: 6 }} />
               <Text style={[styles.btnPrimaryText, { color: '#fff' }]}>
-                {auditRunning ? 'Running audit…' : 'Run Comprehensive Audit'}
+                {auditRunning ? 'Running audit…' : 'RUN FULL AUDIT (auto, ~10 min)'}
               </Text>
             </TouchableOpacity>
             {auditRunning || auditReport ? (
               <View style={{ marginTop: 8 }}>
                 <Text style={{ color: colors.text_muted, fontSize: 11, fontFamily: 'monospace' }}>
                   {auditProgress.msg} · {Math.round(auditProgress.fraction * 100)}%
+                </Text>
+                <Text style={{ color: colors.text_muted, fontSize: 11, fontFamily: 'monospace', marginTop: 2 }}>
+                  ✓ {auditProgress.tally.passed} passed · ✗ {auditProgress.tally.failed} failed
                 </Text>
                 {auditReport ? (
                   <View style={{ marginTop: 6, gap: 4 }}>
@@ -443,7 +458,7 @@ export default function GpsTestScreen() {
                           {s.name}
                         </Text>
                         <Text style={{ color: colors.text_muted, fontSize: 10, fontFamily: 'monospace' }}>
-                          {s.assertions.filter(a => a.pass).length}/{s.assertions.length}
+                          {s.assertions.filter(a => a.passed).length}/{s.assertions.length}
                         </Text>
                       </View>
                     ))}

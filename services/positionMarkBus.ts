@@ -41,6 +41,13 @@ type Listener = (mark: MarkedPosition) => void;
 const listeners: Set<Listener> = new Set();
 let lastMark: MarkedPosition | null = null;
 
+// 2026-05-19 — Audit v2 hook: expose the listener set so the harness
+// scenario runner can fire programmatic mark events using the
+// simulator's current fix (without going through forceMarkPosition's
+// real-GPS pull). Production code paths don't read this — it's only
+// touched by the audit runner. Marked with __ prefix to signal intent.
+export function __getListenersForAudit(): Set<Listener> { return listeners; }
+
 export function subscribeToMark(cb: Listener): () => void {
   listeners.add(cb);
   return () => { listeners.delete(cb); };

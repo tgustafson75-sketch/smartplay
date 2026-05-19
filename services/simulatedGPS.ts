@@ -307,7 +307,49 @@ function tick(): void {
 
   const lat = a.lat + (b.lat - a.lat) * t;
   const lng = a.lng + (b.lng - a.lng) * t;
-  setSimulatedFix({ lat, lng });
+  // 2026-05-19 — Audit v2 hook: apply noise/dropout/glitch/drift to
+  // the clean lat/lng before publishing, and record ground truth for
+  // probe assertions. When audit mode is off, applyNoise is a no-op
+  // and the noised values equal the clean values (configureNoise
+  // defaults to sigma 0).
+  let publishLat: number | null = lat;
+  let publishLng: number | null = lng;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const probes = require('./audit/probes');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const injector = require('./audit/noiseInjector');
+    probes.setGroundTruth(lat, lng);
+    const noised = injector.applyNoise(lat, lng);
+    publishLat = noised.lat;
+    publishLng = noised.lng;
+  } catch { /* audit module not loaded; publish clean */ }
+  if (publishLat != null && publishLng != null) {
+    setSimulatedFix({ lat: publishLat, lng: publishLng });
+  }
+  // Probe sample: capture per-tick raw consumer state.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const probes = require('./audit/probes');
+    if (probes.isProbeActive()) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const sf = require('./smartFinderService');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const off = require('./offCourseDetector');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { useRoundStore } = require('../store/roundStore');
+      const round = useRoundStore.getState();
+      const fix = sf.getLastFix();
+      const fmb = sf.getGreenYardagesSync(round.currentHole);
+      probes.recordSample('gps.raw', { lat: publishLat, lng: publishLng, accuracy_m: fix?.accuracy_m ?? null });
+      probes.recordSample('gps.smoothed', fix ? { lat: fix.location.lat, lng: fix.location.lng } : null);
+      probes.recordSample('yardage.toGreenCenter', fmb?.middle ?? null);
+      probes.recordSample('yardage.toGreenFront', fmb?.front ?? null);
+      probes.recordSample('yardage.toGreenBack', fmb?.back ?? null);
+      probes.recordSample('waypoint.currentHole', round.currentHole);
+      probes.recordSample('waypoint.offCourse', off.useOffCourseStore.getState().isOffCourse);
+    }
+  } catch { /* probes not loaded */ }
 
   if (t >= 1) {
     waypointIdx += 1;
