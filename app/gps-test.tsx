@@ -84,6 +84,8 @@ export default function GpsTestScreen() {
   // emitter for per-tick state, and reads round-store scores via
   // selector for the running scorecard.
   const [walkState, setWalkState] = useState<SimulatedWalkState | null>(null);
+  const [emitCount, setEmitCount] = useState(0);
+  const [lastEmitMs, setLastEmitMs] = useState<number | null>(null);
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const currentHole = useRoundStore(s => s.currentHole);
   const activeCourseName = useRoundStore(s => s.activeCourse);
@@ -91,8 +93,18 @@ export default function GpsTestScreen() {
   const courseHoles = useRoundStore(s => s.courseHoles);
   const isOffCourse = useOffCourseStore(s => s.isOffCourse);
   const yardsToNearestHole = useOffCourseStore(s => s.yardsToNearestHole);
+  // 2026-05-18 — Track every emit so the telemetry panel can show
+  // sim_ticks / last_emit_age. If the simulator's setInterval is alive
+  // but UI shows no progress, ticks will still climb. If ticks freeze
+  // we know the interval was cleared.
   useEffect(() => {
-    const unsub = subscribeToWalk(setWalkState);
+    const unsub = subscribeToWalk((s) => {
+      setWalkState(s);
+      if (s) {
+        setEmitCount(n => n + 1);
+        setLastEmitMs(Date.now());
+      }
+    });
     return () => { unsub(); };
   }, []);
 
@@ -228,39 +240,67 @@ export default function GpsTestScreen() {
         {([
           { round: MENIFEE_MOCK_ROUND, label: 'Menifee Palms', color: '#00C896' },
           { round: PEBBLE_MOCK_ROUND, label: 'Pebble Beach', color: '#F5A623' },
-        ] as const).map(({ round, label, color }) => (
-          <TouchableOpacity
-            key={round.courseId}
-            onPress={() => {
-              try {
-                if (isSimulatedActive()) {
-                  stopSyntheticRound();
-                  Alert.alert('Stopped', 'Synthetic round playback stopped and round discarded.');
-                } else {
-                  const id = startSyntheticRound(round);
-                  Alert.alert(
-                    'Round Started',
-                    `${round.courseName} · ${round.totalHoles} holes (${id}).\n\nCheck Caddie tab + Scorecard for live updates.`,
-                  );
+        ] as const).map(({ round, label, color }) => {
+          // 2026-05-18 — Track sim activity via walkState (reactive)
+          // not isSimulatedActive() (function call evaluated at render
+          // time and never re-runs). Active course derived from the
+          // walk_id so we can label the running course's button as
+          // "Stop" and the other as disabled. Tim hit a state where
+          // both buttons read "Play X" while a sim was already running,
+          // letting him double-tap and stomp on the in-flight round.
+          const simRunning = walkState != null;
+          const isThisCourseRunning = walkState?.walk_id === `mock-round-${round.courseId}`;
+          const otherCourseRunning = simRunning && !isThisCourseRunning;
+          return (
+            <TouchableOpacity
+              key={round.courseId}
+              disabled={otherCourseRunning}
+              onPress={() => {
+                try {
+                  if (isThisCourseRunning) {
+                    stopSyntheticRound();
+                    Alert.alert('Stopped', `${round.courseName} playback stopped and round discarded.`);
+                  } else if (otherCourseRunning) {
+                    // Belt-and-suspenders — the disabled prop blocks
+                    // taps but this is the fail-safe in case it slips.
+                    Alert.alert('Already running', 'Stop the active synthetic round first.');
+                  } else {
+                    const id = startSyntheticRound(round);
+                    Alert.alert(
+                      'Round Started',
+                      `${round.courseName} · ${round.totalHoles} holes (${id}).\n\nCheck Caddie tab + Scorecard for live updates.`,
+                    );
+                  }
+                } catch (e) {
+                  const msg = e instanceof Error
+                    ? `${e.name}: ${e.message}\n\n${(e.stack ?? '').split('\n').slice(0, 6).join('\n')}`
+                    : String(e);
+                  Alert.alert('Synthetic round error', msg);
+                  console.log('[gps-test] synthetic round button error:', e);
                 }
-              } catch (e) {
-                const msg = e instanceof Error
-                  ? `${e.name}: ${e.message}\n\n${(e.stack ?? '').split('\n').slice(0, 6).join('\n')}`
-                  : String(e);
-                Alert.alert('Synthetic round error', msg);
-                console.log('[gps-test] synthetic round button error:', e);
-              }
-            }}
-            style={[styles.btnPrimary, { backgroundColor: color, marginTop: 12 }]}
-            accessibilityRole="button"
-            accessibilityLabel={`Toggle ${label} synthetic round playback`}
-          >
-            <Ionicons name="play-circle-outline" size={18} color="#000" style={{ marginRight: 6 }} />
-            <Text style={styles.btnPrimaryText}>
-              {isSimulatedActive() ? 'Stop Synthetic Round' : `Play ${label} (${round.totalHoles} holes)`}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              }}
+              style={[
+                styles.btnPrimary,
+                {
+                  backgroundColor: otherCourseRunning ? '#3a3a3a' : color,
+                  marginTop: 12,
+                  opacity: otherCourseRunning ? 0.5 : 1,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Toggle ${label} synthetic round playback`}
+            >
+              <Ionicons name={isThisCourseRunning ? 'stop-circle-outline' : 'play-circle-outline'} size={18} color="#000" style={{ marginRight: 6 }} />
+              <Text style={styles.btnPrimaryText}>
+                {isThisCourseRunning
+                  ? `Stop ${label}`
+                  : otherCourseRunning
+                  ? `${label} (other round active)`
+                  : `Play ${label} (${round.totalHoles} holes)`}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
 
         {/* 2026-05-18 — Harness telemetry panel. Live readout of what
             the synthetic round is doing: current hole, simulator
@@ -273,6 +313,11 @@ export default function GpsTestScreen() {
               <Row label="course" value={activeCourseName ?? '—'} colors={colors} />
               <Row label="round_active" value={String(isRoundActive)} colors={colors} />
               <Row label="current_hole" value={`${currentHole} / ${courseHoles.length || '?'}`} colors={colors} />
+              <Row
+                label="sim_emits"
+                value={lastEmitMs ? `${emitCount} (${Math.round((Date.now() - lastEmitMs) / 1000)}s ago)` : `${emitCount}`}
+                colors={colors}
+              />
               <Row
                 label="waypoint"
                 value={walkState ? `${walkState.waypoint_index} → ${walkState.next_label ?? '—'}` : 'idle'}

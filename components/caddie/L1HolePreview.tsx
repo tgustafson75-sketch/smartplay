@@ -172,12 +172,46 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
       getLocalHoleImageById(activeCourseId, currentHole) ??
       getLocalHoleImage(activeCourse, currentHole);
     if (localImg) {
+      // 2026-05-18 — Overlay a live player-position indicator on the
+      // curated hole image. The image isn't pixel-mapped (we don't know
+      // its framing), so we use a horizontal progress bar at the bottom
+      // showing how far the player is along the hole's GPS axis plus a
+      // small dot tracking it. Lets the user (and the synthetic round
+      // harness) eyeball that GPS is updating without opening full
+      // SmartVision. Falls back to no overlay when fix or hole record
+      // is missing.
+      const fix = getLastFix();
+      const holeRecord = useRoundStore.getState().courseHoles.find(h => h.hole === currentHole);
+      let pctAlong: number | null = null;
+      let yardsToGreen: number | null = null;
+      if (fix && holeRecord && (holeRecord.teeLat || holeRecord.teeLng) && (holeRecord.middleLat || holeRecord.middleLng)) {
+        const tee = { lat: holeRecord.teeLat, lng: holeRecord.teeLng };
+        const green = { lat: holeRecord.middleLat, lng: holeRecord.middleLng };
+        const total = haversineYards(tee, green);
+        const fromPlayer = haversineYards(fix.location, green);
+        if (total > 0 && Number.isFinite(fromPlayer)) {
+          yardsToGreen = Math.round(fromPlayer);
+          pctAlong = Math.max(0, Math.min(1, 1 - fromPlayer / total));
+        }
+      }
       return (
         <SmartVisionTap>
           <ImageBackground source={localImg} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
             <View style={styles.imageOverlay}>
               <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
             </View>
+            {pctAlong != null && yardsToGreen != null ? (
+              <>
+                <View style={[styles.playerTrackBar, { width: wrapDims.width - 16 }]}>
+                  <View style={styles.playerTrackTee} />
+                  <View style={styles.playerTrackGreen} />
+                  <View style={[styles.playerTrackDot, { left: `${pctAlong * 100}%` }]} />
+                </View>
+                <View style={styles.playerYardageBadge}>
+                  <Text style={styles.playerYardageText}>{yardsToGreen}y</Text>
+                </View>
+              </>
+            ) : null}
           </ImageBackground>
         </SmartVisionTap>
       );
@@ -314,4 +348,42 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   svHintText: { color: '#00C896', fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
+  // 2026-05-18 — Live player-position overlay on curated hole image.
+  // Bottom track: tee marker (left), green marker (right), player dot
+  // slides between them based on GPS distance-to-green / hole length.
+  playerTrackBar: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    height: 6,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 3,
+    overflow: 'visible',
+  },
+  playerTrackTee: {
+    position: 'absolute',
+    left: 0, top: -2, width: 3, height: 10, backgroundColor: '#9ca3af', borderRadius: 1.5,
+  },
+  playerTrackGreen: {
+    position: 'absolute',
+    right: 0, top: -2, width: 3, height: 10, backgroundColor: '#00C896', borderRadius: 1.5,
+  },
+  playerTrackDot: {
+    position: 'absolute',
+    top: -4,
+    width: 14, height: 14, marginLeft: -7,
+    backgroundColor: '#F5A623',
+    borderRadius: 7,
+    borderWidth: 2, borderColor: '#0d1a0d',
+  },
+  playerYardageBadge: {
+    position: 'absolute',
+    bottom: 24,
+    left: 8,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  playerYardageText: { color: '#F5A623', fontSize: 11, fontWeight: '800', fontFamily: 'monospace' },
 });
