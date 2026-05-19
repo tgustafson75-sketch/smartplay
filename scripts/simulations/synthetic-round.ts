@@ -222,6 +222,104 @@ check(
   `${lngSpread.toFixed(5)}° (${Math.round(lngSpread * 111_111 * Math.cos((minLat * Math.PI) / 180))}m)`,
 );
 
+// ─── Hole-transition math (mirrors services/holeDetection.ts) ────────
+//
+// This is the section that catches the bug Tim hit: "synthetic round
+// runs but nothing else happens." Hole transitions require
+// (a) isRoundActive=true (the on-device fix is roundStore.startRound)
+// (b) getHoleGeometry(courseId, hole) returning tee+green (the on-device
+//     fix is courseGeometryService._seedGeometry).
+// Here we reimplement detectCurrentHole's pure math against the mock
+// data and assert the transition recommendation fires at the right
+// waypoints. If this passes, the on-device wiring is the only remaining
+// risk — and that's been TS-checked + call-graph traced.
+
+section('Hole-transition math (pure detectCurrentHole simulation)');
+
+const MIN_DISTANCE_FROM_GREEN_YD = 35; // matches holeDetection.ts
+const MAX_TRANSITION_LOOKAHEAD = 2;    // matches holeDetection.ts
+
+function detectHoleSim(
+  pos: { lat: number; lng: number },
+  currentHole: number,
+  scoresByHole: Record<number, number>,
+): { hole_number: number; transition_recommended: boolean; reason: string } {
+  const cur = round.holes.find(h => h.holeNumber === currentHole);
+  if (!cur) return { hole_number: currentHole, transition_recommended: false, reason: 'no geom' };
+  const distFromCurrentGreen = haversineYards(pos, cur.green);
+  if (distFromCurrentGreen < MIN_DISTANCE_FROM_GREEN_YD) {
+    return {
+      hole_number: currentHole, transition_recommended: false,
+      reason: `near current green (${Math.round(distFromCurrentGreen)}y)`,
+    };
+  }
+  let bestNextHole = currentHole;
+  let bestNextDist = Infinity;
+  for (let offset = 1; offset <= MAX_TRANSITION_LOOKAHEAD; offset++) {
+    const candidate = currentHole + offset;
+    if (candidate > round.holes.length) break;
+    if (scoresByHole[candidate] != null) continue;
+    const candHole = round.holes.find(h => h.holeNumber === candidate);
+    if (!candHole) continue;
+    const d = haversineYards(pos, candHole.tee);
+    if (d < bestNextDist) { bestNextDist = d; bestNextHole = candidate; }
+  }
+  if (bestNextHole !== currentHole && bestNextDist < distFromCurrentGreen) {
+    return {
+      hole_number: bestNextHole, transition_recommended: true,
+      reason: `closer to hole ${bestNextHole} tee (${Math.round(bestNextDist)}y) than hole ${currentHole} green (${Math.round(distFromCurrentGreen)}y)`,
+    };
+  }
+  return { hole_number: currentHole, transition_recommended: false, reason: `still near current green (${Math.round(distFromCurrentGreen)}y)` };
+}
+
+// Walk the entire round and assert: when we arrive at hole N+1's tee,
+// the detector recommends transitioning from hole N to N+1. This proves
+// the simulator's tee→green→next-tee progression will drive auto-
+// transitions on-device, IF the geometry seed + startRound wiring lands
+// (verified at the code level — TS-clean, call graph traced).
+let transitionsRecommended = 0;
+let transitionsExpected = 0;
+let currentHole = 1;
+const scoresByHole: Record<number, number> = {};
+for (let i = 0; i < round.holes.length; i++) {
+  const h = round.holes[i];
+  // At hole h.holeNumber's green, transition to next hole's tee should fire.
+  if (i < round.holes.length - 1) {
+    const nextHole = round.holes[i + 1];
+    // Position = right at next hole's tee, with current=h.holeNumber
+    const detection = detectHoleSim(nextHole.tee, h.holeNumber, scoresByHole);
+    transitionsExpected++;
+    if (detection.transition_recommended && detection.hole_number === h.holeNumber + 1) {
+      transitionsRecommended++;
+    } else {
+      check(
+        `H${h.holeNumber}→H${h.holeNumber + 1} transition fires at next tee`,
+        false,
+        detection.reason,
+      );
+    }
+    scoresByHole[h.holeNumber] = 4; // pretend we scored
+    currentHole = h.holeNumber + 1;
+  }
+}
+check(
+  `all ${transitionsExpected} hole transitions recommended at correct waypoints`,
+  transitionsRecommended === transitionsExpected,
+  `${transitionsRecommended}/${transitionsExpected}`,
+);
+
+// Sanity: while standing on hole 1's green (within MIN_DISTANCE_FROM_GREEN_YD),
+// detector should NOT recommend transition.
+const h1 = round.holes[0];
+const onGreen = detectHoleSim(h1.green, 1, {});
+check('on hole 1 green → no transition', !onGreen.transition_recommended, onGreen.reason);
+
+// Sanity: while standing on hole 1's tee, detector should also not
+// recommend transition (we're far from H1 green but H2 tee is farther).
+const onTee = detectHoleSim(h1.tee, 1, {});
+check('on hole 1 tee → no transition', !onTee.transition_recommended, onTee.reason);
+
 // Total wall-clock yardage sanity — 18-hole par-72 black tees ~6500-7500
 section('Total course yardage');
 const totalYardage = round.holes.reduce((sum, h) => sum + h.expectedYardage, 0);

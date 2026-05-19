@@ -216,18 +216,124 @@ export function buildWalkFromMockRound(round: MockRound): SimulatedWalk {
   };
 }
 
-/** Start a synthetic round from a JSON-loaded MockRound object.
+/** 2026-05-18 — Start a synthetic round end-to-end:
+ *   1. Build CourseHole[] from the mock JSON and call roundStore.startRound
+ *      so isRoundActive flips true, courseHoles populates, and downstream
+ *      subscribers (holeDetection, orchestrator, SmartFinder) wake up.
+ *   2. Suppress the real GPS watcher (otherwise the device's actual fix
+ *      fights the simulator and yardages snap back to real coords).
+ *   3. Feed the simulated walk so the cached fix marches tee→green for
+ *      every hole.
  *  Returns the walk_id so callers can subscribe / stop. */
 export function startSyntheticRound(round: MockRound): string {
+  // 1. Build CourseHole records from the mock holes. The mock JSON only
+  //    has tee + green coords, so middle/front/back all collapse onto
+  //    the green centroid — fine for a synthetic test (yardages won't
+  //    be 3-decimal accurate but the hole-progression / Kevin firing /
+  //    auto-detect paths all exercise correctly).
+  const courseHoles = round.holes.map(h => ({
+    hole: h.holeNumber,
+    par: h.par,
+    distance: h.expectedYardage,
+    front: Math.max(0, h.expectedYardage - 10),
+    back: h.expectedYardage + 10,
+    teeLat: h.tee.lat,
+    teeLng: h.tee.lng,
+    middleLat: h.green.lat,
+    middleLng: h.green.lng,
+    frontLat: h.green.lat,
+    frontLng: h.green.lng,
+    backLat: h.green.lat,
+    backLng: h.green.lng,
+    note: '',
+    estimated: true,
+  }));
+
+  // 1b. Seed the geometry cache so holeDetection.detectCurrentHole()
+  //     can find tee + green coords and auto-advance the hole as the
+  //     simulator walks. Without this, holeDetection short-circuits
+  //     with "no current-hole green geometry" and the round sits on
+  //     hole 1 forever.
+  try {
+    const { _seedGeometry } = require('./courseGeometryService');
+    _seedGeometry({
+      course_id: round.courseId,
+      course_name: round.courseName,
+      fetched_at: Date.now(),
+      holes: round.holes.map(h => ({
+        hole_number: h.holeNumber,
+        par: h.par,
+        yardage: h.expectedYardage,
+        tee: { lat: h.tee.lat, lng: h.tee.lng },
+        green: { lat: h.green.lat, lng: h.green.lng },
+        green_front: { lat: h.green.lat, lng: h.green.lng },
+        green_back: { lat: h.green.lat, lng: h.green.lng },
+        bearing_deg: h.bearingDeg,
+        hazards: [],
+        fairway_centerline: [],
+        green_outline: [],
+      })),
+    });
+    console.log('[simGPS] seeded synthetic geometry for', round.holes.length, 'holes');
+  } catch (e) {
+    console.log('[simGPS] geometry seed failed (non-fatal):', e);
+  }
+
+  // 2. Start the round in the store. Lazy require dodges any circular
+  //    import risk and matches the pattern used elsewhere for cycle-prone
+  //    stores. Includes our synthetic course id so geometry pre-warm
+  //    will no-op gracefully (no record in the geometry service).
+  try {
+    const { useRoundStore } = require('../store/roundStore');
+    useRoundStore.getState().startRound(round.courseName, courseHoles, {
+      nineHole: false,
+      isCompetition: false,
+      notes: 'Synthetic round playback (dev harness)',
+      goal: null,
+      courseId: round.courseId,
+      mode: 'free_play',
+    });
+    console.log('[simGPS] synthetic round started in store:', round.courseName, courseHoles.length, 'holes');
+  } catch (e) {
+    console.log('[simGPS] startRound failed:', e);
+  }
+
+  // 3. Kill the real GPS watcher AFTER startRound's async GPS boot has
+  //    had a chance to fire. The 600ms delay lets startRound's
+  //    requestForegroundPermissionsAsync → startGpsManager() chain run,
+  //    then we tear it down so simulated coords own the fix cache.
+  setTimeout(() => {
+    try {
+      const { stopGpsManager } = require('./gpsManager');
+      stopGpsManager();
+      console.log('[simGPS] real GPS watcher suppressed — simulator owns the fix');
+    } catch (e) {
+      console.log('[simGPS] stopGpsManager failed (non-fatal):', e);
+    }
+  }, 600);
+
+  // 4. Register and start the simulated walk.
   const walk = buildWalkFromMockRound(round);
-  // Register the synthetic walk so startSimulatedWalk can find it.
-  // We push directly into SIMULATED_WALKS via a tiny mutation — safe
-  // because SIMULATED_WALKS is a module-local array and the harness
-  // is a dev-only entry point.
-  // (Idempotent: if already registered, replace by id.)
   const existingIdx = SIMULATED_WALKS.findIndex(w => w.id === walk.id);
   if (existingIdx >= 0) SIMULATED_WALKS[existingIdx] = walk;
   else SIMULATED_WALKS.push(walk);
   startSimulatedWalk(walk.id);
   return walk.id;
+}
+
+/** 2026-05-18 — Stop the synthetic round end-to-end. Mirrors
+ *  startSyntheticRound: discards the round in the store, clears the
+ *  simulated fix, and stops the walk timer. */
+export function stopSyntheticRound(): void {
+  stopSimulatedWalk();
+  try {
+    const { useRoundStore } = require('../store/roundStore');
+    const s = useRoundStore.getState();
+    if (s.isRoundActive) {
+      s.discardRound();
+      console.log('[simGPS] synthetic round discarded from store');
+    }
+  } catch (e) {
+    console.log('[simGPS] discardRound failed:', e);
+  }
 }

@@ -34,7 +34,7 @@ import {
   type GpsFix,
 } from '../services/gpsManager';
 import { haversineYards } from '../utils/geoDistance';
-import { startSyntheticRound, stopSimulatedWalk, isSimulatedActive, type MockRound } from '../services/simulatedGPS';
+import { startSyntheticRound, stopSyntheticRound, isSimulatedActive, type MockRound } from '../services/simulatedGPS';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const MOCK_ROUND: MockRound = require('../__mocks__/mockRound.json');
 
@@ -207,11 +207,14 @@ export default function GpsTestScreen() {
         <TouchableOpacity
           onPress={() => {
             if (isSimulatedActive()) {
-              stopSimulatedWalk();
-              Alert.alert('Stopped', 'Synthetic round playback stopped.');
+              stopSyntheticRound();
+              Alert.alert('Stopped', 'Synthetic round playback stopped and round discarded.');
             } else {
               const id = startSyntheticRound(MOCK_ROUND);
-              Alert.alert('Started', `Playing ${MOCK_ROUND.totalHoles}-hole synthetic round (${id}).\nWatch the live fix + DataStrip update.`);
+              Alert.alert(
+                'Round Started',
+                `Pebble Beach · ${MOCK_ROUND.totalHoles} holes.\n\n• Round is ACTIVE in the store\n• Real GPS suppressed; simulator owns the fix\n• Tap Caddie tab to see Kevin + yardages react\n• Tap Scorecard to see hole advance\n• Stop discards the round (won't save)`,
+              );
             }
           }}
           style={[styles.btnPrimary, { backgroundColor: '#F5A623', marginTop: 12 }]}

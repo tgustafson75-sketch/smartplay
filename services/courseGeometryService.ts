@@ -317,3 +317,13 @@ export async function fetchCourseGeometry(courseId: string): Promise<CourseGeome
 export function _clearGeometryCache(): void {
   memCache.clear();
 }
+
+/** 2026-05-18 — Test/debug only. Seed a synthetic CourseGeometry into
+ *  the in-memory cache so holeDetection.detectCurrentHole() finds tee +
+ *  green coords for hole-transition logic. Used by the synthetic round
+ *  harness (services/simulatedGPS.ts → startSyntheticRound) so the
+ *  simulator can drive automatic hole advancement end-to-end without
+ *  needing a real Overpass fetch. */
+export function _seedGeometry(geometry: CourseGeometry): void {
+  memCache.set(geometry.course_id, geometry);
+}

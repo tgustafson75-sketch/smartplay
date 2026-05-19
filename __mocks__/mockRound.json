@@ -36,11 +36,11 @@
       "holeNumber": 2,
       "par": 5,
       "expectedYardage": 502,
-      "computedYardage": 420,
-      "bearingDeg": 125.4,
+      "computedYardage": 423,
+      "bearingDeg": 118.7,
       "tee": {
-        "lat": 36.566,
-        "lng": -121.9466,
+        "lat": 36.56567,
+        "lng": -121.9469,
         "timestampMs": 1716351840000
       },
       "green": {
@@ -58,11 +58,11 @@
       "holeNumber": 3,
       "par": 4,
       "expectedYardage": 390,
-      "computedYardage": 328,
-      "bearingDeg": 38.8,
+      "computedYardage": 332,
+      "bearingDeg": 30.1,
       "tee": {
-        "lat": 36.564,
-        "lng": -121.9431,
+        "lat": 36.56374,
+        "lng": -121.9427,
         "timestampMs": 1716353520000
       },
       "green": {
@@ -79,11 +79,11 @@
       "holeNumber": 4,
       "par": 4,
       "expectedYardage": 331,
-      "computedYardage": 308,
-      "bearingDeg": 18.5,
+      "computedYardage": 312,
+      "bearingDeg": 9.4,
       "tee": {
-        "lat": 36.5661,
-        "lng": -121.941,
+        "lat": 36.56597,
+        "lng": -121.94052,
         "timestampMs": 1716354960000
       },
       "green": {
@@ -101,11 +101,11 @@
       "holeNumber": 5,
       "par": 3,
       "expectedYardage": 188,
-      "computedYardage": 160,
-      "bearingDeg": 326.7,
+      "computedYardage": 168,
+      "bearingDeg": 309.2,
       "tee": {
-        "lat": 36.5685,
-        "lng": -121.94,
+        "lat": 36.56873,
+        "lng": -121.93957,
         "timestampMs": 1716356400000
       },
       "green": {
@@ -123,11 +123,11 @@
       "holeNumber": 6,
       "par": 5,
       "expectedYardage": 513,
-      "computedYardage": 449,
-      "bearingDeg": 229.5,
+      "computedYardage": 452,
+      "bearingDeg": 223.2,
       "tee": {
-        "lat": 36.5696,
-        "lng": -121.9409,
+        "lat": 36.56991,
+        "lng": -121.94123,
         "timestampMs": 1716357600000
       },
       "green": {
@@ -145,11 +145,11 @@
       "holeNumber": 7,
       "par": 3,
       "expectedYardage": 106,
-      "computedYardage": 131,
-      "bearingDeg": 222.1,
+      "computedYardage": 141,
+      "bearingDeg": 201.1,
       "tee": {
-        "lat": 36.5672,
-        "lng": -121.9444,
+        "lat": 36.56748,
+        "lng": -121.94478,
         "timestampMs": 1716359280000
       },
       "green": {
@@ -167,11 +167,11 @@
       "holeNumber": 8,
       "par": 4,
       "expectedYardage": 428,
-      "computedYardage": 362,
-      "bearingDeg": 216.4,
+      "computedYardage": 366,
+      "bearingDeg": 208.6,
       "tee": {
-        "lat": 36.5664,
-        "lng": -121.9453,
+        "lat": 36.56664,
+        "lng": -121.94571,
         "timestampMs": 1716360480000
       },
       "green": {
@@ -188,11 +188,11 @@
       "holeNumber": 9,
       "par": 4,
       "expectedYardage": 481,
-      "computedYardage": 343,
-      "bearingDeg": 227.7,
+      "computedYardage": 347,
+      "bearingDeg": 219.5,
       "tee": {
-        "lat": 36.564,
-        "lng": -121.9475,
+        "lat": 36.5643,
+        "lng": -121.94784,
         "timestampMs": 1716361920000
       },
       "green": {
@@ -210,11 +210,11 @@
       "holeNumber": 10,
       "par": 4,
       "expectedYardage": 446,
-      "computedYardage": 367,
-      "bearingDeg": 225.9,
+      "computedYardage": 370,
+      "bearingDeg": 218.2,
       "tee": {
-        "lat": 36.5621,
-        "lng": -121.9501,
+        "lat": 36.56239,
+        "lng": -121.95046,
         "timestampMs": 1716363360000
       },
       "green": {
@@ -231,11 +231,11 @@
       "holeNumber": 11,
       "par": 4,
       "expectedYardage": 384,
-      "computedYardage": 302,
-      "bearingDeg": 345.0,
+      "computedYardage": 306,
+      "bearingDeg": 335.7,
       "tee": {
-        "lat": 36.56,
-        "lng": -121.9528,
+        "lat": 36.56011,
+        "lng": -121.95231,
         "timestampMs": 1716364800000
       },
       "green": {
@@ -252,11 +252,11 @@
       "holeNumber": 12,
       "par": 3,
       "expectedYardage": 202,
-      "computedYardage": 264,
-      "bearingDeg": 345.0,
+      "computedYardage": 268,
+      "bearingDeg": 334.3,
       "tee": {
-        "lat": 36.5624,
-        "lng": -121.9536,
+        "lat": 36.56251,
+        "lng": -121.95311,
         "timestampMs": 1716366240000
       },
       "green": {
@@ -273,11 +273,11 @@
       "holeNumber": 13,
       "par": 4,
       "expectedYardage": 399,
-      "computedYardage": 341,
-      "bearingDeg": 21.9,
+      "computedYardage": 344,
+      "bearingDeg": 13.6,
       "tee": {
-        "lat": 36.5645,
-        "lng": -121.9543,
+        "lat": 36.56435,
+        "lng": -121.95383,
         "timestampMs": 1716367440000
       },
       "green": {
@@ -294,11 +294,11 @@
       "holeNumber": 14,
       "par": 5,
       "expectedYardage": 580,
-      "computedYardage": 391,
-      "bearingDeg": 224.4,
+      "computedYardage": 394,
+      "bearingDeg": 217.0,
       "tee": {
-        "lat": 36.5671,
-        "lng": -121.953,
+        "lat": 36.56739,
+        "lng": -121.95337,
         "timestampMs": 1716368880000
       },
       "green": {
@@ -316,11 +316,11 @@
       "holeNumber": 15,
       "par": 4,
       "expectedYardage": 397,
-      "computedYardage": 288,
-      "bearingDeg": 346.3,
+      "computedYardage": 292,
+      "bearingDeg": 336.3,
       "tee": {
-        "lat": 36.5648,
-        "lng": -121.9558,
+        "lat": 36.5649,
+        "lng": -121.9553,
         "timestampMs": 1716370560000
       },
       "green": {
@@ -337,11 +337,11 @@
       "holeNumber": 16,
       "par": 4,
       "expectedYardage": 403,
-      "computedYardage": 314,
-      "bearingDeg": 345.6,
+      "computedYardage": 318,
+      "bearingDeg": 336.5,
       "tee": {
-        "lat": 36.5671,
-        "lng": -121.9565,
+        "lat": 36.5672,
+        "lng": -121.956,
         "timestampMs": 1716372000000
       },
       "green": {
@@ -358,11 +358,11 @@
       "holeNumber": 17,
       "par": 3,
       "expectedYardage": 178,
-      "computedYardage": 207,
-      "bearingDeg": 325.5,
+      "computedYardage": 213,
+      "bearingDeg": 312.0,
       "tee": {
-        "lat": 36.5696,
-        "lng": -121.9573,
+        "lat": 36.56983,
+        "lng": -121.95688,
         "timestampMs": 1716373440000
       },
       "green": {
@@ -380,11 +380,11 @@
       "holeNumber": 18,
       "par": 5,
       "expectedYardage": 543,
-      "computedYardage": 671,
-      "bearingDeg": 233.2,
+      "computedYardage": 672,
+      "bearingDeg": 229.0,
       "tee": {
-        "lat": 36.571,
-        "lng": -121.9585,
+        "lat": 36.57133,
+        "lng": -121.95881,
         "timestampMs": 1716374640000
       },
       "green": {
