@@ -622,25 +622,42 @@ function _startSyntheticRoundInternal(round: MockRound): string {
   //     hole 1 forever.
   try {
     const { _seedGeometry } = require('./courseGeometryService');
+    // 2026-05-19 — Offset front/back from the green centroid along the
+    // hole's bearing so F/M/B yardages differ meaningfully as the
+    // player walks. Was: all three collapsed onto the green centroid
+    // → identical yardage values. Now: front ~10y before middle, back
+    // ~10y past middle along the tee→green axis. Real greens are
+    // 18-30y deep front-to-back; 20y total (10 each side of middle)
+    // is the conservative midpoint.
+    const GREEN_HALF_DEPTH_YARDS = 10;
+    const DEG_PER_YARD_LAT = 1 / 121778;
     _seedGeometry({
       course_id: round.courseId,
       course_name: round.courseName,
       fetched_at: Date.now(),
-      holes: round.holes.map(h => ({
-        hole_number: h.holeNumber,
-        par: h.par,
-        yardage: h.expectedYardage,
-        tee: { lat: h.tee.lat, lng: h.tee.lng },
-        green: { lat: h.green.lat, lng: h.green.lng },
-        green_front: { lat: h.green.lat, lng: h.green.lng },
-        green_back: { lat: h.green.lat, lng: h.green.lng },
-        bearing_deg: h.bearingDeg,
-        hazards: [],
-        fairway_centerline: [],
-        green_outline: [],
-      })),
+      holes: round.holes.map(h => {
+        const brgRad = (h.bearingDeg * Math.PI) / 180;
+        const dLat = Math.cos(brgRad) * GREEN_HALF_DEPTH_YARDS * DEG_PER_YARD_LAT;
+        const cosLat = Math.cos(h.green.lat * Math.PI / 180);
+        const dLng = Math.sin(brgRad) * GREEN_HALF_DEPTH_YARDS * DEG_PER_YARD_LAT / (cosLat || 1);
+        return {
+          hole_number: h.holeNumber,
+          par: h.par,
+          yardage: h.expectedYardage,
+          tee: { lat: h.tee.lat, lng: h.tee.lng },
+          green: { lat: h.green.lat, lng: h.green.lng },
+          // Front = ~10y BEFORE the centroid (toward tee, opposite bearing)
+          green_front: { lat: h.green.lat - dLat, lng: h.green.lng - dLng },
+          // Back = ~10y BEYOND the centroid (along bearing)
+          green_back: { lat: h.green.lat + dLat, lng: h.green.lng + dLng },
+          bearing_deg: h.bearingDeg,
+          hazards: [],
+          fairway_centerline: [],
+          green_outline: [],
+        };
+      }),
     });
-    console.log('[simGPS] seeded synthetic geometry for', round.holes.length, 'holes');
+    console.log('[simGPS] seeded synthetic geometry for', round.holes.length, 'holes (F/B offset ±10y along bearing)');
   } catch (e) {
     console.log('[simGPS] geometry seed failed (non-fatal):', e);
   }
