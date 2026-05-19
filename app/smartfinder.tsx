@@ -13,7 +13,8 @@ import {
   Linking,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PinchGestureHandler, State, type PinchGestureHandlerGestureEvent, type PinchGestureHandlerStateChangeEvent } from 'react-native-gesture-handler';
+import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
 import { safeBack } from '../services/safeBack';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -309,18 +310,33 @@ function CameraSmartFinder({
   // Continuous zoom in [0, 1]. baseZoom captures the value at the start
   // of a pinch so subsequent pinches feel relative, not absolute. Resets
   // to 1.0× when the screen mounts (matches a real rangefinder power-on).
+  // 2026-05-19 — Switched from legacy PinchGestureHandler to the new
+  // Gesture API (Gesture.Pinch + GestureDetector). The legacy handler
+  // required GestureHandlerRootView at the screen root (added below)
+  // AND its events were swallowed by the StandardCameraOverlay's
+  // full-screen TouchableOpacity for tap-to-lock. The new API composes
+  // pinch (multi-touch) with the existing tap (single-touch) without
+  // a conflict because they're handled at different finger counts.
   const [zoom, setZoom] = useState(0);
   const baseZoomRef = useRef(0);
   const zoomLabel = zoomLabelFor(zoom);
-  const handlePinch = useCallback((e: PinchGestureHandlerGestureEvent) => {
-    const next = Math.max(0, Math.min(1, baseZoomRef.current + (e.nativeEvent.scale - 1) * PINCH_SENSITIVITY));
+  const setZoomFromPinch = useCallback((next: number) => {
     setZoom(next);
   }, []);
-  const handlePinchStateChange = useCallback((e: PinchGestureHandlerStateChangeEvent) => {
-    if (e.nativeEvent.state === State.END || e.nativeEvent.state === State.CANCELLED) {
-      baseZoomRef.current = Math.max(0, Math.min(1, baseZoomRef.current + (e.nativeEvent.scale - 1) * PINCH_SENSITIVITY));
-    }
+  const commitBaseZoom = useCallback((next: number) => {
+    baseZoomRef.current = next;
   }, []);
+  const pinchGesture = useMemo(() => {
+    return Gesture.Pinch()
+      .onUpdate((e) => {
+        const next = Math.max(0, Math.min(1, baseZoomRef.current + (e.scale - 1) * PINCH_SENSITIVITY));
+        runOnJS(setZoomFromPinch)(next);
+      })
+      .onEnd((e) => {
+        const next = Math.max(0, Math.min(1, baseZoomRef.current + (e.scale - 1) * PINCH_SENSITIVITY));
+        runOnJS(commitBaseZoom)(next);
+      });
+  }, [setZoomFromPinch, commitBaseZoom]);
 
   useEffect(() => {
     Location.requestForegroundPermissionsAsync().then(({ status }) => {
@@ -381,28 +397,25 @@ function CameraSmartFinder({
   }
 
   return (
-    <View style={styles.cameraContainer}>
-      <PinchGestureHandler
-        onGestureEvent={handlePinch}
-        onHandlerStateChange={handlePinchStateChange}
-      >
-        <View style={StyleSheet.absoluteFill} collapsable={false}>
+    <GestureHandlerRootView style={styles.cameraContainer}>
+      <GestureDetector gesture={pinchGesture}>
+        <View style={styles.cameraContainer} collapsable={false}>
           <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={zoom} />
-        </View>
-      </PinchGestureHandler>
 
-      {mode === 'standard' ? (
-        <StandardCameraOverlay
-          locationGranted={locationGranted}
-          height={height}
-          zoomLabel={zoomLabel}
-          yards={yards}
-        />
-      ) : mode === 'target' ? (
-        <TargetCameraOverlay yards={yards} />
-      ) : (
-        <PuttCameraOverlay locationGranted={locationGranted} />
-      )}
+          {mode === 'standard' ? (
+            <StandardCameraOverlay
+              locationGranted={locationGranted}
+              height={height}
+              zoomLabel={zoomLabel}
+              yards={yards}
+            />
+          ) : mode === 'target' ? (
+            <TargetCameraOverlay yards={yards} />
+          ) : (
+            <PuttCameraOverlay locationGranted={locationGranted} />
+          )}
+        </View>
+      </GestureDetector>
 
       {/* Top bar — back, hole+par, GPS quality */}
       <View style={[styles.cameraTopBar, { top: insets.top + 8 }]} pointerEvents="box-none">
@@ -422,7 +435,7 @@ function CameraSmartFinder({
       <View style={[styles.cameraToggleWrap, { top: insets.top + 70 }]} pointerEvents="box-none">
         <SmartFinderModeToggle mode={mode} onChange={onModeChange} />
       </View>
-    </View>
+    </GestureHandlerRootView>
   );
 }
 
