@@ -106,6 +106,17 @@ function tick(): void {
   const store = useOffCourseStore.getState();
   const isFar = nearest > OFF_COURSE_THRESHOLD_YD;
 
+  // 2026-05-19 — Lazy-require the harness event logger so off-course
+  // flips show up in the GPS Test Bench timeline alongside transitions
+  // and score logs.
+  const logEvent = (kind: string, detail: string) => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { logHarnessEvent } = require('./simulatedGPS');
+      logHarnessEvent(kind, detail);
+    } catch {}
+  };
+
   if (isFar) {
     if (!store.isOffCourse) {
       // Newly far. Enforce sustained-window before flipping the badge.
@@ -113,6 +124,7 @@ function tick(): void {
         useOffCourseStore.setState({ candidateSinceTs: Date.now(), yardsToNearestHole: Math.round(nearest) });
       } else if (Date.now() - store.candidateSinceTs >= SUSTAINED_OFF_COURSE_MS) {
         store.setOffCourse(true, Math.round(nearest));
+        logEvent('off_course', `flipped TRUE · ${Math.round(nearest)}y from nearest hole point`);
       } else {
         // Still observing — just update the distance.
         useOffCourseStore.setState({ yardsToNearestHole: Math.round(nearest) });
@@ -125,6 +137,7 @@ function tick(): void {
     // Within threshold — clear any candidate window AND the badge.
     if (store.isOffCourse) {
       store.setOffCourse(false, Math.round(nearest));
+      logEvent('off_course', `cleared (back within threshold · ${Math.round(nearest)}y)`);
     } else if (store.candidateSinceTs != null) {
       useOffCourseStore.setState({ candidateSinceTs: null, yardsToNearestHole: Math.round(nearest) });
     }

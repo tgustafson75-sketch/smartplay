@@ -165,6 +165,62 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     );
   }
 
+  // 2026-05-19 — Curated bundled image takes priority over any aerial/
+  // SVG fallback whenever one exists for the course, regardless of
+  // whether geometry is loaded. Tim's repeated "the whole view is gone"
+  // complaint on Menifee Palms was the geometry-seeded synthetic round
+  // bypassing the curated image and falling into the aerial/Mapbox path
+  // (which renders a generic green satellite tile). Curated photos
+  // are the canonical render for any course that has them; geometry
+  // only drives the player-dot overlay coordinates.
+  const curatedImage =
+    getLocalHoleImageById(activeCourseId, currentHole) ??
+    getLocalHoleImage(activeCourse, currentHole);
+
+  if (curatedImage) {
+    const fix = getLastFix();
+    const holeRecord = useRoundStore.getState().courseHoles.find(h => h.hole === currentHole);
+    // Prefer the seeded geometry's tee/green if available; fall back to
+    // courseHoles record (Palms has these). Either path produces an
+    // axis we can project the player onto.
+    const teeLatLng = (geometry?.tee && geometry?.green)
+      ? { tee: geometry.tee, green: geometry.green }
+      : holeRecord && (holeRecord.teeLat || holeRecord.teeLng) && (holeRecord.middleLat || holeRecord.middleLng)
+        ? { tee: { lat: holeRecord.teeLat, lng: holeRecord.teeLng }, green: { lat: holeRecord.middleLat, lng: holeRecord.middleLng } }
+        : null;
+    let pctAlong: number | null = null;
+    let yardsToGreen: number | null = null;
+    if (fix && teeLatLng) {
+      const total = haversineYards(teeLatLng.tee, teeLatLng.green);
+      const fromPlayer = haversineYards(fix.location, teeLatLng.green);
+      if (total > 0 && Number.isFinite(fromPlayer)) {
+        yardsToGreen = Math.round(fromPlayer);
+        pctAlong = Math.max(0, Math.min(1, 1 - fromPlayer / total));
+      }
+    }
+    return (
+      <SmartVisionTap>
+        <ImageBackground source={curatedImage} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
+          <View style={styles.imageOverlay}>
+            <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
+          </View>
+          {pctAlong != null && yardsToGreen != null ? (
+            <>
+              <View style={[styles.playerTrackBar, { width: wrapDims.width - 16 }]}>
+                <View style={styles.playerTrackTee} />
+                <View style={styles.playerTrackGreen} />
+                <View style={[styles.playerTrackDot, { left: `${pctAlong * 100}%` }]} />
+              </View>
+              <View style={styles.playerYardageBadge}>
+                <Text style={styles.playerYardageText}>{yardsToGreen}y</Text>
+              </View>
+            </>
+          ) : null}
+        </ImageBackground>
+      </SmartVisionTap>
+    );
+  }
+
   if (!geometry || !geometry.tee || !geometry.green) {
     // 2026-05-17 — courseId-first lookup. Falls back to name-based only
     // when no local: id is set (e.g. golfcourseapi-only rounds).

@@ -184,6 +184,143 @@ export default function GpsTestScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.body}>
+        {/* 2026-05-19 — SYNTHETIC ROUND HARNESS is now the top section,
+            wrapped in a single visually distinct bordered box with the
+            two play buttons AND the live telemetry readout together so
+            Tim doesn't have to scroll past anything to find both. */}
+        <View style={[styles.harnessBlock, { backgroundColor: colors.surface_elevated, borderColor: colors.accent }]}>
+          <View style={styles.harnessHeader}>
+            <Ionicons name="flask-outline" size={18} color={colors.accent} />
+            <Text style={[styles.harnessTitle, { color: colors.accent }]}>SYNTHETIC ROUND HARNESS</Text>
+          </View>
+          <Text style={[styles.empty, { color: colors.text_muted, marginBottom: 8 }]}>
+            Pick a course to play. Only one round can run at a time. Telemetry below shows what the simulator is doing.
+          </Text>
+
+          {([
+            { round: MENIFEE_MOCK_ROUND, label: 'Menifee Palms', color: '#00C896' },
+            { round: PEBBLE_MOCK_ROUND, label: 'Pebble Beach', color: '#F5A623' },
+          ] as const).map(({ round, label, color }) => {
+            const simRunning = walkState != null;
+            const isThisCourseRunning = walkState?.walk_id === `mock-round-${round.courseId}`;
+            const otherCourseRunning = simRunning && !isThisCourseRunning;
+            return (
+              <TouchableOpacity
+                key={round.courseId}
+                disabled={otherCourseRunning}
+                onPress={() => {
+                  try {
+                    if (isThisCourseRunning) {
+                      stopSyntheticRound();
+                      Alert.alert('Stopped', `${round.courseName} playback stopped and round discarded.`);
+                    } else if (otherCourseRunning) {
+                      Alert.alert('Already running', 'Stop the active synthetic round first.');
+                    } else {
+                      const id = startSyntheticRound(round);
+                      Alert.alert(
+                        'Round Started',
+                        `${round.courseName} · ${round.totalHoles} holes (${id}).\n\nWatch the telemetry below for live progress.`,
+                      );
+                    }
+                  } catch (e) {
+                    const msg = e instanceof Error
+                      ? `${e.name}: ${e.message}\n\n${(e.stack ?? '').split('\n').slice(0, 6).join('\n')}`
+                      : String(e);
+                    Alert.alert('Synthetic round error', msg);
+                    console.log('[gps-test] synthetic round button error:', e);
+                  }
+                }}
+                style={[
+                  styles.btnPrimary,
+                  {
+                    backgroundColor: otherCourseRunning ? '#3a3a3a' : color,
+                    marginTop: 8,
+                    opacity: otherCourseRunning ? 0.5 : 1,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Toggle ${label} synthetic round playback`}
+              >
+                <Ionicons name={isThisCourseRunning ? 'stop-circle-outline' : 'play-circle-outline'} size={18} color="#000" style={{ marginRight: 6 }} />
+                <Text style={styles.btnPrimaryText}>
+                  {isThisCourseRunning
+                    ? `Stop ${label}`
+                    : otherCourseRunning
+                    ? `${label} (other round active)`
+                    : `Play ${label} (${round.totalHoles} holes)`}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+
+          {/* Telemetry — ALWAYS visible, shows "—" placeholders when
+              nothing's running so Tim never wonders if the panel exists. */}
+          <View style={[styles.telemetryBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.telemetryLabel, { color: colors.text_muted }]}>LIVE TELEMETRY</Text>
+            <Row label="course" value={activeCourseName ?? '—'} colors={colors} />
+            <Row label="round_active" value={String(isRoundActive)} colors={colors} />
+            <Row label="current_hole" value={isRoundActive ? `${currentHole} / ${courseHoles.length || '?'}` : '—'} colors={colors} />
+            <Row
+              label="sim_emits"
+              value={lastEmitMs ? `${emitCount} (${Math.round((Date.now() - lastEmitMs) / 1000)}s ago)` : `${emitCount}`}
+              colors={colors}
+            />
+            <Row
+              label="waypoint"
+              value={walkState ? `${walkState.waypoint_index} → ${walkState.next_label ?? '—'}` : 'idle'}
+              colors={colors}
+            />
+            <Row
+              label="fraction_through"
+              value={walkState ? walkState.fraction_through.toFixed(2) : '—'}
+              colors={colors}
+            />
+            <Row
+              label="sim_position"
+              value={walkState ? `${walkState.current_lat.toFixed(5)}, ${walkState.current_lng.toFixed(5)}` : '—'}
+              colors={colors}
+            />
+            <Row
+              label="pace_mps"
+              value={walkState ? walkState.pace_mps.toFixed(1) : '—'}
+              colors={colors}
+            />
+            <Row
+              label="off_course"
+              value={isOffCourse ? `YES (${yardsToNearestHole ?? '?'}y from nearest)` : 'no'}
+              colors={colors}
+            />
+            <Row
+              label="scores_logged"
+              value={`${Object.keys(scores).length} / ${courseHoles.length || '?'}`}
+              colors={colors}
+            />
+            {Object.keys(scores).length > 0 ? (
+              <View style={{ marginTop: 6 }}>
+                <Text style={[styles.empty, { color: colors.text_muted, fontSize: 11, marginBottom: 4 }]}>
+                  PER-HOLE
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  {Object.entries(scores)
+                    .sort(([a], [b]) => Number(a) - Number(b))
+                    .map(([h, s]) => {
+                      const par = courseHoles.find(c => c.hole === Number(h))?.par ?? 4;
+                      const offset = s - par;
+                      const chipColor = offset < 0 ? '#00C896' : offset === 0 ? colors.text_primary : offset === 1 ? '#F5A623' : '#ef4444';
+                      return (
+                        <View key={h} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                          <Text style={{ color: chipColor, fontSize: 11, fontFamily: 'monospace' }}>
+                            H{h}:{s}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                </View>
+              </View>
+            ) : null}
+          </View>
+        </View>
+
         <Text style={[styles.hint, { color: colors.text_muted }]}>
           Set the anchor at a known spot, then walk. Distance should tick up as you move away and down as you come back. If it never moves, GPS itself is the problem — not course geometry, not the consumer chain.
         </Text>
@@ -228,152 +365,6 @@ export default function GpsTestScreen() {
           <Ionicons name="refresh" size={18} color="#000" style={{ marginRight: 6 }} />
           <Text style={styles.btnPrimaryText}>{pulling ? 'Pulling…' : 'Refresh GPS'}</Text>
         </TouchableOpacity>
-
-        {/* 2026-05-17 — Synthetic round playback. Loads a course-mock
-            JSON and feeds it through the existing simulatedGPS pipeline.
-            Drives the same gpsManager → smartFinderService → holeDetection
-            chain as real GPS so this validates the WHOLE pipeline, not
-            just the math. Owner-only via this screen's existing gate.
-            2026-05-18 — added Menifee Lakes Palms (Tim's home course)
-            as a second option so the harness can rehearse on the same
-            layout Tim actually plays. */}
-        {([
-          { round: MENIFEE_MOCK_ROUND, label: 'Menifee Palms', color: '#00C896' },
-          { round: PEBBLE_MOCK_ROUND, label: 'Pebble Beach', color: '#F5A623' },
-        ] as const).map(({ round, label, color }) => {
-          // 2026-05-18 — Track sim activity via walkState (reactive)
-          // not isSimulatedActive() (function call evaluated at render
-          // time and never re-runs). Active course derived from the
-          // walk_id so we can label the running course's button as
-          // "Stop" and the other as disabled. Tim hit a state where
-          // both buttons read "Play X" while a sim was already running,
-          // letting him double-tap and stomp on the in-flight round.
-          const simRunning = walkState != null;
-          const isThisCourseRunning = walkState?.walk_id === `mock-round-${round.courseId}`;
-          const otherCourseRunning = simRunning && !isThisCourseRunning;
-          return (
-            <TouchableOpacity
-              key={round.courseId}
-              disabled={otherCourseRunning}
-              onPress={() => {
-                try {
-                  if (isThisCourseRunning) {
-                    stopSyntheticRound();
-                    Alert.alert('Stopped', `${round.courseName} playback stopped and round discarded.`);
-                  } else if (otherCourseRunning) {
-                    // Belt-and-suspenders — the disabled prop blocks
-                    // taps but this is the fail-safe in case it slips.
-                    Alert.alert('Already running', 'Stop the active synthetic round first.');
-                  } else {
-                    const id = startSyntheticRound(round);
-                    Alert.alert(
-                      'Round Started',
-                      `${round.courseName} · ${round.totalHoles} holes (${id}).\n\nCheck Caddie tab + Scorecard for live updates.`,
-                    );
-                  }
-                } catch (e) {
-                  const msg = e instanceof Error
-                    ? `${e.name}: ${e.message}\n\n${(e.stack ?? '').split('\n').slice(0, 6).join('\n')}`
-                    : String(e);
-                  Alert.alert('Synthetic round error', msg);
-                  console.log('[gps-test] synthetic round button error:', e);
-                }
-              }}
-              style={[
-                styles.btnPrimary,
-                {
-                  backgroundColor: otherCourseRunning ? '#3a3a3a' : color,
-                  marginTop: 12,
-                  opacity: otherCourseRunning ? 0.5 : 1,
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={`Toggle ${label} synthetic round playback`}
-            >
-              <Ionicons name={isThisCourseRunning ? 'stop-circle-outline' : 'play-circle-outline'} size={18} color="#000" style={{ marginRight: 6 }} />
-              <Text style={styles.btnPrimaryText}>
-                {isThisCourseRunning
-                  ? `Stop ${label}`
-                  : otherCourseRunning
-                  ? `${label} (other round active)`
-                  : `Play ${label} (${round.totalHoles} holes)`}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-
-        {/* 2026-05-18 — Harness telemetry panel. Live readout of what
-            the synthetic round is doing: current hole, simulator
-            waypoint, scores logged so far, off-course state. Empty
-            (collapsed) when no round is active. */}
-        {(isRoundActive || walkState) ? (
-          <>
-            <Text style={[styles.sectionLabel, { color: colors.text_muted, marginTop: 24 }]}>HARNESS TELEMETRY</Text>
-            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Row label="course" value={activeCourseName ?? '—'} colors={colors} />
-              <Row label="round_active" value={String(isRoundActive)} colors={colors} />
-              <Row label="current_hole" value={`${currentHole} / ${courseHoles.length || '?'}`} colors={colors} />
-              <Row
-                label="sim_emits"
-                value={lastEmitMs ? `${emitCount} (${Math.round((Date.now() - lastEmitMs) / 1000)}s ago)` : `${emitCount}`}
-                colors={colors}
-              />
-              <Row
-                label="waypoint"
-                value={walkState ? `${walkState.waypoint_index} → ${walkState.next_label ?? '—'}` : 'idle'}
-                colors={colors}
-              />
-              <Row
-                label="fraction_through"
-                value={walkState ? walkState.fraction_through.toFixed(2) : '—'}
-                colors={colors}
-              />
-              <Row
-                label="sim_position"
-                value={walkState ? `${walkState.current_lat.toFixed(5)}, ${walkState.current_lng.toFixed(5)}` : '—'}
-                colors={colors}
-              />
-              <Row
-                label="pace_mps"
-                value={walkState ? walkState.pace_mps.toFixed(1) : '—'}
-                colors={colors}
-              />
-              <Row
-                label="off_course"
-                value={isOffCourse ? `YES (${yardsToNearestHole ?? '?'}y from nearest)` : 'no'}
-                colors={colors}
-              />
-              <Row
-                label="scores_logged"
-                value={`${Object.keys(scores).length} / ${courseHoles.length || '?'}`}
-                colors={colors}
-              />
-              {Object.keys(scores).length > 0 ? (
-                <View style={{ marginTop: 6 }}>
-                  <Text style={[styles.empty, { color: colors.text_muted, fontSize: 11, marginBottom: 4 }]}>
-                    PER-HOLE
-                  </Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                    {Object.entries(scores)
-                      .sort(([a], [b]) => Number(a) - Number(b))
-                      .map(([h, s]) => {
-                        const par = courseHoles.find(c => c.hole === Number(h))?.par ?? 4;
-                        const offset = s - par;
-                        const color = offset < 0 ? '#00C896' : offset === 0 ? colors.text_primary : offset === 1 ? '#F5A623' : '#ef4444';
-                        return (
-                          <View key={h} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-                            <Text style={{ color, fontSize: 11, fontFamily: 'monospace' }}>
-                              H{h}:{s}
-                            </Text>
-                          </View>
-                        );
-                      })}
-                  </View>
-                </View>
-              ) : null}
-            </View>
-          </>
-        ) : null}
 
         <Text style={[styles.sectionLabel, { color: colors.text_muted, marginTop: 24 }]}>ANCHOR</Text>
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -487,6 +478,40 @@ const styles = StyleSheet.create({
   title: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '900', letterSpacing: 0.2 },
   body: { padding: 16 },
   hint: { fontSize: 13, lineHeight: 19, marginBottom: 16 },
+  // 2026-05-19 — Synthetic harness block: visually distinct container
+  // that groups the play buttons + live telemetry together at the top
+  // of the GPS Test Bench. Accent-colored border + flask icon header
+  // so Tim doesn't have to hunt for the telemetry — it's part of the
+  // same prominent box as the play buttons.
+  harnessBlock: {
+    borderRadius: 14,
+    borderWidth: 2,
+    padding: 14,
+    marginBottom: 20,
+  },
+  harnessHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  harnessTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+  },
+  telemetryBox: {
+    marginTop: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 10,
+  },
+  telemetryLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    marginBottom: 6,
+  },
   bodyHint: { fontSize: 11, lineHeight: 16, marginTop: 8, fontStyle: 'italic' },
   sectionLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1.4, marginBottom: 8 },
   card: {

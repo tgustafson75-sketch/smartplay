@@ -131,12 +131,22 @@ export function getLastFix(): LastFix | null {
 export function setSimulatedFix(loc: ShotLocation, accuracy_m = 3): void {
   lastFix = { location: loc, accuracy_m, timestamp: Date.now() };
   simulatedActive = true;
+  // 2026-05-19 — Notify fix-change listeners so downstream consumers
+  // (Caddie tab F/M/B memo via markTick, L1 SmartFinder yardages,
+  // SmartVision live updates, the L1HolePreview player dot) actually
+  // recompute when the simulator moves the player. Without this notify,
+  // the simulator updates lastFix silently and only screens that
+  // subscribe to a separate tick or rerender on their own ever showed
+  // movement. Tim's "Quiet SmartFinder shows no yardage" + "the harness
+  // isn't progressing" reports both trace back here.
+  notifyFixChange();
 }
 
 /** Stop simulation and clear the cached fix so next refreshFix() hits real GPS. */
 export function clearSimulatedFix(): void {
   simulatedActive = false;
   lastFix = null;
+  notifyFixChange();
 }
 
 export function isSimulatedActive(): boolean {

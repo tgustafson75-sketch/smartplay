@@ -302,6 +302,14 @@ async function tick(): Promise<void> {
     candidateHole = null;
     candidateSince = 0;
     console.log('[holeDetection] auto-transition:', next, '·', result.reason);
+    // 2026-05-19 — Mirror hole transitions into the harness event log
+    // so Tim can see (in the GPS Test Bench) exactly when and why each
+    // hole advance fired. Lazy require dodges any circular import risk.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { logHarnessEvent } = require('./simulatedGPS');
+      logHarnessEvent('transition', `→ hole ${next} · ${result.reason}`);
+    } catch {}
     listeners.forEach(l => {
       try { l(next, result.reason); } catch (e) { ownerSentinel('holeDetection.listener', e); }
     });

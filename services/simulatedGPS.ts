@@ -36,6 +36,60 @@ let activeWalk: SimulatedWalk | null = null;
 let waypointIdx = 0;
 let segmentStartTs = 0;
 let listeners = new Set<(s: SimulatedWalkState | null) => void>();
+// 2026-05-19 — Pace overrides + step mode. Tim's harness was outrunning
+// holeDetection's 10s sustained-position window because the default pace
+// was 240 m/s. New controls let the dev pick a realistic walking pace
+// (so transitions actually fire), pause/resume, or step waypoint-by-
+// waypoint to debug per-segment behavior.
+let paceOverrideMps: number | null = null;
+let paused = false;
+let stepMode = false;
+let pendingStepAdvance = false;
+
+export function setSimulatorPace(mps: number | null): void {
+  paceOverrideMps = mps;
+  console.log('[simGPS] pace override:', mps ?? 'walk-default');
+}
+export function getSimulatorPaceOverride(): number | null { return paceOverrideMps; }
+export function setSimulatorPaused(p: boolean): void {
+  paused = p;
+  if (!paused) segmentStartTs = Date.now();
+  console.log('[simGPS] paused:', p);
+}
+export function isSimulatorPaused(): boolean { return paused; }
+export function setSimulatorStepMode(s: boolean): void {
+  stepMode = s;
+  pendingStepAdvance = false;
+  console.log('[simGPS] step mode:', s);
+}
+export function isSimulatorStepMode(): boolean { return stepMode; }
+export function simulatorStepOnce(): void {
+  pendingStepAdvance = true;
+  segmentStartTs = Date.now() - 999_999;
+}
+
+// 2026-05-19 — Harness event log. Every interesting state change
+// (start, stop, waypoint reached, score logged, hole transition,
+// off-course flip) is appended here so the GPS Test Bench can show
+// a live timestamped log. Ring buffer capped at 100 events.
+export type HarnessEvent = { ts: number; kind: string; detail: string };
+const harnessEvents: HarnessEvent[] = [];
+const eventListeners = new Set<(e: HarnessEvent[]) => void>();
+export function logHarnessEvent(kind: string, detail: string): void {
+  const ev = { ts: Date.now(), kind, detail };
+  harnessEvents.push(ev);
+  if (harnessEvents.length > 100) harnessEvents.shift();
+  eventListeners.forEach(l => { try { l([...harnessEvents]); } catch {} });
+}
+export function subscribeHarnessEvents(cb: (e: HarnessEvent[]) => void): () => void {
+  eventListeners.add(cb);
+  cb([...harnessEvents]);
+  return () => { eventListeners.delete(cb); };
+}
+export function clearHarnessEvents(): void {
+  harnessEvents.length = 0;
+  eventListeners.forEach(l => { try { l([]); } catch {} });
+}
 
 function metersBetween(a: SimulatedWalkPoint, b: SimulatedWalkPoint): number {
   const dLat = (b.lat - a.lat) * METERS_PER_DEG_LAT;
@@ -88,6 +142,7 @@ export function startSimulatedWalk(walkId: string): boolean {
     pace_mps: walk.pace_mps ?? 1.4,
   });
   console.log('[simGPS] start:', walk.id, '·', walk.points.length, 'waypoints');
+  logHarnessEvent('start', `${walk.display_name} · ${walk.points.length} waypoints`);
 
   timer = setInterval(tick, TICK_MS);
   return true;
@@ -141,9 +196,12 @@ function rollSyntheticScore(par: number): number {
 
 function tick(): void {
   if (!activeWalk) return;
+  if (paused) return;
+  if (stepMode && !pendingStepAdvance) return;
   const points = activeWalk.points;
   if (waypointIdx >= points.length - 1) {
     console.log('[simGPS] walk complete');
+    logHarnessEvent('walk_complete', `Reached final waypoint (${points.length})`);
     stopSimulatedWalk();
     return;
   }
@@ -151,7 +209,9 @@ function tick(): void {
   const a = points[waypointIdx];
   const b = points[waypointIdx + 1];
   const segmentMeters = metersBetween(a, b);
-  const pace = activeWalk.pace_mps ?? 1.4;
+  // 2026-05-19 — Pace override takes precedence over walk's pace_mps so
+  // Tim can swap fast/realistic on the fly without rebuilding the walk.
+  const pace = paceOverrideMps ?? activeWalk.pace_mps ?? 1.4;
   const segmentMs = (segmentMeters / pace) * 1000;
   const elapsed = Date.now() - segmentStartTs;
   const t = Math.min(1, elapsed / Math.max(segmentMs, 1));
@@ -163,8 +223,10 @@ function tick(): void {
   if (t >= 1) {
     waypointIdx += 1;
     segmentStartTs = Date.now();
+    if (stepMode) pendingStepAdvance = false;
     const reached = b.label ?? `wp ${waypointIdx}`;
     console.log('[simGPS] reached:', reached);
+    logHarnessEvent('waypoint', `→ ${reached} (idx ${waypointIdx})`);
     // 2026-05-18 — If this waypoint is a tagged green, log a
     // randomized score for that hole so the scorecard + recap pipeline
     // populates end-to-end. Only fires when the round-active state
@@ -179,9 +241,11 @@ function tick(): void {
           const offset = score - b.par;
           const label = offset === -1 ? 'birdie' : offset === 0 ? 'par' : offset === 1 ? 'bogey' : offset === 2 ? 'double' : `+${offset}`;
           console.log(`[simGPS] H${b.holeNumber} synthetic score: ${score} (${label})`);
+          logHarnessEvent('score', `H${b.holeNumber} = ${score} (${label}) on par ${b.par}`);
         }
       } catch (e) {
         console.log('[simGPS] synthetic score log failed:', e);
+        logHarnessEvent('error', `score log failed: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
   }
@@ -409,6 +473,7 @@ function _startSyntheticRoundInternal(round: MockRound): string {
     const { stopGpsManager } = require('./gpsManager');
     stopGpsManager();
     console.log('[simGPS] real GPS watcher suppressed — simulator owns the fix');
+    logHarnessEvent('gps', 'real GPS watcher suppressed; simulator owns the fix');
   } catch (e) {
     console.log('[simGPS] stopGpsManager failed (non-fatal):', e);
   }
@@ -440,6 +505,7 @@ export function stopSyntheticRound(): void {
     if (s.isRoundActive) {
       s.discardRound();
       console.log('[simGPS] synthetic round discarded from store');
+      logHarnessEvent('stop', 'round discarded; state reset');
     }
   } catch (e) {
     console.log('[simGPS] discardRound failed:', e);
