@@ -9,7 +9,7 @@ declared shipped:
 1. **The phase response must explicitly state** which critical path(s) the
    phase touches.
 2. **The phase response must state expected behavior** per touched path.
-3. **Tim verifies** the path works end-to-end on the dev-client before
+3. **The operator verifies** the path works end-to-end on the dev-client before
    declaring the phase confirmed shipped.
 4. **If the verification fails**, the phase is *not shipped* — it's pending
    targeted fix. Fix is scoped to the failure (not bundled with other work).
@@ -23,7 +23,7 @@ The four paths:
 
 Each path has path-specific log markers (`[path1:onboard]`, `[path2:round]`,
 `[path3:cage]`, `[path4:voice]`) instrumented at flow boundaries, plus
-existing `[V6-DIAG]` and `[ttfa]` lines for finer detail. Tim greps logcat
+existing `[V6-DIAG]` and `[ttfa]` lines for finer detail. The operator greps logcat
 on the path marker during the MIN VERIFY scenario for that path.
 
 External beta-readiness requires all four paths verified working end-to-end
@@ -37,7 +37,7 @@ When shipping a phase, include in the response:
 - Per-component what shipped
 - Honest scope notes for anything *not* shipped
 - **Critical paths touched** (Path 1 / 2 / 3 / 4 / none)
-- **Expected behavior** per touched path (what Tim should see in MIN VERIFY)
+- **Expected behavior** per touched path (what the operator should see in MIN VERIFY)
 
 ## Commit conventions
 
@@ -133,7 +133,7 @@ is unchanged before reporting the phase complete.
 - React Native + Expo Router + TypeScript.
 - Adult ADHD: all prompts and instructions must be maximally explicit. Every choice presented must be binary or pre-recommended. Never open-ended.
 - Testing on Samsung Galaxy Z Fold (closed ≈ 9:21, open ≈ 8:9). All UI work must account for variable aspect ratios via `useWindowDimensions` and aspect-ratio breakpoints.
-- Discovery logic must be built into prompts. Tim should never have to grep, hunt for files, or paste file contents manually — the agent finds them.
+- Discovery logic must be built into prompts. The operator should never have to grep, hunt for files, or paste file contents manually — the agent finds them.
 
 ## Architecture invariants (do not deviate)
 
@@ -151,7 +151,7 @@ is unchanged before reporting the phase complete.
 
 - Aggressive timeline AND clean product are both non-negotiable. Never accumulate polish debt.
 - Always choose the more logical / better architectural option even if more work, unless it alters product vision. No safe small patches.
-- **Standing decision rule**: make logical calls toward the Wow vision without asking. Note non-obvious calls in one line at the top of the response. Tim overrides if he disagrees.
+- **Standing decision rule**: make logical calls toward the Wow vision without asking. Note non-obvious calls in one line at the top of the response. The operator overrides if they disagree.
 - Verification gates discipline (Phase AO): every phase ships only after empirical proof it works, not just code-level shipped.
 - Prefer synthetic / programmatic verification (Playwright MCP, mocked Kevin, GPS fixtures) over field rounds. Field rounds are the FINAL gate, not the primary one. Never suggest "go test it in the field" as the first verification step.
 
@@ -165,7 +165,7 @@ git commit -m "<concise message>"
 git push origin main
 ```
 
-## Tone for Tim
+## Tone for the operator
 
 - Lead with the answer. No preamble.
 - Pre-made decisions over questions.
