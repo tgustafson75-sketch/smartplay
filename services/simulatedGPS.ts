@@ -226,6 +226,22 @@ export function buildWalkFromMockRound(round: MockRound): SimulatedWalk {
  *      every hole.
  *  Returns the walk_id so callers can subscribe / stop. */
 export function startSyntheticRound(round: MockRound): string {
+  try {
+    return _startSyntheticRoundInternal(round);
+  } catch (e) {
+    const msg = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e);
+    console.log('[simGPS] startSyntheticRound FATAL:', msg);
+    // Surface via owner sentinel so it appears in /owner-logs even if
+    // the UI alert path also throws.
+    try {
+      const { ownerSentinel } = require('./ownerSentinel');
+      ownerSentinel('simGPS.startSyntheticRound', e);
+    } catch {}
+    throw e;
+  }
+}
+
+function _startSyntheticRoundInternal(round: MockRound): string {
   // 1. Build CourseHole records from the mock holes. The mock JSON only
   //    has tee + green coords, so middle/front/back all collapse onto
   //    the green centroid — fine for a synthetic test (yardages won't
@@ -279,46 +295,75 @@ export function startSyntheticRound(round: MockRound): string {
     console.log('[simGPS] geometry seed failed (non-fatal):', e);
   }
 
-  // 2. Start the round in the store. Lazy require dodges any circular
-  //    import risk and matches the pattern used elsewhere for cycle-prone
-  //    stores. Includes our synthetic course id so geometry pre-warm
-  //    will no-op gracefully (no record in the geometry service).
+  // 2. Surgical state mutation in lieu of roundStore.startRound().
+  //    Why: startRound triggers a cascade of async IIFEs (Health Connect
+  //    permission ask, real-GPS bootstrap, walking detector ticker,
+  //    geometry pre-warm hitting the network with our fake courseId,
+  //    background-location request, etc.) — any of which can crash a
+  //    dev-client build that doesn't have the corresponding native
+  //    modules wired up. The synthetic harness needs NONE of those:
+  //    we own the GPS fix, we don't care about Health Connect, and the
+  //    geometry is already seeded above. So we directly set just the
+  //    state that downstream subscribers (holeDetection, off-course
+  //    detector, F/M/B yardages in Caddie tab) actually read.
   try {
     const { useRoundStore } = require('../store/roundStore');
-    useRoundStore.getState().startRound(round.courseName, courseHoles, {
-      nineHole: false,
-      isCompetition: false,
-      notes: 'Synthetic round playback (dev harness)',
-      goal: null,
-      courseId: round.courseId,
+    useRoundStore.setState({
+      isRoundActive: true,
       mode: 'free_play',
+      currentRoundId: 'synthetic-' + Date.now(),
+      activeCourse: round.courseName,
+      activeCourseId: round.courseId,
+      courseHoles,
+      nineHoleMode: false,
+      isCompetition: false,
+      roundNotes: 'Synthetic round playback (dev harness)',
+      goal: null,
+      currentHole: 1,
+      currentYardage: courseHoles[0]?.distance ?? null,
+      scores: {},
+      putts: {},
+      penalties: {},
+      shots: [],
+      holeStats: [],
+      plans: [],
+      currentRoundPhotos: [],
+      emotionalLog: [],
+      roundStartTime: Date.now(),
     });
-    console.log('[simGPS] synthetic round started in store:', round.courseName, courseHoles.length, 'holes');
+    console.log('[simGPS] synthetic round state applied:', round.courseName, courseHoles.length, 'holes');
   } catch (e) {
-    console.log('[simGPS] startRound failed:', e);
+    console.log('[simGPS] state setup failed:', e);
+    throw e;
   }
 
-  // 3. Kill the real GPS watcher AFTER startRound's async GPS boot has
-  //    had a chance to fire. The 600ms delay lets startRound's
-  //    requestForegroundPermissionsAsync → startGpsManager() chain run,
-  //    then we tear it down so simulated coords own the fix cache.
-  setTimeout(() => {
-    try {
-      const { stopGpsManager } = require('./gpsManager');
-      stopGpsManager();
-      console.log('[simGPS] real GPS watcher suppressed — simulator owns the fix');
-    } catch (e) {
-      console.log('[simGPS] stopGpsManager failed (non-fatal):', e);
-    }
-  }, 600);
+  // 3. Kill the real GPS watcher so simulated coords aren't overridden
+  //    by real ones (e.g. if the watcher was started earlier in the
+  //    session). Wrapped because stopGpsManager spawns a
+  //    backgroundLocationTask async stop that may not be available in
+  //    every build profile.
+  try {
+    const { stopGpsManager } = require('./gpsManager');
+    stopGpsManager();
+    console.log('[simGPS] real GPS watcher suppressed — simulator owns the fix');
+  } catch (e) {
+    console.log('[simGPS] stopGpsManager failed (non-fatal):', e);
+  }
 
-  // 4. Register and start the simulated walk.
-  const walk = buildWalkFromMockRound(round);
-  const existingIdx = SIMULATED_WALKS.findIndex(w => w.id === walk.id);
-  if (existingIdx >= 0) SIMULATED_WALKS[existingIdx] = walk;
-  else SIMULATED_WALKS.push(walk);
-  startSimulatedWalk(walk.id);
-  return walk.id;
+  // 4. Register and start the simulated walk. Wrapped because
+  //    startSimulatedWalk emits to subscribers — if any subscriber
+  //    throws during initial emit, we want a clean error, not a crash.
+  try {
+    const walk = buildWalkFromMockRound(round);
+    const existingIdx = SIMULATED_WALKS.findIndex(w => w.id === walk.id);
+    if (existingIdx >= 0) SIMULATED_WALKS[existingIdx] = walk;
+    else SIMULATED_WALKS.push(walk);
+    startSimulatedWalk(walk.id);
+    return walk.id;
+  } catch (e) {
+    console.log('[simGPS] walk start failed:', e);
+    throw e;
+  }
 }
 
 /** 2026-05-18 — Stop the synthetic round end-to-end. Mirrors

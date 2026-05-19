@@ -206,15 +206,23 @@ export default function GpsTestScreen() {
             Owner-only via this screen's existing gate. */}
         <TouchableOpacity
           onPress={() => {
-            if (isSimulatedActive()) {
-              stopSyntheticRound();
-              Alert.alert('Stopped', 'Synthetic round playback stopped and round discarded.');
-            } else {
-              const id = startSyntheticRound(MOCK_ROUND);
-              Alert.alert(
-                'Round Started',
-                `Pebble Beach · ${MOCK_ROUND.totalHoles} holes.\n\n• Round is ACTIVE in the store\n• Real GPS suppressed; simulator owns the fix\n• Tap Caddie tab to see Kevin + yardages react\n• Tap Scorecard to see hole advance\n• Stop discards the round (won't save)`,
-              );
+            try {
+              if (isSimulatedActive()) {
+                stopSyntheticRound();
+                Alert.alert('Stopped', 'Synthetic round playback stopped and round discarded.');
+              } else {
+                const id = startSyntheticRound(MOCK_ROUND);
+                Alert.alert(
+                  'Round Started',
+                  `Pebble Beach · ${MOCK_ROUND.totalHoles} holes (${id}).\n\nCheck Caddie tab + Scorecard for live updates.`,
+                );
+              }
+            } catch (e) {
+              const msg = e instanceof Error
+                ? `${e.name}: ${e.message}\n\n${(e.stack ?? '').split('\n').slice(0, 6).join('\n')}`
+                : String(e);
+              Alert.alert('Synthetic round error', msg);
+              console.log('[gps-test] synthetic round button error:', e);
             }
           }}
           style={[styles.btnPrimary, { backgroundColor: '#F5A623', marginTop: 12 }]}
