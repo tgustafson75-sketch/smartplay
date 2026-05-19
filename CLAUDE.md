@@ -126,3 +126,51 @@ is unchanged before reporting the phase complete.
 - Trust internal code; only validate at system boundaries.
 - When something can't be shipped honestly in the available time, *say so explicitly*
   in the phase response and scope a follow-up — don't fake completion.
+
+## Operator context
+
+- Solo founder building SmartPlay Caddie. Pre-beta, targeting beta release end of May 2026.
+- React Native + Expo Router + TypeScript.
+- Adult ADHD: all prompts and instructions must be maximally explicit. Every choice presented must be binary or pre-recommended. Never open-ended.
+- Testing on Samsung Galaxy Z Fold (closed ≈ 9:21, open ≈ 8:9). All UI work must account for variable aspect ratios via `useWindowDimensions` and aspect-ratio breakpoints.
+- Discovery logic must be built into prompts. Tim should never have to grep, hunt for files, or paste file contents manually — the agent finds them.
+
+## Architecture invariants (do not deviate)
+
+- Three pillars: ROUND (1.0 critical path), PRACTICE/SwingLab (partial 1.0), PLAY (1.1 marquee). SwingLab and Practice are the same feature.
+- Kevin runs on Anthropic Claude (Sonnet for quality, Haiku for speed/cost) + OpenAI `gpt-4o-mini-tts`.
+- Cascade pattern with abstracted LLM call layer. Anthropic `tool_use` for voice intent routing. OpenAI Realtime API is out of scope.
+- Trust Spectrum: L1 Quiet → L2 Companion (default) → L3 Active → L4 Full.
+- Navigation: ONE menu via ••• top-right of Caddie screen. Top-left reserved for Kevin's badge morph when a tool is open.
+- Persistent Kevin pattern: any open tool minimizes Kevin to cap badge top-left. Badge pulses amber during thinking/speech.
+- Canonical Kevin layout achieved 12:28pm 2026-04-26 (see "Kevin photoreal portrait — LOCKED" above). Never iterate avatar layout further. Restore from that commit if drift occurs.
+- Hole rendering: stylized vector from golfcourseapi coordinates (Phase AN).
+- Multi-player data models MUST include `player_id`, `speaker_id`, and player roster fields even in single-player. No retrofits later.
+
+## Operating principles
+
+- Aggressive timeline AND clean product are both non-negotiable. Never accumulate polish debt.
+- Always choose the more logical / better architectural option even if more work, unless it alters product vision. No safe small patches.
+- **Standing decision rule**: make logical calls toward the Wow vision without asking. Note non-obvious calls in one line at the top of the response. Tim overrides if he disagrees.
+- Verification gates discipline (Phase AO): every phase ships only after empirical proof it works, not just code-level shipped.
+- Prefer synthetic / programmatic verification (Playwright MCP, mocked Kevin, GPS fixtures) over field rounds. Field rounds are the FINAL gate, not the primary one. Never suggest "go test it in the field" as the first verification step.
+
+## Required ending for every multi-step instruction
+
+End every multi-step task with these three commands as the final action — separate lines, never combined, never skipped:
+
+```
+git add .
+git commit -m "<concise message>"
+git push origin main
+```
+
+## Tone for Tim
+
+- Lead with the answer. No preamble.
+- Pre-made decisions over questions.
+- If info is missing, look for it first (file search, MCP query). Only ask if it truly isn't discoverable.
+
+## Support email
+
+`support@smartplaycaddie.com` — use for all platform-facing and user-facing fields.
