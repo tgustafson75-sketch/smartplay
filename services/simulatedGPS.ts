@@ -17,6 +17,7 @@
 import { setSimulatedFix, clearSimulatedFix, isSimulatedActive } from './smartFinderService';
 import type { SimulatedWalk, SimulatedWalkPoint } from '../data/simulatedWalks';
 import { SIMULATED_WALKS } from '../data/simulatedWalks';
+import type { ShotResult } from '../store/roundStore';
 
 const TICK_MS = 1_000; // 1Hz fix updates — matches a real-world GPS poll cadence
 const METERS_PER_DEG_LAT = 111_111;
@@ -157,6 +158,94 @@ export function stopSimulatedWalk(): void {
   emit(null);
 }
 
+// 2026-05-19 — Synthesize a realistic per-hole shot trace from
+// (par, score, yardage). Lets the recap pipeline see club distribution,
+// pattern detection (your 7i goes right etc), shots-per-hole flow,
+// etc. instead of an empty shots[] array.
+//
+// Strategy:
+//   - putts = 2 typically (1 if birdie, 3 if double-bogey or worse)
+//   - non-putt strokes = score - putts
+//   - Tee shot: Driver on par 4/5, mid-iron on par 3
+//   - Then approach + chip(s) by remaining distance using the club map
+//   - Last non-putt shot picks the closest "to the green" club
+const CLUB_DISTANCES: { name: string; yards: number }[] = [
+  { name: 'Driver', yards: 260 },
+  { name: '3W', yards: 230 },
+  { name: '5W', yards: 210 },
+  { name: '4i', yards: 190 },
+  { name: '5i', yards: 175 },
+  { name: '6i', yards: 160 },
+  { name: '7i', yards: 145 },
+  { name: '8i', yards: 130 },
+  { name: '9i', yards: 115 },
+  { name: 'PW', yards: 100 },
+  { name: 'SW', yards: 75 },
+  { name: 'LW', yards: 50 },
+];
+function clubForDistance(yards: number): string {
+  if (yards <= 0) return 'PW';
+  // Find smallest club >= yards (so we don't underclub).
+  for (let i = CLUB_DISTANCES.length - 1; i >= 0; i--) {
+    if (CLUB_DISTANCES[i].yards >= yards) return CLUB_DISTANCES[i].name;
+  }
+  return 'Driver';
+}
+function synthesizeShots(par: number, score: number, yardage: number): {
+  club: string;
+  feel: 'flush' | 'solid' | 'fat' | 'thin';
+  direction: 'left' | 'straight' | 'right';
+  shape: 'draw' | 'straight' | 'fade';
+  distance_yards: number;
+}[] {
+  const offset = score - par;
+  // Putt count: birdie usually 1 putt; bogey+ usually 2; double+ sometimes 3.
+  const putts = offset <= -1 ? 1 : offset >= 2 ? (Math.random() < 0.4 ? 3 : 2) : 2;
+  const fullSwings = Math.max(1, score - putts);
+  const shots: ReturnType<typeof synthesizeShots> = [];
+  // Tee shot — Driver on par 4/5, mid-iron on par 3 scaled to yardage.
+  let remaining = yardage;
+  const teeClub = par === 3 ? clubForDistance(yardage) : 'Driver';
+  const teeDist = Math.min(remaining, par === 3 ? yardage : 240);
+  shots.push({
+    club: teeClub,
+    feel: Math.random() < 0.7 ? 'solid' : (Math.random() < 0.5 ? 'flush' : 'thin'),
+    direction: Math.random() < 0.65 ? 'straight' : (Math.random() < 0.5 ? 'left' : 'right'),
+    shape: Math.random() < 0.6 ? 'straight' : (Math.random() < 0.5 ? 'draw' : 'fade'),
+    distance_yards: teeDist,
+  });
+  remaining = Math.max(0, remaining - teeDist);
+
+  // Approach + chips for remaining full-swing shots.
+  for (let i = 1; i < fullSwings; i++) {
+    const isLast = i === fullSwings - 1;
+    // Last full swing should leave ~10-20y short (chip into birdie/par putt).
+    const target = isLast ? Math.max(20, remaining) : Math.min(remaining, 175);
+    const club = clubForDistance(target);
+    shots.push({
+      club,
+      feel: Math.random() < 0.6 ? 'solid' : (Math.random() < 0.5 ? 'pure' as 'flush' : 'thin'),
+      direction: Math.random() < 0.6 ? 'straight' : (Math.random() < 0.5 ? 'left' : 'right'),
+      shape: Math.random() < 0.7 ? 'straight' : (Math.random() < 0.5 ? 'draw' : 'fade'),
+      distance_yards: target,
+    });
+    remaining = Math.max(0, remaining - target);
+  }
+
+  // Putts — always with Putter, 0 distance for synthetic (real shots
+  // would have actual roll distance but the recap doesn't require it).
+  for (let i = 0; i < putts; i++) {
+    shots.push({
+      club: 'Putter',
+      feel: 'solid',
+      direction: 'straight',
+      shape: 'straight',
+      distance_yards: 5,
+    });
+  }
+  return shots;
+}
+
 // 2026-05-18 — Randomized score generator for synthetic rounds. The
 // per-par distributions roughly mimic a bogey-handicap recreational
 // player so the recap surface gets realistic variance (not all-pars
@@ -242,6 +331,35 @@ function tick(): void {
           const label = offset === -1 ? 'birdie' : offset === 0 ? 'par' : offset === 1 ? 'bogey' : offset === 2 ? 'double' : `+${offset}`;
           console.log(`[simGPS] H${b.holeNumber} synthetic score: ${score} (${label})`);
           logHarnessEvent('score', `H${b.holeNumber} = ${score} (${label}) on par ${b.par}`);
+          // 2026-05-19 — Synthesize realistic shots (club, feel,
+          // direction, shape, distance) so the recap pipeline sees a
+          // populated shots[] array. Drives club distribution stats,
+          // pattern detection ("your 7i goes right"), and per-hole
+          // shot trace. Putts also logged via logPutts so the
+          // scorecard's putts column populates.
+          const holeRecord = round.courseHoles.find((c: { hole: number }) => c.hole === b.holeNumber);
+          const yardage = holeRecord?.distance ?? (b.par === 3 ? 150 : b.par === 4 ? 380 : 510);
+          const synthShots = synthesizeShots(b.par, score, yardage);
+          let putts = 0;
+          for (let i = 0; i < synthShots.length; i++) {
+            const s = synthShots[i];
+            if (s.club === 'Putter') { putts += 1; continue; }
+            round.logShot({
+              feel: s.feel as ShotResult['feel'],
+              direction: s.direction,
+              shape: s.shape,
+              club: s.club,
+              hole: b.holeNumber,
+              timestamp: Date.now() + i, // unique per shot for stable id
+              acousticContact: null,
+              distance_yards: s.distance_yards,
+              logged_via: 'tap',
+              shot_in_hole_index: i + 1,
+              hole_number: b.holeNumber,
+            });
+          }
+          if (putts > 0) round.logPutts(b.holeNumber, putts);
+          logHarnessEvent('shots', `H${b.holeNumber} · ${synthShots.length - putts} full + ${putts} putts`);
         }
         // 2026-05-19 — Auto-advance currentHole when the simulator
         // reaches a green. holeDetection's polling-based auto-transition
