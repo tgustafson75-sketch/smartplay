@@ -451,6 +451,21 @@ export default function SmartVisionScreen() {
         setGolfbertHole(null);
       }
 
+      // 2026-05-18 — Curated bundled images win when one exists for this
+      // course, unless the user has explicitly set imageryMode='gps'.
+      // Tim's expectation on the synthetic Menifee harness was the
+      // bundled Palms hole photos, not a Mapbox satellite tile of green
+      // grass. Previous order ("GPS tile if geometry available") forced
+      // the satellite path whenever geometry was seeded, even for
+      // courses with hand-curated imagery on disk. New order: curated
+      // (if available + mode != gps) → GPS tile (geometry + mode != curated) → centroid fallback.
+      const curatedAvailable =
+        getLocalHoleImageById(courseId, holeIndex) ?? getLocalHoleImage(courseName, holeIndex);
+      if (curatedAvailable && imageryMode !== 'gps') {
+        setImageUri(null);
+        setLoading(false);
+        return;
+      }
       // GPS tile only when allowed AND geometry has tee+green coords.
       if (imageryMode !== 'curated' && geo?.green && courseId) {
         // Phase 401 — cap Mapbox request dims at 1280 (API limit) while

@@ -1082,25 +1082,52 @@ export default function CaddieTab() {
     const played = snapshot?.played ?? getHolesPlayed();
     const relState = useRelationshipStore.getState();
 
-    let summary = '';
+    // 2026-05-18 — Contextual summary instead of generic "Short round /
+    // Solid effort" buckets. Pulls the live scores + courseHoles +
+    // active course name out of the store and builds a summary that
+    // references SOMETHING specific (best hole, worst hole, course
+    // name, holes played, score vs par). The full AI recap arrives
+    // ~5-10s later; this is the *immediate* spoken line and should
+    // still sound like Kevin is in the round with you.
+    const roundState = useRoundStore.getState();
+    const cName = roundState.activeCourse ?? 'this course';
+    const buildContextualSummary = (): string => {
+      // Find best / worst hole vs par
+      const holesWithPar = Object.entries(roundState.scores)
+        .map(([h, s]) => {
+          const par = roundState.courseHoles.find(c => c.hole === Number(h))?.par ?? 4;
+          return { hole: Number(h), score: s, par, offset: s - par };
+        })
+        .filter(h => h.score > 0);
+      if (holesWithPar.length === 0) return `${played} holes at ${cName} — let's see what the recap says.`;
+      const best = holesWithPar.reduce((b, h) => (h.offset < b.offset ? h : b));
+      const worst = holesWithPar.reduce((w, h) => (h.offset > w.offset ? h : w));
+      const birdies = holesWithPar.filter(h => h.offset < 0).length;
+      const pars = holesWithPar.filter(h => h.offset === 0).length;
+      const bogeys = holesWithPar.filter(h => h.offset === 1).length;
+      const doublesPlus = holesWithPar.filter(h => h.offset >= 2).length;
 
-    if (played < 9) {
-      summary = 'Short round. What you can control — you controlled.';
-    } else if (vspar <= -3) {
-      summary =
-        "That's a strong round. " + Math.abs(vspar) + ' under is real golf.';
-    } else if (vspar === 0) {
-      summary = 'Even par. That takes real discipline. Well done.';
-    } else if (vspar <= 3) {
-      summary =
-        total + " on the card. Solid effort today. Let's review what worked.";
-    } else if (vspar <= 7) {
-      summary =
-        'Tough one. The game does that sometimes. We know what to work on.';
-    } else {
-      summary =
-        'Hard day out there. Every round teaches you something. We\'ll build on it.';
-    }
+      // Head-to-head: did we go low somewhere?
+      if (vspar <= -3) {
+        return `${total} at ${cName} — ${Math.abs(vspar)} under. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars. Real golf.`;
+      }
+      if (vspar === 0) {
+        return `Even par at ${cName}. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars, ${bogeys} bogeys — discipline showed up today.`;
+      }
+      if (vspar <= 3 && played >= 9) {
+        const bestLabel = best.offset < 0 ? 'birdie' : best.offset === 0 ? 'par' : `${best.score} on a par ${best.par}`;
+        return `${total} on the card at ${cName} — ${vspar > 0 ? '+' + vspar : vspar}. Best hole was ${bestLabel} on ${best.hole}. ${pars + birdies} of ${played} holes at or under par.`;
+      }
+      if (played < 9) {
+        const fewHoles = played;
+        return `${fewHoles} hole${fewHoles === 1 ? '' : 's'} in at ${cName}. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars, ${bogeys + doublesPlus} over — short sample, but I'm tracking it.`;
+      }
+      // Tough round
+      const worstLabel = worst.offset >= 2 ? `${worst.score} on hole ${worst.hole}` : `+${worst.offset} on ${worst.hole}`;
+      return `${total} at ${cName} — ${vspar > 0 ? '+' + vspar : vspar}. ${worstLabel} stung, but ${pars + birdies} hole${pars + birdies === 1 ? '' : 's'} held up. Recap'll show the patterns.`;
+    };
+
+    let summary = buildContextualSummary();
 
     const best = usePlayerProfileStore.getState().personalBest;
     if (best && total > 0 && total < best) {

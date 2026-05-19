@@ -34,7 +34,9 @@ import {
   type GpsFix,
 } from '../services/gpsManager';
 import { haversineYards } from '../utils/geoDistance';
-import { startSyntheticRound, stopSyntheticRound, isSimulatedActive, type MockRound } from '../services/simulatedGPS';
+import { startSyntheticRound, stopSyntheticRound, isSimulatedActive, subscribeToWalk, type MockRound, type SimulatedWalkState } from '../services/simulatedGPS';
+import { useRoundStore } from '../store/roundStore';
+import { useOffCourseStore } from '../services/offCourseDetector';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const PEBBLE_MOCK_ROUND: MockRound = require('../__mocks__/mockRound.json');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -78,6 +80,21 @@ export default function GpsTestScreen() {
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const [history, setHistory] = useState<number[]>([]);
   const [pulling, setPulling] = useState(false);
+  // 2026-05-18 — Harness telemetry. Subscribes to the simulated-walk
+  // emitter for per-tick state, and reads round-store scores via
+  // selector for the running scorecard.
+  const [walkState, setWalkState] = useState<SimulatedWalkState | null>(null);
+  const isRoundActive = useRoundStore(s => s.isRoundActive);
+  const currentHole = useRoundStore(s => s.currentHole);
+  const activeCourseName = useRoundStore(s => s.activeCourse);
+  const scores = useRoundStore(s => s.scores);
+  const courseHoles = useRoundStore(s => s.courseHoles);
+  const isOffCourse = useOffCourseStore(s => s.isOffCourse);
+  const yardsToNearestHole = useOffCourseStore(s => s.yardsToNearestHole);
+  useEffect(() => {
+    const unsub = subscribeToWalk(setWalkState);
+    return () => { unsub(); };
+  }, []);
 
   // Subscribe to every accepted GPS fix from gpsManager. This is the
   // same subscription consumers like smartFinderService use, so what we
@@ -244,6 +261,74 @@ export default function GpsTestScreen() {
             </Text>
           </TouchableOpacity>
         ))}
+
+        {/* 2026-05-18 — Harness telemetry panel. Live readout of what
+            the synthetic round is doing: current hole, simulator
+            waypoint, scores logged so far, off-course state. Empty
+            (collapsed) when no round is active. */}
+        {(isRoundActive || walkState) ? (
+          <>
+            <Text style={[styles.sectionLabel, { color: colors.text_muted, marginTop: 24 }]}>HARNESS TELEMETRY</Text>
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Row label="course" value={activeCourseName ?? '—'} colors={colors} />
+              <Row label="round_active" value={String(isRoundActive)} colors={colors} />
+              <Row label="current_hole" value={`${currentHole} / ${courseHoles.length || '?'}`} colors={colors} />
+              <Row
+                label="waypoint"
+                value={walkState ? `${walkState.waypoint_index} → ${walkState.next_label ?? '—'}` : 'idle'}
+                colors={colors}
+              />
+              <Row
+                label="fraction_through"
+                value={walkState ? walkState.fraction_through.toFixed(2) : '—'}
+                colors={colors}
+              />
+              <Row
+                label="sim_position"
+                value={walkState ? `${walkState.current_lat.toFixed(5)}, ${walkState.current_lng.toFixed(5)}` : '—'}
+                colors={colors}
+              />
+              <Row
+                label="pace_mps"
+                value={walkState ? walkState.pace_mps.toFixed(1) : '—'}
+                colors={colors}
+              />
+              <Row
+                label="off_course"
+                value={isOffCourse ? `YES (${yardsToNearestHole ?? '?'}y from nearest)` : 'no'}
+                colors={colors}
+              />
+              <Row
+                label="scores_logged"
+                value={`${Object.keys(scores).length} / ${courseHoles.length || '?'}`}
+                colors={colors}
+              />
+              {Object.keys(scores).length > 0 ? (
+                <View style={{ marginTop: 6 }}>
+                  <Text style={[styles.empty, { color: colors.text_muted, fontSize: 11, marginBottom: 4 }]}>
+                    PER-HOLE
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    {Object.entries(scores)
+                      .sort(([a], [b]) => Number(a) - Number(b))
+                      .map(([h, s]) => {
+                        const par = courseHoles.find(c => c.hole === Number(h))?.par ?? 4;
+                        const offset = s - par;
+                        const color = offset < 0 ? '#00C896' : offset === 0 ? colors.text_primary : offset === 1 ? '#F5A623' : '#ef4444';
+                        return (
+                          <View key={h} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                            <Text style={{ color, fontSize: 11, fontFamily: 'monospace' }}>
+                              H{h}:{s}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                  </View>
+                </View>
+              ) : null}
+            </View>
+          </>
+        ) : null}
 
         <Text style={[styles.sectionLabel, { color: colors.text_muted, marginTop: 24 }]}>ANCHOR</Text>
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
