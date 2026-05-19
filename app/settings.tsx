@@ -167,7 +167,30 @@ export default function Settings() {
     setPhysicalLimitation(editLimitation.trim() || null);
     const best = parseInt(editBest, 10);
     setPersonalBest(!isNaN(best) ? best : null);
+    setProfileExpanded(false);
     Alert.alert('Saved', 'Profile updated.');
+  };
+
+  // 2026-05-18 — Collapsible sections. Settings was ~5 scrolls long;
+  // now each section header is a tap target that toggles its card body.
+  // All sections default collapsed except Profile (which has its own
+  // slim-card-vs-edit-form treatment based on whether a name is saved).
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [profileExpanded, setProfileExpanded] = useState(!name?.trim());
+  const [searchQuery, setSearchQuery] = useState('');
+  const isSearching = searchQuery.trim().length > 0;
+  const isExpanded = (title: string) => expandedSections[title] === true;
+  const toggleSection = (title: string) => {
+    setExpandedSections(prev => ({ ...prev, [title]: !prev[title] }));
+  };
+  // 2026-05-18 — Search across section titles + section body text. When
+  // a query is active, force-expand sections whose title OR child text
+  // contains the query so the user can see the matching control
+  // without having to manually expand it.
+  const sectionMatchesQuery = (title: string, body: string): boolean => {
+    if (!isSearching) return true;
+    const q = searchQuery.trim().toLowerCase();
+    return title.toLowerCase().includes(q) || body.toLowerCase().includes(q);
   };
 
   // ─── SUB-COMPONENTS ───────────────────────
@@ -183,6 +206,51 @@ export default function Settings() {
   const SectionHeader = ({ title }: { title: string }) => (
     <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{title}</Text>
   );
+
+  // 2026-05-18 — Tappable section header + collapsible body. Renders
+  // children inside the standard cardStyle View only when expanded.
+  // When a search query is active, the section is force-shown if its
+  // title OR child text matches; otherwise the whole section is hidden.
+  const CollapsibleSection = ({ title, children }: { title: string; children: React.ReactNode }) => {
+    // Extract plain text from children for search matching. Recursive
+    // walk handles nested elements; non-string nodes (icons, etc.) are
+    // ignored — matches text content only.
+    const extractText = (node: React.ReactNode): string => {
+      if (node == null || typeof node === 'boolean') return '';
+      if (typeof node === 'string' || typeof node === 'number') return String(node);
+      if (Array.isArray(node)) return node.map(extractText).join(' ');
+      if (React.isValidElement(node)) {
+        const props = node.props as { children?: React.ReactNode; label?: string; sub?: string };
+        return [props.label ?? '', props.sub ?? '', extractText(props.children)].join(' ');
+      }
+      return '';
+    };
+    const bodyText = isSearching ? extractText(children) : '';
+    const visible = sectionMatchesQuery(title, bodyText);
+    if (!visible) return null;
+    const open = isSearching ? true : isExpanded(title);
+    return (
+      <>
+        <TouchableOpacity
+          onPress={() => !isSearching && toggleSection(title)}
+          activeOpacity={isSearching ? 1 : 0.7}
+          style={styles.collapsibleHeader}
+          accessibilityRole="button"
+          accessibilityLabel={`${title} section, ${open ? 'expanded' : 'collapsed'}`}
+        >
+          <Text style={[styles.sectionHeader, { color: colors.text_muted, marginBottom: 0 }]}>{title}</Text>
+          {!isSearching && (
+            <Ionicons
+              name={open ? 'chevron-up' : 'chevron-down'}
+              size={16}
+              color={colors.text_muted}
+            />
+          )}
+        </TouchableOpacity>
+        {open ? <View style={cardStyle}>{children}</View> : null}
+      </>
+    );
+  };
 
   const ToggleRow = ({
     label,
@@ -271,8 +339,62 @@ export default function Settings() {
           <View style={{ width: 60 }} />
         </View>
 
-        {/* PROFILE */}
+        {/* 2026-05-18 — Search bar. Filters sections by title + body
+            text. When a query is active, matching sections auto-expand
+            and chevrons hide. */}
+        <View style={[styles.searchWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Ionicons name="search" size={16} color={colors.text_muted} style={{ marginRight: 8 }} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search settings"
+            placeholderTextColor={colors.text_muted}
+            autoCorrect={false}
+            autoCapitalize="none"
+            style={[styles.searchInput, { color: colors.text_primary }]}
+          />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={10}>
+              <Ionicons name="close-circle" size={16} color={colors.text_muted} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        {/* PROFILE — slim card when saved, full edit form when expanded
+            (auto-expanded if no name on file). 2026-05-18. */}
         <SectionHeader title="Profile" />
+        {!profileExpanded && name?.trim() ? (
+          <View style={[
+            styles.profileSlim,
+            { backgroundColor: colors.surface_elevated, borderColor: colors.border },
+          ]}>
+            <View style={[
+              styles.profileSlimAvatar,
+              { borderColor: colors.accent, backgroundColor: colors.accent_muted },
+            ]}>
+              <Text style={[styles.profileSlimLetter, { color: colors.accent }]}>
+                {name.trim().charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <View style={styles.profileSlimText}>
+              <Text style={[styles.profileSlimName, { color: colors.text_primary }]} numberOfLines={1}>
+                {name.trim()}
+              </Text>
+              <Text style={[styles.profileSlimMeta, { color: colors.text_muted }]} numberOfLines={1}>
+                Handicap {handicapIndex != null ? handicapIndex.toFixed(1) : (handicap || '—')} · Goal {goal || '—'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setProfileExpanded(true)}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Edit profile"
+              style={[styles.profileSlimGear, { borderColor: colors.accent }]}
+            >
+              <Ionicons name="pencil-outline" size={16} color={colors.accent} />
+            </TouchableOpacity>
+          </View>
+        ) : (
         <View style={cardStyle}>
 
           <Text style={inputLblStyle}>Name</Text>
@@ -360,15 +482,25 @@ export default function Settings() {
             onSelect={(v) => setPreferredTee(v as 'front' | 'middle' | 'back')}
           />
 
-          <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProfile}>
-            <Text style={styles.saveBtnText}>Save Profile</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity style={[styles.saveBtn, { flex: 1 }]} onPress={handleSaveProfile}>
+              <Text style={styles.saveBtnText}>Save Profile</Text>
+            </TouchableOpacity>
+            {name?.trim() ? (
+              <TouchableOpacity
+                style={[styles.saveBtn, { flex: 0, paddingHorizontal: 14, backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border }]}
+                onPress={() => setProfileExpanded(false)}
+              >
+                <Text style={[styles.saveBtnText, { color: colors.text_muted }]}>Cancel</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
 
         </View>
+        )}
 
         {/* CADDIE TEAM — Phase 105 per-pillar assignments */}
-        <SectionHeader title="Caddie Team" />
-        <View style={cardStyle}>
+        <CollapsibleSection title="Caddie Team">
           <Text style={[styles.sectionIntro, { color: colors.text_muted }]}>
             Four caddies, one team. Each part of your game can have a different caddie. We&apos;ve set sensible defaults — change anything anytime.
           </Text>
@@ -449,11 +581,10 @@ export default function Settings() {
           <Text style={[styles.sectionIntro, { color: colors.text_muted, marginTop: 4 }]}>
             Top-left badge during a round showing live accuracy + GPS mode + outlier count. Use during the Garmin comparison test.
           </Text>
-        </View>
+        </CollapsibleSection>
 
         {/* CADDIE — extra controls */}
-        <SectionHeader title={`${caddieName}'s Voice`} />
-        <View style={cardStyle}>
+        <CollapsibleSection title={`${caddieName}'s Voice`}>
           <Text style={[styles.sectionIntro, { color: colors.text_muted }]}>
             Manually override the active caddie (the team auto-selects per pillar — this picks who speaks right now).
           </Text>
@@ -503,11 +634,10 @@ export default function Settings() {
             onValueChange={confirmToggle('Launch Greeting', setKevinGreetingEnabled)}
           />
 
-        </View>
+        </CollapsibleSection>
 
         {/* ROUND EXPERIENCE */}
-        <SectionHeader title="Round Experience" />
-        <View style={cardStyle}>
+        <CollapsibleSection title="Round Experience">
           {/* 2026-05-19 — trust slider moved INLINE here. Was a routed
               sub-screen at /settings/trust-level that created the
               settings-within-settings pattern Tim called out. The full
@@ -575,11 +705,10 @@ export default function Settings() {
             value={cartMode}
             onValueChange={confirmToggle('Cart Mode', setCartMode)}
           />
-        </View>
+        </CollapsibleSection>
 
         {/* VOICE */}
-        <SectionHeader title="Voice" />
-        <View style={cardStyle}>
+        <CollapsibleSection title="Voice">
           <ToggleRow
             label="Voice Enabled"
             sub={`${caddieName} speaks responses aloud`}
@@ -614,18 +743,17 @@ export default function Settings() {
             value={voiceOnPhoneSpeaker}
             onValueChange={confirmToggle('Voice on Phone Speaker', setVoiceOnPhoneSpeaker)}
           />
-        </View>
+        </CollapsibleSection>
 
         {/* PRACTICE — Phase BL */}
-        <SectionHeader title="Practice" />
-        <View style={cardStyle}>
+        <CollapsibleSection title="Practice">
           <ToggleRow
             label="Auto Club Detection"
             sub={'Show the camera button in cage sessions to read the number stamped on a club’s sole. Voice ("switching to 6-iron") and the manual picker still work either way.'}
             value={cageAutoClubDetection}
             onValueChange={setCageAutoClubDetection}
           />
-        </View>
+        </CollapsibleSection>
 
         {/* 2026-05-19 — single-row "Caddie ${caddieName}" section folded
             into the Caddie's Voice card above. The "Greet me on launch"
@@ -636,8 +764,7 @@ export default function Settings() {
             below used to live under separate "Display" and
             "Accessibility & Pacing" headers; merged into one header
             since both control how you SEE or HEAR the app. */}
-        <SectionHeader title="Display & Accessibility" />
-        <View style={cardStyle}>
+        <CollapsibleSection title="Display & Accessibility">
 
           <PillRow
             label="Theme"
@@ -670,16 +797,7 @@ export default function Settings() {
             value={largeText}
             onValueChange={setLargeText}
           />
-        </View>
 
-        {/* ACCESSIBILITY — captions, simpler briefings, and the
-            per-persona intensity dial all live together so participants
-            and pros can find them in one place.
-            2026-05-19 — dropped the standalone "Accessibility & Pacing"
-            header here; the row group is now visually part of the same
-            "Display & Accessibility" section above it. Cards still
-            persist independently for layout breathing room. */}
-        <View style={cardStyle}>
           <ToggleRow
             label="Caption caddie speech"
             sub="Show what the caddie is saying on screen during voice playback. Auto-on for Bluetooth audio."
@@ -702,19 +820,9 @@ export default function Settings() {
             value={tankSoftIntro}
             onValueChange={setTankSoftIntro}
           />
-        </View>
 
-        {/* PER-PERSONA INTENSITY DIAL — slider per caddie. Default Tank=70,
-            Harry=90, Kevin/Serena=100. Floor 0, ceiling 100.
-            2026-05-19 — folded under "Display & Accessibility" (it
-            controls the same things as Tank soft-intro et al — how
-            each caddie SHOWS UP). Removes the dedicated "Caddie
-            Intensity" header. */}
-        <View style={cardStyle}>
-          {/* Drives off ACTIVE_PERSONAS so dormant personas (Harry) don't
-              show up here. The persisted intensity entry stays — see
-              settingsStore migrate v6 — so re-enabling Harry restores
-              his slider untouched. */}
+          {/* PER-PERSONA INTENSITY DIAL — slider per caddie. Default Tank=70,
+              Harry=90, Kevin/Serena=100. */}
           {ACTIVE_PERSONAS.map((p, idx, arr) => (
             <View
               key={p}
@@ -749,12 +857,7 @@ export default function Settings() {
               </View>
             </View>
           ))}
-        </View>
 
-        {/* 2026-05-19 — single-row "Measurement" section folded into
-            "Display & Accessibility" above. Distance unit is one
-            line; doesn't deserve its own header. */}
-        <View style={cardStyle}>
           <PillRow
             label="Distance Unit"
             options={[
@@ -764,15 +867,14 @@ export default function Settings() {
             value={distance_unit}
             onSelect={(v) => setDistanceUnit(v as 'yards' | 'meters')}
           />
-        </View>
+        </CollapsibleSection>
 
         {/* CONNECTED HARDWARE — every row honestly labels what's actually
             wired vs scaffolded. Tim was getting bitten by toggling
             "Watch Connected" thinking it pulled real Samsung Health data
             when it was sim-only. Now: label is explicit, toggle is
             disabled, and the description names exactly what's missing. */}
-        <SectionHeader title="Connected Hardware" />
-        <View style={cardStyle}>
+        <CollapsibleSection title="Connected Hardware">
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
               <Text style={labelStyle}>Samsung Galaxy Watch · Not wired</Text>
@@ -811,14 +913,13 @@ export default function Settings() {
               </Text>
             </View>
           </View>
-        </View>
+        </CollapsibleSection>
 
         {/* 2026-05-17 — Phase 413 — Health Data privacy section.
             Master toggle for the Health Connect integration plus an
             explicit re-ask button if the user wants to grant
             permissions after declining them earlier. */}
-        <SectionHeader title="Health Data" />
-        <View style={cardStyle}>
+        <CollapsibleSection title="Health Data">
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
               <Text style={labelStyle}>Use Health Connect during rounds</Text>
@@ -850,7 +951,7 @@ export default function Settings() {
               </Text>
             </View>
           </TouchableOpacity>
-        </View>
+        </CollapsibleSection>
 
         {/* DEVELOPER TOOLS — dev builds only */}
         {__DEV__ && <DeveloperToolsSection cardStyle={cardStyle} colors={colors} />}
@@ -866,8 +967,7 @@ export default function Settings() {
             need the guided re-do. */}
 
         {/* Phase AI — Help / Support section. Single canonical contact. */}
-        <SectionHeader title="Help" />
-        <View style={cardStyle}>
+        <CollapsibleSection title="Help">
           {/* Phase 411 — Quick Start Guide. Same content as the PDF
               tester guide, available in-app so testers can refer back
               during use without hunting for the email attachment. */}
@@ -954,10 +1054,9 @@ export default function Settings() {
               smartplaycaddie.com/privacy →
             </Text>
           </TouchableOpacity>
-        </View>
+        </CollapsibleSection>
 
-        <SectionHeader title="About" />
-        <View style={cardStyle}>
+        <CollapsibleSection title="About">
           <View style={styles.aboutRow}>
             <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>App</Text>
             <Text style={[styles.aboutValue, { color: colors.text_primary }]}>SmartPlay Caddie Pro</Text>
@@ -972,7 +1071,7 @@ export default function Settings() {
               {caddieName}
             </Text>
           </View>
-        </View>
+        </CollapsibleSection>
 
         {/* 2026-05-17 — Owner-only Issue Log. Tim asked for a way to
             voice-capture app feedback during testing ("Kevin, log this:
@@ -986,8 +1085,7 @@ export default function Settings() {
             if (!showOwner) return null;
             return (
               <>
-                <SectionHeader title="Owner Tools" />
-                <View style={cardStyle}>
+                <CollapsibleSection title="Owner Tools">
                   <TouchableOpacity
                     style={styles.resetRow}
                     onPress={() => router.push('/owner-logs' as never)}
@@ -1046,7 +1144,7 @@ export default function Settings() {
                     </View>
                     <Ionicons name="flag" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
-                </View>
+                </CollapsibleSection>
               </>
             );
           } catch { return null; }
@@ -1055,8 +1153,7 @@ export default function Settings() {
         {/* Reset / Sign Out — until real auth lands, this is the
             functional equivalent for testers who want to start fresh
             (new persona, clear stored profile, fresh trial state). */}
-        <SectionHeader title="Reset" />
-        <View style={cardStyle}>
+        <CollapsibleSection title="Reset">
           <TouchableOpacity
             style={styles.resetRow}
             accessibilityRole="button"
@@ -1097,7 +1194,7 @@ export default function Settings() {
             </View>
             <Ionicons name="trash-outline" size={20} color="#f87171" />
           </TouchableOpacity>
-        </View>
+        </CollapsibleSection>
 
         <View style={{ height: 40 }} />
 
@@ -1244,6 +1341,54 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginTop: 20,
     marginBottom: 8,
+  },
+  collapsibleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 20,
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    padding: 0,
+    margin: 0,
+  },
+  // 2026-05-18 — Slim profile card matching dashboard's profileCard.
+  profileSlim: {
+    marginHorizontal: 16,
+    marginBottom: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  profileSlimAvatar: {
+    width: 48, height: 48, borderRadius: 24, borderWidth: 1.5,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  profileSlimLetter: { fontSize: 20, fontWeight: '800' },
+  profileSlimText: { flex: 1, minWidth: 0 },
+  profileSlimName: { fontSize: 17, fontWeight: '800' },
+  profileSlimMeta: { fontSize: 13, marginTop: 2 },
+  profileSlimGear: {
+    width: 36, height: 36, borderRadius: 18, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center',
   },
   card: {
     marginHorizontal: 16,
