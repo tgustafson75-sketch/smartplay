@@ -174,3 +174,13 @@ git push origin main
 ## Support email
 
 `support@smartplaycaddie.com` — use for all platform-facing and user-facing fields.
+
+## Skills & Auto-Triggers
+
+### Field Guide Generation
+**Trigger:** When asked "generate field guide" or "prep for round"
+**Action:** Load and execute `FIELD_GUIDE_GENERATION.md` automatically
+**Purpose:** Current field reference before rounds, always in sync with codebase
+
+### [Future skills go here as you discover them]
+
