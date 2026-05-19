@@ -136,6 +136,11 @@ export default function SmartFinder() {
     if (trustLevel < 2) return; // Quiet = silent by design
     const middle = yards.middle;
     if (middle == null) return;
+    // 2026-05-18 — Sanity gate. If middle yardage is insane (>600y means
+    // we're not playing the hole we think we are, or GPS/geometry are
+    // out of sync — Tim was hearing "Middle of green, eighty thousand
+    // yards"), skip the callout entirely instead of speaking garbage.
+    if (middle > 600 || middle < 30) return;
     calloutSpokenRef.current = true;
     const parts: string[] = [`Middle of green, ${middle} yards.`];
     if (caddieWeather) {
@@ -148,9 +153,21 @@ export default function SmartFinder() {
         parts.push(`Wind ${Math.round(caddieWeather.wind_speed_mph)} ${dir}.`);
       }
     }
-    void speak(parts.join(' '), voiceGender, language, apiUrl).catch((e) => {
-      console.log('[smartfinder] open callout speak failed', e);
-    });
+    // 2026-05-18 — Small delay lets any in-flight speech (briefing,
+    // hole-transition, prior screen's callout) finish before the
+    // rangefinder callout enqueues. Without this, the rangefinder
+    // callout was preempting and getting preempted on rapid screen
+    // changes, producing the choppy/cut-off speech Tim heard. Also
+    // mark userInitiated:true — opening SmartFinder IS a user action,
+    // so at L1 Quiet this should still fire (matches the memory rule
+    // that user-initiated speech bypasses L1's scripted-speech gate).
+    const text = parts.join(' ');
+    const timer = setTimeout(() => {
+      void speak(text, voiceGender, language, apiUrl, { userInitiated: true }).catch((e) => {
+        console.log('[smartfinder] open callout speak failed', e);
+      });
+    }, 300);
+    return () => clearTimeout(timer);
   }, [isRoundActive, voiceEnabled, trustLevel, yards.middle, caddieWeather, shotBearingDeg, voiceGender, language, apiUrl]);
 
   // Camera modes share the camera view + need permission gate. Phase 502

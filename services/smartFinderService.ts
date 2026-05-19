@@ -328,6 +328,16 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
   };
   logYardageCalc(hole, fix, { front, middle, back }, yards);
   void source;
+  // 2026-05-18 — Sanity clamp. If any computed yardage exceeds 800y the
+  // GPS fix is in a different city than the green coord (Tim hit
+  // "80,000 yards" on Standard's F/M/B strip when his real-GPS fix
+  // didn't match the active course geometry). Fall back to the
+  // scorecard yardage rather than showing absurd numbers that will
+  // mislead a user reaching for a club.
+  if ((yards.middle ?? 0) > 800 || (yards.front ?? 0) > 800 || (yards.back ?? 0) > 800) {
+    console.log('[smartFinder] yardages out of range — falling back to scorecard:', yards);
+    return staticYardages(hData, hole);
+  }
   return yards;
 }
 
@@ -358,6 +368,11 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
   };
   logYardageCalc(hole, lastFix, { front, middle, back }, yards);
   void source;
+  // 2026-05-18 — same sanity clamp as the async path above. See note.
+  if ((yards.middle ?? 0) > 800 || (yards.front ?? 0) > 800 || (yards.back ?? 0) > 800) {
+    console.log('[smartFinder:sync] yardages out of range — falling back to scorecard:', yards);
+    return staticYardages(hData, hole);
+  }
   return yards;
 }
 
