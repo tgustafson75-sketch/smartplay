@@ -146,7 +146,32 @@ export function startSimulatedWalk(walkId: string): boolean {
   logHarnessEvent('start', `${walk.display_name} · ${walk.points.length} waypoints`);
 
   timer = setInterval(tick, TICK_MS);
+  // 2026-05-19 — Stall watchdog. Android's Doze + foreground-service
+  // throttling can pause our setInterval when the app is backgrounded
+  // or the screen sleeps. The simulator then "loses an hour" between
+  // ticks (Tim hit this on the Pebble harness — 58-min gap between
+  // H2 shot #1 and shot #2). This watchdog logs a [stalled] event
+  // and clamps segmentStartTs so the simulator doesn't try to
+  // catch up by ticking through 60 waypoints at once on resume.
+  lastTickMs = Date.now();
   return true;
+}
+
+let lastTickMs: number | null = null;
+let stallReportedAt: number | null = null;
+
+function checkStall(): void {
+  if (!activeWalk || paused) return;
+  const now = Date.now();
+  if (lastTickMs != null && now - lastTickMs > 30_000) {
+    if (stallReportedAt == null || now - stallReportedAt > 30_000) {
+      stallReportedAt = now;
+      const gapSec = Math.round((now - lastTickMs) / 1000);
+      logHarnessEvent('stalled', `simulator paused ${gapSec}s (likely app background / Doze)`);
+      // Clamp segmentStartTs so on resume we don't fast-forward.
+      segmentStartTs = now;
+    }
+  }
 }
 
 export function stopSimulatedWalk(): void {
@@ -285,6 +310,12 @@ function rollSyntheticScore(par: number): number {
 
 function tick(): void {
   if (!activeWalk) return;
+  // 2026-05-19 — Stall watchdog: detect long gaps between ticks
+  // (Android Doze / app background can pause our setInterval). Logs
+  // a [stalled] event so a 58-minute gap in the export trace becomes
+  // immediately obvious instead of looking like a regular walk.
+  checkStall();
+  lastTickMs = Date.now();
   if (paused) return;
   if (stepMode && !pendingStepAdvance) return;
   const points = activeWalk.points;

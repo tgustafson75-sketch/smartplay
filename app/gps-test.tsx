@@ -31,6 +31,8 @@ import {
   getLastFix as getGpsLastFix,
   getOneShotFix,
   subscribe as subscribeGps,
+  startGpsManager,
+  stopGpsManager,
   type GpsFix,
 } from '../services/gpsManager';
 import { haversineYards } from '../utils/geoDistance';
@@ -158,6 +160,34 @@ export default function GpsTestScreen() {
   useEffect(() => {
     const unsub = subscribeHarnessEvents(setEvents);
     return () => { unsub(); };
+  }, []);
+
+  // 2026-05-19 — Auto-start gpsManager on screen mount so the user
+  // can watch live GPS movement in a parking lot test (or anywhere)
+  // WITHOUT needing to be in an active round. Previously gpsManager
+  // only ran during isRoundActive=true, so the subscribeGps callback
+  // below never fired outside a round — the user had to tap Refresh
+  // GPS for every reading. Stop on unmount so the watcher doesn't
+  // drain battery after leaving the screen.
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      try {
+        await startGpsManager();
+        if (!mounted) stopGpsManager();
+      } catch (e) {
+        console.log('[gps-test] startGpsManager failed:', e);
+      }
+    })();
+    return () => {
+      mounted = false;
+      // Only stop if no round is active (round-driven path will manage
+      // it otherwise via shotDetectionService's start/stop).
+      try {
+        const round = useRoundStore.getState();
+        if (!round.isRoundActive) stopGpsManager();
+      } catch {}
+    };
   }, []);
 
   // Subscribe to every accepted GPS fix from gpsManager. This is the
