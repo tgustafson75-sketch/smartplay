@@ -51,6 +51,17 @@ type SwingAnalysisResponse = {
   // (e.g. detected_issue='none' or the tendency was uniform across all
   // frames). Required when detected_issue != 'none'.
   fault_frame_index?: number;
+  // Phase 418 — unified swing validation gate. Set to FALSE when the
+  // frames contain no analyzable swing (no person, camera pointed at
+  // floor, footage too dark, person fully out of frame). Downstream
+  // consumers (pose overlay, metrics, insight card) gate fabrication
+  // on this single signal. When false, validity_reason carries the
+  // human-readable reason ("no player in frame", "camera pointed at
+  // floor", etc.). Defaults true on missing/legacy fields for
+  // backward compatibility — the client also runs a heuristic
+  // fallback on observation text.
+  valid_swing?: boolean;
+  validity_reason?: string | null;
 };
 
 // Phase BL/U1 — Tentative observation mode. Used by the upload pipeline
@@ -123,6 +134,12 @@ const SYSTEM_PROMPT = `You are a swing analyst looking at golf-swing frames capt
 
 You will see 1-5 frames from a single swing. Identify the most prominent tendency you can see and return it with appropriate confidence. Use the confidence scale to express uncertainty — a low-confidence tendency is more useful than 'none', because the player can confirm or rule it out.
 
+FIRST — VALIDITY GATE (Phase 418). Before classifying any fault, decide whether the frames actually contain an analyzable swing:
+- valid_swing: true ONLY if a person is visible in at least 2 frames AND they are clearly making a golf-swing motion (or in a recognizable swing position — address, top, impact, follow-through).
+- valid_swing: false when ANY of these are true: no person in any frame, camera pointed at the floor / sky / wall, person fully out of frame, footage entirely too dark to read, frames show only equipment or static scenery.
+- When valid_swing is false: set detected_issue='none', severity='none', confidence='low', fault_frame_index=-1, and write a brief validity_reason describing what's missing ("No player visible in any frame", "Camera pointed at the floor", "Footage too dark to read", etc.). The observation field should match the validity_reason in the caddie's voice.
+- Never fabricate a fault when valid_swing is false. Downstream UI will skip the pose overlay and metrics entirely.
+
 When you identify a fault, also identify WHICH of the submitted frames most clearly shows it. The frames are submitted in time order from address through follow-through — index 0 is the earliest frame, the last index is the latest. The user will see the frame at that index as visual evidence of the diagnosis, so pick the frame that most clearly displays the named tendency.
 
 Canonical issues (pick the one that best matches what you see):
@@ -150,6 +167,8 @@ Confidence scale (pick honestly — low-confidence is fine and useful):
 
 Output ONLY a JSON object:
 {
+  "valid_swing": true | false,
+  "validity_reason": "<null when valid_swing is true; otherwise a short reason string e.g. 'No player visible in any frame' or 'Camera pointed at the floor'>",
   "detected_issue": "<one of the canonical issues>",
   "severity": "minor" | "moderate" | "significant" | "none",
   "confidence": "high" | "medium" | "low",
@@ -279,6 +298,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       parsed.confidence = 'low';
     }
     if (typeof parsed.observation !== 'string') parsed.observation = '';
+    // Phase 418 — validity gate normalisation. Default to true (legacy
+    // responses without the field assume valid). When valid_swing is
+    // false, force detected_issue/severity/fault_frame so downstream
+    // consumers can't accidentally render a fault diagnosis on
+    // no-swing footage.
+    if (typeof parsed.valid_swing !== 'boolean') {
+      parsed.valid_swing = true;
+    }
+    if (parsed.valid_swing === false) {
+      parsed.detected_issue = 'none';
+      parsed.severity = 'none';
+      parsed.fault_frame_index = -1;
+      if (typeof parsed.validity_reason !== 'string' || parsed.validity_reason.length === 0) {
+        parsed.validity_reason = 'No analyzable swing detected in the frames.';
+      }
+    } else {
+      parsed.validity_reason = null;
+    }
     // Phase 403b — normalise fault_frame_index. Must be an integer in
     // [0, frames.length-1] or -1 (no specific frame stood out). Any
     // out-of-range value falls back to -1.

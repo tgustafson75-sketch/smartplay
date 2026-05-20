@@ -40,6 +40,14 @@ export type SwingAnalysis = {
   // no specific frame stood out. Surfaces the moment of the fault in
   // the review UI.
   fault_frame_index?: number;
+  // Phase 418 — unified swing validation gate. False when frames contain
+  // no analyzable swing (no person, floor footage, etc.). Downstream
+  // SmartMotion UI gates pose overlay, metrics, and insight on this
+  // flag. Legacy responses default to true; isValidSwing() in
+  // services/swingValidity.ts adds a heuristic fallback on observation
+  // text for backward compat.
+  valid_swing?: boolean;
+  validity_reason?: string | null;
 };
 
 export type SwingAnalysisResult =

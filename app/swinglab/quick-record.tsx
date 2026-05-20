@@ -157,6 +157,17 @@ export default function QuickRecord() {
         </TouchableOpacity>
       </View>
 
+      {/* Phase 418 — pre-record framing guide. A faint dashed rectangle
+          showing roughly where the player should stand head-to-feet.
+          Helps Tim avoid recording the floor (which was the original
+          fabrication bug). */}
+      {!recording ? (
+        <View style={styles.framingGuide} pointerEvents="none">
+          <View style={styles.framingFrame} />
+          <Text style={styles.framingLabel}>Full body · head to feet</Text>
+        </View>
+      ) : null}
+
       {/* Bottom — big record button */}
       <View style={[styles.bottomArea, { bottom: insets.bottom + 24 }]}>
         <Text style={styles.hint}>
@@ -219,4 +230,31 @@ const styles = StyleSheet.create({
   permBtnText: { fontSize: 14, fontWeight: '900' },
   permCancel: { padding: 12, marginTop: 4 },
   permCancelText: { fontSize: 13, fontWeight: '600' },
+  framingGuide: {
+    position: 'absolute',
+    top: '14%',
+    left: '18%',
+    right: '18%',
+    bottom: '22%',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  framingFrame: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.45)',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+  },
+  framingLabel: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 6,
+    marginBottom: 8,
+  },
 });

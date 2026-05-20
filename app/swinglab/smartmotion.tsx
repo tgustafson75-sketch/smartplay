@@ -36,6 +36,7 @@ import { Video, ResizeMode } from 'expo-av';
 import Svg, { Line, Circle } from 'react-native-svg';
 import { useTheme } from '../../contexts/ThemeContext';
 import { analyzeSwing, type SwingAnalysis } from '../../services/poseDetection';
+import { evaluateSwingValidity, type SwingValidity } from '../../services/swingValidity';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';
 
@@ -107,8 +108,21 @@ export default function SmartMotion() {
     return () => { cancelled = true; };
   }, [clipUri]);
 
+  // Phase 418 — unified swing validity gate. SmartMotion's pose overlay,
+  // metrics strip, and Insight card all consume the SAME validity
+  // result so they cannot contradict each other (prior bug:
+  // skeleton + fake metrics on floor footage while caddie correctly
+  // said "no player visible").
+  const validity: SwingValidity = useMemo(
+    () => evaluateSwingValidity(analysis),
+    [analysis],
+  );
+
   // Derive Top Focus + Drill + Next Swing Focus from the analysis.
-  const insight = useMemo(() => deriveInsight(analysis, caddiePersonality), [analysis, caddiePersonality]);
+  const insight = useMemo(
+    () => deriveInsight(analysis, caddiePersonality, validity),
+    [analysis, caddiePersonality, validity],
+  );
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
@@ -181,6 +195,8 @@ export default function SmartMotion() {
             playbackSpeed={playbackSpeed}
             setPlaybackSpeed={setPlaybackSpeed}
             analysis={analysis}
+            analyzing={analyzing}
+            validity={validity}
             colors={colors}
           />
           <InsightCard
@@ -188,9 +204,11 @@ export default function SmartMotion() {
             analyzing={analyzing}
             analysisError={analysisError}
             analysis={analysis}
+            validity={validity}
             insight={insight}
             caddieName={caddieDisplay(caddiePersonality)}
             dominantMiss={profile.dominantMiss ?? null}
+            onRetake={() => router.push('/swinglab/quick-record' as never)}
             onPressDrill={(drillKey) => router.push(`/drills/${drillKey}` as never)}
           />
         </ScrollView>
@@ -252,7 +270,7 @@ function NoClipHero({ colors, onRecord, onLibrary }: {
 
 function VisualCard({
   clipUri, angle, setAngle, overlays, playbackSpeed, setPlaybackSpeed,
-  analysis, colors,
+  analysis, analyzing, validity, colors,
 }: {
   clipUri: string | null;
   angle: Angle;
@@ -261,8 +279,16 @@ function VisualCard({
   playbackSpeed: SpeedRate;
   setPlaybackSpeed: (s: SpeedRate) => void;
   analysis: SwingAnalysis | null;
+  analyzing: boolean;
+  validity: SwingValidity;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
+  // Phase 418 — render the pose-skeleton and shot-tracer overlays ONLY
+  // when the validation gate confirms an analyzable swing AND analysis
+  // has completed. During analysis we leave the overlays off so a stub
+  // skeleton can't render against floor footage and falsely vanish a
+  // second later.
+  const overlaysGated = !analyzing && validity.valid;
   return (
     <View style={[styles.card, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
       {/* Angle pill row — Down the Line / Face On */}
@@ -322,7 +348,7 @@ function VisualCard({
             ))}
           </Svg>
         )}
-        {clipUri && overlays.body_mechanics && (
+        {clipUri && overlays.body_mechanics && overlaysGated && (
           <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
             <Line x1="50%" y1="6%" x2="50%" y2="94%" stroke={colors.accent} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.55} />
             {STUB_SKELETON.connections.map(([a, b], i) => (
@@ -340,7 +366,7 @@ function VisualCard({
             ))}
           </Svg>
         )}
-        {clipUri && overlays.shot_tracer && (
+        {clipUri && overlays.shot_tracer && overlaysGated && (
           <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
             {/* Tracer placeholder — arcs from ball position through
                 projected flight. Real ball tracking lands with the
@@ -350,6 +376,19 @@ function VisualCard({
             <Circle cx="78%" cy="22%" r={4} fill="#F5A623" opacity={0.85} />
           </Svg>
         )}
+
+        {/* Phase 418 — honest "no swing" badge over the video when the
+            validity gate rejects the footage. User sees the rejection
+            reason directly on the clip rather than scrolling for the
+            caddie insight to explain it. */}
+        {clipUri && !analyzing && !validity.valid && (overlays.body_mechanics || overlays.shot_tracer) ? (
+          <View style={styles.noSwingBadge} pointerEvents="none">
+            <Ionicons name="alert-circle-outline" size={16} color="#fff" />
+            <Text style={styles.noSwingBadgeText} numberOfLines={2}>
+              No swing detected — overlays paused
+            </Text>
+          </View>
+        ) : null}
 
         {/* Speed pill — small floating control top-right (replaces
             the right rail since overlays are toggled above the video). */}
@@ -386,13 +425,21 @@ function VisualCard({
         </View>
       </View>
 
-      {/* Metrics strip — real timing + labeled estimates */}
+      {/* Metrics strip — Phase 418: render real estimates ONLY when the
+          validity gate passes. On no-swing footage we show "—" across
+          all cells with a clear footer so the user can't mistake fake
+          numbers for a real read. */}
       <View style={styles.metricsStrip}>
-        <Metric label="Club Speed" value="82" unit="mph" estimated colors={colors} />
-        <Metric label="Ball Speed" value="113" unit="mph" estimated colors={colors} />
-        <Metric label="Smash" value="1.37" unit="" estimated colors={colors} />
-        <Metric label="Carry" value="156" unit="yds" estimated colors={colors} />
+        <Metric label="Club Speed" value={overlaysGated ? '82' : '—'} unit="mph" estimated={overlaysGated} colors={colors} />
+        <Metric label="Ball Speed" value={overlaysGated ? '113' : '—'} unit="mph" estimated={overlaysGated} colors={colors} />
+        <Metric label="Smash" value={overlaysGated ? '1.37' : '—'} unit="" estimated={overlaysGated} colors={colors} />
+        <Metric label="Carry" value={overlaysGated ? '156' : '—'} unit="yds" estimated={overlaysGated} colors={colors} />
       </View>
+      {!analyzing && !validity.valid ? (
+        <Text style={[styles.metricsFooter, { color: colors.text_muted }]}>
+          Metrics paused — record a swing with your full body in frame to see estimates.
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -539,17 +586,25 @@ interface DerivedInsight {
 }
 
 function InsightCard({
-  colors, analyzing, analysisError, analysis, insight, caddieName, dominantMiss, onPressDrill,
+  colors, analyzing, analysisError, analysis, validity, insight, caddieName, dominantMiss, onRetake, onPressDrill,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
   analyzing: boolean;
   analysisError: string | null;
   analysis: SwingAnalysis | null;
+  validity: SwingValidity;
   insight: DerivedInsight;
   caddieName: string;
   dominantMiss: string | null;
+  onRetake: () => void;
   onPressDrill: (drillKey: string) => void;
 }) {
+  // Phase 418 — when the validity gate rejects the footage, the Insight
+  // card collapses to an honest "I couldn't see your swing" message
+  // with a Record-again CTA. No Top Focus, no Drill, no Next Swing
+  // Focus — those imply a real read that doesn't exist.
+  const showInvalidState = !analyzing && !analysisError && !validity.valid && analysis !== null;
+
   return (
     <View style={[styles.card, { backgroundColor: colors.surface_elevated, borderColor: colors.border, marginTop: 10 }]}>
       <Text style={[styles.insightHeader, { color: colors.accent }]}>{caddieName.toUpperCase()}'S INSIGHT</Text>
@@ -569,6 +624,10 @@ function InsightCard({
             <Text style={[styles.bubbleText, { color: colors.text_muted }]}>
               {analysisError}. Tap Record to try another swing.
             </Text>
+          ) : showInvalidState ? (
+            <Text style={[styles.bubbleText, { color: colors.text_primary }]}>
+              I couldn&apos;t see your swing in this clip — {(validity.reason ?? 'no analyzable swing detected').toLowerCase()}. Point the camera at your full body and try again.
+            </Text>
           ) : (
             <Text style={[styles.bubbleText, { color: colors.text_primary }]}>{insight.diagnostic}</Text>
           )}
@@ -576,59 +635,94 @@ function InsightCard({
       </View>
       <Text style={[styles.caddieNameLabel, { color: colors.text_muted }]}>{caddieName.toUpperCase()}</Text>
 
-      {/* Top Focus */}
-      <Text style={[styles.sectionLabel, { color: colors.text_muted, marginTop: 14 }]}>TOP FOCUS</Text>
-      <View style={[styles.focusCard, { borderColor: colors.border }]}>
-        <View style={[styles.focusIcon, { borderColor: colors.accent }]}>
-          <Ionicons name="refresh-outline" size={20} color={colors.accent} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.focusTitle, { color: colors.text_primary }]}>{insight.topFocus}</Text>
-          <Text style={[styles.focusSub, { color: colors.text_muted }]} numberOfLines={2}>{insight.topFocusSub}</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
-      </View>
+      {showInvalidState ? (
+        <>
+          {/* Framing tips — visible when the validity gate rejects so
+              the user knows HOW to get a usable read on the next try. */}
+          <Text style={[styles.sectionLabel, { color: colors.text_muted, marginTop: 14 }]}>FRAMING TIPS</Text>
+          <View style={[styles.focusCard, { borderColor: colors.border, alignItems: 'flex-start', flexDirection: 'column', gap: 6 }]}>
+            <FramingTip text="Phone vertical, on a stable mount or leaned against your bag." />
+            <FramingTip text="Stand 6-10 feet away — get your full body in frame head-to-feet." />
+            <FramingTip text="Down-the-line: camera behind you, looking at the target line." />
+            <FramingTip text="Face-on: camera in front of you, perpendicular to the target line." />
+          </View>
+          <TouchableOpacity
+            onPress={onRetake}
+            style={[styles.retakeBtn, { backgroundColor: colors.accent }]}
+            accessibilityRole="button"
+            accessibilityLabel="Record another swing"
+          >
+            <Ionicons name="radio-button-on" size={18} color="#060f09" />
+            <Text style={[styles.retakeBtnText, { color: '#060f09' }]}>Record another swing</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <>
+          {/* Top Focus */}
+          <Text style={[styles.sectionLabel, { color: colors.text_muted, marginTop: 14 }]}>TOP FOCUS</Text>
+          <View style={[styles.focusCard, { borderColor: colors.border }]}>
+            <View style={[styles.focusIcon, { borderColor: colors.accent }]}>
+              <Ionicons name="refresh-outline" size={20} color={colors.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.focusTitle, { color: colors.text_primary }]}>{insight.topFocus}</Text>
+              <Text style={[styles.focusSub, { color: colors.text_muted }]} numberOfLines={2}>{insight.topFocusSub}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+          </View>
 
-      {/* Recommended Drill */}
-      <Text style={[styles.sectionLabel, { color: colors.text_muted, marginTop: 14 }]}>RECOMMENDED DRILL</Text>
-      <TouchableOpacity
-        onPress={() => onPressDrill(insight.drillKey)}
-        style={[styles.drillCard, { borderColor: colors.border }]}
-      >
-        <View style={[styles.drillIcon, { borderColor: colors.accent }]}>
-          <Ionicons name="body-outline" size={22} color={colors.accent} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.focusTitle, { color: colors.text_primary }]}>{insight.drillTitle}</Text>
-          <Text style={[styles.focusSub, { color: colors.text_muted }]} numberOfLines={2}>{insight.drillSub}</Text>
-        </View>
-        <View style={[styles.drillThumb, { backgroundColor: colors.background, borderColor: colors.border }]}>
-          <Ionicons name="play" size={18} color={colors.accent} />
-        </View>
-      </TouchableOpacity>
+          {/* Recommended Drill */}
+          <Text style={[styles.sectionLabel, { color: colors.text_muted, marginTop: 14 }]}>RECOMMENDED DRILL</Text>
+          <TouchableOpacity
+            onPress={() => onPressDrill(insight.drillKey)}
+            style={[styles.drillCard, { borderColor: colors.border }]}
+          >
+            <View style={[styles.drillIcon, { borderColor: colors.accent }]}>
+              <Ionicons name="body-outline" size={22} color={colors.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.focusTitle, { color: colors.text_primary }]}>{insight.drillTitle}</Text>
+              <Text style={[styles.focusSub, { color: colors.text_muted }]} numberOfLines={2}>{insight.drillSub}</Text>
+            </View>
+            <View style={[styles.drillThumb, { backgroundColor: colors.background, borderColor: colors.border }]}>
+              <Ionicons name="play" size={18} color={colors.accent} />
+            </View>
+          </TouchableOpacity>
 
-      {/* Next Swing Focus */}
-      <Text style={[styles.sectionLabel, { color: colors.text_muted, marginTop: 14 }]}>NEXT SWING FOCUS</Text>
-      <View style={[styles.focusCard, { borderColor: colors.border }]}>
-        <View style={[styles.focusIcon, { borderColor: colors.accent }]}>
-          <Ionicons name="locate-outline" size={20} color={colors.accent} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.focusTitle, { color: colors.text_primary }]}>{insight.nextSwingFocus}</Text>
-          <Text style={[styles.focusSub, { color: colors.accent }]} numberOfLines={1}>{insight.nextSwingArrow}</Text>
-        </View>
-      </View>
-      {/* View Full Data */}
-      <TouchableOpacity style={[styles.fullDataBtn, { borderColor: colors.border }]}>
-        <Text style={[styles.fullDataLabel, { color: colors.text_primary }]}>View Full Data</Text>
-        <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
-      </TouchableOpacity>
+          {/* Next Swing Focus */}
+          <Text style={[styles.sectionLabel, { color: colors.text_muted, marginTop: 14 }]}>NEXT SWING FOCUS</Text>
+          <View style={[styles.focusCard, { borderColor: colors.border }]}>
+            <View style={[styles.focusIcon, { borderColor: colors.accent }]}>
+              <Ionicons name="locate-outline" size={20} color={colors.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.focusTitle, { color: colors.text_primary }]}>{insight.nextSwingFocus}</Text>
+              <Text style={[styles.focusSub, { color: colors.accent }]} numberOfLines={1}>{insight.nextSwingArrow}</Text>
+            </View>
+          </View>
+          {/* View Full Data */}
+          <TouchableOpacity style={[styles.fullDataBtn, { borderColor: colors.border }]}>
+            <Text style={[styles.fullDataLabel, { color: colors.text_primary }]}>View Full Data</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+          </TouchableOpacity>
+        </>
+      )}
 
-      {analysis ? (
+      {analysis && validity.valid ? (
         <Text style={[styles.confidenceFooter, { color: colors.text_muted }]}>
           Analysis confidence: {analysis.confidence} · severity: {analysis.severity}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+function FramingTip({ text }: { text: string }) {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.framingTipRow}>
+      <Ionicons name="checkmark-circle-outline" size={14} color={colors.accent} />
+      <Text style={[styles.framingTipText, { color: colors.text_muted }]} numberOfLines={2}>{text}</Text>
     </View>
   );
 }
@@ -703,7 +797,7 @@ function BottomBar({ colors, onTagClub, onCompare }: {
 
 // ─── Insight derivation ─────────────────────────────────────────────
 
-function deriveInsight(a: SwingAnalysis | null, persona: string): DerivedInsight {
+function deriveInsight(a: SwingAnalysis | null, persona: string, validity: SwingValidity): DerivedInsight {
   if (!a) {
     return {
       diagnostic: `Record a swing and ${caddieDisplay(persona)} will read it for you.`,
@@ -714,6 +808,23 @@ function deriveInsight(a: SwingAnalysis | null, persona: string): DerivedInsight
       drillSub: '3:1 backswing-to-downswing rhythm — works on every swing.',
       nextSwingFocus: 'Smooth setup',
       nextSwingArrow: 'Relaxed → Athletic',
+    };
+  }
+  // Phase 418 — when validity gate rejects, return a placeholder
+  // insight; the InsightCard will short-circuit and render the
+  // "couldn't see your swing" state + framing tips, so these fields
+  // are never actually shown. We still return a well-formed
+  // DerivedInsight so the type contract holds.
+  if (!validity.valid) {
+    return {
+      diagnostic: validity.reason ?? 'No analyzable swing detected in this clip.',
+      topFocus: 'No swing detected',
+      topFocusSub: 'Get your full body in frame and record again.',
+      drillKey: 'tempo',
+      drillTitle: 'Tempo Trainer',
+      drillSub: '3:1 backswing-to-downswing rhythm — works on every swing.',
+      nextSwingFocus: 'Reframe & retake',
+      nextSwingArrow: 'Floor → Full body',
     };
   }
   const issue = a.detected_issue;
@@ -917,6 +1028,21 @@ const styles = StyleSheet.create({
   metricLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1, marginBottom: 4 },
   metricValue: { fontSize: 22, fontWeight: '900' },
   metricUnit: { fontSize: 10, marginTop: 2 },
+  metricsFooter: { fontSize: 11, marginTop: 8, textAlign: 'center', fontStyle: 'italic', lineHeight: 16 },
+  noSwingBadge: {
+    position: 'absolute', top: 10, left: 10, right: 80,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 10, paddingVertical: 6,
+    backgroundColor: 'rgba(239,68,68,0.85)', borderRadius: 10,
+  },
+  noSwingBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700', flex: 1 },
+  framingTipRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingVertical: 2 },
+  framingTipText: { flex: 1, fontSize: 12, lineHeight: 17 },
+  retakeBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, marginTop: 12, paddingVertical: 14, borderRadius: 12,
+  },
+  retakeBtnText: { fontSize: 14, fontWeight: '900', letterSpacing: 0.3 },
   insightHeader: { fontSize: 12, fontWeight: '900', letterSpacing: 1.6 },
   insightRow: { flexDirection: 'row', gap: 12, marginTop: 10, alignItems: 'flex-start' },
   caddiePortrait: { width: 56, height: 56, borderRadius: 28, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
