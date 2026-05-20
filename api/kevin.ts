@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import { KEVIN_TTS_VOICE, KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
+import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
 import { getCaddieName, getCharacterSpec } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
@@ -934,15 +934,74 @@ ${onCourseContextBlock}${baseMessage}`
     console.log('[kevin] response:', text);
     if (toolAction) console.log('[kevin] tool:', toolAction.type);
 
-    const ttsResponse = await openai.audio.speech.create({
-      model: 'gpt-4o-mini-tts',
-      voice: KEVIN_TTS_VOICE,
-      input: text,
-      instructions: KEVIN_TTS_INSTRUCTIONS,
-    });
+    // 2026-05-20 — Persona-aware TTS. Was hardcoded to KEVIN_TTS_VOICE
+    // so Kevin's voice spoke for every persona (Tim flagged Serena
+    // utterances coming out in Kevin's voice). Mirror /api/voice's
+    // persona routing: ElevenLabs per-persona voice ID first, OpenAI
+    // gender-mapped voice (nova for Serena, onyx for the rest) as
+    // fallback.
+    const personaKey =
+      typeof personaInput === 'string' ? personaInput.toLowerCase() : '';
+    const ELEVEN_VOICES_BY_PERSONA: Record<string, string> = {
+      kevin:  '1fz2mW1imKTf5Ryjk5su',
+      serena: 'RGb96Dcl0k5eVje8EBch',
+      harry:  '5Jfxy1x2Df4No3LQBZXE',
+      tank:   'gQOVuaEi4cxS2vkZAK3A',
+    };
+    const ELEVEN_SETTINGS_BY_PERSONA: Record<string, { stability: number; similarity_boost: number; style: number; use_speaker_boost: boolean }> = {
+      kevin:  { stability: 0.45, similarity_boost: 0.75, style: 0.55, use_speaker_boost: true },
+      serena: { stability: 0.50, similarity_boost: 0.75, style: 0.50, use_speaker_boost: true },
+      tank:   { stability: 0.35, similarity_boost: 0.70, style: 0.70, use_speaker_boost: true },
+      harry:  { stability: 0.65, similarity_boost: 0.80, style: 0.30, use_speaker_boost: true },
+    };
+    const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY;
 
-    const arrayBuffer = await ttsResponse.arrayBuffer();
-    const audioBase64 = Buffer.from(arrayBuffer).toString('base64');
+    let audioBase64: string | null = null;
+
+    if (ELEVENLABS_KEY && ELEVEN_VOICES_BY_PERSONA[personaKey]) {
+      try {
+        const voiceId = ELEVEN_VOICES_BY_PERSONA[personaKey];
+        const voiceSettings = ELEVEN_SETTINGS_BY_PERSONA[personaKey] ?? ELEVEN_SETTINGS_BY_PERSONA.kevin;
+        const elevenRes = await fetch(
+          'https://api.elevenlabs.io/v1/text-to-speech/' + voiceId,
+          {
+            method: 'POST',
+            headers: {
+              'xi-api-key': ELEVENLABS_KEY,
+              'Content-Type': 'application/json',
+              'Accept': 'audio/mpeg',
+            },
+            body: JSON.stringify({
+              text,
+              model_id: 'eleven_turbo_v2',
+              voice_settings: voiceSettings,
+            }),
+          },
+        );
+        if (elevenRes.ok) {
+          const buf = await elevenRes.arrayBuffer();
+          audioBase64 = Buffer.from(buf).toString('base64');
+        } else {
+          console.log('[kevin] ElevenLabs failed:', elevenRes.status, '— falling back to OpenAI');
+        }
+      } catch (e) {
+        console.log('[kevin] ElevenLabs error:', e, '— falling back to OpenAI');
+      }
+    }
+
+    if (!audioBase64) {
+      // OpenAI TTS fallback — pick voice by persona gender.
+      const ttsVoice: 'onyx' | 'nova' =
+        personaKey === 'serena' ? 'nova' : 'onyx';
+      const ttsResponse = await openai.audio.speech.create({
+        model: 'gpt-4o-mini-tts',
+        voice: ttsVoice,
+        input: text,
+        instructions: KEVIN_TTS_INSTRUCTIONS,
+      });
+      const arrayBuffer = await ttsResponse.arrayBuffer();
+      audioBase64 = Buffer.from(arrayBuffer).toString('base64');
+    }
 
     return res.status(200).json({ text, audioBase64, toolAction });
 

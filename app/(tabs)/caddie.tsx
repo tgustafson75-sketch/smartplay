@@ -558,6 +558,11 @@ export default function CaddieTab() {
   const [showShotCard, setShowShotCard] = useState(false);
   const [showRoundSetup, setShowRoundSetup] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  // 2026-05-20 — Pre-round tools FAB expansion state. Collapsed = chevron
+  // arrow on the right; tapped = expands to the LEFT into a row of tool
+  // icons. Replaces the giant full-width green pill Tim flagged as
+  // "fucking giant ass button".
+  const [toolsExpanded, setToolsExpanded] = useState(false);
   // Phase 109-followup — Quick Log Shot modal visibility.
   const [quickLogOpen, setQuickLogOpen] = useState(false);
   const [selectedPickedCourse, setSelectedPickedCourse] = useState<PickedCourse | null>(
@@ -2460,39 +2465,77 @@ export default function CaddieTab() {
         />
       </Animated.View>
 
-      {/* 2026-05-19 — Pre-round Tools FAB. Tim + Tank's range / quick-
-          swing-record use case needs access to the expandable tools
-          without starting a round. Renders only when no round is
-          active (the data strip above takes over once a round starts).
-          Tapping opens the same GlobalToolsMenu the ••• pill triggers. */}
+      {/* 2026-05-20 — Pre-round Tools FAB. Small right-side green
+          chevron; tapping expands a row of tool icons to the LEFT.
+          Replaces the prior full-width green pill (rejected: "fucking
+          giant ass button"). Renders only when no round is active. */}
       {!isRoundActive ? (
-        <TouchableOpacity
+        <View
           style={{
             position: 'absolute',
             bottom: insets.bottom + 16,
-            alignSelf: 'center',
-            left: 0, right: 0,
-            marginHorizontal: 24,
-            backgroundColor: '#00C896',
-            borderRadius: 22,
-            paddingVertical: 14,
+            right: 16,
             flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.4, shadowRadius: 6, elevation: 8,
+            gap: 10,
             zIndex: 12,
           }}
-          onPress={() => useToolsMenuStore.getState().open()}
-          accessibilityRole="button"
-          accessibilityLabel="Open tools menu"
+          pointerEvents="box-none"
         >
-          <Ionicons name="chevron-up" size={18} color="#060f09" />
-          <Text style={{ color: '#060f09', fontSize: 15, fontWeight: '900', letterSpacing: 0.4 }}>
-            TOOLS · SmartMotion · Range
-          </Text>
-        </TouchableOpacity>
+          {toolsExpanded ? (
+            <>
+              <ToolFabIcon
+                icon="camera-outline"
+                label="SmartMotion"
+                onPress={() => { setToolsExpanded(false); router.push('/swinglab/smartmotion' as never); }}
+              />
+              <ToolFabIcon
+                icon="videocam-outline"
+                label="Range"
+                onPress={() => { setToolsExpanded(false); router.push('/swinglab/range' as never); }}
+              />
+              <ToolFabIcon
+                icon="library-outline"
+                label="Drills"
+                onPress={() => { setToolsExpanded(false); router.push('/drills' as never); }}
+              />
+              <ToolFabIcon
+                icon="albums-outline"
+                label="Library"
+                onPress={() => { setToolsExpanded(false); router.push('/swinglab/library' as never); }}
+              />
+              <ToolFabIcon
+                icon="apps-outline"
+                label="All Tools"
+                onPress={() => { setToolsExpanded(false); useToolsMenuStore.getState().open(); }}
+              />
+            </>
+          ) : null}
+          <TouchableOpacity
+            onPress={() => setToolsExpanded(s => !s)}
+            accessibilityRole="button"
+            accessibilityLabel={toolsExpanded ? 'Close tools' : 'Open tools'}
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              backgroundColor: '#00C896',
+              alignItems: 'center',
+              justifyContent: 'center',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.4,
+              shadowRadius: 6,
+              elevation: 8,
+            }}
+          >
+            <Ionicons
+              name={toolsExpanded ? 'chevron-forward' : 'chevron-back'}
+              size={22}
+              color="#060f09"
+            />
+          </TouchableOpacity>
+        </View>
       ) : null}
 
       {/* PENALTY QUICK-TAP — only visible when the scoring tool is open. */}
@@ -3181,6 +3224,39 @@ export default function CaddieTab() {
       </Modal>
 
     </View>
+  );
+}
+
+// 2026-05-20 — Tools FAB expanded icon. Small green circle with a
+// tool icon inside; tapping fires the parent's route push and
+// auto-collapses the FAB.
+function ToolFabIcon({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={{
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(0, 200, 150, 0.18)',
+        borderWidth: 1.5,
+        borderColor: '#00C896',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Ionicons name={icon} size={20} color="#00C896" />
+    </TouchableOpacity>
   );
 }
 
