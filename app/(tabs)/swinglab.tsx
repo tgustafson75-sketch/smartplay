@@ -43,13 +43,18 @@ interface LauncherCardSpec {
   route: string;
 }
 
+// 2026-05-19 — Reordered per Tim: SmartMotion first (the marquee
+// camera flow), then Range Mode, then Drills, then Arena, then
+// Library, then Acoustic. SmartMotion also gets expanded sub copy
+// covering AI Swing Analysis + Body Mechanics + Tracing future state
+// so the user sees the full SmartMotion value prop at a glance.
 const CARDS: LauncherCardSpec[] = [
   {
-    key: 'drills',
-    icon: 'library-outline',
-    title: 'Drills',
-    sub: 'Primary Issue · Common Faults · pro instructor videos',
-    route: '/drills',
+    key: 'smartmotion',
+    icon: 'camera-outline',
+    title: 'SmartMotion',
+    sub: 'AI Swing Analysis · Body Mechanics · Shot Tracing (coming)',
+    route: '/swinglab/camera-setup?next=%2Fswinglab%2Fcage-drill',
   },
   {
     key: 'range',
@@ -59,11 +64,11 @@ const CARDS: LauncherCardSpec[] = [
     route: '/swinglab/range',
   },
   {
-    key: 'smartmotion',
-    icon: 'camera-outline',
-    title: 'SmartMotion',
-    sub: 'Single-swing video + audio narration',
-    route: '/swinglab/camera-setup?next=%2Fswinglab%2Fcage-drill',
+    key: 'drills',
+    icon: 'library-outline',
+    title: 'Drills',
+    sub: 'Primary Issue · Common Faults · pro instructor videos',
+    route: '/drills',
   },
   {
     key: 'arena',

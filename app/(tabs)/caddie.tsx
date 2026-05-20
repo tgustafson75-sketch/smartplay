@@ -2460,6 +2460,41 @@ export default function CaddieTab() {
         />
       </Animated.View>
 
+      {/* 2026-05-19 — Pre-round Tools FAB. Tim + Tank's range / quick-
+          swing-record use case needs access to the expandable tools
+          without starting a round. Renders only when no round is
+          active (the data strip above takes over once a round starts).
+          Tapping opens the same GlobalToolsMenu the ••• pill triggers. */}
+      {!isRoundActive ? (
+        <TouchableOpacity
+          style={{
+            position: 'absolute',
+            bottom: insets.bottom + 16,
+            alignSelf: 'center',
+            left: 0, right: 0,
+            marginHorizontal: 24,
+            backgroundColor: '#00C896',
+            borderRadius: 22,
+            paddingVertical: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.4, shadowRadius: 6, elevation: 8,
+            zIndex: 12,
+          }}
+          onPress={() => useToolsMenuStore.getState().open()}
+          accessibilityRole="button"
+          accessibilityLabel="Open tools menu"
+        >
+          <Ionicons name="chevron-up" size={18} color="#060f09" />
+          <Text style={{ color: '#060f09', fontSize: 15, fontWeight: '900', letterSpacing: 0.4 }}>
+            TOOLS · SmartMotion · Range
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+
       {/* PENALTY QUICK-TAP — only visible when the scoring tool is open. */}
       {isRoundActive && showShotCard && (
         <TouchableOpacity
