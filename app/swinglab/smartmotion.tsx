@@ -40,8 +40,16 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';
 
 type Angle = 'down_the_line' | 'face_on';
-type ActiveTab = 'smart_motion' | 'shot_tracer' | 'body_mechanics';
-type ControlMode = 'grid' | 'overlay' | 'draw' | 'speed';
+// 2026-05-20 — Shot Tracer + Body Mechanics are overlays on the same
+// SmartMotion video, NOT separate tabs. User toggles them on/off
+// independently and they composite on the swing playback.
+interface OverlayState {
+  body_mechanics: boolean;
+  shot_tracer: boolean;
+  grid: boolean;
+  draw: boolean;
+}
+type SpeedRate = 0.25 | 0.5 | 1;
 
 // 2026-05-19 — Phase 416 — Two-card SmartMotion. See file header for
 // architectural call on pose detection seam.
@@ -52,10 +60,16 @@ export default function SmartMotion() {
   const profile = usePlayerProfileStore();
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('smart_motion');
   const [angle, setAngle] = useState<Angle>('face_on');
-  const [controlMode, setControlMode] = useState<ControlMode>('overlay');
-  const [playbackSpeed, setPlaybackSpeed] = useState<0.25 | 0.5 | 1>(0.5);
+  const [overlays, setOverlays] = useState<OverlayState>({
+    body_mechanics: true,
+    shot_tracer: false,
+    grid: false,
+    draw: false,
+  });
+  const toggleOverlay = (key: keyof OverlayState) =>
+    setOverlays(prev => ({ ...prev, [key]: !prev[key] }));
+  const [playbackSpeed, setPlaybackSpeed] = useState<SpeedRate>(0.5);
   const [analysis, setAnalysis] = useState<SwingAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -114,94 +128,138 @@ export default function SmartMotion() {
         </TouchableOpacity>
       </View>
 
-      {/* Top tab bar — Smart Motion / Shot Tracer / Body Mechanics */}
-      <View style={styles.tabRow}>
-        <TabPill
-          label="Smart Motion"
-          icon="body-outline"
-          active={activeTab === 'smart_motion'}
-          accent={colors.accent}
-          mutedBorder={colors.border}
-          onPress={() => setActiveTab('smart_motion')}
-        />
-        <TabPill
-          label="Shot Tracer"
-          icon="trail-sign-outline"
-          active={activeTab === 'shot_tracer'}
-          accent={colors.accent}
-          mutedBorder={colors.border}
-          onPress={() => setActiveTab('shot_tracer')}
-        />
-        <TabPill
-          label="Body Mechanics"
-          icon="walk-outline"
-          active={activeTab === 'body_mechanics'}
-          accent={colors.accent}
-          mutedBorder={colors.border}
-          onPress={() => setActiveTab('body_mechanics')}
-        />
-      </View>
+      {/* 2026-05-20 — Single-view overlay toggle row (not tabs). Tim:
+          "Shot Tracer and Body Mechanics are integrated within
+          SmartMotion. They can be toggled so you can overlay the
+          shot tracer over the SmartMotion video and/or body
+          mechanics over the same video — it's all one interface." */}
+      {clipUri ? (
+        <View style={styles.overlayRow}>
+          <OverlayToggle
+            label="Body Mechanics"
+            icon="body-outline"
+            active={overlays.body_mechanics}
+            colors={colors}
+            onPress={() => toggleOverlay('body_mechanics')}
+          />
+          <OverlayToggle
+            label="Shot Tracer"
+            icon="trail-sign-outline"
+            active={overlays.shot_tracer}
+            colors={colors}
+            onPress={() => toggleOverlay('shot_tracer')}
+          />
+          <OverlayToggle
+            label="Grid"
+            icon="grid-outline"
+            active={overlays.grid}
+            colors={colors}
+            onPress={() => toggleOverlay('grid')}
+          />
+        </View>
+      ) : null}
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {activeTab === 'smart_motion' && (
+      {/* 2026-05-19 — Tim's call: simplify. No-clip state shows a big
+          prominent Record CTA so the user gets to the camera in ONE
+          tap. The full analysis view only renders when a clip exists.
+          Bottom action bar is STICKY (absolute-positioned over the
+          ScrollView) so Record is always visible — no more burying
+          it past the fold. */}
+      {!clipUri ? (
+        <NoClipHero
+          colors={colors}
+          onRecord={() => router.push('/swinglab/quick-record' as never)}
+          onLibrary={() => router.push('/swinglab/library' as never)}
+        />
+      ) : (
+        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 92 }]} showsVerticalScrollIndicator={false}>
           <VisualCard
             clipUri={clipUri ?? null}
             angle={angle}
             setAngle={setAngle}
-            controlMode={controlMode}
-            setControlMode={setControlMode}
+            overlays={overlays}
             playbackSpeed={playbackSpeed}
             setPlaybackSpeed={setPlaybackSpeed}
             analysis={analysis}
             colors={colors}
           />
-        )}
+          <InsightCard
+            colors={colors}
+            analyzing={analyzing}
+            analysisError={analysisError}
+            analysis={analysis}
+            insight={insight}
+            caddieName={caddieDisplay(caddiePersonality)}
+            dominantMiss={profile.dominantMiss ?? null}
+            onPressDrill={(drillKey) => router.push(`/drills/${drillKey}` as never)}
+          />
+        </ScrollView>
+      )}
 
-        {activeTab === 'body_mechanics' && (
-          <BodyMechanicsCard analysis={analysis} colors={colors} />
-        )}
-
-        {activeTab === 'shot_tracer' && (
-          <ShotTracerCard colors={colors} />
-        )}
-
-        {/* Card 2 — INSIGHT (always visible below the visual) */}
-        <InsightCard
-          colors={colors}
-          analyzing={analyzing}
-          analysisError={analysisError}
-          analysis={analysis}
-          insight={insight}
-          caddieName={caddieDisplay(caddiePersonality)}
-          dominantMiss={profile.dominantMiss ?? null}
-          onPressDrill={(drillKey) => router.push(`/drills/${drillKey}` as never)}
-        />
-
-        {/* Bottom action bar — shared across both cards */}
-        <BottomBar
-          colors={colors}
-          onRecord={() => router.push('/swinglab/camera-setup?next=/swinglab/smartmotion' as never)}
-          onTagClub={() => {/* TODO: club tag sheet */}}
-          onCompare={() => router.push('/swinglab/library' as never)}
-        />
-      </ScrollView>
+      {/* Sticky bottom action bar — always visible, doesn't scroll
+          out of view. Hidden in no-clip state (NoClipHero has its
+          own giant Record CTA). */}
+      {clipUri ? (
+        <View style={styles.stickyBar}>
+          <BottomBar
+            colors={colors}
+            onRecord={() => router.push('/swinglab/quick-record' as never)}
+            onTagClub={() => {/* TODO: club tag sheet */}}
+            onCompare={() => router.push('/swinglab/library' as never)}
+          />
+        </View>
+      ) : null}
     </SafeAreaView>
+  );
+}
+
+// ─── No-clip hero (entry state) ─────────────────────────────────────
+
+function NoClipHero({ colors, onRecord, onLibrary }: {
+  colors: ReturnType<typeof useTheme>['colors'];
+  onRecord: () => void;
+  onLibrary: () => void;
+}) {
+  return (
+    <View style={styles.noClipHero}>
+      <View style={[styles.noClipCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
+        <View style={[styles.noClipIcon, { backgroundColor: colors.accent_muted, borderColor: colors.accent }]}>
+          <Ionicons name="videocam" size={48} color={colors.accent} />
+        </View>
+        <Text style={[styles.noClipTitle, { color: colors.text_primary }]}>Ready when you are.</Text>
+        <Text style={[styles.noClipSub, { color: colors.text_muted }]}>
+          Tap Record. AI swing analysis · body mechanics overlay · drill recommendation. Shot tracing coming.
+        </Text>
+        <TouchableOpacity
+          onPress={onRecord}
+          style={[styles.noClipPrimary, { backgroundColor: colors.accent }]}
+          accessibilityRole="button"
+          accessibilityLabel="Record a swing"
+        >
+          <Ionicons name="radio-button-on" size={20} color="#060f09" />
+          <Text style={[styles.noClipPrimaryText, { color: '#060f09' }]}>Record Swing</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onLibrary} style={styles.noClipSecondary}>
+          <Ionicons name="albums-outline" size={16} color={colors.accent} />
+          <Text style={[styles.noClipSecondaryText, { color: colors.accent }]}>Open Swing Library</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
 // ─── Card 1: Visual ─────────────────────────────────────────────────
 
 function VisualCard({
-  clipUri, angle, setAngle, controlMode, setControlMode, playbackSpeed, setPlaybackSpeed,
+  clipUri, angle, setAngle, overlays, playbackSpeed, setPlaybackSpeed,
   analysis, colors,
 }: {
   clipUri: string | null;
   angle: Angle;
   setAngle: (a: Angle) => void;
-  controlMode: ControlMode;
-  setControlMode: (m: ControlMode) => void;
-  playbackSpeed: 0.25 | 0.5 | 1;
-  setPlaybackSpeed: (s: 0.25 | 0.5 | 1) => void;
+  overlays: OverlayState;
+  playbackSpeed: SpeedRate;
+  setPlaybackSpeed: (s: SpeedRate) => void;
   analysis: SwingAnalysis | null;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
@@ -253,56 +311,68 @@ function VisualCard({
           </View>
         )}
 
-        {/* Pose overlay placeholder. Real keypoints land in the next APK
-            when TFJS + expo-gl + @tensorflow-models/pose-detection ship.
-            Renders a vertical alignment reference + 8 stub joints so the
-            UI shows the SHAPE of the analysis even before the keypoints
-            are live. */}
-        {clipUri && controlMode === 'overlay' && (
+        {/* Composited overlays — each layer toggles independently. */}
+        {clipUri && overlays.grid && (
           <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-            {/* Vertical alignment line */}
+            {[1, 2, 3].map(i => (
+              <Line key={`v${i}`} x1={`${i * 25}%`} y1="0%" x2={`${i * 25}%`} y2="100%" stroke="#ffffff" strokeWidth={0.5} opacity={0.2} />
+            ))}
+            {[1, 2, 3].map(i => (
+              <Line key={`h${i}`} x1="0%" y1={`${i * 25}%`} x2="100%" y2={`${i * 25}%`} stroke="#ffffff" strokeWidth={0.5} opacity={0.2} />
+            ))}
+          </Svg>
+        )}
+        {clipUri && overlays.body_mechanics && (
+          <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
             <Line x1="50%" y1="6%" x2="50%" y2="94%" stroke={colors.accent} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.55} />
-            {/* Stub skeleton — 8 joints + connections. Replaced by real
-                keypoints once on-device pose lands. */}
             {STUB_SKELETON.connections.map(([a, b], i) => (
               <Line
                 key={i}
                 x1={`${STUB_SKELETON.joints[a].x}%`} y1={`${STUB_SKELETON.joints[a].y}%`}
                 x2={`${STUB_SKELETON.joints[b].x}%`} y2={`${STUB_SKELETON.joints[b].y}%`}
                 stroke={colors.accent}
-                strokeWidth={2}
-                opacity={0.4}
+                strokeWidth={2.5}
+                opacity={0.7}
               />
             ))}
             {STUB_SKELETON.joints.map((j, i) => (
-              <Circle key={i} cx={`${j.x}%`} cy={`${j.y}%`} r={3} fill={colors.accent} opacity={0.55} />
+              <Circle key={i} cx={`${j.x}%`} cy={`${j.y}%`} r={4} fill={colors.accent} opacity={0.85} />
             ))}
           </Svg>
         )}
-        {clipUri && controlMode === 'grid' && (
+        {clipUri && overlays.shot_tracer && (
           <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-            {[1,2,3].map(i => (
-              <Line key={`v${i}`} x1={`${i*25}%`} y1="0%" x2={`${i*25}%`} y2="100%" stroke="#ffffff" strokeWidth={0.5} opacity={0.18} />
-            ))}
-            {[1,2,3].map(i => (
-              <Line key={`h${i}`} x1="0%" y1={`${i*25}%`} x2="100%" y2={`${i*25}%`} stroke="#ffffff" strokeWidth={0.5} opacity={0.18} />
-            ))}
+            {/* Tracer placeholder — arcs from ball position through
+                projected flight. Real ball tracking lands with the
+                ball-detection pipeline. */}
+            <Line x1="50%" y1="78%" x2="78%" y2="22%" stroke="#F5A623" strokeWidth={2.5} opacity={0.7} strokeDasharray="4,3" />
+            <Circle cx="50%" cy="78%" r={5} fill="#F5A623" opacity={0.85} />
+            <Circle cx="78%" cy="22%" r={4} fill="#F5A623" opacity={0.85} />
           </Svg>
         )}
 
-        {/* Right control rail */}
-        <View style={[styles.controlRail, { backgroundColor: 'rgba(13,26,13,0.88)', borderColor: colors.border }]}>
-          <RailButton icon="grid-outline" label="Grid" active={controlMode === 'grid'} accent={colors.accent} onPress={() => setControlMode('grid')} />
-          <RailButton icon="body-outline" label="Overlay" active={controlMode === 'overlay'} accent={colors.accent} onPress={() => setControlMode('overlay')} />
-          <RailButton icon="pencil-outline" label="Draw" active={controlMode === 'draw'} accent={colors.accent} onPress={() => setControlMode('draw')} />
-          <RailButton icon="speedometer-outline" label="Speed" active={controlMode === 'speed'} accent={colors.accent} onPress={() => {
-            setControlMode('speed');
-            // Cycle speeds: 0.25 → 0.5 → 1
+        {/* Speed pill — small floating control top-right (replaces
+            the right rail since overlays are toggled above the video). */}
+        <TouchableOpacity
+          onPress={() => {
             const next = playbackSpeed === 0.25 ? 0.5 : playbackSpeed === 0.5 ? 1 : 0.25;
             setPlaybackSpeed(next);
-          }} />
-        </View>
+          }}
+          style={styles.speedPill}
+        >
+          <Ionicons name="speedometer-outline" size={14} color="#fff" />
+          <Text style={styles.speedPillText}>{playbackSpeed}x</Text>
+        </TouchableOpacity>
+
       </View>
+
+      {/* 2026-05-20 — Record button integrated INTO the video card
+          (just below the playback frame). Tim: "Record/stop/play
+          should be integrated into the video screen element, not at
+          the bottom of the screen — that's confusing." Big circular
+          record button anchored to the analysis card, not the screen
+          chrome. */}
+      <FrameRecordButton />
 
       {/* Scrubber (visual placeholder — real frame stepping ships with
           expo-video positionMillis subscription in a follow-up) */}
@@ -361,6 +431,49 @@ function AnglePill({ label, icon, active, colors, onPress }: {
     >
       <Ionicons name={icon} size={14} color={active ? colors.accent : colors.text_muted} />
       <Text style={[styles.anglePillText, { color: active ? colors.accent : colors.text_muted }]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+function FrameRecordButton() {
+  const router = useRouter();
+  const { colors } = useTheme();
+  return (
+    <View style={styles.frameRecordWrap}>
+      <TouchableOpacity
+        style={[styles.frameRecordOuter, { borderColor: colors.accent }]}
+        onPress={() => router.push('/swinglab/quick-record' as never)}
+        accessibilityRole="button"
+        accessibilityLabel="Record a new swing"
+      >
+        <View style={[styles.frameRecordInner, { backgroundColor: '#ef4444' }]} />
+      </TouchableOpacity>
+      <Text style={[styles.frameRecordHint, { color: colors.text_muted }]}>Tap to record another swing</Text>
+    </View>
+  );
+}
+
+function OverlayToggle({ label, icon, active, colors, onPress }: {
+  label: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  active: boolean;
+  colors: ReturnType<typeof useTheme>['colors'];
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[
+        styles.overlayToggle,
+        active
+          ? { backgroundColor: colors.accent_muted, borderColor: colors.accent }
+          : { backgroundColor: 'transparent', borderColor: colors.border },
+      ]}
+    >
+      <Ionicons name={icon} size={14} color={active ? colors.accent : colors.text_muted} />
+      <Text style={[styles.overlayToggleText, { color: active ? colors.accent : colors.text_muted }]}>
         {label}
       </Text>
     </TouchableOpacity>
@@ -560,18 +673,19 @@ function ShotTracerCard({ colors }: {
   );
 }
 
-function BottomBar({ colors, onRecord, onTagClub, onCompare }: {
+function BottomBar({ colors, onTagClub, onCompare }: {
   colors: ReturnType<typeof useTheme>['colors'];
-  onRecord: () => void;
+  onRecord?: () => void; // unused — record now lives in the video card
   onTagClub: () => void;
   onCompare: () => void;
 }) {
+  // 2026-05-20 — Record removed from the bottom bar. Tim: "integrated
+  // into the video screen element, not all the way down at the bottom."
+  // Bottom strip now has Tag Club + Compare only (utility actions, not
+  // the primary capture). Background tinted so it reads as a separate
+  // utility row when sticky at the bottom.
   return (
-    <View style={styles.bottomBar}>
-      <TouchableOpacity onPress={onRecord} style={[styles.bottomBtn, { backgroundColor: colors.accent }]}>
-        <Ionicons name="radio-button-on" size={16} color="#060f09" />
-        <Text style={[styles.bottomBtnText, { color: '#060f09' }]}>Record</Text>
-      </TouchableOpacity>
+    <View style={[styles.bottomBar, { backgroundColor: colors.surface_elevated, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: 6 }]}>
       <TouchableOpacity onPress={onTagClub} style={[styles.bottomBtn, { borderColor: colors.border, borderWidth: 1 }]}>
         <Ionicons name="flag-outline" size={16} color={colors.text_primary} />
         <View>
@@ -824,4 +938,64 @@ const styles = StyleSheet.create({
   bottomBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 12 },
   bottomBtnText: { fontSize: 13, fontWeight: '800' },
   bottomBtnSub: { fontSize: 10, fontWeight: '600' },
+  // 2026-05-20 — Single-view + overlay toggles + sticky bar + no-clip hero
+  overlayRow: {
+    flexDirection: 'row', gap: 8,
+    paddingHorizontal: 12, paddingBottom: 8,
+  },
+  overlayToggle: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 8, borderRadius: 18, borderWidth: 1,
+  },
+  overlayToggleText: { fontSize: 12, fontWeight: '700' },
+  speedPill: {
+    position: 'absolute', top: 10, right: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5,
+    backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 12,
+  },
+  speedPillText: { color: '#fff', fontSize: 11, fontWeight: '700', fontFamily: 'monospace' },
+  stickyBar: {
+    position: 'absolute', left: 12, right: 12, bottom: 12,
+  },
+  noClipHero: {
+    flex: 1, padding: 16, justifyContent: 'center',
+  },
+  noClipCard: {
+    borderRadius: 16, borderWidth: 1, padding: 24,
+    alignItems: 'center', gap: 12,
+  },
+  noClipIcon: {
+    width: 88, height: 88, borderRadius: 44, borderWidth: 2,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 4,
+  },
+  noClipTitle: { fontSize: 22, fontWeight: '900', letterSpacing: 0.2 },
+  noClipSub: { fontSize: 13, lineHeight: 19, textAlign: 'center', paddingHorizontal: 8 },
+  noClipPrimary: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 14, paddingHorizontal: 28,
+    borderRadius: 14, marginTop: 8, minWidth: 220,
+  },
+  noClipPrimaryText: { fontSize: 16, fontWeight: '900', letterSpacing: 0.3 },
+  noClipSecondary: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8,
+  },
+  noClipSecondaryText: { fontSize: 13, fontWeight: '700' },
+  // 2026-05-20 — Record button INSIDE the video card (per Tim's
+  // "integrate into the video screen element" call). Big circular
+  // button just below the playback frame, primary capture action.
+  frameRecordWrap: {
+    alignItems: 'center', gap: 8, marginTop: 12,
+  },
+  frameRecordOuter: {
+    width: 64, height: 64, borderRadius: 32, borderWidth: 4,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  frameRecordInner: {
+    width: 48, height: 48, borderRadius: 24,
+  },
+  frameRecordHint: {
+    fontSize: 11, fontWeight: '600',
+  },
 });
