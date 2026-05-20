@@ -54,7 +54,7 @@ const CARDS: LauncherCardSpec[] = [
     icon: 'camera-outline',
     title: 'SmartMotion',
     sub: 'AI Swing Analysis · Body Mechanics · Shot Tracing (coming)',
-    route: '/swinglab/camera-setup?next=%2Fswinglab%2Fcage-drill',
+    route: '/swinglab/smartmotion',
   },
   {
     key: 'range',
