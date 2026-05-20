@@ -541,13 +541,31 @@ export default function GpsTestScreen() {
                     ))}
                     <TouchableOpacity
                       onPress={async () => {
+                        // 2026-05-19 — Audit reports are too big for
+                        // Share.share's text payload (12 scenarios x
+                        // ~5000 probe samples ≈ multiple MB).
+                        // Write to a temp file via expo-file-system,
+                        // then share the file URI via expo-sharing —
+                        // file-based share handles arbitrary size.
                         try {
-                          await Share.share({
-                            message: JSON.stringify(auditReport, null, 2),
-                            title: `GPS Audit · ${new Date().toLocaleString()}`,
-                          });
+                          const FileSystem = await import('expo-file-system/legacy');
+                          const Sharing = await import('expo-sharing');
+                          const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                          const uri = `${FileSystem.cacheDirectory}gps-audit-${ts}.json`;
+                          await FileSystem.writeAsStringAsync(uri, JSON.stringify(auditReport, null, 2));
+                          if (await Sharing.isAvailableAsync()) {
+                            await Sharing.shareAsync(uri, {
+                              mimeType: 'application/json',
+                              dialogTitle: `GPS Audit · ${new Date().toLocaleString()}`,
+                              UTI: 'public.json',
+                            });
+                          } else {
+                            Alert.alert('Saved', `Audit JSON written to ${uri}`);
+                          }
                         } catch (e) {
-                          Alert.alert('Export failed', e instanceof Error ? e.message : String(e));
+                          const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+                          Alert.alert('Export failed', msg);
+                          console.log('[audit] export failed:', e);
                         }
                       }}
                       style={[styles.btnPrimary, { backgroundColor: '#9333ea', marginTop: 6 }]}
