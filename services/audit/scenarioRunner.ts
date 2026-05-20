@@ -339,7 +339,14 @@ export async function runAuditV2(ctx: RunnerCtx): Promise<AuditReport> {
       window_w: ctx.windowDims.w,
       window_h: ctx.windowDims.h,
     },
-    bundle_commit: '25eceb0+',
+    // 2026-05-19 — Pull live bundle identity from expo-updates so audit
+    // reports record exactly which JS bundle ran them.
+    bundle_commit: await (async () => {
+      try {
+        const Updates = await import('expo-updates');
+        return (Updates.updateId as string | null) ?? 'dev';
+      } catch { return 'unknown'; }
+    })(),
     summary: {
       scenarios_run: results.length,
       scenarios_passed: results.filter(r => r.overall === 'pass').length,

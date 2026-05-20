@@ -570,13 +570,24 @@ export default function GpsTestScreen() {
           <TouchableOpacity
             onPress={async () => {
               try {
+                // 2026-05-19 — Pull real bundle identity from expo-updates
+                // so the export's bundle_commit field shows the loaded
+                // updateId / createdAt instead of a stale hardcoded SHA.
+                let bundleId: string | null = null;
+                let bundleCreated: string | null = null;
+                try {
+                  const Updates = await import('expo-updates');
+                  bundleId = (Updates.updateId as string | null) ?? null;
+                  bundleCreated = Updates.createdAt instanceof Date ? Updates.createdAt.toISOString() : null;
+                } catch {}
                 const fullEvents = events.map(e => ({
                   ts: e.ts, iso: new Date(e.ts).toISOString(), kind: e.kind, detail: e.detail,
                 }));
                 const round = useRoundStore.getState();
                 const report = {
                   generated_at: new Date().toISOString(),
-                  bundle_commit: '1024770', // matches latest at write time
+                  bundle_update_id: bundleId,
+                  bundle_created_at: bundleCreated,
                   walk_state: walkState,
                   emit_count: emitCount,
                   last_emit_ms: lastEmitMs,
