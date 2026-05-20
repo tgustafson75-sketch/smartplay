@@ -1,3 +1,5 @@
+// Bundle hash bump: 2026-05-20 EAS asset processor was stuck on the
+// prior hash; trivial change forces a new bundle id.
 /**
  * Phase 418 — Unified swing validation gate (client side).
  *
