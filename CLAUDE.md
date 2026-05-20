@@ -165,6 +165,18 @@ git commit -m "<concise message>"
 git push origin main
 ```
 
+## Sprint save-point discipline (Phase 421)
+
+The repo is the memory. Chat is disposable; files are not. During the consolidation sprint (started 2026-05-20), every session — whether in Claude Code or in a planning chat — closes with:
+
+1. **Update [docs/SPRINT-LOG.md](docs/SPRINT-LOG.md)** — append today's entry under a new `## Day N — YYYY-MM-DD` heading (or extend today's entry if same day). Sections: Shipped today / Verified on device (Z Fold) / Open / carried to tomorrow / Notes.
+2. **Refresh [docs/SPRINT-RESUME.md](docs/SPRINT-RESUME.md)** — update the "Where we are right now," "What's done and verified," "What's actively in progress," and "What's next (P0 queue)" sections so a fresh chat can resume cold. Keep it short.
+3. **Commit + push both files** at the end of the session so the save-point is never local-only. Use the standard ending commands above.
+
+A new chat resuming the sprint reads `SPRINT-RESUME.md` first, then `SPRINT-LOG.md` for daily detail, then the master [docs/audit-420-SPRINT-MAP.md](docs/audit-420-SPRINT-MAP.md) for the full prioritized plan. If those three files contradict, `SPRINT-MAP.md` wins on priorities, `SPRINT-LOG.md` wins on what shipped when, `SPRINT-RESUME.md` is the short pointer.
+
+Low-friction rule: if updating these docs starts feeling like a chore, the docs are too long. Keep entries tight — bullets, not essays.
+
 ## Tone for Tim
 
 - Lead with the answer. No preamble.
