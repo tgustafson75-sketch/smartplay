@@ -14,6 +14,25 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Fix B — Camera angle chosen BEFORE recording (tap + voice)
+
+**Problem (real-device):** SmartMotion's down-the-line vs face-on toggle only appeared AFTER recording, so the analyst's biomechanical read used the default orientation against whatever the user actually shot — wrong reads on most clips.
+
+**Fix shipped:**
+- **Default flipped to down-the-line** in [app/swinglab/smartmotion.tsx](../app/swinglab/smartmotion.tsx) (was `face_on`). Down-the-line is the common swing-analysis convention and the better default for first-time captures (path / plane / over-the-top / early-extension reads).
+- **Pre-record angle picker** in `NoClipHero`. Two-pill row with tap-to-select: "Down the Line — Path · plane · over-the-top" and "Face On — Weight · hips · reverse pivot". The Record button label includes the chosen angle so the user can't miss which one is active when they tap it.
+- **Angle persists across navigation** via URL param. SmartMotion → quick-record passes `?angle=…`; quick-record → SmartMotion passes `?clipUri=…&angle=…` so `analyzeSwing` fires with the SETUP angle. SmartMotion also hydrates from `?angle=` so the voice intent path lands on the right initial state.
+- **Quick-record angle chip** (top, below the status pill) shows the chosen angle + lets the user flip with a tap before recording. Hidden during recording.
+- **`analyzeSwing()` context** ([services/poseDetection.ts:256](../services/poseDetection.ts#L256)) extended with `angle?: 'down_the_line' | 'face_on'`. SmartMotion passes the chosen angle on the call.
+- **Server-side prompt** ([api/swing-analysis.ts](../api/swing-analysis.ts)) — added an explicit `Camera angle: …` line to the analyst's user context with orientation-specific guidance: down-the-line clips are good for path/plane/over-the-top/early extension; face-on clips are good for weight shift / hip rotation / reverse pivot / sway. The prompt also tells the analyst NOT to confidently diagnose the wrong-orientation faults from each angle. Defaults to down-the-line server-side when the field is missing (legacy callers).
+- **Voice intents** for "record me down the line" / "record me face on":
+  - [api/voice-intent.ts](../api/voice-intent.ts) — extended `open_tool` parameter schema with `angle?` and `auto_start?`, added six new training examples covering "DTL" / "face on" / "front view" / variations.
+  - [services/intents/openToolHandler.ts](../services/intents/openToolHandler.ts) — when `tool_name='smartmotion'` and `angle`/`auto_start` are present, builds the route `?angle=…&autoStart=1`. Quick-record's new auto-start effect fires `handleRecord` 250 ms after mount once camera + mic permissions are granted. The spoken response confirms the orientation ("Recording down the line.").
+
+**Build gates:** `tsc --noEmit` clean. `expo lint` unchanged at the Phase 420 baseline (5 errors + 12 warnings — all pre-existing).
+
+**Did NOT touch:** the analysis math itself — same haversine, same pose pipeline, same canonical-issue catalog. Fix B is purely WHICH angle the analyst is told the camera was on.
+
 ### Fix A — Persistent caddie mic badge on SmartMotion / Cage Mode / SwingLab + auto-voice diagnosis
 
 **Problem (real-device):** Tim reported no way to manually reach the caddie on SmartMotion, Cage Mode, or SwingLab, AND hands-free wake-word ("record" / "start") did nothing.

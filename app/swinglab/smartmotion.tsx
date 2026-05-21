@@ -61,11 +61,20 @@ type SpeedRate = 0.25 | 0.5 | 1;
 export default function SmartMotion() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { clipUri } = useLocalSearchParams<{ clipUri?: string }>();
+  const { clipUri, angle: angleParam } = useLocalSearchParams<{ clipUri?: string; angle?: string }>();
   const profile = usePlayerProfileStore();
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
 
-  const [angle, setAngle] = useState<Angle>('face_on');
+  // 2026-05-21 — Fix B: angle is chosen BEFORE recording (in this
+  // NoClipHero, in quick-record, or via voice "record me down the
+  // line" / "face on") and persists across navigation via URL param.
+  // Default is down-the-line — the common swing-analysis convention,
+  // best for path / plane / over-the-top / early-extension reads.
+  // Was 'face_on' which gave the analyst the wrong orientation for
+  // most users' first recordings.
+  const initialAngle: Angle =
+    angleParam === 'face_on' || angleParam === 'face-on' ? 'face_on' : 'down_the_line';
+  const [angle, setAngle] = useState<Angle>(initialAngle);
   const [overlays, setOverlays] = useState<OverlayState>({
     body_mechanics: true,
     shot_tracer: false,
@@ -91,6 +100,11 @@ export default function SmartMotion() {
           club: 'unknown',
           swing_number: 1,
           caddie_name: caddiePersonality,
+          // 2026-05-21 — Fix B: pass the angle chosen at SETUP so the
+          // analyst's prompt knows the camera orientation. Reading
+          // weight-shift from a down-the-line clip (or path from a
+          // face-on clip) was the diagnosis-wrong-orientation bug.
+          angle,
           player_context: {
             handicap: profile.handicap ?? null,
             dominant_miss: profile.dominantMiss ?? null,
@@ -191,7 +205,9 @@ export default function SmartMotion() {
       {!clipUri ? (
         <NoClipHero
           colors={colors}
-          onRecord={() => router.push('/swinglab/quick-record' as never)}
+          angle={angle}
+          setAngle={setAngle}
+          onRecord={() => router.push({ pathname: '/swinglab/quick-record', params: { angle } } as never)}
           onLibrary={() => router.push('/swinglab/library' as never)}
         />
       ) : (
@@ -242,8 +258,10 @@ export default function SmartMotion() {
 
 // ─── No-clip hero (entry state) ─────────────────────────────────────
 
-function NoClipHero({ colors, onRecord, onLibrary }: {
+function NoClipHero({ colors, angle, setAngle, onRecord, onLibrary }: {
   colors: ReturnType<typeof useTheme>['colors'];
+  angle: Angle;
+  setAngle: (a: Angle) => void;
   onRecord: () => void;
   onLibrary: () => void;
 }) {
@@ -257,14 +275,40 @@ function NoClipHero({ colors, onRecord, onLibrary }: {
         <Text style={[styles.noClipSub, { color: colors.text_muted }]}>
           Tap Record. AI swing analysis · body mechanics overlay · drill recommendation. Shot tracing coming.
         </Text>
+
+        {/* 2026-05-21 — Fix B: pre-record angle picker. The analyst
+            uses the SETUP angle for biomechanical reads, so it has
+            to be chosen BEFORE recording. Default = down-the-line. */}
+        <Text style={[styles.preRecordLabel, { color: colors.text_muted }]}>CAMERA ANGLE</Text>
+        <View style={styles.preRecordAngleRow}>
+          <PreRecordAnglePill
+            label="Down the Line"
+            sub="Path · plane · over-the-top"
+            icon="trending-up-outline"
+            active={angle === 'down_the_line'}
+            colors={colors}
+            onPress={() => setAngle('down_the_line')}
+          />
+          <PreRecordAnglePill
+            label="Face On"
+            sub="Weight · hips · reverse pivot"
+            icon="person-outline"
+            active={angle === 'face_on'}
+            colors={colors}
+            onPress={() => setAngle('face_on')}
+          />
+        </View>
+
         <TouchableOpacity
           onPress={onRecord}
           style={[styles.noClipPrimary, { backgroundColor: colors.accent }]}
           accessibilityRole="button"
-          accessibilityLabel="Record a swing"
+          accessibilityLabel={`Record a ${angle === 'down_the_line' ? 'down-the-line' : 'face-on'} swing`}
         >
           <Ionicons name="radio-button-on" size={20} color="#060f09" />
-          <Text style={[styles.noClipPrimaryText, { color: '#060f09' }]}>Record Swing</Text>
+          <Text style={[styles.noClipPrimaryText, { color: '#060f09' }]}>
+            Record Swing ({angle === 'down_the_line' ? 'Down the Line' : 'Face On'})
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onLibrary} style={styles.noClipSecondary}>
           <Ionicons name="albums-outline" size={16} color={colors.accent} />
@@ -272,6 +316,33 @@ function NoClipHero({ colors, onRecord, onLibrary }: {
         </TouchableOpacity>
       </View>
     </View>
+  );
+}
+
+function PreRecordAnglePill({ label, sub, icon, active, colors, onPress }: {
+  label: string;
+  sub: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  active: boolean;
+  colors: ReturnType<typeof useTheme>['colors'];
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}. ${sub}`}
+      style={[
+        styles.preRecordAnglePill,
+        active
+          ? { backgroundColor: colors.accent_muted, borderColor: colors.accent }
+          : { backgroundColor: 'transparent', borderColor: colors.border },
+      ]}
+    >
+      <Ionicons name={icon} size={18} color={active ? colors.accent : colors.text_muted} />
+      <Text style={[styles.preRecordAnglePillLabel, { color: active ? colors.accent : colors.text_primary }]}>{label}</Text>
+      <Text style={[styles.preRecordAnglePillSub, { color: colors.text_muted }]} numberOfLines={1}>{sub}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -1117,6 +1188,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8,
   },
   noClipSecondaryText: { fontSize: 13, fontWeight: '700' },
+  // 2026-05-21 — Fix B: pre-record angle picker.
+  preRecordLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 1.6, marginTop: 6 },
+  preRecordAngleRow: { flexDirection: 'row', gap: 8, alignSelf: 'stretch', marginTop: 4 },
+  preRecordAnglePill: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    gap: 2,
+  },
+  preRecordAnglePillLabel: { fontSize: 13, fontWeight: '900', marginTop: 2 },
+  preRecordAnglePillSub: { fontSize: 10, fontWeight: '600', letterSpacing: 0.4 },
   // 2026-05-20 — Record button INSIDE the video card (per Tim's
   // "integrate into the video screen element" call). Big circular
   // button just below the playback frame, primary capture action.

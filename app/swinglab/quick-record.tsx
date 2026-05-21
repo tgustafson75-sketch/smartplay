@@ -13,20 +13,32 @@
  * for ("simple, intuitive, quick load, camera opens immediately").
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useTheme } from '../../contexts/ThemeContext';
 
 const MAX_RECORD_SECONDS = 8;
 
+type Angle = 'down_the_line' | 'face_on';
+
 export default function QuickRecord() {
   const router = useRouter();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  // 2026-05-21 — Fix B: angle is chosen BEFORE recording. Routed in
+  // via URL param from SmartMotion's NoClipHero or the voice intent
+  // ("record me down the line" / "face on"). Default down-the-line
+  // when omitted. autoStart=1 (from voice) fires recording on mount
+  // so the spoken command "record me face on" both sets the angle
+  // and starts the capture in one shot.
+  const { angle: angleParam, autoStart: autoStartParam } = useLocalSearchParams<{ angle?: string; autoStart?: string }>();
+  const initialAngle: Angle =
+    angleParam === 'face_on' || angleParam === 'face-on' ? 'face_on' : 'down_the_line';
+  const [angle, setAngle] = useState<Angle>(initialAngle);
   const [camPerm, requestCamPerm] = useCameraPermissions();
   const [micPerm, requestMicPerm] = useMicrophonePermissions();
   const cameraRef = useRef<CameraView>(null);
@@ -34,6 +46,7 @@ export default function QuickRecord() {
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoStartedRef = useRef(false);
 
   useEffect(() => {
     if (!camPerm) void requestCamPerm();
@@ -48,7 +61,7 @@ export default function QuickRecord() {
     };
   }, []);
 
-  const handleRecord = async () => {
+  const handleRecord = useCallback(async () => {
     if (recording) {
       try { cameraRef.current?.stopRecording(); } catch {}
       return;
@@ -73,7 +86,10 @@ export default function QuickRecord() {
       if (uri) {
         router.replace({
           pathname: '/swinglab/smartmotion',
-          params: { clipUri: uri },
+          // 2026-05-21 — Fix B: hand the angle back to smartmotion so
+          // analyzeSwing fires with the SETUP-chosen orientation,
+          // not the default.
+          params: { clipUri: uri, angle },
         } as never);
       }
     } catch (e) {
@@ -82,7 +98,24 @@ export default function QuickRecord() {
       setRecording(false);
       setElapsed(0);
     }
-  };
+  }, [recording, router, angle]);
+
+  // 2026-05-21 — Fix B: auto-start from voice intent. When the user
+  // says "record me down the line" / "face on", openToolHandler
+  // routes here with ?autoStart=1 — fire the record handler once
+  // the camera + mic permissions are granted. Guarded by
+  // autoStartedRef so we only fire on first mount.
+  useEffect(() => {
+    if (autoStartParam !== '1') return;
+    if (autoStartedRef.current) return;
+    if (!camPerm?.granted || !micPerm?.granted) return;
+    autoStartedRef.current = true;
+    // Slight delay so the CameraView ref is attached before we call
+    // recordAsync. 250ms is generous; on real device the view mounts
+    // in <100ms.
+    const t = setTimeout(() => { void handleRecord(); }, 250);
+    return () => clearTimeout(t);
+  }, [autoStartParam, camPerm?.granted, micPerm?.granted, handleRecord]);
 
   // Permission gate
   if (!camPerm || !micPerm) {
@@ -156,6 +189,29 @@ export default function QuickRecord() {
           <Ionicons name="camera-reverse" size={26} color={recording ? '#666' : '#fff'} />
         </TouchableOpacity>
       </View>
+
+      {/* 2026-05-21 — Fix B: angle chip below the top bar. Confirms
+          which angle was chosen pre-record + lets the user flip
+          before they hit record if they entered with the wrong
+          one. Hidden during recording so it doesn't distract. */}
+      {!recording ? (
+        <TouchableOpacity
+          onPress={() => setAngle(a => (a === 'down_the_line' ? 'face_on' : 'down_the_line'))}
+          style={[styles.angleChip, { top: insets.top + 60 }]}
+          accessibilityRole="button"
+          accessibilityLabel={`Camera angle: ${angle === 'down_the_line' ? 'down the line' : 'face on'}. Tap to switch.`}
+        >
+          <Ionicons
+            name={angle === 'down_the_line' ? 'trending-up-outline' : 'person-outline'}
+            size={14}
+            color="#00C896"
+          />
+          <Text style={styles.angleChipText}>
+            {angle === 'down_the_line' ? 'DOWN THE LINE' : 'FACE ON'}
+          </Text>
+          <Ionicons name="swap-horizontal" size={13} color="#9ca3af" />
+        </TouchableOpacity>
+      ) : null}
 
       {/* Phase 418 — pre-record framing guide. A faint dashed rectangle
           showing roughly where the player should stand head-to-feet.
@@ -257,4 +313,19 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     marginBottom: 8,
   },
+  angleChip: {
+    position: 'absolute',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 200, 150, 0.5)',
+    zIndex: 5,
+  },
+  angleChipText: { color: '#00C896', fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
 });

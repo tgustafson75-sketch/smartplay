@@ -254,6 +254,12 @@ export async function analyzeSwing(
       first_name?: string | null;
     };
     swing_tag?: string | null;
+    // 2026-05-21 — Fix B: camera angle the player chose BEFORE
+    // recording. Routed into the analyst's system prompt so
+    // down-the-line vs face-on reads use the correct orientation
+    // for biomechanical checks. Defaults to 'down_the_line' (the
+    // common swing-analysis convention) when omitted.
+    angle?: 'down_the_line' | 'face_on';
   },
   boundaries?: { startSec: number; endSec: number },
   // Phase 403b — when provided, the persisted fault-frame JPEG will be

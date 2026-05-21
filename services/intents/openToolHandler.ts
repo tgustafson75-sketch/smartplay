@@ -106,6 +106,17 @@ export const openToolHandler: IntentHandler = {
     }
 
     if (action.type === 'navigate') {
+      // 2026-05-21 — Fix B: voice "record me down the line" / "face on"
+      // routes through tool_name='smartmotion' with angle + auto_start
+      // params. Forward both as URL query params so quick-record can
+      // hydrate state + fire recording on mount.
+      const angleRaw = String(intent.parameters.angle ?? '').toLowerCase();
+      const angle: 'down_the_line' | 'face_on' | null =
+        angleRaw === 'face_on' || angleRaw === 'face-on' ? 'face_on' :
+        angleRaw === 'down_the_line' || angleRaw === 'down-the-line' || angleRaw === 'dtl' ? 'down_the_line' :
+        null;
+      const autoStart = intent.parameters.auto_start === true;
+
       try {
         const { router } = await import('expo-router');
         // Phase H — pass play_intent through as a query param for /lie-analysis.
@@ -116,17 +127,34 @@ export const openToolHandler: IntentHandler = {
             ? `${action.path}?intent=${playIntent}`
             : action.path;
           router.push(path as never);
+        } else if ((toolName === 'smartmotion' || toolName === 'smart_motion') && (angle || autoStart)) {
+          const params: string[] = [];
+          if (angle) params.push(`angle=${angle}`);
+          if (autoStart) params.push('autoStart=1');
+          router.push(`${action.path}?${params.join('&')}` as never);
         } else {
           router.push(action.path as never);
         }
       } catch (err) {
         console.log('[openToolHandler] navigate failed:', err);
       }
+
+      // 2026-05-21 — Fix B: when the voice command picked an angle,
+      // confirm it in the spoken response so the user knows the
+      // analyst is reading the correct orientation.
+      let voiceResponse: string;
+      if (toolName === 'lie_analysis' || toolName === 'tightlie') {
+        voiceResponse = 'Let me look.';
+      } else if ((toolName === 'smartmotion' || toolName === 'smart_motion') && angle) {
+        const label = angle === 'down_the_line' ? 'down the line' : 'face on';
+        voiceResponse = autoStart ? `Recording ${label}.` : `SmartMotion, ${label}.`;
+      } else {
+        voiceResponse = 'Opening ' + TOOL_LABEL[toolName] + '.';
+      }
+
       return {
         success: true,
-        voice_response: (toolName === 'lie_analysis' || toolName === 'tightlie')
-          ? 'Let me look.'
-          : 'Opening ' + TOOL_LABEL[toolName] + '.',
+        voice_response: voiceResponse,
         side_effects: ['navigate:' + action.path],
         follow_up_needed: false,
       };

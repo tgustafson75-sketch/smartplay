@@ -244,6 +244,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (isShortGame) {
       ctxLines.push(`Shot type: ${swingTag}`);
     }
+    // 2026-05-21 — Fix B: camera angle is chosen BEFORE recording and
+    // routed in so biomechanical reads use the correct orientation.
+    // Down-the-line view = camera behind the player looking down the
+    // target line (clearest for path / plane / over-the-top / early
+    // extension). Face-on view = camera in front of the player
+    // perpendicular to the target line (clearest for weight shift /
+    // hip rotation / reverse pivot / sway). The two angles expose
+    // different fault patterns; reading the wrong angle gives the
+    // wrong diagnosis. Defaults to down-the-line when omitted (the
+    // most common swing-analysis convention).
+    const angleRaw = typeof ctx.angle === 'string' ? ctx.angle.toLowerCase() : '';
+    const angle: 'down_the_line' | 'face_on' =
+      angleRaw === 'face_on' || angleRaw === 'face-on' || angleRaw === 'faceon'
+        ? 'face_on'
+        : 'down_the_line';
+    const angleLabel = angle === 'down_the_line' ? 'down-the-line' : 'face-on';
+    ctxLines.push(
+      `Camera angle: ${angleLabel}. ` +
+      (angle === 'down_the_line'
+        ? 'Camera is behind the player on the target line. Best reads from this angle: swing path, plane, over-the-top, early extension, attack angle, club position at the top. Do NOT confidently diagnose weight-shift / reverse-pivot / hip-sway from this angle — those need face-on.'
+        : 'Camera is in front of the player, perpendicular to the target line. Best reads from this angle: weight shift, hip rotation, reverse pivot, sway, head movement, posture maintenance. Do NOT confidently diagnose swing path / plane / over-the-top from this angle — those need down-the-line.')
+    );
     const userText = mode === 'tentative'
       ? (ctxLines.length > 0 ? ctxLines.join('\n') + '\n\n' : '') +
         `These ${frames.length} frame${frames.length === 1 ? '' : 's'} are from a swing where the full-analysis pipeline could not confirm a fault. Give a tentative observation only — no canonical fault claim. Return JSON per the schema.`

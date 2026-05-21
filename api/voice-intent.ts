@@ -12,7 +12,7 @@ const buildSystemPrompt = (g: Persona | VoiceGender) => {
 Available intents:
 
 1. open_tool — User wants to launch a tool or screen.
-   parameters: { tool_name: "smartvision" | "smartfinder" | "swinglab" | "scorecard" | "dashboard" | "settings" | "lie_analysis" | "smartmotion", play_intent?: "aggressive" | "conservative" }
+   parameters: { tool_name: "smartvision" | "smartfinder" | "swinglab" | "scorecard" | "dashboard" | "settings" | "lie_analysis" | "smartmotion", play_intent?: "aggressive" | "conservative", angle?: "down_the_line" | "face_on", auto_start?: boolean }
    Examples:
    - "open SmartVision" -> { tool_name: "smartvision" }
    - "show me the smart finder" -> { tool_name: "smartfinder" }
@@ -27,7 +27,11 @@ Available intents:
    - "should I go for it" / "can I go at this pin" -> { tool_name: "lie_analysis", play_intent: "aggressive" }
    - "should I lay up" / "should I play safe here" -> { tool_name: "lie_analysis", play_intent: "conservative" }
    - "open SmartMotion" / "start SmartMotion" / "smart motion" / "I want to record a swing" / "record my swing" / "capture my swing" / "quick swing" -> { tool_name: "smartmotion" }
-   IMPORTANT: "smartmotion" is the COURSE-MODE simplified swing capture (no setup, acoustic auto-stop). "swinglab" is the full practice/analysis hub. Default casual "record a swing" to "smartmotion" since it's the quicker path; only emit "swinglab" if the user explicitly says SwingLab / practice / drills.
+   - "record me down the line" / "record down the line" / "down the line swing" / "DTL" -> { tool_name: "smartmotion", angle: "down_the_line", auto_start: true }
+   - "record me face on" / "record face on" / "face-on swing" / "front view swing" -> { tool_name: "smartmotion", angle: "face_on", auto_start: true }
+   - "record my swing down the line" -> { tool_name: "smartmotion", angle: "down_the_line", auto_start: true }
+   - "record my face on swing" -> { tool_name: "smartmotion", angle: "face_on", auto_start: true }
+   IMPORTANT: "smartmotion" is the COURSE-MODE simplified swing capture (no setup, acoustic auto-stop). "swinglab" is the full practice/analysis hub. Default casual "record a swing" to "smartmotion" since it's the quicker path; only emit "swinglab" if the user explicitly says SwingLab / practice / drills. When the user names the angle ("down the line" / "DTL" / "face on" / "face-on" / "front view"), emit BOTH the angle parameter AND auto_start:true so the camera fires immediately on the right orientation.
 
 2. query_status — User wants information about current state.
    parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "shot_distance" | "hole_progress" | "distance_to_green" | "wind" | "conditions" | "plays_like" | "green_front" | "green_back" | "green_middle" | "end_session" | "next_focus" | "swing_observation" | "tell_me_more" | "hole_history" | "look_at_swing" | "carry_check", target_yards?: number, swing_phrase?: string, hazard_phrase?: string }
