@@ -28,6 +28,8 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  useWindowDimensions,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -369,6 +371,60 @@ function VisualCard({
   // skeleton can't render against floor footage and falsely vanish a
   // second later.
   const overlaysGated = !analyzing && validity.valid;
+
+  // 2026-05-21 — Fix C: skeleton + shot-tracer overlays were drawing
+  // against the videoFrame CONTAINER (StyleSheet.absoluteFill), but
+  // the actual video pixels live in a centered subrect created by
+  // `resizeMode: COVER`. The container's aspect is fixed (4:5); the
+  // source clip's aspect varies (9:21 cover-screen, 9:16 phone, etc.)
+  // — COVER scales the video to fill the container and crops the
+  // overflow. Drawing the SVG against the container meant a body that
+  // was actually at the center of the source clip showed up offset in
+  // the rendered crop, AND on Z Fold open/close the container resized
+  // without the SVG remapping, so the misalignment shifted further.
+  //
+  // Fix: track the video's natural dimensions (via onReadyForDisplay)
+  // + the container's measured size (via onLayout). Compute the
+  // displayed video rect with the COVER scale formula. Position the
+  // overlay SVGs at that rect, not the full container. Pose keypoints
+  // are normalized to the SOURCE video, so SVG percentages now map
+  // correctly to actual body pixels. useWindowDimensions is referenced
+  // as a re-render trigger so a fold open/close kicks the layout
+  // recompute even if the container's onLayout debounces.
+  // onLayout on the videoFrame fires on fold/unfold automatically,
+  // so the videoRect memo refreshes without needing window
+  // dimensions in the dep array.
+  useWindowDimensions();
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
+  const [videoNatural, setVideoNatural] = useState<{ width: number; height: number } | null>(null);
+
+  const handleVideoFrameLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setContainerSize(prev => {
+      if (prev && Math.abs(prev.width - width) < 0.5 && Math.abs(prev.height - height) < 0.5) return prev;
+      return { width, height };
+    });
+  };
+
+  const videoRect = useMemo<{ left: number; top: number; width: number; height: number } | null>(() => {
+    if (!containerSize || !videoNatural) return null;
+    const cW = containerSize.width;
+    const cH = containerSize.height;
+    const vW = videoNatural.width;
+    const vH = videoNatural.height;
+    if (!cW || !cH || !vW || !vH) return null;
+    // COVER fit: scale to fill the container, cropping any overflow.
+    const scale = Math.max(cW / vW, cH / vH);
+    const renderedW = vW * scale;
+    const renderedH = vH * scale;
+    return {
+      left: (cW - renderedW) / 2,
+      top: (cH - renderedH) / 2,
+      width: renderedW,
+      height: renderedH,
+    };
+  }, [containerSize, videoNatural]);
+
   return (
     <View style={[styles.card, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
       {/* Angle pill row — Down the Line / Face On */}
@@ -393,7 +449,7 @@ function VisualCard({
       </View>
 
       {/* Video frame with pose-overlay placeholder + right control rail */}
-      <View style={styles.videoFrame}>
+      <View style={styles.videoFrame} onLayout={handleVideoFrameLayout}>
         {clipUri ? (
           <Video
             source={{ uri: clipUri }}
@@ -404,6 +460,19 @@ function VisualCard({
             isMuted
             rate={playbackSpeed}
             useNativeControls={false}
+            onReadyForDisplay={(payload) => {
+              // 2026-05-21 — Fix C: capture the clip's native dimensions
+              // so the overlay SVGs can be positioned to the
+              // displayed-video subrect (COVER scale + crop) instead of
+              // the container box.
+              const ns = (payload as { naturalSize?: { width: number; height: number } })?.naturalSize;
+              if (ns && ns.width > 0 && ns.height > 0) {
+                setVideoNatural(prev => {
+                  if (prev && prev.width === ns.width && prev.height === ns.height) return prev;
+                  return { width: ns.width, height: ns.height };
+                });
+              }
+            }}
           />
         ) : (
           <View style={[StyleSheet.absoluteFill, styles.videoPlaceholder]}>
@@ -428,8 +497,26 @@ function VisualCard({
             ))}
           </Svg>
         )}
+        {/* 2026-05-21 — Fix C: skeleton + shot-tracer overlays are
+            positioned to the DISPLAYED VIDEO RECT (COVER scale +
+            crop), not the container box. Keypoint percentages are
+            now relative to the actual visible video pixels, so the
+            skeleton lands on the body regardless of source-clip
+            aspect ratio (9:21 cover-screen, 9:16 phone, etc.) AND
+            stays aligned when the Z Fold opens/closes. Falls back to
+            absoluteFill when the natural-size/layout hasn't landed
+            yet (first frame) — the user sees a brief container-relative
+            placement that snaps correct as soon as onReadyForDisplay
+            fires. */}
         {clipUri && overlays.body_mechanics && overlaysGated && (
-          <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Svg
+            style={
+              videoRect
+                ? { position: 'absolute', left: videoRect.left, top: videoRect.top, width: videoRect.width, height: videoRect.height }
+                : StyleSheet.absoluteFill
+            }
+            pointerEvents="none"
+          >
             <Line x1="50%" y1="6%" x2="50%" y2="94%" stroke={colors.accent} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.55} />
             {STUB_SKELETON.connections.map(([a, b], i) => (
               <Line
@@ -447,7 +534,14 @@ function VisualCard({
           </Svg>
         )}
         {clipUri && overlays.shot_tracer && overlaysGated && (
-          <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Svg
+            style={
+              videoRect
+                ? { position: 'absolute', left: videoRect.left, top: videoRect.top, width: videoRect.width, height: videoRect.height }
+                : StyleSheet.absoluteFill
+            }
+            pointerEvents="none"
+          >
             {/* Tracer placeholder — arcs from ball position through
                 projected flight. Real ball tracking lands with the
                 ball-detection pipeline. */}

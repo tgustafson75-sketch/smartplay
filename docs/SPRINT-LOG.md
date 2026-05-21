@@ -14,6 +14,25 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Fix C — Skeleton overlay alignment + Z Fold aspect-ratio remap
+
+**Coordinate-space mismatch in one sentence:** the skeleton SVG filled the videoFrame container (`StyleSheet.absoluteFill`), but `<Video resizeMode={ResizeMode.COVER}>` scales-and-crops the source clip inside that container — so the skeleton's normalized percentages tracked the container box while the actual body pixels lived in a centered subrect whose offset depended on `(container aspect) vs (source video aspect)`, and Z Fold open/close changed the container dimensions without remapping the subrect.
+
+**Fix shipped (`app/swinglab/smartmotion.tsx`):**
+- Track the clip's natural dimensions via `<Video onReadyForDisplay>` → `payload.naturalSize`.
+- Track the container's measured size via `<View onLayout>` on the videoFrame.
+- New `videoRect` memo computes the displayed-video subrect using the COVER scale formula: `scale = max(containerW/videoW, containerH/videoH)`; `renderedW/H = videoW/H * scale`; `left/top = (containerW/H - renderedW/H) / 2`. Result is the exact pixel rect where the video's visible content lives inside the container.
+- Skeleton + shot-tracer SVGs now position absolutely to `videoRect` (left/top/width/height) instead of `StyleSheet.absoluteFill`. Keypoint percentages are normalized to the source video, so 50% in the SVG = 50% of the actual body pixels.
+- `useWindowDimensions()` subscribed (not in deps) so any fold/unfold re-renders the component; the videoFrame's `onLayout` then fires with new dimensions and the memo recomputes — alignment tracks the fold transition.
+- Grid overlay LEFT on `StyleSheet.absoluteFill` (it's a camera-framing aid, intentionally container-relative).
+- Fallback to `absoluteFill` for one frame while natural-size + layout haven't landed yet (snaps correct on next render).
+
+**Did NOT touch:** Phase 418 validation gate, analysis math, pose pipeline, canonical-issue catalog. Pure overlay rendering / coordinate-space plumbing.
+
+**Note for honest expectations:** real pose keypoints land with the TFJS/MoveNet integration in a future APK. Today's `STUB_SKELETON` is still hardcoded normalized coordinates — Fix C makes the MAPPING correct, so when real keypoints arrive they'll land on the body without further work. With the stub, the skeleton now sits at a correctly-scaled position within the visible video rather than against the container box.
+
+**Build gates:** `tsc --noEmit` clean. `expo lint` back at the Phase 420 baseline (5 errors + 12 warnings — all pre-existing).
+
 ### Fix B — Camera angle chosen BEFORE recording (tap + voice)
 
 **Problem (real-device):** SmartMotion's down-the-line vs face-on toggle only appeared AFTER recording, so the analyst's biomechanical read used the default orientation against whatever the user actually shot — wrong reads on most clips.
