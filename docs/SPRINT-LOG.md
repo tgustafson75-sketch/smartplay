@@ -14,6 +14,35 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Consolidation 2 — dead-code removal pass (2,313 LOC deleted across 29 files)
+
+Methodical batch deletion from the Phase 420 dead-code audit. `tsc --noEmit` gated after each batch. Total: **2,313 deletions across 29 files** (audit estimate was ~3,400 LOC — the difference is files that ended up retained per the report below).
+
+**Batch 1 — Expo starter-template leftovers (12 files, ~zero-risk closed graph).** Confirmed all importers were themselves starter files (the graph: `themed-text`, `themed-view`, `parallax-scroll-view`, `external-link`, `haptic-tab`, `hello-wave`, `ui/collapsible`, `ui/icon-symbol` × 2, `use-color-scheme` × 2, `use-theme-color`, `store/index` barrel). Added `hooks/use-theme-color.ts` to the audit's list because it imported only the starter graph. Real-app code referenced zero of these. All deleted. Only false-positive grep hit was a comment phrase in `services/youtubeLinks.ts` ("external-link calls"), not an import. tsc clean.
+
+**Batch 2 — superseded / orphan scaffolds (8 files).** Verified zero importers for `services/gpsAudit.ts` (418 LOC, superseded by `services/audit/*`), `services/swingCapture.ts` (pre-416), `services/primaryIssueRanker.ts`, `services/cvScoring.ts`, `services/acousticBallSpeed.ts`, `services/sensing/sensingSources.ts`. The pose pair (`components/swinglab/SkeletonOverlay.tsx` + `services/poseInference.ts`) was a circular orphan — SkeletonOverlay only imported poseInference, nothing else imported either.
+
+**Critical pose check before deletion:** confirmed the live skeleton overlay (`StubSkeletonOverlay` in `app/swinglab/smartmotion.tsx`) uses local `STUB_SKELETON_JOINTS` constants, NOT poseInference data. The Fix C topology rewrite added zero poseInference imports. `services/poseInference.ts` was a pre-TFJS seam scaffold returning null until the TFJS install commit landed (never happened). Both files were genuinely dead. **Deleted.** Updated the smartmotion.tsx file header comment to drop the dangling reference to deleted poseInference.
+
+**Batch 3 — deprecated components (8 files).** Phase AT / 111 / 405 had removed all consumers. Verified zero importers: `AddressSilhouette`, `KevinHelpButton`, `WhatCanISayChip`, `TapToTalkButton`, `course/CourseAbout`, `course/CourseHero`, `course/CourseStats`, `caddie/PhotoCaptureButton`. All deleted. tsc clean.
+
+**Batch 4 — REPORT only, deferred to Tim:** `services/modeSelector.ts` + `services/roles/{caddieRole,coachRole,psychologistRole}.ts`. Confirmed closed orphan island:
+- `modeSelector.ts` has **zero importers** anywhere outside `services/roles/`.
+- Each role file is imported **only** by `modeSelector.ts`.
+- `store/trustLevelStore.ts` line 20 mentions `modeSelector` in a header comment but does NOT import anything from the chain.
+- `services/trustLevelService.ts` is used by other code (`lieAnalysisContext`, `listeningSession`, `voiceOnboardingService`) but those don't touch the roles chain.
+- **Verdict:** the chain is a Trust-Spectrum-aspirational scaffold that nothing currently consumes. Tim's decision: delete (~4 files removed, scaffold reset) vs keep (waiting for the planned Caddie / Coach / Psychologist register-shifting work to land). **Held for Tim.**
+
+**watchService.ts evaluation:** the only remaining "reference" in cage-mode.tsx turned out to be a header comment I wrote during Fix F describing the file — not an actual import. Re-grepped each export (`analyzeTempoRatio`, `estimateClubSpeed`, `getKevinTempoLine`, `simulateSwing`): **zero consumers across the whole codebase.** The entire file is dead today, including the math helpers. **Kept per Tim's prompt** — it's the documented native-SDK hook site for the post-sprint watch build. The math helpers (~15 lines of tempo + club-speed calc) will be load-bearing when the SDK lands; deleting and re-implementing later is the alternative but git history holds the same value. **Tim's call** if he wants to delete it now and resurrect later, or keep.
+
+**`expo-image` dropped from package.json.** Verified zero imports via grep. `npm install` refreshed the lockfile cleanly; both `package.json` and `package-lock.json` no longer list it. tsc still clean.
+
+**Build gates:** `tsc --noEmit` clean after every batch and at the end. `expo lint` unchanged at the Consolidation 1 baseline (5 errors + 11 warnings — all pre-existing). No new regressions.
+
+**Outstanding decisions for Tim:**
+1. Delete `services/modeSelector.ts` + `services/roles/*` now (no consumers anywhere; Trust Spectrum doesn't use them) — or keep until register-shifting work spec'd?
+2. Delete `services/watchService.ts` now (zero consumers, math will resurrect from git when SDK lands) — or keep as the documented hook site?
+
 ### Consolidation 1 — three single-source-of-truth merges (haversine, voice-tuning, watch-state)
 
 **Merge A — Haversine: 5 implementations → 1.** Canonical `utils/geoDistance.ts`. Verified each re-implementation against the canonical before merging:

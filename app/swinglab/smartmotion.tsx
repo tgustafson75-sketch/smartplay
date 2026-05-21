@@ -12,12 +12,13 @@
  *            Focus + Recommended Drill + Next Swing Focus + View Full
  *            Data + Record / Tag Club / Compare bottom row
  *
- * Architectural call: pose-skeleton overlay is a SEAM (renders a
- * placeholder line for now). Real keypoint extraction lives in
- * services/poseInference.ts which is scaffolded but unwired — the
- * MoveNet integration ships with the next APK build when the TFJS +
- * expo-gl deps install cleanly. Card 2 insights are REAL today via
- * the existing cloud analysis path.
+ * Architectural call: pose-skeleton overlay renders a stub (the
+ * StubSkeletonOverlay component below) with normalized keypoint
+ * positions matching the MoveNet-17 subset we'll receive when the
+ * TFJS / MoveNet integration lands in a future APK build (TFJS +
+ * expo-gl native deps; same future-build scope as the Galaxy Watch
+ * SDK). Card 2 insights are REAL today via the existing cloud
+ * analysis path (/api/swing-analysis).
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
