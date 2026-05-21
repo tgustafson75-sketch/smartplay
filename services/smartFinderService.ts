@@ -290,13 +290,22 @@ function resolveHoleDataWithFallback(hole: number): import('../store/roundStore'
 // during active-round when GPS hasn't landed yet, so the user sees
 // real numbers immediately instead of dashes. Per Tim: "pre-round in
 // static, would adjust to GPS once active."
+//
+// 2026-05-21 — Consolidation 5: returns reason: 'no_geometry' (was
+// 'ok'). The fallback is the scorecard's tee→green TOTAL, not a
+// live GPS read — it doesn't decrease as the player walks toward
+// the green. Returning 'ok' previously masqueraded the static
+// number as live; UI consumers had no signal to downgrade
+// confidence. Same no-fake-precision principle as the Phase 418
+// validation gate and the SmartFinder GPS-quality framing. The
+// number is still useful as a reference; just labelled honestly.
 function staticYardages(hData: import('../store/roundStore').CourseHole, hole: number): GreenYardages {
   return {
     front: typeof hData.front === 'number' ? hData.front : null,
     middle: typeof hData.distance === 'number' ? hData.distance : null,
     back: typeof hData.back === 'number' ? hData.back : null,
     hole_number: hole,
-    reason: 'ok',
+    reason: 'no_geometry',
   };
 }
 

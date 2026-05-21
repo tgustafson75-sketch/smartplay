@@ -86,21 +86,36 @@ export default function SmartFinderCard() {
 
       <View style={styles.header}>
         <Text style={styles.holeLabel}>HOLE {yards.hole_number}</Text>
+        {/* 2026-05-21 — Consolidation 5: honest "SCORECARD" pill when
+            the middle value is the card total, not a live GPS read. */}
+        {yards.reason === 'no_geometry' ? (
+          <Text style={styles.scorecardPill}>SCORECARD</Text>
+        ) : null}
         <GPSQuality reading={gps} />
       </View>
       <View style={styles.row}>
         <Cell label="FRONT" value={yards.front} />
         <Divider />
-        <Cell label="MIDDLE" value={yards.middle} value_emphasis />
+        <Cell
+          label="MIDDLE"
+          value={yards.middle}
+          value_emphasis
+          approximate={yards.reason === 'no_geometry'}
+        />
         <Divider />
         <Cell label="BACK" value={yards.back} />
       </View>
       {/* Sim-report gap 1 — when GPS is solid but the course's green
           coords aren't loaded, dashes alone leave the player guessing.
-          Honest hint explains WHY and offers the tap-to-target alternative. */}
-      {isRoundActive && yards.middle == null && gps.level !== 'none' ? (
+          Honest hint explains WHY and offers the tap-to-target alternative.
+          2026-05-21 — Consolidation 5: also fires when reason is
+          'no_geometry' (middle is now populated from scorecard, not null,
+          so the prior `middle == null` gate would have missed the case). */}
+      {isRoundActive && (yards.reason === 'no_geometry' || (yards.middle == null && gps.level !== 'none')) ? (
         <Text style={styles.emptyHint}>
-          Course doesn&apos;t have green coords — tap to drop a target instead.
+          {yards.reason === 'no_geometry'
+            ? "Scorecard distance — no green GPS for this course. Tap to drop a target instead."
+            : "Course doesn’t have green coords — tap to drop a target instead."}
         </Text>
       ) : (
         <Text style={styles.tapHint}>Tap for SmartFinder →</Text>
@@ -109,11 +124,11 @@ export default function SmartFinderCard() {
   );
 }
 
-function Cell({ label, value, value_emphasis }: { label: string; value: number | null; value_emphasis?: boolean }) {
+function Cell({ label, value, value_emphasis, approximate }: { label: string; value: number | null; value_emphasis?: boolean; approximate?: boolean }) {
   return (
     <View style={styles.cell}>
       <Text style={[styles.value, value_emphasis && styles.valueEmphasis]}>
-        {value != null ? value : '—'}
+        {value != null ? (approximate ? `~${value}` : value) : '—'}
       </Text>
       <Text style={styles.cellLabel}>{label}</Text>
     </View>
@@ -161,6 +176,20 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1.5,
+  },
+  // 2026-05-21 — Consolidation 5: subtle "SCORECARD" pill rendered in
+  // the header when the middle value is the scorecard tee→green total
+  // (no live green GPS for this course).
+  scorecardPill: {
+    color: '#9ca3af',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#374151',
+    borderRadius: 6,
   },
   row: {
     flexDirection: 'row',

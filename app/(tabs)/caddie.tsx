@@ -446,7 +446,11 @@ export default function CaddieTab() {
       const y = getGreenYardagesSync(currentHole);
       if (!y) return null;
       if (y.front == null && y.middle == null && y.back == null) return null;
-      return { front: y.front, middle: y.middle, back: y.back };
+      // 2026-05-21 — Consolidation 5: pass the reason through so the
+      // DistanceCard can label "SCORECARD ~Xy" when the middle value
+      // is the scorecard tee→green total (no per-hole green geometry
+      // for this course) instead of a live GPS read.
+      return { front: y.front, middle: y.middle, back: y.back, reason: y.reason };
     } catch { return null; }
     // markTick listed as a re-render signal — same rationale as liveYardage.
     // eslint-disable-next-line react-hooks/exhaustive-deps

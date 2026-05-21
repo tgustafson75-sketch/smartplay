@@ -14,6 +14,33 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Consolidation 5 — SmartFinder honest fallback labeling (`no_geometry` instead of silent `'ok'`)
+
+The NH pre-trip check (Maplewood / Pembroke Pines) surfaced this honesty gap: golfcourseapi has zero per-hole green coordinates for either course, so SmartFinder's fallback fires the scorecard tee→green total as the "middle" yardage. The fallback was returning `reason: 'ok'` — masquerading a static card-total as a live GPS read. Affects every course missing green geometry, not just the NH trip pair.
+
+**Fix shipped:**
+
+1. **`services/smartFinderService.ts` — `staticYardages()` returns `reason: 'no_geometry'`** (was `'ok'`). The dedicated reason already existed in the `GreenYardagesReason` type but the function wasn't using it. No change to the actual yardage math — only the label.
+
+2. **`components/caddie/cockpit/DistanceCard.tsx`** — extended `FrontMiddleBack` with optional `reason` field. When `reason === 'no_geometry'`:
+   - Renders a subtle "SCORECARD" pill next to the GPS badge.
+   - Hero number gets a `~` prefix (e.g. `~485` instead of `485`) signaling approximation.
+   - Hero label appends "· CARD TOTAL" to the unit label.
+   - GPS dot downgrades from `good` → `weak` (effective accuracy override).
+   - Accessibility label updated to mention the scorecard-fallback state.
+
+3. **`components/smartfinder/SmartFinderCard.tsx`** — header gets a "SCORECARD" pill; middle cell renders `~Xy`; empty-hint logic now fires on `reason === 'no_geometry'` even when middle is non-null (the prior gate `middle == null` would have missed the case after the service-side fix). New honest hint: "Scorecard distance — no green GPS for this course. Tap to drop a target instead."
+
+4. **`app/smartfinder.tsx`** (full screen) — `geometryMsg` already handled `no_geometry` correctly but the message implied missing data. Updated to differentiate: when middle is non-null, says "Scorecard distance — no live GPS green for this course." When middle is null, keeps the original "Green coordinates unavailable for this course."
+
+5. **`app/(tabs)/caddie.tsx`** — `fmb` memo now passes `y.reason` through to `DistanceCard` so the pill + `~` prefix render correctly on Caddie home.
+
+**Behavior on courses WITH geometry: zero change.** `reason: 'ok'` is still returned when `resolveGreenCoords` finds real green coords; the pill, `~` prefix, GPS-dot downgrade, and "CARD TOTAL" label all stay hidden. Pure additive UI on the fallback path.
+
+**Same no-fake-precision principle** as Phase 418 SmartMotion validation gate and the SmartFinder GPS-quality framing. The number is still useful as a reference; just labelled honestly.
+
+**Build gates:** `tsc --noEmit` clean. `expo lint` at the Consolidation 1/2/2b/3/4 baseline (5 errors + 11 warnings — all pre-existing). No behavior change beyond the new honest labeling on the fallback path.
+
 ### Consolidation 4 — `console.log` noise pruned (18 routine traces gated, 414 intentional diagnostics retained)
 
 **Survey:** actual count was **432 `console.log` calls** across the tree (Phase 420 audit said 355 — likely an under-count from the same narrow-grep methodology that produced the route false-positives). Top offenders matched the audit: `store/roundStore.ts` (29), `services/simulatedGPS.ts` (22), `services/listeningSession.ts` (16), `app/(tabs)/caddie.tsx` (14), `hooks/useVoiceCaddie.ts` (12).

@@ -958,9 +958,15 @@ function MapView({
     // missing or GPS hasn't locked yet, instead of silent "—" placeholders.
     // 'no_geometry' is the painful case: hole exists but golfcourseapi
     // never returned green coordinates. Tell the user, don't pretend.
+    //
+    // 2026-05-21 — Consolidation 5: when the middle value is non-null
+    // under 'no_geometry' it's the scorecard tee→green total — say so
+    // explicitly rather than implying live GPS.
     const geometryMsg =
       yards.reason === 'no_geometry'
-        ? 'Green coordinates unavailable for this course.'
+        ? (yards.middle != null
+            ? 'Scorecard distance — no live GPS green for this course.'
+            : 'Green coordinates unavailable for this course.')
         : yards.reason === 'no_fix'
         ? 'Waiting for GPS fix…'
         : null;

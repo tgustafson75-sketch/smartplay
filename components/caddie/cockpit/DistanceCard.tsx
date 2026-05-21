@@ -27,6 +27,13 @@ export interface FrontMiddleBack {
   front: number | null;
   middle: number | null;
   back: number | null;
+  // 2026-05-21 — Consolidation 5: honest fallback source. When
+  // `reason === 'no_geometry'` the middle value is the scorecard
+  // tee→green TOTAL (not a live GPS read — doesn't decrease as
+  // the player walks). UI labels it "SCORECARD ~Xy" so the user
+  // can tell card-total from live distance. Optional for back-
+  // compat with any caller still passing the older shape.
+  reason?: 'ok' | 'no_geometry' | 'no_fix' | 'no_hole';
 }
 
 export interface DistanceCardProps {
@@ -51,12 +58,22 @@ export function DistanceCard({
   const front = fmb?.front ?? null;
   const back = fmb?.back ?? null;
   const unitLabel = unit === 'meters' ? 'METERS TO PIN' : 'YARDS TO PIN';
+  // 2026-05-21 — Consolidation 5: honest fallback labeling. When
+  // SmartFinder fell back to the scorecard tee→green total (no
+  // per-hole green geometry for this course), render a subtle
+  // "SCORECARD" pill + "~" prefix on the hero number so the user
+  // can tell card-total from live read. Effective gpsAccuracy
+  // downgrades to 'weak' so the GPS dot dims. Same no-fake-
+  // precision principle as the Phase 418 validation gate.
+  const isScorecardFallback = fmb?.reason === 'no_geometry';
+  const effectiveAccuracy: 'good' | 'weak' | 'off' = isScorecardFallback ? 'weak' : gpsAccuracy;
+  const middleDisplay = middle != null ? (isScorecardFallback ? `~${middle}` : String(middle)) : '—';
 
   return (
     <Pressable
       onPress={onPressOpenRangefinder}
       accessibilityRole="button"
-      accessibilityLabel="Open SmartFinder rangefinder"
+      accessibilityLabel={isScorecardFallback ? 'Open SmartFinder rangefinder (scorecard distance, no live GPS green)' : 'Open SmartFinder rangefinder'}
       style={({ pressed }) => [
         styles.outer,
         {
@@ -73,19 +90,26 @@ export function DistanceCard({
         <Text style={[styles.label, { color: colors.text_primary }]}>
           <Text style={{ color: colors.accent }}>SMART </Text>FINDER
         </Text>
+        {isScorecardFallback ? (
+          <View style={[styles.scorecardPill, { borderColor: colors.text_muted }]}>
+            <Text style={[styles.scorecardPillText, { color: colors.text_muted }]}>SCORECARD</Text>
+          </View>
+        ) : null}
         <View style={[styles.gpsBadge, { borderColor: colors.accent }]}>
           <Ionicons
-            name={gpsAccuracy === 'off' ? 'locate-outline' : 'locate'}
+            name={effectiveAccuracy === 'off' ? 'locate-outline' : 'locate'}
             size={16}
-            color={gpsAccuracy === 'good' ? colors.accent : colors.text_muted}
+            color={effectiveAccuracy === 'good' ? colors.accent : colors.text_muted}
           />
         </View>
       </View>
 
       <Text style={[styles.hero, { color: colors.text_primary }]}>
-        {middle != null ? String(middle) : '—'}
+        {middleDisplay}
       </Text>
-      <Text style={[styles.heroLabel, { color: colors.text_muted }]}>{unitLabel}</Text>
+      <Text style={[styles.heroLabel, { color: colors.text_muted }]}>
+        {isScorecardFallback ? `${unitLabel} · CARD TOTAL` : unitLabel}
+      </Text>
 
       <View style={[styles.fmbRow, { borderTopColor: colors.border }]}>
         <FmbCell label="FRONT" value={front} accent />
@@ -149,6 +173,20 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // 2026-05-21 — Consolidation 5: honest-fallback "SCORECARD" pill.
+  // Subtle, sits next to the gpsBadge when fmb.reason === 'no_geometry'.
+  scorecardPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginRight: 8,
+  },
+  scorecardPillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.2,
   },
   hero: {
     fontSize: 84,
