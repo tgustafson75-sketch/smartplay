@@ -37,6 +37,17 @@ import { buildNarrationScript } from '../../services/recapNarration';
 import RoundShareCard from '../../components/RoundShareCard';
 import type { RoundRecap, HoleComparison } from '../../types/plan';
 import type { GhostHoleResult } from '../../types/ghost';
+import type { RoundPhoto } from '../../store/roundStore';
+
+// Day 1 fix — module-level stable empty array. Used as the selector
+// fallback below so the Zustand selector returns the SAME reference
+// across renders when the round has no photos. The prior `?? []`
+// inline fallback produced a fresh `[]` per render → Zustand's
+// useSyncExternalStore saw a "changed snapshot" → re-rendered →
+// re-ran the selector → new `[]` → loop → "Maximum update depth
+// exceeded" on the End Round → recap navigation. Same fix pattern
+// as the GpsQualityOverlay split-selector bug fix (2026-05-16).
+const EMPTY_PHOTOS: RoundPhoto[] = [];
 
 const MODE_LABELS: Record<string, string> = {
   break_100: 'Break 100',
@@ -169,7 +180,7 @@ export default function RecapScreen() {
   const caddieName = getCaddieName(caddiePersonality);
   // Phase R — pull round photos from the persisted RoundRecord (recap api
   // returns a different shape — photos live on the local roundStore).
-  const roundPhotos = useRoundStore(s => s.roundHistory.find(r => r.id === round_id)?.round_photos ?? []);
+  const roundPhotos = useRoundStore(s => s.roundHistory.find(r => r.id === round_id)?.round_photos ?? EMPTY_PHOTOS);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
   const cardRef = useRef<View>(null);

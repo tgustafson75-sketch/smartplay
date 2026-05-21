@@ -24,6 +24,7 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 - Phase 418 SmartMotion validation gate — `services/swingValidity.ts` + server `valid_swing` field + UI gating
 - Phase 420 audit (12 docs)
 - Phase 421 sprint infrastructure (this set)
+- **Day 1 / Fix 1 — End Round crash fixed** ([app/recap/[round_id].tsx:172](../app/recap/[round_id].tsx#L172)) — Zustand selector `roundPhotos` returned a fresh `[]` per render via inline `?? []` fallback. Stabilized via module-level `EMPTY_PHOTOS` constant.
 
 **Verified clean by audits (do not touch — see Sprint Map "VERIFIED CLEAN"):**
 - TypeScript strict, zero errors, zero suppressions
@@ -55,7 +56,7 @@ In dependency order — see [audit-420-SPRINT-MAP.md](audit-420-SPRINT-MAP.md) f
 1. **P0-1** — Fix `/arena/practice` 404. SwingLab → Arena card crashes any tester. Either build stub Arena screen or hide card. Effort: S. ([app/(tabs)/swinglab.tsx:78](../app/(tabs)/swinglab.tsx#L78))
 2. **P0-2** — Verify `/swinglab/range` exists; likely missing per audit. Same fix as P0-1 if absent. Effort: S.
 3. **P0-3** — Collapse two SmartMotion UIs. `app/smartmotion-quick.tsx` (954 LOC, OLD) is still reachable from voice-intent (`services/intents/openToolHandler.ts:28-29`), Tools menu (`components/tools/GlobalToolsMenu.tsx:325`), and Library (`app/swinglab/library.tsx:256`). Repoint to canonical `app/swinglab/smartmotion.tsx` and delete. Effort: M.
-4. **P0-4** — Reproduce End-Round "Maximum update depth" crash on current bundle. Effort: S to repro, M to fix.
+4. ~~**P0-4** — Reproduce End-Round "Maximum update depth" crash on current bundle.~~ **DONE Day 1 / Fix 1.** Root cause: Zustand selector returning fresh `[]` per render. Fix on `main` in this session's commit. Empirical verification on Z Fold still required.
 5. **P0-5** — Write `speaker_id: 'self'` default in 4 paths so multi-player migration doesn't need a data fixup later. Effort: M.
 
 Then P1 consolidation (5 swing-capture surfaces → 2; 5 haversines → 1; 3 GPS-fix caches → 1; etc.) and P2 polish.
