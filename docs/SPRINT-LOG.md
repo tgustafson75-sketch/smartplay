@@ -391,6 +391,16 @@ Items captured here are NOT today's work but live within the sprint horizon. Re-
 
 **Polish (P2 — only if the wow doesn't land after verification, and only after consolidation closes):** if the camera overlay needs to feel more premium, treat as a polish pass. Not new feature work; not before P0/P1 wraps.
 
+### Galaxy Watch IMU — honestly deferred, ready to build post-sprint (excluded from consolidation)
+
+**Diagnosis (Fix F, `b0354f2`):** Watch IMU is scaffold + math + sim only. No real SDK wired, no production data path. UI is correctly defensive — nothing watch-related renders, no fake "connected" stub. The only issue was a [cage-mode.tsx](../app/swinglab/cage-mode.tsx) header comment overselling it as "all six capabilities" wired; comment corrected to mark Watch IMU as scaffold pending native SDK. **No runtime change. Cage Mode is a complete lessons tool without it.**
+
+**Ready to build, post-consolidation:** wearables SDK access unblocked 2026-05-19 (memory `beta-wearables-sdk-access.md`). Real Watch IMU ships via an **EAS Build** (native module, NOT OTA). This is NEW construction — **excluded from the consolidation sprint per the feature-complete mandate.** Build it after the sprint, on its own EAS cycle.
+
+**Implementation site already marked:** `services/watchService.ts` `// FUTURE: REAL SDK HOOK` block (lines 112-118). Hook delivers swing IMU events to `useWatchStore.recordSwing()` and flips `setConnected(true)`. Once wired, the existing Cage Mode UI (defensive render gates already in place) lights up automatically with zero additional plumbing.
+
+**Do NOT add a "coming soon" UI hint in the meantime** — that would itself be a stub of a stub. Silence is the right answer for an unbuilt feature.
+
 ---
 
 ## Post-Launch Tooling Ideas
