@@ -143,10 +143,18 @@ export async function analyzePoseFromUri(imageUri: string, timestampMs = 0): Pro
       signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) {
+      // Pre-G safety net — covers a real upstream failure (500/502/etc).
+      // Note that the env-var-gated "not configured" branch ships 200
+      // with { configured: false } now (Fix H Option B); see below.
       console.warn('[pose] proxy returned', res.status);
       return null;
     }
-    const data = await res.json() as { data?: unknown };
+    const data = await res.json() as { data?: unknown; configured?: boolean };
+    // 2026-05-21 — Fix H (Option B): server now returns 200 with
+    // { data: null, configured: false } when POSE_API_KEY/HOST aren't
+    // set. Collapse to null so the biomechanics card stays hidden —
+    // identical UX, just no false 503 alert from Vercel.
+    if (data.configured === false || data.data == null) return null;
     const keypoints = normalizeKeypoints(data.data);
     if (keypoints.length === 0) return null;
     return { timestampMs, keypoints };

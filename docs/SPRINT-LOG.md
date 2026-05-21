@@ -14,6 +14,26 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Fix H (Option B) — pose-analysis returns 200-with-null when unconfigured
+
+**Diagnosis (no Vercel logs needed — cause was plain in source):** the Vercel 503 alert was firing on `/api/pose-analysis`, the RapidAPI pose-detection proxy that feeds the optional Biomechanics card on swing detail. The 503 was **intentional** — [api/pose-analysis.ts:104](../api/pose-analysis.ts#L104) returned `res.status(503)` when `POSE_API_KEY + POSE_API_HOST` env vars weren't configured. The file header even documented it: *"Without them, every action returns a graceful 503 — clients fall through silently."* It was working as designed; Vercel just couldn't tell the difference between "intentionally off" and "broken."
+
+**Blast radius (confirmed none):**
+- `/api/swing-analysis` (SmartMotion primary analysis path) is independent of `/api/pose-analysis`. SmartMotion was not broken in production.
+- Both callers ([services/videoUpload.ts:497](../services/videoUpload.ts#L497) for live biomechanics, [app/swinglab/swing/[swing_id].tsx:158](../app/swinglab/swing/[swing_id].tsx#L158) for older-swing backfill) are fire-and-forget with explicit "failures silent — pose API has known reliability variance, env-var gated; detail screen renders the Biomechanics card iff result is present — zero UX regression when API isn't configured" comments.
+- [services/poseAnalysisApi.ts:145](../services/poseAnalysisApi.ts#L145) already collapsed `!res.ok → null`, so the 503 was already handled gracefully on the client.
+- Cage Mode (post Fix G) doesn't touch `/api/pose-analysis` at all.
+
+**Fix shipped (Option B — honest status code, not a real fix because nothing was actually broken):**
+
+1. **[api/pose-analysis.ts:104](../api/pose-analysis.ts#L104)** — unconfigured branch now returns `200 OK` with `{ data: null, configured: false, reason: <env-var-message> }`. Vercel sees a successful function → no false alert. The `configured: false` flag distinguishes this state from a genuine upstream failure (which still surfaces as a non-2xx status via the existing branch).
+
+2. **[services/poseAnalysisApi.ts:149](../services/poseAnalysisApi.ts#L149)** — `analyzePoseFromUri` now checks `data.configured === false || data.data == null` and returns `null` for either, collapsing both the new "off" shape and any real-data-empty case to the same no-op. The existing `!res.ok` fallback stays in place so a genuine 5xx still degrades gracefully too.
+
+**UX is unchanged.** Swing detail screen shows zero biomechanics card when POSE env isn't set, identical to pre-G behaviour. No fabrication — null in, no card out. This is trivially reversible when POSE_API_KEY/HOST + a real RapidAPI subscription land later (Option A would just be configuring the env vars).
+
+**Build gates:** `tsc --noEmit` clean. No regression in any caller (both pre-existing `!res.ok` branches and the new `configured: false` branch collapse to `null`, which is what the consumers already expect).
+
 ### Fix G (Option A) — honest Cage Mode + screen-aware voice "record"
 
 **Diagnosis report (verbatim verdict before any code change):** the on-device "check position 404 + voice record dead" reports were **three separate problems, none caused by 9B**:

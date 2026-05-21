@@ -18,8 +18,17 @@
  *
  * Auth: server-side. POSE_API_KEY + POSE_API_HOST env vars on Vercel
  * (or the generic RAPIDAPI_KEY / RAPIDAPI_HOST as fallback). Without
- * them, every action returns a graceful 503 — clients fall through
- * silently.
+ * them, every action returns 200 with { data: null, configured: false }
+ * — clients fall through silently (no biomechanics card renders).
+ *
+ * 2026-05-21 — Fix H (Option B): the unconfigured branch used to return
+ * HTTP 503 to signal "intentionally not configured." Functionally correct
+ * but the wrong status code — 503 fired false Vercel function-failure
+ * alerts even though every client (poseAnalysisApi.analyzePoseFromUri,
+ * videoUpload fire-and-forget background biomechanics) already treated
+ * !res.ok as a no-op. Returning 200 with a null/configured-false payload
+ * keeps the UX behaviour identical (biomechanics card stays hidden) but
+ * stops the false alert. NOT fabrication — null in, no card out.
  *
  * Client side passes either:
  *   - imageUrl: the proxy fetches the image, then forwards as multipart
@@ -99,9 +108,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const auth = buildAuth();
   if ('error' in auth) {
-    // 503 (not 500) so clients can recognize the "not configured"
-    // state vs a real upstream failure and fall through silently.
-    return res.status(503).json({ error: auth.error });
+    // 2026-05-21 — Fix H (Option B): return 200 with a null payload so
+    // Vercel doesn't see this as a function failure. UX is identical —
+    // clients check `configured === false` (or `data == null`) and
+    // render no biomechanics card. NOT a real upstream failure; the
+    // `configured: false` flag tells the client this is the env-gated
+    // off state, distinguishable from a 5xx upstream error.
+    return res.status(200).json({ data: null, configured: false, reason: auth.error });
   }
 
   const body = (req.body ?? {}) as { imageUrl?: string; imageBase64?: string };
