@@ -43,6 +43,8 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 **Total LOC removed by Consolidation 3:** zero. Nothing was actually orphaned. The Phase 420 routes audit needs a methodology note — its grep was narrower than the codebase's real call patterns.
 
+**LESSON (Phase 420 audit grep gap):** the routes audit produced 14 false-positive "orphans" because it matched only string-literal `router.push('/x')` and missed template literals (`` `/course/${id}` ``), `pathname:`-object form (`router.push({ pathname: '/x', ... })`), cold-install redirects (`app/index.tsx`), and indirect callers (Settings rows, Tools menu). Zero of the 14 were genuine orphans; `/hole-view` (1,484 LOC) was a false orphan reached via object-form push from `caddie.tsx:2860` and `play.tsx:566`. **Lesson:** the Phase 420 audit's orphan/dead detection systematically undercounts references — always verify importers directly (`tsc --noEmit` after a candidate delete + grep all call forms: string literal, template literal, `pathname:` object, `href=`, `<Link>`) before trusting any "orphaned/dead" claim from it. Consolidation 2's 29-file dead-code deletes were safe because each candidate was confirmed zero-importer with tsc gates after each batch; route "orphans" got the same scrutiny here and almost none survived it.
+
 **Build gates:** `tsc --noEmit` clean. `expo lint` at the Consolidation 1/2/2b baseline (5 errors + 11 warnings).
 
 ### Consolidation 2b — modeSelector/roles chain deleted, watchService kept, skeleton-stub honesty note logged
