@@ -44,10 +44,15 @@ interface LauncherCardSpec {
 }
 
 // 2026-05-19 — Reordered per Tim: SmartMotion first (the marquee
-// camera flow), then Range Mode, then Drills, then Arena, then
-// Library, then Acoustic. SmartMotion also gets expanded sub copy
-// covering AI Swing Analysis + Body Mechanics + Tracing future state
-// so the user sees the full SmartMotion value prop at a glance.
+// camera flow), then Range Mode, then Drills, then Library, then
+// Acoustic. SmartMotion also gets expanded sub copy covering AI Swing
+// Analysis + Body Mechanics + Tracing future state so the user sees
+// the full SmartMotion value prop at a glance.
+//
+// 2026-05-20 — Day 1 / Fix 2: Arena card removed. The route
+// /arena/practice 404'd (no app/arena/ directory) and was a user-
+// visible launch blocker on the SwingLab tab. Pulled the card
+// entirely rather than building a stub.
 const CARDS: LauncherCardSpec[] = [
   {
     key: 'smartmotion',
@@ -69,13 +74,6 @@ const CARDS: LauncherCardSpec[] = [
     title: 'Drills',
     sub: 'Primary Issue · Common Faults · pro instructor videos',
     route: '/drills',
-  },
-  {
-    key: 'arena',
-    icon: 'trophy-outline',
-    title: 'Arena',
-    sub: 'Bag distances · tempo trainer · putting clock',
-    route: '/arena/practice',
   },
   {
     key: 'library',

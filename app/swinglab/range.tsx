@@ -89,11 +89,14 @@ export default function RangeMode() {
   const startingClubAvgYds = startingClub === 'Driver' ? 240 : null;
 
   const handleStartSession = () => {
-    // Range Mode is multi-shot by design — route to CageSessionOverlay's
-    // multi-shot capture (/cage/session) rather than the single-swing
-    // /swinglab/cage-drill screen. The detector backing both is the same
-    // (services/acousticImpactDetector); only the mode differs.
-    router.push('/cage/session' as never);
+    // 2026-05-20 — Day 1 / Fix 2: Range Mode is wired only to the Swing
+    // Library now. The prior /cage/session destination was one of the
+    // 5 duplicated swing-capture surfaces flagged in the Phase 420
+    // duplication audit; sprint mandate is to keep Range Mode isolated
+    // from those legacy capture flows until P1-1 collapses them.
+    // Range Mode stays as the pre-flight planning surface; the user
+    // proceeds to the Library to capture / review swings from there.
+    router.push('/swinglab/library' as never);
   };
 
   return (

@@ -53,8 +53,8 @@ OTA push for the most recent bundle (`e872f9b`) failed 5× on Expo's asset proce
 
 In dependency order — see [audit-420-SPRINT-MAP.md](audit-420-SPRINT-MAP.md) for evidence and file paths:
 
-1. **P0-1** — Fix `/arena/practice` 404. SwingLab → Arena card crashes any tester. Either build stub Arena screen or hide card. Effort: S. ([app/(tabs)/swinglab.tsx:78](../app/(tabs)/swinglab.tsx#L78))
-2. **P0-2** — Verify `/swinglab/range` exists; likely missing per audit. Same fix as P0-1 if absent. Effort: S.
+1. ~~**P0-1** — Fix `/arena/practice` 404.~~ **DONE Day 1 / Fix 2.** Card removed from SwingLab launcher; verified no remaining `/arena` references.
+2. ~~**P0-2** — Verify `/swinglab/range` exists.~~ **CONFIRMED — file present at `app/swinglab/range.tsx`.** Earlier audit "likely missing" claim was wrong. Range Mode's Start Session was also rewired (Day 1 / Fix 2) to route only to the Swing Library (was going to `/cage/session`, one of the legacy capture surfaces).
 3. **P0-3** — Collapse two SmartMotion UIs. `app/smartmotion-quick.tsx` (954 LOC, OLD) is still reachable from voice-intent (`services/intents/openToolHandler.ts:28-29`), Tools menu (`components/tools/GlobalToolsMenu.tsx:325`), and Library (`app/swinglab/library.tsx:256`). Repoint to canonical `app/swinglab/smartmotion.tsx` and delete. Effort: M.
 4. ~~**P0-4** — Reproduce End-Round "Maximum update depth" crash on current bundle.~~ **DONE Day 1 / Fix 1.** Root cause: Zustand selector returning fresh `[]` per render. Fix on `main` in this session's commit. Empirical verification on Z Fold still required.
 5. **P0-5** — Write `speaker_id: 'self'` default in 4 paths so multi-player migration doesn't need a data fixup later. Effort: M.
