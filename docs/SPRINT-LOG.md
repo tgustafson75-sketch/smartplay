@@ -224,6 +224,28 @@ No fix needed. Optional cosmetic: `stopSimulatedWalk` could also suppress off-co
 
 ---
 
+## Verification + Polish Backlog (near-term)
+
+Items captured here are NOT today's work but live within the sprint horizon. Re-evaluate after the active P0/P1 wave settles.
+
+### SmartFinder as "your phone is your rangefinder" — wow moment
+
+**Positioning (honest):** SmartFinder is a GPS-based rangefinder, NOT a laser. For the target user — mid-to-high handicapper, mostly no laser rangefinder, wants club-distance not pin-precision — this is the **correct** tool, not a compromise. Front/middle/back GPS yardages are more useful for club selection than a single laser pin number.
+
+**Accuracy reality (for honest marketing + demo copy):**
+- Modern phone GPS, open sky: typically **~3-5 yards**.
+- Worst case (tree cover, overcast, hillside, cold GPS): **~10-12 yards**.
+- This is BELOW the noise floor of the target golfer's own shot dispersion AND below the typical club gap (~10-15y between irons). The tool is more precise than the player — so the error doesn't drive a wrong club choice. That's why it works.
+- **Honest line:** *"within a few yards — close enough to pick the right club."* Do NOT imply laser/point-at-pin precision. A phone camera cannot laser-range regardless of camera quality (LiDAR ≈ 5m max, useless at golf distance). The camera's role is the VISUAL OVERLAY experience, not the measurement.
+
+**Verify on device (tomorrow's list):**
+- Camera-mode SmartFinder overlay on Z Fold — does it land the wow moment with current code? Pinch-zoom rewrite was unverified per the Phase 420 audit ([audit-420-tools.md](audit-420-tools.md)).
+- Confirm the GPS-quality indicator actually surfaces to the USER when GPS is degraded — a shaky yardage shows lower confidence rather than fake precision. Same no-fake-precision principle as the Phase 418 SmartMotion validation gate.
+
+**Polish (P2 — only if the wow doesn't land after verification, and only after consolidation closes):** if the camera overlay needs to feel more premium, treat as a polish pass. Not new feature work; not before P0/P1 wraps.
+
+---
+
 ## Post-Launch Tooling Ideas
 
 Captured to clear them off the active sprint. **Not sprint work — do not build during the consolidation sprint.** Re-evaluate after 1.0 ships.

@@ -93,6 +93,7 @@ Sprint isn't done until ALL of these are confirmed on a real Z Fold (from the Sp
 - [ ] Round start → 18 holes simulated → End Round → recap — no "Maximum update depth" crash
 - [ ] Debug routes return 404 / redirect for non-owner accounts
 - [ ] APK build size unchanged or smaller than pre-sprint baseline (5.2 MB Hermes)
+- [ ] SmartFinder camera-mode overlay lands the "your phone is your rangefinder" wow moment on Z Fold (pinch-zoom verified); GPS-quality indicator visibly downgrades on weak signal so the user never reads fake precision (same honesty principle as the SmartMotion 418 gate). Full positioning + accuracy framing in [SPRINT-LOG.md → Verification + Polish Backlog](SPRINT-LOG.md).
 
 ---
 
