@@ -87,6 +87,16 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   '/smartfinder-debug',
   '/subscription-debug',
   '/voice-debug',
+  // 2026-05-21 — Consolidation 3: owner-only authoring + diagnostic
+  // surfaces added for centralised gating. Each was reachable today
+  // — /author/reference-assets via the Tools menu "Reference
+  // Authoring" row (no row-level isOwnerEmail check), /landmark-curate
+  // only from cage-debug (transitively gated but defence-in-depth),
+  // /owner-logs from Settings → Owner Tools (section-gated but the
+  // central gate is the canonical place).
+  '/author/reference-assets',
+  '/landmark-curate',
+  '/owner-logs',
 ]);
 
 function AppNavigator() {

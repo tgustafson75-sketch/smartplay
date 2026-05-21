@@ -14,6 +14,37 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Consolidation 3 — Orphan-routes audit verdict: ZERO genuine orphans (Phase 420 audit had narrow grep, missed 14 of 14)
+
+**Methodology:** re-grepped each "orphan" with broader patterns — template literals (`\`/course/${id}\``), `pathname:` object form, indirect callers (Settings rows, Tools menu), cold-install redirects. Phase 420 routes-audit agent's grep had been string-literal-only and missed most real call sites.
+
+**Every flagged orphan is actually reached.** Categorization below — `keep` for everything; tightened the central debug gate on three owner-only surfaces for defense-in-depth.
+
+| # | Route | Status | Evidence | Action |
+|---|---|---|---|---|
+| 1 | `/owner-logs` | **REACHED** | `settings.tsx:1106` (Owner Tools section), self-gated via `isOwnerEmail` | Keep + added to `DEBUG_ROUTES` for centralised gating |
+| 2 | `/hole-view` (1,484 LOC) | **REACHED** | `caddie.tsx:2860`, `play.tsx:566` — both use `pathname:` object form which the audit's grep missed | Keep — was a FALSE orphan |
+| 3 | `/lie-analysis` | **REACHED** | `caddie.tsx:2373`, `CockpitCaddieScreen.tsx:309`, voice intent `lie_analysis`/`tightlie` | Keep |
+| 4 | `/mark-green` | **REACHED** | `settings.tsx:1150` (Owner Tools), Tools menu, voice intent `mark_green`/`markgreen` | Keep |
+| 5 | `/swinglab/quick-record` | **REACHED** | SmartMotion (4 sites), Tools menu, cockpit MOTION button | Keep — canonical fast-path post Fix 9B |
+| 6 | `/ghost-debug` | **REACHED** | `cage-debug.tsx:254` button | Keep, already in `DEBUG_ROUTES` (Fix 3) |
+| 7 | `/cage-review/start` | **REACHED** | `cage-debug`, `cage/summary`, `cage/history` | Keep |
+| 8 | `/author/reference-assets` | **REACHED** | Tools menu "Reference Authoring" row — was NOT row-gated | Keep + added to `DEBUG_ROUTES` |
+| 9 | `/kevin-learning` | **REACHED** | `settings.tsx:1136`, `components/VocabBanner.tsx:59` | Keep |
+| 10 | `/landmark-curate` | **REACHED** | `cage-debug.tsx:257` (transitively gated by cage-debug's gate) | Keep + added to `DEBUG_ROUTES` for defense-in-depth |
+| 11 | `/welcome` | **REACHED** | `app/index.tsx:96, 114` — cold-install redirect | Keep — critical path |
+| 12 | `/intro-video` | **REACHED** | `app/index.tsx:77` — onboarding redirect | Keep |
+| 13 | `/course/[course_id]` | **REACHED** | 6 sites in `play.tsx` + `caddie.tsx` using template literal `\`/course/${id}\`` | Keep |
+| 14 | `/quick-start` | **REACHED** | `settings.tsx:991`, `welcome.tsx:183` | Keep |
+
+**`/hole-view` special-handling outcome:** false orphan. Both `app/(tabs)/caddie.tsx:2860` and `app/(tabs)/play.tsx:566` push to it via `router.push({ pathname: '/hole-view', ... })`. The Phase 420 audit grep was looking for `router.push('/hole-view')` string-literal pattern only and missed the object-pathname form. **No delete needed.** 1,484 LOC of live screen.
+
+**Gate tightening shipped:** added `/author/reference-assets`, `/landmark-curate`, `/owner-logs` to the `DEBUG_ROUTES` set in `app/_layout.tsx`. Each was reachable today but not in the central debug gate from Fix 3. Defense-in-depth on owner-only surfaces.
+
+**Total LOC removed by Consolidation 3:** zero. Nothing was actually orphaned. The Phase 420 routes audit needs a methodology note — its grep was narrower than the codebase's real call patterns.
+
+**Build gates:** `tsc --noEmit` clean. `expo lint` at the Consolidation 1/2/2b baseline (5 errors + 11 warnings).
+
 ### Consolidation 2b — modeSelector/roles chain deleted, watchService kept, skeleton-stub honesty note logged
 
 **Deleted (orphan island, no spec, resurrect from git when register-shifting is spec'd):**
