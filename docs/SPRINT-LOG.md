@@ -14,6 +14,32 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Fix F — Galaxy Watch IMU in Cage Mode (diagnosis: unbuilt, not broken)
+
+**Diagnosis: (a) — not built.** The Galaxy Watch IMU integration is scaffold + math + test sim only. No real SDK wired.
+
+Evidence:
+- [services/watchService.ts](../services/watchService.ts) — tempo-analysis math, `estimateClubSpeed()`, and a `simulateSwing()` test helper. Lines 112-118 are an explicit `// FUTURE: REAL SDK HOOK ─` comment block with example code that was never implemented.
+- Grep across the codebase for `recordSwing` / `setConnected` / `setSwingDetected` returns **zero callers outside the store itself.** No production code path delivers data into `useWatchStore`.
+- Phase 420 dead-code audit had already flagged `services/watchService.ts` as a Phase 417/418 scaffold with no consumers.
+- Memory note `beta-wearables-sdk-access.md` (2026-05-19): wearables SDK access just unblocked; **native-module wiring requires an EAS Build, not OTA.**
+
+**No fake-data UI risk today.** Cage Mode's UI is correctly defensive:
+- The Watch Metrics card only renders when `watchSwing` is non-null ([app/swinglab/cage-mode.tsx:740](../app/swinglab/cage-mode.tsx#L740)). Never triggers in production because nothing writes to `useWatchStore.sessionSwings`.
+- The "Watch connected but didn't catch this swing" hint is gated on `watchConnected === true` ([cage-mode.tsx:770](../app/swinglab/cage-mode.tsx#L770)). Also never triggers — `isConnected` stays `false`.
+- The user sees nothing watch-related — correct empty-state for an unbuilt feature.
+
+**Code change this turn — honest header only:** updated `app/swinglab/cage-mode.tsx` file header. Was claiming "all six capabilities" including Galaxy Watch IMU as if it were wired alongside bullseye gate / ball-speed / calibration / analysis APIs. Now reads "five wired capabilities" + a "Fix F diagnosis" paragraph naming Watch IMU as planned-sixth pending native SDK wiring on the next APK.
+
+**No runtime UI change.** Tim's decision pending on whether to add a small "Watch metrics ship in next APK" hint somewhere subtle. Current recommendation: skip it — would itself be a stub of a stub. The defensive render is the right answer.
+
+**Path forward (post-OTA, before launch):**
+- Native module integration via EAS Build using the beta Samsung Health SDK Tim has access to. Implementation site = [services/watchService.ts](../services/watchService.ts) `FUTURE: REAL SDK HOOK` block. Hook delivers swing IMU events into `useWatchStore.recordSwing()` + flips `setConnected(true)`.
+- Once wired, the existing Cage Mode UI lights up automatically — no UI plumbing changes needed.
+- Estimated effort: M (native module + permissions + connection lifecycle); blocked by no JS-only fix, only by the APK build cycle.
+
+**Build gates:** `tsc --noEmit` clean (only changed a comment block). No runtime behavior change.
+
 ### Skeleton topology — explicit bone-edge list, circle head, wrist nodes
 
 **Report (3 sentences):**

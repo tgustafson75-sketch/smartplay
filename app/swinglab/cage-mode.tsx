@@ -4,11 +4,24 @@
  * 2026-05-21 — Day 2 / Fix 9B: file renamed from cage-drill.tsx to
  * cage-mode.tsx + given a clear Cage Mode identity. SmartMotion (quick
  * swing check) and Cage Mode (full practice/lesson tool) are now two
- * distinct features with zero overlap. Cage Mode keeps all six
+ * distinct features with zero overlap. Cage Mode keeps five wired
  * cage-specific capabilities: bullseye-in-frame gate, ball-speed
- * detection, cage calibration store, Galaxy Watch IMU integration,
- * cage-specific analysis APIs (analyzeCageVideo + coachReview), and
- * the CageOverlay framing component. Works in a cage OR on the range.
+ * detection, cage calibration store, cage-specific analysis APIs
+ * (analyzeCageVideo + coachReview), and the CageOverlay framing
+ * component. Works in a cage OR on the range.
+ *
+ * 2026-05-21 — Fix F diagnosis: Galaxy Watch IMU is the SIXTH planned
+ * capability but is NOT wired yet. services/watchService.ts has only
+ * tempo math + a simulateSwing test helper + a "FUTURE: REAL SDK HOOK"
+ * comment block; nothing writes to useWatchStore in production
+ * (zero callers of setConnected / recordSwing). The render path in
+ * this file IS correctly defensive (`watchSwing && ...` gate at the
+ * results card) so no fake "watch connected" UI shows up — the
+ * empty state is silence, which is the right answer for an unbuilt
+ * integration. Real Watch IMU wiring requires native module +
+ * EAS Build (not OTA-able). Sprint plan: defer to the next APK,
+ * use the beta wearables SDK Tim has access to per
+ * memory/beta-wearables-sdk-access.md.
  *
  * Behaviour is byte-identical to the prior cage-drill flow EXCEPT for
  * the ported batch-count selector (see below) — no other capability
