@@ -1,5 +1,5 @@
 import '../services/polyfills';
-import { Stack , router } from 'expo-router';
+import { Stack , router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useEffect } from 'react';
@@ -70,8 +70,42 @@ if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
 const TRIAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Inner layout reads theme and guards onboarding
+// 2026-05-20 — Day 1 / Fix 3: central debug-route gate. Single source
+// of truth for which routes are owner-only. Any deep link or
+// accidental navigation to one of these paths by a non-owner (and
+// not __DEV__) is redirected away. Per-screen useDebugRouteGate()
+// calls remain as belt-and-suspenders defense.
+const DEBUG_ROUTES: ReadonlySet<string> = new Set([
+  '/gps-test',
+  '/acoustic-test',
+  '/api-debug',
+  '/battery-debug',
+  '/cage-debug',
+  '/ghost-debug',
+  '/patterns-debug',
+  '/plan-debug',
+  '/smartfinder-debug',
+  '/subscription-debug',
+  '/voice-debug',
+]);
+
 function AppNavigator() {
   const { colors } = useTheme();
+
+  // 2026-05-20 — Day 1 / Fix 3: central gate for *-debug + dev test
+  // routes. Watches pathname; any non-owner (and not __DEV__) hitting
+  // a gated route gets redirected to the caddie home tab. One gate
+  // covers all 11 routes — no per-screen check required.
+  const pathname = usePathname();
+  const ownerEmail = usePlayerProfileStore(s => s.email);
+  useEffect(() => {
+    if (!pathname) return;
+    if (!DEBUG_ROUTES.has(pathname)) return;
+    if (__DEV__ || isOwnerEmail(ownerEmail)) return;
+    try { router.replace('/(tabs)/caddie' as never); } catch (e) {
+      console.log('[debug-gate] redirect failed', e);
+    }
+  }, [pathname, ownerEmail]);
 
   // Intentionally removed: do not redirect here. app/index.tsx owns initial
   // routing after hydration. A guard here fires before AsyncStorage hydrates,
