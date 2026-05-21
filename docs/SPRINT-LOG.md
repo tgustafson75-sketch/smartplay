@@ -14,6 +14,30 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Consolidation 1 — three single-source-of-truth merges (haversine, voice-tuning, watch-state)
+
+**Merge A — Haversine: 5 implementations → 1.** Canonical `utils/geoDistance.ts`. Verified each re-implementation against the canonical before merging:
+- `services/gpsManager.ts:116` — `haversineMeters`: R = 6,371,000 m, identical formula, returns meters. **IDENTICAL.**
+- `services/shotDetectionService.ts:65` — `haversineMeters`: same R, identical formula. **IDENTICAL.**
+- `services/mapboxImagery.ts:88` — `haversineMeters`: same R, identical formula. **IDENTICAL.**
+- `services/smartVisionOverlay.ts:178` — `haversineYards`: same R, formula uses `c = 2 * atan2(sqrt(h), sqrt(1-h))` instead of canonical `2 * asin(sqrt(h))`. **Mathematically identical** — both yield the same angle whose sin is sqrt(h); atan2 is slightly more numerically stable at antipodes but the difference is below float precision for any golf-course distance. Local `METERS_TO_YARDS = 1.09361` is a rounded reciprocal of canonical `METERS_PER_YARD = 0.9144` (max ~0.001y drift at 300y, invisible).
+
+No formula differed in a way that mattered. Added a sibling `haversineMeters()` export to the canonical so meters-returning callers don't round-trip through yards. All four re-impls replaced with imports. `R_METERS` constant kept locally in `smartVisionOverlay.ts` because it's also used by the local-tangent-plane projection (separate math from haversine — left alone).
+
+**Merge B — `_voiceTuning` shared module.** Diff confirmed `api/voice.ts` and `api/kevin.ts` held byte-identical `ELEVEN_VOICES_BY_PERSONA` + `ELEVEN_SETTINGS_BY_PERSONA` maps. Extracted to new [api/_voiceTuning.ts](../api/_voiceTuning.ts) (leading-underscore by Vercel convention so it's a private helper, not a route). Both endpoints now import from it. No behavior change to any persona's voice — same IDs, same settings, same `KEVIN` fallback path. Single drift-resistant source for the next tuning pass.
+
+**Merge C — watch-connected state: 2 stores → 1.** Canonical = `store/watchStore.ts` (`isConnected`). `store/settingsStore.ts` had a sibling `watchConnected: boolean` + `setWatchConnected` setter that was a manual-toggle parallel of the same concept. Removed from `settingsStore`. Repointed:
+- `app/cage/index.tsx:57` now reads `useWatchStore((s) => s.isConnected)`.
+- `app/settings.tsx` ditto for the disabled "Galaxy Watch · Not wired" display row; dropped the unused `setWatchConnected` import (the disabled Switch was already wired to `() => {}`).
+- `settingsStore.ts` — field, type, action, and initial value all removed.
+- No persistence migration needed: the existing comment at `settingsStore.ts:515` confirms `watchConnected` was never in `partialize`, so no stale persisted value to scrub.
+
+After this, every consumer (cage-mode, cage/summary, settings, cage/index) reads watch state from the single dedicated `watchStore` — ready for the real native SDK to flip `setConnected(true)` from one place when it lands.
+
+**Build gates:** `tsc --noEmit` clean. `expo lint` went from 5 errors + 12 warnings → 5 errors + 11 warnings (an unused-var pickup from dropping `setWatchConnected` from settings.tsx). No new regressions.
+
+**Did NOT change behavior anywhere** — these are pure dedupes. Sprint Map P1-4 (haversine), P1-5 (watch state), and P1-6 (voice tuning) all closed.
+
 ### Fix F — Galaxy Watch IMU in Cage Mode (diagnosis: unbuilt, not broken)
 
 **Diagnosis: (a) — not built.** The Galaxy Watch IMU integration is scaffold + math + test sim only. No real SDK wired.

@@ -2,6 +2,13 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
+// 2026-05-21 — Consolidation 1 / Merge B: shared persona voice tuning.
+// Same maps that api/voice.ts uses; single source of truth in
+// api/_voiceTuning.ts.
+import {
+  ELEVEN_VOICES_BY_PERSONA,
+  ELEVEN_SETTINGS_BY_PERSONA,
+} from './_voiceTuning';
 import { getCaddieName, getCharacterSpec } from '../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
@@ -942,18 +949,6 @@ ${onCourseContextBlock}${baseMessage}`
     // fallback.
     const personaKey =
       typeof personaInput === 'string' ? personaInput.toLowerCase() : '';
-    const ELEVEN_VOICES_BY_PERSONA: Record<string, string> = {
-      kevin:  '1fz2mW1imKTf5Ryjk5su',
-      serena: 'RGb96Dcl0k5eVje8EBch',
-      harry:  '5Jfxy1x2Df4No3LQBZXE',
-      tank:   'gQOVuaEi4cxS2vkZAK3A',
-    };
-    const ELEVEN_SETTINGS_BY_PERSONA: Record<string, { stability: number; similarity_boost: number; style: number; use_speaker_boost: boolean }> = {
-      kevin:  { stability: 0.45, similarity_boost: 0.75, style: 0.55, use_speaker_boost: true },
-      serena: { stability: 0.50, similarity_boost: 0.75, style: 0.50, use_speaker_boost: true },
-      tank:   { stability: 0.35, similarity_boost: 0.70, style: 0.70, use_speaker_boost: true },
-      harry:  { stability: 0.65, similarity_boost: 0.80, style: 0.30, use_speaker_boost: true },
-    };
     const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY;
 
     let audioBase64: string | null = null;

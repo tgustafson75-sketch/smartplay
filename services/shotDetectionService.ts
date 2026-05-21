@@ -2,6 +2,7 @@ import * as Location from 'expo-location';
 import { startGpsManager, subscribe as subscribeGps, stopGpsManager } from './gpsManager';
 import { startSmartFinderGpsTracking, stopSmartFinderGpsTracking } from './smartFinderService';
 import { ownerSentinel } from './ownerSentinel';
+import { haversineMeters } from '../utils/geoDistance';
 
 export interface GPSSample {
   lat: number;
@@ -62,16 +63,8 @@ const WALK_OVERRIDES: Partial<DetectorConfig> = {
 
 const METERS_PER_YARD = 0.9144;
 
-function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
-  const R = 6371000;
-  const toRad = (deg: number) => deg * Math.PI / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const lat1 = toRad(a.lat);
-  const lat2 = toRad(b.lat);
-  const x = Math.sin(dLat / 2) ** 2 + Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
-  return 2 * R * Math.asin(Math.sqrt(x));
-}
+// 2026-05-21 — Consolidation 1: local haversineMeters removed in favor of
+// utils/geoDistance.ts canonical (mathematically identical formula).
 
 class ShotDetector {
   private config: DetectorConfig = DEFAULT_CONFIG;

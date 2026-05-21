@@ -14,6 +14,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
+// 2026-05-21 — Consolidation 1 / Merge C: watch-connected display
+// reads from the dedicated watchStore so all three call sites
+// (cage-mode, cage/summary, settings) share one source of truth.
+import { useWatchStore } from '../store/watchStore';
 import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
 import { useToastStore } from '../store/toastStore';
 import { useTrustLevelStore, TRUST_LEVEL_META, TRUST_LEVEL_SLIDER_ORDER } from '../store/trustLevelStore';
@@ -43,7 +47,6 @@ export default function Settings() {
     responseMode,
     castMode,
     highContrast,
-    watchConnected,
     autoListenEnabled,
     cartMode,
     skip_briefings,
@@ -79,7 +82,6 @@ export default function Settings() {
     setPersonaIntensity,
     tankSoftIntro,
     setTankSoftIntro,
-    setWatchConnected,
     setAutoListenEnabled,
     setCartMode,
     setSkipBriefings,
@@ -88,6 +90,11 @@ export default function Settings() {
     setThemePreference,
     setFillerEnabled,
   } = useSettingsStore();
+
+  // Watch-connected status for the disabled "Galaxy Watch · Not wired"
+  // display row. Reads from the dedicated watchStore — stays false
+  // until the native SDK lands and flips it.
+  const watchConnected = useWatchStore((s) => s.isConnected);
 
   // 4-persona caddie selector — driven by caddiePersonality (the source
   // of truth). voiceGender is auto-synced inside the store setter.

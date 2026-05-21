@@ -19,6 +19,7 @@
 
 import type { ShotResult } from '../store/roundStore';
 import type { HoleGeometry } from './courseGeometryService';
+import { haversineYards } from '../utils/geoDistance';
 
 export type LatLng = { lat: number; lng: number };
 
@@ -172,18 +173,16 @@ export function shotsForHole(allShots: ShotResult[], holeNumber: number): ShotRe
 
 // ─── Math helpers (pure) ──────────────────────────────────────────────────
 
-const R_METERS = 6371000;
-const METERS_TO_YARDS = 1.09361;
+// 2026-05-21 — Consolidation 1: local haversineYards removed in favor of
+// utils/geoDistance.ts canonical. Prior local used atan2(sqrt(h), sqrt(1-h))
+// vs canonical asin(sqrt(h)) — mathematically identical within float
+// precision for any practical golf-course distance, and the canonical
+// METERS_PER_YARD = 0.9144 is the exact rational definition while the
+// local 1.09361 was a rounded reciprocal (max ~0.001y drift at 300y,
+// invisible).
 
-function haversineYards(a: LatLng, b: LatLng): number {
-  const φ1 = a.lat * Math.PI / 180;
-  const φ2 = b.lat * Math.PI / 180;
-  const Δφ = (b.lat - a.lat) * Math.PI / 180;
-  const Δλ = (b.lng - a.lng) * Math.PI / 180;
-  const h = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-  return R_METERS * c * METERS_TO_YARDS;
-}
+// Used by the local-tangent-plane projection below (NOT haversine).
+const R_METERS = 6371000;
 
 /**
  * Project a [lat, lng] onto pixel coordinates within a static-tile image

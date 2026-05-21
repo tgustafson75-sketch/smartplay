@@ -9,8 +9,8 @@ function toRad(deg: number): number {
   return (deg * Math.PI) / 180;
 }
 
-/** Haversine distance between two GPS points in yards. */
-export function haversineYards(loc1: ShotLocation, loc2: ShotLocation): number {
+/** Haversine distance between two GPS points in meters. */
+export function haversineMeters(loc1: ShotLocation, loc2: ShotLocation): number {
   const dLat = toRad(loc2.lat - loc1.lat);
   const dLng = toRad(loc2.lng - loc1.lng);
   const lat1 = toRad(loc1.lat);
@@ -18,8 +18,12 @@ export function haversineYards(loc1: ShotLocation, loc2: ShotLocation): number {
   const x =
     Math.sin(dLat / 2) ** 2 +
     Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
-  const meters = 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(x));
-  return meters / METERS_PER_YARD;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(x));
+}
+
+/** Haversine distance between two GPS points in yards. */
+export function haversineYards(loc1: ShotLocation, loc2: ShotLocation): number {
+  return haversineMeters(loc1, loc2) / METERS_PER_YARD;
 }
 
 /** Distance from a shot's start_location to its end_location, in yards. Null if either missing. */

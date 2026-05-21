@@ -83,7 +83,12 @@ interface SettingsState {
   // accepted Tank for at least one full session.
   tankSoftIntro: boolean;
 
-  watchConnected: boolean;
+  // 2026-05-21 — Consolidation 1 / Merge C: watchConnected moved to
+  // the dedicated watchStore (store/watchStore.ts) so the
+  // Settings display, Cage Mode result card, and the upcoming
+  // native SDK all share one source of truth. Removed from this
+  // store. See also the migrate() block below which strips the
+  // field on hydration of persisted state from prior versions.
   glassesConnected: boolean;
   autoListenEnabled: boolean;
   skip_briefings: boolean;
@@ -170,7 +175,7 @@ interface SettingsState {
   setSimpleBriefing: (v: boolean) => void;
   setPersonaIntensity: (p: Persona, v: number) => void;
   setTankSoftIntro: (v: boolean) => void;
-  setWatchConnected: (v: boolean) => void;
+  // setWatchConnected moved to watchStore.setConnected (Consolidation 1 / Merge C).
   setGlassesConnected: (v: boolean) => void;
   setAutoListenEnabled: (v: boolean) => void;
   setCartMode: (v: boolean) => void;
@@ -227,7 +232,6 @@ export const useSettingsStore = create<SettingsState>()(
       // back active is a single-line edit.
       personaIntensity: { kevin: 100, serena: 100, harry: 90, tank: 70 },
       tankSoftIntro: true,
-      watchConnected: false,
       glassesConnected: false,
       autoListenEnabled: false,
       cartMode: false,
@@ -347,7 +351,6 @@ export const useSettingsStore = create<SettingsState>()(
         },
       })),
       setTankSoftIntro: (v) => set({ tankSoftIntro: v }),
-      setWatchConnected: (v) => set({ watchConnected: v }),
       setGlassesConnected: (v) => set({ glassesConnected: v }),
       setAutoListenEnabled: (v) => set({ autoListenEnabled: v }),
       setCartMode: (v) => set({ cartMode: v }),

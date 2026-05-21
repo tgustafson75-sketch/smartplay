@@ -12,7 +12,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useCageStore } from '../../store/cageStore';
-import { useSettingsStore } from '../../store/settingsStore';
+// 2026-05-21 — Consolidation 1 / Merge C: watch-connected state moved
+// from settingsStore to watchStore (the dedicated watch store) so
+// there's one source of truth when the native SDK lands.
+import { useWatchStore } from '../../store/watchStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
 import AppIcon from '../../components/AppIcon';
@@ -54,7 +57,7 @@ export default function CageIndex() {
   const { startSession, cameraAlignment, sessionHistory, setDistanceCalibration } = useCageStore();
   const [calibrationOpen, setCalibrationOpen] = useState(false);
   const [calibrationInput, setCalibrationInput] = useState('');
-  const { watchConnected } = useSettingsStore();
+  const watchConnected = useWatchStore((s) => s.isConnected);
   const { confidenceByClub } = useRelationshipStore();
 
   const [selectedClub, setSelectedClub] = useState('7I');
