@@ -60,6 +60,7 @@ In dependency order — see [audit-420-SPRINT-MAP.md](audit-420-SPRINT-MAP.md) f
 5. **P0-5** — Write `speaker_id: 'self'` default in 4 paths so multi-player migration doesn't need a data fixup later. Effort: M.
 6. ~~**P0-7** — Gate debug routes for non-owners.~~ **DONE Day 1 / Fix 3.** Single central `usePathname()` watcher in `app/_layout.tsx` redirects non-owners away from 11 gated routes.
 7. ~~**P1-3** — Collapse 3 GPS-fix caches to one.~~ **DONE Day 1 / Fix 4.** `gpsManager` is the single owner; smartFinderService and shotLocationService became thin readers. Sim, mark, and round-end write paths all flow through gpsManager. Stops the yardage-drift / 629,441y class of bugs at the source.
+8. ~~**Day 1 / Fix 5** — Cockpit-mode SHOTS cell now ticks during the hole.~~ Was only watching `scores` (final hole map); harness shots never wrote that until completion. Now derives a running stroke count from `shots` mirroring the data-bar's STROKE calc.
 
 Then P1 consolidation (5 swing-capture surfaces → 2; 5 haversines → 1; 3 GPS-fix caches → 1; etc.) and P2 polish.
 

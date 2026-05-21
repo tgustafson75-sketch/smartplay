@@ -73,6 +73,12 @@ export default function CockpitCaddieScreen({
   const { colors } = useTheme();
 
   // Round data — useShallow keeps re-renders scoped to keys we actually read.
+  // 2026-05-20 — Day 1 / Fix 5: added `shots` so SHOTS can tick during
+  // the hole. Previously cockpit only watched `scores`, which is the
+  // final hole score map. Harness-logged shots never wrote `scores`
+  // until hole completion, so the SHOTS cell stayed at "—" the whole
+  // hole. The data-bar uses the same per-shot count for STROKE; this
+  // brings cockpit to parity.
   const {
     isRoundActive,
     currentHole,
@@ -80,6 +86,7 @@ export default function CockpitCaddieScreen({
     courseHoles,
     scores,
     putts,
+    shots,
     currentYardage,
   } = useRoundStore(
     useShallow((s) => ({
@@ -89,6 +96,7 @@ export default function CockpitCaddieScreen({
       courseHoles: s.courseHoles,
       scores: s.scores,
       putts: s.putts,
+      shots: s.shots,
       currentYardage: s.currentYardage,
     })),
   );
@@ -132,7 +140,21 @@ export default function CockpitCaddieScreen({
   const holeData = courseHoles.find((h) => h.hole === currentHole);
   const par = holeData?.par ?? 4;
   const baseYardage = holeData?.distance ?? null;
-  const holeShots = scores[currentHole];
+  // 2026-05-20 — Day 1 / Fix 5: cockpit SHOTS cell value. Manual-edit
+  // wins (scores[currentHole] is set when the user taps +/- or the
+  // hole completes); otherwise derive a running count from the
+  // logged shots + their penalty strokes. Mirrors the calc the
+  // data-bar uses for STROKE so cockpit ticks as the harness or
+  // conversational logger writes shots throughout the hole instead
+  // of staying at "—" until hole completion.
+  const loggedHoleShots = shots.filter((s) => s.hole === currentHole);
+  const runningStrokeCount =
+    loggedHoleShots.length > 0
+      ? loggedHoleShots.length +
+        loggedHoleShots.reduce((acc, s) => acc + (s.penalty_strokes ?? 0), 0)
+      : 0;
+  const holeShots: number | undefined =
+    scores[currentHole] ?? (runningStrokeCount > 0 ? runningStrokeCount : undefined);
   const holePutts = putts[currentHole];
 
   const handleStepperHole = (next: number) => {
