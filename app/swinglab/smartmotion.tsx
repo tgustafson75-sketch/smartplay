@@ -45,6 +45,9 @@ import { useSettingsStore } from '../../store/settingsStore';
 // can reach the caddie from SmartMotion the same way they can from the
 // Caddie tab and Cage Mode. Same `listeningSession.toggle()` pipeline.
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
+// 2026-05-21 — Fix D: 3-line caddie quick-start intro shown the first
+// few opens (per-slug counter in settingsStore). Skippable.
+import { CaddieIntroSheet, useCaddieIntro } from '../../components/caddie/CaddieIntroSheet';
 
 type Angle = 'down_the_line' | 'face_on';
 // 2026-05-20 — Shot Tracer + Body Mechanics are overlays on the same
@@ -144,8 +147,15 @@ export default function SmartMotion() {
     [analysis, caddiePersonality, validity],
   );
 
+  // 2026-05-21 — Fix D: caddie quick-start intro. Only show pre-record
+  // (no clipUri) — once a clip is on screen the user obviously knows
+  // what to do. The hook checks the introOpens counter and gates
+  // visibility for the first 3 opens.
+  const introState = useCaddieIntro('smartmotion', !clipUri);
+
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
+      <CaddieIntroSheet slug="smartmotion" visible={introState.visible} onDismiss={introState.dismiss} />
       <View style={styles.header}>
         {/* 2026-05-21 — Fix A: tap-to-talk caddie badge top-left.
             Same canonical pattern as Cage Mode + every tab's

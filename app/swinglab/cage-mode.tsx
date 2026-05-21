@@ -82,6 +82,9 @@ import { useCageCalibrationStore } from '../../store/cageCalibrationStore';
 // 2026-05-21 — Fix A: shared CaddieMicBadge for consistent
 // tap-to-talk affordance (ring + halo + mic-icon overlay).
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
+// 2026-05-21 — Fix D: 3-line caddie quick-start intro shown the first
+// few opens of Cage Mode (per-slug counter in settingsStore). Skippable.
+import { CaddieIntroSheet, useCaddieIntro } from '../../components/caddie/CaddieIntroSheet';
 
 type Phase =
   | 'SETUP'
@@ -489,6 +492,13 @@ export default function CageModeScreen() {
     void toggleListening();
   }, []);
 
+  // 2026-05-21 — Fix D: caddie quick-start intro. Only gates on the
+  // initial SETUP phase — once the user is past the first phase
+  // transition (CHECKING / READY / RECORDING / RESULT) they're
+  // already moving and don't need the orientation. Auto-suppresses
+  // after a few opens via the per-slug counter in settingsStore.
+  const introState = useCaddieIntro('cage_mode', phase === 'SETUP');
+
   // ── Caption pulse on phase change ───────────────────────────────────
   const captionFade = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -554,6 +564,7 @@ export default function CageModeScreen() {
 
   return (
     <View style={styles.container}>
+      <CaddieIntroSheet slug="cage_mode" visible={introState.visible} onDismiss={introState.dismiss} />
       {cameraVisible && (
         <CameraView
           ref={cameraRef}

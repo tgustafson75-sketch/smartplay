@@ -106,6 +106,12 @@ interface SettingsState {
   distance_unit: 'yards' | 'meters';
 
   tutorialsSeen: Record<string, boolean>;
+  // 2026-05-21 — Fix D: per-screen intro open counter. Used to
+  // auto-suppress the SmartMotion / Cage Mode 3-line caddie intro
+  // after the user has seen it a few times. Keyed by intro slug
+  // (e.g. 'smartmotion', 'cage_mode'). Persisted via the standard
+  // settings rehydration path so opens carry across launches.
+  introOpens: Record<string, number>;
   fillerEnabled: boolean;
   // Phase O — earbud tap-to-talk control
   earbudTapToTalk: boolean;
@@ -174,6 +180,7 @@ interface SettingsState {
   setProactiveKevinEnabled: (v: boolean) => void;
   setDistanceUnit: (u: 'yards' | 'meters') => void;
   markTutorialSeen: (key: string) => void;
+  incrementIntroOpen: (key: string) => void;
   resetTutorials: () => void;
   setFillerEnabled: (v: boolean) => void;
   setEarbudTapToTalk: (v: boolean) => void;
@@ -230,6 +237,7 @@ export const useSettingsStore = create<SettingsState>()(
       proactive_kevin_enabled: true,
       distance_unit: 'yards' as const,
       tutorialsSeen: {},
+      introOpens: {},
       fillerEnabled: true,
       earbudTapToTalk: true,
       voiceOnPhoneSpeaker: true,
@@ -350,6 +358,10 @@ export const useSettingsStore = create<SettingsState>()(
       setDistanceUnit: (u) => set({ distance_unit: u }),
       markTutorialSeen: (key) =>
         set(s => ({ tutorialsSeen: { ...s.tutorialsSeen, [key]: true } })),
+      incrementIntroOpen: (key) =>
+        set(s => ({
+          introOpens: { ...s.introOpens, [key]: (s.introOpens?.[key] ?? 0) + 1 },
+        })),
       resetTutorials: () => set({ tutorialsSeen: {} }),
       setFillerEnabled: (v) => set({ fillerEnabled: v }),
       setEarbudTapToTalk: (v) => set({ earbudTapToTalk: v }),
@@ -488,6 +500,7 @@ export const useSettingsStore = create<SettingsState>()(
         proactive_kevin_enabled: s.proactive_kevin_enabled,
         distance_unit: s.distance_unit,
         tutorialsSeen: s.tutorialsSeen,
+        introOpens: s.introOpens,
         fillerEnabled: s.fillerEnabled,
         earbudTapToTalk: s.earbudTapToTalk,
         voiceOnPhoneSpeaker: s.voiceOnPhoneSpeaker,

@@ -14,6 +14,26 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Fix D — Caddie 3-line quick-start intro on SmartMotion + Cage Mode
+
+**Fix shipped:**
+- New shared [components/caddie/CaddieIntroSheet.tsx](../components/caddie/CaddieIntroSheet.tsx) — Modal overlay with three caddie-voice lines + a single "Got it" button. Tap outside the card also dismisses. Speaks the lines via the existing `voiceService.speak()` with `{ userInitiated: true }` (passes L1 Quiet — the user explicitly opened the screen). Persona-tuned lines for all four caddies (Kevin / Serena / Tank / Harry).
+- Persisted counter in `settingsStore`: new `introOpens: Record<string, number>` + `incrementIntroOpen(key)` action. Added to the persistence partialize so opens carry across launches. **Auto-suppress rule:** show for the first 3 opens of each slug (`smartmotion`, `cage_mode`), silent after. Dismissing increments the counter; mounting alone does not (so a partial open doesn't burn the count).
+- `useCaddieIntro(slug, gate)` hook encapsulates the read + dismiss logic. Returns `{ visible, dismiss }` for the screen to wire to the sheet.
+- [app/swinglab/smartmotion.tsx](../app/swinglab/smartmotion.tsx) — wires the intro behind `gate = !clipUri` so it only shows on the pre-record state (NoClipHero). Once a clip is on screen the user obviously knows what to do.
+- [app/swinglab/cage-mode.tsx](../app/swinglab/cage-mode.tsx) — wires the intro behind `gate = phase === 'SETUP'`. Once the user has moved past initial setup (CHECKING / READY / RECORDING / RESULT) the orientation is no longer useful.
+
+**Sample lines (Kevin, SmartMotion):**
+> A few steps back. Pick down-the-line or face-on — your call.
+> Tell me when to record. Tap stop when you're done.
+> I'll break down what I saw the moment it's ready.
+
+Each persona has its own tone — Tank is clipped imperatives, Serena precise-instructor, Harry warm-partnership, Kevin balanced/decisive.
+
+**Did NOT touch:** Phase A mic badge, Phase B angle toggle, Phase 418 validation gate, analysis math. Pure additive intro overlay. The voice "how does this work" re-trigger from the badge is **deferred** — would need a new voice intent + handler; out of Fix D's scope.
+
+**Build gates:** `tsc --noEmit` clean. `expo lint` at the Phase 420 baseline (5 errors + 12 warnings — all pre-existing).
+
 ### Fix C — Skeleton overlay alignment + Z Fold aspect-ratio remap
 
 **Coordinate-space mismatch in one sentence:** the skeleton SVG filled the videoFrame container (`StyleSheet.absoluteFill`), but `<Video resizeMode={ResizeMode.COVER}>` scales-and-crops the source clip inside that container — so the skeleton's normalized percentages tracked the container box while the actual body pixels lived in a centered subrect whose offset depended on `(container aspect) vs (source video aspect)`, and Z Fold open/close changed the container dimensions without remapping the subrect.
