@@ -14,6 +14,48 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Day 2 close — diagnoses run, open items, post-launch backlog
+
+**Detailed per-fix entries are below** (Fix I → Fix H → Fix G → Consolidation 5 Part 2 → Consolidation 5 Part 1). This block captures the end-of-day work that didn't ship code: two no-code diagnoses (Fix J, Fix K), open items carried into Day 3, and the post-launch backlog that accumulated during today's "are we sure this isn't a bug?" passes.
+
+#### Fix J (diagnosis only) — SmartMotion analysis is real and swing-specific, not generic
+
+Tim's concern: SmartMotion gives nearly identical analysis on every swing — is the text analysis as fake as the known-stub skeleton overlay? Diagnosis below the read.
+
+- **Real frames reach the model every call.** `extractKeyFrames()` ([services/poseDetection.ts:153-228](../services/poseDetection.ts#L153)) uses `expo-video-thumbnails` + `expo-image-manipulator` to extract 5 base64 JPEGs from the specific clip at fractions `[0.08, 0.40, 0.60, 0.75, 0.88]`. They're attached as Anthropic `image` content blocks to Sonnet 4-6 in [api/swing-analysis.ts:286-296](../api/swing-analysis.ts#L286). No mock, no thumbnail substitute, no single-still shortcut.
+- **The system prompt is highly specific** ([api/swing-analysis.ts:133-187](../api/swing-analysis.ts#L133)): Phase 418 validity gate (no person → `valid_swing: false` → downstream-forced `detected_issue='none'`), 10-canonical-issue catalog, severity scale, confidence scale, `fault_frame_index` (frame the model picks as most diagnostic), `caddie_name` voice cadence per persona, `player_context` handicap-tier register, `dominant_miss` priority bias, camera-angle awareness (down-the-line vs face-on diagnoses different faults), per-language observation routing.
+- **No client-side cache.** SmartMotion `useEffect` at [smartmotion.tsx:99-141](../app/swinglab/smartmotion.tsx#L99) keys on `[clipUri]`; each clip triggers a fresh call.
+- **No stub feeding the analysis.** `STUB_SKELETON_JOINTS` is the visual overlay only ([smartmotion.tsx:1163](../app/swinglab/smartmotion.tsx#L1163)) — does not touch the analysis text path.
+- **Tentative fallback can't masquerade as a real fault.** `analyzeSwingTentative` ([poseDetection.ts:384+](../services/poseDetection.ts#L384)) is forced to `detected_issue='none'`, `severity='none'`, `confidence='low'` ([api/swing-analysis.ts:364-369](../api/swing-analysis.ts#L364)). Tentative only fires from the upload-pipeline path, not from SmartMotion's direct call.
+- **Verdict:** real-and-specific. Tim's "samey" reads = consistent swing + identical `player_context` + temperature-0.2 model on visually-similar 5-frame inputs → similar text by construction, not by fabrication. **One unconfirmed real-but-shallow path** to check on device: partial frame-extraction failure. Smoking-gun log: `adb logcat | grep "V6-DIAG.*STAGE 2"` and look at `successful: N` vs `attempted: 5`. If consistently 5 → close as not-a-bug. If <5 → real-but-shallow extraction fix worth doing.
+
+#### Fix K (diagnosis only) — SmartMotion timeline showing "only 2 points" is almost certainly display formatting
+
+Tim's concern: timeline pills only show ~2s and ~3s, not the expected 5 keyframes (0.08/0.40/0.60/0.75/0.88).
+
+- **The timeline pills are "DETECTED MOMENTS"** on the swing-detail screen ([app/swinglab/swing/[swing_id].tsx:444-461](../app/swinglab/swing/%5Bswing_id%5D.tsx#L444)). Source: `shot.detected_issue_timestamps_sec`, persisted 1-to-1 from `r.frame_timestamps_sec` ([videoUpload.ts:299](../services/videoUpload.ts#L299), [cage/summary.tsx:126](../app/cage/summary.tsx#L126)) — no filtering. **One pill per extracted frame.**
+- **Label format collapses sub-second spread.** Render code at line 455: `0:${Math.floor(ts).toString().padStart(2, '0')}`. On a 3-4 s clip the five fraction-spaced frames land at e.g. `0.24 / 1.20 / 1.80 / 2.25 / 2.64s` — `Math.floor` produces `0:00 0:01 0:01 0:02 0:02` → 5 pills, 3 visible labels. On a bounded multi-swing window of ~2s starting at 2s, timestamps cluster at `2.16 / 2.80 / 3.20 / 3.50 / 3.76` → 5 pills, **exactly 2 distinct labels: "0:02" and "0:03"** — matches Tim's report precisely.
+- **By-design fraction clustering.** Three of the five fractions (`0.60 / 0.75 / 0.88`) target the downswing-to-impact window ([poseDetection.ts:100-108 comment](../services/poseDetection.ts#L100)); on a short clip they all fall in a 1-2 second range.
+- **Verdict:** most likely (b) display-only collapse + (c) short-clip by-design clustering, both visible at 1-second floor precision. Five frames likely extract fine. **Definitive check is the same log as Fix J** (`STAGE 2 — extractKeyFrames done { successful: N }`) — if 5, closes both J and K as not-bugs.
+- **Optional cosmetic polish (post-launch):** render labels at 0.1s precision (`(ts).toFixed(1)s`) instead of `0:${Math.floor}`. Visually distinguishes all 5 pills on short clips. No analysis change.
+
+#### Open / carried into Day 3
+
+- **On-device verify pending — Fix I caddie honest-fallback.** Force a failure (airplane mode mid-query, or a Spanish query during a slow Vercel cold start) and confirm the caddie SPEAKS the honest "having trouble" line + vibrates instead of going silent. This is the key tester-trust verification before the EAS tester build.
+- **On-device check — frame-extraction log.** `adb logcat | grep "V6-DIAG.*STAGE 2"` while playing back a swing → look at `successful: N` per call. If consistently 5, close Fix J and Fix K as not-bugs. If <5, the partial-extraction path is a real-but-shallow fix worth a small Day 3 patch (likely improving `probeDurationMs` to use a finer staircase or just always use the bounded `ImageManipulator.getInfo` shape).
+- **EAS tester build — not yet kicked.** Gated on the Fix I device-verify above.
+- **Tonight (Day 2 → Day 3 bridge):** real round at Menifee — round path is solid post-Consolidation work; this is the real-world Doze pocket-test + cart-transition checks. Daughter capturing 5-angle hole photos (raw collection, labeled convention) in parallel.
+- **This week before NH trip:** Maplewood + Pembroke Pines have no green geometry. Plan: use Consolidation 5 Part 2's surfaced "Mark this green" CTA to seed per-hole overrides during round 1. Persistence (via `courseGreenOverrides.ts` AsyncStorage) inherits across rounds — round 2 at Maplewood gets live yardages without re-marking.
+
+#### Post-launch candidates logged today (NOT sprint scope, captured here so they don't get lost)
+
+- **Cage Mode CV bullseye + dedicated `/api/cage/analyze` backend** — the unbuilt "Prompt 2" that Fix G dropped. Bullseye-aware scoring + multi-strike features.json would round out Cage Mode to its originally-spec'd six capabilities. Today: it ships honest with five real capabilities + framing guide.
+- **Pose-analysis biomechanics enrichment** — needs `POSE_API_KEY` + `POSE_API_HOST` env vars in Vercel + an active RapidAPI subscription. Fix H Option B kept the client + endpoint trivially reversible; flipping the env vars on turns the Biomechanics card live.
+- **Second-swing comparison feature in SmartMotion** — Fix J confirmed the analysis IS real and swing-specific, so a side-by-side comparison would surface genuine differences. Out of sprint scope per Tim's "no new features" rule; logged for post-launch.
+- **Club-distance-aware synthetic round** (harness v2) — logged earlier in the sprint.
+- **Real MoveNet pose tracking + Galaxy Watch IMU** — post-sprint EAS native module builds, gated on the beta wearables SDK access (per memory entry `beta-wearables-sdk-access.md`).
+- **Cosmetic Fix K polish** — 0.1s-precision pill labels on the swing-detail "DETECTED MOMENTS" row. Trivial; bundled with any future swing-detail cleanup pass.
+
 ### Fix I (A + B + C) — Honest caddie failure handling + 30s Vercel headroom
 
 **Diagnosis verdict before code change:** the on-device "caddie sometimes gives no response, especially in Spanish" report was **two separate problems**:
