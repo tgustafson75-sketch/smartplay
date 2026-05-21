@@ -14,6 +14,24 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Skeleton topology — explicit bone-edge list, circle head, wrist nodes
+
+**Report (3 sentences):**
+1. Connection pattern was the bug — TWO shared-apex problems: head (joint 0) connected directly to BOTH shoulders via edges `[0,1]` and `[0,2]` (triangle apex on top), AND both hips connected to a single shared "ankles" joint (index 7) via `[5,7]` and `[6,7]` (kite legs converging to one point at the ball).
+2. Keypoint schema was the 8-joint custom STUB (not MoveNet/MediaPipe); now rewritten to 13 joints matching the **MoveNet-17 subset** we'll receive when the TFJS / MoveNet integration lands (nose + left/right shoulder, elbow, wrist, hip, knee, ankle) — same indices, same labels, so real keypoints drop in without renaming.
+3. Confirmed: head now renders as an outlined circle (radius derived from shoulder-width × 0.275, clamped 8–36 px), wrists are explicit joint nodes at indices 5/6, every bone is its own `<Line>` — no shared apex.
+
+**Fix shipped (`app/swinglab/smartmotion.tsx`):**
+- Replaced `STUB_SKELETON` (joints + connections) with `STUB_SKELETON_JOINTS` (13 named joints in MoveNet order), `STUB_SKELETON_BONES` (12 explicit bone edges — torso 4 + arms 4 + legs 4), and `STUB_SKELETON_NODE_INDICES` (12 non-head joints rendered as dots).
+- Extracted a new `<StubSkeletonOverlay>` component. All sizes derive from `videoRect.width` / `height`: `headRadius = clamp(shoulderWidth × 0.55 / 2, [8, 36])`, `jointRadius = clamp(bodyScale × 0.011, [3, 7])`, `boneStrokeWidth = clamp(bodyScale × 0.005, [1.5, 3.5])`. No hardcoded px.
+- Neck line drawn explicitly from shoulder-midpoint to the BOTTOM of the head circle (`head.y + headRadiusYPct`) so the head reads as a head on a neck, not an apex.
+- Render gate now requires `videoRect` (overlay hides for one frame while natural-size + layout settle, then snaps in — avoids hardcoded-px fallback that Tim explicitly banned).
+- Existing vertical alignment reference line preserved as-is.
+
+**Did NOT touch:** coordinate mapping (videoRect math from Fix C), Z Fold remap, useWindowDimensions wiring, Phase 418 validation gate, analysis math, shot tracer overlay. Topology-only.
+
+**Build gates:** `tsc --noEmit` clean. `expo lint` at the Phase 420 baseline (5 errors + 12 warnings — all pre-existing).
+
 ### Fix E — Language (Spanish) applied to caddie TTS + analysis
 
 **Diagnosis in one paragraph:** the setting persists correctly. The READ path was sound — every `/api/kevin` fetch site (`hooks/useKevin.ts`, `hooks/useVoiceCaddie.ts`, `services/listeningSession.ts` × 2) sends `language` from the settings store; `/api/kevin` reads it and injects a strict "Respond ONLY in Spanish" rule into the system prompt (lines 462-465). The LLM TEXT comes back in Spanish. **The break was TTS:** [api/kevin.ts:976](../api/kevin.ts#L976) hardcoded `model_id: 'eleven_turbo_v2'` — the English-only ElevenLabs model — regardless of language. Spanish text fed to an English-locale TTS model produces English-cadence pronunciation. `/api/voice` already does this correctly (`language === 'en' ? 'eleven_turbo_v2' : 'eleven_multilingual_v2'`); `/api/kevin` was never updated to mirror it when it gained persona-aware TTS in Fix A (`a63d1b3`). Voice IDs are language-agnostic — only the model id needed to flip.

@@ -524,30 +524,8 @@ function VisualCard({
             yet (first frame) — the user sees a brief container-relative
             placement that snaps correct as soon as onReadyForDisplay
             fires. */}
-        {clipUri && overlays.body_mechanics && overlaysGated && (
-          <Svg
-            style={
-              videoRect
-                ? { position: 'absolute', left: videoRect.left, top: videoRect.top, width: videoRect.width, height: videoRect.height }
-                : StyleSheet.absoluteFill
-            }
-            pointerEvents="none"
-          >
-            <Line x1="50%" y1="6%" x2="50%" y2="94%" stroke={colors.accent} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.55} />
-            {STUB_SKELETON.connections.map(([a, b], i) => (
-              <Line
-                key={i}
-                x1={`${STUB_SKELETON.joints[a].x}%`} y1={`${STUB_SKELETON.joints[a].y}%`}
-                x2={`${STUB_SKELETON.joints[b].x}%`} y2={`${STUB_SKELETON.joints[b].y}%`}
-                stroke={colors.accent}
-                strokeWidth={2.5}
-                opacity={0.7}
-              />
-            ))}
-            {STUB_SKELETON.joints.map((j, i) => (
-              <Circle key={i} cx={`${j.x}%`} cy={`${j.y}%`} r={4} fill={colors.accent} opacity={0.85} />
-            ))}
-          </Svg>
+        {clipUri && overlays.body_mechanics && overlaysGated && videoRect && (
+          <StubSkeletonOverlay videoRect={videoRect} accent={colors.accent} />
         )}
         {clipUri && overlays.shot_tracer && overlaysGated && (
           <Svg
@@ -1161,28 +1139,176 @@ const ISSUE_INSIGHTS: Record<string, IssueMap> = {
   },
 };
 
-// ─── Stub skeleton (replaced by real MoveNet keypoints next APK) ──────
+// ─── Stub skeleton overlay component ────────────────────────────────
+//
+// Renders the bone graph + head circle + joint nodes against the
+// already-computed videoRect (the displayed-video subrect inside the
+// videoFrame, per Fix C). All sizes derive from videoRect dimensions
+// so they hold up at any aspect ratio (Z Fold closed ~9:21, open
+// ~8:9, standard phone ~9:16) without hardcoding pixels.
 
-const STUB_SKELETON = {
-  joints: [
-    { x: 50, y: 12 },  // head 0
-    { x: 42, y: 28 },  // L shoulder 1
-    { x: 58, y: 28 },  // R shoulder 2
-    { x: 36, y: 44 },  // L elbow 3
-    { x: 64, y: 44 },  // R elbow 4
-    { x: 44, y: 56 },  // L hip 5
-    { x: 56, y: 56 },  // R hip 6
-    { x: 50, y: 80 },  // ankles 7
-  ],
-  connections: [
-    [0, 1], [0, 2],            // head → shoulders
-    [1, 2],                     // shoulder line
-    [1, 3], [2, 4],            // shoulders → elbows
-    [1, 5], [2, 6],            // shoulders → hips
-    [5, 6],                     // hip line
-    [5, 7], [6, 7],            // hips → ankles
-  ] as [number, number][],
-};
+function StubSkeletonOverlay({
+  videoRect,
+  accent,
+}: {
+  videoRect: { left: number; top: number; width: number; height: number };
+  accent: string;
+}) {
+  const { width: vW, height: vH } = videoRect;
+  const bodyScale = Math.min(vW, vH);
+
+  // Shoulder-width derived radius for the head circle. Clamped so it
+  // doesn't get microscopic on a small preview or absurd on full-screen.
+  const lShoulder = STUB_SKELETON_JOINTS[1];
+  const rShoulder = STUB_SKELETON_JOINTS[2];
+  const shoulderWidthPx = (Math.abs(rShoulder.x - lShoulder.x) / 100) * vW;
+  const headRadius = Math.max(8, Math.min(36, (shoulderWidthPx * 0.55) / 2));
+  const jointRadius = Math.max(3, Math.min(7, bodyScale * 0.011));
+  const boneStrokeWidth = Math.max(1.5, Math.min(3.5, bodyScale * 0.005));
+  const headStrokeWidth = boneStrokeWidth * 1.1;
+
+  // Neck line ends at the BOTTOM of the head circle so the head reads
+  // as a head on a neck instead of disappearing into the line. We
+  // express the circle radius as a percentage of vH to keep
+  // SVG-percentage math consistent.
+  const head = STUB_SKELETON_JOINTS[0];
+  const shoulderMidX = (lShoulder.x + rShoulder.x) / 2;
+  const shoulderMidY = (lShoulder.y + rShoulder.y) / 2;
+  const headRadiusYPct = (headRadius / vH) * 100;
+  const neckEndY = head.y + headRadiusYPct;
+
+  return (
+    <Svg
+      style={{
+        position: 'absolute',
+        left: videoRect.left,
+        top: videoRect.top,
+        width: vW,
+        height: vH,
+      }}
+      pointerEvents="none"
+    >
+      {/* Vertical alignment reference line — preserved from the
+          prior overlay, intentionally unchanged. */}
+      <Line
+        x1="50%" y1="6%" x2="50%" y2="94%"
+        stroke={accent} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.55}
+      />
+
+      {/* Bones — each edge is its own line. No shared apex, no closed
+          polygon. Two legs are two distinct chains. */}
+      {STUB_SKELETON_BONES.map(([a, b], i) => (
+        <Line
+          key={`bone-${i}`}
+          x1={`${STUB_SKELETON_JOINTS[a].x}%`}
+          y1={`${STUB_SKELETON_JOINTS[a].y}%`}
+          x2={`${STUB_SKELETON_JOINTS[b].x}%`}
+          y2={`${STUB_SKELETON_JOINTS[b].y}%`}
+          stroke={accent}
+          strokeWidth={boneStrokeWidth}
+          strokeLinecap="round"
+          opacity={0.88}
+        />
+      ))}
+
+      {/* Neck — shoulder midpoint to bottom of head circle. */}
+      <Line
+        x1={`${shoulderMidX}%`}
+        y1={`${shoulderMidY}%`}
+        x2={`${head.x}%`}
+        y2={`${neckEndY}%`}
+        stroke={accent}
+        strokeWidth={boneStrokeWidth}
+        strokeLinecap="round"
+        opacity={0.88}
+      />
+
+      {/* Head — outlined circle node, radius derived from shoulder
+          width. Stroked (not filled) so it reads as a head, not a blob. */}
+      <Circle
+        cx={`${head.x}%`}
+        cy={`${head.y}%`}
+        r={headRadius}
+        stroke={accent}
+        strokeWidth={headStrokeWidth}
+        fill="transparent"
+        opacity={0.95}
+      />
+
+      {/* Joint dots — every joint except head. Wrists explicitly
+          included as the club-hinge diagnostic point. */}
+      {STUB_SKELETON_NODE_INDICES.map((i) => (
+        <Circle
+          key={`joint-${i}`}
+          cx={`${STUB_SKELETON_JOINTS[i].x}%`}
+          cy={`${STUB_SKELETON_JOINTS[i].y}%`}
+          r={jointRadius}
+          fill={accent}
+          opacity={0.95}
+        />
+      ))}
+    </Svg>
+  );
+}
+
+// ─── Stub skeleton ───────────────────────────────────────────────────
+//
+// 2026-05-21 — Topology rewrite. The prior 8-joint stub had two
+// converging-apex bugs that read as a kite, not a skeleton:
+//   1. Both hips connected to a SINGLE "ankles" joint → legs drew as a
+//      triangle/kite down to one point at the ball.
+//   2. Head connected directly to both shoulders → triangle apex on
+//      top instead of a head node on a neck.
+//   Plus missing wrists (no club-hinge diagnostic point) and missing
+//   knees.
+//
+// Now: 13 joints matching the MoveNet-17 subset we'll receive when the
+// TFJS / MoveNet integration lands (nose + L/R for shoulder, elbow,
+// wrist, hip, knee, ankle). Explicit bone-edge list — each bone is
+// its own line, no shared apex. Two legs are two distinct chains.
+// Head is rendered as a separate scaled CIRCLE node connected to the
+// shoulder midpoint by a neck line. Joint dots and head radius scale
+// from body dimensions (videoRect), not hardcoded px.
+//
+// Joint coords are positioned for a face-on golfer in setup (feet
+// shoulder-width, hands meeting near center mid-body). Down-the-line
+// will look slightly stylized until real keypoints land, but the
+// topology is now a real human skeleton, not a polygon.
+
+const STUB_SKELETON_JOINTS: { x: number; y: number; label: string }[] = [
+  { x: 50, y: 10, label: 'nose' },           // 0
+  { x: 40, y: 24, label: 'left_shoulder' },  // 1
+  { x: 60, y: 24, label: 'right_shoulder' }, // 2
+  { x: 32, y: 37, label: 'left_elbow' },     // 3
+  { x: 68, y: 37, label: 'right_elbow' },    // 4
+  { x: 42, y: 52, label: 'left_wrist' },     // 5
+  { x: 58, y: 52, label: 'right_wrist' },    // 6
+  { x: 44, y: 53, label: 'left_hip' },       // 7
+  { x: 56, y: 53, label: 'right_hip' },      // 8
+  { x: 42, y: 70, label: 'left_knee' },      // 9
+  { x: 58, y: 70, label: 'right_knee' },     // 10
+  { x: 38, y: 88, label: 'left_ankle' },     // 11
+  { x: 62, y: 88, label: 'right_ankle' },    // 12
+];
+
+const STUB_SKELETON_BONES: [number, number][] = [
+  // Torso: shoulder line, hip line, two side seams.
+  [1, 2], [7, 8], [1, 7], [2, 8],
+  // Left arm: shoulder → elbow → wrist.
+  [1, 3], [3, 5],
+  // Right arm: shoulder → elbow → wrist.
+  [2, 4], [4, 6],
+  // Left leg: hip → knee → ankle.
+  [7, 9], [9, 11],
+  // Right leg: hip → knee → ankle.
+  [8, 10], [10, 12],
+];
+
+// Joint dot render set. Head (0) is drawn as a separate scaled circle
+// node so it doesn't fight with the bone graph. Every other joint
+// renders as a filled dot — wrists explicitly included since the
+// wrist is the club-hinge diagnostic point.
+const STUB_SKELETON_NODE_INDICES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
 // ─── Styles ─────────────────────────────────────────────────────────
 
