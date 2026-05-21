@@ -1,14 +1,20 @@
 /**
  * Cage Mode — dedicated practice + lesson environment.
  *
+ * 2026-05-21 — Fix G (Option A): dropped the unbuilt CV bullseye gate and
+ * the unbuilt /api/cage/analyze backend. Both endpoints 404'd in production
+ * because they were never implemented past the mock stub. SETUP → RECORDING
+ * directly (no fake CHECKING/READY/NOT_READY); the framing overlay still
+ * renders so the user can align body + bullseye + ball-address visually,
+ * but no fake "bullseye detected" gate runs. Post-record review is built
+ * from REAL signals only: local acoustic impact detector + /api/acoustic-
+ * detect (ball speed) + /api/kevin/coach (coach review). No fabrication —
+ * if a capability isn't available, the card stays empty rather than fake.
+ *
  * 2026-05-21 — Day 2 / Fix 9B: file renamed from cage-drill.tsx to
  * cage-mode.tsx + given a clear Cage Mode identity. SmartMotion (quick
  * swing check) and Cage Mode (full practice/lesson tool) are now two
- * distinct features with zero overlap. Cage Mode keeps five wired
- * cage-specific capabilities: bullseye-in-frame gate, ball-speed
- * detection, cage calibration store, cage-specific analysis APIs
- * (analyzeCageVideo + coachReview), and the CageOverlay framing
- * component. Works in a cage OR on the range.
+ * distinct features with zero overlap. Works in a cage OR on the range.
  *
  * 2026-05-21 — Fix F diagnosis: Galaxy Watch IMU is the SIXTH planned
  * capability but is NOT wired yet. services/watchService.ts has only
@@ -36,18 +42,17 @@
  * "capture" / "start" hands-free fires the same handler the button
  * does. Wake-word loop would have been redundant.
  *
- * State machine:
- *   SETUP → CHECKING → READY | NOT_READY
- *                    └ NOT_READY auto-reverts to SETUP after 2s
- *           READY → RECORDING (12s) → UPLOADING → RESULT | ERROR
- *           ERROR → "Try Again" → SETUP
- *           RESULT → "Swing Again" → SETUP  (auto if batch incomplete)
+ * State machine (post-G):
+ *   SETUP → RECORDING (12s) → UPLOADING → RESULT | ERROR
+ *   ERROR → "Try Again" → SETUP
+ *   RESULT → "Swing Again" → SETUP  (auto if batch incomplete)
  *
- * Capture: 1080p / 30fps / audio / single .mp4 in FileSystem.cacheDirectory.
- * Auto-stop at 12s OR on user stop tap.
+ * Capture: 1080p / 30fps / audio / single .mp4. CameraView holds mode='video'
+ * throughout so recordAsync can't race a mode transition.
  *
- * Bullseye visibility check is the gate before recording can start. The
- * still-frame upload to /api/cage/check-bullseye decides READY vs NOT_READY.
+ * No pre-record CV gate — the unbuilt /api/cage/check-bullseye endpoint is
+ * gone. CageOverlay still renders during SETUP so the user can align body
+ * + bullseye + ball-address visually before tapping Start.
  *
  * Kevin badge (top-left, taps to listening) and ••• menu (top-right) stay
  * visible at all times so the player can pull Kevin in or exit cleanly.
@@ -63,12 +68,9 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
-import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  checkBullseye,
-  analyzeCageVideo,
   coachReview,
   isMockMode,
   type CageAnalyzeResponse,
@@ -99,11 +101,12 @@ import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 // few opens of Cage Mode (per-slug counter in settingsStore). Skippable.
 import { CaddieIntroSheet, useCaddieIntro } from '../../components/caddie/CaddieIntroSheet';
 
+// 2026-05-21 — Fix G (Option A): CHECKING/READY/NOT_READY phases removed
+// with the unbuilt CV bullseye gate. SETUP → RECORDING directly. The
+// framing overlay still helps the user align manually; we just don't
+// fake a server-side "bullseye detected" approval.
 type Phase =
   | 'SETUP'
-  | 'CHECKING'
-  | 'READY'
-  | 'NOT_READY'
   | 'RECORDING'
   | 'UPLOADING'
   | 'RESULT'
@@ -112,10 +115,7 @@ type Phase =
 const RECORDING_MAX_SECONDS = 12;
 
 const KEVIN_CAPTION: Partial<Record<Phase, string>> = {
-  SETUP:     'Position your camera so the bullseye is in the frame.',
-  CHECKING:  'Looking for the target…',
-  READY:     'Locked in. Ready when you are.',
-  NOT_READY: "I can't see the target. Step left a bit.",
+  SETUP:     'Frame your hitting area — tap when ready.',
   RECORDING: 'Swing when ready.',
   UPLOADING: 'Lemme take a look at that one…',
   RESULT:    "Here's what I saw.",
@@ -146,7 +146,6 @@ export default function CageModeScreen() {
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordCountdownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const notReadyRevertRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [phase, setPhase] = useState<Phase>('SETUP');
   const [recordedSeconds, setRecordedSeconds] = useState(0);
@@ -205,15 +204,17 @@ export default function CageModeScreen() {
   // PGA HOPE follow-up (A4) — single-handed players cannot reach the
   // bottom-right record button while holding the camera. Subscribe to
   // 'swing' kind voice captures so saying "record" / "capture" / "start"
-  // triggers the same handler the button does. Only fires while phase
-  // is READY (don't double-trigger mid-recording).
+  // triggers the same handler the button does.
+  //
+  // 2026-05-21 — Fix G (Option A): fire from SETUP (was READY). With the
+  // unbuilt CV bullseye gate removed, SETUP is the only pre-record phase.
+  // handleStartRecording has its own internal guards (mic permission,
+  // double-tap promise) so mid-RECORDING dup-fires are still race-safe.
   useEffect(() => {
     let cancelled = false;
     const unsub = subscribeCapture(['swing'], () => {
       if (cancelled) return;
-      // Race-safe: only trigger if we're in the phase that allows it.
-      // The button uses phase === 'READY' as its guard; mirror that.
-      if (phase === 'READY') {
+      if (phase === 'SETUP') {
         void handleStartRecording();
       }
     });
@@ -226,57 +227,15 @@ export default function CageModeScreen() {
     return () => {
       if (recordTimerRef.current) clearInterval(recordTimerRef.current);
       if (recordCountdownRef.current) clearTimeout(recordCountdownRef.current);
-      if (notReadyRevertRef.current) clearTimeout(notReadyRevertRef.current);
     };
   }, []);
 
-  // ── NOT_READY auto-revert to SETUP after 2s ─────────────────────────
-  useEffect(() => {
-    if (phase !== 'NOT_READY') return;
-    if (notReadyRevertRef.current) clearTimeout(notReadyRevertRef.current);
-    notReadyRevertRef.current = setTimeout(() => setPhase('SETUP'), 2000);
-    return () => {
-      if (notReadyRevertRef.current) {
-        clearTimeout(notReadyRevertRef.current);
-        notReadyRevertRef.current = null;
-      }
-    };
-  }, [phase]);
+  // 2026-05-21 — Fix G (Option A): removed the NOT_READY auto-revert
+  // useEffect and handleCheckPosition. With no CV bullseye gate, there
+  // is no NOT_READY state and no preview-frame POST. The user frames
+  // their target visually using CageOverlay and taps Start Recording.
 
   // ── State transitions ───────────────────────────────────────────────
-
-  const handleCheckPosition = useCallback(async () => {
-    if (!cameraRef.current) return;
-    console.log('[path3:cage] check_position requested');
-    setPhase('CHECKING');
-    try {
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.5, base64: true, skipProcessing: true,
-      });
-      const b64 = photo?.base64 ?? '';
-      if (!b64) {
-        setErrorMessage('Could not capture preview frame.');
-        setPhase('ERROR');
-        return;
-      }
-      const res = await checkBullseye(b64);
-      if (res.kind !== 'ok') {
-        setErrorMessage(res.kind === 'no_network' ? 'No network. Try again.' : res.message);
-        setPhase('ERROR');
-        return;
-      }
-      if (res.data.detected && res.data.canvas_visible) {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setPhase('READY');
-      } else {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        setPhase('NOT_READY');
-      }
-    } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : String(e));
-      setPhase('ERROR');
-    }
-  }, []);
 
   const handleStartRecording = useCallback(async () => {
     if (!cameraRef.current) return;
@@ -356,72 +315,80 @@ export default function CageModeScreen() {
     // could hang or reject. Stop synchronously, then transition.
     try { cameraRef.current?.stopRecording(); } catch {}
 
-    // Phase J.1 — stop the parallel audio recording and run peak
-    // detection. Fire in parallel with the video upload below so this
-    // ~50ms work doesn't block the user from seeing UPLOADING state.
-    // J.2 hybrid: when on-device impact is found, ALSO POST the WAV to
-    // /api/acoustic-detect for server-side two-peak ball speed.
-    void stopAndDetectImpact()
-      .then(async (reading) => {
-        if (!reading) return;
-        setImpactReading(reading);
-        if (reading.audio_uri) {
-          const speed = await detectBallSpeed({
-            audioUri: reading.audio_uri,
-            impact_ms: reading.impact_ms,
-          });
-          if (speed) {
-            setBallSpeed(speed);
-            // Persist the server-derived cage distance so camera-setup
-            // can surface it (and the user can override if it's off).
-            useCageCalibrationStore.getState().setAutoDetected(speed.cage_distance_yards);
-          }
-          void cleanupImpactRecording(reading.audio_uri);
-        }
-      })
-      .catch(() => undefined);
-
     setPhase('UPLOADING');
 
+    // 2026-05-21 — Fix G (Option A): the /api/cage/analyze endpoint was
+    // never built (404 in prod) so the previous flow of POST-video-and-
+    // wait-for-features-json is gone. Real signals only — local acoustic
+    // impact + /api/acoustic-detect ball-speed + /api/kevin/coach review.
+    // We still need the recording promise to resolve so the camera file
+    // lands cleanly; we just don't upload it to anything.
     try {
+      // Phase J.1 — stop and detect impact. Was fire-and-forget pre-G;
+      // now awaited inline so we can hand the resolved values straight
+      // into the coachReview features payload below (no race, no stale
+      // state read).
+      let resolvedImpact: ImpactReading | null = null;
+      let resolvedSpeed: BallSpeedResult | null = null;
+      try {
+        resolvedImpact = await stopAndDetectImpact();
+        if (resolvedImpact) {
+          setImpactReading(resolvedImpact);
+          if (resolvedImpact.audio_uri) {
+            // J.2 hybrid: two-peak server detection for ball speed.
+            resolvedSpeed = await detectBallSpeed({
+              audioUri: resolvedImpact.audio_uri,
+              impact_ms: resolvedImpact.impact_ms,
+            });
+            if (resolvedSpeed) {
+              setBallSpeed(resolvedSpeed);
+              useCageCalibrationStore.getState().setAutoDetected(resolvedSpeed.cage_distance_yards);
+            }
+            void cleanupImpactRecording(resolvedImpact.audio_uri);
+          }
+        }
+      } catch (e) { console.log('[cage-mode] acoustic chain failed:', e); }
+
+      // Drain the video recording promise so the camera releases its
+      // file handle cleanly. We don't upload it — analyzeCageVideo's
+      // backend was never built.
       const recorded = await recordingPromiseRef.current;
       recordingPromiseRef.current = null;
-      const sourceUri = recorded?.uri;
-      if (!sourceUri) {
+      if (!recorded?.uri) {
         setErrorMessage('Recording produced no file.');
         setPhase('ERROR');
         return;
       }
 
-      // Move to a stable cache path so the camera's temp file doesn't
-      // get evicted before upload completes.
-      const cacheDir = FileSystem.cacheDirectory ?? '';
-      const cachedUri = `${cacheDir}cage_drill_${Date.now()}.mp4`;
-      try {
-        await FileSystem.copyAsync({ from: sourceUri, to: cachedUri });
-      } catch {
-        // Fall through with the original uri if copy fails.
-      }
-      const uploadUri = (await FileSystem.getInfoAsync(cachedUri)).exists ? cachedUri : sourceUri;
-
-      const res = await analyzeCageVideo(uploadUri);
-
-      // Best-effort delete of the local cache file regardless of outcome.
-      try { await FileSystem.deleteAsync(cachedUri, { idempotent: true }); } catch {}
-
-      if (res.kind !== 'ok') {
-        setErrorMessage(res.kind === 'no_network' ? 'Upload failed — no network. Try again.' : res.message);
-        setPhase('ERROR');
-        return;
-      }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setResult(res.data);
+
+      // Build features.json from REAL signals only. bullseye_offsets stays
+      // empty — we don't have CV scoring. strike_count derives from the
+      // acoustic detector. notes carry the ball-speed estimate when the
+      // server-side two-peak detector returned one. Honest about what we
+      // know vs don't.
+      const notes: string[] = [];
+      if (resolvedImpact) {
+        notes.push(
+          `Impact at ${(resolvedImpact.impact_ms / 1000).toFixed(2)}s (acoustic confidence ${Math.round(resolvedImpact.confidence * 100)}%).`,
+        );
+      }
+      if (resolvedSpeed) {
+        notes.push(
+          `Estimated ball speed ${resolvedSpeed.ball_speed_mph} mph at ${resolvedSpeed.cage_distance_yards}yd cage distance.`,
+        );
+      }
+      const features: CageAnalyzeResponse = {
+        strike_count: resolvedImpact ? 1 : 0,
+        strike_times: resolvedImpact ? [Number((resolvedImpact.impact_ms / 1000).toFixed(2))] : [],
+        bullseye_offsets: [],
+        notes,
+      };
+      setResult(features);
 
       // Wire watch metrics. If the connected watch recorded a swing
-      // during the capture window (recording start → now), attach it to
-      // the result so the user sees video analysis + watch tempo/club
-      // speed side by side. No-op when no watch connected; harmless if
-      // the watch recorded for a different drill.
+      // during the capture window, attach it so video review + watch
+      // tempo/club speed show side by side. No-op when no watch.
       const startedAt = recordingStartedAtRef.current ?? 0;
       const endedAt = Date.now();
       const watchSwings = useWatchStore.getState().sessionSwings;
@@ -430,10 +397,12 @@ export default function CageModeScreen() {
         .find((s) => s.timestamp >= startedAt && s.timestamp <= endedAt + 2000);
       if (matched) setWatchSwing(matched);
 
-      // Hand features.json to Kevin's cage_swing_review tool. The coach
-      // response replaces the raw-JSON display from Prompt 1; the JSON is
-      // still available behind a 'Show details' expander.
-      const coachRes = await coachReview(res.data, voiceGender);
+      // Hand the locally-built features to Kevin's cage_swing_review tool.
+      // /api/kevin/coach exists (vercel.json rewrites to api/cage-coach.ts).
+      // The endpoint accepts arbitrary features in the body; Sonnet
+      // responds to what's present. With our sparser payload it leans on
+      // strike timing + notes; no fabricated bullseye_offsets to riff on.
+      const coachRes = await coachReview(features, voiceGender);
       if (coachRes.kind === 'ok') {
         setCoach(coachRes.data);
         if (voiceEnabled) {
@@ -506,8 +475,7 @@ export default function CageModeScreen() {
   }, []);
 
   // 2026-05-21 — Fix D: caddie quick-start intro. Only gates on the
-  // initial SETUP phase — once the user is past the first phase
-  // transition (CHECKING / READY / RECORDING / RESULT) they're
+  // initial SETUP phase — once the user advances to RECORDING they're
   // already moving and don't need the orientation. Auto-suppresses
   // after a few opens via the per-slug counter in settingsStore.
   const introState = useCaddieIntro('cage_mode', phase === 'SETUP');
@@ -573,7 +541,13 @@ export default function CageModeScreen() {
   // promise can resolve cleanly. The full-screen UPLOADING overlay covers
   // the camera visually; functional reason for keeping the View alive is
   // the recording promise lifecycle, not the pixel.
-  const cameraVisible = phase === 'SETUP' || phase === 'CHECKING' || phase === 'READY' || phase === 'NOT_READY' || phase === 'RECORDING' || phase === 'UPLOADING';
+  // 2026-05-21 — Fix G (Option A): CameraView keeps mode='video' through
+  // every visible phase. The pre-G code toggled between 'picture' and
+  // 'video' so it could takePictureAsync for the CV bullseye check; that
+  // toggle was async and could race a recordAsync call immediately after
+  // setPhase('RECORDING'). With the CV check gone we never need picture
+  // mode, so the race is eliminated by construction.
+  const cameraVisible = phase === 'SETUP' || phase === 'RECORDING' || phase === 'UPLOADING';
 
   return (
     <View style={styles.container}>
@@ -583,7 +557,7 @@ export default function CageModeScreen() {
           ref={cameraRef}
           style={StyleSheet.absoluteFill}
           facing="back"
-          mode={phase === 'RECORDING' ? 'video' : 'picture'}
+          mode="video"
           videoQuality="1080p"
         />
       )}
@@ -591,12 +565,12 @@ export default function CageModeScreen() {
       {/* Dim overlay so chrome reads on bright camera frames. */}
       {cameraVisible && <View style={styles.cameraDim} pointerEvents="none" />}
 
-      {/* Phase AM — multi-purpose alignment overlay. Renders only during
-          setup phases; hidden during RECORDING / UPLOADING so the
-          recording UI isn't crowded with the alignment scaffold. Color
-          maps to phase (amber → green when READY, red on NOT_READY). */}
-      {(phase === 'SETUP' || phase === 'CHECKING' || phase === 'READY' || phase === 'NOT_READY') && (
-        <CageOverlay phase={phase as CageOverlayPhase} />
+      {/* Phase AM — multi-purpose alignment overlay. Renders during
+          SETUP only (post-G — no fake CHECKING/READY/NOT_READY states).
+          Lets the user align body + bullseye + ball-address visually
+          before tapping Start. */}
+      {phase === 'SETUP' && (
+        <CageOverlay phase="SETUP" />
       )}
 
       <Header insets={insets} onBack={() => safeBack()} onMore={() => setMoreOpen(true)} onBadge={onBadgeTap} />
@@ -628,81 +602,58 @@ export default function CageModeScreen() {
         </View>
       )}
 
-      {/* SETUP / READY / NOT_READY — bottom CTAs. */}
-      {(phase === 'SETUP' || phase === 'READY' || phase === 'NOT_READY' || phase === 'CHECKING') && (
+      {/* SETUP — bottom CTA. Post-G: single Start Recording button (was
+          a Check Position → READY → Start Recording two-step gated on a
+          404 endpoint). Voice "record" + manual mic + button all fire
+          handleStartRecording from this single state. */}
+      {phase === 'SETUP' && (
         <View style={[styles.ctaWrap, { paddingBottom: insets.bottom + 32 }]} pointerEvents="box-none">
-          {/* 2026-05-21 — Day 2 / Fix 9B: batch-count selector. Only
-              renders pre-recording (SETUP/NOT_READY) so it doesn't
-              clutter the READY/CHECKING moment. Selecting a size
-              resets the batch index. */}
-          {(phase === 'SETUP' || phase === 'NOT_READY') && (
-            <View style={styles.batchRow}>
-              <Text style={styles.batchLabel}>SWINGS THIS SESSION</Text>
-              <View style={styles.batchPills}>
-                {BATCH_OPTIONS.map(opt => {
-                  const active = batchSize === opt;
-                  return (
-                    <TouchableOpacity
-                      key={opt}
-                      onPress={() => { setBatchSize(opt); setBatchIdx(0); }}
-                      style={[styles.batchPill, active && styles.batchPillActive]}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Set session length to ${opt} swing${opt === 1 ? '' : 's'}`}
-                    >
-                      <Text style={[styles.batchPillText, active && styles.batchPillTextActive]}>{opt}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              {batchActive && (
-                <Text style={styles.batchProgress}>{batchIdx + 1} of {batchSize}</Text>
-              )}
+          {/* Day 2 / Fix 9B — batch-count selector (1/3/5/10). */}
+          <View style={styles.batchRow}>
+            <Text style={styles.batchLabel}>SWINGS THIS SESSION</Text>
+            <View style={styles.batchPills}>
+              {BATCH_OPTIONS.map(opt => {
+                const active = batchSize === opt;
+                return (
+                  <TouchableOpacity
+                    key={opt}
+                    onPress={() => { setBatchSize(opt); setBatchIdx(0); }}
+                    style={[styles.batchPill, active && styles.batchPillActive]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Set session length to ${opt} swing${opt === 1 ? '' : 's'}`}
+                  >
+                    <Text style={[styles.batchPillText, active && styles.batchPillTextActive]}>{opt}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {batchActive && (
+              <Text style={styles.batchProgress}>{batchIdx + 1} of {batchSize}</Text>
+            )}
+          </View>
+          {/* Voice trigger hint — surfaces the hands-free path one time
+              per device. Hidden once tutorialsSeen marks the slug. */}
+          {!useSettingsStore.getState().tutorialsSeen?.['cage_voice_trigger'] && (
+            <View style={styles.voiceHintRow}>
+              <Ionicons name="mic-outline" size={14} color="#00C896" />
+              <Text style={styles.voiceHintText} accessibilityLabel="Tip: say record or capture to start recording with voice">
+                {'Tip: say "record" or "capture" — hands-free.'}
+              </Text>
             </View>
           )}
-          {phase === 'CHECKING' ? (
-            <View style={styles.checkingCard}>
-              <ActivityIndicator color="#00C896" />
-              <Text style={styles.checkingText}>Checking position…</Text>
-            </View>
-          ) : phase === 'READY' ? (
-            <>
-              {/* Re-sim P0 #2 — surface the voice trigger one-time so
-                  players (especially those who can't easily reach the
-                  button) know it exists. Hidden once tutorialsSeen marks
-                  cage_voice_trigger. */}
-              {!useSettingsStore.getState().tutorialsSeen?.['cage_voice_trigger'] && (
-                <View style={styles.voiceHintRow}>
-                  <Ionicons name="mic-outline" size={14} color="#00C896" />
-                  <Text style={styles.voiceHintText} accessibilityLabel="Tip: say record or capture to start recording with voice">
-                    {'Tip: say "record" or "capture" — hands-free.'}
-                  </Text>
-                </View>
-              )}
-              <TouchableOpacity
-                style={[styles.primaryBtn, styles.recordBtn]}
-                onPress={() => {
-                  useSettingsStore.getState().markTutorialSeen('cage_voice_trigger');
-                  void handleStartRecording();
-                }}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel="Start recording your swing — or say record"
-              >
-                <View style={styles.recordDot} />
-                <Text style={styles.primaryBtnText}>Start Recording</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <TouchableOpacity
-              style={[styles.primaryBtn, phase === 'NOT_READY' && styles.primaryBtnDisabled]}
-              onPress={handleCheckPosition}
-              disabled={phase === 'NOT_READY'}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="scan-outline" size={20} color="#0d1a0d" />
-              <Text style={styles.primaryBtnText}>Check Position</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[styles.primaryBtn, styles.recordBtn]}
+            onPress={() => {
+              useSettingsStore.getState().markTutorialSeen('cage_voice_trigger');
+              void handleStartRecording();
+            }}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Start recording your swing — or say record"
+          >
+            <View style={styles.recordDot} />
+            <Text style={styles.primaryBtnText}>Start Recording</Text>
+          </TouchableOpacity>
         </View>
       )}
 

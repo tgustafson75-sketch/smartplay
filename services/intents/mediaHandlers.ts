@@ -19,8 +19,18 @@ import {
   type CaptureKind,
 } from '../mediaCapture';
 import { track } from '../analytics';
+import { getActiveSurface } from '../activeSurfaceRegistry';
 
 function normalizeKind(raw: unknown): CaptureKind {
+  // 2026-05-21 — Fix G: screen-aware default. When the user is on a
+  // drill_session surface (Cage Mode), the kind is unambiguously 'swing'
+  // regardless of what the voice-intent classifier emitted for
+  // capture_type. Without this, a bare "record" on Cage Mode falls
+  // through to 'shot' (the default below) which then fails canCapture
+  // with "you're not in a round yet" — the manual-mic record path is
+  // dead. setActiveSurface('drill_session') is set on Cage Mode mount,
+  // so this check is reliable while the user is on that screen.
+  if (getActiveSurface() === 'drill_session') return 'swing';
   const v = String(raw ?? '').toLowerCase().trim();
   if (v === 'swing') return 'swing';
   // 2026-05-17 — legacy 'highlight' (hero shot) collapses to 'shot'.

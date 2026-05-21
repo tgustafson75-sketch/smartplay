@@ -14,6 +14,41 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Fix G (Option A) — honest Cage Mode + screen-aware voice "record"
+
+**Diagnosis report (verbatim verdict before any code change):** the on-device "check position 404 + voice record dead" reports were **three separate problems, none caused by 9B**:
+
+1. **`/api/cage/check-bullseye` 404** — endpoint never built. [vercel.json](../vercel.json) has no route; no `api/cage/` directory exists. The `services/cageApi.ts` header comment literally said *"Two endpoints (backend lands in Prompt 2) … Mock mode … so the on-device state machine can be exercised end-to-end before the backend exists."* Prompt 2 never landed. The 404 has been present since `cageApi.ts` was first authored, masked in dev by `EXPO_PUBLIC_CAGE_MOCK_MODE=true`. Same applies to `/api/cage/analyze`. 9B only renamed `cage-drill.tsx` → `cage-mode.tsx`; the broken URLs live in `services/cageApi.ts` and were not touched.
+
+2. **Voice "record" routed to `'shot'` by default** — [services/intents/mediaHandlers.ts:23](../services/intents/mediaHandlers.ts#L23) `normalizeKind()` returned `'shot'` for anything that wasn't literally `'swing'`. Then `canCapture('shot')` refused on Cage Mode because `round.isRoundActive` is false. The handler had no awareness of `getActiveSurface()` even though Cage Mode does `setActiveSurface('drill_session')` on mount.
+
+3. **Camera preview is fine** — Tim's report that the check-position test pic captured and POSTed (then 404'd) confirms `CameraView` mounts and `takePictureAsync` works. The latent `mode='picture' ↔ 'video'` race wasn't reached because the 404 stopped the user at SETUP→ERROR; the post-G fix removes it by construction (mode='video' always).
+
+**Decision:** Option A. No mock-mode fabrication in production — same no-fake-precision rule as SmartMotion 418 / SmartFinder Consolidation 5. Cage Mode ships honest, using real capabilities only.
+
+**Fix shipped:**
+
+1. **[services/cageApi.ts](../services/cageApi.ts)** — deleted `checkBullseye()`, `analyzeCageVideo()`, and the `CheckBullseyeResponse` type. Kept `coachReview()` (which hits `/api/kevin/coach` → rewritten to `api/cage-coach.ts` in vercel.json — this one is real and deployed). Kept the `CageAnalyzeResponse` shape because `/api/kevin/coach` still takes it as input; cage-mode.tsx now BUILDS it locally from real signals instead of pulling fabricated data from an endpoint that never existed.
+
+2. **[app/swinglab/cage-mode.tsx](../app/swinglab/cage-mode.tsx)** —
+   - Collapsed phase machine from `SETUP → CHECKING → READY | NOT_READY → RECORDING → UPLOADING → RESULT | ERROR` to `SETUP → RECORDING → UPLOADING → RESULT | ERROR`. No fake "bullseye detected" gate, no NOT_READY auto-revert.
+   - Removed `handleCheckPosition` (was POSTing to the 404 endpoint) and the NOT_READY useEffect + ref.
+   - `stopRecordingAndUpload` no longer calls `analyzeCageVideo`. It awaits the local acoustic-impact detector + `/api/acoustic-detect` (ball speed; deployed) inline, then builds the `features` payload from those resolved values (`strike_count` from impact, `strike_times` from `impact_ms/1000`, `bullseye_offsets: []` because there's no CV scoring and we don't fake one, `notes[]` carrying the impact confidence + ball-speed mph estimate when present). Passes the locally-built payload to `coachReview()` → `/api/kevin/coach`. No 404 anywhere in the chain.
+   - SETUP CTA simplified: batch-count selector + voice-trigger hint + single "Start Recording" button (the prior `Check Position → READY → Start Recording` two-step is gone).
+   - **CameraView pinned to `mode="video"` always.** Pre-G it toggled `'picture' ↔ 'video'` on phase change so `takePictureAsync` could feed the bullseye check; that toggle was async and could race `recordAsync` called immediately after `setPhase('RECORDING')`. With the CV check gone, picture mode is no longer needed and the race is eliminated by construction.
+   - `subscribeCapture(['swing'])` phase guard loosened: `phase === 'READY'` → `phase === 'SETUP'`. Voice "record" / "capture" / "start" now fires `handleStartRecording()` from the only pre-record phase that exists post-G. Internal mic-permission + double-tap guards inside `handleStartRecording` already prevent mid-RECORDING dup-fires.
+   - Removed `expo-file-system/legacy` import (cache-copy-for-upload code went with the analyze call).
+
+3. **[services/intents/mediaHandlers.ts](../services/intents/mediaHandlers.ts)** — `normalizeKind()` is now screen-aware. When `getActiveSurface() === 'drill_session'` the kind is forced to `'swing'` regardless of what the voice-intent classifier emitted. Bare "record" on Cage Mode no longer falls through to `'shot'` and then refuses for lack of an active round.
+
+**Verify on device (OTA — no APK rebuild needed):**
+- Open Cage Mode → framing overlay visible (no 404 / no "checking position" spinner).
+- Tap Start Recording → 12s recording → real impact / ball-speed / Kevin coach card. No fabricated bullseye offsets.
+- Tap caddie mic, say "record" → SETUP → RECORDING. No "you're not in a round" refusal.
+- If acoustic detection misses (silent room, no impact), the impact card stays hidden — honest empty state, not a fake reading.
+
+**Build gates:** `tsc --noEmit` clean. Unused `checkingCard` / `checkingText` / `primaryBtnDisabled` styles left in place (zero-risk dead code; lint-pass cleanup can pick them up later).
+
 ### Consolidation 5 (Part 2) — Surface the Mark Green capture loop on no-geometry surfaces
 
 Part 1 made the scorecard fallback label honest. Part 2 closes the next gap on Maplewood / Pembroke Pines: the **path out of fallback** (Mark Green → live yardages) was only reachable via Settings → Owner Tools, the Tools menu, or a voice intent. Buried, not obvious. With the NH trip next weekend Tim wanted the no-geometry surfaces to *actively* offer the capture loop.
