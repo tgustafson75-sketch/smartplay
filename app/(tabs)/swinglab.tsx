@@ -61,6 +61,18 @@ const CARDS: LauncherCardSpec[] = [
     sub: 'AI Swing Analysis · Body Mechanics · Shot Tracing (coming)',
     route: '/swinglab/smartmotion',
   },
+  // 2026-05-21 — Day 2 / Fix 9B: Cage Mode added as its own card so
+  // it's discoverable alongside SmartMotion. Cage Mode is the
+  // dedicated practice + lesson environment (bullseye gate, ball-speed
+  // detection, watch IMU, cage calibration, batch-count selector).
+  // SmartMotion stays the quick swing check. Zero overlap.
+  {
+    key: 'cage-mode',
+    icon: 'scan-outline',
+    title: 'Cage Mode',
+    sub: 'Practice + lessons · bullseye gate · ball-speed · 1/3/5/10 swing batches',
+    route: '/swinglab/cage-mode',
+  },
   {
     key: 'range',
     icon: 'videocam-outline',

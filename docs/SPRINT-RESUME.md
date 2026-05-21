@@ -7,7 +7,7 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 ## Where we are right now
 
 - **Sprint:** Two-week consolidation sprint, started 2026-05-20. Target: app ready by June.
-- **Current day:** Day 2 — 2026-05-21. **PAUSED awaiting Tim's go on Fix 9B (deletes + cage-drill capability port + speed option).** See `docs/SPRINT-LOG.md` Day 2 / Fix 9A entry.
+- **Current day:** Day 2 — 2026-05-21. Fix 9B shipped: SmartMotion (quick) and Cage Mode (practice/lessons) are now two clean features with zero overlap. `app/smartmotion-quick.tsx` deleted. `app/swinglab/cage-drill.tsx` renamed to `app/swinglab/cage-mode.tsx` with batch-count ported in. Voice intent + Tools menu + cockpit MOTION skip the NoClipHero (Option D speed). Sprint Map P0-3 closed.
 - **Current focus:** Audit-and-infrastructure day. Phase 420 audit and Phase 421 save-point system landed. No app code changes today beyond the morning's persona TTS + Tools FAB + Phase 418 validation gate.
 - **Full prioritized plan:** [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MAP.md)
 - **Daily running log:** [docs/SPRINT-LOG.md](SPRINT-LOG.md)

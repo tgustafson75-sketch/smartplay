@@ -14,6 +14,39 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Day 2 / Fix 9B — Two clean features: SmartMotion (quick) + Cage Mode (practice/lessons)
+
+Per Tim's confirmed decision. SmartMotion = quick swing check. Cage Mode = dedicated practice + lesson environment. Zero overlap.
+
+**Cage Mode final identity:**
+- **Route:** `/swinglab/cage-mode` (was `/swinglab/cage-drill`).
+- **File:** `app/swinglab/cage-mode.tsx` (renamed via `git mv` to preserve history). Component renamed from `CageDrillScreen` to `CageModeScreen`. Header updated to identify as Cage Mode.
+- **Reachable from:** SwingLab tab → new "Cage Mode" card (added between SmartMotion and Range Mode).
+- **All six capabilities preserved byte-identical:** bullseye-in-frame gate (`checkBullseye`), ball-speed detection (`detectBallSpeed`), cage calibration store (`useCageCalibrationStore`), Galaxy Watch IMU integration (`useWatchStore` + `SwingMetrics`), cage-specific analysis APIs (`analyzeCageVideo` + `coachReview`), and the `CageOverlay` framing component. No behavior changes vs the prior cage-drill.
+- **Cockpit caller** at `components/caddie/CockpitCaddieScreen.tsx:301` was routing to `/swinglab/cage-drill` for "fire the camera fast" mid-round intent. That intent matches SmartMotion's fast path more than Cage Mode's setup flow → repointed to `/swinglab/quick-record` (Option D speed path).
+
+**Ported from smartmotion-quick to Cage Mode:**
+- **Batch-count selector (1 / 3 / 5 / 10 swings) — PORTED.** Renders in SETUP / NOT_READY phases as a labelled pill row ("SWINGS THIS SESSION"); selecting a size resets `batchIdx`. After each RESULT, if the batch isn't complete the screen auto-returns to SETUP after 4s for the next swing. Final RESULT stays on-screen until the user taps Swing Again. Adds ~30 LOC of additive code; no change to the existing phase machine.
+- **Voice "ready" wake-word multi-swing loop — DROPPED.** Cage Mode already subscribes to the `subscribeCapture(['swing'])` voice-capture intent ([cage-mode.tsx:156-164](../app/swinglab/cage-mode.tsx#L156-L164)) so saying "record" / "capture" / "start" hands-free fires the same handler the button does. Functionally equivalent — the wake-word loop would have been redundant + required a new LISTENING_VOICE phase + mode-toggle UI that conflicted with Cage Mode's existing listening model (`toggleListening`).
+
+**smartmotion-quick.tsx deleted:**
+- File removed via `git rm app/smartmotion-quick.tsx` (954 LOC gone).
+- Stack.Screen registration removed from `app/_layout.tsx` (replaced with a comment explaining the move).
+- Zero functional references to `smartmotion-quick` remain anywhere in source (only 3 explanatory comments noting it was removed).
+
+**Option D speed path — wired:**
+- Voice intent `smartmotion` / `smart_motion` ([services/intents/openToolHandler.ts:28-29](../services/intents/openToolHandler.ts#L28-L29)) → `/swinglab/quick-record` (camera live immediately; quick-record routes back to `/swinglab/smartmotion?clipUri=...` after recording).
+- ••• Tools menu SmartMotion row ([components/tools/GlobalToolsMenu.tsx:325](../components/tools/GlobalToolsMenu.tsx#L325)) → `/swinglab/quick-record` (same flow). Subcopy updated to "Quick swing check · camera opens immediately".
+- Cockpit MOTION button (above) → `/swinglab/quick-record` (mid-round fast camera).
+- Library "Record a swing" CTA ([app/swinglab/library.tsx:256](../app/swinglab/library.tsx#L256)) → `/swinglab/smartmotion` (review / intro context — keeps the marketing hero).
+- SwingLab tab SmartMotion card → `/swinglab/smartmotion` (browsing context — keeps the marketing hero).
+
+**CaptureOverlay.tsx — UNTOUCHED.** Confirmed not a SmartMotion duplicate; it's the round-side voice "record this shot" surface mounted at app root for the `mediaCapture` 'shot' kind.
+
+**Build gates:** `tsc --noEmit` clean. `expo lint` unchanged at Phase 420 baseline (5 errors + 12 warnings — all pre-existing, no new regressions from this batch).
+
+**Overlap verification:** SmartMotion and Cage Mode now share zero direct code paths. They both import `acousticImpactDetector` (separate capture sessions), `useSettingsStore`, and `voiceService` — utility services, not feature code. No shared state, no shared phase machine, no shared screens.
+
 ### Day 2 / Fix 9A — Re-route all entry points to canonical SmartMotion (NO DELETES)
 Per Tim's standing decision: there is exactly ONE SmartMotion. Survivor = `app/swinglab/smartmotion.tsx` (Phase 416 two-card + Phase 418 validation gate). `app/swinglab/quick-record.tsx` stays as the minimal capture primitive.
 

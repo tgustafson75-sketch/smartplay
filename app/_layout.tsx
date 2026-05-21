@@ -689,7 +689,7 @@ function AppNavigator() {
           options={{ animation: 'slide_from_bottom' }}
         />
         <Stack.Screen
-          name="swinglab/cage-drill"
+          name="swinglab/cage-mode"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
         <Stack.Screen
@@ -736,16 +736,13 @@ function AppNavigator() {
           name="smartfinder-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
-        {/* Phase 403 — SmartMotion Quick: course-mode simplified swing
-            capture. /swinglab/cage-drill remains the cage-mode flow with
-            full bullseye + calibration setup. This route is for the
-            "open SmartMotion" voice intent and the Tools menu shortcut —
-            camera goes live immediately, acoustic detector arms the
-            stop. */}
-        <Stack.Screen
-          name="smartmotion-quick"
-          options={{ animation: 'slide_from_bottom', headerShown: false }}
-        />
+        {/* 2026-05-21 — Day 2 / Fix 9B: smartmotion-quick.tsx deleted.
+            All SmartMotion entry points route to the canonical
+            /swinglab/smartmotion (Phase 416 two-card + Phase 418
+            validation gate). The voice intent + Tools menu now skip
+            the NoClipHero by pushing /swinglab/quick-record first
+            (Option D speed path). Cage-mode practice/lesson flow
+            lives at /swinglab/cage-mode (renamed from cage-drill). */}
         {/* Phase 405b — internal authoring tool. Tank (the real
             instructor behind the persona) uses this to capture
             per-category swing references that appear instantly in the

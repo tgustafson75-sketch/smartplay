@@ -321,10 +321,14 @@ export function GlobalToolsMenu() {
             <Row
               icon="flash-outline"
               label="SmartMotion"
-              sub="AI Swing Analysis · Body Mechanics · Shot Tracing"
-              onPress={() => nav('/swinglab/smartmotion')}
+              sub="Quick swing check · camera opens immediately"
+              onPress={() => nav('/swinglab/quick-record')}
               colors={colors}
             />
+            {/* 2026-05-21 — Day 2 / Fix 9B: SmartMotion entry skips the
+                NoClipHero (Option D speed). Cage Mode is a separate
+                deeper practice/lesson tool reachable from the SwingLab
+                tab; not duplicated here. */}
             <Row
               icon="construct-outline"
               label="Reference Authoring"

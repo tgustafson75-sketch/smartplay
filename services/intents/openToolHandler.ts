@@ -19,15 +19,18 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // Phase AS — alias so the classifier can also emit tool_name=tightlie
   // and we route the same place. Both names work end-to-end.
   tightlie: { type: 'navigate', path: '/lie-analysis' },
-  // 2026-05-21 — Day 2 / Fix 9A: collapsed to ONE SmartMotion. Voice
-  // intent now routes to the canonical /swinglab/smartmotion
-  // (Phase 416 two-card + Phase 418 validation gate). The prior
-  // /smartmotion-quick was a parallel implementation slated for
-  // deletion. Aliases: "smartmotion", "smart_motion", "smart motion" —
-  // classifier normalizes spaces/underscores so any reach us as
-  // tool_name='smartmotion'.
-  smartmotion: { type: 'navigate', path: '/swinglab/smartmotion' },
-  smart_motion: { type: 'navigate', path: '/swinglab/smartmotion' },
+  // 2026-05-21 — Day 2 / Fix 9B: Option D speed path. Voice "open
+  // SmartMotion" is a record-NOW intent — skip the canonical
+  // smartmotion screen's NoClipHero marketing card and land the user
+  // on the live camera (quick-record). After recording, quick-record
+  // routes back to /swinglab/smartmotion?clipUri=... where the
+  // Phase 416 two-card + Phase 418 validation gate take over for the
+  // analysis depth. Library + SwingLab card entries still land on
+  // /swinglab/smartmotion directly (review / intro context).
+  // Aliases: "smartmotion", "smart_motion", "smart motion" — classifier
+  // normalizes spaces/underscores.
+  smartmotion: { type: 'navigate', path: '/swinglab/quick-record' },
+  smart_motion: { type: 'navigate', path: '/swinglab/quick-record' },
   // 2026-05-19 — Acoustic Test Bench (Phase BO.1) was reachable via
   // SwingLab tile but had no voice intent route. The classifier could
   // emit tool_name='acoustic' / 'acoustic_test' / 'test_bench' but

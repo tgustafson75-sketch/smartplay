@@ -1,12 +1,34 @@
 /**
- * Cage Drill — full-screen capture + analyze flow.
+ * Cage Mode — dedicated practice + lesson environment.
+ *
+ * 2026-05-21 — Day 2 / Fix 9B: file renamed from cage-drill.tsx to
+ * cage-mode.tsx + given a clear Cage Mode identity. SmartMotion (quick
+ * swing check) and Cage Mode (full practice/lesson tool) are now two
+ * distinct features with zero overlap. Cage Mode keeps all six
+ * cage-specific capabilities: bullseye-in-frame gate, ball-speed
+ * detection, cage calibration store, Galaxy Watch IMU integration,
+ * cage-specific analysis APIs (analyzeCageVideo + coachReview), and
+ * the CageOverlay framing component. Works in a cage OR on the range.
+ *
+ * Behaviour is byte-identical to the prior cage-drill flow EXCEPT for
+ * the ported batch-count selector (see below) — no other capability
+ * changes vs the file prior to rename.
+ *
+ * Batch-count (1 / 3 / 5 / 10) ported in from the deleted
+ * smartmotion-quick.tsx. Lets the player set a session length before
+ * starting; after each RESULT the screen auto-returns to SETUP for the
+ * next swing until the batch is complete. The voice "ready" wake-word
+ * loop was NOT ported — Cage Mode already subscribes to the 'swing'
+ * voice capture kind (see subscribeCapture below) so saying "record" /
+ * "capture" / "start" hands-free fires the same handler the button
+ * does. Wake-word loop would have been redundant.
  *
  * State machine:
  *   SETUP → CHECKING → READY | NOT_READY
  *                    └ NOT_READY auto-reverts to SETUP after 2s
  *           READY → RECORDING (12s) → UPLOADING → RESULT | ERROR
  *           ERROR → "Try Again" → SETUP
- *           RESULT → "Swing Again" → SETUP
+ *           RESULT → "Swing Again" → SETUP  (auto if batch incomplete)
  *
  * Capture: 1080p / 30fps / audio / single .mp4 in FileSystem.cacheDirectory.
  * Auto-stop at 12s OR on user stop tap.
@@ -87,7 +109,7 @@ const CONFIDENCE_DOT: Record<CoachReviewResponse['confidence'], string> = {
   low:    '#9ca3af',
 };
 
-export default function CageDrillScreen() {
+export default function CageModeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: W } = useWindowDimensions();
@@ -129,6 +151,19 @@ export default function CageDrillScreen() {
   const [ballSpeed, setBallSpeed] = useState<BallSpeedResult | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  // 2026-05-21 — Day 2 / Fix 9B: batch-count selector ported in from
+  // the deleted smartmotion-quick.tsx. batchSize is the planned session
+  // length (1 / 3 / 5 / 10 swings); batchIdx is the index of the
+  // currently-completing swing (0-based). After each RESULT, if
+  // batchIdx + 1 < batchSize we auto-return to SETUP for the next
+  // swing. User can still tap "Swing Again" to advance manually or
+  // abandon the batch.
+  type BatchSize = 1 | 3 | 5 | 10;
+  const BATCH_OPTIONS: BatchSize[] = [1, 3, 5, 10];
+  const [batchSize, setBatchSize] = useState<BatchSize>(1);
+  const [batchIdx, setBatchIdx] = useState(0);
+  const batchActive = batchSize > 1;
+  const batchComplete = batchIdx + 1 >= batchSize;
 
   const { voiceEnabled, voiceGender, language, caddiePersonality } = useSettingsStore();
   const caddieName = getCaddieName(caddiePersonality);
@@ -412,8 +447,25 @@ export default function CageDrillScreen() {
     setErrorMessage(null);
     setDetailsOpen(false);
     setRecordedSeconds(0);
+    // 2026-05-21 — Day 2 / Fix 9B: advance the batch index if a batch
+    // session is in flight. When the batch completes the user has
+    // already seen the final RESULT card; tapping Swing Again resets
+    // for a fresh batch starting back at index 0.
+    setBatchIdx(prev => (prev + 1 >= batchSize ? 0 : prev + 1));
     setPhase('SETUP');
-  }, []);
+  }, [batchSize]);
+
+  // 2026-05-21 — Day 2 / Fix 9B: batch auto-advance. While a multi-swing
+  // batch is in flight, the RESULT phase loops back to SETUP after a
+  // short pause so the player keeps swinging without tapping. Final
+  // RESULT of the batch stays on-screen until the user taps Swing
+  // Again (which resets the batch).
+  useEffect(() => {
+    if (phase !== 'RESULT') return;
+    if (!batchActive || batchComplete) return;
+    const t = setTimeout(() => { handleSwingAgain(); }, 4000);
+    return () => clearTimeout(t);
+  }, [phase, batchActive, batchComplete, handleSwingAgain]);
 
   // Belt-and-suspenders: if the user backs out mid-recording we don't
   // want the parallel AudioRecorder to leak. abortImpactRecording is
@@ -552,6 +604,34 @@ export default function CageDrillScreen() {
       {/* SETUP / READY / NOT_READY — bottom CTAs. */}
       {(phase === 'SETUP' || phase === 'READY' || phase === 'NOT_READY' || phase === 'CHECKING') && (
         <View style={[styles.ctaWrap, { paddingBottom: insets.bottom + 32 }]} pointerEvents="box-none">
+          {/* 2026-05-21 — Day 2 / Fix 9B: batch-count selector. Only
+              renders pre-recording (SETUP/NOT_READY) so it doesn't
+              clutter the READY/CHECKING moment. Selecting a size
+              resets the batch index. */}
+          {(phase === 'SETUP' || phase === 'NOT_READY') && (
+            <View style={styles.batchRow}>
+              <Text style={styles.batchLabel}>SWINGS THIS SESSION</Text>
+              <View style={styles.batchPills}>
+                {BATCH_OPTIONS.map(opt => {
+                  const active = batchSize === opt;
+                  return (
+                    <TouchableOpacity
+                      key={opt}
+                      onPress={() => { setBatchSize(opt); setBatchIdx(0); }}
+                      style={[styles.batchPill, active && styles.batchPillActive]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Set session length to ${opt} swing${opt === 1 ? '' : 's'}`}
+                    >
+                      <Text style={[styles.batchPillText, active && styles.batchPillTextActive]}>{opt}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {batchActive && (
+                <Text style={styles.batchProgress}>{batchIdx + 1} of {batchSize}</Text>
+              )}
+            </View>
+          )}
           {phase === 'CHECKING' ? (
             <View style={styles.checkingCard}>
               <ActivityIndicator color="#00C896" />
@@ -897,6 +977,28 @@ const styles = StyleSheet.create({
 
   recordBtn: { backgroundColor: '#ef4444' },
   recordDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#ffffff' },
+
+  // 2026-05-21 — Day 2 / Fix 9B: batch-count selector styles.
+  batchRow: {
+    backgroundColor: 'rgba(6, 15, 9, 0.78)',
+    borderColor: 'rgba(0, 200, 150, 0.35)', borderWidth: 1,
+    borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14,
+    marginBottom: 10, alignItems: 'center', gap: 8,
+  },
+  batchLabel: { color: '#9ca3af', fontSize: 10, fontWeight: '800', letterSpacing: 1.4 },
+  batchPills: { flexDirection: 'row', gap: 6 },
+  batchPill: {
+    minWidth: 44, paddingVertical: 6, paddingHorizontal: 10,
+    borderRadius: 10, borderWidth: 1, borderColor: '#1e3a28',
+    backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center',
+  },
+  batchPillActive: {
+    borderColor: '#00C896',
+    backgroundColor: 'rgba(0, 200, 150, 0.18)',
+  },
+  batchPillText: { color: '#9ca3af', fontSize: 14, fontWeight: '800' },
+  batchPillTextActive: { color: '#00C896' },
+  batchProgress: { color: '#cbd5e1', fontSize: 11, fontWeight: '700' },
 
   voiceHintRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
