@@ -12,6 +12,47 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 ### Shipped today (Day 1 / Fix 1 addendum)
 - **End Round "Maximum update depth exceeded" crash — FIXED** ([app/recap/[round_id].tsx:172](../app/recap/[round_id].tsx#L172)). Root cause: the `useRoundStore` selector for `roundPhotos` used an inline `?? []` fallback. When `round_photos` was `undefined` (every round without photos — Tim's synthetic rounds in particular), the selector returned a FRESH `[]` literal each evaluation. Zustand's `useSyncExternalStore` saw the new reference as a snapshot change, re-rendered, re-ran the selector, got yet another fresh `[]`, looped forever → crash. Fix: extracted `const EMPTY_PHOTOS: RoundPhoto[] = []` at module scope and use it as the fallback so the reference is stable. Same pattern Tim already fixed in `components/dev/GpsQualityOverlay.tsx` (2026-05-16 — see in-file comment there).
 
+### Day 1 / Fix 8 — Diagnosis pass (NO FIX applied tonight)
+Two harness findings investigated; both reports below. Tim verifies real-device behavior tomorrow before any fix is applied.
+
+#### Finding 1 — Simulator stalls (1931s + 87s pauses on the latest harness log)
+**Verdict: SIM-TIMER ARTIFACT. Real GPS would NOT die under the same conditions, *provided* the user has granted background location permission AND the OEM hasn't killed the foreground service.**
+
+The sim uses a plain JS `setInterval` ([services/simulatedGPS.ts:148](../services/simulatedGPS.ts#L148)) — pure JS timer with no native anchor. Android's Doze + app-background throttling pauses JS timers; the watchdog at [services/simulatedGPS.ts:163-175](../services/simulatedGPS.ts#L163-L175) detects the gap and logs `[stalled]` but cannot prevent it. The 1931s gap is exactly this.
+
+Real GPS path is engineered to survive Doze:
+- **Foreground watch:** `Location.watchPositionAsync` in [services/gpsManager.ts startWatchInternal](../services/gpsManager.ts) — JS-callback path, foreground-only. Would also lose ticks when the app backgrounds.
+- **Background path:** `Location.startLocationUpdatesAsync` registered via TaskManager in [services/backgroundLocationTask.ts:106-140](../services/backgroundLocationTask.ts#L106-L140), with `foregroundService` notification + `pausesUpdatesAutomatically: false` + `activityType: Fitness`. Task callback flows back into `gpsManager.ingestExternalFix` (same processFix pipeline as foreground).
+- **Permission flow:** `Location.requestBackgroundPermissionsAsync` at [store/roundStore.ts:575](../store/roundStore.ts#L575) on round start.
+
+Real risks on a pocketed phone:
+1. **Background permission denied** → foreground service config is moot. `startLocationUpdatesAsync` won't deliver while backgrounded → phone-in-pocket goes dark.
+2. **OEM battery-optimization** (Samsung One UI, Xiaomi MIUI) can kill foreground services not on the OS whitelist. Z Fold Samsung skin is aggressive — Tim has previously hit this class.
+3. **Foreground watch dies** when app backgrounds — only the background task delivers fixes once the app's not in focus. Fix cadence drops from 1Hz (active) to 10s (background config).
+
+Proposed minimal hardening (do not apply tonight — needs real-device verification first):
+- **Tomorrow's verification step:** Tim starts a round on the Z Fold, grants background permission when prompted, pockets the phone for 10-15 min, then opens to confirm continuous fix cadence in the GPS Test Bench timeline (no `[stalled]` events, no large gaps in the ring buffer).
+- If that passes: no app-side change needed. Sim stall is a harness-only artifact.
+- If that fails (Doze killed the foreground service despite the notification): add Samsung-specific battery-optimization opt-out prompt (`PowerManager.requestIgnoreBatteryOptimizations` via a small native module or `expo-intent-launcher` deep-link to the OS settings screen).
+- Sim-side hardening optional regardless: replace `setInterval` with a wake-aware ticker (`expo-keep-awake` + `AppState` listener that resyncs `lastTickMs` on foreground), so harness runs don't lose visibility to a "real" issue while the simulator is silent.
+
+#### Finding 2 — Off-course flip at end of round (3461y from nearest hole, after H18 walk_complete)
+**Verdict: HARMLESS HARNESS TEARDOWN. Not a round-end state bug; not what the End Round crash (Fix 1, `2801bf9`) was masking.**
+
+Sequence:
+1. Sim reaches final waypoint → [services/simulatedGPS.ts:322-326](../services/simulatedGPS.ts#L322-L326) logs `walk_complete` → calls `stopSimulatedWalk()`.
+2. `stopSimulatedWalk()` ([services/simulatedGPS.ts:177-184](../services/simulatedGPS.ts#L177-L184)) calls `clearSimulatedFix()` — which (per Day 1 / Fix 4) flips `gpsManager.simulatedActive = false` and nulls `lastFix`.
+3. The round is **still active** at this point — `walk_complete` does not call `endRound`. The off-course detector keeps polling ([services/offCourseDetector.ts:147+](../services/offCourseDetector.ts#L147)).
+4. With `simulatedActive = false`, the foreground `watchPositionAsync` subscription (still alive) starts delivering real-device GPS fixes → `processFix` → `lastFix` becomes the device's actual coordinates (Tim's living room).
+5. Off-course detector reads `gpsManager.getLastFix()` → haversines to every course-hole green/tee/front/back → minimum is 3461 yards because the device is 1.97 miles from the simulated course. Sustained-window threshold elapses → `setOffCourse(true)` → log fires.
+
+This is the detector behaving correctly given the device's true location. Not a bug. Specifically:
+- It is **not** state corruption left by round-end — round-end hasn't fired yet.
+- It is **not** what the End Round crash was masking — the crash fired on `/recap/[round_id]` mount (`useRoundStore` selector returning a fresh `[]`), a completely different code path and trigger.
+- The 3461y reading is genuine: device is 3461 yards from the nearest point of the synthetic course's geometry.
+
+No fix needed. Optional cosmetic: `stopSimulatedWalk` could also suppress off-course logging for a few seconds after teardown (the user obviously doesn't need "off course" telemetry during the brief gap between sim end and End Round). Not worth the surface area unless it's user-visible noise — and the off-course pill on the Caddie tab is only shown during an active round AND with telemetry tab open, so it's almost certainly invisible to Tim. Defer indefinitely.
+
 ### Shipped today (Day 1 / Fix 7 addendum)
 - **Hole-transition GPS refresh seam** (`app/(tabs)/caddie.tsx`, new useEffect keyed on `[currentHole, isRoundActive]`). Tim hit 2-5y upward yardage drift on holes 13/16/17 of the synthetic round; the value self-corrected within ~1 sim tick and corrected immediately on navigate-away/back. Root cause: when `holeDetection` fires → `setCurrentHole(next)` → `fmb` memo re-runs with the new hole's green coords against a `gpsManager.lastFix` from one sim-tick ago. Memo correct, fix correct, but the position lag = a small drift. Option A fix: on hole change, `await gpsManager.getOneShotFix()` (pulses real GPS if cache >10s; no-op on sim) then bump `markTick` to force the memo to recompute against whatever's freshest. Closes the seam without touching haversine, yardage math, or the GPS quality classifier. Symptoms 2 (no caddie hole announcement on harness) and 3 (stroke never exceeds 2 on harness) confirmed expected harness behavior — documented in the diagnosis, not fixed.
 
