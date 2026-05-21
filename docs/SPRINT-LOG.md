@@ -12,6 +12,70 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 ### Shipped today (Day 1 / Fix 1 addendum)
 - **End Round "Maximum update depth exceeded" crash — FIXED** ([app/recap/[round_id].tsx:172](../app/recap/[round_id].tsx#L172)). Root cause: the `useRoundStore` selector for `roundPhotos` used an inline `?? []` fallback. When `round_photos` was `undefined` (every round without photos — Tim's synthetic rounds in particular), the selector returned a FRESH `[]` literal each evaluation. Zustand's `useSyncExternalStore` saw the new reference as a snapshot change, re-rendered, re-ran the selector, got yet another fresh `[]`, looped forever → crash. Fix: extracted `const EMPTY_PHOTOS: RoundPhoto[] = []` at module scope and use it as the fallback so the reference is stable. Same pattern Tim already fixed in `components/dev/GpsQualityOverlay.tsx` (2026-05-16 — see in-file comment there).
 
+## Day 2 — 2026-05-21
+
+### Day 2 / Fix 9A — Re-route all entry points to canonical SmartMotion (NO DELETES)
+Per Tim's standing decision: there is exactly ONE SmartMotion. Survivor = `app/swinglab/smartmotion.tsx` (Phase 416 two-card + Phase 418 validation gate). `app/swinglab/quick-record.tsx` stays as the minimal capture primitive.
+
+**Re-routes shipped (this commit):**
+- `services/intents/openToolHandler.ts:28-29` — voice intent `smartmotion` / `smart_motion` → `/swinglab/smartmotion` (was `/smartmotion-quick`)
+- `components/tools/GlobalToolsMenu.tsx:325` — ••• Tools menu SmartMotion row → `/swinglab/smartmotion` (was `/smartmotion-quick`). Updated subcopy from "Quick swing capture · acoustic auto-stop" to the canonical's "AI Swing Analysis · Body Mechanics · Shot Tracing"
+- `app/swinglab/library.tsx:256` — "Record a swing" empty-state CTA → `/swinglab/smartmotion` (was `/smartmotion-quick`)
+- SwingLab tab card already pointed at `/swinglab/smartmotion` — no change
+
+Build gates: `tsc --noEmit` clean. `expo lint` unchanged at the Phase 420 baseline (5 errors all `react/no-unescaped-entities` + 12 warnings — no new regressions from this re-route).
+
+**Inbound-refs audit after re-route:**
+
+| Candidate | LOC | Inbound functional refs | Safe to delete now? |
+|-----------|-----|--------------------------|----------------------|
+| `app/smartmotion-quick.tsx` | 954 | **0** (only `app/_layout.tsx:746` Stack.Screen registration remains — declarative, drops with the file) | **YES — pending Tim's go** |
+| `app/swinglab/cage-drill.tsx` | 1,039 | **1: `components/caddie/CockpitCaddieScreen.tsx:301`** still does `router.push('/swinglab/cage-drill')` for the cockpit-mode cage button. Plus header-comment refs in `app/swinglab/quick-record.tsx`, `app/swinglab/camera-setup.tsx`, `app/swinglab/range.tsx`, `services/acousticImpactDetector.ts`, `store/cageCalibrationStore.ts` (no functional impact). | **NO — one live caller** |
+| `components/CaptureOverlay.tsx` | 311 | **Globally mounted at app root** (`app/_layout.tsx:49+582`). Not a screen — listens to `mediaCapture` for the 'shot' kind. Subscribed by `services/mediaCapture.ts` + referenced by `services/intents/mediaHandlers.ts`, `store/roundStore.ts`, `scripts/simulations/run-sim.ts`. | **NO — different feature** |
+
+**Capability check (the load-bearing question for cage-drill):**
+
+**`app/smartmotion-quick.tsx`** vs survivor — pure parallel duplicate of the capture flow, BUT carries two non-obvious behaviours the survivor does not have today:
+1. **Voice "ready" wake-word loop** (LISTENING_VOICE phase) — multi-swing demo flow where the user says "ready" / "go" / "swing" to trigger the next capture hands-free
+2. **Loop count selector (1 / 3 / 5 / 10 swings)** — multi-swing batch mode for range / demo sessions
+3. Inline RESULTS phase that loops back to READY without leaving the screen — survivor today routes through `quick-record` → back to `smartmotion` with `clipUri`, which is functionally the same flow over two screens
+
+If Tim wants those wake-word and loop-count behaviours preserved, **port before delete**. If they were dead-weight (Tim's "Mariners demo" use case has shifted), pure delete.
+
+**`app/swinglab/cage-drill.tsx`** vs survivor — NOT a pure duplicate. Unique capabilities the survivor does not have:
+1. **`checkBullseye` gate** — calls `cageApi.checkBullseye` to verify the bullseye is in frame before allowing recording (SETUP → CHECKING → READY | NOT_READY phases). Cage-practice-specific.
+2. **`detectBallSpeed` integration** — calls `acousticDetectApi.detectBallSpeed` for ball-speed estimation. Cage-specific.
+3. **`useCageCalibrationStore`** — surfaces "effective distance" from the cage calibration store.
+4. **Watch IMU integration** — `useWatchStore` `SwingMetrics` consumer (Galaxy Watch swing-detection feed).
+5. **`analyzeCageVideo` + `coachReview` APIs** — cage-specific analysis path (different from `runPhaseKOnSession` the survivor uses).
+6. **`CageOverlay` component** — visual framing guidance specific to cage practice.
+
+These are CAGE-PRACTICE features, not general SmartMotion features. Tim's "ONE SmartMotion" decree may want these merged in, or it may want cage practice to remain a distinct (but renamed) feature. Need Tim's call before deletion. The cockpit-mode cage button at `components/caddie/CockpitCaddieScreen.tsx:301` was NOT in Tim's listed re-route targets (voice / ••• / Library / SwingLab card) so it's left as-is for now.
+
+**`components/CaptureOverlay.tsx`** — NOT a SmartMotion screen at all. Globally-mounted overlay that listens for the `mediaCapture` `'shot'` kind. Triggered by the voice intent "record this shot" mid-round; captures a 5s shot clip and writes the URI onto the most-recent `ShotResult.clip_uri`. Conceptually distinct from cage/practice capture. The Phase 420 duplication audit tagged it loosely; reading the code, it serves the round-side per-shot recording, not the practice flow. **Recommend: keep, not a deletion candidate.** The audit count drops from 5 capture surfaces to 4 (sm-quick, cage-drill, cage-session-overlay, quick-record); after deletes drops to 2 (cage-session-overlay + quick-record).
+
+**Speed assessment of the survivor's flow (the "deep AND instant" question):**
+
+Currently from "tap SmartMotion in Tools menu":
+1. Tap → land on `/swinglab/smartmotion` with no `clipUri` → see `NoClipHero` ("Ready when you are. Tap Record. AI swing analysis · body mechanics overlay · drill recommendation.")
+2. Tap "Record Swing" → push `/swinglab/quick-record` → camera live
+3. Tap big red record button → records 8s OR tap again to stop early → `router.replace` back to `/swinglab/smartmotion?clipUri=...`
+4. Analysis runs → two-card view populated
+
+That's two extra surface transitions vs the prior smartmotion-quick flow (which landed at READY phase with the camera already live, then RESULTS appeared in-place). The two-card analysis depth is preserved AFTER capture, but the **landing-screen friction is not instant**: a marketing-style hero screen sits between Tools tap and camera.
+
+Options to make it instant (NOT applied — Tim's call):
+- **A. Auto-push to quick-record when entering smartmotion with no clipUri** — single tap from any entry point lands on a live camera. But: blocks users who want to land on smartmotion to view a library swing.
+- **B. Embed the camera inline in the NoClipHero** — biggest visual change, most code surgery.
+- **C. Add a tap-friendly "Open camera" entry above the marketing copy** — current Record button already does this, just labelled and positioned for first-time discovery rather than speed. Could tighten the layout / make the CTA larger / drop the copy.
+- **D. Direct-camera path for voice intent + Tools menu only (not Library)** — preserves Library's "tap to view existing swings" flow while making fast-path entries truly instant.
+
+Recommendation: **D**. The voice intent and Tools-menu paths are explicit "I want to record now" signals; the Library path is "I want to review what I've recorded." Two intents, one screen, branched on entry source.
+
+**Status: paused for Tim's go on what to port/delete from cage-drill + smartmotion-quick + which speed option (if any) to apply.**
+
+---
+
 ### Day 1 / Fix 8 — Diagnosis pass (NO FIX applied tonight)
 Two harness findings investigated; both reports below. Tim verifies real-device behavior tomorrow before any fix is applied.
 

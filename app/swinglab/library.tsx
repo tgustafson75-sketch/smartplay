@@ -253,7 +253,7 @@ export default function SwingLibrary() {
           ) : (
             <TouchableOpacity
               style={[styles.cta, { backgroundColor: colors.accent }]}
-              onPress={() => router.push('/smartmotion-quick' as never)}
+              onPress={() => router.push('/swinglab/smartmotion' as never)}
             >
               <Ionicons name="videocam" size={18} color="#0d1a0d" style={{ marginRight: 8 }} />
               <Text style={styles.ctaText}>Record a swing</Text>

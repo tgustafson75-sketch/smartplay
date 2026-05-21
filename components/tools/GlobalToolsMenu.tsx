@@ -321,8 +321,8 @@ export function GlobalToolsMenu() {
             <Row
               icon="flash-outline"
               label="SmartMotion"
-              sub="Quick swing capture · acoustic auto-stop"
-              onPress={() => nav('/smartmotion-quick')}
+              sub="AI Swing Analysis · Body Mechanics · Shot Tracing"
+              onPress={() => nav('/swinglab/smartmotion')}
               colors={colors}
             />
             <Row
