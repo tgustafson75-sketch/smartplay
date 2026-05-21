@@ -32,6 +32,8 @@
  */
 
 import * as Location from 'expo-location';
+// 2026-05-21 — Consolidation 4: routine lifecycle status logs gated.
+import { devLog } from './devLog';
 
 export const BACKGROUND_LOCATION_TASK = 'smartplay-background-location';
 
@@ -84,7 +86,7 @@ function ensureTaskDefined(): boolean {
       })();
     });
     taskDefined = true;
-    console.log('[bgLocation] task defined:', BACKGROUND_LOCATION_TASK);
+    devLog('[bgLocation] task defined:', BACKGROUND_LOCATION_TASK);
     return true;
   } catch (e) {
     console.log('[bgLocation] ensureTaskDefined failed (non-fatal):', e);
@@ -133,7 +135,7 @@ export async function startBackgroundLocation(): Promise<void> {
       pausesUpdatesAutomatically: false,
       activityType: Location.ActivityType.Fitness,
     });
-    console.log('[bgLocation] updates started');
+    devLog('[bgLocation] updates started');
   } catch (e) {
     console.log('[bgLocation] start failed:', e);
   }
@@ -145,7 +147,7 @@ export async function stopBackgroundLocation(): Promise<void> {
     const running = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
     if (!running) return;
     await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
-    console.log('[bgLocation] updates stopped');
+    devLog('[bgLocation] updates stopped');
   } catch (e) {
     console.log('[bgLocation] stop failed:', e);
   }

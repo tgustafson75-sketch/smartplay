@@ -14,6 +14,40 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Consolidation 4 — `console.log` noise pruned (18 routine traces gated, 414 intentional diagnostics retained)
+
+**Survey:** actual count was **432 `console.log` calls** across the tree (Phase 420 audit said 355 — likely an under-count from the same narrow-grep methodology that produced the route false-positives). Top offenders matched the audit: `store/roundStore.ts` (29), `services/simulatedGPS.ts` (22), `services/listeningSession.ts` (16), `app/(tabs)/caddie.tsx` (14), `hooks/useVoiceCaddie.ts` (12).
+
+**Classification per Tim's spec:**
+
+| Category | Count | Action |
+|---|---|---|
+| Server-side `api/*.ts` (Vercel functions, `__DEV__` undefined) | 51 | **Skip** — no gate possible |
+| Dev-only `scripts/simulations/*` | 33 | **Skip** — dev-only |
+| Harness `services/simulatedGPS.ts` | 22 | **Skip** — Tim's explicit exclusion |
+| Owner debug surfaces (`*-debug.tsx`, `gps-test.tsx`) | 3 | **Skip** — logging is the point |
+| Tagged diagnostic breadcrumbs (`[V6-DIAG]`, `[path2:round]`, `[path4:voice]`, `[audit:round-active]`, `[audit:earbud]`, `[audit:gps]`, `[audit:voice]`, `[ttfa]`, `[handicap]`, `[mark]`, etc.) | ~140 | **Keep** — instrumented grep targets |
+| Catch-block error surfacing (`catch (e) { console.log('[X] failed:', e) }`) | ~165 | **Keep** — real-failure visibility |
+| Routine flow traces (status messages, value dumps, lifecycle "did X" notifications) | **18** | **Gated through `devLog`** |
+
+**`services/devLog.ts` created** — single-line helper: `if (__DEV__) console.log(...)`. Bundler dead-code-eliminates the body in production builds (`__DEV__` is the literal `false`, so Metro/Hermes drops it). Routes through here are silent in TestFlight / public builds; still log in dev.
+
+**18 routine traces gated** across 6 files:
+- `services/fillerLibrary.ts` — 7 (filler library lifecycle: cache hit/miss, generation start/complete, library clear)
+- `services/backgroundLocationTask.ts` — 3 (task defined / updates started / updates stopped — pure lifecycle)
+- `services/mediaKeyBridge.ts` — 2 (track-player loader notes — defensive notes, not errors)
+- `store/roundStore.ts` — 2 (health-snapshot object dump, setCurrentHole clamp notification)
+- `hooks/useVoiceCaddie.ts` — 3 (transcript dump, follow-up bypass note, recording-started)
+- `app/_layout.tsx` — 2 (Updates background-fetch complete, mark shot-location-correction applied — would spam on long rounds)
+
+**Final count:** **414 `console.log`** (down from 432) + **19 `devLog`** routing through the new helper. Net = same total touch surface; difference is 18 lines that produce zero output in production builds.
+
+**Why the audit's "noise" framing overstated the problem:** reading the corpus showed ~95% of existing logs are already tagged diagnostics or honest catch-block error surfaces. The audit's grep didn't classify; it counted. The genuine routine-flow noise is a much smaller set (~18 lines of 432), already-disciplined codebase by log standards. Tim's KEEP categories were correctly conservative.
+
+**Build gates:** `tsc --noEmit` clean. `expo lint` at the Consolidation 1/2/2b/3 baseline (5 errors + 11 warnings — all pre-existing).
+
+**Did NOT touch:** `app/(tabs)/caddie.tsx` log lines (refactor deferred per project decision — wouldn't gate there in isolation). Server-side `api/*` routes (no `__DEV__` in Node). Harness / scripts / debug surfaces (per Tim's spec). All catch-block error patterns. All `[V6-DIAG]` / `[audit:*]` / `[path*:]` / `[ttfa]` / `[handicap]` breadcrumbs.
+
 ### Consolidation 3 — Orphan-routes audit verdict: ZERO genuine orphans (Phase 420 audit had narrow grep, missed 14 of 14)
 
 **Methodology:** re-grepped each "orphan" with broader patterns — template literals (`\`/course/${id}\``), `pathname:` object form, indirect callers (Settings rows, Tools menu), cold-install redirects. Phase 420 routes-audit agent's grep had been string-literal-only and missed most real call sites.

@@ -19,6 +19,8 @@ import {
   classifyQuery,
 } from '../services/fillerLibrary';
 import { checkContent } from '../services/contentGuardrail';
+// 2026-05-21 — Consolidation 4: routine voice traces gated through devLog.
+import { devLog } from '../services/devLog';
 import { voiceCommandRouter } from '../services/intents';
 import type { AppContext } from '../types/voiceIntent';
 import type { ToolAction } from '../app/api/kevin+api';
@@ -700,7 +702,7 @@ export const useVoiceCaddie = ({
         return;
       }
 
-      console.log('[voice] transcript:', transcript);
+      devLog('[voice] transcript:', transcript);
 
       if (!transcript.trim()) {
         // Silent / unintelligible audio. Common when the mic was too
@@ -757,7 +759,7 @@ export const useVoiceCaddie = ({
       // own prior turn.
       const skipIntentRouter = isAwaitingFollowUp();
       if (skipIntentRouter) {
-        console.log('[voice] follow-up bypass: Kevin asked a question, routing reply straight to brain');
+        devLog('[voice] follow-up bypass: Kevin asked a question, routing reply straight to brain');
       }
 
       // ── Voice command routing — runs after bypasses, before brain ──
@@ -979,7 +981,7 @@ export const useVoiceCaddie = ({
       const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
 
       recordingRef.current = recording;
-      console.log('[voice] recording started');
+      devLog('[voice] recording started');
 
       // Auto-stop after AUTO_STOP_MS
       autoStopTimer.current = setTimeout(() => {

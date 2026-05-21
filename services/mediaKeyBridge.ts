@@ -27,6 +27,9 @@
  *     support; then this file's loadTrackPlayer() body becomes the wire.
  */
 
+// 2026-05-21 — Consolidation 4: track-player-loader notes gated.
+import { devLog } from './devLog';
+
 let TrackPlayer: any = null;
 let Event: any = null;
 let Capability: any = null;
@@ -62,7 +65,7 @@ function loadTrackPlayer(): boolean {
     Capability = cap;
     return true;
   } catch (e) {
-    console.log('[mediaKeyBridge] track-player load failed (expected in Expo Go):', e);
+    devLog('[mediaKeyBridge] track-player load failed (expected in Expo Go):', e);
     return false;
   }
 }
@@ -85,7 +88,7 @@ async function ensureSetup(): Promise<void> {
       });
     } catch (e) {
       // setupPlayer throws if called twice — safe to ignore.
-      console.log('[mediaKeyBridge] setup note:', e);
+      devLog('[mediaKeyBridge] setup note:', e);
     }
   })();
 

@@ -52,6 +52,8 @@ import CaptionStrip from '../components/CaptionStrip';
 import { GlobalToolsMenu } from '../components/tools/GlobalToolsMenu';
 import { GlobalToast } from '../components/toast/GlobalToast';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+// 2026-05-21 — Consolidation 4: routine status logs gated.
+import { devLog } from '../services/devLog';
 
 // Phase Y — whenRoundStoreHydrated lives in store/roundStore.ts (was
 // inlined here originally; audit moved it to remove a brittle
@@ -201,7 +203,7 @@ function AppNavigator() {
         const result = await Updates.checkForUpdateAsync();
         if (!result.isAvailable) return;
         await Updates.fetchUpdateAsync();
-        console.log('[updates] background fetch complete — applies on next launch');
+        devLog('[updates] background fetch complete — applies on next launch');
       } catch (e) {
         console.log('[updates] background fetch failed', e);
       }
@@ -515,7 +517,7 @@ function AppNavigator() {
             const ageMs = Date.now() - lastShotOnHole.timestamp;
             if (ageMs < 60_000 && !lastShotOnHole.end_location) {
               round.closeHoleEndLocation(hole, { lat: mark.lat, lng: mark.lng });
-              console.log(`[mark] shot-location correction applied to shot ${lastShotOnHole.id} (${Math.round(ageMs / 1000)}s old)`);
+              devLog(`[mark] shot-location correction applied to shot ${lastShotOnHole.id} (${Math.round(ageMs / 1000)}s old)`);
             }
           }
         }

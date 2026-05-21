@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
+// 2026-05-21 — Consolidation 4: routine status logs gated. Tagged
+// breadcrumbs ([path2:round], [audit:round-active]) stay on console.log.
+import { devLog } from '../services/devLog';
 import type { RoundMode } from '../types/patterns';
 import type { HolePlan } from '../types/plan';
 import type { ShotOutcome } from '../types/shot';
@@ -600,7 +603,7 @@ export const useRoundStore = create<RoundState>()(
           idx === s.roundHistory.length - 1 ? { ...r, health } : r,
         );
         set({ roundHistory: updated });
-        console.log('[roundStore] enrichLastRoundWithHealth:', {
+        devLog('[roundStore] enrichLastRoundWithHealth:', {
           steps: health.totalSteps,
           dist: health.distanceMeters,
           hr_avg: health.heartRateAvg,
@@ -1028,7 +1031,7 @@ export const useRoundStore = create<RoundState>()(
         const maxHole = state.courseHoles.length > 0 ? state.courseHoles.length : 18;
         const clamped = Math.max(1, Math.min(hole, maxHole));
         if (clamped !== hole) {
-          console.log(`[roundStore] setCurrentHole(${hole}) clamped to ${clamped} (course max=${maxHole})`);
+          devLog(`[roundStore] setCurrentHole(${hole}) clamped to ${clamped} (course max=${maxHole})`);
         }
         // Phase B + Phase Q.5b — close out the previous hole's last shot
         // end_location to that hole's green centroid before advancing.

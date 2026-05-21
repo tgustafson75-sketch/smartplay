@@ -3,6 +3,9 @@ import { Audio } from 'expo-av';
 import { File, Paths } from 'expo-file-system';
 import { FILLER_PHRASES } from '../constants/fillerPhrases';
 import type { FillerCategory, FillerClip, FillerLibrary } from '../types/filler';
+// 2026-05-21 — Consolidation 4: routine status logs gated through
+// devLog so they're silent in production. Errors stay on console.log.
+import { devLog } from './devLog';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -82,11 +85,11 @@ export async function initFillerLibrary(): Promise<void> {
   const cached = await loadFromStorage();
   if (cached && allFilesExist(cached)) {
     library = cached;
-    console.log('[filler] library loaded from cache:', cached.clips.length, 'clips');
+    devLog('[filler] library loaded from cache:', cached.clips.length, 'clips');
   } else if (cached) {
     // Index exists but audio files were purged from cache — reset so regeneration triggers
     await AsyncStorage.removeItem(STORAGE_KEY);
-    console.log('[filler] cache miss — audio files gone, will regenerate');
+    devLog('[filler] cache miss — audio files gone, will regenerate');
   }
 }
 
@@ -140,7 +143,7 @@ async function doGenerate(
 
   // Check if already valid
   if (library && library.voice_settings_hash === hash && allFilesExist(library)) {
-    console.log('[filler] library already up to date');
+    devLog('[filler] library already up to date');
     return;
   }
 
@@ -149,11 +152,11 @@ async function doGenerate(
   if (cached && cached.voice_settings_hash === hash &&
       cached.clips.length === FILLER_PHRASES.length && allFilesExist(cached)) {
     library = cached;
-    console.log('[filler] library loaded from storage after re-check');
+    devLog('[filler] library loaded from storage after re-check');
     return;
   }
 
-  console.log('[filler] generating', FILLER_PHRASES.length, 'clips...');
+  devLog('[filler] generating', FILLER_PHRASES.length, 'clips...');
 
   // Audit 101 / W3 — parallelize TTS fetches with a concurrency cap.
   // Prior code processed each phrase serially: ~40 phrases × ~1-2s
@@ -179,7 +182,7 @@ async function doGenerate(
   try {
     await saveToStorage(newLib);
     library = newLib;
-    console.log('[filler] generation complete:', newLib.clips.length, '/', FILLER_PHRASES.length, 'clips');
+    devLog('[filler] generation complete:', newLib.clips.length, '/', FILLER_PHRASES.length, 'clips');
   } catch {
     // saveToStorage already logged the error; leave `library` untouched
     // so the next generateLibrary call retries from a clean state.
@@ -310,7 +313,7 @@ export async function clearLibrary(): Promise<void> {
   }
   await AsyncStorage.removeItem(STORAGE_KEY);
   library = null;
-  console.log('[filler] library cleared');
+  devLog('[filler] library cleared');
 }
 
 /** Classify a voice transcript into a filler category using keyword heuristics. */
