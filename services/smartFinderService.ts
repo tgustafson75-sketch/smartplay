@@ -1,7 +1,15 @@
-import * as Location from 'expo-location';
 import { useRoundStore, type ShotLocation } from '../store/roundStore';
 import { haversineYards } from '../utils/geoDistance';
-import { getOneShotFix, bumpToActive, subscribe as subscribeGps } from './gpsManager';
+import {
+  getOneShotFix,
+  bumpToActive,
+  subscribe as subscribeGps,
+  getLastFix as getGpsLastFix,
+  setSimulatedFix as setGpsSimulatedFix,
+  clearSimulatedFix as clearGpsSimulatedFix,
+  setMarkedFix as setGpsMarkedFix,
+  isSimulatedActive as isGpsSimulatedActive,
+} from './gpsManager';
 // 2026-05-19 — fall back to courseGeometryService cache when the local
 // courseHoles record has zeroed coords. data/courses.ts ships placeholder
 // zeros for courses we haven't hand-coded (Sunnyvale, SJ Muni). When the
@@ -64,21 +72,35 @@ export type LastFix = {
   timestamp: number;
 };
 
-let lastFix: LastFix | null = null;
-// Phase Q.5b — sim override flag. When true, refreshFix() returns the
-// caller-set lastFix instead of calling Location. Only set by the
-// services/simulatedGPS.ts test harness; production code never touches.
-let simulatedActive = false;
+// 2026-05-20 — Day 1 / Fix 4: smartFinderService no longer holds its
+// own position cache. The single source of truth is gpsManager.lastFix.
+// All public read paths below derive from getGpsLastFix() and all write
+// paths (sim / mark) proxy to gpsManager so every consumer sees the
+// same fix.
 
-// Phase 107 / B1 — listeners notified whenever lastFix changes so consumers
+/** Map gpsManager's GpsFix to the local LastFix shape used by yardage callers. */
+function getLastFixInternal(): LastFix | null {
+  const fix = getGpsLastFix();
+  if (!fix) return null;
+  return {
+    location: { lat: fix.lat, lng: fix.lng },
+    accuracy_m: fix.accuracy_m,
+    timestamp: fix.timestamp,
+  };
+}
+
+// Phase 107 / B1 — listeners notified whenever the fix changes so consumers
 // can react to live GPS updates (yardage strip auto-refresh while walking).
+// After Day 1 / Fix 4 these listeners are driven directly by the gpsManager
+// subscription wired in startSmartFinderGpsTracking — sim and mark writes
+// no longer notify locally because gpsManager fans those out to ALL
+// subscribers including this service.
 type FixChangeListener = (fix: LastFix) => void;
 const fixChangeListeners = new Set<FixChangeListener>();
 
-function notifyFixChange(): void {
-  if (!lastFix) return;
+function notifyFixChange(fix: LastFix): void {
   for (const cb of fixChangeListeners) {
-    try { cb(lastFix); } catch (e) { console.warn('[smartFinder] fix listener threw:', e); }
+    try { cb(fix); } catch (e) { console.warn('[smartFinder] fix listener threw:', e); }
   }
 }
 
@@ -88,107 +110,79 @@ export function subscribeFixChange(cb: FixChangeListener): () => void {
 }
 
 // Phase 107 / B1 — wire the live gpsManager subscription so yardages
-// auto-update as the player walks. gpsManager publishes 1Hz fixes during
-// active mode and 10s fixes during walking; either way smartFinder's
-// lastFix stays current and consumers see real-time yardages without
-// requiring Mark or screen-open to refresh.
+// auto-update as the player walks. The subscriber maps gpsManager's
+// GpsFix into smartFinder's LastFix shape and fans out to local
+// subscribeFixChange listeners.
 let gpsUnsub: (() => void) | null = null;
 export function startSmartFinderGpsTracking(): void {
   if (gpsUnsub) return;
   gpsUnsub = subscribeGps((fix) => {
-    // Sim override wins.
-    if (simulatedActive) return;
-    lastFix = {
+    notifyFixChange({
       location: { lat: fix.lat, lng: fix.lng },
       accuracy_m: fix.accuracy_m,
       timestamp: fix.timestamp,
-    };
-    notifyFixChange();
+    });
   });
 }
 export function stopSmartFinderGpsTracking(): void {
   if (gpsUnsub) { gpsUnsub(); gpsUnsub = null; }
-  // 2026-05-17 — reset cached fix + the calc-log ring buffer at round
-  // end. Previously lastFix carried over (UI showed yardages from the
-  // PREVIOUS round's last fix until the new round's first tick) and
-  // calcLog accumulated across rounds unbounded by round boundary
-  // (only bounded by total size). fixChangeListeners is intentionally
-  // NOT cleared — subscribers (cockpit data strip, smartfinder)
-  // remain mounted across rounds and should keep their subscriptions.
-  lastFix = null;
+  // 2026-05-17 — reset the calc-log ring buffer at round end so it
+  // doesn't accumulate across rounds. fixChangeListeners is
+  // intentionally NOT cleared — subscribers (cockpit data strip,
+  // smartfinder) remain mounted across rounds and should keep their
+  // subscriptions. The position cache is owned by gpsManager and gets
+  // cleared by stopGpsManager() in the round-end teardown.
   calcLog = [];
 }
 
 export function getLastFix(): LastFix | null {
-  return lastFix;
+  return getLastFixInternal();
 }
 
 /**
- * Phase Q.5b — set the cached fix directly. Used by the simulated GPS
- * test harness to feed waypoint coordinates without going through the
- * device geolocation API. Idempotent.
+ * Phase Q.5b — sim seed proxied to gpsManager.setSimulatedFix. Pre-Day 1 /
+ * Fix 4 this wrote a local cache; now it routes through gpsManager so
+ * every consumer (shotLocationService, GPS quality overlay, etc.)
+ * sees the same fix.
  */
 export function setSimulatedFix(loc: ShotLocation, accuracy_m = 3): void {
-  lastFix = { location: loc, accuracy_m, timestamp: Date.now() };
-  simulatedActive = true;
-  // 2026-05-19 — Notify fix-change listeners so downstream consumers
-  // (Caddie tab F/M/B memo via markTick, L1 SmartFinder yardages,
-  // SmartVision live updates, the L1HolePreview player dot) actually
-  // recompute when the simulator moves the player. Without this notify,
-  // the simulator updates lastFix silently and only screens that
-  // subscribe to a separate tick or rerender on their own ever showed
-  // movement. Tim's "Quiet SmartFinder shows no yardage" + "the harness
-  // isn't progressing" reports both trace back here.
-  notifyFixChange();
+  setGpsSimulatedFix(loc, accuracy_m);
 }
 
-/** Stop simulation and clear the cached fix so next refreshFix() hits real GPS. */
+/** Stop simulation. Proxies to gpsManager. */
 export function clearSimulatedFix(): void {
-  simulatedActive = false;
-  lastFix = null;
-  notifyFixChange();
+  clearGpsSimulatedFix();
 }
 
 export function isSimulatedActive(): boolean {
-  return simulatedActive;
+  return isGpsSimulatedActive();
 }
 
 /**
- * Phase AL — public seeder used by the position Mark bus. Forces the
- * cached lastFix to the user-marked coordinates so SmartFinder yardages
- * (front/middle/back) render against the marked spot immediately,
- * without waiting for the next watch tick. Subscribed in app/_layout.
+ * Phase AL — public seeder for the position Mark bus. Proxies to
+ * gpsManager.setMarkedFix so the marked coords become the single
+ * source of truth across SmartFinder, shotLocationService, and any
+ * other GPS-reading surface.
  */
 export function setMarkedFix(lat: number, lng: number, accuracy_m: number | null): void {
-  lastFix = {
-    location: { lat, lng },
-    accuracy_m,
-    timestamp: Date.now(),
-  };
-  // Phase 107 / B1 — notify subscribers so all yardage consumers refresh.
-  notifyFixChange();
+  setGpsMarkedFix(lat, lng, accuracy_m);
 }
 
 /**
- * Pulls a high-accuracy GPS fix and stores accuracy alongside the location for
- * use by the GPS quality indicator. Returns null on permission denial / failure
- * (callers should show the GPS-weak state).
+ * Pulls a high-accuracy GPS fix via gpsManager.getOneShotFix and returns
+ * the mapped LastFix shape. Returns null on permission denial / failure.
  */
 export async function refreshFix(): Promise<LastFix | null> {
-  // Sim override: just return whatever the harness set.
-  if (simulatedActive) return lastFix;
   // SmartFinder being open is a shot-intent signal — bump GPS to active.
   bumpToActive('smartfinder_refresh');
   try {
     const fix = await getOneShotFix();
-    if (!fix) return lastFix;
-    lastFix = {
+    if (!fix) return getLastFixInternal();
+    return {
       location: { lat: fix.lat, lng: fix.lng },
       accuracy_m: fix.accuracy_m ?? null,
       timestamp: fix.timestamp,
     };
-    notifyFixChange();
-    return lastFix;
   } catch (e) {
     console.log('[smartFinder] refreshFix failed:', e);
     return null;
@@ -310,7 +304,7 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
   const round = useRoundStore.getState();
   const hole = holeNumber ?? round.currentHole;
   const hData = resolveHoleDataWithFallback(hole);
-  const fix = lastFix ?? (await refreshFix());
+  const fix = getLastFixInternal() ?? (await refreshFix());
 
   if (!hData) {
     return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_hole' };
@@ -362,7 +356,8 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
   if (!hData) {
     return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_hole' };
   }
-  if (!lastFix) {
+  const syncFix = getLastFixInternal();
+  if (!syncFix) {
     return staticYardages(hData, hole);
   }
   const { front, middle, back, source } = resolveGreenCoords(hole);
@@ -370,13 +365,13 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
     return staticYardages(hData, hole);
   }
   const yards = {
-    front: front ? Math.round(haversineYards(lastFix.location, front)) : null,
-    middle: middle ? Math.round(haversineYards(lastFix.location, middle)) : null,
-    back: back ? Math.round(haversineYards(lastFix.location, back)) : null,
+    front: front ? Math.round(haversineYards(syncFix.location, front)) : null,
+    middle: middle ? Math.round(haversineYards(syncFix.location, middle)) : null,
+    back: back ? Math.round(haversineYards(syncFix.location, back)) : null,
     hole_number: hole,
     reason: 'ok' as const,
   };
-  logYardageCalc(hole, lastFix, { front, middle, back }, yards);
+  logYardageCalc(hole, syncFix, { front, middle, back }, yards);
   void source;
   // 2026-05-18 — same sanity clamp as the async path above. See note.
   if ((yards.middle ?? 0) > 800 || (yards.front ?? 0) > 800 || (yards.back ?? 0) > 800) {
@@ -388,7 +383,7 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
 
 /** Yardage from the player's current location to a tapped/known target point. */
 export async function distanceToPoint(target: ShotLocation): Promise<number | null> {
-  const fix = lastFix ?? (await refreshFix());
+  const fix = getLastFixInternal() ?? (await refreshFix());
   if (!fix) return null;
   const yards = Math.round(haversineYards(fix.location, target));
   logYardageCalc(null, fix, { middle: target, front: null, back: null }, {

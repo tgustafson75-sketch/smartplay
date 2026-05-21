@@ -1,7 +1,7 @@
 import * as Location from 'expo-location';
 import { useRoundStore, type ShotLocation, type CourseHole } from '../store/roundStore';
 import { getHoleGeometry } from './courseGeometryService';
-import { getOneShotFix } from './gpsManager';
+import { getOneShotFix, getLastFix as getGpsLastFix } from './gpsManager';
 
 /**
  * Phase B — GPS location capture for shots.
@@ -22,33 +22,39 @@ import { getOneShotFix } from './gpsManager';
  * when the next shot lands.
  */
 
-let lastLocation: ShotLocation | null = null;
+// 2026-05-20 — Day 1 / Fix 4: shotLocationService no longer holds a
+// local lastLocation cache. The single source of truth is gpsManager.
+// Reads go through getOneShotFix (which now respects simulator + mark
+// state per the gpsManager-side change), and the only fallback when
+// that returns null is gpsManager's existing cache via getGpsLastFix —
+// no shadow copy that could diverge from the canonical position.
 
 /**
- * Returns a fresh GPS fix when possible. Falls back to the last cached fix if the
- * request fails (e.g. permission denied, out of signal). Returns null if no fix is
- * available at all.
+ * Returns a fresh GPS fix when possible. Falls through to gpsManager's
+ * existing cache when a fresh pulse fails (e.g. permission denied, out
+ * of signal). Returns null if no fix is available anywhere.
  */
 export async function getCurrentLocation(): Promise<ShotLocation | null> {
   try {
     const { granted } = await Location.getForegroundPermissionsAsync();
     if (!granted) {
       const req = await Location.requestForegroundPermissionsAsync();
-      if (!req.granted) return lastLocation;
+      if (!req.granted) {
+        const cached = getGpsLastFix();
+        return cached ? { lat: cached.lat, lng: cached.lng } : null;
+      }
     }
-    // Pre-beta — prefer cached fix from gpsManager (<10s old) before
-    // firing a redundant high-accuracy pulse.
+    // Prefer cached fix from gpsManager (<10s old) before firing a
+    // redundant high-accuracy pulse. getOneShotFix also short-circuits
+    // to the cached fix when the simulator is active.
     const fix = await getOneShotFix();
-    if (fix) {
-      lastLocation = { lat: fix.lat, lng: fix.lng };
-      return lastLocation;
-    }
-    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-    lastLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    return lastLocation;
+    if (fix) return { lat: fix.lat, lng: fix.lng };
+    const cached = getGpsLastFix();
+    return cached ? { lat: cached.lat, lng: cached.lng } : null;
   } catch (e) {
     console.log('[shotLocation] getCurrentLocation failed:', e);
-    return lastLocation;
+    const cached = getGpsLastFix();
+    return cached ? { lat: cached.lat, lng: cached.lng } : null;
   }
 }
 
@@ -113,7 +119,20 @@ export function closeHoleAtTransition(holeNumber: number): void {
   useRoundStore.getState().closeHoleEndLocation(holeNumber, green);
 }
 
-/** For tests / debugging. */
+/**
+ * Test seam — pre-Day-1-fix-4 this set a local cache. Now that
+ * shotLocationService has no local cache, this proxies to gpsManager's
+ * sim-fix path so tests still produce a known position. Existing
+ * callers (none in production code, only test files) keep working.
+ */
 export function _setLastLocationForTest(loc: ShotLocation | null): void {
-  lastLocation = loc;
+  if (!loc) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { clearSimulatedFix } = require('./gpsManager') as typeof import('./gpsManager');
+    clearSimulatedFix();
+    return;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { setSimulatedFix } = require('./gpsManager') as typeof import('./gpsManager');
+  setSimulatedFix(loc, 3);
 }

@@ -85,6 +85,14 @@ type PoorSignalListener = (info: { accuracy_m: number | null; duration_ms: numbe
 const poorSignalListeners = new Set<PoorSignalListener>();
 let mode: GpsMode = 'walking';
 let lastFix: GpsFix | null = null;
+// 2026-05-20 — Day 1 / Fix 4: gpsManager is the canonical owner of
+// "current position." Sim and marked-fix write paths used to live in
+// smartFinderService.ts and only updated its local cache, leaving
+// gpsManager.lastFix stale. Any consumer that read via getOneShotFix
+// (e.g. shotLocationService) got a real-device fix while the
+// simulator believed it was elsewhere — root cause of the 629,441y
+// off-course readings and the "yardages drift up" symptom.
+let simulatedActive = false;
 let lastBumpReason: string | null = null;
 let lastBumpAt: number | null = null;
 let lastActiveBumpAt = 0;
@@ -126,6 +134,12 @@ function haversineMeters(a: GpsFix, b: { lat: number; lng: number }): number {
  * Returns true when the fix was accepted (not rejected as an outlier).
  */
 function processFix(raw: GpsFix): boolean {
+  // 2026-05-20 — Day 1 / Fix 4: drop incoming real GPS while the
+  // simulator owns the cache. Without this, watchPositionAsync would
+  // overwrite the sim coords with the device's real-world fix on every
+  // tick and the simulated round would jump to the player's actual
+  // location.
+  if (simulatedActive) return false;
   // (1) Discard if reported accuracy is worse than threshold.
   if (raw.accuracy_m != null && raw.accuracy_m > OUTLIER_ACCURACY_M) {
     outliersDiscarded++;
@@ -188,6 +202,68 @@ function processFix(raw: GpsFix): boolean {
  */
 export function ingestExternalFix(fix: GpsFix): boolean {
   return processFix(fix);
+}
+
+// 2026-05-20 — Day 1 / Fix 4: canonical write paths for simulator and
+// manual-mark seeded fixes. These were previously in smartFinderService
+// and only updated that service's local cache, diverging from
+// gpsManager.lastFix. Now they update the one true cache + fan out to
+// every subscriber (smartFinderService, shotLocationService, GPS quality
+// overlay, etc.) so every consumer sees the same position.
+
+/**
+ * Simulator-only fix seed. Sets lastFix to the harness-provided coords
+ * and flips simulatedActive so live GPS ticks are suppressed (would
+ * overwrite the sim) and getOneShotFix short-circuits to the cached
+ * sim fix (would otherwise pulse a real-device read).
+ */
+export function setSimulatedFix(loc: { lat: number; lng: number }, accuracy_m = 3): void {
+  simulatedActive = true;
+  lastFix = {
+    lat: loc.lat,
+    lng: loc.lng,
+    accuracy_m,
+    speed: null,
+    timestamp: Date.now(),
+  };
+  lastTickAt = Date.now();
+  for (const cb of subscribers) {
+    try { cb(lastFix); } catch (e) { ownerSentinel('gps.subscriber.sim', e); }
+  }
+}
+
+/** Stop the sim and clear the cached fix so the next real GPS tick wins. */
+export function clearSimulatedFix(): void {
+  simulatedActive = false;
+  lastFix = null;
+  smoothingBuffer = [];
+}
+
+export function isSimulatedActive(): boolean {
+  return simulatedActive;
+}
+
+/**
+ * Manual-mark seed. Forces lastFix to the user-marked coordinates so
+ * yardages (front / middle / back, shot start_location, etc.) reflect
+ * the marked spot immediately without waiting for the next watch tick.
+ * Resets the smoothing buffer per the Phase 107 / B3 note in
+ * bumpToActive — mark wants the raw current position, not a smoothed
+ * blend with the prior walking-mode samples.
+ */
+export function setMarkedFix(lat: number, lng: number, accuracy_m: number | null): void {
+  lastFix = {
+    lat,
+    lng,
+    accuracy_m,
+    speed: null,
+    timestamp: Date.now(),
+  };
+  smoothingBuffer = [];
+  lastTickAt = Date.now();
+  for (const cb of subscribers) {
+    try { cb(lastFix); } catch (e) { ownerSentinel('gps.subscriber.mark', e); }
+  }
 }
 
 function setMode(next: GpsMode, reason: string) {
@@ -429,6 +505,11 @@ export function stopGpsManager(): void {
   }
   subscribers.clear();
   lastFix = null;
+  // 2026-05-20 — Day 1 / Fix 4: clear the simulator flag on
+  // round-end so the next round starts with real GPS enabled by
+  // default. The simulator harness is round-scoped — leaving the
+  // flag true would silently suppress real GPS in the next round.
+  simulatedActive = false;
   smoothingBuffer = [];
   outliersDiscarded = 0;
   batterySaverFloor = null;
@@ -504,6 +585,11 @@ export function getLastBump(): { reason: string | null; ts: number | null } {
  * high-accuracy pulses); otherwise refreshes via Location.getCurrentPositionAsync.
  */
 export async function getOneShotFix(opts?: { maxAgeMs?: number }): Promise<GpsFix | null> {
+  // 2026-05-20 — Day 1 / Fix 4: when simulator owns the cache, always
+  // return the cached sim fix. Pulsing a real-device read here would
+  // bypass the simulator and return the player's real-world coords —
+  // exactly the bug that produced 629,441y off-course readings.
+  if (simulatedActive) return lastFix;
   const maxAge = opts?.maxAgeMs ?? CACHE_FRESH_MS;
   if (lastFix && Date.now() - lastFix.timestamp < maxAge) return lastFix;
   try {
