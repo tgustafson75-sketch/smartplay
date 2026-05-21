@@ -17,10 +17,15 @@ import { getPersistStorage } from '../services/ssrSafeStorage';
  * The level is consumed by:
  *   - Caddie home layout switcher (L1 quiet / L2 companion / L3 active /
  *     L4 full / L5 cockpit)
- *   - services/modeSelector.ts — shapes Caddie/Coach/Psychologist mode-selection
  *   - services/voiceOnboardingService.ts — picks per-level hint copy
  *   - services/trustLevelService.ts — exposes getTrustLevel(), wake-word default,
  *     and any other consumer-facing convenience.
+ *
+ * 2026-05-21 — Consolidation 2b removed the prior reference here to
+ * services/modeSelector.ts + services/roles/*. That chain was an
+ * aspirational orphan island with no consumers and no spec; deleted.
+ * When Caddie/Coach/Psychologist register-shifting is actually
+ * spec'd, resurrect from git history rather than reading this comment.
  */
 
 export type TrustLevel = 1 | 2 | 3 | 4 | 5;

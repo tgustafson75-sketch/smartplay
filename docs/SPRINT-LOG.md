@@ -14,6 +14,28 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Consolidation 2b — modeSelector/roles chain deleted, watchService kept, skeleton-stub honesty note logged
+
+**Deleted (orphan island, no spec, resurrect from git when register-shifting is spec'd):**
+- `services/modeSelector.ts`
+- `services/roles/caddieRole.ts`
+- `services/roles/coachRole.ts`
+- `services/roles/psychologistRole.ts`
+- `services/roles/` directory removed (auto, after the last file).
+- `store/trustLevelStore.ts` header comment line 20 — removed the dangling `services/modeSelector.ts` consumer reference + added a one-line note explaining the deletion + resurrect-from-git path.
+
+tsc clean, lint at the Consolidation 1/2 baseline (5 errors + 11 warnings). Zero importers anywhere in the codebase — verified before delete.
+
+**Kept — `services/watchService.ts`.** The documented native-SDK hook site for the post-sprint EAS watch build (wearables SDK access in hand per Fix F). The tempo/club-speed math is what the wired implementation will use. Real scheduled seam, NOT orphan scaffold.
+
+**Honesty note — SmartMotion skeleton overlay is STUB only.**
+
+The live SmartMotion skeleton overlay renders from `STUB_SKELETON_JOINTS` — hardcoded placeholder constants in `app/swinglab/smartmotion.tsx`. The Fix C coordinate-space remap + the topology rewrite (explicit bone-edge list, scaled head circle, wrist nodes) made it LOOK correct on real device — two distinct legs, head on a neck, joint dots at every limb, scales with `videoRect` so it stays aligned across Z Fold open/close.
+
+**It does NOT yet TRACK the user's real body.** It draws a generic golfer in setup pose. The bones, the head, the joints are visually correct but the positions are fixed — every clip gets the same skeleton overlaid in the same place. Real pose detection (MoveNet via TFJS) is a post-sprint EAS native build, same category as the Galaxy Watch IMU integration: native module + EAS Build, NOT OTA-able. Joint indices already match the MoveNet-17 subset so when real keypoints arrive they drop in without code surgery.
+
+**Standing rule:** do NOT present the skeleton as real swing tracking until that native build lands. No marketing copy / demo language claiming "this is your tracked swing" while the constants are static. Honest framing today: "preview of what real-time skeleton tracking will look like once the on-device pose model ships in the next APK build" — same no-fake-precision principle as the Phase 418 validation gate and the SmartFinder GPS-quality framing.
+
 ### Consolidation 2 — dead-code removal pass (2,313 LOC deleted across 29 files)
 
 Methodical batch deletion from the Phase 420 dead-code audit. `tsc --noEmit` gated after each batch. Total: **2,313 deletions across 29 files** (audit estimate was ~3,400 LOC — the difference is files that ended up retained per the report below).
