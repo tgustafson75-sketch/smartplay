@@ -83,3 +83,18 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 ### Notes
 - [decisions, gotchas, what a fresh chat needs to know]
 ```
+
+---
+
+## Post-Launch Tooling Ideas
+
+Captured to clear them off the active sprint. **Not sprint work — do not build during the consolidation sprint.** Re-evaluate after 1.0 ships.
+
+### Club-distance-aware synthetic round (harness v2)
+**What:** Upgrade the synthetic round generator so it plays golf instead of walking a path. Instead of interpolating position along fractional waypoints (tee → 1/3 → 2/3 → green) per [services/simulatedGPS.ts](../services/simulatedGPS.ts), the harness steps by realistic shot distances: tee shot ~driver carry, lands at a real position, next shot the appropriate club distance, etc., until on the green. Mock round JSON carries a shot sequence per hole (club, expected carry, resulting position) with realistic dwell at each.
+
+**Why:** Lets the FULL interconnected round system be desk-verified in one run — club selection, club yardages, stroke count, shot logging, hole transitions, and caddie club-recommendation logic all reacting to realistic shots together. The cross-component dynamics (how these pieces talk to each other) are exactly what's hard to verify piece-by-piece. Today the harness caps observed strokes at ~2 and can't exercise shot sequencing (see Day 1 / Fix 7 diagnosis Symptom 3 — the cap is the harness emitting 1 shot at mid-fairway + a burst at the green). Harness v2 fixes that.
+
+**What it does NOT do:** Still feeds SIMULATED position, so it still cannot exercise real-GPS hardware behavior (accuracy, signal, the `getOneShotFix` pulse that the sim guard short-circuits per Day 1 / Fix 4). Real-device round remains the only proof of GPS hardware behavior. This is a logic-coverage tool, not a GPS hardware test.
+
+**Priority:** Post-1.0. Good debugging investment, not launch-critical. Sits with the video content engine and other post-launch tooling.
