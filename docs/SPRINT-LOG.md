@@ -14,7 +14,36 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
-### Consolidation 5 — SmartFinder honest fallback labeling (`no_geometry` instead of silent `'ok'`)
+### Consolidation 5 (Part 2) — Surface the Mark Green capture loop on no-geometry surfaces
+
+Part 1 made the scorecard fallback label honest. Part 2 closes the next gap on Maplewood / Pembroke Pines: the **path out of fallback** (Mark Green → live yardages) was only reachable via Settings → Owner Tools, the Tools menu, or a voice intent. Buried, not obvious. With the NH trip next weekend Tim wanted the no-geometry surfaces to *actively* offer the capture loop.
+
+**Pre-change architectural verification — the three correctness questions Tim asked before any UI work:**
+
+1. **Is live yardage after marking measured as live-position → marked-green (haversine), NOT step-subtraction from the tee?**
+   ✅ Yes. [services/smartFinderService.ts:336-338, 377-379](../services/smartFinderService.ts#L336-L338) — `front/middle/back` are all `haversineYards(fix.location, …)` against the resolved green coords. No tee-subtraction anywhere on the live path. Dogleg-safe.
+
+2. **Does the marked green persist across rounds (and app restarts)?**
+   ✅ Yes. [services/courseGreenOverrides.ts](../services/courseGreenOverrides.ts) — AsyncStorage-backed singleton at key `smartplay.courseGreenOverrides.v1`. Per-`(courseId, hole)` entries with `{ lat, lng, markedAt }`. `rehydrate()` runs on first access; persists indefinitely until `clearGreenOverride()` is called.
+
+3. **Does re-marking a green overwrite the prior fix with a fresh GPS pulse?**
+   ✅ Yes. [app/mark-green.tsx:106](../app/mark-green.tsx#L106) — `await getOneShotFix({ maxAgeMs: 0 })` forces a fresh fix on every re-mark. [services/courseGreenOverrides.ts](../services/courseGreenOverrides.ts) — `setGreenOverride()` blindly reassigns `cached[courseId][hole]`; no merge / no skip-if-exists. Re-mark always wins.
+
+**No architectural change required.** Only surfacing.
+
+**Surfacing changes shipped:**
+
+1. **[app/smartfinder.tsx](../app/smartfinder.tsx)** — full-screen MapView fallback now renders a green "Mark this green for live yardages" pill button directly below the `geometryMsg` row when `yards.reason === 'no_geometry'`. Routes to `/mark-green`. Added `useRouter` import; added `markGreenBtn` / `markGreenBtnText` styles.
+
+2. **[components/smartfinder/SmartFinderCard.tsx](../components/smartfinder/SmartFinderCard.tsx)** — embedded card on Caddie home now splits the no-geometry empty-block into a static "Scorecard distance — no green GPS for this course." hint **plus** an inline Mark Green TouchableOpacity that stops bubbling and routes directly to `/mark-green`. The outer card-tap still routes to `/smartfinder` for everything else. Other no-geometry-variant branch (`middle == null && gps !== 'none'`) preserved unchanged.
+
+3. **No changes** to `services/smartFinderService.ts`, `services/courseGreenOverrides.ts`, or `app/mark-green.tsx` — they already do exactly what Tim required.
+
+**Result on Maplewood / Pembroke Pines next weekend:** opening the round → SCORECARD pill + `~485` middle + visible green "Mark this green for live yardages" button on both the Caddie-home embedded card AND the full-screen SmartFinder. One tap to capture. Live yardages thereafter are haversine(live → marked) and persist for future rounds at the same course.
+
+**Build gates:** `tsc --noEmit` clean. No regressions to courses with geometry — the new button only renders when `yards.reason === 'no_geometry'`.
+
+### Consolidation 5 (Part 1) — SmartFinder honest fallback labeling (`no_geometry` instead of silent `'ok'`)
 
 The NH pre-trip check (Maplewood / Pembroke Pines) surfaced this honesty gap: golfcourseapi has zero per-hole green coordinates for either course, so SmartFinder's fallback fires the scorecard tee→green total as the "middle" yardage. The fallback was returning `reason: 'ok'` — masquerading a static card-total as a live GPS read. Affects every course missing green geometry, not just the NH trip pair.
 

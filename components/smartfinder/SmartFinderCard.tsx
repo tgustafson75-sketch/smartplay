@@ -110,12 +110,33 @@ export default function SmartFinderCard() {
           Honest hint explains WHY and offers the tap-to-target alternative.
           2026-05-21 — Consolidation 5: also fires when reason is
           'no_geometry' (middle is now populated from scorecard, not null,
-          so the prior `middle == null` gate would have missed the case). */}
-      {isRoundActive && (yards.reason === 'no_geometry' || (yards.middle == null && gps.level !== 'none')) ? (
+          so the prior `middle == null` gate would have missed the case).
+          2026-05-21 — Consolidation 5 Part 2: when reason is 'no_geometry'
+          we now expose an inline "Mark this green" tap that routes to
+          /mark-green instead of forcing the player through the full
+          SmartFinder screen to find the action. Live yardage after marking
+          is haversine(live → marked) and persists across rounds — see
+          services/smartFinderService.ts resolveGreenCoords() and
+          app/mark-green.tsx. */}
+      {isRoundActive && yards.reason === 'no_geometry' ? (
+        <View style={styles.emptyBlock}>
+          <Text style={styles.emptyHint}>
+            Scorecard distance — no green GPS for this course.
+          </Text>
+          <TouchableOpacity
+            onPress={(e) => {
+              e.stopPropagation?.();
+              router.push('/mark-green' as never);
+            }}
+            activeOpacity={0.8}
+            style={styles.markGreenBtn}
+          >
+            <Text style={styles.markGreenBtnText}>Mark this green for live yardages</Text>
+          </TouchableOpacity>
+        </View>
+      ) : isRoundActive && yards.middle == null && gps.level !== 'none' ? (
         <Text style={styles.emptyHint}>
-          {yards.reason === 'no_geometry'
-            ? "Scorecard distance — no green GPS for this course. Tap to drop a target instead."
-            : "Course doesn’t have green coords — tap to drop a target instead."}
+          Course doesn’t have green coords — tap to drop a target instead.
         </Text>
       ) : (
         <Text style={styles.tapHint}>Tap for SmartFinder →</Text>
@@ -216,5 +237,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     fontStyle: 'italic',
+  },
+  emptyBlock: {
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  markGreenBtn: {
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#00C896',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#003d20',
+  },
+  markGreenBtnText: {
+    color: '#0a1f12',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.4,
   },
 });

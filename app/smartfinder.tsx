@@ -17,6 +17,7 @@ import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-g
 import { runOnJS } from 'react-native-reanimated';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
 import { safeBack } from '../services/safeBack';
+import { useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
@@ -948,6 +949,7 @@ function MapView({
   weather: WeatherSnapshot | null;
   shotBearingDeg: number | null;
 }) {
+  const router = useRouter();
   if (!geometry || !geometry.tee || !geometry.green) {
     const playsLike = (actual: number | null): number | null => {
       if (actual == null || !weather) return null;
@@ -983,6 +985,23 @@ function MapView({
           {geometryMsg && (
             <View style={styles.geometryMsgRow}>
               <Text style={styles.geometryMsgText}>{geometryMsg}</Text>
+              {/* 2026-05-21 — Consolidation 5 Part 2: when the course has
+                  no live green GPS, surface the Mark Green capture loop
+                  here instead of leaving it buried in Settings / Tools.
+                  Live yardage after marking is haversine(live → marked),
+                  not step-subtraction; persists across rounds via
+                  courseGreenOverrides; re-mark overwrites with a fresh
+                  one-shot fix. See services/smartFinderService.ts
+                  resolveGreenCoords() and app/mark-green.tsx. */}
+              {yards.reason === 'no_geometry' ? (
+                <TouchableOpacity
+                  onPress={() => router.push('/mark-green' as never)}
+                  style={styles.markGreenBtn}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.markGreenBtnText}>Mark this green for live yardages</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           )}
         </View>
@@ -1293,6 +1312,16 @@ const styles = StyleSheet.create({
   hazardItem: { color: '#9ca3af', fontSize: 13, lineHeight: 19 },
   geometryMsgRow: { marginTop: 16, alignSelf: 'stretch', alignItems: 'center', paddingHorizontal: 16 },
   geometryMsgText: { color: '#fbbf24', fontSize: 12, fontWeight: '600', letterSpacing: 0.4, textAlign: 'center' },
+  markGreenBtn: {
+    marginTop: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor: '#00C896',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#003d20',
+  },
+  markGreenBtnText: { color: '#0a1f12', fontSize: 13, fontWeight: '800', letterSpacing: 0.5 },
 
   holeNav: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
