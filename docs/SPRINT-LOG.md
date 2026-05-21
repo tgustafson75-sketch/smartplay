@@ -14,6 +14,27 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Fix A — Persistent caddie mic badge on SmartMotion / Cage Mode / SwingLab + auto-voice diagnosis
+
+**Problem (real-device):** Tim reported no way to manually reach the caddie on SmartMotion, Cage Mode, or SwingLab, AND hands-free wake-word ("record" / "start") did nothing.
+
+**Auto-voice diagnosis (one sentence):** the continuous-mic VAD loop (`useVoiceActivityDetection`) is mounted ONLY on `app/(tabs)/caddie.tsx` — no other screen has a continuous wake-word listener, so saying "record" cold on SmartMotion / Cage Mode / SwingLab can never fire. (Cage Mode does have `subscribeCapture(['swing'])` which catches the 'swing' voice intent — but only AFTER a listening session is opened, not as a true wake-word.) Fix is non-trivial (mic ownership across screens) — deferred. Manual badge is the priority path and now works on all three.
+
+**Manual tap-to-talk status before this fix:**
+- Cage Mode: badge wired in its custom Header → `toggleListening()`. Static image, no listening pulse, no mic-icon affordance. Title still read "Cage Drill" (drift from the 9B rename).
+- SwingLab: `BrandHeaderRow` already had tap-to-talk on the brand badge — but no visual mic affordance, so it read as a logo not a button.
+- SmartMotion: NO badge at all in its custom header. Genuinely missing.
+
+**Fix shipped:**
+- New shared component [components/caddie/CaddieMicBadge.tsx](../components/caddie/CaddieMicBadge.tsx). Encapsulates: badge image + listening-state ring (green active / amber thinking) + pulsing halo on 'listening' + small mic-icon overlay (bottom-right of the badge so it visually reads as a control) + tap → `listeningSession.toggle()`. Subscribes to `useListeningSessionStore` so every instance pulses in sync.
+- [components/brand/BrandHeaderRow.tsx](../components/brand/BrandHeaderRow.tsx) refactored to use `CaddieMicBadge` internally — no API change to consumers (SwingLab + Play + Dashboard + Scorecard tabs unchanged), every tab now gets the mic-icon affordance + consistent state pulse.
+- [app/swinglab/smartmotion.tsx](../app/swinglab/smartmotion.tsx) — added `<CaddieMicBadge size={40} />` as the first element of the header (top-left), back chevron remains beside it.
+- [app/swinglab/cage-mode.tsx](../app/swinglab/cage-mode.tsx) — Header swapped the static `Image` badge for `<CaddieMicBadge size={40} onPress={onBadge} />`. Listening pulse + mic-icon for free. Stale `badgeBtn` / `badgeImg` styles removed. Header title updated "Cage Drill" → "Cage Mode" (post-9B drift fix).
+
+**Auto-voice fix:** NOT applied (deferred). The fix requires wiring continuous VAD to multiple screens with mic-ownership coordination — beyond Fix A's scope. Manual badge is the verified manual fallback path.
+
+**Build gates:** `tsc --noEmit` clean. `expo lint` unchanged at the Phase 420 baseline (5 errors + 12 warnings — all pre-existing, no new regressions).
+
 ### Day 2 / Fix 9B — Two clean features: SmartMotion (quick) + Cage Mode (practice/lessons)
 
 Per Tim's confirmed decision. SmartMotion = quick swing check. Cage Mode = dedicated practice + lesson environment. Zero overlap.

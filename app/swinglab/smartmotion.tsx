@@ -39,6 +39,10 @@ import { analyzeSwing, type SwingAnalysis } from '../../services/poseDetection';
 import { evaluateSwingValidity, type SwingValidity } from '../../services/swingValidity';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';
+// 2026-05-21 — Fix A: persistent caddie tap-to-talk badge so the user
+// can reach the caddie from SmartMotion the same way they can from the
+// Caddie tab and Cage Mode. Same `listeningSession.toggle()` pipeline.
+import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 
 type Angle = 'down_the_line' | 'face_on';
 // 2026-05-20 — Shot Tracer + Body Mechanics are overlays on the same
@@ -127,6 +131,11 @@ export default function SmartMotion() {
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
+        {/* 2026-05-21 — Fix A: tap-to-talk caddie badge top-left.
+            Same canonical pattern as Cage Mode + every tab's
+            BrandHeaderRow — toggles a listening session via the
+            shared CaddieMicBadge component. */}
+        <CaddieMicBadge size={40} />
         <TouchableOpacity onPress={() => router.back()} hitSlop={10}>
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>

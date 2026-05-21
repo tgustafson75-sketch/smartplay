@@ -15,13 +15,16 @@
  * lock-step by sharing the same constants below.
  */
 
-import React, { useEffect, useRef } from 'react';
-import { View, Text, Image, Pressable, Animated, Easing, StyleSheet } from 'react-native';
+import React from 'react';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useToolsMenuStore } from '../../store/toolsMenuStore';
-import { useListeningSessionStore } from '../../store/listeningSessionStore';
-import { toggle as toggleListening } from '../../services/listeningSession';
+// 2026-05-21 — Fix A: BrandHeaderRow's badge logic moved to the shared
+// CaddieMicBadge component so every tap-to-talk surface (this row +
+// SmartMotion + Cage Mode) uses the same ring / halo / mic-icon
+// affordance.
+import { CaddieMicBadge } from '../caddie/CaddieMicBadge';
 
 export const BRAND_BADGE_SIZE = 56;
 export const BRAND_TAGLINE = 'REAL-TIME CADDIE INTELLIGENCE';
@@ -43,45 +46,10 @@ export interface BrandHeaderRowProps {
 export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress, hideToolsPill = false }: BrandHeaderRowProps) {
   const { colors } = useTheme();
   const openTools = useToolsMenuStore((s) => s.open);
-  const listeningState = useListeningSessionStore((s) => s.state);
 
-  // Default = toggle the listening session (same pipeline that earbud
-  // taps and Play-tab badge already use). Pass `null` explicitly to
-  // disable taps on a particular surface.
-  const effectiveOnLogoPress: (() => void) | null =
-    onLogoPress === undefined ? () => { void toggleListening(); } : onLogoPress;
-  const isListening = listeningState === 'listening';
-  const isThinking = listeningState === 'thinking' || listeningState === 'responding';
-
-  // Subtle ring color + halo while the session is active so the badge
-  // gives the same listening / thinking feedback Kevin's face does.
-  const ringColor = isListening || isThinking ? colors.accent : 'transparent';
-  const logo = (
-    <View style={[styles.badgeRing, { borderColor: ringColor }]}>
-      {isListening && <ListeningHalo accent={colors.accent} />}
-      <Image
-        source={require('../../assets/avatars/smartplay_caddie_badge.png')}
-        style={styles.badge}
-        resizeMode="contain"
-      />
-    </View>
-  );
   return (
     <View style={styles.wrap}>
-      {effectiveOnLogoPress ? (
-        <Pressable
-          onPress={effectiveOnLogoPress}
-          hitSlop={6}
-          accessibilityRole="button"
-          accessibilityLabel={isListening ? 'Stop talking' : 'Talk to caddie'}
-          accessibilityHint="Starts recording. Tap again to stop."
-          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-        >
-          {logo}
-        </Pressable>
-      ) : (
-        logo
-      )}
+      <CaddieMicBadge size={BRAND_BADGE_SIZE} onPress={onLogoPress ?? undefined} />
       <View style={styles.titleBlock}>
         <View style={styles.wordmarkRow}>
           <Text style={[styles.name1, { color: colors.accent }]}>SMARTPLAY</Text>
@@ -114,29 +82,6 @@ export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress, hideTools
   );
 }
 
-/** Pulsing halo around the badge while the listening session is in the
- *  'listening' state. Mounted only when listening so idle pays zero
- *  animation cost. Mirrors the same pulse pattern Cockpit's BrandHeader
- *  uses so the two surfaces feel identical when active. */
-function ListeningHalo({ accent }: { accent: string }) {
-  const progress = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(Animated.timing(progress, {
-      toValue: 1, duration: 1500, easing: Easing.out(Easing.ease), useNativeDriver: true,
-    }));
-    loop.start();
-    return () => { loop.stop(); progress.setValue(0); };
-  }, [progress]);
-  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [1, 1.3] });
-  const opacity = progress.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] });
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[styles.halo, { borderColor: accent, opacity, transform: [{ scale }] }]}
-    />
-  );
-}
-
 export default BrandHeaderRow;
 
 const styles = StyleSheet.create({
@@ -147,28 +92,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 8,
     gap: 12,
-  },
-  badge: {
-    width: BRAND_BADGE_SIZE,
-    height: BRAND_BADGE_SIZE,
-    borderRadius: BRAND_BADGE_SIZE / 2,
-  },
-  // Ring around the badge that lights up while the listening session
-  // is active. Pure container — no border when listeningState is idle.
-  badgeRing: {
-    width: BRAND_BADGE_SIZE + 4,
-    height: BRAND_BADGE_SIZE + 4,
-    borderRadius: (BRAND_BADGE_SIZE + 4) / 2,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  halo: {
-    position: 'absolute',
-    width: BRAND_BADGE_SIZE + 16,
-    height: BRAND_BADGE_SIZE + 16,
-    borderRadius: (BRAND_BADGE_SIZE + 16) / 2,
-    borderWidth: 3,
   },
   titleBlock: {
     flex: 1,

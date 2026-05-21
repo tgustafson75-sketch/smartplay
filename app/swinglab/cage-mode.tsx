@@ -79,6 +79,9 @@ import {
 } from '../../services/acousticImpactDetector';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
 import { useCageCalibrationStore } from '../../store/cageCalibrationStore';
+// 2026-05-21 — Fix A: shared CaddieMicBadge for consistent
+// tap-to-talk affordance (ring + halo + mic-icon overlay).
+import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 
 type Phase =
   | 'SETUP'
@@ -893,15 +896,13 @@ function Header({
 }) {
   return (
     <View style={[styles.header, { top: insets.top + 8 }]} pointerEvents="box-none">
-      <TouchableOpacity onPress={onBadge} style={styles.badgeBtn} accessibilityLabel="Talk to your caddie">
-        <Image
-          source={require('../../assets/avatars/smartplay_caddie_badge.png')}
-          style={styles.badgeImg}
-          resizeMode="contain"
-        />
-      </TouchableOpacity>
+      {/* 2026-05-21 — Fix A: swapped the static badge Image for the
+          shared CaddieMicBadge so the ring + halo + mic-icon overlay
+          react to listening state. Tap pipeline unchanged
+          (onBadge → toggleListening). */}
+      <CaddieMicBadge size={40} onPress={onBadge} />
       <View style={styles.headerCenter}>
-        <Text style={styles.headerTitle}>Cage Drill</Text>
+        <Text style={styles.headerTitle}>Cage Mode</Text>
       </View>
       <View style={{ flexDirection: 'row', gap: 4 }}>
         <TouchableOpacity onPress={onBack} style={styles.iconBtn} accessibilityLabel="Back">
@@ -935,13 +936,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     zIndex: 30,
   },
-  badgeBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    borderWidth: 1.5, borderColor: '#00C896',
-    backgroundColor: 'rgba(6, 15, 9, 0.65)',
-    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-  },
-  badgeImg: { width: 30, height: 30 },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { color: '#ffffff', fontSize: 14, fontWeight: '900', letterSpacing: 1.4 },
   iconBtn: {

@@ -8,6 +8,7 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 - **Sprint:** Two-week consolidation sprint, started 2026-05-20. Target: app ready by June.
 - **Current day:** Day 2 — 2026-05-21. Fix 9B shipped: SmartMotion (quick) and Cage Mode (practice/lessons) are now two clean features with zero overlap. `app/smartmotion-quick.tsx` deleted. `app/swinglab/cage-drill.tsx` renamed to `app/swinglab/cage-mode.tsx` with batch-count ported in. Voice intent + Tools menu + cockpit MOTION skip the NoClipHero (Option D speed). Sprint Map P0-3 closed.
+- **Fix A shipped:** new `components/caddie/CaddieMicBadge.tsx` (shared tap-to-talk badge with ring + halo + mic-icon overlay). `BrandHeaderRow` refactored to use it (no API change). Added to SmartMotion + Cage Mode headers; SwingLab gets it via BrandHeaderRow. Auto-voice (continuous wake-word) on these screens remains deferred — manual badge is the manual fallback.
 - **Current focus:** Audit-and-infrastructure day. Phase 420 audit and Phase 421 save-point system landed. No app code changes today beyond the morning's persona TTS + Tools FAB + Phase 418 validation gate.
 - **Full prioritized plan:** [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MAP.md)
 - **Daily running log:** [docs/SPRINT-LOG.md](SPRINT-LOG.md)
