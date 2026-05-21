@@ -14,6 +14,38 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Fix I (A + B + C) — Honest caddie failure handling + 30s Vercel headroom
+
+**Diagnosis verdict before code change:** the on-device "caddie sometimes gives no response, especially in Spanish" report was **two separate problems**:
+
+1. **`services/listeningSession.ts` swallowed every failure silently.** The earbud-tap / mic-badge caddie flow had three silent-drop branches: chat fallback non-2xx + null reply + fetch throw ([line 333-368](../services/listeningSession.ts#L333)), handler path falsy `voice_response` + handler throw ([line 375-459](../services/listeningSession.ts#L375)), and the in-round diagnostic Coach POST ([line 289-347](../services/listeningSession.ts#L289)). All logged to console and dropped the pill to idle — the user heard nothing. The `useVoiceCaddie` hook used by cockpit / full-mode round flow already does this correctly ([line 615-647](../hooks/useVoiceCaddie.ts#L615)) — the listeningSession path just never got the same treatment.
+2. **`/api/kevin` had no Vercel `maxDuration` config** — Anthropic SDK timeout is 25s; Vercel Hobby default is 10s; Pro default is 60s. On Pro without explicit config a complex Sonnet conversational reply + multilingual TTS (Spanish via `eleven_multilingual_v2` is ~2-5s heavier than English `eleven_turbo_v2`) could cumulatively brush 25-30s and risk silent server kill before completing. Spanish wasn't a different code path — same bug, just more often tipped over the latency edge.
+
+**Same class as Fix H?** Adjacent but different cause. Fix H = endpoint returned 503 by design; client already collapsed it to a no-op. Fix I = client dropped non-2xx silently with no honest fallback, AND the underlying response could intermittently fail for legitimate reasons (Anthropic latency, Vercel timeout, network blip, rate limit). Both Fixes restore honest-degradation; the underlying mechanisms diverge.
+
+**Fix shipped (Tim chose A + C; B added once Vercel Pro confirmed):**
+
+1. **Shape A — [services/listeningSession.ts](../services/listeningSession.ts) honest fallbacks.** New module-level `FAILURE_FALLBACK` map (English / Spanish / Chinese) and `speakHonestFailure(language, voiceGender, apiUrl)` helper that vibrates 120ms, stops any in-flight TTS, and speaks the user's localized "I'm having trouble connecting — try that again." Wired into every silent-drop branch:
+   - Chat fallback path: tracks `chatSpoken` flag; if `!chatRes.ok` OR `reply === null` OR fetch throws OR `responseAllowed` was false → speaks the honest line.
+   - Handler path: new `else if (!result.voice_response && responseAllowed && !result.tool_action)` branch — purely-no-output handler calls now get the fallback. Navigation-only `tool_action` results still skip TTS (handlers that route the user aren't expected to speak).
+   - Outer catch (was log-only): now also speaks the localized failure line via fresh `useSettingsStore.getState()` (defensive read in case the throw happened before settings was bound).
+   - In-round diagnostic Coach: tracks `diagnosticSpoken`; both `!r.ok` and the catch block now hit the fallback.
+
+2. **Shape C — [api/kevin.ts](../api/kevin.ts) outer catch returns 200 with localized fallback.** Was returning HTTP 500 with `{ error: msg }` — which the client's `if (chatRes.ok)` branch dropped silently. Now returns HTTP 200 with `{ text: localizedFallback, audioBase64: null, toolAction: null, error: msg, errorType }`. Same per-language map as the client (English / Spanish / Chinese). Client's existing chat-fallback `if (chatRes.ok) → if (reply)` branch now picks up the fallback string and speaks it. **NOT fabrication** — only the honest error message reaches the user, never a fake answer to their actual question. Original error/stack still logs server-side and surfaces in the response body for debugging.
+
+3. **Shape B — [vercel.json](../vercel.json) per-endpoint `maxDuration: 30`.** Vercel Pro confirmed by Tim. Added explicit `builds[]` entries with `config.maxDuration: 30` for the five Sonnet-using functions before the wildcard catch-all:
+   - `api/kevin.ts` (main caddie response)
+   - `api/brain.ts` (older path + warm-up pings)
+   - `api/voice-intent.ts` (intent classifier with Sonnet fallback)
+   - `api/swing-analysis.ts` (SmartMotion Sonnet vision)
+   - `api/cage-coach.ts` (cage swing review tool)
+
+   Gives the 25s Anthropic SDK timeout + ElevenLabs TTS (~2-5s on multilingual) + OpenAI TTS fallback (~1-2s) cumulative room to complete naturally instead of being killed mid-request on the 10s default. Endpoints still exit in their natural Anthropic-timeout window for fast queries; this just removes the premature-kill failure mode.
+
+**UX result:** the pill never goes idle in silence on failure. The user hears the honest "having trouble connecting — try again" line in their language and feels a short vibration. Spanish failures speak the Spanish fallback. Normal queries still respond normally.
+
+**Build gates:** `tsc --noEmit` clean. `useVoiceCaddie` round-active path unchanged (it already did this correctly — kept as reference). No fabrication anywhere — only honest error strings reach the user.
+
 ### Fix H (Option B) — pose-analysis returns 200-with-null when unconfigured
 
 **Diagnosis (no Vercel logs needed — cause was plain in source):** the Vercel 503 alert was firing on `/api/pose-analysis`, the RapidAPI pose-detection proxy that feeds the optional Biomechanics card on swing detail. The 503 was **intentional** — [api/pose-analysis.ts:104](../api/pose-analysis.ts#L104) returned `res.status(503)` when `POSE_API_KEY + POSE_API_HOST` env vars weren't configured. The file header even documented it: *"Without them, every action returns a graceful 503 — clients fall through silently."* It was working as designed; Vercel just couldn't tell the difference between "intentionally off" and "broken."

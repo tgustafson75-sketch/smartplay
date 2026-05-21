@@ -1016,7 +1016,35 @@ ${onCourseContextBlock}${baseMessage}`
     const stack = err instanceof Error ? err.stack : undefined;
     console.error('[kevin] error:', msg);
     if (stack) console.error('[kevin] stack:', stack);
-    return res.status(500).json({
+    // 2026-05-21 — Fix I shape C: return 200 with an honest localized
+    // fallback string instead of HTTP 500. The client's chat-fallback
+    // path in services/listeningSession.ts only spoke replies when
+    // `chatRes.ok` was true; on a 500 it fell through to dead silence.
+    // By landing the fallback string here, every caller (including any
+    // future client) gets a speakable response on failure without
+    // having to special-case 500. This is NOT fabrication — only the
+    // honest error message is delivered, never a fake answer to the
+    // user's question. Per-language map mirrors listeningSession's
+    // FAILURE_FALLBACK so the contract is consistent across all caddie
+    // surfaces. Error details still surface via the `error` field for
+    // logging/debugging.
+    const reqLang = (() => {
+      try {
+        const lang = (req.body as { language?: unknown })?.language;
+        return typeof lang === 'string' ? lang : 'en';
+      } catch { return 'en'; }
+    })();
+    const FAILURE_FALLBACK_KEVIN: Record<string, string> = {
+      en: "I'm having trouble connecting — try that again.",
+      es: 'Tengo problemas para conectarme — inténtalo de nuevo.',
+      zh: '我连接遇到问题——请再试一次。',
+    };
+    const langKey = reqLang.toLowerCase().slice(0, 2);
+    const text = FAILURE_FALLBACK_KEVIN[langKey] ?? FAILURE_FALLBACK_KEVIN.en;
+    return res.status(200).json({
+      text,
+      audioBase64: null,
+      toolAction: null,
       error: msg,
       errorType: err instanceof Error ? err.name : 'UnknownError',
     });

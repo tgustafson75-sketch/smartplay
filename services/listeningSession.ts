@@ -1,4 +1,4 @@
-import { Linking } from 'react-native';
+import { Linking, Vibration } from 'react-native';
 import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture } from './voiceService';
 import { getDialog } from './dialogEngine';
 import { getTrustLevel } from './trustLevelService';
@@ -123,6 +123,44 @@ function pickOpener(): string {
   if (trustLevel === 1) return 'Yeah?';
 
   return getDialog(role, 'earbud_open');
+}
+
+// 2026-05-21 — Fix I: localized fallback message spoken when the caddie
+// response path silently fails (non-2xx, empty body, network throw,
+// handler exception). Replaces dead silence with an honest "having
+// trouble" line so the user knows something went wrong instead of
+// assuming the mic missed them. NOT a fabricated answer — only the
+// error string is spoken. Same string is also returned server-side
+// by api/kevin's outer catch (Fix I shape C) so the contract is
+// consistent across all failure surfaces.
+const FAILURE_FALLBACK: Record<string, string> = {
+  en: "I'm having trouble connecting — try that again.",
+  es: 'Tengo problemas para conectarme — inténtalo de nuevo.',
+  zh: '我连接遇到问题——请再试一次。',
+};
+function failureFallbackFor(lang: string | null | undefined): string {
+  const key = (lang ?? 'en').toLowerCase().slice(0, 2);
+  return FAILURE_FALLBACK[key] ?? FAILURE_FALLBACK.en;
+}
+
+/**
+ * Speak an honest "couldn't respond" message for the user's language
+ * and pulse a short vibration, so dead silence never reads as broken.
+ * Used by every silent-failure branch in this module (chat fallback
+ * fetch errors, handler throws, outer catch). Cheap and idempotent —
+ * the speak() call already serializes with stopSpeaking().
+ */
+async function speakHonestFailure(
+  language: 'en' | 'es' | 'zh' | null | undefined,
+  voiceGender: 'male' | 'female',
+  apiUrl: string,
+): Promise<void> {
+  const msg = failureFallbackFor(language);
+  try { Vibration.vibrate(120); } catch {}
+  try { await stopSpeaking().catch(() => {}); } catch {}
+  try {
+    await speak(msg, voiceGender, language ?? 'en', apiUrl, { userInitiated: true });
+  } catch (e) { console.log('[listeningSession] failure-fallback speak threw', e); }
 }
 
 async function openSession() {
@@ -280,6 +318,9 @@ async function openSession() {
           tankSoftIntro: settingsStore.tankSoftIntro,
         };
         await fillerP;
+        // 2026-05-21 — Fix I shape A: track whether anything was spoken
+        // and fall back to the honest failure line otherwise.
+        let diagnosticSpoken = false;
         const r = await fetch(`${apiUrl}/api/kevin`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -290,6 +331,7 @@ async function openSession() {
           if (j.text && ttsAllowed) {
             await stopSpeaking().catch(() => {});
             await speak(j.text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true });
+            diagnosticSpoken = true;
           }
           // If user wanted card, push to the new diagnostic-card screen
           // with the reasoning text as a param so it can render +
@@ -303,9 +345,17 @@ async function openSession() {
               });
             } catch (e) { console.log('[listeningSession] diagnostic-card nav failed', e); }
           }
+        } else {
+          console.log('[listeningSession] in_round_diagnostic non-ok:', r.status);
+        }
+        if (!diagnosticSpoken && ttsAllowed) {
+          await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
         }
       } catch (e) {
         console.log('[listeningSession] in_round_diagnostic failed', e);
+        if (ttsAllowed) {
+          await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
+        }
       }
       setSessionStateMirror('idle');
       return;
@@ -330,6 +380,14 @@ async function openSession() {
           await speak(intent.follow_up_question, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
             .catch((e) => console.log('[listeningSession] follow_up speak failed', e));
         } else {
+          // 2026-05-21 — Fix I shape A: every silent-failure branch below
+          // now speaks an honest fallback line instead of letting the pill
+          // go dark. Three failure modes were dropping silently pre-fix:
+          //   (1) chatRes.ok === false (500/503/504 from Vercel timeout
+          //       or upstream model failure)
+          //   (2) chatRes.ok === true but reply text is empty / wrong shape
+          //   (3) fetch itself throws (network error, AbortController)
+          let chatSpoken = false;
           try {
             const chatRes = await fetch(`${apiUrl}/api/kevin`, {
               method: 'POST',
@@ -350,6 +408,11 @@ async function openSession() {
               // every small-talk fallback ("hey Tank, how are you") through
               // the listening pill. Prefer the audioBase64 path so the
               // user hears the canonical persona voice when present.
+              //
+              // Fix I shape C — /api/kevin's outer catch now returns
+              // 200 with {text: localizedFallback, audioBase64: null}
+              // on exception. So even server-side failures land here
+              // with a non-empty `text` and we just speak it (no audio).
               const reply = typeof chatJson?.text === 'string' ? chatJson.text : null;
               const replyAudio = typeof chatJson?.audioBase64 === 'string' ? chatJson.audioBase64 : null;
               if (reply) {
@@ -361,10 +424,16 @@ async function openSession() {
                   await speak(reply, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
                     .catch((e) => console.log('[listeningSession] chat fallback speak failed', e));
                 }
+                chatSpoken = true;
               }
+            } else {
+              console.log('[listeningSession] chat fallback non-ok:', chatRes.status);
             }
           } catch (e) {
             console.log('[listeningSession] chat fallback fetch failed', e);
+          }
+          if (!chatSpoken && responseAllowed) {
+            await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
           }
         }
       }
@@ -424,6 +493,17 @@ async function openSession() {
         // "generic-then-relevant" disconnect on the 2nd question.
         await stopSpeaking().catch(() => {});
         await speak(result.voice_response, settings.voiceGender, settings.language, apiUrl, { userInitiated: true });
+      } else if (!result.voice_response && responseAllowed) {
+        // 2026-05-21 — Fix I shape A: handler returned no voice_response
+        // (e.g. an internal failure path with no fallback string). Don't
+        // leave the pill idle in silence — speak an honest "having
+        // trouble" line. Some handlers legitimately have no spoken reply
+        // (e.g. navigation tool_actions that route the user); those set
+        // result.tool_action, which we still execute below. For the
+        // pure-no-output case the user gets the localized failure line.
+        if (!result.tool_action) {
+          await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
+        }
       }
       // Phase R/S — dispatch tool_action.open_url. Internal routes (e.g.
       // swing library jumps, SmartVision opens) go through router.push as
@@ -455,7 +535,24 @@ async function openSession() {
       }
     }
   } catch (e) {
+    // 2026-05-21 — Fix I shape A: outer catch used to log silently and
+    // leave the pill idle. Now also speaks the honest failure line so
+    // the user gets a tactile + audible signal instead of dead silence.
+    // Read settings fresh in case the throw happened before the outer
+    // settings binding was created (defensive).
     console.log('[listeningSession] respond failed', e);
+    try {
+      const settingsFresh = useSettingsStore.getState();
+      const routeAllowed = getCurrentRoute() !== 'phone_speaker' ||
+        (settingsFresh as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
+      if (settingsFresh.voiceEnabled && routeAllowed) {
+        await speakHonestFailure(
+          settingsFresh.language,
+          settingsFresh.voiceGender,
+          process.env.EXPO_PUBLIC_API_URL ?? '',
+        );
+      }
+    } catch (innerErr) { console.log('[listeningSession] outer-catch fallback failed', innerErr); }
   }
 
   setSessionStateMirror('idle');
