@@ -379,3 +379,11 @@ Captured to clear them off the active sprint. **Not sprint work — do not build
 **What it does NOT do:** Still feeds SIMULATED position, so it still cannot exercise real-GPS hardware behavior (accuracy, signal, the `getOneShotFix` pulse that the sim guard short-circuits per Day 1 / Fix 4). Real-device round remains the only proof of GPS hardware behavior. This is a logic-coverage tool, not a GPS hardware test.
 
 **Priority:** Post-1.0. Good debugging investment, not launch-critical. Sits with the video content engine and other post-launch tooling.
+
+### SmartMotion estimated smash factor reads high — calibration question, not a bug
+
+**Observation (2026-05-21):** On an 8-iron the estimated smash factor read **1.37** — at the top of the plausible iron range (real irons ~1.30-1.38). Not physically impossible, not a calculation bug — the estimate landing at the optimistic end of the valid window.
+
+**Sprint decision: no code change.** The `(est)` label on the metric cell is the honest treatment for an approximate value. Hand-tuning the displayed number to "look right" would be faking precision and violates the no-fake-precision principle (same principle as the Phase 418 SmartMotion validation gate and the SmartFinder GPS-quality framing).
+
+**Post-launch:** if estimated metrics consistently read high across many swings — not just a one-off — that's a CALIBRATION question for the estimation model, almost certainly over-estimating ball speed or under-estimating club speed. Can only be tuned properly against real launch-monitor ground truth (Garmin R10 / Rapsodo / SkyTrak / etc.) feeding the phone estimate alongside actual measurements so the offset can be measured and corrected per club. Sits with the launch-monitor-integration item. **Not sprint work.**
