@@ -395,6 +395,30 @@ export default function CaddieTab() {
     })();
     return () => { active = false; if (unsub) unsub(); };
   }, []);
+
+  // 2026-05-20 — Day 1 / Fix 7 (Option A): hole-transition GPS refresh
+  // seam. On `currentHole` change, immediately pulse gpsManager for a
+  // fresh fix and bump markTick so the fmb memo recomputes against the
+  // NEW hole's green with the freshest possible position. Closes the
+  // gap between the hole-detection transition firing and the next GPS
+  // poll — the source of the 2-5y upward yardage drift Tim hit on
+  // holes 13/16/17 of the synthetic round. On the sim path,
+  // getOneShotFix short-circuits to the cached fix (per Day 1 / Fix 4)
+  // and the markTick bump is what nudges the memo to recompute; on
+  // real GPS a stale (>10s) cache pulses a fresh device read.
+  useEffect(() => {
+    if (!isRoundActive) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const gps = await import('../../services/gpsManager');
+        await gps.getOneShotFix();
+        if (cancelled) return;
+        setMarkTick(t => t + 1);
+      } catch (e) { console.log('[caddie] hole-transition GPS refresh failed:', e); }
+    })();
+    return () => { cancelled = true; };
+  }, [currentHole, isRoundActive]);
   const liveYardage = useMemo(() => {
     if (yardageMode !== 'live' || !isRoundActive) return null;
     try {
