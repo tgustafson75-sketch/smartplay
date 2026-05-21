@@ -69,6 +69,7 @@ export default function SmartMotion() {
   const { clipUri, angle: angleParam } = useLocalSearchParams<{ clipUri?: string; angle?: string }>();
   const profile = usePlayerProfileStore();
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
+  const language = useSettingsStore(s => s.language);
 
   // 2026-05-21 — Fix B: angle is chosen BEFORE recording (in this
   // NoClipHero, in quick-record, or via voice "record me down the
@@ -110,6 +111,11 @@ export default function SmartMotion() {
           // weight-shift from a down-the-line clip (or path from a
           // face-on clip) was the diagnosis-wrong-orientation bug.
           angle,
+          // 2026-05-21 — Fix E: pass selected language so the analyst
+          // writes the observation in Spanish/Chinese when the user
+          // has flipped the setting. Previously every observation
+          // came back English regardless.
+          language,
           player_context: {
             handicap: profile.handicap ?? null,
             dominant_miss: profile.dominantMiss ?? null,

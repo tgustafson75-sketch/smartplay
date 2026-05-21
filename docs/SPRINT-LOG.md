@@ -14,6 +14,30 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ## Day 2 — 2026-05-21
 
+### Fix E — Language (Spanish) applied to caddie TTS + analysis
+
+**Diagnosis in one paragraph:** the setting persists correctly. The READ path was sound — every `/api/kevin` fetch site (`hooks/useKevin.ts`, `hooks/useVoiceCaddie.ts`, `services/listeningSession.ts` × 2) sends `language` from the settings store; `/api/kevin` reads it and injects a strict "Respond ONLY in Spanish" rule into the system prompt (lines 462-465). The LLM TEXT comes back in Spanish. **The break was TTS:** [api/kevin.ts:976](../api/kevin.ts#L976) hardcoded `model_id: 'eleven_turbo_v2'` — the English-only ElevenLabs model — regardless of language. Spanish text fed to an English-locale TTS model produces English-cadence pronunciation. `/api/voice` already does this correctly (`language === 'en' ? 'eleven_turbo_v2' : 'eleven_multilingual_v2'`); `/api/kevin` was never updated to mirror it when it gained persona-aware TTS in Fix A (`a63d1b3`). Voice IDs are language-agnostic — only the model id needed to flip.
+
+**Fix shipped:**
+- [api/kevin.ts](../api/kevin.ts) — ElevenLabs call now selects `eleven_multilingual_v2` when `language !== 'en'`, otherwise `eleven_turbo_v2`. Mirrors /api/voice exactly. Applies to ALL personas (Kevin / Serena / Tank / Harry) on every caddie response path.
+- [api/swing-analysis.ts](../api/swing-analysis.ts) — secondary issue caught: the swing-analysis prompt had zero language directive, so SmartMotion's Insight observation came back in English even when the user picked Spanish. Added a CRITICAL line directing the analyst to write `observation` + `follow_up_question` in Spanish or Chinese (enum values stay English — they're machine identifiers).
+- [services/poseDetection.ts](../services/poseDetection.ts) — extended `analyzeSwing` context type with `language?: 'en' | 'es' | 'zh'`.
+- [app/swinglab/smartmotion.tsx](../app/swinglab/smartmotion.tsx) — `analyzeSwing` call now passes `language` from settings.
+
+**Confirmed already-correct paths (no changes needed):**
+- `/api/voice` (uses multilingual model when language ≠ 'en')
+- `/api/briefing` (Spanish/Chinese hard-enforce already in prompt)
+- `services/fillerLibrary.ts` (voiceHash keyed by `persona_lang_v5`)
+- `services/briefingGenerator.ts` (cache keyed by `${roundId}|${language}`)
+- `setLanguage()` in settingsStore — clears filler library + briefing cache on change
+
+**Deferred (lower priority — fix in a follow-up):**
+- `api/cage-coach.ts` (the cage-mode "Coach Review" endpoint) — has zero language plumbing. `services/cageApi.ts` doesn't send language to it either. Cage-Mode-only surface, separate from the primary caddie chat.
+- `app/ghost-debug.tsx:103` hardcodes `language: 'en'`. Owner-only debug screen; harmless.
+- Real-time language change while a clip is on the SmartMotion analysis screen won't re-analyze — `useEffect` is keyed on `clipUri` only. Acceptable: the next recording picks up the new language.
+
+**Build gates:** `tsc --noEmit` clean. `expo lint` at the Phase 420 baseline (5 errors + 12 warnings — all pre-existing).
+
 ### Fix D — Caddie 3-line quick-start intro on SmartMotion + Cage Mode
 
 **Fix shipped:**

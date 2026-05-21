@@ -219,6 +219,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (typeof ctx.caddie_name === 'string' && ctx.caddie_name.trim().length > 0) {
       ctxLines.push(`Caddie voice: ${ctx.caddie_name.trim()}`);
     }
+    // 2026-05-21 — Fix E: thread the player's selected language into
+    // the swing-analysis prompt so the observation text comes back in
+    // the right language. Previously the analyst always wrote
+    // English regardless of settings. Same hard-enforcement pattern
+    // /api/kevin uses.
+    const language = typeof ctx.language === 'string' ? ctx.language.toLowerCase() : 'en';
+    if (language === 'es') {
+      ctxLines.push('CRITICAL: Write the `observation` and `follow_up_question` fields in Spanish (español). The detected_issue / severity / confidence enum values stay in English (they are machine identifiers).');
+    } else if (language === 'zh') {
+      ctxLines.push('CRITICAL: Write the `observation` and `follow_up_question` fields in Chinese (中文). The detected_issue / severity / confidence enum values stay in English (they are machine identifiers).');
+    }
     // Phase 502 — player_context. When the client passes profile fields
     // (handicap, dominant_miss, experience), the analyst tailors the
     // read. This was Tim's "every golfer gets the same analysis" finding.

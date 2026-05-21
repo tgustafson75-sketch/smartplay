@@ -260,6 +260,10 @@ export async function analyzeSwing(
     // for biomechanical checks. Defaults to 'down_the_line' (the
     // common swing-analysis convention) when omitted.
     angle?: 'down_the_line' | 'face_on';
+    // 2026-05-21 — Fix E: player's selected language. Routes into
+    // the swing-analysis prompt so the observation text comes back
+    // in the right language (Spanish / Chinese / English).
+    language?: 'en' | 'es' | 'zh';
   },
   boundaries?: { startSec: number; endSec: number },
   // Phase 403b — when provided, the persisted fault-frame JPEG will be

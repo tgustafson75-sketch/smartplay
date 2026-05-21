@@ -962,6 +962,17 @@ ${onCourseContextBlock}${baseMessage}`
       try {
         const voiceId = ELEVEN_VOICES_BY_PERSONA[personaKey];
         const voiceSettings = ELEVEN_SETTINGS_BY_PERSONA[personaKey] ?? ELEVEN_SETTINGS_BY_PERSONA.kevin;
+        // 2026-05-21 — Fix E: pick the ElevenLabs model from the
+        // request language. `eleven_turbo_v2` is English-only;
+        // Spanish / Chinese / any non-English text needs
+        // `eleven_multilingual_v2` or the pronunciation is wrong.
+        // Mirrors api/voice.ts which already does this; this path
+        // was missed when api/kevin gained persona-aware TTS in
+        // Fix A (a63d1b3) so Tim's Spanish setting reached the LLM
+        // (Spanish text came back) but TTS rendered it through the
+        // English model. Voice IDs are language-agnostic — only the
+        // model_id needs to flip.
+        const ttsModel = language === 'en' ? 'eleven_turbo_v2' : 'eleven_multilingual_v2';
         const elevenRes = await fetch(
           'https://api.elevenlabs.io/v1/text-to-speech/' + voiceId,
           {
@@ -973,7 +984,7 @@ ${onCourseContextBlock}${baseMessage}`
             },
             body: JSON.stringify({
               text,
-              model_id: 'eleven_turbo_v2',
+              model_id: ttsModel,
               voice_settings: voiceSettings,
             }),
           },
