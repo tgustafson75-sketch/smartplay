@@ -911,3 +911,35 @@ Captured to clear them off the active sprint. **Not sprint work — do not build
 **Plan:** Claude can draft both documents tailored to the actual data practices in a focused session — NOT in the middle of a fix cluster. Draft MUST get real legal review before publishing (paid attorney review or a compliant generator like Termly / iubenda). The combination of location + video/audio capture + AI processing + potential minor users is a real liability profile and unvetted legal text is not acceptable to ship.
 
 **Sits with other deferred business-track items:** Apple Developer enrollment + D-U-N-S number, Stripe production configuration, App Store / Play Store assets + screenshots, App Privacy disclosures.
+
+---
+
+## Future Integration — Meta Wearables Device Access Toolkit (glasses)
+
+### Config captured 2026-05-21 — for FUTURE build, not now
+
+**Status:** integration item #7 on the post-launch list. Config captured here so it's not lost. **Do NOT add the manifest tags now** — that's a native change for a feature that isn't built, and Meta's testing guidance explicitly says don't set the tags while the dev account is still in Developer Mode testing. Wait for the full Meta Wearables SDK integration pass — own EAS native build cycle.
+
+**Application ID (non-secret, ok to record here):**
+- `2111052109463421`
+
+**Manifest meta-data tags (add at integration time, not now):**
+```xml
+<meta-data android:name="com.meta.wearable.mwdat.APPLICATION_ID"
+    android:value="2111052109463421" />
+<meta-data android:name="com.meta.wearable.mwdat.CLIENT_TOKEN"
+    android:value="[CLIENT_TOKEN — INJECT VIA EAS SECRET, NEVER PLAINTEXT]" />
+```
+
+**Security — the CLIENT_TOKEN is a secret.** Token prefix `AR|2111052109463421|…` — Tim holds the full value. At integration:
+- Create EAS secret: `eas env:create --environment production --name META_WEARABLE_CLIENT_TOKEN --value "<token>"` (same pattern as `EXPO_PUBLIC_SENTRY_DSN`).
+- Reference the secret in the manifest injection step of the integration code, NOT in a committed `app.json` / `AndroidManifest.xml` string literal.
+- Repeat for `preview` + `development` environments if those builds need to exercise the glasses pipeline.
+
+**Still needed before the integration build can run:**
+- Android Package name + App signature submitted to Meta dashboard's "Mobile app configuration" section.
+- Camera access rationale string (Meta requires a user-facing rationale; not the same as the Android permission usage description, separate field in their dashboard).
+- Touch-to-talk permission — requested from Meta, pending approval.
+- Camera access — confirmed available.
+
+**Scope when integration lands:** the full Meta Wearables SDK work (native module + EAS dev-client rebuild), enabling "Hey Meta" voice capture from the glasses → routed into the SmartPlay caddie pipeline. **Don't piecemeal the manifest tag tonight** — the tag alone does nothing without the SDK, and Meta's instructions say don't add it while the test account is in Developer Mode.
