@@ -34,6 +34,31 @@ Relevant surfaces to apply this to: [services/holeDetection.ts](../services/hole
 
 ## Day 2 — 2026-05-21
 
+### Field validation — Tank lesson with Nick Chertok, Prunridge GC, 2026-05-21 6:30 PM
+
+Real Tank (the working golf instructor whose voice the app's Tank persona is built from) gave a live lesson to Nick Chertok at Prunridge GC tonight and used **SmartMotion** during the lesson. Nick is a golf influencer + investor with a large following + an investment angle. His reaction: *"amazing, wants to see everything."*
+
+**What this validates:**
+- SmartMotion is the most-proven surface in the app right now — real Sonnet vision analysis (Fix J confirmed real-and-specific, not generic), Phase 418 validity gate, the rebuilt skeleton topology, Fix C overlay-to-video-subrect alignment, Fix B pre-record camera-angle choice, Fix E Spanish/Chinese language threading. Nick saw the app at its best surface, and a sharp golf evaluator with reach signed off.
+- The discipline that got us here — no fake skeleton overlays presented as tracked, no fake bullseye scores presented as detected, no fake live yardages on courses without geometry, no fake "I heard you" caddie silence — is the discipline that earned the "amazing" reaction. **Honest degradation is the product differentiator** when the evaluator is sharp enough to catch fake precision.
+
+**What this raises the bar on:**
+- "Wants to see everything" means the return look hits the **round path, Caddie, and Cage Mode** — exactly the surfaces where tonight's Menifee cart round exposed the open issues:
+  - **Fix N — Start Round crash** (just shipped; needs EAS build + on-device verify)
+  - **Fix L — Co-located course atCourse + hole-jumping** (diagnosis logged; fix deferred until a clean post-N Start Round confirms the GPS path)
+  - **Fix L Symptom 3 — no caddie intro on tee-off** (per-hole "Hole N, par X, Y yards" intro doesn't exist; only round-start)
+  - **Voice unification** — the listeningSession honest-fallback work (Fix I) shipped, but a sharp evaluator will probe the small-talk / round-conversation paths harder than the harness ever has
+  - **[[cart-is-default]]** — Nick will almost certainly be in a cart on the return visit; the GPS / hole-detection / shot-detection lens must already be cart-first by then, per the standing principle
+- A sharp golf evaluator spots fake precision instantly. The no-stubs / honest-degradation discipline matters **more** now, not less. Every "we'll fake it for the demo" temptation should land in the post-launch backlog instead.
+
+**Implication for the current fix priority board:**
+- The crash → nav/scoring resilience → voice unification ordering Tim already has is the right board for a returning sharp evaluator. Get those right BEFORE the next showing.
+- If the next showing is imminent (days), urgency-now on N → L. If there's a week+, the sprint can land clean first.
+
+**Open item to pin down via Tank:**
+- What specifically does Nick want to see next? Round path on a real cart? Cage Mode in a real cage? Voice + caddie during play? Determines whether Fix N + Fix L are urgent-now or there's room to land the full sprint clean.
+- Rough timing of the next showing — drives the EAS build cadence and what gets pulled forward from the post-launch backlog.
+
 ### Fix N (THE GATE) — crash-proof Start Round (POST_NOTIFICATIONS + graceful foreground service + collapsed GPS double-fire + Sentry DSN slot)
 
 **Root cause established without a stack trace** (per Fix M diagnosis): Tim's Z Fold (One UI 6 / Android 14, targetSdk 35) hard-crashed on every Start Round. Strongest candidate — and the one the defensive fix addresses unconditionally — the foreground location service posts a persistent notification, but `POST_NOTIFICATIONS` was missing from the manifest. On Android 13+ the runtime permission is required; on Samsung One UI 6+, starting a foreground service that posts a notification without it throws a native `SecurityException` that bypasses JS try/catch → process kill. The round persisted because the Zustand `set()` + AsyncStorage flush completed before the crash; the foreground-service start fires in the post-persist async block.
