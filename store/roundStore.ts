@@ -1065,6 +1065,42 @@ export const useRoundStore = create<RoundState>()(
         if (prevHole !== clamped) {
           console.log(`[path2:round] hole transition prev=${prevHole} next=${clamped}`);
           console.log(`[audit:round-active] hole-transition prev=${prevHole} next=${clamped} yardage=${holeData?.distance ?? 'null'}`);
+          // 2026-05-21 — Fix S — per-hole caddie intro on transition. Fires
+          // for BOTH auto-detection (holeDetection subscriber) and manual
+          // nav (cockpit stepper, DataStrip ◀/▶, voice "I'm on hole 7").
+          // Brief: hole, par, yardage. Hole 1 at round-start does NOT pass
+          // through this branch (startRound uses direct set(), not
+          // setCurrentHole), so no double-fire with the briefing or the
+          // skip-briefings hole-1 announcement. Gating mirrors the
+          // skip-briefings speak: voice enabled AND trust level !== 1
+          // (Quiet). Active persona is implicitly honored — speak() reads
+          // caddiePersonality from the store at request time (Fix Q).
+          // userInitiated:true bypasses L1 Quiet's scripted-speech gate;
+          // we still suppress at trust=1 above so Quiet stays quiet.
+          if (state.isRoundActive) {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const settingsMod = require('./settingsStore') as typeof import('./settingsStore');
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const trustMod = require('./trustLevelStore') as typeof import('./trustLevelStore');
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const voiceMod = require('../services/voiceService') as typeof import('../services/voiceService');
+              const settings = settingsMod.useSettingsStore.getState();
+              const trustLevel = trustMod.useTrustLevelStore.getState().level;
+              if (settings.voiceEnabled && trustLevel !== 1) {
+                const par = holeData?.par;
+                const yards = holeData?.distance;
+                let text = `Hole ${clamped}.`;
+                if (par) text += ` Par ${par}.`;
+                if (yards) text += ` ${yards} yards.`;
+                const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+                void voiceMod.speak(text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
+                  ?.catch?.(() => {});
+              }
+            } catch (e) {
+              console.log('[roundStore] per-hole intro failed (non-fatal):', e);
+            }
+          }
         }
         // Notify holeDetection of manual override so its sustained-position
         // window doesn't immediately race against the user's pick.
