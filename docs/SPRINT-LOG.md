@@ -1073,3 +1073,35 @@ These are **real `holeDetection.ts` auto-transitions**, not harness synthetic-ad
 - **Fix L (hole-jumping + co-located course):** elevated to top priority post-Menifee. Harness now reproduces the failure mode at desk; design + ship the multi-course picker + tuned thresholds.
 - **Sentry:** DSN wired in expo.dev env. Activates on NEXT EAS native build (current APK still inert because env var wasn't present at build time).
 - **OTA discipline:** add post-commit `eas update` step or automate. Tim shouldn't be on a stale bundle while fixes pile up on git.
+
+#### Cage Mode UX (`30f2c40`) — batch picker dismiss + Z Fold label wrap (OTA, no logic changes)
+
+Tim screenshot from the Z Fold cover display showed two narrow-screen issues during cage SETUP:
+1. The **SWINGS THIS SESSION** pill row (1 / 3 / 5 / 10) overlapped the BALL dashed box at the lower-left of the framing rectangle. Picker stayed visible after selection, blocking the address-position alignment area.
+2. The orange SETUP helper label **"Drag bullseye to target · drag BALL to address"** got cut off at the right edge — "address" truncated to "addres" — due to letter-spacing 1.5 + no horizontal padding pushing the last word off the narrow display.
+
+**Fix 1 — batch-picker dismiss** in [app/swinglab/cage-mode.tsx](../app/swinglab/cage-mode.tsx):
+- New `batchPickerDismissed` state defaults `false` (full picker shown for first selection).
+- Any pill tap (1/3/5/10) sets `dismissed=true`, hides the pill row, replaces it with a compact green pill-badge: `"3 swings · 1/3 · tap to change"`.
+- Re-tap the badge re-opens the full picker if the user changes their mind mid-session.
+- Stays dismissed for the rest of the cage session; component unmount + remount (leave + return to cage) resets so a fresh session starts with the picker visible again.
+- **No logic change** to `batchSize` / `batchIdx` / `batchActive` / `batchComplete`. The dismissed flag is purely a render gate.
+
+**Fix 2 — Z Fold label wrap** in [components/swinglab/CageOverlay.tsx](../components/swinglab/CageOverlay.tsx):
+- `paddingHorizontal: 16` on labelWrap so text has breathing room from screen edges.
+- `numberOfLines={2}` + `adjustsFontSizeToFit` + `minimumFontScale={0.75}` + `textAlign: 'center'` on the label Text — wraps or auto-shrinks cleanly on narrow screens.
+- `letterSpacing` reduced 1.5 → 1.2 (still reads as a tracked label, fits narrow displays).
+- **Pure CSS** — no behavior change. Normal-width phones look identical; Z Fold cover display no longer overflows.
+
+#### Cage Mode core verified by Tim
+> "Once the acoustic tracks the shot within that timing that you're getting, it's gonna be so goddamn perfect."
+
+Cage Mode's real capabilities — acoustic impact detection, ball-speed estimate via `/api/acoustic-detect`, coach review via `/api/kevin/coach` (persona-aware per Fix Q), Fix G's deleted-fabricated-bullseye discipline — are all working as a real lessons tool. Combined with tonight's voice-latency tweak (~25% faster TTS) the coach review feedback lands quicker. Ready for the real Tank to put it in front of students.
+
+#### Final OTA roster (preview channel, all pushed tonight)
+- `d300ccd2-917c-4224-a906-864c27e968cf` — Fix S + Fix T + Harness v2-lite + Path A → commit `5115e81`
+- `d3cb6b88-b6bc-40f9-889d-3bd909664e76` — Path 1 Owner Triage → commit `15c3da4`
+- `02fb29df-9ec4-4cc2-bfa1-efa91d326396` — Voice latency rollup → commit `4cf1df1`
+- `514cd256-a798-439c-a6f8-c047e9a2fe6b` — Cage Mode UX → commit `30f2c40`
+
+All four bundles are now live on the preview channel. Current EAS APK (`c7f5ad9a` from earlier in the day, Fix N-3 base) pulls them on launch + apply on next cold start. **15 commits + 4 OTAs shipped between Day 3 close (~22:00 PT) and 02:00 PT.**
