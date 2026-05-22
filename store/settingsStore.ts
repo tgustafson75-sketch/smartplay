@@ -234,7 +234,13 @@ export const useSettingsStore = create<SettingsState>()(
       tankSoftIntro: true,
       glassesConnected: false,
       autoListenEnabled: false,
-      cartMode: false,
+      // 2026-05-22 — Cart-is-default product principle: ~95% of golfers
+      // ride. Default cartMode TRUE so new installs get cart-aware shot
+      // thresholds + Fix L's cart-mode hole-detection bonus without
+      // needing to touch Settings. Walking users flip to OFF once and
+      // their preference persists. Existing users' persisted value
+      // (whatever they previously had) wins via the persist middleware.
+      cartMode: true,
       hasAskedHealthPermission: false,
       healthDataEnabled: true,
       skip_briefings: false,
