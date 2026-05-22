@@ -24,10 +24,10 @@
  * re-prompt on next launch).
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ScrollView,
+  KeyboardAvoidingView, Platform, ScrollView, Animated, Easing, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -65,13 +65,65 @@ export default function WelcomeScreen() {
   const setHandicap = usePlayerProfileStore(s => s.setHandicap);
   const setCaddiePersonality = useSettingsStore(s => s.setCaddiePersonality);
 
+  // 2026-05-22 — T&C acceptance gate. Read from store so an interrupted
+  // onboarding (user closes app mid-form) finds the checkbox already
+  // ticked on resume. Persisted timestamp doubles as proof-of-consent
+  // for store-submission privacy compliance.
+  const termsAcceptedAt = usePlayerProfileStore(s => s.termsAcceptedAt);
+  const acceptTerms = usePlayerProfileStore(s => s.acceptTerms);
+  const clearTermsAcceptance = usePlayerProfileStore(s => s.clearTermsAcceptance);
+
   const [name, setLocalName] = useState(existingName);
   const [handicapText, setHandicapText] = useState(
     existingHandicap != null && existingHandicap !== 18 ? String(existingHandicap) : '',
   );
   const [caddie, setCaddie] = useState<Persona>(existingCaddie ?? 'kevin');
+  const termsAccepted = termsAcceptedAt != null;
+
+  // 2026-05-22 — Smooth CTA enable/disable transition. Animates opacity
+  // when termsAccepted toggles so the "Get started" button visibly
+  // wakes up at the moment the user checks the box (and dims back if
+  // they uncheck). Easing matches the standard onboarding feel.
+  const ctaOpacity = useRef(new Animated.Value(termsAccepted ? 1 : 0.45)).current;
+  useEffect(() => {
+    Animated.timing(ctaOpacity, {
+      toValue: termsAccepted ? 1 : 0.45,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [termsAccepted, ctaOpacity]);
+
+  // Placeholder handlers for "View Full Terms" + "Privacy Policy".
+  // Real legal text gets drafted + reviewed before store submission
+  // (see SPRINT-LOG launch-prep section). These open a polite Alert
+  // explaining the placeholder state until the docs are ready.
+  const showTermsPlaceholder = () => {
+    Alert.alert(
+      'Full Terms — coming soon',
+      'The complete Terms of Service document is in legal review before App Store / Play Store submission. The summary above covers the substantive commitments. Reach out to support@smartplaycaddie.com with questions.',
+    );
+  };
+  const showPrivacyPlaceholder = () => {
+    Alert.alert(
+      'Privacy Policy — coming soon',
+      'The full Privacy Policy is in legal review before App Store / Play Store submission. SmartPlay Caddie collects location, voice, camera, and gameplay data as outlined in the summary above. Reach out to support@smartplaycaddie.com with questions.',
+    );
+  };
 
   const handleGetStarted = () => {
+    // 2026-05-22 — T&C gate. CTA is visually disabled when terms not
+    // accepted (opacity .45 + non-interactive), so the only way this
+    // handler fires is with consent. Defensive double-check anyway —
+    // surfaces a clear nudge instead of silently no-op'ing if the
+    // visual gate is ever bypassed (accessibility services, etc.).
+    if (!termsAccepted) {
+      Alert.alert(
+        'Acceptance required',
+        'Please review the Terms & Acceptance section and tick the agreement checkbox before continuing.',
+      );
+      return;
+    }
     // Persist what was filled. Empty name -> default 'friend' so the
     // caddie has SOMETHING to address them by; user can update later
     // via Edit Profile.
@@ -167,13 +219,114 @@ export default function WelcomeScreen() {
             You can change this anytime in Settings.
           </Text>
 
-          <TouchableOpacity
-            style={[styles.cta, { backgroundColor: colors.accent }]}
-            onPress={handleGetStarted}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.ctaText}>Get started</Text>
-          </TouchableOpacity>
+          {/* 2026-05-22 — Terms & Acceptance gate. Required before
+              "Get started" enables. Acceptance persists immediately to
+              the store so an interrupted onboarding (close mid-form)
+              resumes with the box pre-ticked. Real legal text is in
+              review before store submission (see SPRINT-LOG launch-
+              prep); the placeholder buttons surface that state. */}
+          <View style={[
+            styles.termsCard,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}>
+            <Text style={[styles.fieldLabel, { color: colors.accent, marginBottom: spacing.sm }]}>
+              TERMS &amp; ACCEPTANCE
+            </Text>
+            <ScrollView
+              style={styles.termsScroll}
+              contentContainerStyle={styles.termsScrollContent}
+              showsVerticalScrollIndicator
+              nestedScrollEnabled
+            >
+              <Text style={[styles.termsBody, { color: colors.text_primary }]}>
+                By creating a SmartPlay Caddie account and using the platform, you acknowledge and agree that:
+              </Text>
+              {[
+                'SmartPlay Caddie provides AI-generated golf guidance, analytics, recommendations, and coaching insights for informational and entertainment purposes only.',
+                'All swing analysis, club recommendations, strategy suggestions, and course guidance are generated algorithmically and should not be considered professional golf instruction, medical advice, or guaranteed performance outcomes.',
+                'Users are solely responsible for their own decisions, safety, gameplay, equipment usage, physical activity, and conduct while using the application on or off the golf course.',
+                'SmartPlay Caddie does not guarantee accuracy, completeness, or real-time reliability of yardages, hazard detection, environmental conditions, or AI-generated recommendations.',
+                'Users assume all risks associated with athletic activity, golf participation, and device usage during play or practice.',
+                'SmartPlay Caddie may collect gameplay, swing, voice, camera, device, and performance-related data in accordance with the Privacy Policy to improve platform functionality and personalization features.',
+              ].map((line, i) => (
+                <View key={i} style={styles.termsBulletRow}>
+                  <Text style={[styles.termsBullet, { color: colors.accent }]}>•</Text>
+                  <Text style={[styles.termsBulletText, { color: colors.text_primary }]}>{line}</Text>
+                </View>
+              ))}
+            </ScrollView>
+
+            {/* View Full Terms · Privacy Policy — placeholder ghost
+                buttons until the legal documents are published. */}
+            <View style={styles.termsLinksRow}>
+              <TouchableOpacity
+                style={[styles.termsLink, { borderColor: colors.border }]}
+                onPress={showTermsPlaceholder}
+                accessibilityRole="button"
+                accessibilityLabel="View Full Terms"
+              >
+                <Ionicons name="document-text-outline" size={13} color={colors.accent} />
+                <Text style={[styles.termsLinkText, { color: colors.accent }]}>View Full Terms</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.termsLink, { borderColor: colors.border }]}
+                onPress={showPrivacyPlaceholder}
+                accessibilityRole="button"
+                accessibilityLabel="Privacy Policy"
+              >
+                <Ionicons name="shield-checkmark-outline" size={13} color={colors.accent} />
+                <Text style={[styles.termsLinkText, { color: colors.accent }]}>Privacy Policy</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Acceptance checkbox row. Tap anywhere on the row toggles
+                the state — larger hit target than just the box. */}
+            <TouchableOpacity
+              style={styles.termsAcceptRow}
+              onPress={() => {
+                if (termsAccepted) clearTermsAcceptance();
+                else acceptTerms();
+              }}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: termsAccepted }}
+              accessibilityLabel="I have read and agree to the Terms of Service and Privacy Policy"
+              activeOpacity={0.7}
+            >
+              <View style={[
+                styles.termsCheckbox,
+                { borderColor: termsAccepted ? colors.accent : colors.border },
+                termsAccepted && { backgroundColor: colors.accent },
+              ]}>
+                {termsAccepted && <Ionicons name="checkmark" size={16} color="#ffffff" />}
+              </View>
+              <Text style={[styles.termsAcceptText, { color: colors.text_primary }]}>
+                I have read and agree to the Terms of Service and Privacy Policy.
+              </Text>
+            </TouchableOpacity>
+            {termsAccepted && (
+              <Text style={[styles.termsTimestamp, { color: colors.text_muted }]}>
+                Accepted {new Date(termsAcceptedAt!).toLocaleString()}
+              </Text>
+            )}
+          </View>
+
+          <Animated.View style={{ opacity: ctaOpacity }}>
+            <TouchableOpacity
+              style={[
+                styles.cta,
+                { backgroundColor: colors.accent },
+                !termsAccepted && styles.ctaDisabled,
+              ]}
+              onPress={handleGetStarted}
+              activeOpacity={0.85}
+              disabled={!termsAccepted}
+              accessibilityRole="button"
+              accessibilityLabel={termsAccepted ? 'Get started' : 'Get started — disabled until terms accepted'}
+              accessibilityState={{ disabled: !termsAccepted }}
+            >
+              <Text style={styles.ctaText}>Get started</Text>
+            </TouchableOpacity>
+          </Animated.View>
 
           {/* Phase 411 — opt-in tour. Lower-profile button so it
               doesn't compete with "Get started". Testers who want
@@ -227,7 +380,98 @@ function makeStyles(
       borderRadius: r.lg, paddingVertical: 14, alignItems: 'center',
       marginTop: s.xl,
     },
+    ctaDisabled: {
+      // Subtle visual cue ON TOP of the animated opacity. Accent color
+      // stays so the button is still clearly the primary action — just
+      // looks "sleeping" until the user accepts.
+    },
     ctaText: { color: '#ffffff', fontSize: 16, fontWeight: '900', letterSpacing: 0.3 },
+    // ─── Terms & Acceptance card ───────────────────────────────────
+    termsCard: {
+      marginTop: s.xl,
+      borderRadius: r.lg,
+      borderWidth: 1,
+      padding: s.md,
+    },
+    termsScroll: {
+      maxHeight: 220,
+      marginBottom: s.sm,
+    },
+    termsScrollContent: {
+      paddingRight: s.sm,
+    },
+    termsBody: {
+      fontSize: 13,
+      lineHeight: 19,
+      marginBottom: s.sm,
+      fontWeight: '600',
+    },
+    termsBulletRow: {
+      flexDirection: 'row',
+      marginBottom: s.sm,
+      paddingRight: s.xs,
+    },
+    termsBullet: {
+      width: 14,
+      fontSize: 14,
+      fontWeight: '900',
+      lineHeight: 18,
+    },
+    termsBulletText: {
+      flex: 1,
+      fontSize: 12.5,
+      lineHeight: 18,
+    },
+    termsLinksRow: {
+      flexDirection: 'row',
+      gap: s.sm,
+      marginTop: s.xs,
+      marginBottom: s.md,
+    },
+    termsLink: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      borderRadius: r.md,
+      borderWidth: 1,
+    },
+    termsLinkText: {
+      fontSize: 11.5,
+      fontWeight: '800',
+      letterSpacing: 0.3,
+    },
+    termsAcceptRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: s.sm,
+      paddingVertical: s.xs,
+    },
+    termsCheckbox: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 1,
+    },
+    termsAcceptText: {
+      flex: 1,
+      fontSize: 13,
+      lineHeight: 19,
+      fontWeight: '600',
+    },
+    termsTimestamp: {
+      fontSize: 10,
+      fontWeight: '600',
+      marginTop: s.xs,
+      letterSpacing: 0.3,
+      textAlign: 'right',
+    },
     tourBtn: {
       paddingVertical: s.sm,
       alignItems: 'center',

@@ -84,6 +84,15 @@ interface PlayerProfileState {
   customCaddiePortraitB64: string | null;
   useCustomCaddie: boolean;
 
+  // 2026-05-22 — Launch-prep Terms & Conditions acceptance. Captured
+  // during onboarding (welcome.tsx) before the user can tap "Get
+  // started". Stored as a timestamp so we can prove WHEN the user
+  // accepted (for store-submission privacy compliance + audit trail).
+  // Null = not yet accepted; presence of any timestamp = accepted.
+  // Persisted via the partialize block below so an interrupted
+  // onboarding (close mid-form) retains the acceptance state on resume.
+  termsAcceptedAt: number | null;
+
   // ─── ACTIONS ────────────────────────────
 
   setName: (name: string) => void;
@@ -116,6 +125,9 @@ interface PlayerProfileState {
   setSelfieB64: (b: string | null) => void;
   setCustomCaddiePortraitB64: (b: string | null) => void;
   setUseCustomCaddie: (on: boolean) => void;
+  // 2026-05-22 — Launch-prep T&C acceptance.
+  acceptTerms: () => void;
+  clearTermsAcceptance: () => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -158,6 +170,8 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       selfieB64: null,
       customCaddiePortraitB64: null,
       useCustomCaddie: false,
+      // 2026-05-22 — Launch-prep T&C acceptance default.
+      termsAcceptedAt: null,
 
       setName: (name) =>
         set({ name, firstName: name.split(' ')[0] ?? name }),
@@ -215,6 +229,13 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setSelfieB64: (b) => set({ selfieB64: b }),
       setCustomCaddiePortraitB64: (b) => set({ customCaddiePortraitB64: b }),
       setUseCustomCaddie: (on) => set({ useCustomCaddie: on }),
+      // 2026-05-22 — Launch-prep T&C acceptance actions.
+      // acceptTerms stamps the timestamp; the welcome screen disables
+      // its "Get started" CTA until termsAcceptedAt is non-null.
+      // clearTermsAcceptance is exposed for testing + a future Settings
+      // surface where the user can revoke ("delete my account" flow).
+      acceptTerms: () => set({ termsAcceptedAt: Date.now() }),
+      clearTermsAcceptance: () => set({ termsAcceptedAt: null }),
     }),
     {
       name: 'player-profile-v2',
