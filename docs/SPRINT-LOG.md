@@ -34,6 +34,33 @@ Relevant surfaces to apply this to: [services/holeDetection.ts](../services/hole
 
 ## Day 2 — 2026-05-21
 
+### Fix N (THE GATE) — crash-proof Start Round (POST_NOTIFICATIONS + graceful foreground service + collapsed GPS double-fire + Sentry DSN slot)
+
+**Root cause established without a stack trace** (per Fix M diagnosis): Tim's Z Fold (One UI 6 / Android 14, targetSdk 35) hard-crashed on every Start Round. Strongest candidate — and the one the defensive fix addresses unconditionally — the foreground location service posts a persistent notification, but `POST_NOTIFICATIONS` was missing from the manifest. On Android 13+ the runtime permission is required; on Samsung One UI 6+, starting a foreground service that posts a notification without it throws a native `SecurityException` that bypasses JS try/catch → process kill. The round persisted because the Zustand `set()` + AsyncStorage flush completed before the crash; the foreground-service start fires in the post-persist async block.
+
+**Shipped:**
+
+1. **[app.json](../app.json) — `android.permission.POST_NOTIFICATIONS` added.** Manifest-side prerequisite for the runtime grant to be possible at all. EAS-build-only — NOT OTA-able.
+
+2. **[services/backgroundLocationTask.ts](../services/backgroundLocationTask.ts)** — new `ensurePostNotificationsPermission()` helper. On Android 13+ (`Platform.Version >= 33`), calls `PermissionsAndroid.check` → `PermissionsAndroid.request` with a localized rationale string. On Android < 13 / iOS / non-Android: returns true. On any throw: returns false (treat as denied → skip foreground service). `startBackgroundLocation` now gates the `Location.startLocationUpdatesAsync` call on this probe: if denied, logs and returns WITHOUT calling the native function — round continues via foreground `watchPositionAsync` in `gpsManager`, only Doze coverage degrades. The actual `startLocationUpdatesAsync` is also wrapped in an inner try/catch so any other native throw (OEM-specific service refusal, future Android version type-mismatch) ALSO can't kill the round. **Three layers of defense:** permission-pre-check → inner try/catch around native call → outer try/catch around the whole function.
+
+3. **[app/(tabs)/caddie.tsx:1387-1404](../app/(tabs)/caddie.tsx#L1387)** — collapsed the double-fire of `startGpsManager`. `runStartRound` used to launch a parallel `requestForegroundPermissionsAsync` → `startGpsManager` → `refreshFix` → `forceMarkPosition` block ~30ms after `roundStore.startRound`'s own orchestration block did the same thing. Two concurrent calls could pass the `if (subscription) return` check in `startGpsManager` and race the foreground-service registration. **Now:** caddie.tsx schedules ONLY the initial-fix sync (`refreshFix` + `forceMarkPosition`) after an 800ms wait for the canonical roundStore orchestration to land the GPS subscription. Single startGpsManager call site.
+
+4. **[eas.json](../eas.json) — `EXPO_PUBLIC_SENTRY_DSN: ""` slot added to all three env blocks** (development / preview / production). When Tim sets a real DSN via EAS secrets or by replacing the empty string here, `Sentry.init()` at [_layout.tsx:64](../app/_layout.tsx#L64) starts capturing native crashes automatically — no more adb sessions needed. **`SENTRY_DISABLE_AUTO_UPLOAD: "true"` is intentionally KEPT** until Tim also has `SENTRY_AUTH_TOKEN` + `SENTRY_ORG` + `SENTRY_PROJECT` configured (source-map upload requires all three; would otherwise fail the EAS build). Runtime crash capture works WITHOUT source-map upload — separate concern, can wire later.
+
+**What Tim still needs to do for full Sentry coverage** (NOT blocking this fix):
+- Create a Sentry project at sentry.io
+- Add `EXPO_PUBLIC_SENTRY_DSN` value via EAS dashboard secrets (or replace the empty string in eas.json — secrets are cleaner)
+- After confirming runtime capture works, set `SENTRY_AUTH_TOKEN` + `SENTRY_ORG` + `SENTRY_PROJECT` as EAS secrets and remove `SENTRY_DISABLE_AUTO_UPLOAD` for readable stack traces
+
+**Health Connect + task-manager paths** were left as-is — both are already defensive (Health Connect has an availability probe + try/catch chain, task-manager has a wrapping try/catch in `ensureTaskDefined`). The primary crash surface was the foreground-service notification — that's now blocked by the new permission gate even on rooted/custom-ROM devices where `PermissionsAndroid` itself throws.
+
+**Verification path:** EAS build → install on Z Fold → tap Start Round. Expected: no crash, GPS engages via foreground watch (POST_NOTIFICATIONS prompt fires once on first round; whether Tim grants or denies, the round starts). When granted, foreground service runs and shows the persistent "SmartPlay tracking your round" notification. When denied, no notification, no foreground service, foreground watch only. NOT blocking ship — defensive fix is correct by construction; Sentry will self-report if a different native crash surfaces.
+
+**Build gates:** `tsc --noEmit` clean. EAS rebuild required (manifest permission change) — not OTA-able.
+
+**Hole-jumping (Fix L) re-evaluation deferred** until a clean crash-free Start Round is confirmed on device. The hole-jumping diagnosis stands (co-located atCourse picks Lakes when Tim plays Palms) but the half-init from the crash-and-reopen path also plays a role — both fixes need to land together for a real verification.
+
 ### Day 2 close — diagnoses run, open items, post-launch backlog
 
 **Detailed per-fix entries are below** (Fix I → Fix H → Fix G → Consolidation 5 Part 2 → Consolidation 5 Part 1). This block captures the end-of-day work that didn't ship code: two no-code diagnoses (Fix J, Fix K), open items carried into Day 3, and the post-launch backlog that accumulated during today's "are we sure this isn't a bug?" passes.

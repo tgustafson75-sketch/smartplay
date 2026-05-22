@@ -1383,30 +1383,30 @@ export default function CaddieTab() {
       fetchCourseGeometry(courseId).catch(err => console.log('[caddie] geometry warm failed:', err));
     }
 
-    // Phase V.7+ — pre-warm GPS at round start so the foreground permission
-    // prompt fires NOW (in the parking lot, not on hole 1 mid-shot) and the
-    // first GPS fix is already cached by the time the user looks at hole-view
-    // yardage. Idempotent — gpsManager.start is a no-op if already running.
+    // 2026-05-21 — Fix N: the pre-warm GPS block that used to live
+    // here (requestForegroundPermissionsAsync + startGpsManager +
+    // refreshFix + forceMarkPosition) is now handled inside
+    // store/roundStore.ts startRound's orchestration block. Two
+    // concurrent startGpsManager calls ~30ms apart raced the
+    // foreground-service registration check, which was a contributing
+    // factor to the Start Round crash on Samsung One UI. Now there's
+    // ONE call site (the orchestration in roundStore.startRound).
+    // The refreshFix + forceMarkPosition initial-fix sync still
+    // matters for SmartFinder / DataStrip hole-1 yardages, so we
+    // schedule them lazily after the GPS subscription is in place.
     void (async () => {
       try {
-        const Location = await import('expo-location');
-        const perm = await Location.requestForegroundPermissionsAsync();
-        if (!perm.granted) {
-          console.log('[caddie] location permission not granted at round start');
-          return;
-        }
-        const gps = await import('../../services/gpsManager');
-        await gps.startGpsManager();
-        // Phase AY — fire a fresh fix + propagate immediately so all
-        // hole-1 yardage displays (SmartFinder, DataStrip plays-like)
-        // reflect the player's actual position at Start Round. Acts
-        // like a synthetic Mark event without persisting it.
+        // Brief wait so roundStore's GPS orchestration has a chance
+        // to land the subscription before we ask for a fresh fix.
+        // Empirically gpsManager.startGpsManager completes in well
+        // under 500ms; 800ms is safe headroom.
+        await new Promise(r => setTimeout(r, 800));
         const sf = await import('../../services/smartFinderService');
         await sf.refreshFix();
         const bus = await import('../../services/positionMarkBus');
         await bus.forceMarkPosition().catch(() => {});
       } catch (e) {
-        console.log('[caddie] gps prewarm failed:', e);
+        console.log('[caddie] initial-fix sync failed (non-fatal):', e);
       }
     })();
 
