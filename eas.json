@@ -16,7 +16,8 @@
         "buildType": "apk"
       },
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "resourceClass": "m-medium"
       },
       "channel": "development"
     },
@@ -32,7 +33,9 @@
         "buildType": "apk"
       },
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "resourceClass": "m-medium",
+        "autoIncrement": "buildNumber"
       },
       "channel": "preview"
     },
@@ -46,12 +49,28 @@
         "buildType": "app-bundle"
       },
       "ios": {
-        "simulator": false
+        "distribution": "store",
+        "simulator": false,
+        "resourceClass": "m-medium",
+        "autoIncrement": "buildNumber"
       },
       "channel": "production"
     }
   },
   "submit": {
-    "production": {}
+    "preview": {
+      "ios": {
+        "appleId": "REPLACE_WITH_APPLE_ID_EMAIL",
+        "ascAppId": "REPLACE_WITH_APP_STORE_CONNECT_APP_ID",
+        "appleTeamId": "REPLACE_WITH_APPLE_TEAM_ID"
+      }
+    },
+    "production": {
+      "ios": {
+        "appleId": "REPLACE_WITH_APPLE_ID_EMAIL",
+        "ascAppId": "REPLACE_WITH_APP_STORE_CONNECT_APP_ID",
+        "appleTeamId": "REPLACE_WITH_APPLE_TEAM_ID"
+      }
+    }
   }
 }

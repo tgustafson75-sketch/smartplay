@@ -13,7 +13,15 @@
     "vercel-build": "expo export --platform web",
     "generate:greetings": "node scripts/generate-kevin-greetings.mjs",
     "sim": "tsx scripts/simulations/run-sim.ts",
-    "sim:round": "tsx scripts/simulations/synthetic-round.ts"
+    "sim:round": "tsx scripts/simulations/synthetic-round.ts",
+    "ios:build:preview": "eas build --profile preview --platform ios",
+    "ios:build:production": "eas build --profile production --platform ios",
+    "ios:submit": "eas submit --profile production --platform ios --latest",
+    "ios:ship": "eas build --profile production --platform ios --auto-submit-with-profile production",
+    "ota:preview": "eas update --branch preview",
+    "ota:production": "eas update --branch production",
+    "android:build:preview": "eas build --profile preview --platform android",
+    "android:build:production": "eas build --profile production --platform android"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",
