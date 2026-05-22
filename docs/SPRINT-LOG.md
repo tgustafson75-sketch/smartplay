@@ -1105,3 +1105,21 @@ Cage Mode's real capabilities — acoustic impact detection, ball-speed estimate
 - `514cd256-a798-439c-a6f8-c047e9a2fe6b` — Cage Mode UX → commit `30f2c40`
 
 All four bundles are now live on the preview channel. Current EAS APK (`c7f5ad9a` from earlier in the day, Fix N-3 base) pulls them on launch + apply on next cold start. **15 commits + 4 OTAs shipped between Day 3 close (~22:00 PT) and 02:00 PT.**
+
+#### Sentry env var rename (CLI fix, no commit)
+Tim added `SENTRY_DSN` to expo.dev env earlier tonight. The app reads `process.env.EXPO_PUBLIC_SENTRY_DSN` (the `EXPO_PUBLIC_` prefix is required for Expo's bundler to inline the var into the JS bundle). Caught this in the first EAS native build's log output. Used `eas env:create` + `eas env:delete` to rename across all three environments (preview / production / development). All three now have only `EXPO_PUBLIC_SENTRY_DSN=https://fd68abeec545ce0511f6a99d902203fd@...` — Sentry will activate on any build that picks up the renamed var.
+
+#### EAS native builds kicked
+- **Build #1** (`7d3a0bcf-5800-4b48-8f71-674b8d39e1d0`) — Android preview, started 12:44 AM, full stack embedded (Cage UX + Path A + Path 1 + voice latency + all OTA fixes) but built BEFORE the Sentry env rename → no Sentry activation. Safety fallback APK.
+- **Build #2** (`8a293122-3326-496e-b7f3-4f924f5f0b7f`) — Android preview, started 12:50 AM, identical code stack + Sentry env var correctly named at build time → Sentry activates on install. **This is the canonical fresh APK going forward.**
+- **iOS build attempt** failed in non-interactive mode: "EAS CLI couldn't find any credentials suitable for internal distribution." First-ever iOS build needs interactive Apple credentials setup. Blocked on Apple Developer Program enrollment (deferred business-track item). Next session: enroll + run `eas build --platform ios` interactively.
+
+#### PWA decision — deferred to next focused session (2026-05-22 ~02:00 PT)
+Tim asked about iOS access via web (PWA / Chrome on iOS). Honest scope discussion:
+- **Tier 1** (30-min marketing landing page, no actual app): possible tonight but minimal value.
+- **Tier 2** (real PWA with web-guards on every native-module import — `expo-camera`, `expo-task-manager`, `expo-location` background, `react-native-health-connect`, `expo-haptics`, etc. — plus web-fallback components for SmartFinder / Settings / Recap, disabled round mode on web): ~1 focused day. Not feasible at 02:00 PT after a 16-commit night.
+- **Tier 3** (full feature parity): probably never worth it once TestFlight is available post-Apple-enrollment.
+
+**Tim's call: wait. Don't ship a broken option.** Real PWA pass queued for a deliberate next session. iOS users continue to wait until either Apple Developer enrollment lands (TestFlight is then the right path) OR a focused PWA pass with proper web-guards.
+
+**Final commit count for Day 3: 16 commits + 4 OTAs + 2 EAS native builds + Sentry env corrected.**
