@@ -39,6 +39,7 @@ import { Video, ResizeMode } from 'expo-av';
 import Svg, { Line, Circle } from 'react-native-svg';
 import { useTheme } from '../../contexts/ThemeContext';
 import { analyzeSwing, type SwingAnalysis } from '../../services/poseDetection';
+import { extractPoseFramesFromVideo, type PoseFrame, type Keypoint } from '../../services/poseAnalysisApi';
 import { evaluateSwingValidity, type SwingValidity } from '../../services/swingValidity';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -94,6 +95,14 @@ export default function SmartMotion() {
   const [analysis, setAnalysis] = useState<SwingAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  // 2026-05-22 — Path A (real pose overlay). Captured swing keyframes
+  // run through /api/pose-analysis (RapidAPI MoveNet proxy). When
+  // available, RealSkeletonOverlay renders these real keypoints
+  // instead of StubSkeletonOverlay's normalized mock. videoDurationMs
+  // captured from Video.onLoad so the SWING_POSITIONS fractions land
+  // on the right times in the clip.
+  const [poseFrames, setPoseFrames] = useState<PoseFrame[] | null>(null);
+  const [videoDurationMs, setVideoDurationMs] = useState<number | null>(null);
 
   // Kick off cloud swing analysis on mount.
   useEffect(() => {
@@ -137,6 +146,28 @@ export default function SmartMotion() {
     })();
     return () => { cancelled = true; };
   }, [clipUri]);
+
+  // 2026-05-22 — Path A — fetch real pose keypoints once the clip is on
+  // screen AND the video has reported its duration. Runs in parallel
+  // with analyzeSwing (Card 2). Pose API is rate-limited (RapidAPI),
+  // so we fire ONCE per clip mount, never on resize / scrub. Null
+  // result (no env vars, network failure, or no person detected) →
+  // RealSkeletonOverlay falls through to StubSkeletonOverlay so the
+  // UI never regresses.
+  useEffect(() => {
+    if (!clipUri || videoDurationMs == null) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const frames = await extractPoseFramesFromVideo(clipUri, videoDurationMs);
+        if (!cancelled) setPoseFrames(frames);
+      } catch (e) {
+        console.log('[smartmotion] pose-frame fetch failed (non-fatal):', e);
+        if (!cancelled) setPoseFrames(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [clipUri, videoDurationMs]);
 
   // Phase 418 — unified swing validity gate. SmartMotion's pose overlay,
   // metrics strip, and Insight card all consume the SAME validity
@@ -242,6 +273,8 @@ export default function SmartMotion() {
             analyzing={analyzing}
             validity={validity}
             colors={colors}
+            poseFrames={poseFrames}
+            onVideoDuration={(ms) => setVideoDurationMs(ms)}
           />
           <InsightCard
             colors={colors}
@@ -369,7 +402,7 @@ function PreRecordAnglePill({ label, sub, icon, active, colors, onPress }: {
 
 function VisualCard({
   clipUri, angle, setAngle, overlays, playbackSpeed, setPlaybackSpeed,
-  analysis, analyzing, validity, colors,
+  analysis, analyzing, validity, colors, poseFrames, onVideoDuration,
 }: {
   clipUri: string | null;
   angle: Angle;
@@ -381,6 +414,11 @@ function VisualCard({
   analyzing: boolean;
   validity: SwingValidity;
   colors: ReturnType<typeof useTheme>['colors'];
+  // 2026-05-22 — Path A — real pose keypoints from /api/pose-analysis
+  // when available. Null = backend unconfigured / fetch failed / no
+  // person detected → render StubSkeletonOverlay (no regression).
+  poseFrames: PoseFrame[] | null;
+  onVideoDuration: (ms: number) => void;
 }) {
   // Phase 418 — render the pose-skeleton and shot-tracer overlays ONLY
   // when the validation gate confirms an analyzable swing AND analysis
@@ -477,6 +515,16 @@ function VisualCard({
             isMuted
             rate={playbackSpeed}
             useNativeControls={false}
+            onLoad={(status) => {
+              // 2026-05-22 — Path A — surface real video duration so
+              // the parent can extract pose frames at canonical swing
+              // positions (P1 / P2 / P4 / P6 / P10 as fractions of
+              // total duration). Without this the pose call would use
+              // a default 2500ms guess and miss the impact frame on
+              // longer clips.
+              const d = (status as { durationMillis?: number })?.durationMillis;
+              if (typeof d === 'number' && d > 0) onVideoDuration(d);
+            }}
             onReadyForDisplay={(payload) => {
               // 2026-05-21 — Fix C: capture the clip's native dimensions
               // so the overlay SVGs can be positioned to the
@@ -526,7 +574,18 @@ function VisualCard({
             placement that snaps correct as soon as onReadyForDisplay
             fires. */}
         {clipUri && overlays.body_mechanics && overlaysGated && videoRect && (
-          <StubSkeletonOverlay videoRect={videoRect} accent={colors.accent} />
+          // 2026-05-22 — Path A — render real pose keypoints from
+          // /api/pose-analysis when available; falls back to the
+          // animated stub when the backend isn't configured or no
+          // person was detected. Honest by construction: no fake
+          // skeleton renders against floor footage (validity gate
+          // upstream already suppresses) and no fake skeleton renders
+          // if the pose backend silently fails (we know it's stub).
+          poseFrames && poseFrames.length > 0 ? (
+            <RealSkeletonOverlay videoRect={videoRect} accent={colors.accent} frames={poseFrames} />
+          ) : (
+            <StubSkeletonOverlay videoRect={videoRect} accent={colors.accent} />
+          )
         )}
         {clipUri && overlays.shot_tracer && overlaysGated && (
           <Svg
@@ -1147,6 +1206,172 @@ const ISSUE_INSIGHTS: Record<string, IssueMap> = {
 // videoFrame, per Fix C). All sizes derive from videoRect dimensions
 // so they hold up at any aspect ratio (Z Fold closed ~9:21, open
 // ~8:9, standard phone ~9:16) without hardcoding pixels.
+
+// 2026-05-22 — Path A — RealSkeletonOverlay renders the actual pose
+// keypoints returned by /api/pose-analysis (RapidAPI MoveNet proxy)
+// for one canonical swing position — P6_impact by default (most
+// diagnostic moment). Falls back to P4_top → first available frame
+// if impact wasn't captured. Bone topology mirrors StubSkeletonOverlay
+// so the look + feel stays consistent; only the joint positions are
+// real (driven by the user's actual body in the captured frame).
+//
+// Keypoint coords from the pose API may be normalized 0-1 OR pixel
+// values relative to the source frame; we auto-detect by checking
+// the max value and convert to 0-1 either way before mapping to
+// videoRect pixels.
+function RealSkeletonOverlay({
+  videoRect,
+  accent,
+  frames,
+}: {
+  videoRect: { left: number; top: number; width: number; height: number };
+  accent: string;
+  frames: PoseFrame[];
+}) {
+  const { width: vW, height: vH } = videoRect;
+  const bodyScale = Math.min(vW, vH);
+
+  // Prefer impact (P6) → top (P4) → first frame as the canonical pose
+  // to render. Impact is the most diagnostic moment per coaching norms.
+  const frame =
+    frames.find(f => f.position === 'P6_impact')
+    ?? frames.find(f => f.position === 'P4_top')
+    ?? frames[0];
+
+  // Build a name→keypoint map for O(1) lookup. Filter out low-confidence
+  // points (score < 0.2 is noise) so we don't draw bones into nowhere.
+  const kpByName = new Map<string, Keypoint>();
+  for (const kp of frame.keypoints) {
+    if (kp.name && kp.score > 0.2) kpByName.set(kp.name, kp);
+  }
+  const lShoulder = kpByName.get('left_shoulder');
+  const rShoulder = kpByName.get('right_shoulder');
+  const nose = kpByName.get('nose');
+
+  // Auto-detect coordinate space: any value > 1.5 = pixel coords;
+  // otherwise normalized 0-1. Compute the normalizer factor used to
+  // map every keypoint into 0-1 range before percentage-rendering
+  // against videoRect.
+  let normX = 1, normY = 1;
+  if (lShoulder || rShoulder || nose) {
+    const sample = lShoulder ?? rShoulder ?? nose!;
+    if (sample.x > 1.5 || sample.y > 1.5) {
+      // Pixel coords — find max across all keypoints to derive bounds.
+      let maxX = 0, maxY = 0;
+      for (const kp of frame.keypoints) {
+        if (kp.x > maxX) maxX = kp.x;
+        if (kp.y > maxY) maxY = kp.y;
+      }
+      normX = maxX > 0 ? maxX : 1;
+      normY = maxY > 0 ? maxY : 1;
+    }
+  }
+
+  // Helper: kp → SVG percentage string (0-100), or null if missing.
+  const pct = (kp: Keypoint | undefined, axis: 'x' | 'y'): string | null => {
+    if (!kp) return null;
+    const norm = axis === 'x' ? kp.x / normX : kp.y / normY;
+    return `${Math.max(0, Math.min(100, norm * 100))}%`;
+  };
+
+  // Bone edges — same topology as StubSkeletonOverlay for visual continuity.
+  const BONE_EDGES: [string, string][] = [
+    ['left_shoulder', 'right_shoulder'],
+    ['left_shoulder', 'left_elbow'],
+    ['left_elbow', 'left_wrist'],
+    ['right_shoulder', 'right_elbow'],
+    ['right_elbow', 'right_wrist'],
+    ['left_shoulder', 'left_hip'],
+    ['right_shoulder', 'right_hip'],
+    ['left_hip', 'right_hip'],
+    ['left_hip', 'left_knee'],
+    ['left_knee', 'left_ankle'],
+    ['right_hip', 'right_knee'],
+    ['right_knee', 'right_ankle'],
+  ];
+
+  const jointRadius = Math.max(3, Math.min(7, bodyScale * 0.011));
+  const boneStrokeWidth = Math.max(1.5, Math.min(3.5, bodyScale * 0.005));
+  const headStrokeWidth = boneStrokeWidth * 1.1;
+
+  // Head circle radius derived from shoulder width (same logic as stub).
+  const headRadius = (() => {
+    if (!lShoulder || !rShoulder) return Math.max(8, bodyScale * 0.05);
+    const dx = (rShoulder.x - lShoulder.x) / normX;
+    const dy = (rShoulder.y - lShoulder.y) / normY;
+    const shoulderWidthPx = Math.hypot(dx * vW, dy * vH);
+    return Math.max(8, Math.min(36, (shoulderWidthPx * 0.55) / 2));
+  })();
+
+  return (
+    <Svg
+      style={{
+        position: 'absolute',
+        left: videoRect.left,
+        top: videoRect.top,
+        width: vW,
+        height: vH,
+      }}
+      pointerEvents="none"
+    >
+      {/* Vertical alignment reference line — preserved from the prior
+          overlay for continuity. */}
+      <Line
+        x1="50%" y1="6%" x2="50%" y2="94%"
+        stroke={accent} strokeWidth={1.5} strokeDasharray="6,4" opacity={0.55}
+      />
+
+      {/* Bones — each edge drawn only when both endpoints exist + cleared
+          the confidence floor. Missing pairs silently skip (typical when
+          one wrist is occluded behind the body, etc.). */}
+      {BONE_EDGES.map(([a, b], i) => {
+        const ka = kpByName.get(a);
+        const kb = kpByName.get(b);
+        if (!ka || !kb) return null;
+        const x1 = pct(ka, 'x'), y1 = pct(ka, 'y');
+        const x2 = pct(kb, 'x'), y2 = pct(kb, 'y');
+        if (!x1 || !y1 || !x2 || !y2) return null;
+        return (
+          <Line
+            key={`real-bone-${i}`}
+            x1={x1} y1={y1} x2={x2} y2={y2}
+            stroke={accent}
+            strokeWidth={boneStrokeWidth}
+            strokeLinecap="round"
+            opacity={0.88}
+          />
+        );
+      })}
+
+      {/* Head — circle centered on nose. */}
+      {nose && (
+        <Circle
+          cx={pct(nose, 'x') ?? '50%'}
+          cy={pct(nose, 'y') ?? '10%'}
+          r={headRadius}
+          stroke={accent}
+          strokeWidth={headStrokeWidth}
+          fill="transparent"
+          opacity={0.95}
+        />
+      )}
+
+      {/* Joint dots — render every detected joint above confidence floor. */}
+      {Array.from(kpByName.entries()).filter(([n]) => n !== 'nose').map(([n, kp]) => {
+        const cx = pct(kp, 'x'), cy = pct(kp, 'y');
+        if (!cx || !cy) return null;
+        return (
+          <Circle
+            key={`real-joint-${n}`}
+            cx={cx} cy={cy} r={jointRadius}
+            fill={accent}
+            opacity={0.95}
+          />
+        );
+      })}
+    </Svg>
+  );
+}
 
 function StubSkeletonOverlay({
   videoRect,

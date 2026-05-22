@@ -336,6 +336,23 @@ function computeBiomechanics(frames: PoseFrame[]): SwingBiomechanics {
  *  on each, compute biomechanics. Returns null when the video is invalid
  *  OR the pose API failed for every frame (caller renders fallback). */
 export async function analyzeSwingFromVideo(videoUri: string, durationMs: number): Promise<SwingBiomechanics | null> {
+  const frames = await extractPoseFramesFromVideo(videoUri, durationMs);
+  if (!frames) return null;
+  return computeBiomechanics(frames);
+}
+
+/** 2026-05-22 — Path A (SmartMotion real pose overlay): same keyframe-
+ *  extraction pipeline as analyzeSwingFromVideo, but returns the raw
+ *  per-position PoseFrames instead of collapsing into a biomechanics
+ *  summary. SmartMotion uses this to render a real skeleton at the
+ *  most-diagnostic position (P6 impact by default) instead of the
+ *  StubSkeletonOverlay's animated mock.
+ *
+ *  Returns null when the video is too short or every frame failed
+ *  pose detection (caller falls back to StubSkeletonOverlay so there's
+ *  no regression vs the existing behavior).
+ */
+export async function extractPoseFramesFromVideo(videoUri: string, durationMs: number): Promise<PoseFrame[] | null> {
   if (durationMs < 500) {
     console.warn('[pose] video too short to sample');
     return null;
@@ -351,5 +368,5 @@ export async function analyzeSwingFromVideo(videoUri: string, durationMs: number
     if (f) frames.push(f);
   }
   if (frames.length === 0) return null;
-  return computeBiomechanics(frames);
+  return frames;
 }
