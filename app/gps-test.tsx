@@ -36,7 +36,7 @@ import {
   type GpsFix,
 } from '../services/gpsManager';
 import { haversineYards } from '../utils/geoDistance';
-import { startSyntheticRound, stopSyntheticRound, isSimulatedActive, subscribeToWalk, subscribeHarnessEvents, clearHarnessEvents, type MockRound, type SimulatedWalkState, type HarnessEvent } from '../services/simulatedGPS';
+import { startSyntheticRound, stopSyntheticRound, isSimulatedActive, subscribeToWalk, subscribeHarnessEvents, clearHarnessEvents, setSimulatorMovementMode, getSimulatorMovementMode, type MockRound, type MovementMode, type SimulatedWalkState, type HarnessEvent } from '../services/simulatedGPS';
 import { useRoundStore } from '../store/roundStore';
 import { useOffCourseStore } from '../services/offCourseDetector';
 import { runAuditV2 } from '../services/audit/scenarioRunner';
@@ -90,6 +90,61 @@ function BundleBadge() {
     }}>
       bundle: {shortId} · {info.channel ?? 'unknown'} · {ageStr}
     </Text>
+  );
+}
+
+// 2026-05-21 — Harness v2-lite — cart vs walk toggle. Module-state
+// driven via setSimulatorMovementMode so the next startSyntheticRound
+// picks up the choice. `disabled` flips true during an active run so
+// the user doesn't think mid-run changes apply to the in-flight walk
+// (the walk builder reads the mode at startSyntheticRound time).
+function MovementModeToggle({ colors, disabled }: { colors: ReturnType<typeof useTheme>['colors']; disabled: boolean }): React.ReactElement {
+  const [mode, setMode] = useState<MovementMode>(getSimulatorMovementMode());
+  const apply = (next: MovementMode) => {
+    setSimulatorMovementMode(next);
+    setMode(next);
+  };
+  return (
+    <View style={{
+      flexDirection: 'row',
+      gap: 8,
+      marginVertical: 8,
+      opacity: disabled ? 0.55 : 1,
+    }}>
+      {(['walk', 'cart'] as const).map(m => {
+        const active = mode === m;
+        return (
+          <TouchableOpacity
+            key={m}
+            onPress={() => { if (!disabled) apply(m); }}
+            style={{
+              flex: 1,
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: active ? colors.accent : colors.border,
+              backgroundColor: active ? `${colors.accent}22` : 'transparent',
+              alignItems: 'center',
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`Set harness movement mode to ${m}`}
+            accessibilityState={{ selected: active, disabled }}
+          >
+            <Text style={{
+              color: active ? colors.accent : colors.text_primary,
+              fontWeight: active ? '700' : '500',
+              fontSize: 13,
+            }}>
+              {m === 'walk' ? '🚶 Walk' : '🏌️ Cart'}
+            </Text>
+            <Text style={{ color: colors.text_muted, fontSize: 10, marginTop: 2 }}>
+              {m === 'walk' ? 'straight line · 4 m/s' : 'offset path · 7 m/s'}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
   );
 }
 
@@ -284,6 +339,14 @@ export default function GpsTestScreen() {
           <Text style={[styles.empty, { color: colors.text_muted, marginBottom: 8 }]}>
             Pick a course to play. Only one round can run at a time. Telemetry below shows what the simulator is doing.
           </Text>
+
+          {/* 2026-05-21 — Harness v2-lite — cart vs walk movement toggle.
+              Cart is the 95% real-world default (memory cart-is-default);
+              the harness should exercise both. Toggle persisted in
+              module state via setSimulatorMovementMode; honored by the
+              next startSyntheticRound. Hidden but functional during an
+              active run (changing mid-run doesn't rebuild the walk). */}
+          <MovementModeToggle colors={colors} disabled={walkState != null} />
 
           {([
             { round: MENIFEE_MOCK_ROUND, label: 'Menifee Palms', color: '#00C896' },

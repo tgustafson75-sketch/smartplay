@@ -47,6 +47,45 @@ let paused = false;
 let stepMode = false;
 let pendingStepAdvance = false;
 
+// 2026-05-21 — Harness v2-lite (Fix O/P/Q/S desk verification):
+// Movement mode lets Tim toggle between a clean walker track (the
+// historic default) and a cart-style track that's faster, offset from
+// the straight tee→green line, and stops at non-canonical points
+// (cart-path intermediates near the green rather than landing exactly
+// on the green every time). Cart is the 95% case for real golfers
+// (memory: cart-is-default), so the harness should exercise both.
+//
+// HONEST LIMIT: this still feeds SIMULATED positions through the same
+// pipeline. It does NOT reproduce the real co-located-course GPS
+// confusion (Lakes / Palms interweave) that caused the Menifee
+// hole-jumping. That's a real-GPS, real-world problem — Fix L
+// (multi-course picker + centroid math) + a real cart round remain
+// the only tests for that. The cart harness tests detection
+// ROBUSTNESS to cart-style motion patterns, not the real facility-
+// geometry problem.
+export type MovementMode = 'walk' | 'cart';
+let movementMode: MovementMode = 'walk';
+
+export function setSimulatorMovementMode(mode: MovementMode): void {
+  movementMode = mode;
+  console.log('[simGPS] movement mode:', mode);
+  logHarnessEvent('mode', `movement mode = ${mode}`);
+}
+export function getSimulatorMovementMode(): MovementMode { return movementMode; }
+
+// 2026-05-21 — Harness v2-lite — Fix O verification (manual override
+// stickiness). The harness's synthetic-advance at green-reach calls
+// setCurrentHole(nextHole) deterministically. Without a guard, if Tim
+// taps back a hole mid-harness to test the manual-override flow, the
+// next green-reach would silently override his correction and the
+// "did the manual override stick?" test would always fail.
+//
+// We track the hole the harness LAST advanced to (or the harness's
+// expected current hole at any moment). If round.currentHole differs
+// from that at the next green-reach, we know the user manually moved
+// the pointer — and we honor it instead of overriding.
+let harnessExpectedHole: number | null = null;
+
 export function setSimulatorPace(mps: number | null): void {
   paceOverrideMps = mps;
   console.log('[simGPS] pace override:', mps ?? 'walk-default');
@@ -478,11 +517,41 @@ function tick(): void {
         // (Caddie data strip, F/M/B yardage, SmartVision hole image)
         // updates as the harness walks through the round. Capped at
         // courseHoles.length so we don't index past hole 18.
+        //
+        // 2026-05-21 — Harness v2-lite — Fix O verification (manual
+        // override stickiness). If round.currentHole doesn't match the
+        // hole the harness last advanced to, that means the user
+        // manually nudged the pointer between transitions. Respect the
+        // user's choice — do NOT override. Log it so the post-run
+        // event review shows the manual correction was honored. This
+        // is the harness-side mirror of the production manual-override
+        // lockout (services/holeDetection.ts noteManualOverride at
+        // setCurrentHole).
         const nextHole = b.holeNumber + 1;
         const totalHoles = round.courseHoles.length;
-        if (round.isRoundActive && round.currentHole !== nextHole && nextHole <= totalHoles) {
+        const persona = (() => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const settingsMod = require('../store/settingsStore') as typeof import('../store/settingsStore');
+            return settingsMod.useSettingsStore.getState().caddiePersonality;
+          } catch { return 'unknown'; }
+        })();
+        const userMovedHole = harnessExpectedHole != null && round.currentHole !== harnessExpectedHole;
+        if (userMovedHole) {
+          logHarnessEvent(
+            'manual_override_respected',
+            `harness expected H${harnessExpectedHole} but user moved to H${round.currentHole} — skipping synthetic advance`,
+          );
+          // Re-sync harnessExpectedHole to wherever the user is now so
+          // subsequent synthetic advances reference the right baseline.
+          harnessExpectedHole = round.currentHole;
+        } else if (round.isRoundActive && round.currentHole !== nextHole && nextHole <= totalHoles) {
           round.setCurrentHole(nextHole);
-          logHarnessEvent('transition', `→ hole ${nextHole} (synthetic advance from H${b.holeNumber} green)`);
+          harnessExpectedHole = nextHole;
+          logHarnessEvent(
+            'transition',
+            `→ hole ${nextHole} from H${b.holeNumber} green · persona=${persona} (Fix S intro should fire; Fix Q persona is active)`,
+          );
         }
       } catch (e) {
         console.log('[simGPS] synthetic score log failed:', e);
@@ -539,19 +608,62 @@ export interface MockRound {
 /** Convert a MockRound JSON object into a SimulatedWalk that
  *  startSimulatedWalk understands. Each hole expands to:
  *    [tee] → [1/3 fairway] → [2/3 fairway] → [green] → [next hole tee]
- *  with the last hole's green capped (no next-tee continuation). */
-export function buildWalkFromMockRound(round: MockRound): SimulatedWalk {
+ *  with the last hole's green capped (no next-tee continuation).
+ *
+ *  2026-05-21 — Harness v2-lite — movement mode parameter. 'walk' is
+ *  the historic clean track. 'cart' offsets the fairway waypoints
+ *  perpendicular to the tee→green line (alternating left/right per
+ *  hole, ~15y offset) so the path resembles a cart-path running off
+ *  to the side, and runs at a faster pace (~7 m/s ≈ 16 mph cart cruise).
+ *  Cart still ends at the green (the player walks the final 15y onto
+ *  the green from the cart) so the synthetic score-logging green
+ *  trigger still fires cleanly.
+ *
+ *  Cart mode is the 95% real-world default (memory: cart-is-default)
+ *  and exercises hole-detection's tolerance to off-fairway-line
+ *  motion without needing real cart hardware.
+ */
+const DEG_PER_YARD_LAT = 1 / 121778; // ~111111 m/deg / 0.9144 m/yard
+function offsetPerpendicular(
+  base: { lat: number; lng: number },
+  bearingDeg: number,
+  yards: number,
+): { lat: number; lng: number } {
+  // Perpendicular bearing (turn 90° right from the tee→green direction).
+  const perpRad = ((bearingDeg + 90) * Math.PI) / 180;
+  const dLat = Math.cos(perpRad) * yards * DEG_PER_YARD_LAT;
+  const cosLat = Math.cos(base.lat * Math.PI / 180);
+  const dLng = Math.sin(perpRad) * yards * DEG_PER_YARD_LAT / (cosLat || 1);
+  return { lat: base.lat + dLat, lng: base.lng + dLng };
+}
+
+export function buildWalkFromMockRound(round: MockRound, mode: MovementMode = 'walk'): SimulatedWalk {
+  const isCart = mode === 'cart';
   const points: SimulatedWalkPoint[] = [];
   for (let i = 0; i < round.holes.length; i++) {
     const h = round.holes[i];
     const { tee, green } = h;
-    // Tee position
+    // Cart-path offset: alternate left/right per hole (real cart paths
+    // do this — they run on one side of the fairway and switch which
+    // side for variety / hazards). ±15y is enough to land outside the
+    // fairway centerline without straying into adjacent fairways.
+    const cartOffset = isCart ? (i % 2 === 0 ? 15 : -15) : 0;
+    const midOffset = (lat: number, lng: number) =>
+      cartOffset === 0 ? { lat, lng } : offsetPerpendicular({ lat, lng }, h.bearingDeg, cartOffset);
+
+    // Tee position — cart sits at the tee box (no offset; cart parking
+    // is right next to the tee on most courses)
     points.push({ lat: tee.lat, lng: tee.lng, label: `H${h.holeNumber} tee` });
-    // Fairway interpolations to seed sustained-position windows
+    // Fairway interpolations — offset perpendicular to the tee→green
+    // axis when in cart mode (cart-path edge of fairway).
+    const mid = midOffset(
+      tee.lat + (green.lat - tee.lat) * 0.34,
+      tee.lng + (green.lng - tee.lng) * 0.34,
+    );
     points.push({
-      lat: tee.lat + (green.lat - tee.lat) * 0.34,
-      lng: tee.lng + (green.lng - tee.lng) * 0.34,
-      label: `H${h.holeNumber} mid-fairway`,
+      lat: mid.lat,
+      lng: mid.lng,
+      label: `H${h.holeNumber} mid-fairway${isCart ? ' (cart path)' : ''}`,
       // 2026-05-19 — Tag fairway waypoints with their hole so the
       // simulator can log a tee shot when the player arrives here.
       // STROKE counter on the data strip then increments mid-hole
@@ -559,14 +671,19 @@ export function buildWalkFromMockRound(round: MockRound): SimulatedWalk {
       holeNumber: h.holeNumber,
       par: h.par,
     });
+    const approach = midOffset(
+      tee.lat + (green.lat - tee.lat) * 0.67,
+      tee.lng + (green.lng - tee.lng) * 0.67,
+    );
     points.push({
-      lat: tee.lat + (green.lat - tee.lat) * 0.67,
-      lng: tee.lng + (green.lng - tee.lng) * 0.67,
-      label: `H${h.holeNumber} approach`,
+      lat: approach.lat,
+      lng: approach.lng,
+      label: `H${h.holeNumber} approach${isCart ? ' (cart path)' : ''}`,
       holeNumber: h.holeNumber,
       par: h.par,
     });
-    // Green
+    // Green — cart still arrives here so the synthetic score-logging
+    // trigger (b.isGreen branch in tick()) fires unchanged.
     points.push({
       lat: green.lat,
       lng: green.lng,
@@ -577,22 +694,23 @@ export function buildWalkFromMockRound(round: MockRound): SimulatedWalk {
     });
   }
   // 2026-05-19 — Pace dropped from 240 m/s (fast-forward, ~7s/round)
-  // to 4 m/s (~brisk jog). Reason: at 240 m/s the simulator passed
-  // through each green→next-tee transition zone in <1 second, well
-  // below holeDetection's 10s SUSTAINED_TRANSITION_MS window. Auto-
-  // transitions never fired and the round stayed pinned on hole 1
-  // forever. At 4 m/s:
-  //   - within-hole segments (~60m): ~15s walking
-  //   - green→next-tee segment (~50m): ~12s — clears the 10s window
-  //   - per-hole total: ~57s, 18 holes ≈ 17 min, 9 holes ≈ 9 min
-  // Slow but functional. Pace overrides via setSimulatorPace() let
-  // the dev switch back to fast-forward for pure math validation.
+  // to 4 m/s (~brisk jog) for walk mode. Reason: at 240 m/s the
+  // simulator passed through each green→next-tee transition zone in
+  // <1 second, well below holeDetection's 10s SUSTAINED_TRANSITION_MS
+  // window. Auto-transitions never fired and the round stayed pinned
+  // on hole 1 forever.
+  //   - walk @ 4 m/s: within-hole ~15s, green→next-tee ~12s, total ~57s/hole
+  //   - cart @ 7 m/s: within-hole ~9s,  green→next-tee ~7s,  total ~32s/hole
+  // 2026-05-21 — Harness v2-lite — Cart mode bumps to 7 m/s (~16 mph,
+  // realistic cart cruise). Pace overrides via setSimulatorPace() still
+  // win over both defaults for pure math validation.
+  const defaultPace = isCart ? 7 : 4;
   return {
     id: `mock-round-${round.courseId}`,
-    display_name: `Synthetic: ${round.courseName} (${round.totalHoles} holes)`,
+    display_name: `Synthetic: ${round.courseName} (${round.totalHoles} holes, ${mode})`,
     course_name_hint: round.courseName.toLowerCase(),
-    description: 'Synthetic round from a MockRound JSON. Pace tuned to clear holeDetection sustained-position gates.',
-    pace_mps: 4,
+    description: `Synthetic round from a MockRound JSON in ${mode} mode. Pace tuned to clear holeDetection sustained-position gates.`,
+    pace_mps: defaultPace,
     points,
   };
 }
@@ -752,11 +870,27 @@ function _startSyntheticRoundInternal(round: MockRound): string {
   // 4. Register and start the simulated walk. Wrapped because
   //    startSimulatedWalk emits to subscribers — if any subscriber
   //    throws during initial emit, we want a clean error, not a crash.
+  //
+  //    2026-05-21 — Harness v2-lite — pass the current movement mode
+  //    (walk | cart) into the walk builder so cart mode picks up the
+  //    perpendicular path offset + faster pace. Honest-limit logged
+  //    so the post-run event review starts with the scope reminder.
   try {
-    const walk = buildWalkFromMockRound(round);
+    const walk = buildWalkFromMockRound(round, movementMode);
     const existingIdx = SIMULATED_WALKS.findIndex(w => w.id === walk.id);
     if (existingIdx >= 0) SIMULATED_WALKS[existingIdx] = walk;
     else SIMULATED_WALKS.push(walk);
+    // Reset the harness's hole-tracking baseline so the Fix-O manual-
+    // override guard starts from a known state on each new run.
+    harnessExpectedHole = 1;
+    logHarnessEvent(
+      'honest_limit',
+      `mode=${movementMode}: simulated positions through the same pipeline. Cannot reproduce co-located-course GPS confusion (Lakes/Palms interweave) — that's real-GPS only.`,
+    );
+    logHarnessEvent(
+      'fix_targets',
+      'Verifies Fix O (manual-override stickiness), Fix Q (persona on transition), Fix S (per-hole intro). Fix P (voice-intent classifier) NOT exercised — harness writes scores via roundStore.logScore directly, not through the voice-intent → logScoreHandler chain.',
+    );
     startSimulatedWalk(walk.id);
     return walk.id;
   } catch (e) {
@@ -770,6 +904,9 @@ function _startSyntheticRoundInternal(round: MockRound): string {
  *  simulated fix, and stops the walk timer. */
 export function stopSyntheticRound(): void {
   stopSimulatedWalk();
+  // 2026-05-21 — Harness v2-lite — clear hole baseline so the next run
+  // doesn't carry over the prior round's expected-hole tracker.
+  harnessExpectedHole = null;
   try {
     const { useRoundStore } = require('../store/roundStore');
     const s = useRoundStore.getState();
