@@ -22,7 +22,8 @@
           "location"
         ],
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "buildNumber": "2"
     },
     "android": {
       "package": "com.smartplaycaddie.app",

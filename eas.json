@@ -40,6 +40,7 @@
       "channel": "preview"
     },
     "production": {
+      "credentialsSource": "local",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://smartplay-beta.vercel.app",
         "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCh6a4PaRpohas6kmh1KjrmdYDQkIZuth4",
@@ -60,16 +61,16 @@
   "submit": {
     "preview": {
       "ios": {
-        "appleId": "t.gustafson75@gmail.com",
-        "ascAppId": "REPLACE_AFTER_FIRST_SUBMIT_CREATES_THE_ASC_APP_RECORD",
+        "appleId": "t.gustafson@hotmail.com",
+        "ascAppId": "6772344465",
         "appleTeamId": "B6KTPCWF7A",
         "language": "en-US"
       }
     },
     "production": {
       "ios": {
-        "appleId": "t.gustafson75@gmail.com",
-        "ascAppId": "REPLACE_AFTER_FIRST_SUBMIT_CREATES_THE_ASC_APP_RECORD",
+        "appleId": "t.gustafson@hotmail.com",
+        "ascAppId": "6772344465",
         "appleTeamId": "B6KTPCWF7A",
         "language": "en-US"
       }
