@@ -7,6 +7,26 @@ The full sprint plan lives in [docs/audit-420-SPRINT-MAP.md](audit-420-SPRINT-MA
 
 ---
 
+## Standing design principles
+
+**These are permanent rules, not one-off decisions. Every diagnosis, fix, and verification touching the listed surfaces must apply them.**
+
+### Cart is the default, not the exception (logged 2026-05-21)
+
+~95% of golfers start in a cart. All GPS / hole-detection / round-flow logic must be designed for CART movement as the **primary** case and walking as the secondary case — not the other way around.
+
+What "cart-default" means in practice:
+- **Cart movement is faster** (typically 6-12 mph vs walking 2-4 mph). Sustained-position thresholds calibrated for a stationary walker on a tee miss the cart-rider's pre-shot stops (~5-15s) and incorrectly hold transitions.
+- **Cart paths swing wide** of the tee-to-green line and routinely pass adjacent holes' tees and greens. A cart at 60 yards from the current green might be 30 yards from a different hole's tee — false-transition territory that a walker on the playing corridor never sees.
+- **Cart stops aren't on the tee/green.** Carts park at the cart-path stop, walk to the ball, swing, walk back. Yardages and hole transitions must tolerate cart-path positions that diverge from the playing line by 20-50 yards.
+- **Multi-course / interwoven facilities compound this.** Menifee Lakes + Palms share cart paths in places; a cart on Palms hole 9 passes within yards of Lakes hole 12. The cart-default rule + co-located course logic must work together.
+
+**Verification rule:** any hole-detection / round-GPS / shot-detection change MUST be verified on a real cart round before being declared ready. A walker-only pass or harness-only pass is **insufficient**. This is a permanent test-bar item.
+
+Relevant surfaces to apply this to: [services/holeDetection.ts](../services/holeDetection.ts), [services/shotDetectionService.ts](../services/shotDetectionService.ts) (already has a cartMode config), [services/gpsManager.ts](../services/gpsManager.ts) (mode evaluator), [services/walkingDetector.ts](../services/walkingDetector.ts), and the new co-located-course atCourse logic in [app/(tabs)/play.tsx](../app/(tabs)/play.tsx).
+
+---
+
 ## Day 1 — 2026-05-20
 
 ### Shipped today (Day 1 / Fix 1 addendum)
