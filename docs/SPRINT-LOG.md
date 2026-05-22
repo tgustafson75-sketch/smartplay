@@ -1123,3 +1123,21 @@ Tim asked about iOS access via web (PWA / Chrome on iOS). Honest scope discussio
 **Tim's call: wait. Don't ship a broken option.** Real PWA pass queued for a deliberate next session. iOS users continue to wait until either Apple Developer enrollment lands (TestFlight is then the right path) OR a focused PWA pass with proper web-guards.
 
 **Final commit count for Day 3: 16 commits + 4 OTAs + 2 EAS native builds + Sentry env corrected.**
+
+#### Launch-prep T&C acceptance gate (`b7cc3b6`, OTA `655ec148`)
+After the build kicks, Tim asked for a required Terms & Conditions acceptance step in onboarding before account completion. Added inside the existing single-screen `app/welcome.tsx` (preserved Tim's "no multi-step nonsense" rule — same screen, new section, no nav changes):
+
+- Scrollable Terms summary card with the exact 6-bullet acknowledgment language Tim specified (AI guidance for info/entertainment only, not professional instruction, user responsibility, accuracy disclaimer, athletic-risk assumption, data-collection notice)
+- "View Full Terms" + "Privacy Policy" ghost buttons → placeholder Alerts pointing at the legal-review-pending state + support@smartplaycaddie.com (full long-form legal text still pending attorney review or a compliant generator like Termly / iubenda before App Store + Play Store submission — already tracked separately in Launch Prep section)
+- Acceptance checkbox row with the exact verbatim copy ("I have read and agree to the Terms of Service and Privacy Policy.") — tap anywhere on the row toggles it
+- "Get started" CTA wrapped in Animated.View; fades opacity 0.45 ↔ 1.0 on toggle (220ms ease-out cubic); `disabled` prop set so accessibility services can't force-tap when not consented
+- Persistence: `termsAcceptedAt: number | null` added to `playerProfileStore` (default null = not accepted; timestamp = accepted). Stamped immediately on checkbox tap so an interrupted onboarding (close mid-form, kill app) resumes with the box pre-ticked. Timestamp serves as proof-of-consent for store-submission privacy compliance + audit trail.
+- `clearTermsAcceptance` action exposed for future "delete my account" Settings flow
+- Zero changes to auth flow (none touched), nav structure, existing field validation, or other store fields
+
+#### Next session priorities (Tim's call, 2026-05-22 ~02:10 PT)
+1. **PWA Tier 2** — the iOS-via-web path. Focused ~1-day session: web-guards on every native-module import (expo-camera, expo-task-manager, expo-location background, react-native-health-connect, expo-haptics), web-fallback components for SmartFinder / Settings / Recap / Cage (using `getUserMedia` + Web Geolocation), disabled round mode on web (no background GPS), PWA manifest + Apple touch icons + iOS-specific meta tags + service worker, deploy to Vercel under a dedicated route. Honest scope: full on-course round will still be Android-native; web gives iOS users the stationary tools experience.
+2. **Fix L** (hole-jumping + co-located course) — harness now reproduces the failure mode at desk; design the multi-course atCourse picker + tuned holeDetection thresholds for cart-default motion.
+3. **iOS native** unblocks if Tim completes Apple Developer Program enrollment between sessions.
+
+**Day 3 final-final tally: 17 commits + 5 OTAs + 2 EAS native builds + Sentry env corrected + T&C acceptance gate shipped.**
