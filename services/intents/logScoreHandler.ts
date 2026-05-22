@@ -38,6 +38,41 @@ function parseStrokes(raw: unknown): number | null {
   return null;
 }
 
+/**
+ * 2026-05-21 — Fix P: par-relative score name parser. Resolves "par",
+ * "bogey", "birdie", "double bogey", etc. against the known par for
+ * the current hole. Returns null when par is unknown or no score name
+ * matches. The classifier emits these as string `strokes` values
+ * ("par", "bogey", "birdie", "eagle", "double_bogey", "triple_bogey");
+ * we also accept the natural-language verbatim ("made par",
+ * "I bogeyed", "triple", etc.) as a fallback via the raw_utterance.
+ *
+ * Order of checks matters — "double_bogey" is matched before "bogey"
+ * so a phrase like "double bogey" doesn't resolve to just bogey.
+ */
+function parseScoreName(raw: unknown, par: number | null): number | null {
+  if (par == null) return null;
+  if (typeof raw !== 'string') return null;
+  const s = raw.trim().toLowerCase();
+  // Canonical token names emitted by the classifier (strict matches first).
+  if (s === 'eagle') return Math.max(1, par - 2);
+  if (s === 'birdie') return Math.max(1, par - 1);
+  if (s === 'par') return par;
+  if (s === 'bogey') return par + 1;
+  if (s === 'double_bogey' || s === 'double-bogey') return par + 2;
+  if (s === 'triple_bogey' || s === 'triple-bogey') return par + 3;
+  // Loose natural-language matches (longer phrases first so "double
+  // bogey" doesn't mismatch on the inner "bogey"). Bounded by Math.min
+  // to the handler's 1..12 valid range.
+  if (/\b(triple[\s-]?bogey|tripled|triple)\b/.test(s)) return Math.min(12, par + 3);
+  if (/\b(double[\s-]?bogey|doubled|double)\b/.test(s)) return Math.min(12, par + 2);
+  if (/\b(eagled|eagle)\b/.test(s)) return Math.max(1, par - 2);
+  if (/\b(birdied|birdie)\b/.test(s)) return Math.max(1, par - 1);
+  if (/\bpar\b/.test(s)) return par;
+  if (/\b(bogeyed|bogey)\b/.test(s)) return Math.min(12, par + 1);
+  return null;
+}
+
 function parseHole(raw: unknown, fallback: number): number {
   if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 1 && raw <= 18) return raw;
   if (typeof raw === 'string') {
@@ -90,9 +125,31 @@ export const logScoreHandler: IntentHandler = {
         follow_up_needed: false,
       };
     }
+    // 2026-05-21 — Fix P: par lookup MUST happen before strokes parsing
+    // now, because the par-relative score-name parser ("par" / "bogey" /
+    // "birdie" / "double_bogey" / "triple_bogey" / "eagle") needs the
+    // par to resolve to a stroke count. Numeric strokes parsing
+    // (parseStrokes) doesn't need par; we just want par available for
+    // BOTH branches.
     const params = (intent.parameters ?? {}) as Record<string, unknown>;
-    const strokes = parseStrokes(params.strokes) ?? parseStrokes(intent.raw_text);
+    const hole = parseHole(params.hole_number, round.currentHole);
+    const par = round.courseHoles.find(h => h.hole === hole)?.par ?? null;
+    // Numeric parsing first (params.strokes is the classifier's primary
+    // emit; raw_text is the verbatim utterance fallback). If neither
+    // yields a number, fall through to par-relative score-name parsing
+    // for "par" / "bogey" / "birdie" / "double_bogey" / "triple_bogey"
+    // / "eagle" — both as the classifier's canonical string strokes
+    // value AND as a verbatim hit on the user's utterance.
+    let strokes = parseStrokes(params.strokes) ?? parseStrokes(intent.raw_text);
     if (strokes == null) {
+      strokes = parseScoreName(params.strokes, par) ?? parseScoreName(intent.raw_text, par);
+    }
+    if (strokes == null) {
+      // Genuine ambiguity — classifier saw a log_score but couldn't
+      // pin a number or score name. ONE brief clarifier; the user's
+      // next utterance will be parsed fresh. (Tim's Fix P spec: clear
+      // score reports like "I got a 4" must NOT trigger this; only
+      // genuinely ambiguous "score me" / "log a score" do.)
       return {
         success: false,
         voice_response: "How many strokes? Tell me a number.",
@@ -100,8 +157,6 @@ export const logScoreHandler: IntentHandler = {
         follow_up_needed: true,
       };
     }
-    const hole = parseHole(params.hole_number, round.currentHole);
-    const par = round.courseHoles.find(h => h.hole === hole)?.par ?? null;
     round.logScore(hole, strokes);
     track('log_score_voice', { hole, strokes, par });
     const label = scoreLabel(strokes, par);

@@ -34,6 +34,43 @@ Relevant surfaces to apply this to: [services/holeDetection.ts](../services/hole
 
 ## Day 2 — 2026-05-21
 
+### Fix P — Voice score-telling vs question disambiguation (classifier gap, not handler bug)
+
+**Discovery turned up another silent-contract gap** (same shape as Fix O): the `logScoreHandler` was fully implemented and registered in `services/intents/index.ts:36` — solid stroke parsing (digits + word forms 1-12), hole parsing (explicit "on hole N" + current-hole fallback), confirms with score-vs-par label ("Got it — 4 (par)"). Wired the same canonical `round.logScore` write path Fix O's cockpit + scorecard use. **But voice never reached it**, because `log_score` was completely absent from the `api/voice-intent.ts` classifier prompt — not in the numbered intent list, not in the JSON schema union at line 242. The Haiku classifier model can't emit an intent_type it hasn't been told exists. "I got a 4 on hole 1" → classified as `unknown` → triggered the "are you asking or telling?" clarifier (the default unknown-branch behavior in `listeningSession.ts`).
+
+**Shipped:**
+
+1. **[api/voice-intent.ts](../api/voice-intent.ts)** — added a full `log_score` intent definition (numbered #21, placed adjacent to log_shot #16 for cohesion). Covers natural score-telling phrasings:
+   - Numeric: "I got a 4", "took a 5", "made a five", "I shot a 7", "I had a five", "score me 6", "put me down for 4", "carded a 6"
+   - Par-relative: "made par", "I bogeyed", "I birdied 7", "eagle", "double bogey", "triple", "I doubled"
+   - Hole disambiguation rules baked into the prompt:
+     - Number-only → strokes (current hole assumed)
+     - "N on hole M" → strokes=N, hole_number=M
+     - Score-name + number ("I bogeyed 7", "birdie on 7") → the number is the HOLE, the name is the strokes
+     - Score-name alone → strokes is the name, hole_number omitted
+   - Explicit DO-NOT-MATCH guards against strategy questions ("what should I hit", "how far") and mid-hole shot logs ("I hit driver 240 left").
+   - Added `"log_score"` to the JSON shape union at line 242 so the classifier is actually permitted to emit it.
+
+2. **[services/intents/logScoreHandler.ts](../services/intents/logScoreHandler.ts)** — added `parseScoreName(raw, par)` for par-relative resolution. Handles classifier's canonical tokens (`"par"`, `"bogey"`, `"birdie"`, `"eagle"`, `"double_bogey"`, `"triple_bogey"`) AND loose verbatim matches ("made par", "I bogeyed", "double bogey", "triple", "tripled"). Order-sensitive (longer phrases first so "double bogey" doesn't mismatch on inner "bogey"). Clamped to the existing 1..12 valid range.
+   - Reordered the handler's execute path to look up par BEFORE parsing strokes (par-relative names need par to resolve). Numeric parsing still runs first; falls through to par-relative parsing on null.
+   - Same canonical write path: `round.logScore(hole, strokes)`. Same confirmation: `"Got it — 4 (par)"` (or `"Got it, hole 7 — 5 (bogey)"` when not the current hole). Caddie persona voice applies via the existing listeningSession TTS path.
+
+3. **Zero parallel scoring logic.** Single source of truth: voice "I got a 4" → classifier emits `log_score` → handler resolves strokes via numeric or par-relative parsing → `round.logScore(hole, strokes)` — the exact same store action the cockpit stepper (Fix O), scorecard row-tap save, and manual scoring flows all hit. Scores recorded via voice appear immediately in cockpit + scorecard with no extra plumbing.
+
+**Verify (desk + harness — OTA-able):**
+- "I got a 4 on hole 1" → logs strokes=4 on hole 1, caddie confirms "Got it, hole 1 — 4 (bogey)". No "are you asking or telling?"
+- "I made par" → logs strokes=par for current hole, caddie confirms "Got it — 4 (par)" (or whatever par is).
+- "I bogeyed" → logs par+1 for current hole.
+- "Double bogey" → logs par+2.
+- "I birdied 7" → logs par-1 on hole 7.
+- "What should I hit here?" → still routes to brain (strategy), NOT a score log.
+- "Score me" with no number → falls back to the original "How many strokes?" clarifier (one brief follow-up, not the broken ambiguity loop).
+- Logged scores appear in cockpit + scorecard immediately (same Fix O canonical path).
+
+**Build gates:** `tsc --noEmit` clean. OTA-able (no native changes; classifier deploys via Vercel on next push, handler ships via OTA).
+
+**Pattern note:** Fix O (cockpit `setScore` vs `logScore` selector mismatch) and Fix P (classifier missing `log_score` intent) are the same class of silent contract bug — handler exists, write path canonical, but a layer above the handler doesn't know the intent exists or names it wrong. Worth grepping the rest of the intent registrations to see if any other handler is wired but not in the classifier prompt. Logged for a quick audit next session.
+
 ### Fix O — Hole nav + scoring resilience (cockpit scoring fix + DataStrip ◀/▶)
 
 **Discovery before the fix changed:** the cockpit's StepperPair UI was fully wired and visible, but tapping the SHOTS/PUTTS +/- buttons did nothing on device. Root cause turned out to be a method-name mismatch — [CockpitCaddieScreen.tsx:105-110](../components/caddie/CockpitCaddieScreen.tsx#L105) was pulling `setScore` / `setPutts` from the store via `(s as unknown as {...}).setScore`, but the Pro store exposes those actions as `logScore` / `logPutts` ([roundStore.ts:335-336, 1067, 1078](../store/roundStore.ts#L335)). The optional chaining `setScore?.(...)` then silently no-op'd every tap. No error, no warning, no log — just a button that didn't do anything. Same bug for PUTTS. The data path was completely correct; only the action getter was wrong.

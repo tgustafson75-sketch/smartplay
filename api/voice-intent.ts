@@ -197,6 +197,35 @@ Available intents:
    raw_utterance: pass the verbatim user phrase so the handler can store it for context.
    ONLY match when the user is reporting a shot they just hit (past tense or present-narrative). DO NOT match generic queries about clubs ("what club here") — those are open_tool / query_status. DO NOT match cage-mode club switches ("switching to 6-iron") — those are club_change.
 
+21. log_score — User is REPORTING their final score for a hole they just finished. Past-tense report with a number ("I got a 4", "took a 5") OR a score name ("made par", "bogey", "birdie"). This is DISTINCT from:
+   - log_shot (#16), which captures a single SWING mid-hole ("I hit driver 240 left").
+   - Strategy questions ("what should I hit", "how far", "where do I aim"), which are open_tool / query_status / lie_analysis — NOT score reports.
+   - acknowledge ("got it", "okay"), which is a bare acknowledgment with no score/hole.
+   parameters: { strokes: number | "par" | "bogey" | "double_bogey" | "triple_bogey" | "birdie" | "eagle", hole_number?: number, raw_utterance: string }
+   Examples:
+   - "I got a 4 on hole 1" -> { strokes: 4, hole_number: 1, raw_utterance: "I got a 4 on hole 1" }
+   - "I got a 5" -> { strokes: 5, raw_utterance: "I got a 5" } (current hole)
+   - "took a 6 on this hole" -> { strokes: 6, raw_utterance: "took a 6 on this hole" }
+   - "I made a five" -> { strokes: 5, raw_utterance: "I made a five" }
+   - "I shot a 7 on hole 4" -> { strokes: 7, hole_number: 4, raw_utterance: "I shot a 7 on hole 4" }
+   - "I had a five" -> { strokes: 5, raw_utterance: "I had a five" }
+   - "score me a six" / "score me 6" -> { strokes: 6, raw_utterance: "score me a six" }
+   - "put me down for a 4" -> { strokes: 4, raw_utterance: "put me down for a 4" }
+   - "carded a 6" -> { strokes: 6, raw_utterance: "carded a 6" }
+   - "made par" / "that was a par" / "par for me" -> { strokes: "par", raw_utterance: "made par" }
+   - "I bogeyed" / "that was a bogey" / "bogey" -> { strokes: "bogey", raw_utterance: "I bogeyed" }
+   - "I birdied 7" / "birdie on seven" -> { strokes: "birdie", hole_number: 7, raw_utterance: "I birdied 7" }
+   - "eagle" / "I eagled" -> { strokes: "eagle", raw_utterance: "eagle" }
+   - "double bogey" / "I doubled" / "double" -> { strokes: "double_bogey", raw_utterance: "double bogey" }
+   - "triple" / "I tripled" / "triple bogey" -> { strokes: "triple_bogey", raw_utterance: "triple" }
+   IMPORTANT — number-vs-hole disambiguation:
+   - When the user names ONLY a number ("got a 4", "took a 5"), that number IS the strokes. hole_number is omitted (handler uses current hole).
+   - When the user names a number with explicit hole reference ("4 on hole 1", "shot a 7 on hole 4"), the FIRST number is strokes and the post-"hole" number is hole_number.
+   - When the user names a score-name + a number ("I bogeyed 7", "birdie on 7"), the number is the HOLE, the name is the strokes. Emit strokes:"bogey" or "birdie" + hole_number:7.
+   - When the user names ONLY a score-name with no number ("made par", "bogey"), strokes = that name, hole_number omitted.
+   raw_utterance: pass the verbatim user phrase.
+   ONLY match when the user is REPORTING a finished result (past tense + a score). DO NOT match present-tense shot reports ("I'm hitting 6-iron") or strategy questions ("what should I hit"). DO NOT match if the user is logging a single shot mid-hole ("I hit driver 240 left") — that's log_shot.
+
 17. media_capture — User wants to capture video of an upcoming shot or swing.
    parameters: { capture_type: "shot" | "swing", raw_utterance: string }
    Examples:
@@ -239,7 +268,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null
