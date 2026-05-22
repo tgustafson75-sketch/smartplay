@@ -62,8 +62,17 @@ export default async function handler(
         const voiceSettings =
           ELEVEN_SETTINGS_BY_PERSONA[personaKey] ?? ELEVEN_SETTINGS_DEFAULT;
 
+        // 2026-05-22 — Latency optimization (no regression).
+        // optimize_streaming_latency=2 trades a tiny amount of quality
+        // for ~25% faster synthesis on the ElevenLabs side. Level 2 is
+        // the documented sweet spot for short spoken-word responses
+        // (caddie lines, briefings, per-hole intros); levels 3-4 start
+        // to affect intonation noticeably and aren't worth it for the
+        // 2-3 second clips this endpoint generates. Query param is
+        // ignored by ElevenLabs if unrecognized — safe degradation
+        // path. The OpenAI fallback below is unchanged.
         const elevenRes = await fetch(
-          'https://api.elevenlabs.io/v1/text-to-speech/' + voiceId,
+          'https://api.elevenlabs.io/v1/text-to-speech/' + voiceId + '?optimize_streaming_latency=2',
           {
             method: 'POST',
             headers: {

@@ -968,8 +968,11 @@ ${onCourseContextBlock}${baseMessage}`
         // English model. Voice IDs are language-agnostic — only the
         // model_id needs to flip.
         const ttsModel = language === 'en' ? 'eleven_turbo_v2' : 'eleven_multilingual_v2';
+        // 2026-05-22 — Same latency optimization as /api/voice.
+        // optimize_streaming_latency=2 cuts synthesis time ~25%; safe
+        // degradation if ElevenLabs ignores the param (no behavior change).
         const elevenRes = await fetch(
-          'https://api.elevenlabs.io/v1/text-to-speech/' + voiceId,
+          'https://api.elevenlabs.io/v1/text-to-speech/' + voiceId + '?optimize_streaming_latency=2',
           {
             method: 'POST',
             headers: {
