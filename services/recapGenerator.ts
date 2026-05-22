@@ -121,6 +121,10 @@ export async function generateRecap(
     // when no tutorials are flagged active.
     practiceContext?: string | null;
     voiceGender?: 'male' | 'female';
+    // 2026-05-21 — Fix Q: pass active persona so the recap renders in
+    // the user's selected caddie's voice + perspective, not the server's
+    // voiceGender→Kevin fallback.
+    persona?: 'kevin' | 'serena' | 'harry' | 'tank';
   },
 ): Promise<RoundRecap> {
   const { courseName, courseId, mode, startedAt, endedAt, totalScore, scoreVsPar, scores, plans, shots, courseHoles } = round;
@@ -185,6 +189,7 @@ export async function generateRecap(
         // pre-formatted string from buildFullPracticeContext).
         practice_context: round.practiceContext ?? null,
         voiceGender: round.voiceGender ?? 'male',
+        persona: round.persona,
       }),
     }).finally(() => clearTimeout(timeout));
 

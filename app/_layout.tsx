@@ -10,7 +10,7 @@ import { KevinPresenceProvider } from '../contexts/KevinPresenceContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore, isOwnerEmail, OWNER_EMAILS } from '../store/playerProfileStore';
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
-import { useSettingsStore, type Persona } from '../store/settingsStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
 import { initListeningSession } from '../services/listeningSession';
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
@@ -39,9 +39,10 @@ import { conversationalLoggingOrchestrator } from '../services/conversationalLog
 import { subscribeToMark } from '../services/positionMarkBus';
 import { setMarkedFix } from '../services/smartFinderService';
 import BatteryPrompt from '../components/battery/BatteryPrompt';
-import { subscribeActiveSurface } from '../services/activeSurfaceRegistry';
-import { getActiveCaddie, mapSurfaceToPillar } from '../services/caddieResolver';
-import { speak as speakHandoff, stopSpeaking } from '../services/voiceService';
+// 2026-05-21 — Fix Q (Path B): subscribeActiveSurface, mapSurfaceToPillar,
+// and speakHandoff are no longer needed at this layer — persona switches
+// only on explicit user action via setCaddiePersonality (Settings tap or
+// accept-handoff), and that store action speaks its own intro line.
 import { useTeamIntelligenceStore } from '../store/teamIntelligenceStore';
 import { initTeamIntelligenceForSession } from '../services/teamIntelligence';
 import CaddieSuggestionCard from '../components/CaddieSuggestionCard';
@@ -219,58 +220,32 @@ function AppNavigator() {
   useEffect(() => {
     initTeamIntelligenceForSession();
 
-    // Track per-pillar overrides made by accepted handoffs so we can
-    // revert when the user leaves that pillar. Map: pillar → original caddie.
-    const handoffOverrides = new Map<string, Persona>();
-
+    // 2026-05-21 — Fix Q (Path B): an accepted handoff is the user's
+    // EXPLICIT opt-in to switch personas. It now switches the GLOBAL
+    // caddiePersonality — which in turn resets every pillar so the
+    // user's new selection propagates everywhere. Previously this only
+    // set a per-pillar override and relied on the deleted
+    // `syncFromAssignmentChange` subscriber to lift it to global, AND
+    // it auto-reverted when the user crossed surfaces — both behaviors
+    // contradicted the "explicit user action only" rule. No magic
+    // auto-revert; if the user wants to switch back, they switch back.
     const unsubAccept = useTeamIntelligenceStore.subscribe((s, prev) => {
-      // Detect a freshly-accepted suggestion: prev had pendingSuggestion,
-      // current has acceptedHandoffs grown by one with no decline cooldown
-      // bump. The store's acceptPendingSuggestion clears pending and
-      // appends to acceptedHandoffs in one set call, so this comparison is
-      // race-safe.
       if (s.acceptedHandoffs.length <= prev.acceptedHandoffs.length) return;
       const acceptedId = s.acceptedHandoffs[s.acceptedHandoffs.length - 1];
       if (!acceptedId) return;
-      // Find the suggestion that was just accepted (already cleared from
-      // pendingSuggestion). We need its original details from prev.
       const accepted = prev.pendingSuggestion;
       if (!accepted || accepted.id !== acceptedId) return;
 
-      // Stash the current assignment so we can revert on return.
-      const assignments = useSettingsStore.getState().caddieAssignments;
-      const originalForPillar = assignments[accepted.pillar];
-      handoffOverrides.set(accepted.pillar, originalForPillar);
-
-      // Apply the override (this triggers _layout's existing pillar →
-      // caddiePersonality sync via the assignment subscription).
-      useSettingsStore.getState().setCaddieForPillar(accepted.pillar, accepted.toPersona);
-
-      // Voice handoff line if not in 'soft' or 'off' suppression mode.
+      // Global switch — fires setCaddiePersonality's own intro line
+      // (the "Tank stepping in" / "Serena here" speak). That intro is
+      // the user-initiated handoff announcement; no separate handoff
+      // line needed. Suppression honors caddieSuggestions mode below.
       const settings = useSettingsStore.getState();
-      if (settings.caddieSuggestions === 'on' && settings.voiceEnabled && !settings.discreteMode) {
-        const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
-        const NAME: Record<Persona, string> = { kevin: 'Kevin', serena: 'Serena', harry: 'Harry', tank: 'Tank' };
-        const handoffLine = `Alright — handing off to ${NAME[accepted.toPersona]} for this. ${NAME[accepted.toPersona]} will bring you back when ready.`;
-        speakHandoff(handoffLine, settings.voiceGender, settings.language, apiUrl, { userInitiated: false }).catch(() => {});
-      }
+      if (settings.caddieSuggestions === 'off') return;
+      useSettingsStore.getState().setCaddiePersonality(accepted.toPersona);
     });
 
-    // Return condition: when the active surface leaves the pillar where
-    // a handoff was active, revert that pillar's assignment back to the
-    // original caddie (the user's prior preference).
-    const unsubReturn = subscribeActiveSurface((next) => {
-      if (handoffOverrides.size === 0) return;
-      const nextPillar = mapSurfaceToPillar(next);
-      // Any pillar in the override map that isn't the new pillar reverts.
-      for (const [pillar, original] of handoffOverrides.entries()) {
-        if (pillar === nextPillar) continue;
-        useSettingsStore.getState().setCaddieForPillar(pillar as 'round' | 'cage' | 'drills' | 'play', original);
-        handoffOverrides.delete(pillar);
-      }
-    });
-
-    return () => { unsubAccept(); unsubReturn(); };
+    return () => { unsubAccept(); };
   }, []);
 
   // Phase O — boot earbud listening session bus, honoring user setting
@@ -283,81 +258,19 @@ function AppNavigator() {
     return () => { unsub(); };
   }, []);
 
-  // Phase 105 — sync caddiePersonality to the active pillar's caddie.
-  // When the user crosses surfaces (e.g. Round → Cage), caddiePersonality
-  // flips to that pillar's assigned caddie. Existing consumers (voice,
-  // brain, avatar) already read caddiePersonality so this routes the
-  // team architecture through every site without per-call-site refactor.
-  // setCaddiePersonality also clears the persona-keyed audio caches so
-  // the user doesn't hear the prior pillar's caddie's filler clips.
-  //
-  // Handoff line: when the active caddie actually changes (not on first
-  // mount), the new caddie says one short in-character line so the user
-  // hears the team handoff explicitly. Suppressed when the change came
-  // from a manual override in Settings (no surface transition).
-  useEffect(() => {
-    const HANDOFF_LINES: Record<string, string> = {
-      kevin: "Hey, ready when you are.",
-      serena: "Serena. Let's get to it.",
-      harry: "Harry here. Let's think this through together.",
-      tank: "Tank here. Let's work.",
-    };
-
-    let firstSync = true;
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
-
-    // PGA HOPE follow-up (B2): cart power-cycles re-fire the active-surface
-    // subscriber, which used to deliver the handoff line twice in quick
-    // succession. Debounce identical (cur → next) transitions inside a 2s
-    // window so a wake event after a momentary sleep doesn't double-speak.
-    let lastHandoffKey = '';
-    let lastHandoffAt = 0;
-    const HANDOFF_DEBOUNCE_MS = 2000;
-
-    const syncFromSurface = () => {
-      const next = getActiveCaddie();
-      const cur = useSettingsStore.getState().caddiePersonality;
-      if (next === cur) return;
-      const key = `${cur}->${next}`;
-      const now = Date.now();
-      if (key === lastHandoffKey && now - lastHandoffAt < HANDOFF_DEBOUNCE_MS) return;
-      lastHandoffKey = key;
-      lastHandoffAt = now;
-      // Phase BM — await stopSpeaking BEFORE issuing the handoff line so the
-      // queued briefing/proactive utterance is fully cancelled. Previously
-      // both ran in parallel via the singleton, which gave the ~50ms two-voice
-      // overlap Tim reported at round-start.
-      useSettingsStore.getState().setCaddiePersonality(next);
-      if (firstSync) { firstSync = false; return; }
-      const settings = useSettingsStore.getState();
-      if (!settings.voiceEnabled || settings.discreteMode) return;
-      const line = HANDOFF_LINES[next];
-      if (!line) return;
-      void (async () => {
-        await stopSpeaking().catch(() => {});
-        await speakHandoff(line, settings.voiceGender, settings.language, apiUrl, { userInitiated: false }).catch(() => {});
-      })();
-    };
-
-    const syncFromAssignmentChange = () => {
-      const next = getActiveCaddie();
-      const cur = useSettingsStore.getState().caddiePersonality;
-      if (next === cur) return;
-      // Same race guard for Settings-driven swaps.
-      stopSpeaking().catch(() => {});
-      // Manual Settings edit — suppress voice handoff (the user was just
-      // tapping a row, no need to talk over them).
-      useSettingsStore.getState().setCaddiePersonality(next);
-    };
-
-    syncFromSurface();
-    const unsub = subscribeActiveSurface(syncFromSurface);
-    const unsubAssign = useSettingsStore.subscribe((s, prev) => {
-      if (s.caddieAssignments === prev.caddieAssignments) return;
-      syncFromAssignmentChange();
-    });
-    return () => { unsub(); unsubAssign(); };
-  }, []);
+  // 2026-05-21 — Fix Q (Path B): the prior `syncFromSurface` and
+  // `syncFromAssignmentChange` subscribers used to overwrite
+  // caddiePersonality with the active-pillar's caddie every time the user
+  // crossed surfaces (Round → Cage → Drills). That was the structural
+  // source of the cross-persona bleed: pick Serena in Settings, walk to
+  // the round, hear Kevin. Per Tim's Fix Q spec, persona is set ONLY by
+  // explicit user action — Settings tap or an accept-handoff. Crossing
+  // surfaces no longer changes persona. The per-pillar map (and any user-
+  // assigned override via Settings) is still resolved at the fetch sites
+  // via getActiveCaddie() / getCaddieForPillar() so a power user who
+  // explicitly sets a pillar override still gets that override on its
+  // surface — but the auto-handoff intro line is gone, and the global
+  // persona is no longer silently rewritten by surface crossings.
 
   // 2026-05-17 — Audit B P0: phantom-round boot guard. Tim's APK-
   // reinstall workflow leaves AsyncStorage-persisted `isRoundActive:

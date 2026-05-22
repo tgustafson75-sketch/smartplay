@@ -16,6 +16,8 @@
  *                           (rewritten to api/cage-coach.ts in vercel.json)
  */
 
+import type { Persona } from '../lib/persona';
+
 const MOCK_MODE = process.env.EXPO_PUBLIC_CAGE_MOCK_MODE === 'true';
 const KEVIN_MOCK_MODE = process.env.EXPO_PUBLIC_CAGE_KEVIN_MOCK_MODE === 'true';
 const KEVIN_MOCK_LATENCY_MS = 1000;
@@ -59,7 +61,15 @@ export type CoachReviewResponse = {
  * a hardcoded response comes back after 1s so the cage screen can be
  * exercised without burning Anthropic tokens.
  */
-export async function coachReview(features: CageAnalyzeResponse, voiceGender: 'male' | 'female' = 'male'): Promise<ApiResult<CoachReviewResponse>> {
+export async function coachReview(
+  features: CageAnalyzeResponse,
+  voiceGender: 'male' | 'female' = 'male',
+  // 2026-05-21 — Fix Q: pass the active persona so cage swing reviews
+  // route to the user's selected caddie (Tank on the cage by default,
+  // or whoever the user has set globally) instead of defaulting to
+  // Kevin via the server's voiceGender→Kevin fallback.
+  persona?: Persona,
+): Promise<ApiResult<CoachReviewResponse>> {
   if (KEVIN_MOCK_MODE) {
     await delay(KEVIN_MOCK_LATENCY_MS);
     return {
@@ -76,7 +86,7 @@ export async function coachReview(features: CageAnalyzeResponse, voiceGender: 'm
     const res = await fetch(`${apiUrl()}/api/kevin/coach`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ features, voiceGender }),
+      body: JSON.stringify({ features, voiceGender, persona }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!res.ok) return { kind: 'error', message: `Server returned ${res.status}` };

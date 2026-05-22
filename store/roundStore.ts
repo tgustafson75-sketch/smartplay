@@ -926,6 +926,17 @@ export const useRoundStore = create<RoundState>()(
               } catch { return 'the player'; }
             })();
             const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+            // 2026-05-21 — Fix Q: pass voiceGender + persona so the recap
+            // renders in the user's selected caddie's voice instead of
+            // falling through to the server's Kevin default. cur is the
+            // active settings snapshot captured higher up in this scope
+            // (see the tankSoftIntro branch above line 825).
+            const settingsForRecap = (() => {
+              try {
+                const mod = require('./settingsStore');
+                return mod.useSettingsStore.getState();
+              } catch { return null; }
+            })();
             await generateRecap(record.id, {
               courseName: record.courseName ?? 'Unknown Course',
               courseId: record.courseId,
@@ -941,6 +952,8 @@ export const useRoundStore = create<RoundState>()(
               patternInsights: [],
               playerName,
               apiUrl,
+              voiceGender: settingsForRecap?.voiceGender ?? 'male',
+              persona: settingsForRecap?.caddiePersonality,
             });
             console.log(`[roundStore] recap generated for ${record.id}`);
           } catch (e) {

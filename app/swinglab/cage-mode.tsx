@@ -402,7 +402,7 @@ export default function CageModeScreen() {
       // The endpoint accepts arbitrary features in the body; Sonnet
       // responds to what's present. With our sparser payload it leans on
       // strike timing + notes; no fabricated bullseye_offsets to riff on.
-      const coachRes = await coachReview(features, voiceGender);
+      const coachRes = await coachReview(features, voiceGender, caddiePersonality);
       if (coachRes.kind === 'ok') {
         setCoach(coachRes.data);
         if (voiceEnabled) {

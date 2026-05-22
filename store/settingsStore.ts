@@ -274,6 +274,14 @@ export const useSettingsStore = create<SettingsState>()(
       setDiscreteMode: (v) => set({ discreteMode: v }),
       setResponseMode: (m) => set({ responseMode: m }),
       setCaddiePersonality: (p) => {
+        // 2026-05-21 — Fix Q (Path B): global persona is the single source
+        // of truth. Setting it ALSO resets every per-pillar assignment to
+        // the same persona so the per-pillar map can never silently
+        // contradict the user's global selection ("pick Serena, hear
+        // Kevin" — the bleed). Power users can still set a per-pillar
+        // override AFTER this via setCaddieForPillar; that's the only way
+        // a pillar can differ from global.
+        //
         // Persona is the source of truth. voiceGender stays in sync
         // because the TTS path (services/voiceService.speak → /api/voice
         // OpenAI fallback) still keys by gender for the OpenAI voice
@@ -293,7 +301,11 @@ export const useSettingsStore = create<SettingsState>()(
             voiceMod.stopSpeaking?.()?.catch?.(() => {});
           } catch { /* ignore */ }
         }
-        set({ caddiePersonality: p, voiceGender: gender });
+        set({
+          caddiePersonality: p,
+          voiceGender: gender,
+          caddieAssignments: { round: p, cage: p, drills: p, play: p },
+        });
         // 2026-05-19 — Persona handoff welcome. When the active caddie
         // changes (manual or via team handoff), the new persona should
         // briefly introduce themselves so the user knows who's on the

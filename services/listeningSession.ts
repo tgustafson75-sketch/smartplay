@@ -242,7 +242,14 @@ async function openSession() {
     const parseRes = await fetch(`${apiUrl}/api/voice-intent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: utterance, voiceGender: settings.voiceGender ?? 'male' }),
+      // 2026-05-21 — Fix Q: pass active persona so the classifier's
+      // follow-up question (if any) is styled in the user's selected
+      // caddie's voice, not the voiceGender-derived Kevin/Serena default.
+      body: JSON.stringify({
+        text: utterance,
+        voiceGender: settings.voiceGender ?? 'male',
+        persona: settings.caddiePersonality,
+      }),
     });
     if (!parseRes.ok) {
       setSessionStateMirror('idle');
@@ -399,6 +406,14 @@ async function openSession() {
                 currentYardage: round.currentYardage ?? null,
                 activeCourse: round.activeCourse,
                 isRoundActive: round.isRoundActive,
+                // 2026-05-21 — Fix Q: pass active persona + voiceGender
+                // so the small-talk reply uses the user's selected caddie
+                // instead of falling through to the server's Kevin default
+                // (lib/persona.ts resolvePersona → 'kevin' fallback). This
+                // was the #1 cross-persona bleed channel — voice replies
+                // to "hey Tank, how are you" were coming back as Kevin.
+                voiceGender: settings.voiceGender ?? 'male',
+                persona: settings.caddiePersonality,
               }),
             });
             if (chatRes.ok) {

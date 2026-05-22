@@ -154,6 +154,7 @@ export default function BriefingScreen() {
           language,
           recentCageSessions,
           voiceGender,
+          persona: caddiePersonality,
         });
 
         if (cancelled) return;

@@ -1,5 +1,5 @@
 import type { RoundMode } from '../types/patterns';
-import type { VoiceGender } from '../lib/persona';
+import type { Persona, VoiceGender } from '../lib/persona';
 
 interface BriefingParams {
   roundId: string;
@@ -29,6 +29,10 @@ interface BriefingParams {
     date: string;
   }>;
   voiceGender?: VoiceGender;
+  // 2026-05-21 — Fix Q: pass the active persona so the briefing renders
+  // in the user's selected caddie's voice + system prompt. Without it the
+  // backend resolves voiceGender → Kevin/Serena and ignores Tank.
+  persona?: Persona;
 }
 
 // In-memory cache: `${roundId}|${language}` → briefing text. Keyed by
@@ -63,7 +67,12 @@ export async function generateBriefing(params: BriefingParams): Promise<string> 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
-      body: JSON.stringify({ ...rest, language, voiceGender: params.voiceGender ?? 'male' }),
+      body: JSON.stringify({
+        ...rest,
+        language,
+        voiceGender: params.voiceGender ?? 'male',
+        persona: params.persona,
+      }),
     });
     clearTimeout(timeout);
 
