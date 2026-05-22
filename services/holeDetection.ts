@@ -34,9 +34,43 @@ import { ownerSentinel } from './ownerSentinel';
 
 const POSITION_HISTORY_WINDOW_MS = 30_000;       // rolling 30s
 const SUSTAINED_TRANSITION_MS    = 10_000;        // 10s sustained position required
-const MIN_DISTANCE_FROM_GREEN_YD = 30;            // user must be 30+ yds from current green
+// 2026-05-22 — Fix L. Bumped from 30 → 60. The 30y gate let cart-path
+// motion trigger premature transitions: harness reproduced 3× on a single
+// 18-hole cart round at Menifee Palms (H12→H13 at 114y/166y, H14→H15
+// at 16y/49y!, H16→H17 at 76y/102y). 60y means "anywhere meaningfully
+// near the green" disqualifies a transition. Real greens are 18-30y
+// deep; 60y from centroid keeps the player on the current hole through
+// approach + green-side play + first putt walk-up. Pair with
+// TRANSITION_MARGIN_YD below — both gates must fail before a transition
+// candidate even gets considered.
+const MIN_DISTANCE_FROM_GREEN_YD = 60;
+// 2026-05-22 — Fix L. New constant. The OLD comparison was
+// `bestNextDist < distFromCurrentGreen` — fires the instant the next tee
+// is even 1y closer. That's the H14→H15 disaster pattern: 16y from H15
+// tee vs 49y from H14 green = transition fires while player is still
+// putting. Require next tee to be at least TRANSITION_MARGIN_YD CLOSER
+// than current green, i.e. the player has clearly committed to moving on,
+// not just standing in a spot that happens to be marginally closer to
+// the next tee than the green centroid.
+const TRANSITION_MARGIN_YD       = 30;
+// 2026-05-22 — Fix L. Cart-mode bonus. Cart paths inherently swing wide
+// of the fairway centerline and can pass closer to adjacent holes' tees
+// than a walker would. When settingsStore.cartMode is on we add this to
+// BOTH the green-proximity gate AND the transition margin — i.e. cart
+// players need to be even more clearly committed before auto-transition
+// fires. Reading settingsStore via dynamic require to avoid the
+// services/store circular import.
+const CART_MODE_BONUS_YD         = 20;
 const MAX_TRANSITION_LOOKAHEAD   = 2;             // only consider current+1 and current+2 holes
 const POLL_INTERVAL_MS           = 4_000;         // 4s poll cadence (cheap)
+
+function getCartMode(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const settingsMod = require('../store/settingsStore') as typeof import('../store/settingsStore');
+    return settingsMod.useSettingsStore.getState().cartMode === true;
+  } catch { return false; }
+}
 
 type LatLng = { lat: number; lng: number };
 
@@ -149,12 +183,21 @@ export function detectCurrentHole(
 
   const distFromCurrentGreen = haversineYards(position, currentGeom.green);
 
-  // Must be at least MIN_DISTANCE_FROM_GREEN_YD from current green to consider
+  // 2026-05-22 — Fix L. Effective gates pick up the CART_MODE_BONUS_YD
+  // when settings.cartMode is on. Carts ride paths offset from the
+  // fairway centerline that can pass close to adjacent tees — apply a
+  // wider buffer so a routine cart-path arc doesn't yank the player
+  // into the next hole.
+  const cartBonus = getCartMode() ? CART_MODE_BONUS_YD : 0;
+  const effectiveMinFromGreen = MIN_DISTANCE_FROM_GREEN_YD + cartBonus;
+  const effectiveMargin = TRANSITION_MARGIN_YD + cartBonus;
+
+  // Must be at least effectiveMinFromGreen from current green to consider
   // a transition — short of that, the user is around the current green.
-  if (distFromCurrentGreen < MIN_DISTANCE_FROM_GREEN_YD) {
+  if (distFromCurrentGreen < effectiveMinFromGreen) {
     return {
       hole_number: currentHole, confidence: 'high', transition_recommended: false,
-      reason: `near current green (${Math.round(distFromCurrentGreen)}y)`,
+      reason: `near current green (${Math.round(distFromCurrentGreen)}y of ${effectiveMinFromGreen}y gate${cartBonus ? ', cart-mode' : ''})`,
     };
   }
 
@@ -176,13 +219,18 @@ export function detectCurrentHole(
     }
   }
 
-  // Closer to next tee than current green? Recommend transition.
-  if (bestNextHole !== currentHole && bestNextDist < distFromCurrentGreen) {
+  // 2026-05-22 — Fix L. Was `bestNextDist < distFromCurrentGreen` — fired
+  // the instant the next tee was even 1y closer than the current green.
+  // That's the harness's H14→H15 failure mode (16y from H15 tee, 49y
+  // from H14 green → transition fires while putting). Now require the
+  // next tee to be at least effectiveMargin CLOSER than the current
+  // green. Player has to be clearly committed to moving on.
+  if (bestNextHole !== currentHole && distFromCurrentGreen - bestNextDist >= effectiveMargin) {
     return {
       hole_number: bestNextHole,
       confidence: bestNextDist < distFromCurrentGreen * 0.5 ? 'high' : 'medium',
       transition_recommended: true,
-      reason: `closer to hole ${bestNextHole} tee (${Math.round(bestNextDist)}y) than hole ${currentHole} green (${Math.round(distFromCurrentGreen)}y)`,
+      reason: `closer to hole ${bestNextHole} tee (${Math.round(bestNextDist)}y) by ${Math.round(distFromCurrentGreen - bestNextDist)}y than hole ${currentHole} green (${Math.round(distFromCurrentGreen)}y), margin ${effectiveMargin}y`,
     };
   }
 
