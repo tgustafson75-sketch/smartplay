@@ -9,8 +9,15 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useOffCourseStore } from '../services/offCourseDetector';
 import { useMovementModeStore } from '../services/movementModeDetector';
+// 2026-05-21 — Fix O: in-strip manual hole back/forward nav. Reuses the
+// same setCurrentHole entry point the cockpit stepper, scorecard row tap,
+// SmartFinder picker, and voice "hole N" intent all hit. setCurrentHole
+// calls noteManualOverride() so a user correcting a wrong auto-transition
+// holds for 20s before holeDetection can re-fire — manual wins.
+import { useRoundStore } from '../store/roundStore';
 
 export interface CaddieDataStripProps {
   yardage: number | null;
@@ -56,6 +63,20 @@ export default function CaddieDataStrip({
   void _totalScore; void _scoreVsPar;
   const lastCellLabel = 'STROKE';
   const lastCellValue = String(stroke);
+  // 2026-05-21 — Fix O: stable handle for the inline hole nav arrows
+  // below. Pulled once here so the inner Pressables don't re-read the
+  // store on every press.
+  const setCurrentHole = useRoundStore((s) => s.setCurrentHole);
+  const handleHolePrev = () => {
+    if (hole.current <= 1) return;
+    void Haptics.selectionAsync().catch(() => undefined);
+    setCurrentHole(Math.max(1, hole.current - 1));
+  };
+  const handleHoleNext = () => {
+    if (hole.current >= hole.total) return;
+    void Haptics.selectionAsync().catch(() => undefined);
+    setCurrentHole(Math.min(hole.total, hole.current + 1));
+  };
   // Phase 405 — off-course badge. When the offCourseDetector observes
   // the player >200y from every hole's reference points for 20s, this
   // store flips and the strip shows an amber "OFF COURSE · ~Xy" badge
@@ -183,11 +204,8 @@ export default function CaddieDataStrip({
   // ── GRID LAYOUT (WIDE mode) ──────────────
   // Phase AY — YARDS removed (lives on SmartVision now).
   if (stripLayout === 'grid') {
-    const row1 = [
-      { label: 'HOLE',  value: `${hole.current}/${hole.total}`, dotIdx: 0 },
-      { label: 'PLAYS', value: playsLike != null ? String(playsLike) : '—', dotIdx: 1 },
-      null,
-    ];
+    // 2026-05-21 — Fix O: HOLE rendered as a custom cell with manual
+    // ◀/▶ nav arrows. PLAYS keeps the generic template.
     const row2 = [
       { label: 'TARGET', value: targetDirection, dotIdx: 2 },
       { label: lastCellLabel, value: lastCellValue, dotIdx: null },
@@ -211,21 +229,50 @@ export default function CaddieDataStrip({
           <View style={[StyleSheet.absoluteFill, styles.tintOverlay]} />
 
           <View style={styles.gridRow}>
-            {row1.map((c, i) =>
-              c === null ? (
-                <View key={i} style={styles.gridCell} />
-              ) : (
-                <React.Fragment key={c.label}>
-                  <View style={styles.gridCell}>
-                    <Text style={styles.cellLabel}>{c.label}</Text>
-                    <Text style={[styles.cellValue, { fontSize: 22 }]}>{c.value}</Text>
-                  </View>
-                  {c.dotIdx !== null && (
-                    <Animated.View style={[styles.dot, { opacity: dotAnims[c.dotIdx] }]} />
-                  )}
-                </React.Fragment>
-              )
-            )}
+            {/* HOLE cell with manual ◀/▶ — Fix O. */}
+            <View style={styles.gridCell}>
+              <Text style={styles.cellLabel}>HOLE</Text>
+              <View style={styles.holeNavRow}>
+                <Pressable
+                  onPress={handleHolePrev}
+                  disabled={hole.current <= 1}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Previous hole"
+                  style={styles.holeNavBtn}
+                >
+                  <Ionicons
+                    name="chevron-back"
+                    size={16}
+                    color={hole.current <= 1 ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
+                  />
+                </Pressable>
+                <Text style={[styles.cellValue, { fontSize: 20 }]}>{`${hole.current}/${hole.total}`}</Text>
+                <Pressable
+                  onPress={handleHoleNext}
+                  disabled={hole.current >= hole.total}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Next hole"
+                  style={styles.holeNavBtn}
+                >
+                  <Ionicons
+                    name="chevron-forward"
+                    size={16}
+                    color={hole.current >= hole.total ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
+                  />
+                </Pressable>
+              </View>
+            </View>
+            <Animated.View style={[styles.dot, { opacity: dotAnims[0] }]} />
+            <View style={styles.gridCell}>
+              <Text style={styles.cellLabel}>PLAYS</Text>
+              <Text style={[styles.cellValue, { fontSize: 22 }]}>
+                {playsLike != null ? String(playsLike) : '—'}
+              </Text>
+            </View>
+            <Animated.View style={[styles.dot, { opacity: dotAnims[1] }]} />
+            <View style={styles.gridCell} />
           </View>
 
           <View style={[styles.gridRow, styles.gridRowBorder]}>
@@ -263,8 +310,10 @@ export default function CaddieDataStrip({
   // Phase AY — YARDS column removed (hole-stated yardage now lives on
   // SmartVision). Remaining 4 cells get a larger font since they have
   // more horizontal room.
+  // 2026-05-21 — Fix O: the HOLE cell is now rendered separately (it has
+  // its own ◀/▶ stepper arrows for manual hole nav) instead of via the
+  // generic cell template. The remaining 3 cells use the cell array.
   const cells = [
-    { label: 'HOLE',   value: `${hole.current}/${hole.total}`,             fontSize: 20 },
     { label: 'PLAYS',  value: playsLike != null ? String(playsLike) : '—', fontSize: 20 },
     { label: 'TARGET', value: targetDirection,                             fontSize: 14 },
     { label: lastCellLabel, value: lastCellValue,                          fontSize: 20 },
@@ -287,6 +336,46 @@ export default function CaddieDataStrip({
         <View style={[StyleSheet.absoluteFill, styles.tintOverlay]} />
 
         <View style={styles.row}>
+          {/* 2026-05-21 — Fix O: manual HOLE nav. Inner Pressables
+              catch their own taps (nested Pressables don't bubble to
+              the outer expand-to-cockpit handler in React Native).
+              Tapping the value text between the arrows still expands
+              the cockpit, so the affordance doesn't get hijacked. */}
+          <View style={styles.cell}>
+            <Text style={styles.cellLabel}>HOLE</Text>
+            <View style={styles.holeNavRow}>
+              <Pressable
+                onPress={handleHolePrev}
+                disabled={hole.current <= 1}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Previous hole"
+                style={styles.holeNavBtn}
+              >
+                <Ionicons
+                  name="chevron-back"
+                  size={14}
+                  color={hole.current <= 1 ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
+                />
+              </Pressable>
+              <Text style={[styles.cellValue, { fontSize: 18 }]}>{`${hole.current}/${hole.total}`}</Text>
+              <Pressable
+                onPress={handleHoleNext}
+                disabled={hole.current >= hole.total}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Next hole"
+                style={styles.holeNavBtn}
+              >
+                <Ionicons
+                  name="chevron-forward"
+                  size={14}
+                  color={hole.current >= hole.total ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
+                />
+              </Pressable>
+            </View>
+          </View>
+          <Animated.View style={[styles.dot, { opacity: dotAnims[0] }]} />
           {cells.map((cell, i) => (
             <React.Fragment key={cell.label}>
               <View style={styles.cell}>
@@ -296,7 +385,7 @@ export default function CaddieDataStrip({
                 </Text>
               </View>
               {i < cells.length - 1 && (
-                <Animated.View style={[styles.dot, { opacity: dotAnims[i] }]} />
+                <Animated.View style={[styles.dot, { opacity: dotAnims[i + 1] }]} />
               )}
             </React.Fragment>
           ))}
@@ -422,6 +511,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.5,
     color: '#ffffff',
+  },
+  // 2026-05-21 — Fix O: hole-nav arrow row used by both horizontal and
+  // grid layouts. Compact ◀/▶ around the hole value. Inner Pressables
+  // own their own taps; the value text between them still propagates
+  // to the outer expand-to-cockpit handler.
+  holeNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  holeNavBtn: {
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dot: {
     width: 4,

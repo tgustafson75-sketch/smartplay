@@ -34,6 +34,38 @@ Relevant surfaces to apply this to: [services/holeDetection.ts](../services/hole
 
 ## Day 2 — 2026-05-21
 
+### Fix O — Hole nav + scoring resilience (cockpit scoring fix + DataStrip ◀/▶)
+
+**Discovery before the fix changed:** the cockpit's StepperPair UI was fully wired and visible, but tapping the SHOTS/PUTTS +/- buttons did nothing on device. Root cause turned out to be a method-name mismatch — [CockpitCaddieScreen.tsx:105-110](../components/caddie/CockpitCaddieScreen.tsx#L105) was pulling `setScore` / `setPutts` from the store via `(s as unknown as {...}).setScore`, but the Pro store exposes those actions as `logScore` / `logPutts` ([roundStore.ts:335-336, 1067, 1078](../store/roundStore.ts#L335)). The optional chaining `setScore?.(...)` then silently no-op'd every tap. No error, no warning, no log — just a button that didn't do anything. Same bug for PUTTS. The data path was completely correct; only the action getter was wrong.
+
+**Shipped:**
+
+1. **[components/caddie/CockpitCaddieScreen.tsx](../components/caddie/CockpitCaddieScreen.tsx)** — replaced the broken `setScore` / `setPutts` getters with `logScore` / `logPutts` (the canonical store actions the scorecard, voice intents, and harness all use). `handleStepperShots` and `handleStepperPutts` now call the real write path. Cockpit scoring works for the first time on device. Also passed `totalHoles={courseHoles.length || 18}` to StepperPair so 9-hole rounds cap the hole stepper at 9.
+
+2. **[components/CaddieDataStrip.tsx](../components/CaddieDataStrip.tsx)** — added manual hole ◀/▶ nav around the HOLE cell value in BOTH layouts (horizontal portrait + grid Fold-open). Inner Pressables catch their own taps so the value text between them still expands the cockpit on tap (the existing affordance is preserved — nav arrows are additive). Calls `useRoundStore(setCurrentHole)` (the same canonical entry point as cockpit + scorecard + SmartFinder + voice intent + holeDetection auto-transitions). Chevrons disable + dim at boundaries (hole 1 / total). Haptic selectionAsync on each press, matching the cockpit pattern.
+
+3. **Scorecard** — already had manual hole nav via row tap ([scorecard.tsx:294](../app/(tabs)/scorecard.tsx#L294)). No change needed; flagged for the verify list.
+
+**Manual-override behavior verified, no change required.** [roundStore.ts setCurrentHole:1051-1055](../store/roundStore.ts#L1051) already calls `holeDetection.noteManualOverride()` on every manual hole set, and [holeDetection.ts tick:264](../services/holeDetection.ts#L264) honors `manualOverrideAt` for 20 seconds (`SUSTAINED_TRANSITION_MS * 2`). When the user corrects a wrong auto-transition from anywhere (cockpit stepper, scorecard row tap, new DataStrip arrows, SmartFinder picker, voice), auto-detection won't immediately yank them back.
+
+**One canonical write path everywhere:**
+- Hole set: `setCurrentHole(n)` in [store/roundStore.ts:1024](../store/roundStore.ts#L1024) — single function, called from every surface.
+- Score set: `logScore(hole, n)` in [store/roundStore.ts:1067](../store/roundStore.ts#L1067) — same.
+- Putts set: `logPutts(hole, n)` in [store/roundStore.ts:1078](../store/roundStore.ts#L1078) — same.
+
+No parallel scoring or nav logic per surface. The cockpit, scorecard, and DataStrip all hit the same actions.
+
+**Verify on device (desk + harness — OTA-able, no real round required):**
+- Cockpit: tap SHOTS +/-, then PUTTS +/-. Values update + persist to scorecard. (Used to silent no-op.)
+- DataStrip: tap ◀ / ▶ around HOLE. Current hole steps back/forward, 1..total capped. Cockpit + scorecard reflect the change instantly.
+- Tap the value text (between the arrows) on DataStrip → cockpit still expands. Affordance preserved.
+- Harness: simulate a wrong auto-transition; manually correct via cockpit OR scorecard OR DataStrip → the correction holds for 20s before auto-detection can re-fire.
+- 9-hole round: hole stepper caps at 9 everywhere.
+
+**Build gates:** `tsc --noEmit` clean. OTA-able (no native changes).
+
+**Touched zero GPS / holeDetection logic** — Fix L territory stays untouched. This is purely the resilience layer.
+
 ### Field validation — Tank lesson with Nick Chertok, Prunridge GC, 2026-05-21 6:30 PM
 
 Real Tank (the working golf instructor whose voice the app's Tank persona is built from) gave a live lesson to Nick Chertok at Prunridge GC tonight and used **SmartMotion** during the lesson. Nick is a golf influencer + investor with a large following + an investment angle. His reaction: *"amazing, wants to see everything."*

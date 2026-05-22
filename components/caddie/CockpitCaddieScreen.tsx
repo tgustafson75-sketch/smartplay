@@ -101,13 +101,14 @@ export default function CockpitCaddieScreen({
     })),
   );
   // Action refs — stable; pulled separately.
+  // 2026-05-21 — Fix O: replaced `setScore` / `setPutts` (non-existent on
+  // the Pro store; the prior code's `?.` optional chaining was silently
+  // dropping every tap) with the canonical `logScore` / `logPutts`. Same
+  // write path the scorecard, voice intents, and harness all use — single
+  // source of truth.
   const setCurrentHole = useRoundStore((s) => s.setCurrentHole);
-  const setScore = useRoundStore((s) => (s as unknown as {
-    setScore?: (hole: number, n: number) => void;
-  }).setScore);
-  const setPutts = useRoundStore((s) => (s as unknown as {
-    setPutts?: (hole: number, n: number) => void;
-  }).setPutts);
+  const logScore = useRoundStore((s) => s.logScore);
+  const logPutts = useRoundStore((s) => s.logPutts);
   // Manual shot logging — Pro's roundStore exposes logShot(ShotResult).
   // We map v3's Distance / Direction taps onto Pro's existing schema:
   //   - Direction (left/straight/right) → ShotResult.direction
@@ -163,11 +164,11 @@ export default function CockpitCaddieScreen({
   };
   const handleStepperShots = (next: number) => {
     void Haptics.selectionAsync().catch(() => undefined);
-    setScore?.(currentHole, next);
+    logScore(currentHole, next);
   };
   const handleStepperPutts = (next: number) => {
     void Haptics.selectionAsync().catch(() => undefined);
-    setPutts?.(currentHole, next);
+    logPutts(currentHole, next);
   };
 
   // ── Manual shot logging (v3 ShotResultRow parity) ──────────────────
@@ -271,6 +272,7 @@ export default function CockpitCaddieScreen({
           par={par}
           shots={holeShots}
           putts={holePutts}
+          totalHoles={courseHoles.length || 18}
           onChangeHole={handleStepperHole}
           onChangeShots={handleStepperShots}
           onChangePutts={handleStepperPutts}
