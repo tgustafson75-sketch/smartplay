@@ -1008,3 +1008,68 @@ Late-night fix cluster after the Z Fold Start Round crash kept biting through th
 - **Sentry wiring:** `eas env:create --environment preview --name EXPO_PUBLIC_SENTRY_DSN --value "<dsn>"` then next build self-reports crashes
 - **Fix L (hole-jumping + co-located course):** still diagnosis-only, not shipped. Next priority once Fix N-3 verifies clean.
 - **Range work + maybe 9 tomorrow:** will exercise SmartMotion (Card 2 = REAL, pose overlay = STUB), real-GPS round flow on the Z Fold, the per-hole intro across actual hole transitions, and cart vs walk hole-detection.
+
+### Late-night extension — 2026-05-22 00:00–02:00
+
+Tim verified Fix N-3 on the Z Fold (Start Round no longer crashes — confirms Health Connect native JNI fatal was the cause). Then shipped four more pieces before bed.
+
+#### Path A (`5115e81`) — SmartMotion real pose-skeleton overlay (OTA)
+Tank's "real demo" upgrade. The pose-analysis backend was already wired (Tim subscribed to a RapidAPI MoveNet endpoint; `api/pose-analysis.ts` + `services/poseAnalysisApi.ts` with `analyzeSwingFromVideo` keyframe pipeline). Missing piece: SmartMotion's overlay never consumed real keypoints — rendered `StubSkeletonOverlay` (animated normalized mock) regardless.
+
+- New export `extractPoseFramesFromVideo(uri, durationMs)` in poseAnalysisApi.ts — same keyframe pipeline as `analyzeSwingFromVideo` but returns raw `PoseFrame[]` instead of collapsing to biomechanics.
+- New `RealSkeletonOverlay` component in `app/swinglab/smartmotion.tsx` — renders the P6_impact frame's keypoints (most diagnostic moment), with fallback to P4_top → first available. Auto-detects pixel vs normalized keypoint coords, filters score < 0.2 noise, head circle radius derived from shoulder width.
+- `Video.onLoad` captures real durationMs so SWING_POSITIONS fractions land on the right frames.
+- useEffect runs `extractPoseFramesFromVideo` ONCE per clip mount (rate-limit safe).
+- Overlay swap is fall-through: `RealSkeletonOverlay` when frames available, else `StubSkeletonOverlay`. **No regression** when pose API is unconfigured / fails / no person detected.
+
+Tim confirmed POSE_API_KEY + POSE_API_HOST set on Vercel — Path A is live end-to-end. STUB designation removed from compendium for SmartMotion overlay (now: REAL when configured).
+
+#### Path 1 (`15c3da4`) — Owner Triage with Claude (OTA, read-only)
+Tim's idea: "is it possible since it logs on my phone that I could use AI to send a fix from the phone from the same UI?" Path 1 (lowest risk) ships per-entry "Triage with Claude" button on `/owner-logs`. Read-only by design — produces a hypothesis, never patches code.
+
+- New endpoints: `api/owner-triage.ts` (Vercel) + `app/api/owner-triage+api.ts` (Expo Router twin for dev). Sonnet 4.5, max_tokens 800, ephemeral cache. System prompt is a senior RN/Expo/TS engineer briefed on SmartPlay's pillars, stores, recent fixes (Q/R/N-3/S/T), and silent-failure gates.
+- Output structured: **Hypothesis** / **Where to look** (file + line guesses) / **Quick check first** (one setting to verify before any code change) / **If real, fix scope** / **Severity** (P0/P1/P2). Honest-uncertainty instruction — model told NOT to fabricate file paths.
+- UI in `/owner-logs.tsx`: per-entry button bundles entry + capture context + last 50 harness events (live via `subscribeHarnessEvents`) + last 5 prior issues + settings snapshot (caddiePersonality, voiceEnabled, voiceOnPhoneSpeaker, discreteMode, skip_briefings, language, responseMode, cartMode, smartVisionImagery, yardageMode, round state) + bundle info (updateId, createdAt). Result renders inline monospace below entry; share icon surfaces alongside.
+- **SAFETY:** does not mutate device state, does not write git, does not publish OTAs, does not patch code. Owner-gated by existing `isOwnerEmail(profile.email)` check that gates the whole `/owner-logs` screen.
+- **Cost discipline:** each Triage tap is one Sonnet call (~3-5¢). Cached per entry; re-tap forces re-run.
+- **Mid-round usage:** "Kevin, log this — X" voice intent → later tap Triage → hypothesis → optional share to Notes/Slack for next dev session.
+
+#### Voice latency optimization (`4cf1df1`) — Vercel server-only, no OTA needed
+Tim asked to optimize voice response time without breaking anything. Added `?optimize_streaming_latency=2` query param to both ElevenLabs URLs (`api/voice.ts` and `api/kevin.ts`). Level 2 is the documented sweet spot for short spoken-word — trades a tiny amount of intonation polish for ~25% faster synthesis. Levels 3-4 affect quality noticeably and aren't worth it for 2-3 second clips.
+
+**Zero regression risk:** unknown query params → ElevenLabs ignores → behavior identical. OpenAI fallback path untouched. No client change. Vercel auto-deploys on push.
+
+#### Harness v2-lite cart-mode run (Tim, 2026-05-22 07:13–07:22 PT)
+Tim ran the synthetic round end-to-end in cart mode at Menifee Lakes Palms (18 holes, 87 total — par 72, +15). Full event log + scores + shots captured via Export Report.
+
+**All verifications passed:**
+- **Fix Q (persona)**: every `transition` event tagged `persona=serena`. Eight transitions, eight serenas. No Kevin bleed anywhere across the 18-hole run.
+- **Fix O (manual override)**: fired 3× correctly (H12→H13, H14→H15, H16→H17). Each time `manual_override_respected — harness expected HN but user moved to HN+1 — skipping synthetic advance`.
+- **Score distribution**: 9 pars, 6 bogeys, 2 doubles, 1 triple — realistic bogey-handicap distribution.
+- **STROKE climbs past 2**: multiple holes 3-7 shots. Tee shot at mid-fairway + per-hole burst at green both firing.
+
+**Big finding worth flagging — cart mode reproduced the Fix L failure mode at the desk.** Three of the auto-detection events fired BEFORE the harness reached the green:
+```
+07:17:00 → transition: → hole 13 · closer to hole 13 tee (114y) than hole 12 green (166y)
+07:18:32 → transition: → hole 15 · closer to hole 15 tee (29y) than hole 14 green (33y)
+07:19:40 → transition: → hole 17 · closer to hole 17 tee (71y) than hole 16 green (94y)
+```
+
+These are **real `holeDetection.ts` auto-transitions**, not harness synthetic-advances. The cart-path offset (±15y perpendicular) put the synthesized position close enough to the next hole's tee that the proximity rule (`closer to next tee than current green`) fired prematurely. This is exactly the co-located-course hole-jumping problem Fix L is supposed to address. **The harness in cart mode reproduced the failure mode without needing the real Lakes/Palms interweave** — desk-reproducible test bed for Fix L design + verification.
+
+**Implication for Fix L:** current `holeDetection.ts` thresholds (`MIN_DISTANCE_FROM_GREEN_YD = 30`, `MAX_TRANSITION_LOOKAHEAD = 2`, `SUSTAINED_TRANSITION_MS = 10s`) are tuned for clean walker paths and over-fire under cart-style motion. Fix L should tune these for cart-default plus add the multi-course atCourse picker + "playing X but GPS says Y" safety belt.
+
+**Cosmetic harness noise (not regressions):** `synthesizeShots()` produces zero-distance shots on a few high-stroke holes (H5, H9, H12, etc.) when the score requires more swings than the hole's distance budget. Harness-only artifact — real rounds log actual GPS-measured distances. `walk_complete` fires but `isRoundActive` stays true — by design (user taps Stop to end).
+
+#### OTAs published tonight (preview channel)
+- `d300ccd2-917c-4224-a906-864c27e968cf` (Fix S + Fix T + Harness v2-lite + Path A) → commit `5115e81`
+- `d3cb6b88-b6bc-40f9-889d-3bd909664e76` (Path 1 Owner Triage) → commit `15c3da4`
+- `02fb29df-9ec4-4cc2-bfa1-efa91d326396` (rollup of voice latency tweak — server-only but bundle refreshed) → commit `4cf1df1`
+
+**Note carried into next session:** the original APK was built from commit `97c04ed` (Fix N-3). Every JS-only fix since required an OTA publish that didn't happen until 00:00 PT. Tim was running the build's embedded bundle (only Fix N-3) for hours after multiple "OTA-able" commits landed on git. Lesson: **push to git ≠ deploy to device**. Future workflow needs explicit `eas update --branch preview` after each OTA-able commit (or batch at end-of-session). Could automate via a git hook or GitHub Action that runs `eas update` on push-to-main.
+
+#### Open items carried into next session (updated)
+- **Tomorrow's range + 9-hole:** verify Fix S per-hole intro fires on real hole transitions in active persona's voice. Verify Path A real pose overlay renders on a recorded swing.
+- **Fix L (hole-jumping + co-located course):** elevated to top priority post-Menifee. Harness now reproduces the failure mode at desk; design + ship the multi-course picker + tuned thresholds.
+- **Sentry:** DSN wired in expo.dev env. Activates on NEXT EAS native build (current APK still inert because env var wasn't present at build time).
+- **OTA discipline:** add post-commit `eas update` step or automate. Tim shouldn't be on a stale bundle while fixes pile up on git.
