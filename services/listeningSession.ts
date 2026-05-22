@@ -150,7 +150,7 @@ function failureFallbackFor(lang: string | null | undefined): string {
  * fetch errors, handler throws, outer catch). Cheap and idempotent —
  * the speak() call already serializes with stopSpeaking().
  */
-async function speakHonestFailure(
+export async function speakHonestFailure(
   language: 'en' | 'es' | 'zh' | null | undefined,
   voiceGender: 'male' | 'female',
   apiUrl: string,

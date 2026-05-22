@@ -18,6 +18,7 @@ import { useSettingsStore, getEffectiveSimpleBriefing } from '../../store/settin
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { speak, stopSpeaking, configureAudioForSpeech } from '../../services/voiceService';
 import { generateBriefing } from '../../services/briefingGenerator';
+import { speakHonestFailure } from '../../services/listeningSession';
 import { checkContent } from '../../services/contentGuardrail';
 import { generatePatternInsights } from '../../services/patternDetection';
 import { getFirstTeeHint } from '../../services/voiceOnboardingService';
@@ -182,7 +183,20 @@ export default function BriefingScreen() {
         setPhase('done');
         setTimeout(() => { if (!cancelled) goToCaddie(); }, 1500);
 
-      } catch {
+      } catch (e) {
+        // 2026-05-21 — Fix T — honest-failure on briefing fetch failure.
+        // Previously this catch silently navigated to the Caddie tab with
+        // no spoken fallback. Result: a flaky network at round-start
+        // dropped the user into a silent round (no briefing, no per-hole
+        // intro for hole 1 either since hole 1 doesn't go through
+        // setCurrentHole's transition branch). Same class of silent
+        // drop as Fix I; now covered. The speak is best-effort — if it
+        // also fails, we still navigate so the user isn't stuck on the
+        // briefing screen forever.
+        console.log('[briefing] generation failed; speaking honest fallback:', e);
+        if (!cancelled && voiceEnabled && trustLevel !== 1) {
+          try { await speakHonestFailure(language as 'en'|'es'|'zh', voiceGender, apiUrl); } catch {}
+        }
         if (!cancelled) goToCaddie();
       }
     }

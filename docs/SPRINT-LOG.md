@@ -943,3 +943,68 @@ Captured to clear them off the active sprint. **Not sprint work — do not build
 - Camera access — confirmed available.
 
 **Scope when integration lands:** the full Meta Wearables SDK work (native module + EAS dev-client rebuild), enabling "Hey Meta" voice capture from the glasses → routed into the SmartPlay caddie pipeline. **Don't piecemeal the manifest tag tonight** — the tag alone does nothing without the SDK, and Meta's instructions say don't add it while the test account is in Developer Mode.
+
+---
+
+## Day 3 close — 2026-05-21 evening sprint
+
+Late-night fix cluster after the Z Fold Start Round crash kept biting through the first defensive fix. Caps the day at 9 shipped commits (Fix Q, Fix R, Fix N-3, Fix S, Fix T, Harness v2-lite, Meta Wearables log, Compendium, plus the eas.json hotfix from earlier). Tim's running EAS preview build `c7f5ad9a` (Fix N-3 base, JS-only fixes ride OTA on top).
+
+### Fix Q (`338329e`) — persona unification: one active caddie everywhere, opt-in handoff
+- **Symptom:** Tim picked Serena, Kevin still spoke on some surfaces.
+- **Diagnosis:** two parallel persona systems — global `caddiePersonality` vs per-pillar `caddieAssignments`. `app/_layout.tsx` had a `syncFromSurface` subscriber that overwrote global with the per-pillar caddie on every surface crossing. PLUS 5 silent-bleed fetch sites passed only `voiceGender` (not `persona`) → backend resolvePersona fell through to `'kevin'` default.
+- **Fix (Path B):** `setCaddiePersonality(p)` now also resets `caddieAssignments` to `{round:p, cage:p, drills:p, play:p}`. Deleted `syncFromSurface` + `syncFromAssignmentChange` subscribers — persona switches ONLY on explicit user action. Accept-handoff calls `setCaddiePersonality` directly (no per-pillar override + sync magic). Threaded persona through 5 silent-bleed sites: `listeningSession.ts` (small-talk + voice-intent classifier), `briefingGenerator.ts`, `voiceCommandParser.ts`, `cageApi.ts coachReview`, `recapGenerator.ts` (+ `roundStore` caller).
+- **Result:** pick Serena → all pillars Serena. Surface crossings no longer auto-switch.
+
+### Fix R (`a71035f`) — Notes section on recap (in-flow retrieval)
+- **Diagnosis:** "Kevin, log this" entries WERE saving to `issueLogStore` ([logIssueHandler.ts:89](services/intents/logIssueHandler.ts#L89)) unconditionally. Retrieval UI also existed at Settings → Owner Tools → Issue Log → `/owner-logs.tsx`. Hidden when `isOwnerEmail(profile.email)` is false. Most likely Tim's profile email wasn't set on his build.
+- **Fix:** added "NOTES FROM THIS ROUND" section on `recap/[round_id].tsx` filtered by `started_at → ended_at + 5min grace`. Natural in-flow surface — entries appear on the recap of the round they were captured during.
+- **Pending Tim:** verify Settings → Owner Tools shows, OR set `EXPO_PUBLIC_OWNER_EMAIL` as EAS secret so future builds always show the row.
+
+### Fix N-3 (`97c04ed`) — Health Connect off the round-start path (the REAL Start Round crash fix)
+- **Diagnosis path:** Fix N (POST_NOTIFICATIONS guard + foreground service guard) shipped earlier didn't stop the crash. Walked the full round-start native-call inventory. Found TWO independent HC native call paths firing at round-start: (1) the Phase 413 JIT permission IIFE in `roundStore.startRound` (line 473-493) calling `hc.initialize()` + `hc.requestPermission()`; (2) `walkingDetector.startActivityTicker` immediate-tick calling `isHealthAvailable()` → `hc.initialize()` again. `react-native-health-connect` 3.5.3 can throw a NATIVE JNI fatal on Samsung One UI when HC is missing/stubbed. JS try/catch CANNOT catch JNI throws. The persist `set({isRoundActive:true})` landed synchronously BEFORE the IIFE fired (so reopen showed round active) but the IIFE killed the process before `hasAskedHealthPermission` could flip (so the JIT re-fired every Start Round).
+- **Fix:** deleted the JIT IIFE from `startRound` entirely. Gated `walkingDetector.startActivityTicker` on `hasAskedHealthPermission === true`. Added defensive top-level guard in `walkingDetector.detectActivity` so any future caller can't bypass. Permission ask moved to explicit user action in Settings → Health Data → "Connect Health Data" tap (off the round-start path). If HC crashes when probed there, it takes down only the Settings tap, not the round flow.
+- **Result:** round-start makes ZERO Health Connect native calls. **Pending Tim's Z Fold verify.**
+- **Honest caveat:** I diagnosed without confirmation via adb logcat or Sentry. Sentry DSN is still not wired (account connected but `EXPO_PUBLIC_SENTRY_DSN` not in EAS secrets yet — Tim's queued task). If the crash persists, capture `adb logcat AndroidRuntime:E *:S` on the OLD APK before installing the new one for ground truth.
+
+### Fix S (`1646a2d`) — per-hole caddie intro on transition
+- **Symptom:** no caddie greeting when reaching a new hole. Only round-start announces hole 1.
+- **Fix:** added speak() in `roundStore.setCurrentHole`'s transition branch ("Hole N. Par X. Y yards."). Fires for BOTH auto-detection (holeDetection subscriber) AND manual nav (cockpit stepper, DataStrip ◀▶, voice "I'm on hole 7"). Hole 1 at round-start does NOT pass through this branch (startRound uses direct set(), not setCurrentHole) so no double-fire with the briefing. Gating mirrors skip-briefings speak: `voiceEnabled && trustLevel !== 1`. Active persona implicit via Fix Q semantics.
+- **Pending Tim:** verify on-device on tomorrow's range/9-hole round.
+
+### Fix T (`<next commit>`) — briefing fetch failure honest fallback
+- **Symptom (surfaced in voice path audit):** `app/round/briefing.tsx:185-187` catch swallowed `generateBriefing` failures and silently navigated to the Caddie tab. Result: flaky network at round-start = no briefing AND no honest "having trouble" line. Per-hole intro (Fix S) also doesn't fire for hole 1, so user dropped into a silent round.
+- **Fix:** exported `speakHonestFailure` from `services/listeningSession.ts` (was module-private). Briefing catch now speaks the localized honest-failure line before navigating, gated identically to the briefing speak (`voiceEnabled && trustLevel !== 1`). Same class of fix as Fix I; one more silent-drop site covered.
+
+### Harness v2-lite (`76f33af`) — desk verification for tonight's fixes
+- Existing synthetic round harness already had realistic 3-5 shots per hole + setCurrentHole auto-advance at green-reach.
+- Added: `MovementMode = 'walk' | 'cart'` toggle (cart = ±15y perpendicular path offset + 7 m/s vs walk's 4 m/s). Cart is the 95% real-world case (memory cart-is-default).
+- Added Fix-O manual-override guard: tracks `harnessExpectedHole`; if user manually moves the pointer between transitions, harness respects it and logs `manual_override_respected` instead of overriding.
+- Transition events log active persona (Fix Q verification post-run).
+- Two honest-limit log lines on every run (`honest_limit`, `fix_targets`) — explicitly notes simulator can't reproduce co-located-course GPS confusion (Fix L territory) and can't exercise Fix P voice-intent classifier (harness writes via roundStore.logScore directly).
+- UI: walk/cart toggle on `gps-test.tsx` above the play buttons.
+
+### Voice path audit (no commit — analysis only)
+- Tim asked why Serena was silent on round-open. Most likely: `voiceEnabled = false` master toggle. Other potential gates: trust L1 Quiet, `voiceOnPhoneSpeaker` (default true post-v7), `skip_briefings`, briefing fetch silent-drop (now closed by Fix T).
+- Full voice-path inventory documented in conversation: round opener, per-hole intro, persona switch intro, intent responses, conversational fallback, in-round diagnostic Coach, filler, honest fallback, cage coach review, lie analysis, recap narration, team handoff intro.
+- All 17 registered intents resolve to a `voice_response`. Conversational / tactical questions fall through `intent_type: 'unknown'` to `/api/kevin` (Sonnet) for full reasoning. Every question can be answered as long as voice is on.
+
+### SmartPlay Compendium (`5fe77a2`) — authoritative reference for Tim + Tank
+- 582-line single doc at [docs/SMARTPLAY-COMPENDIUM.md](SMARTPLAY-COMPENDIUM.md). Built from codebase walk via two parallel Explore agents.
+- Sections: overview + tech stack, caddie system (personas/voice/brain/handoff), Round / Practice / Play pillars, voice command catalog, trust spectrum, REAL vs STUB vs DEFERRED matrix, known issues, architecture notes (Zustand stores + persistence, single-source-of-truth declarations, API endpoint inventory, vercel.json overrides, boot sequence).
+- Explicit honesty markers: SmartMotion pose skeleton = STUB (`StubSkeletonOverlay`, no MoveNet imports); Watch IMU = DEFERRED (`FUTURE: REAL SDK HOOK`); Cage CV bullseye = REMOVED (Fix G); glasses = vestigial field; Range Mode / Drills / Swing Library / Arena UI = NOT BUILT (1.1); selfie→caddie face = SHIPPED end-to-end (commits fdf2cb1, 2b9331b, 3b26c30 — already live, Tim had forgotten).
+- Tank uses the REAL section as safe-to-demo list, STUB/DEFERRED sections as never-demo list.
+
+### Meta Wearables future-integration config logged (`1bf2cb3`)
+- App ID `2111052109463421` captured (non-secret), manifest tag template with CLIENT_TOKEN explicitly marked as EAS-secret-only.
+- Do NOT add manifest tag now — Meta's instructions say not to set it during Developer Mode testing AND it's a native change for an unbuilt feature.
+
+### Open items carried into next session
+- **On-device verification (Tim's tomorrow):**
+  - Fix N-3: Start Round on Z Fold without crash
+  - Fix S: per-hole intro fires on transition in active persona
+  - Fix I: airplane-mode mid-query speaks honest fallback
+  - Fix T: briefing fetch failure speaks honest fallback (test via airplane-mode AT round-start specifically)
+- **Sentry wiring:** `eas env:create --environment preview --name EXPO_PUBLIC_SENTRY_DSN --value "<dsn>"` then next build self-reports crashes
+- **Fix L (hole-jumping + co-located course):** still diagnosis-only, not shipped. Next priority once Fix N-3 verifies clean.
+- **Range work + maybe 9 tomorrow:** will exercise SmartMotion (Card 2 = REAL, pose overlay = STUB), real-GPS round flow on the Z Fold, the per-hole intro across actual hole transitions, and cart vs walk hole-detection.
