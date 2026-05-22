@@ -182,6 +182,13 @@ export default function CageModeScreen() {
   const [batchIdx, setBatchIdx] = useState(0);
   const batchActive = batchSize > 1;
   const batchComplete = batchIdx + 1 >= batchSize;
+  // 2026-05-22 — Hide the pill row after the user picks a count so it
+  // stops overlapping the ball box in SETUP. Stays hidden for the rest
+  // of the cage session; the compact badge below the Start Recording
+  // button can re-open it if the user changes their mind. Component
+  // unmount (leave + return to cage) resets the state so the picker
+  // appears again on a fresh session.
+  const [batchPickerDismissed, setBatchPickerDismissed] = useState(false);
 
   const { voiceEnabled, voiceGender, language, caddiePersonality } = useSettingsStore();
   const caddieName = getCaddieName(caddiePersonality);
@@ -608,29 +615,46 @@ export default function CageModeScreen() {
           handleStartRecording from this single state. */}
       {phase === 'SETUP' && (
         <View style={[styles.ctaWrap, { paddingBottom: insets.bottom + 32 }]} pointerEvents="box-none">
-          {/* Day 2 / Fix 9B — batch-count selector (1/3/5/10). */}
-          <View style={styles.batchRow}>
-            <Text style={styles.batchLabel}>SWINGS THIS SESSION</Text>
-            <View style={styles.batchPills}>
-              {BATCH_OPTIONS.map(opt => {
-                const active = batchSize === opt;
-                return (
-                  <TouchableOpacity
-                    key={opt}
-                    onPress={() => { setBatchSize(opt); setBatchIdx(0); }}
-                    style={[styles.batchPill, active && styles.batchPillActive]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Set session length to ${opt} swing${opt === 1 ? '' : 's'}`}
-                  >
-                    <Text style={[styles.batchPillText, active && styles.batchPillTextActive]}>{opt}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+          {/* Day 2 / Fix 9B — batch-count selector (1/3/5/10).
+              2026-05-22 — Once the user picks a count, hide the row so it
+              stops overlapping the ball box. The compact badge below
+              still surfaces the current choice + lets them re-open the
+              picker to change it. */}
+          {!batchPickerDismissed ? (
+            <View style={styles.batchRow}>
+              <Text style={styles.batchLabel}>SWINGS THIS SESSION</Text>
+              <View style={styles.batchPills}>
+                {BATCH_OPTIONS.map(opt => {
+                  const active = batchSize === opt;
+                  return (
+                    <TouchableOpacity
+                      key={opt}
+                      onPress={() => { setBatchSize(opt); setBatchIdx(0); setBatchPickerDismissed(true); }}
+                      style={[styles.batchPill, active && styles.batchPillActive]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Set session length to ${opt} swing${opt === 1 ? '' : 's'}`}
+                    >
+                      <Text style={[styles.batchPillText, active && styles.batchPillTextActive]}>{opt}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {batchActive && (
+                <Text style={styles.batchProgress}>{batchIdx + 1} of {batchSize}</Text>
+              )}
             </View>
-            {batchActive && (
-              <Text style={styles.batchProgress}>{batchIdx + 1} of {batchSize}</Text>
-            )}
-          </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => setBatchPickerDismissed(false)}
+              style={styles.batchBadge}
+              accessibilityRole="button"
+              accessibilityLabel={`${batchSize} swing${batchSize === 1 ? '' : 's'} planned. Tap to change.`}
+            >
+              <Text style={styles.batchBadgeText}>
+                {batchSize} swing{batchSize === 1 ? '' : 's'}{batchActive ? ` · ${batchIdx + 1}/${batchSize}` : ''} · tap to change
+              </Text>
+            </TouchableOpacity>
+          )}
           {/* Voice trigger hint — surfaces the hands-free path one time
               per device. Hidden once tutorialsSeen marks the slug. */}
           {!useSettingsStore.getState().tutorialsSeen?.['cage_voice_trigger'] && (
@@ -968,6 +992,19 @@ const styles = StyleSheet.create({
   batchPillText: { color: '#9ca3af', fontSize: 14, fontWeight: '800' },
   batchPillTextActive: { color: '#00C896' },
   batchProgress: { color: '#cbd5e1', fontSize: 11, fontWeight: '700' },
+  // 2026-05-22 — Compact "tap to change" badge replaces the full pill
+  // row once the user has picked a count. Single-line, small, lives in
+  // the same ctaWrap above the Start Recording button so it doesn't
+  // overlap the ball box like the full picker did.
+  batchBadge: {
+    alignSelf: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0, 200, 150, 0.12)',
+    marginBottom: 6,
+  },
+  batchBadgeText: { color: '#00C896', fontSize: 11, fontWeight: '700', letterSpacing: 0.4 },
 
   voiceHintRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,

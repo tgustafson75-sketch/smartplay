@@ -267,7 +267,12 @@ export default function CageOverlay({ phase }: Props) {
 
       {/* Guidance text — outside any draggable so it doesn't move. */}
       <View pointerEvents="none" style={[styles.labelWrap, { top: boxTop + boxHeight + 12 }]}>
-        <Text style={[styles.label, { color: palette.stroke }]}>{palette.label}</Text>
+        <Text
+          style={[styles.label, { color: palette.stroke }]}
+          numberOfLines={2}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+        >{palette.label}</Text>
       </View>
     </View>
   );
@@ -299,11 +304,20 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0, right: 0,
     alignItems: 'center',
+    // 2026-05-22 — Z Fold cover-display fix. Without horizontal padding
+    // the long SETUP label ("Drag bullseye to target · drag BALL to
+    // address") overflowed past the screen edge with letter-spacing
+    // pushing the last word out. Padding + numberOfLines:2 + auto-fit
+    // on the Text below let it wrap or shrink cleanly on narrow
+    // screens (Z Fold cover ~6:13 portrait) while leaving normal-width
+    // phones unaffected.
+    paddingHorizontal: 16,
   },
   label: {
     fontSize: 12,
     fontWeight: '800',
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
+    textAlign: 'center',
     textShadowColor: 'rgba(0,0,0,0.85)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
