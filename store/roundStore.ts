@@ -463,41 +463,46 @@ export const useRoundStore = create<RoundState>()(
         });
         console.log(`[path2:round] start course=${course} holes=${holes.length} courseId=${courseId ?? 'none'}`);
         console.log(`[audit:round-active] state=true roundId=${roundId} hole=1 course="${course}"`);
-        // 2026-05-17 — Phase 413 — Just-in-time Health Connect
-        // permission ask. The first time a round starts, we politely
-        // ask for steps/HR/distance/exercise read access. Asked only
-        // once per device (the persisted `hasAskedHealthPermission`
-        // flag in settingsStore gates it). If declined, the round
-        // proceeds normally with no degraded experience — health
-        // enrich just no-ops at end-round.
-        void (async () => {
-          try {
-            const settings = require('./settingsStore');
-            const s = settings.useSettingsStore.getState();
-            if (s.hasAskedHealthPermission) return;
-            const health = await import('../services/healthData');
-            const available = await health.isHealthAvailable();
-            if (!available) {
-              // Mark asked even when unavailable, so we don't poll
-              // every round start on devices without Health Connect.
-              s.setHasAskedHealthPermission(true);
-              return;
-            }
-            await health.requestHealthPermissions([
-              'steps', 'distance', 'heartRate', 'exercise', 'activeCalories',
-            ]);
-            s.setHasAskedHealthPermission(true);
-          } catch (e) {
-            console.log('[roundStore] health-permission JIT ask failed:', e);
-          }
-        })();
+        // 2026-05-21 — Fix N-3 — the original Phase 413 JIT Health Connect
+        // permission ask used to live here. It was the prime suspect for the
+        // Z Fold "app closes on Start Round, every time, reopen shows round
+        // active" crash: react-native-health-connect can throw a native
+        // JNI fatal during initialize()/requestPermission() on Samsung One
+        // UI devices where Health Connect is missing or stubbed, and JS
+        // try/catch CANNOT catch a native JNI throw. The persist set
+        // landed (round shows active on reopen) but the IIFE took the
+        // process down before hasAskedHealthPermission could flip — so
+        // the JIT re-fired every Start Round attempt.
+        //
+        // Round-start now makes ZERO Health Connect native calls. The
+        // permission ask is moved to an explicit user action in
+        // Settings → Health Data → "Connect Health Data" — off the
+        // round-start path entirely. A native crash there only affects
+        // the Settings tap, not the round flow.
         // 2026-05-17 — Phase 413 — start the walking-vs-cart detector
         // ticker. Refreshes every 30s during the round; the
         // orchestrator reads getCachedReading() / isEffectiveCartMode()
         // synchronously when deciding whether to auto-fire on a
         // GPS-displacement event. Stopped at round end.
+        //
+        // 2026-05-21 — Fix N-3 — gate on hasAskedHealthPermission. The
+        // ticker's first tick fires immediately (walkingDetector.ts:157)
+        // and calls isHealthAvailable() → hc.initialize() — a native
+        // call that can crash the process on Samsung One UI when HC
+        // is missing/stubbed. With the JIT removed (above), the user
+        // must explicitly grant via Settings before any HC native code
+        // runs. Until then we skip the ticker entirely. The GPS-only
+        // fallback inside detectActivity already covers no-health-data
+        // scenarios, so cart/walk detection still works without HC —
+        // it just leans harder on GPS speed + the manual cartMode toggle.
         void (async () => {
           try {
+            const settingsMod = require('./settingsStore');
+            const settingsSnap = settingsMod.useSettingsStore.getState();
+            if (!settingsSnap.hasAskedHealthPermission) {
+              console.log('[roundStore] walking ticker skipped: Health Connect not granted yet');
+              return;
+            }
             const wd = await import('../services/walkingDetector');
             const gps = await import('../services/gpsManager');
             wd.startActivityTicker(() => gps.getLastFix()?.speed ?? 0);

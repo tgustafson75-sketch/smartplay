@@ -949,20 +949,50 @@ export default function Settings() {
               thumbColor={colors.text_primary}
             />
           </View>
+          {/* 2026-05-21 — Fix N-3 — explicit tap-to-grant. The original
+              "re-ask on next round" row relied on the JIT IIFE in
+              roundStore.startRound, which was the prime suspect for the
+              Z Fold native crash. JIT removed; permission ask now fires
+              ONLY from this button, off the round-start path entirely.
+              If the HC native module throws a JNI fatal when probed here,
+              it takes down Settings instead of the round — failure mode
+              is the user simply can't tap-and-grant on a stubbed-HC
+              device, which is the correct degradation. */}
           <TouchableOpacity
             style={rowDivStyle}
             onPress={() => {
-              setHasAskedHealthPermission(false);
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
-              useToastStore.getState().show('Will re-ask on next round start');
+              void (async () => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+                try {
+                  const health = await import('../services/healthData');
+                  const available = await health.isHealthAvailable();
+                  if (!available) {
+                    setHasAskedHealthPermission(true);
+                    useToastStore.getState().show('Health Connect not available on this device.');
+                    return;
+                  }
+                  const result = await health.requestHealthPermissions([
+                    'steps', 'distance', 'heartRate', 'exercise', 'activeCalories',
+                  ]);
+                  setHasAskedHealthPermission(true);
+                  if (result.granted.length > 0) {
+                    useToastStore.getState().show(`Health Connect linked (${result.granted.length} categories).`);
+                  } else {
+                    useToastStore.getState().show('Health Connect access not granted.');
+                  }
+                } catch (e) {
+                  console.log('[settings] Health Connect ask failed:', e);
+                  useToastStore.getState().show('Could not reach Health Connect on this device.');
+                }
+              })();
             }}
             accessibilityRole="button"
-            accessibilityLabel="Re-ask Health Connect permission on next round"
+            accessibilityLabel="Connect Health Data"
           >
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Re-ask permission on next round</Text>
+              <Text style={labelStyle}>Connect Health Data</Text>
               <Text style={subStyle}>
-                If you declined the Health Connect grant earlier, tap here and the prompt will reappear when you start your next round.
+                Tap to grant SmartPlay read access to your Health Connect data (steps, heart rate, distance, calories). Required for the walking-vs-cart detector to use real step counts. If you skip this, cart/walk detection still works using GPS + your manual Cart Mode toggle.
               </Text>
             </View>
           </TouchableOpacity>

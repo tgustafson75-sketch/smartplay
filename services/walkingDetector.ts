@@ -59,8 +59,28 @@ export async function detectActivity(windowGpsSpeedMps: number): Promise<Detecto
   const end = Date.now();
   const start = end - WINDOW_MS;
 
-  const available = await isHealthAvailable();
-  const steps = available ? await readStepsBetween(start, end) : 0;
+  // 2026-05-21 — Fix N-3 — defensive guard. Health Connect native calls
+  // (isHealthAvailable → hc.initialize, readStepsBetween → hc.readRecords)
+  // can throw a NATIVE JNI fatal on devices where the HC binding is stubbed
+  // or missing (observed on Samsung One UI / Z Fold). JS try/catch CANNOT
+  // catch a native JNI throw, so we must not invoke HC native code at all
+  // unless the user has explicitly granted permission via Settings → Health
+  // Data → Connect Health Data. Until that opt-in is set, walking/cart
+  // detection falls through to the GPS-only branch (no-health-data path
+  // below) — which already produces a valid DetectorReading using
+  // windowGpsSpeedMps + the manual cartMode toggle.
+  let available = false;
+  let steps = 0;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const settingsMod = require('../store/settingsStore') as typeof import('../store/settingsStore');
+    if (settingsMod.useSettingsStore.getState().hasAskedHealthPermission) {
+      available = await isHealthAvailable();
+      if (available) steps = await readStepsBetween(start, end);
+    }
+  } catch (e) {
+    console.log('[walkingDetector] health read skipped:', e);
+  }
   const hasHealthData = available && steps > 0;
 
   // Decision tree.
