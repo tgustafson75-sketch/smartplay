@@ -28,6 +28,7 @@ import { checkContent } from '../../services/contentGuardrail';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getCaddieName } from '../../lib/persona';
 import { useRoundStore } from '../../store/roundStore';
+import { useIssueLogStore } from '../../store/issueLogStore';
 import PhotoCollage from '../../components/recap/PhotoCollage';
 import HandicapImpactCard from '../../components/recap/HandicapImpactCard';
 import { track } from '../../services/analytics';
@@ -181,6 +182,10 @@ export default function RecapScreen() {
   // Phase R — pull round photos from the persisted RoundRecord (recap api
   // returns a different shape — photos live on the local roundStore).
   const roundPhotos = useRoundStore(s => s.roundHistory.find(r => r.id === round_id)?.round_photos ?? EMPTY_PHOTOS);
+  // 2026-05-21 — Fix R: subscribe to issue log entries so the recap
+  // can surface "Kevin, log this" notes captured during the round.
+  // Must be called before any conditional return below (rules of hooks).
+  const issueEntries = useIssueLogStore(s => s.entries);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
   const cardRef = useRef<View>(null);
@@ -380,6 +385,18 @@ export default function RecapScreen() {
     .sort((a, b) => (b.kevin_summary?.length ?? 0) - (a.kevin_summary?.length ?? 0))
     .slice(0, 3);
 
+  // 2026-05-21 — Fix R: filter "Kevin, log this" entries captured during
+  // this round (subscribed up top so the hook runs unconditionally).
+  // Window = started_at → ended_at + 5min grace so a thought spoken right
+  // after End Round still shows on the recap.
+  const ROUND_NOTE_GRACE_MS = 5 * 60 * 1000;
+  const roundNotes = issueEntries
+    .filter(e =>
+      e.timestamp >= recap.started_at &&
+      e.timestamp <= recap.ended_at + ROUND_NOTE_GRACE_MS
+    )
+    .sort((a, b) => a.timestamp - b.timestamp);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -543,6 +560,32 @@ export default function RecapScreen() {
               </View>
             )}
 
+            {/* 2026-05-21 — Fix R: notes captured via "Kevin, log this"
+                during the round window. Hidden when zero notes; otherwise
+                shows hole + time + text per entry, vertically stacked. */}
+            {roundNotes.length > 0 && (
+              <View style={styles.notesSection}>
+                <Text style={styles.holesHeader}>NOTES FROM THIS ROUND</Text>
+                {roundNotes.map(note => {
+                  const hole = note.context?.currentHole ?? null;
+                  const time = new Date(note.timestamp).toLocaleTimeString([], {
+                    hour: 'numeric', minute: '2-digit',
+                  });
+                  return (
+                    <View key={note.id} style={styles.noteCard}>
+                      <View style={styles.noteHeaderRow}>
+                        <Text style={styles.noteHeader}>
+                          {hole != null ? `Hole ${hole}` : 'Off-course'}
+                        </Text>
+                        <Text style={styles.noteTime}>{time}</Text>
+                      </View>
+                      <Text style={styles.noteText}>{note.text}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
             <Text style={styles.holesHeader}>
               {ghost ? 'GHOST  ·  YOURS  ·  DELTA' : 'HOLE BY HOLE'}
             </Text>
@@ -658,6 +701,16 @@ const styles = StyleSheet.create({
   keyMomentHole: { color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 1.2, marginBottom: 2 },
   keyMomentScore: { fontSize: 18, fontWeight: '900', marginBottom: 6 },
   keyMomentSummary: { color: '#9ca3af', fontSize: 11, lineHeight: 16 },
+  notesSection: { marginBottom: 16, paddingHorizontal: 12 },
+  noteCard: {
+    backgroundColor: '#0d2418', borderRadius: 10,
+    borderWidth: 1, borderColor: '#1e3a28',
+    padding: 12, marginBottom: 8,
+  },
+  noteHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  noteHeader: { color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
+  noteTime: { color: '#6b7280', fontSize: 10, fontWeight: '600' },
+  noteText: { color: '#e5e7eb', fontSize: 14, lineHeight: 20 },
   holesHeader: { color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 2, marginHorizontal: 16, marginBottom: 8 },
   holeCard: {
     marginHorizontal: 12, marginBottom: 8,
