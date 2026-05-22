@@ -891,3 +891,23 @@ Captured to clear them off the active sprint. **Not sprint work — do not build
 **Sprint decision: no code change.** The `(est)` label on the metric cell is the honest treatment for an approximate value. Hand-tuning the displayed number to "look right" would be faking precision and violates the no-fake-precision principle (same principle as the Phase 418 SmartMotion validation gate and the SmartFinder GPS-quality framing).
 
 **Post-launch:** if estimated metrics consistently read high across many swings — not just a one-off — that's a CALIBRATION question for the estimation model, almost certainly over-estimating ball speed or under-estimating club speed. Can only be tuned properly against real launch-monitor ground truth (Garmin R10 / Rapsodo / SkyTrak / etc.) feeding the phone estimate alongside actual measurements so the offset can be measured and corrected per club. Sits with the launch-monitor-integration item. **Not sprint work.**
+
+---
+
+## Launch Prep — Business / Legal Track (parallel to fix sprint, not code)
+
+### Terms & Conditions + Privacy Policy required for store submission (2026-05-21)
+
+**Status:** required before App Store + Play Store submission. Both stores require a privacy-policy URL at submit time. ToS protects SmartPlay AI LLC and defines the user relationship. **Not a code item** — sits on the business/legal track in parallel with the fix sprint.
+
+**Data profile the docs MUST cover (sensitive — generic boilerplate is insufficient):**
+- Location / GPS (rounds, hole detection, SmartFinder yardages)
+- Video + audio capture (swing analysis, caddie microphone)
+- AI processing via third parties (Anthropic, OpenAI, ElevenLabs)
+- Account info; payments (Stripe) if monetized at launch
+- AI-content disclaimer: analysis / yardages / club suggestions are **estimates**, not professional or medical advice — ties to the no-fake-precision principle that runs through the whole product (Phase 418 SmartMotion gate, SmartFinder GPS-quality framing, smash-factor `(est)` label).
+- Support contact: support@smartplaycaddie.com
+
+**Plan:** Claude can draft both documents tailored to the actual data practices in a focused session — NOT in the middle of a fix cluster. Draft MUST get real legal review before publishing (paid attorney review or a compliant generator like Termly / iubenda). The combination of location + video/audio capture + AI processing + potential minor users is a real liability profile and unvetted legal text is not acceptable to ship.
+
+**Sits with other deferred business-track items:** Apple Developer enrollment + D-U-N-S number, Stripe production configuration, App Store / Play Store assets + screenshots, App Privacy disclosures.
