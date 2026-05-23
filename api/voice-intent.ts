@@ -34,7 +34,7 @@ Available intents:
    IMPORTANT: "smartmotion" is the COURSE-MODE simplified swing capture (no setup, acoustic auto-stop). "swinglab" is the full practice/analysis hub. Default casual "record a swing" to "smartmotion" since it's the quicker path; only emit "swinglab" if the user explicitly says SwingLab / practice / drills. When the user names the angle ("down the line" / "DTL" / "face on" / "face-on" / "front view"), emit BOTH the angle parameter AND auto_start:true so the camera fires immediately on the right orientation.
 
 2. query_status — User wants information about current state.
-   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "shot_distance" | "hole_progress" | "distance_to_green" | "wind" | "conditions" | "plays_like" | "green_front" | "green_back" | "green_middle" | "end_session" | "next_focus" | "swing_observation" | "tell_me_more" | "hole_history" | "look_at_swing" | "carry_check", target_yards?: number, swing_phrase?: string, hazard_phrase?: string }
+   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "shot_distance" | "hole_progress" | "distance_to_green" | "wind" | "conditions" | "plays_like" | "green_front" | "green_back" | "green_middle" | "end_session" | "next_focus" | "swing_observation" | "tell_me_more" | "hole_history" | "look_at_swing" | "carry_check" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare", target_yards?: number, swing_phrase?: string, hazard_phrase?: string, member_name?: string, notes?: string, lie_hint?: string, against?: "self_previous" | "tour_median" | "amateur_good" }
    Examples:
    - "what's my score" -> { query_topic: "score" }
    - "what hole am I on" -> { query_topic: "hole" }
@@ -56,6 +56,15 @@ Available intents:
    - "how was last time I played this hole" / "what did I do here last round" / "how was my last round here" -> { query_topic: "hole_history" }
    - "look at last Tuesday's swing" / "show me Friday's swing" / "pull up that upload from last week" -> { query_topic: "look_at_swing", swing_phrase: "last tuesday" } (carry the date phrase verbatim)
    - "can I carry the bunker" / "can I carry that water" / "can I clear the trees" / "can I get over it" -> { query_topic: "carry_check", hazard_phrase: "bunker" } (extract the hazard noun)
+   - "analyze my putt" / "how's my putting stroke" / "how's my read" / "look at my putt" -> { query_topic: "putt_analysis" }
+   - "how's Emma's progress" / "show me her progress" / "how's my daughter doing" -> { query_topic: "family_progress", member_name: "Emma" }
+   - "analyze Emma's swing" / "analyze my daughter's swing" / "how was that swing" / "coach Emma's swing" -> { query_topic: "family_analysis", member_name: "Emma" }
+   - "compare to last week" / "compare to her last swing" -> { query_topic: "family_analysis", member_name: "<active>", notes: "compare to last week" }
+   - "how's the team doing" / "team progress" / "how's the team trending" / "team roll up" -> { query_topic: "team_progress" }
+   - "what's the play" / "what's the play here" / "what should I hit" / "give me the play" / "smart play" / "tell me the play" -> { query_topic: "shot_strategy" }
+   - "what's the play from the rough" / "what's the play from fluffy lie" -> { query_topic: "shot_strategy", lie_hint: "rough" }
+   - "compare to my last swing" / "compare my swing to my last one" / "vs my last swing" -> { query_topic: "swing_compare", against: "self_previous" }
+   - "compare to tour" / "compare to the pros" / "how do I compare to tour" -> { query_topic: "swing_compare", against: "tour_median" }
 
 8. rules_query — User is asking about a Rules of Golf situation.
    parameters: { query_text: string }

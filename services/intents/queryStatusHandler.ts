@@ -105,6 +105,77 @@ export const queryStatusHandler: IntentHandler = {
         };
       }
 
+      case 'shot_strategy': {
+        // 2026-05-22 — Caddie Brain: "what's the play here". Routes
+        // through smartAnalysisEngine.analyze({kind:'shot_strategy'}) →
+        // metaCourseIntelligence.recommendShot which composes 8 signals
+        // (geometry, GPS, wind, vision, lie, ghost, golfer model, recent
+        // shots) into one strategic recommendation.
+        const engine = await import('../smartAnalysisEngine');
+        const lieHint = typeof intent.parameters.lie_hint === 'string'
+          ? intent.parameters.lie_hint
+          : null;
+        const targetYards = typeof intent.parameters.target_yards === 'number'
+          ? intent.parameters.target_yards
+          : null;
+        const env = await engine.analyze({
+          kind: 'shot_strategy',
+          lie_hint: lieHint,
+          target_yards: targetYards,
+        });
+        return {
+          success: env.status !== 'error',
+          voice_response: env.voice_summary,
+          side_effects: [`query:shot_strategy:conf_${env.confidence}`],
+          follow_up_needed: false,
+        };
+      }
+
+      case 'swing_compare': {
+        // 2026-05-22 — Caddie Brain: compare current vs reference swing.
+        // For voice-only (no video URI from voice), we describe the
+        // capability and route to UI when needed. Future enhancement:
+        // pull the most-recent uploaded swing's clipUri automatically.
+        const against =
+          intent.parameters.against === 'self_previous' ? 'self_previous' :
+          intent.parameters.against === 'tour_median' ? 'tour_median' :
+          intent.parameters.against === 'amateur_good' ? 'amateur_good' : 'tour_median';
+        try {
+          const swingLib = await import('../swingLibrary');
+          const entries = swingLib.getLibrary('all');
+          if (entries.length < 1) {
+            return {
+              success: true,
+              voice_response:
+                "You haven't uploaded a swing to the library yet. Record one in SmartMotion and try again.",
+              side_effects: ['query:swing_compare:no_swings'],
+              follow_up_needed: false,
+            };
+          }
+          // For voice path, surface a quick acknowledgement; full
+          // analysis kicks off when caller passes video URI explicitly
+          // (UI button flow). This keeps the voice response immediate.
+          return {
+            success: true,
+            voice_response:
+              against === 'tour_median'
+                ? 'Pulling up your latest swing to compare against the tour median. Opening swing library.'
+                : 'Comparing your most recent swing to your previous one. Opening the library now.',
+            side_effects: [`query:swing_compare:${against}`],
+            follow_up_needed: false,
+            tool_action: { type: 'open_url', url: '/swinglab/library' },
+          };
+        } catch (e) {
+          console.log('[swing_compare] failed:', e);
+          return {
+            success: false,
+            voice_response: "Couldn't open the swing library right now.",
+            side_effects: ['query:swing_compare:error'],
+            follow_up_needed: false,
+          };
+        }
+      }
+
       case 'team_progress': {
         // 2026-05-22 — Captain extension: roll up recent swing trends
         // across every teammate (excludes coaches). Reads junior-swing

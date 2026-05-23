@@ -30,7 +30,7 @@ Available intents:
    - "mark the green" / "mark green" / "I'm at the green" / "open Mark Green" -> { tool_name: "mark_green" }
 
 2. query_status — User wants information about current state.
-   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "putt_analysis" | "family_progress" | "family_analysis", member_name?: string, notes?: string }
+   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare", member_name?: string, notes?: string, lie_hint?: string, target_yards?: number, against?: "self_previous" | "tour_median" | "amateur_good" }
    Examples:
    - "what's my score" -> { query_topic: "score" }
    - "what hole am I on" -> { query_topic: "hole" }
@@ -40,6 +40,10 @@ Available intents:
    - "analyze Emma's swing" / "analyze my daughter's swing" / "how was that swing" / "coach Emma's swing" -> { query_topic: "family_analysis", member_name: "Emma" }
    - "compare to last week" / "compare to her last swing" -> { query_topic: "family_analysis", member_name: "<active>", notes: "compare to last week" }
    - "how's the team doing" / "team progress" / "how's the team trending" / "team roll up" -> { query_topic: "team_progress" }
+   - "what's the play" / "what's the play here" / "what should I hit" / "give me the play" / "smart play" / "tell me the play" -> { query_topic: "shot_strategy" }
+   - "what's the play from the rough" / "what's the play from fluffy lie" -> { query_topic: "shot_strategy", lie_hint: "rough" }
+   - "compare to my last swing" / "compare my swing to my last one" / "vs my last swing" -> { query_topic: "swing_compare", against: "self_previous" }
+   - "compare to tour" / "compare to the pros" / "how do I compare to tour" -> { query_topic: "swing_compare", against: "tour_median" }
 
 3. change_setting — User wants to modify a setting.
    parameters: { setting_name: string, new_value: string | boolean }

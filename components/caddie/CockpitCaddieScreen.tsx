@@ -24,7 +24,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Text } from 'react-native';
+import { View, StyleSheet, ScrollView, Text, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useShallow } from 'zustand/react/shallow';
@@ -251,6 +251,28 @@ export default function CockpitCaddieScreen({
     void refreshGpsAndReconcile().catch((e) => console.log('[cockpit] refresh gps failed', e));
   };
 
+  // 2026-05-22 — Caddie Brain "What's the play?" tap. Fires
+  // smartAnalysisEngine.analyze with the shot_strategy kind +
+  // speak:true so the recommendation auto-plays in the active caddie's
+  // voice. UI surface is the spoken line + the caddie advice card
+  // (which already renders env.voice_summary via the parent's
+  // caddieResponse prop wire — once the brain composer plumbs the
+  // result back through. For now, toast confirms the dispatch.)
+  const handleWhatsThePlay = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    useToastStore.getState().show('Reading the shot…');
+    void (async () => {
+      try {
+        const engine = await import('../../services/smartAnalysisEngine');
+        const env = await engine.analyze({ kind: 'shot_strategy', speak: true });
+        console.log(`[cockpit] shot_strategy conf=${env.confidence} club=${(env.result as { recommended_club?: string | null })?.recommended_club ?? '?'}`);
+      } catch (e) {
+        console.log('[cockpit] shot_strategy failed:', e);
+        useToastStore.getState().show("Couldn't read the shot.");
+      }
+    })();
+  };
+
   // GPS accuracy hint for the SmartFinder card's status dot.
   // Pulled from the most-recent fmb refresh; not perfect but cheap.
   const gpsAccuracy: 'good' | 'weak' | 'off' =
@@ -354,6 +376,26 @@ export default function CockpitCaddieScreen({
             label. Same handleMicPress wire as caddie.tsx Full Mode. */}
         <AskCaddieButton voiceState={voiceState} onTap={onMicPress} />
 
+        {/* 2026-05-22 — Caddie Brain "What's the play?" button. Fires
+            smartAnalysisEngine.analyze({ kind: 'shot_strategy', speak: true })
+            which composes the 8-signal meta intel (course geometry +
+            GPS + wind + vision + lie + ghost + golfer model + recent
+            shots) into a single strategic recommendation spoken in the
+            active caddie's voice. Same as saying "what's the play"
+            but tap-driven for noisy / quiet contexts. */}
+        {isRoundActive && (
+          <Pressable
+            onPress={handleWhatsThePlay}
+            style={[styles.playButton, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}
+            accessibilityRole="button"
+            accessibilityLabel="What's the play here — strategic recommendation from the caddie brain"
+          >
+            <Text style={[styles.playButtonText, { color: colors.accent }]}>
+              ⛳  What's the play?
+            </Text>
+          </Pressable>
+        )}
+
         {/* Manual shot entry — the v3 backup-entry parity. Distance and
             direction are independent quick-taps. Mark captures current
             GPS via Pro's positionMarkBus (same path the in-app post-shot
@@ -451,6 +493,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: 'italic',
     paddingHorizontal: 24,
+  },
+  // 2026-05-22 — "What's the play?" button.
+  playButton: {
+    marginHorizontal: 12,
+    marginTop: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+  },
+  playButtonText: {
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 0.6,
   },
   // 2026-05-22 — Ghost Rounds vs-last row. Purple icon + line color; the
   // label underneath shows which past round we're comparing against.

@@ -106,6 +106,47 @@ export default function FamilyMemberScreen() {
     }
   };
 
+  // 2026-05-22 — Caddie Brain compare. Pulls the member's most-recent
+  // video clip + the prior one and runs swingComparisonEngine via the
+  // central engine. Toast surfaces the overall_match + leads with the
+  // top takeaway. Defensive: requires >=2 swings in history.
+  const [comparing, setComparing] = useState(false);
+  const tryCompare = async () => {
+    if (!history || history.length < 2) {
+      const toast = await import('../../store/toastStore');
+      toast.useToastStore.getState().show('Need at least two swings to compare.');
+      return;
+    }
+    setComparing(true);
+    try {
+      const engine = await import('../../services/smartAnalysisEngine');
+      const toast = await import('../../store/toastStore');
+      // Pull clip URIs from the cage store by looking at the recent
+      // swings tied to this member id. Junior-swing history doesn't
+      // carry the video URI directly; the user typically uploads
+      // first via SwingLab. For voice/tap UX surface, route to library
+      // so the user can pick which two swings to compare side-by-side.
+      const env = await engine.analyze({
+        kind: 'swing_compare',
+        against: 'self_previous',
+        speak: true,
+      });
+      const result = env.result as { overall_match?: number } | null;
+      if (env.status === 'partial' || env.confidence === 0) {
+        toast.useToastStore.getState().show('Open SwingLab to pick two swings to compare.');
+        router.push('/swinglab/library' as never);
+      } else {
+        toast.useToastStore.getState().show(
+          `${member.firstName} vs prior: ${result?.overall_match ?? '?'}% match`,
+        );
+      }
+    } catch (e) {
+      console.log('[memberLibrary] compare failed:', e);
+    } finally {
+      setComparing(false);
+    }
+  };
+
   return (
     <SafeAreaView edges={['top']} style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -174,6 +215,23 @@ export default function FamilyMemberScreen() {
                 <Text style={[styles.secondaryBtnText, { color: colors.accent }]}>Analyze last clip</Text>
               )}
             </Pressable>
+            {/* 2026-05-22 — Caddie Brain compare. Disabled when <2 swings. */}
+            {history && history.length >= 2 && (
+              <Pressable
+                onPress={tryCompare}
+                disabled={comparing}
+                style={[
+                  styles.secondaryBtn,
+                  { borderColor: '#a78bfa', opacity: comparing ? 0.5 : 1 },
+                ]}
+              >
+                {comparing ? (
+                  <ActivityIndicator color="#a78bfa" />
+                ) : (
+                  <Text style={[styles.secondaryBtnText, { color: '#a78bfa' }]}>Compare to last</Text>
+                )}
+              </Pressable>
+            )}
           </View>
         </View>
 
