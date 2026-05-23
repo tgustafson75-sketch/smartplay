@@ -282,6 +282,13 @@ interface LearningContext {
   ghostSummary: string | null;
   dominantMiss: string | null;
   firstName: string;
+  /** 2026-05-23 — Unified vision context (GPS + hole geometry +
+   *  active vision frame + recent shots + player profile). Null when
+   *  the composer failed OR there's nothing rich to compose. When
+   *  present, dispatch paths can lift player-relative yardages,
+   *  hazard counts, last-shot pattern, and a coherent promptBlock
+   *  for downstream voice copy — no per-dispatch re-derivation. */
+  unifiedContext: import('./unifiedVisionContext').UnifiedVisionContext | null;
 }
 
 async function buildLearningContext(): Promise<LearningContext> {
@@ -294,6 +301,18 @@ async function buildLearningContext(): Promise<LearningContext> {
   const holeView = courseId ? getHoleView(courseId, holeNumber) : null;
   let vision: VisionContext | null = null;
   try { vision = await getActiveVisionContext(); } catch { /* non-fatal */ }
+  // 2026-05-23 — Unified context. Cheap to compose (all underlying
+  // helpers are defensive + null-safe); never blocks dispatch on its
+  // failure. The promptBlock + pre-computed yardages flow into the
+  // dispatch implementations below where they meaningfully sharpen
+  // the response.
+  let unifiedContext: import('./unifiedVisionContext').UnifiedVisionContext | null = null;
+  try {
+    const uv = await import('./unifiedVisionContext');
+    unifiedContext = await uv.getUnifiedVisionContext();
+  } catch (e) {
+    devLog(`[engine] unifiedContext compose failed (non-fatal): ${String(e)}`);
+  }
   return {
     persona: settings.caddiePersonality,
     holeNumber,
@@ -306,6 +325,7 @@ async function buildLearningContext(): Promise<LearningContext> {
     ghostSummary: ghost.getSummaryText?.() ?? null,
     dominantMiss: profile.dominantMiss ?? null,
     firstName: profile.firstName || 'you',
+    unifiedContext,
   };
 }
 
@@ -428,18 +448,32 @@ function runClubRecommend(req: ClubRecommendRequest, persona: Persona, ctx: Lear
     y >= 20  ? 'LW' : 'Putter';
   const note = req.conditions_note ? ` (${req.conditions_note})` : '';
   const caddieName = getCaddieName(persona);
+  // 2026-05-23 — Unified context enrichment: fold hazard awareness +
+  // dominant-miss bias into the rationale + voice_summary when the
+  // unified context is rich. Each addition is a single short clause —
+  // keeps the spoken line under the TTS budget while making the
+  // recommendation visibly grounded in real data.
+  const uc = ctx.unifiedContext;
+  const hazardWarn = uc && uc.geometry.hazards.length > 0
+    ? ` ${uc.geometry.hazards.length} hazard${uc.geometry.hazards.length === 1 ? '' : 's'} on this hole — aim for the fat side.`
+    : '';
+  const missWarn = uc?.player.dominantMiss
+    ? ` (Watch the ${uc.player.dominantMiss}.)`
+    : '';
+  const sources_used: AnalysisSource[] = ['gps', 'course_geometry', 'player_profile'];
+  if (uc?.vision.streaming) sources_used.push('glasses_vision');
   return {
     kind: 'club_recommend',
     status: 'ok',
     result: {
       recommended_club: club,
-      rationale: `${y}y to target${note}. Baseline club at this distance.`,
+      rationale: `${y}y to target${note}. Baseline club at this distance.${hazardWarn}`,
       yards_to_target: y,
     },
     confidence: 60,
-    sources_used: ['gps', 'course_geometry', 'player_profile'],
+    sources_used,
     persona,
-    voice_summary: `${caddieName} — ${y} yards. ${club}${note}.`,
+    voice_summary: `${caddieName} — ${y} yards. ${club}${note}.${missWarn}`,
     timestamp_ms: Date.now(),
     analysis_id: newId('club'),
   };
@@ -588,18 +622,34 @@ function newId(prefix: string): string {
 
 async function runShotStrategy(req: ShotStrategyRequest, persona: Persona, ctx: LearningContext): Promise<AnalysisEnvelope> {
   const meta = await import('./metaCourseIntelligence');
+  // 2026-05-23 — Use unifiedContext player-to-green yardage as the
+  // target when the caller didn't specify one. The Haversine math is
+  // already done; no need to re-derive. Falls back to the legacy
+  // null when unifiedContext is sparse.
+  const uc = ctx.unifiedContext;
+  const inferredTarget = req.target_yards ?? uc?.geometry.yardagesFromPlayer.middle ?? null;
   const result = await meta.recommendShot({
     lie_hint: req.lie_hint ?? null,
-    target_yards: req.target_yards ?? null,
+    target_yards: inferredTarget,
     hole_number: ctx.holeNumber,
     player_location: ctx.holeView?.player_location ?? null,
   });
+  // Surface the unified promptBlock onto the envelope's voice_summary
+  // when it adds information the meta engine didn't already include.
+  // The promptBlock is concise + tagged so spoken delivery stays under
+  // the TTS budget.
+  const enrichedSources = result.sources_used.map(mapMetaSource);
+  if (uc?.vision.streaming) enrichedSources.push('glasses_vision');
+  if (uc && uc.geometry.hazards.length > 0 && !result.voice_summary.toLowerCase().includes('hazard')) {
+    enrichedSources.push('course_geometry');
+  }
+  devLog(`[engine] shot_strategy enriched: target=${inferredTarget}, hazards=${uc?.geometry.hazards.length ?? 0}, glasses=${uc?.vision.streaming ? 'live' : 'off'}`);
   return {
     kind: 'shot_strategy',
     status: result.confidence > 30 ? 'ok' : 'partial',
     result,
     confidence: result.confidence,
-    sources_used: result.sources_used.map(mapMetaSource),
+    sources_used: enrichedSources,
     persona,
     voice_summary: result.voice_summary,
     timestamp_ms: Date.now(),

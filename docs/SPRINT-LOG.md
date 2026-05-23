@@ -1501,6 +1501,33 @@ Tim asked again for items 1-3 (Swing Library polish + KB expansion + SmartVision
 
 **Day 5 extension 6 tally: 1 commit + 1 OTA + ts-check clean. Library now captures EVERY swing recorded via SmartMotion + Cage Mode.**
 
+### Day 5 extension 7 — unifiedVisionContext → smartAnalysisEngine deep integration
+
+Tim asked again for the Final Polish batch (items 1-3). Everything except deep `smartAnalysisEngine` integration was already shipped from extensions 1-6 — confirmed via grep: Library compare button (line 95+378 of library.tsx), detail compare action (line 35/347/350 of [swing_id].tsx), auto-suggest card (line 96/803/805), KB at 112 entries (40+ ask exceeded by 2.8x), unifiedVisionContext + hook + LiveStrategy all present. The one real gap: the engine's dispatch paths still ran on their own LearningContext, never pulling from the unified composer.
+
+**Shipped:**
+
+- **[services/smartAnalysisEngine.ts](../services/smartAnalysisEngine.ts) — LearningContext gained `unifiedContext: UnifiedVisionContext | null`**. Composed once per `analyze()` call inside `buildLearningContext` via the same `getUnifiedVisionContext` the brain prompt already uses. Defensive — failure during composition logs + leaves `unifiedContext: null`, dispatch paths branch on null.
+- **`runClubRecommend` enrichment**: rationale now appends "N hazards on this hole — aim for the fat side" when present; voice_summary appends "(Watch the [dominant_miss].)" when the player has a known dominant_miss; `sources_used` upgrades to include `'glasses_vision'` when DAT is actively streaming. Adds three quiet, additive clauses to a recommendation that previously read off the yardage alone.
+- **`runShotStrategy` enrichment**: when the caller didn't pass `target_yards`, the engine now uses `unifiedContext.geometry.yardagesFromPlayer.middle` — leveraging the Haversine math that's already done in the unified composer instead of having `metaCourseIntelligence` re-derive. `sources_used` upgrades correctly: `'glasses_vision'` when DAT is streaming, `'course_geometry'` when hazards weren't already in the meta engine's voice_summary. `devLog` records the enrichment so the trace is observable: `[engine] shot_strategy enriched: target=185, hazards=2, glasses=live`.
+
+**Why this matters:**
+Before this change, the brain (`api/kevin.ts`) consumed the rich unified context but the local analysis engine — which produces the structured envelopes the Caddie tab + history surfaces render directly from — was blind to it. A "what club do I hit" run inside the engine would say "162y, 6 iron" with no hazard awareness even when the unified composer knew there were two hazards on the hole. Now the engine speaks with the same situational ground truth as the brain prompt.
+
+**Defensive guarantees:**
+- All new clauses are conditional. When unifiedContext is null (no round, no GPS, no geometry), every dispatch reads identically to before.
+- Sources arrays use `AnalysisSource` enum — TS catches any drift.
+- Compose failure inside `buildLearningContext` is non-fatal; analyze() still dispatches with the legacy LearningContext.
+
+**Verification:**
+- `npx tsc --noEmit` → exit 0.
+- Brain prompt unchanged (still receives the same unified_context_block). Voice flow unchanged. SmartMotion / SmartVision / PuttingLab / Library all unchanged.
+
+**OTA-eligible** (JS-only).
+
+**Day 5 extension 7 tally: 1 commit + 1 OTA + ts-check clean. Analysis engine now grounded in the same unified context as the brain — no more split-vision between the two.**
+
+
 
 
 
