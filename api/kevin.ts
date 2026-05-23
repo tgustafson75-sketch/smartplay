@@ -315,6 +315,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // verbatim into system prompt so every reply has user-specific
       // grounding without per-call latency. Each is a 1-3 paragraph note.
       kevinContext = null,
+      // 2026-05-22 — Brain prompt builder integration.
+      // golfer_model_snippet: derived tendency snapshot from
+      //   services/golferModel.buildGolferModel().prompt_snippet
+      //   ("dominant miss: right; avg score last 5 rounds: +6 vs par;
+      //   trending putts/hole 1.9...")
+      // recent_analyses_snippet: condensed string of the last 5-10
+      //   smartAnalysisEngine envelopes from getRecentAnalyses() —
+      //   gives Kevin "you just told them X" continuity.
+      golfer_model_snippet = null,
+      recent_analyses_snippet = null,
       persistentPatterns = null,
       recentCageInsights = [],
       recentRoundInsights = [],
@@ -358,6 +368,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const characterSpec = getCharacterSpec(personaInput);
 
     const _kevinContext: string | null = typeof kevinContext === 'string' && kevinContext.trim() ? kevinContext.trim() : null;
+    const _golferModel: string | null = typeof golfer_model_snippet === 'string' && golfer_model_snippet.trim() ? golfer_model_snippet.trim() : null;
+    const _recentAnalyses: string | null = typeof recent_analyses_snippet === 'string' && recent_analyses_snippet.trim() ? recent_analyses_snippet.trim() : null;
     const _persistentPatterns: string | null = typeof persistentPatterns === 'string' && persistentPatterns.trim() ? persistentPatterns.trim() : null;
     const _practiceContext: string | null = typeof practice_context === 'string' && practice_context.trim() ? practice_context.trim() : null;
     type InsightLite = { course?: string; club?: string; insight: string };
@@ -560,6 +572,8 @@ ${physicalLimitation ? `PHYSICAL NOTE: ${physicalLimitation} — never suggest m
 ${todBlock}
 
 ${_kevinContext ? `ABOUT THIS GOLFER (private; never read aloud — use as background):\n${_kevinContext}` : ''}
+${_golferModel ? `\nDERIVED TENDENCIES (private; use to be SPECIFIC instead of generic — never recite these literally):\n${_golferModel}` : ''}
+${_recentAnalyses ? `\nWHAT YOU JUST TOLD THEM (last few exchanges in this session — don't repeat verbatim, but stay coherent):\n${_recentAnalyses}` : ''}
 
 ${Array.isArray(playerVocabulary) && playerVocabulary.length > 0 ? `PHRASES THIS PLAYER USES (private; mirror their vocabulary, do not list these out loud):\n${(playerVocabulary as unknown[]).filter(p => typeof p === 'string').slice(0, 20).join(', ')}` : ''}
 

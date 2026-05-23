@@ -365,12 +365,52 @@ export async function stopAndDetectImpact(): Promise<ImpactReading | null> {
     peak.db >= -20 ? 0.60 :
     0.30;
 
-  return {
+  const reading: ImpactReading = {
     impact_ms: peak.offset_ms,
     peak_db: peak.db,
     confidence,
     audio_uri,
   };
+  // 2026-05-22 — Cache the most-recent reading so other services
+  // (acousticsAnalyzer, lieAnalysisService.enrichedLieAnalysis) can
+  // opportunistically pull it without the caller having to plumb it
+  // through. TTL applied in getLastImpactReading() — stale strikes
+  // shouldn't bias unrelated downstream calls.
+  _lastReading = { reading, capturedAt: Date.now() };
+  return reading;
+}
+
+// ─── 2026-05-22 — Recent-impact cache + accessor ─────────────────────────
+
+interface CachedReading { reading: ImpactReading; capturedAt: number }
+let _lastReading: CachedReading | null = null;
+/** TTL on a cached reading. Beyond this, services that pull
+ *  opportunistically (enrichedLieAnalysis) treat it as absent. 60s
+ *  matches the typical "swing then read the lie" window. */
+const RECENT_IMPACT_TTL_MS = 60_000;
+
+/**
+ * Returns the most-recent ImpactReading captured by stopAndDetectImpact()
+ * iff it landed within RECENT_IMPACT_TTL_MS. null otherwise (no recent
+ * strike OR cache is stale).
+ *
+ * Used by lieAnalysisService.enrichedLieAnalysis to auto-fold acoustic
+ * prior into a lie call without forcing every caller to plumb the
+ * reading through.
+ */
+export function getLastImpactReading(): ImpactReading | null {
+  if (!_lastReading) return null;
+  if (Date.now() - _lastReading.capturedAt > RECENT_IMPACT_TTL_MS) {
+    _lastReading = null;
+    return null;
+  }
+  return _lastReading.reading;
+}
+
+/** Clears the cached recent reading. Called by round-end / cage-end
+ *  teardown so a stale strike from the prior context can't carry over. */
+export function clearLastImpactReading(): void {
+  _lastReading = null;
 }
 
 /**

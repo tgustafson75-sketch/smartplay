@@ -247,7 +247,41 @@ export async function enrichedLieAnalysis(input: EnrichLieInput): Promise<Enrich
   }
 
   const sources_used: EnrichedLieAnalysis['sources_used'] = ['vision'];
-  if (input.acoustic) sources_used.push('acoustic');
+
+  // 2026-05-22 — Acoustic auto-feed. If the caller didn't pass an
+  // explicit acoustic prior AND the impact detector has a recent
+  // reading (<60s), classify it via acousticsAnalyzer + use it.
+  // Stale strikes are filtered out at the source (TTL inside
+  // acousticImpactDetector.getLastImpactReading).
+  let resolvedAcoustic: AcousticPriorSignal | null = input.acoustic ?? null;
+  if (!resolvedAcoustic) {
+    try {
+      const detector = await import('./acousticImpactDetector');
+      const reading = detector.getLastImpactReading();
+      if (reading) {
+        const analyzer = await import('./acousticsAnalyzer');
+        const cls = analyzer.analyzeStrike({ reading });
+        if (cls.confidence >= 40) {
+          resolvedAcoustic = {
+            strike: cls.strike_location === 'flush' ? 'flush'
+              : cls.strike_location === 'fat' ? 'fat'
+              : cls.strike_location === 'thin' ? 'thin'
+              : cls.strike_location === 'heel' ? 'heel'
+              : cls.strike_location === 'toe' ? 'toe' : 'unknown',
+            turf: cls.turf === 'grass' ? 'grass'
+              : cls.turf === 'sand' ? 'sand'
+              : cls.turf === 'hardpan' ? 'hardpan'
+              : cls.turf === 'rough' ? 'rough' : 'unknown',
+            confidence: cls.confidence,
+          };
+          console.log(`[lie] auto-folded acoustic prior: strike=${resolvedAcoustic.strike} turf=${resolvedAcoustic.turf} conf=${resolvedAcoustic.confidence}`);
+        }
+      }
+    } catch (e) {
+      console.log('[lie] acoustic auto-feed failed (non-fatal):', e);
+    }
+  }
+  if (resolvedAcoustic) sources_used.push('acoustic');
 
   // 2. Risk/reward synthesis via metaCourseIntelligence.
   let riskReward: RiskRewardCall | null = null;
@@ -273,11 +307,11 @@ export async function enrichedLieAnalysis(input: EnrichLieInput): Promise<Enrich
   }
 
   // 3. Compose the spoken summary.
-  const voice = composeEnrichedVoice(base, input.acoustic ?? null, riskReward);
+  const voice = composeEnrichedVoice(base, resolvedAcoustic, riskReward);
 
   return {
     base,
-    acoustic_prior: input.acoustic ?? null,
+    acoustic_prior: resolvedAcoustic,
     risk_reward: riskReward,
     sources_used,
     voice_summary: voice,

@@ -141,6 +141,41 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
               return useRoundStore.getState().pendingLieAnalysis;
             } catch { return null; }
           })(),
+          // 2026-05-22 — Brain prompt builder integration. Three layers
+          // of golfer-specific context fold into Kevin's system prompt:
+          //   - kevinContext: prior Sonnet onboarding profile (existing
+          //     field, just was never being sent — now plumbed through)
+          //   - golfer_model_snippet: derived tendency snapshot from
+          //     services/golferModel.buildGolferModel()
+          //   - recent_analyses_snippet: condensed string of the last 8
+          //     smartAnalysisEngine envelopes for continuity
+          // Every fetch is best-effort; failures fall through to null
+          // and Kevin just doesn't get that layer of context (no regression).
+          kevinContext: (() => {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const p = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
+              return p.usePlayerProfileStore.getState().kevinContext;
+            } catch { return null; }
+          })(),
+          golfer_model_snippet: (() => {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const gm = require('../services/golferModel') as typeof import('../services/golferModel');
+              return gm.buildGolferModel().prompt_snippet;
+            } catch { return null; }
+          })(),
+          recent_analyses_snippet: (() => {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const eng = require('../services/smartAnalysisEngine') as typeof import('../services/smartAnalysisEngine');
+              const recent = eng.getRecentAnalyses(8);
+              if (recent.length === 0) return null;
+              return recent
+                .map((r) => `[${r.kind}] ${r.voice_summary}`)
+                .join('\n');
+            } catch { return null; }
+          })(),
         }),
       }).finally(() => clearTimeout(timeout));
 
