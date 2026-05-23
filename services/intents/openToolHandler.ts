@@ -48,6 +48,13 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // coords when course geometry is missing / wrong. Aliases.
   mark_green: { type: 'navigate', path: '/mark-green' },
   markgreen: { type: 'navigate', path: '/mark-green' },
+  // 2026-05-23 — Mark Tee mirrors Mark Green for the ORIGIN end of
+  // the hole. With both anchored the hole length is verifiable
+  // (haversine between marked tee + marked green) and the override
+  // wins over GPS course data — same player-marked-as-truth pattern.
+  mark_tee: { type: 'navigate', path: '/mark-tee' },
+  marktee: { type: 'navigate', path: '/mark-tee' },
+  mark_tee_box: { type: 'navigate', path: '/mark-tee' },
   // 2026-05-23 — Coach Mode (Fix #9). Voice phrasings "open coach mode",
   // "coach Emma", "let's coach Mike", etc. land here. The execute()
   // path below also reads parameters.player_name (or extracts from
@@ -79,6 +86,9 @@ const TOOL_LABEL: Record<string, string> = {
   gps_test_bench: 'GPS Test Bench',
   mark_green: 'Mark Green',
   markgreen: 'Mark Green',
+  mark_tee: 'Mark Tee',
+  marktee: 'Mark Tee',
+  mark_tee_box: 'Mark Tee',
   coach_mode: 'Coach Mode',
   coachmode: 'Coach Mode',
 };

@@ -32,6 +32,7 @@ Available intents:
    - "record me face on" / "record face on" / "face-on swing" / "front view swing" -> { tool_name: "smartmotion", angle: "face_on", auto_start: true }
    - "record my swing down the line" -> { tool_name: "smartmotion", angle: "down_the_line", auto_start: true }
    - "record my face on swing" -> { tool_name: "smartmotion", angle: "face_on", auto_start: true }
+   - "mark the tee" / "mark tee" / "mark the tee box" / "I'm at the tee" / "open Mark Tee" -> { tool_name: "mark_tee" }
    - "open Coach Mode" / "coach mode" / "start coaching" / "let's coach" / "watch my student" -> { tool_name: "coach_mode" }
    - "I'm coaching Emma" / "coach Mike" / "let's coach Sarah" / "I'm gonna coach Jenny" / "watch my student Mike" -> { tool_name: "coach_mode", player_name: "Emma" } (extract the FIRST NAME verbatim into player_name; preserves capitalization as spoken)
    IMPORTANT: "smartmotion" is the COURSE-MODE simplified swing capture (no setup, acoustic auto-stop). "swinglab" is the full practice/analysis hub. Default casual "record a swing" to "smartmotion" since it's the quicker path; only emit "swinglab" if the user explicitly says SwingLab / practice / drills. When the user names the angle ("down the line" / "DTL" / "face on" / "face-on" / "front view"), emit BOTH the angle parameter AND auto_start:true so the camera fires immediately on the right orientation.

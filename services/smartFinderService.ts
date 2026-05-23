@@ -23,6 +23,11 @@ import { getHoleGeometry } from './courseGeometryService';
 // next round on the same course gets accurate yardages out of the
 // gate without depending on golfcourseapi data.
 import { getGreenOverride } from './courseGreenOverrides';
+// 2026-05-23 — Mark Tee mirror. Tee overrides take the same
+// player-marked-wins precedence as green overrides; resolveTeeCoords
+// below mirrors resolveGreenCoords. The pair powers the "anchored
+// hole length" computation (marked tee → marked green).
+import { getTeeOverride } from './courseTeeOverrides';
 
 /**
  * Phase D-2 — SmartFinder data layer.
@@ -261,6 +266,64 @@ function resolveGreenCoords(holeNumber: number): {
     }
   }
   return { front: null, middle: null, back: null, source: 'none' };
+}
+
+/**
+ * 2026-05-23 — Resolve TEE coordinates with the same player-marked-wins
+ * precedence as resolveGreenCoords. Decision order:
+ *   1. Mark Tee override (player walked to the tee and tapped) → override
+ *   2. roundStore.courseHoles[i].teeLat/teeLng (golfcourseapi) → courseHoles
+ *   3. None — tee unknown
+ *
+ * No geometry-cache fallback yet because the cache today carries only
+ * green centroids; if/when courseGeometryService starts caching tee
+ * boxes a third branch will land here.
+ */
+export function resolveTeeCoords(holeNumber: number): {
+  tee: ShotLocation | null;
+  source: 'override' | 'courseHoles' | 'none';
+} {
+  const round = useRoundStore.getState();
+  const courseId = round.activeCourseId ?? null;
+  if (courseId) {
+    const ov = getTeeOverride(courseId, holeNumber);
+    if (ov) {
+      return { tee: { lat: ov.lat, lng: ov.lng }, source: 'override' };
+    }
+  }
+  const hData = round.courseHoles.find(h => h.hole === holeNumber);
+  if (hData) {
+    const tee = safeLoc(hData.teeLat, hData.teeLng);
+    if (tee) return { tee, source: 'courseHoles' };
+  }
+  return { tee: null, source: 'none' };
+}
+
+/**
+ * 2026-05-23 — Anchored hole length in yards. Returns the haversine
+ * distance between the marked tee and marked green when BOTH are
+ * captured for this hole. Null otherwise — callers should fall back
+ * to the scorecard distance (roundStore.courseHoles[i].distance) when
+ * the anchor pair isn't complete.
+ *
+ * This is the "closes the yardage loop" payoff of marking both ends:
+ * a verified hole length the player can trust over the static
+ * scorecard number AND over GPS course geometry that may not match
+ * the tee box the player is actually playing from.
+ */
+export function getAnchoredHoleLengthYards(holeNumber: number): number | null {
+  const round = useRoundStore.getState();
+  const courseId = round.activeCourseId ?? null;
+  if (!courseId) return null;
+  const teeOv = getTeeOverride(courseId, holeNumber);
+  const greenOv = getGreenOverride(courseId, holeNumber);
+  if (!teeOv || !greenOv) return null;
+  return Math.round(
+    haversineYards(
+      { lat: teeOv.lat, lng: teeOv.lng },
+      { lat: greenOv.lat, lng: greenOv.lng },
+    ),
+  );
 }
 
 /**
