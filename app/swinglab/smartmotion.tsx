@@ -47,6 +47,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 // can reach the caddie from SmartMotion the same way they can from the
 // Caddie tab and Cage Mode. Same `listeningSession.toggle()` pipeline.
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
+import GlassesStatusBadge from '../../components/GlassesStatusBadge';
 // 2026-05-21 — Fix D: 3-line caddie quick-start intro shown the first
 // few opens (per-slug counter in settingsStore). Skippable.
 import { CaddieIntroSheet, useCaddieIntro } from '../../components/caddie/CaddieIntroSheet';
@@ -206,6 +207,9 @@ export default function SmartMotion() {
         <View style={{ flex: 1, alignItems: 'center' }}>
           <Text style={[styles.title, { color: colors.text_primary }]}>SmartMotion</Text>
           <Text style={[styles.subtitle, { color: colors.text_muted }]}>Swing Analysis</Text>
+          {/* 2026-05-23 — Glasses badge surfaces when DAT is connected.
+              Renders nothing on non-DAT builds (hideWhenUnavailable). */}
+          <GlassesStatusBadge />
         </View>
         <TouchableOpacity
           onPress={() => router.push('/swinglab/range' as never)}

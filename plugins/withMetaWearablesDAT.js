@@ -38,8 +38,13 @@ const {
   withAndroidManifest,
   withProjectBuildGradle,
   withAppBuildGradle,
+  withMainApplication,
+  withInfoPlist,
+  withDangerousMod,
   AndroidConfig,
 } = require('@expo/config-plugins');
+const fs = require('fs');
+const path = require('path');
 
 // ─── Credentials (literal — overridable via EAS env if you ever
 //     decide to migrate to env-driven later) ───────────────────────
@@ -52,21 +57,71 @@ const ENV_FALLBACK = {
 };
 
 // ─── 1. Maven repo (project-level build.gradle) ─────────────────────
+//
+// Resolve the GitHub Personal Access Token at PREBUILD time so the
+// gradle native build doesn't depend on env-var inheritance from the
+// EAS Build container (which is inconsistent across worker images).
+// Read precedence:
+//   1. process.env.GITHUB_TOKEN          ← EAS Build env (EAS dashboard)
+//   2. process.env.EXPO_GITHUB_TOKEN     ← alt name in case the env is namespaced
+//   3. extra.githubToken in app.json     ← committable fallback if Tim ever
+//                                          wants to bake it into config
+// If none resolve, we still inject the Maven block — but with a clear
+// "[missing GITHUB_TOKEN]" sentinel string in the credentials. Gradle
+// then 401s during dependency resolution with a self-explanatory
+// error in the EAS Build log, instead of silently producing an APK
+// missing the DAT artifacts.
+function resolveGitHubToken(config) {
+  const fromEnv =
+    process.env.GITHUB_TOKEN ||
+    process.env.EXPO_GITHUB_TOKEN;
+  if (fromEnv) return { token: fromEnv, source: 'env' };
+  const fromExtra =
+    config && config.extra && typeof config.extra.githubToken === 'string'
+      ? config.extra.githubToken
+      : null;
+  if (fromExtra) return { token: fromExtra, source: 'extra' };
+  return { token: null, source: 'missing' };
+}
+
 function withMavenRepo(config) {
+  const { token, source } = resolveGitHubToken(config);
+  if (source === 'missing') {
+    // Print at prebuild time so the warning lands in EAS Build logs
+    // BEFORE gradle ever runs — easier to triage than a 401 buried in
+    // dependency-resolution output.
+    console.warn(
+      '\n[withMetaWearablesDAT] WARNING: GITHUB_TOKEN is not set.\n' +
+      '  Set it as an EAS secret (EAS dashboard → Project → Environment\n' +
+      '  variables → add GITHUB_TOKEN with a GitHub PAT that has read:packages\n' +
+      '  scope) before running `eas build`. The next gradle step will fail\n' +
+      '  with a 401 against maven.pkg.github.com/facebook/meta-wearables-dat-android\n' +
+      '  until this is resolved. See docs/README_EAS_BUILD.md for details.\n',
+    );
+  } else {
+    console.log(`[withMetaWearablesDAT] resolved GITHUB_TOKEN from ${source}`);
+  }
+  const renderedPassword = token ? token : '[missing GITHUB_TOKEN — see EAS env or app.json extra.githubToken]';
+
   return withProjectBuildGradle(config, (gradleConfig) => {
     const marker = 'maven.pkg.github.com/facebook/meta-wearables-dat-android';
     if (gradleConfig.modResults.contents.includes(marker)) {
+      // Already injected on a previous prebuild — regenerate the
+      // password line in case the token rotated.
+      gradleConfig.modResults.contents = gradleConfig.modResults.contents.replace(
+        /password\s*=\s*"[^"]*"\s*\/\/\s*mwdat-pat/,
+        `password = "${renderedPassword}" // mwdat-pat`,
+      );
       return gradleConfig;
     }
-    // Inject the Maven block inside the existing `allprojects { repositories { ... } }` block.
-    // The default Expo template uses Groovy build.gradle (not .kts) at the
-    // project root. We match it permissively.
+    // Comment marker on the password line lets a future prebuild
+    // rotate the value without re-injecting the whole block.
     const repoBlock = `
         maven {
             url "https://maven.pkg.github.com/facebook/meta-wearables-dat-android"
             credentials {
-                username = ""
-                password = System.getenv("GITHUB_TOKEN") ?: ""
+                username = "mwdat"
+                password = "${renderedPassword}" // mwdat-pat
             }
         }`;
     if (/allprojects\s*\{\s*repositories\s*\{/.test(gradleConfig.modResults.contents)) {
@@ -75,8 +130,6 @@ function withMavenRepo(config) {
         (match) => match + repoBlock,
       );
     } else {
-      // Fallback — append a fresh allprojects block (rare on Expo SDK 54+
-      // since the template ships one, but defensive).
       gradleConfig.modResults.contents += `
 allprojects {
     repositories {
@@ -168,12 +221,207 @@ function withManifest(config) {
   });
 }
 
+// ─── 3.5. MainApplication.kt — inject MetaWearablesPackage() ───────
+//
+// Expo prebuild regenerates android/app/src/main/java/.../MainApplication.kt
+// each time. Without an active injection, the React Native runtime
+// can't see our package and `NativeModules.MetaWearablesFrame`
+// resolves to null — the JS bridge falls through to its "no-op"
+// fallback path and frames never flow.
+//
+// We patch the Kotlin file's getPackages() body:
+//   - Find the line that initializes `packages` (val packages = PackageList(this).packages)
+//   - Inject `packages.add(com.smartplaycaddy.wearables.MetaWearablesPackage())`
+//     immediately after it.
+//
+// We ALSO copy the two Kotlin source files (MetaWearablesFrameModule.kt,
+// MetaWearablesPackage.kt) from android-native/ into the prebuilt
+// android source tree at the correct package path. That seals the
+// loop — Tim's tracked source in android-native/ is the canonical
+// reviewable copy; prebuild materializes it into the bare tree at
+// every build.
+function withMainApplicationInjection(config) {
+  // Step 1: copy the Kotlin sources into the prebuilt tree.
+  const next = withDangerousMod(config, [
+    'android',
+    async (modConfig) => {
+      const projectRoot = modConfig.modRequest.projectRoot;
+      const platformRoot = modConfig.modRequest.platformProjectRoot;
+      const pkgPath = path.join(
+        platformRoot,
+        'app',
+        'src',
+        'main',
+        'java',
+        'com',
+        'smartplaycaddy',
+        'wearables',
+      );
+      const sourceDir = path.join(projectRoot, 'android-native');
+      const files = ['MetaWearablesFrameModule.kt', 'MetaWearablesPackage.kt'];
+      try {
+        if (!fs.existsSync(pkgPath)) {
+          fs.mkdirSync(pkgPath, { recursive: true });
+        }
+        for (const f of files) {
+          const src = path.join(sourceDir, f);
+          const dst = path.join(pkgPath, f);
+          if (fs.existsSync(src)) {
+            fs.copyFileSync(src, dst);
+          }
+        }
+      } catch (e) {
+        console.warn(
+          '[withMetaWearablesDAT] Android source copy failed (non-fatal):',
+          e.message,
+        );
+      }
+      return modConfig;
+    },
+  ]);
+
+  // Step 2: inject packages.add(...) into MainApplication.kt's getPackages().
+  return withMainApplication(next, (mainAppConfig) => {
+    let contents = mainAppConfig.modResults.contents;
+    const marker = 'MetaWearablesPackage()';
+    if (contents.includes(marker)) {
+      return mainAppConfig;
+    }
+
+    // Expo's MainApplication.kt template uses this canonical pattern.
+    // We match the val-line + the // Packages comment block to be
+    // resilient against minor Expo template drift.
+    const valLineRegex = /(val\s+packages\s*=\s*PackageList\(this\)\.packages)/;
+    if (valLineRegex.test(contents)) {
+      contents = contents.replace(
+        valLineRegex,
+        (match) =>
+          `${match}\n            // Auto-injected by withMetaWearablesDAT.js — Meta Wearables DAT native module.\n            packages.add(com.smartplaycaddy.wearables.MetaWearablesPackage())`,
+      );
+      mainAppConfig.modResults.contents = contents;
+      console.log('[withMetaWearablesDAT] injected MetaWearablesPackage into MainApplication.kt');
+    } else {
+      console.warn(
+        '[withMetaWearablesDAT] WARNING: could not locate PackageList(this).packages in MainApplication.kt; ' +
+        'package registration NOT injected. NativeModules.MetaWearablesFrame will be null. ' +
+        'This usually means Expo regenerated MainApplication.kt with a new template shape — ' +
+        'update the valLineRegex in plugins/withMetaWearablesDAT.js.',
+      );
+    }
+    return mainAppConfig;
+  });
+}
+
+// ─── 4. iOS Info.plist — Bluetooth + camera + DAT attestation ──────
+function withIOSInfoPlist(config, { appId, clientToken }) {
+  return withInfoPlist(config, (infoConfig) => {
+    const plist = infoConfig.modResults;
+
+    // Bluetooth usage description — required for any app that talks to
+    // a Bluetooth peripheral on iOS. Same string set the existing
+    // expo-location plugin uses for transparency tone.
+    if (!plist.NSBluetoothAlwaysUsageDescription) {
+      plist.NSBluetoothAlwaysUsageDescription =
+        'Smart Play Caddie connects to your Ray-Ban Meta glasses to receive camera frames + route caddie voice to the glasses speakers.';
+    }
+    if (!plist.NSBluetoothPeripheralUsageDescription) {
+      plist.NSBluetoothPeripheralUsageDescription = plist.NSBluetoothAlwaysUsageDescription;
+    }
+    // Camera usage — DAT uses the glasses camera, not the phone camera,
+    // but iOS still surfaces the prompt for clarity.
+    if (!plist.NSCameraUsageDescription) {
+      plist.NSCameraUsageDescription =
+        'Smart Play Caddie reads frames from your Ray-Ban Meta glasses to coach your swing and read greens.';
+    }
+
+    // DAT attestation. These keys are read by the iOS SDK at session
+    // init time — same role as the AndroidManifest meta-data entries.
+    plist['MetaWearablesAppId'] = appId;
+    plist['MetaWearablesClientToken'] = clientToken;
+
+    return infoConfig;
+  });
+}
+
+// ─── 5. iOS Podfile — add the Wearables pod via withDangerousMod ──
+// @expo/config-plugins does not expose a typed `withPodfile`; the
+// canonical pattern is a dangerous-mod that edits the Podfile text in
+// place. This is exactly how expo-build-properties' iOS branch
+// touches the Podfile when its `extraPods` option is in play.
+function withIOSPodfile(config) {
+  return withDangerousMod(config, [
+    'ios',
+    async (modConfig) => {
+      const podfilePath = path.join(modConfig.modRequest.platformProjectRoot, 'Podfile');
+      if (!fs.existsSync(podfilePath)) return modConfig;
+      let contents = fs.readFileSync(podfilePath, 'utf-8');
+      const marker = "pod 'Wearables'";
+      if (contents.includes(marker)) return modConfig;
+      const insertion = `
+  # Meta Wearables DAT v0.7 — Ray-Ban Meta glasses live frames + audio.
+  pod 'Wearables', :git => 'https://github.com/facebook/meta-wearables-dat-ios.git', :tag => '0.7.0'
+  pod 'WearablesCamera', :git => 'https://github.com/facebook/meta-wearables-dat-ios.git', :tag => '0.7.0'
+`;
+      if (contents.includes('use_react_native!')) {
+        contents = contents.replace('use_react_native!', insertion + '  use_react_native!');
+      } else {
+        contents += '\n' + insertion;
+      }
+      fs.writeFileSync(podfilePath, contents, 'utf-8');
+      return modConfig;
+    },
+  ]);
+}
+
+// ─── 6. Drop Swift + Obj-C source files into the iOS project ───────
+//
+// Expo prebuild regenerates the bare ios/ tree on every run. We use a
+// "dangerous mod" to copy the Swift + Obj-C module files from
+// ios-native/ into ios/SmartPlayCaddie/ at prebuild time. This is the
+// least-invasive seam — the canonical Swift sources live in
+// ios-native/ (version-tracked + reviewable) and the prebuild copies
+// them into place. After this lands, Xcode automatically picks up the
+// files via the "auto-add new files" project setting Expo configures.
+function withSwiftSourceCopy(config) {
+  return withDangerousMod(config, [
+    'ios',
+    async (modConfig) => {
+      const projectRoot = modConfig.modRequest.projectRoot;
+      const platformRoot = modConfig.modRequest.platformProjectRoot;
+      const sourceDir = path.join(projectRoot, 'ios-native');
+      const targetDir = path.join(platformRoot, 'SmartPlayCaddie', 'Wearables');
+      const files = ['MetaWearablesFrameModule.swift', 'MetaWearablesFrame.m'];
+      try {
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+        for (const f of files) {
+          const src = path.join(sourceDir, f);
+          const dst = path.join(targetDir, f);
+          if (fs.existsSync(src)) {
+            fs.copyFileSync(src, dst);
+          }
+        }
+      } catch (e) {
+        console.warn('[withMetaWearablesDAT] iOS source copy failed (non-fatal):', e.message);
+      }
+      return modConfig;
+    },
+  ]);
+}
+
 // ─── Plugin entry point ─────────────────────────────────────────────
 function withMetaWearablesDAT(config) {
   let next = config;
+  // Android
   next = withMavenRepo(next);
   next = withAppGradle(next, ENV_FALLBACK);
   next = withManifest(next);
+  next = withMainApplicationInjection(next);
+  // iOS
+  next = withIOSInfoPlist(next, ENV_FALLBACK);
+  next = withIOSPodfile(next);
+  next = withSwiftSourceCopy(next);
   return next;
 }
 

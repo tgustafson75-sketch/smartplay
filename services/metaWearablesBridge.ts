@@ -28,7 +28,7 @@
  * collapses to no-op without throwing.
  */
 
-import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
+import { NativeModules, NativeEventEmitter, Platform, AppState, type AppStateStatus } from 'react-native';
 import { submitVisionFrame, type VisionFrame } from './glassesVisionInput';
 import { devLog } from './devLog';
 
@@ -75,6 +75,12 @@ function subscribeOnce(): void {
   emitter.addListener('MetaWearableFrame', (payload: FramePayload) => {
     try {
       if (!payload?.uri) return;
+      lastFrameAt = Date.now();
+      // Mark streaming=true on the FIRST frame after a start. The
+      // startMetaWearablesStreaming resolver also sets this, but
+      // first-frame is the most honest "we're actually receiving data"
+      // signal so we publish from here too — cheap idempotent update.
+      if (!currentStatus.streaming) publishStatus({ streaming: true, connected: true });
       const frame: VisionFrame = {
         uri: payload.uri,
         captured_at: payload.captured_at ?? Date.now(),
@@ -91,6 +97,8 @@ function subscribeOnce(): void {
     }
   });
   subscribed = true;
+  ensureStaleProbe();
+  ensureAppStateListener();
   devLog('[mwdat-bridge] subscribed to MetaWearableFrame events');
 }
 
@@ -133,9 +141,20 @@ export async function startMetaWearablesStreaming(
     throw new Error('Meta Wearables DAT not available on this platform / build');
   }
   subscribeOnce();
-  const result = await NativeMod.startStreaming(quality, fps);
+  requestedQuality = quality;
+  requestedFps = fps;
+  const cfg = effectiveStreamConfig();
+  const result = await NativeMod.startStreaming(cfg.quality, cfg.fps);
+  publishStatus({
+    available: true,
+    connected: true,
+    streaming: true,
+    device: result.device || 'Ray-Ban Meta',
+    effectiveFps: cfg.fps,
+  });
+  lastFrameAt = Date.now();
   devLog(
-    `[mwdat-bridge] startStreaming ok device=${result.device} alreadyStreaming=${result.alreadyStreaming}`,
+    `[mwdat-bridge] startStreaming ok device=${result.device} alreadyStreaming=${result.alreadyStreaming} effectiveFps=${cfg.fps}`,
   );
   return result.device || 'Ray-Ban Meta';
 }
@@ -148,6 +167,8 @@ export async function stopMetaWearablesStreaming(): Promise<void> {
     devLog('[mwdat-bridge] streaming stopped');
   } catch (e) {
     devLog('[mwdat-bridge] stopStreaming threw (non-fatal): ' + String(e));
+  } finally {
+    publishStatus({ connected: false, streaming: false, effectiveFps: 0 });
   }
 }
 
@@ -156,3 +177,126 @@ export async function stopMetaWearablesStreaming(): Promise<void> {
 // device constraint doesn't surface as a runtime error when the
 // caddie is mid-utterance. For now the bridge runs hot — the cost of
 // the collision is a single rejected DAT call, not a crash.
+
+// ─── Status subscription ────────────────────────────────────────────
+//
+// Consumers (Settings toggle, SmartMotion / PuttingLab / SmartVision
+// status badges) subscribe via onGlassesStatusChange to react when
+// the stream connects or disconnects. The status changes whenever:
+//   - startMetaWearablesStreaming resolves successfully (→ streaming
+//     = true, connected = true)
+//   - stopMetaWearablesStreaming resolves (→ both false)
+//   - A frame hasn't arrived in STALE_MS (default 12s) AFTER we
+//     thought we were streaming. Reports streaming=false in that case
+//     so UI badges flip back without the consumer having to poll.
+//
+// Failure modes that should fire a status change but currently don't
+// (TODO follow-up): the OS dropping the Bluetooth connection without
+// throwing, the Meta AI app revoking permission mid-stream. Both
+// surface as a frame-timeout today; explicit DAT lifecycle hooks
+// would tighten that.
+
+type StatusListener = (status: GlassesStatus) => void;
+export interface GlassesStatus {
+  available: boolean;
+  connected: boolean;
+  streaming: boolean;
+  device: string;
+  /** Effective FPS the bridge is currently asking the SDK for. May be
+   *  lower than the user-requested FPS if thermal/battery throttle
+   *  kicked in. */
+  effectiveFps: number;
+}
+
+let currentStatus: GlassesStatus = {
+  available: NativeMod !== null,
+  connected: false,
+  streaming: false,
+  device: '',
+  effectiveFps: 0,
+};
+const statusListeners = new Set<StatusListener>();
+let lastFrameAt: number = 0;
+const STALE_MS = 12_000;
+let staleProbe: ReturnType<typeof setInterval> | null = null;
+
+function publishStatus(partial: Partial<GlassesStatus>): void {
+  currentStatus = { ...currentStatus, ...partial };
+  for (const cb of statusListeners) {
+    try { cb(currentStatus); } catch (e) { devLog('[mwdat-bridge] status listener threw: ' + String(e)); }
+  }
+}
+
+function ensureStaleProbe(): void {
+  if (staleProbe || !NativeMod) return;
+  staleProbe = setInterval(() => {
+    if (!currentStatus.streaming) return;
+    const age = Date.now() - lastFrameAt;
+    if (age > STALE_MS) {
+      devLog(`[mwdat-bridge] stream went stale (${age}ms since last frame) — flipping streaming=false`);
+      publishStatus({ streaming: false });
+    }
+  }, 4_000);
+}
+
+export function onGlassesStatusChange(cb: StatusListener): () => void {
+  statusListeners.add(cb);
+  // Fire once with the current state so subscribers don't have to call
+  // getMetaWearablesStatus separately for first render.
+  try { cb(currentStatus); } catch { /* swallow */ }
+  return () => { statusListeners.delete(cb); };
+}
+
+export function getGlassesStatusSync(): GlassesStatus {
+  return currentStatus;
+}
+
+// ─── Thermal / battery awareness ────────────────────────────────────
+//
+// Bluetooth Classic camera streaming is non-trivial battery + thermal
+// load on the phone (radio + JPEG encode + JS bridge IPC). When the
+// device reports a hot thermal state, we downshift FPS in real time
+// so we don't push the phone past throttling. RN doesn't ship a
+// stable thermal-state API across platforms today; the bridge listens
+// for AppState background transitions (cheap, available everywhere)
+// and downshifts on backgrounding as a conservative proxy. Explicit
+// thermal hooks land later when expo-thermal or a similar module is
+// in the dependency tree.
+
+type QualityPreset = 'high' | 'medium' | 'low';
+let requestedQuality: QualityPreset = 'medium';
+let requestedFps: number = 24;
+let appStateSub: ReturnType<typeof AppState.addEventListener> | null = null;
+
+function effectiveStreamConfig(): { quality: QualityPreset; fps: number } {
+  // Background → drop to low/7. Active → use user-requested.
+  if (AppState.currentState !== 'active') {
+    return { quality: 'low', fps: 7 };
+  }
+  return { quality: requestedQuality, fps: requestedFps };
+}
+
+async function applyStreamConfig(): Promise<void> {
+  if (!NativeMod || !currentStatus.streaming) return;
+  const cfg = effectiveStreamConfig();
+  if (cfg.fps === currentStatus.effectiveFps) return;
+  devLog(`[mwdat-bridge] reconfiguring stream → quality=${cfg.quality} fps=${cfg.fps}`);
+  try {
+    // DAT doesn't expose a hot-reconfigure on either platform yet —
+    // the cheapest reconfigure is stop+start. We swallow any error so
+    // a reconfigure miss doesn't crash an active stream.
+    await NativeMod.stopStreaming();
+    await NativeMod.startStreaming(cfg.quality, cfg.fps);
+    publishStatus({ effectiveFps: cfg.fps });
+  } catch (e) {
+    devLog('[mwdat-bridge] reconfigure failed (non-fatal): ' + String(e));
+  }
+}
+
+function ensureAppStateListener(): void {
+  if (appStateSub || !NativeMod) return;
+  appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
+    devLog(`[mwdat-bridge] app state → ${next}`);
+    if (currentStatus.streaming) void applyStreamConfig();
+  });
+}

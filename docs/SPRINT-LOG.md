@@ -1346,6 +1346,57 @@ Tim dropped the DAT attestation credentials from the Wearables Developer Center 
 
 **Day 5 extension tally: +1 commit (DAT native module + config plugin + JS bridge) + ts-check clean.**
 
+### Day 5 extension 2 — iOS DAT module + cross-platform polish + status surfacing
+
+Built on top of the Android DAT integration (extension 1) to add iOS, thermal awareness, a connection-status hook, and the surface badges Tim asked for as examples in SmartMotion / PuttingLab / SmartVision.
+
+**Shipped:**
+- **[ios-native/MetaWearablesFrameModule.swift](../ios-native/MetaWearablesFrameModule.swift)** (NEW) — Swift counterpart to the Kotlin module. Same public surface (`startStreaming` / `stopStreaming` / `getStatus`). Opens a DAT session via `AutoDeviceSelector(wearables:)`, subscribes to `videoFramePublisher`, JPEG-compresses frames to a single overwritable cache file, emits `MetaWearableFrame` events via `RCTEventEmitter`. `image(from:)` is reflection-tolerant for SDK shape drift across DAT preview revs (`.makeUIImage()` → `.cgImage` → `.uiImage` fallback). Threading via dedicated serial write queue so DAT's publisher isn't blocked.
+- **[ios-native/MetaWearablesFrame.m](../ios-native/MetaWearablesFrame.m)** (NEW) — Obj-C bridge header. `RCT_EXTERN_MODULE(MetaWearablesFrame, RCTEventEmitter)` with `RCT_EXTERN_METHOD` declarations matching the Swift `@objc(...)` signatures.
+- **[plugins/withMetaWearablesDAT.js](../plugins/withMetaWearablesDAT.js)** — extended with iOS branch:
+  - `withIOSInfoPlist`: adds `NSBluetoothAlwaysUsageDescription` + `NSBluetoothPeripheralUsageDescription` + `NSCameraUsageDescription` + `MetaWearablesAppId` + `MetaWearablesClientToken`.
+  - `withIOSPodfile` (via `withDangerousMod` since `withPodfile` isn't a stable export): inserts `pod 'Wearables'` + `pod 'WearablesCamera'` from `github.com/facebook/meta-wearables-dat-ios.git:0.7.0` above `use_react_native!`.
+  - `withSwiftSourceCopy`: at every prebuild, copies `MetaWearablesFrameModule.swift` + `MetaWearablesFrame.m` from `ios-native/` into `ios/SmartPlayCaddie/Wearables/` — tracked sources are canonical, prebuild materializes them.
+- **[services/metaWearablesBridge.ts](../services/metaWearablesBridge.ts)** — extended with:
+  - `onGlassesStatusChange(cb)` / `getGlassesStatusSync()` — subscription API. Publishes on start/stop/first-frame; flips `streaming=false` after 12s without a frame (stale probe).
+  - `GlassesStatus` interface — adds `effectiveFps` to the prior shape.
+  - Thermal-proxy throttle: listens to `AppState` transitions; when the app backgrounds, the bridge stops+restarts the DAT stream at quality=low + fps=7. Returns to user-requested config on `active`. Real thermal API will replace this when expo-thermal lands.
+- **[hooks/useGlassesStatus.ts](../hooks/useGlassesStatus.ts)** (NEW) — React hook that wraps the subscription. Returns `GlassesStatus & { multimodalReady: boolean }` — `multimodalReady` is sugar for "available && connected && streaming" so consumers can flip a chip on/off with one boolean.
+- **[components/GlassesStatusBadge.tsx](../components/GlassesStatusBadge.tsx)** (NEW) — tiny inline chip. Three states: MULTIMODAL ON (green), GLASSES PAIRED (amber), GLASSES OFF (neutral). Renders `null` when DAT isn't available so non-DAT builds stay clean. Optional `onPress` so the badge can deep-link into Settings.
+- **Surface mounts (the examples in Tim's brief):**
+  - [app/swinglab/smartmotion.tsx](../app/swinglab/smartmotion.tsx) — under the "Swing Analysis" subtitle.
+  - [components/swinglab/PuttingAnalysisCard.tsx](../components/swinglab/PuttingAnalysisCard.tsx) — alongside the PUTTING label in the card header.
+  - [app/smartvision.tsx](../app/smartvision.tsx) — under the hole/par chip in the top bar.
+- **[docs/META_WEARABLES_DAT_INTEGRATION.md](META_WEARABLES_DAT_INTEGRATION.md)** (NEW) — definitive cross-platform integration guide. Architecture diagram, public API, status badge usage, permissions flow, battery/thermal awareness, concurrency constraints, follow-ups.
+
+### Day 5 extension 3 — EAS Build hardening (after first build failed on GITHUB_TOKEN + MainApplication regen)
+
+The first EAS build with DAT enabled surfaced exactly the two gaps I'd flagged in extension 1's commit message. Both are now closed permanently inside the same config plugin:
+
+- **`GITHUB_TOKEN` resolution** ([plugins/withMetaWearablesDAT.js](../plugins/withMetaWearablesDAT.js) — `resolveGitHubToken`):
+  - Read order: `process.env.GITHUB_TOKEN` → `process.env.EXPO_GITHUB_TOKEN` → `config.extra.githubToken` from app.json → missing.
+  - Token is INJECTED as a literal into the gradle Maven `credentials` block at PREBUILD time (not read by gradle at native-build time). Avoids EAS Build env inheritance inconsistencies. Safe because `android/` is gitignored.
+  - When missing: prints a clearly-formatted multi-line warning at prebuild time (lands in EAS Build logs BEFORE gradle runs), then injects a sentinel password (`[missing GITHUB_TOKEN — see EAS env...]`) that 401s with a self-explanatory error during dependency resolution.
+  - Idempotent re-injection: if the maven block is already present from a prior prebuild, the password line is regenerated in place (so token rotations propagate cleanly).
+- **MainApplication.kt package registration** (`withMainApplicationInjection`):
+  - Uses `withMainApplication` mod (stable @expo/config-plugins export).
+  - Pattern-matches the Expo template's canonical `val packages = PackageList(this).packages` line and inserts `packages.add(com.smartplaycaddy.wearables.MetaWearablesPackage())` immediately after. Idempotent via a `marker` substring check.
+  - Also handles the source-file copy step: at every prebuild, `MetaWearablesFrameModule.kt` + `MetaWearablesPackage.kt` are copied from `android-native/` into `android/app/src/main/java/com/smartplaycaddy/wearables/`. So the canonical reviewable source lives in `android-native/` (tracked); prebuild materializes it.
+  - When the val-line pattern doesn't match (Expo template drift), prints a clear "could not locate" warning so the failure is loud + immediately actionable (one regex update).
+- **[docs/README_EAS_BUILD.md](README_EAS_BUILD.md)** (NEW) — step-by-step setup for the GitHub PAT + EAS env variable, plus a 5-item troubleshooting section keyed off the actual log lines a failure produces ("WARNING: GITHUB_TOKEN is not set", "HTTP 401 against maven.pkg.github.com", "Build succeeds but NativeModules.MetaWearablesFrame is null at runtime", etc).
+
+### What's NOT touched
+- No regression to existing SmartMotion / SmartVision / PuttingLab / lie analysis / drill flows / Meta Glasses voice bridge — all badge mounts are additive UI; the bridge's no-op fallback handles the no-native-module case.
+- No EAS env vars set from this seat (Tim's call — the only manual step is adding `GITHUB_TOKEN` in the EAS dashboard, no CLI).
+
+### Verification
+- Config plugin smoke-loaded via `node -e "require('./plugins/withMetaWearablesDAT.js')({extra:{}})"` → prints the documented "GITHUB_TOKEN not set" warning and exits 0, confirming the function shape is well-formed and the warning landing as designed.
+- `npx tsc --noEmit` → exit 0 across all changes (JS bridge + hook + badge + surface mounts).
+- Plugin entry point ordering: Android (Maven repo → AppGradle → Manifest → MainApplication injection) → iOS (Info.plist → Podfile → Swift source copy). Each step idempotent.
+
+**Day 5 final tally: 3 commits + 0 OTAs + ts-check clean. DAT integration end-to-end on Android (pending GITHUB_TOKEN env in EAS dashboard); iOS-ready pending Apple Developer enrollment.**
+
+
 
 
 

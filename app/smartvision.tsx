@@ -42,6 +42,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import GlassesStatusBadge from '../components/GlassesStatusBadge';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import Svg, { Line as SvgLine, Polygon as SvgPolygon, Text as SvgText, G as SvgG } from 'react-native-svg';
@@ -881,6 +882,11 @@ export default function SmartVisionScreen() {
             <Text style={styles.holeBadgePar}>
               {geometry ? `PAR ${geometry.par} · ${geometry.yardage}y` : '—'}
             </Text>
+            {/* 2026-05-23 — Glasses badge under the hole/par chip.
+                Surfaces when DAT is connected so the player sees that
+                SmartVision will get multimodal grounding from the
+                glasses POV. Renders nothing on non-DAT builds. */}
+            <GlassesStatusBadge />
           </View>
           <TouchableOpacity onPress={goNext} disabled={holeIndex >= (totalHoles || 18)} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="chevron-forward" size={22} color={holeIndex >= (totalHoles || 18) ? '#374151' : '#ffffff'} />
