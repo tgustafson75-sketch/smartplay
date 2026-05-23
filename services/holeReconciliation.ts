@@ -36,6 +36,10 @@ import { haversineYards } from '../utils/geoDistance';
 import { useRoundStore } from '../store/roundStore';
 import type { GpsFix } from './gpsManager';
 import { devLog } from './devLog';
+// 2026-05-22 — Course Data Orchestrator: read the sustained-heading
+// signal to break ties between parallel / dogleg holes (the hardest
+// case for proximity-only scoring).
+import { getSustainedHeading } from './courseDataOrchestrator';
 
 // ─── Tunables ────────────────────────────────────────────────────────────
 
@@ -58,6 +62,19 @@ const ACCURACY_WARN_THRESHOLD_M = 30;
  *  comment for golf rationale. */
 const GREEN_ACTIVE_RADIUS_YD = 60;
 const TEE_ACTIVE_RADIUS_YD = 40;
+
+/** 2026-05-22 — Heading-alignment tunables. When the player's sustained
+ *  movement heading aligns with a hole's tee→green axis (within
+ *  HEADING_ALIGN_TOL_DEG), that hole gets a proximity bonus equal to
+ *  HEADING_BONUS_YD subtracted from its score. Aimed at the doubly-tricky
+ *  parallel-hole / dogleg case where two holes' centroids are close in
+ *  yardage but the player is clearly moving ALONG one of them.
+ *
+ *  20° tolerance covers a mid-fairway position with normal walking
+ *  meander; 25y bonus is calibrated so it nudges a tied hole into the
+ *  lead but can't override a clear 30y proximity gap. */
+const HEADING_ALIGN_TOL_DEG = 20;
+const HEADING_BONUS_YD = 25;
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -149,6 +166,12 @@ export function reconcileCurrentHole(newFix: GpsFix, force = false): ReconcileRe
   }
 
   // ─── Score every hole on the course ────────────────────────────────
+  // 2026-05-22 — Sustained heading tie-breaker. When the player is
+  // moving in a sustained direction (e.g. walking down a fairway), the
+  // hole whose tee→green axis matches that direction gets a small
+  // proximity bonus. Breaks the parallel-hole / dogleg ambiguity where
+  // two holes are geometrically close.
+  const sustainedHeading = getSustainedHeading();
   const totalHoles = round.courseHoles.length > 0 ? round.courseHoles.length : 18;
   const scores: HoleScore[] = [];
   for (let h = 1; h <= totalHoles; h++) {
@@ -158,9 +181,18 @@ export function reconcileCurrentHole(newFix: GpsFix, force = false): ReconcileRe
     const distToGreen = haversineYards({ lat: newFix.lat, lng: newFix.lng }, geom.green);
     const inActiveZone =
       distToTee < TEE_ACTIVE_RADIUS_YD || distToGreen < GREEN_ACTIVE_RADIUS_YD;
+    let score = Math.min(distToTee, distToGreen);
+
+    // Apply heading-alignment bonus when both signals are available.
+    if (sustainedHeading != null && geom.bearing_deg != null) {
+      const delta = Math.abs(angleDeltaDeg(sustainedHeading, geom.bearing_deg));
+      if (delta <= HEADING_ALIGN_TOL_DEG) {
+        score = Math.max(0, score - HEADING_BONUS_YD);
+      }
+    }
     scores.push({
       hole: h,
-      score: Math.min(distToTee, distToGreen),
+      score,
       distToTee,
       distToGreen,
       inActiveZone,
@@ -322,4 +354,14 @@ function computeConfidence(
   // Weighted blend — proximity matters most, then gap, then accuracy.
   const blended = proximityScore * 0.5 + gapScore * 0.3 + accScore * 0.2;
   return Math.round(Math.max(0, Math.min(100, blended)));
+}
+
+/**
+ * Smallest signed angle between two bearings (in degrees). Returns a value
+ * in (-180, 180]. Caller typically wants Math.abs() to compare to a
+ * tolerance window.
+ */
+function angleDeltaDeg(a: number, b: number): number {
+  let d = ((a - b) % 360 + 540) % 360 - 180;
+  return d;
 }

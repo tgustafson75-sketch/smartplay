@@ -470,6 +470,13 @@ export const useRoundStore = create<RoundState>()(
         });
         console.log(`[path2:round] start course=${course} holes=${holes.length} courseId=${courseId ?? 'none'}`);
         console.log(`[audit:round-active] state=true roundId=${roundId} hole=1 course="${course}"`);
+        // 2026-05-22 — Course Data Orchestrator: clear sustained-fix buffer
+        // so a heading carried over from a prior round can't bias the
+        // first reconciliation on this round.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          require('../services/courseDataOrchestrator').clearSustainedBuffer?.();
+        } catch { /* non-fatal */ }
         // 2026-05-21 — Fix N-3 — the original Phase 413 JIT Health Connect
         // permission ask used to live here. It was the prime suspect for the
         // Z Fold "app closes on Start Round, every time, reopen shows round

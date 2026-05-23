@@ -183,6 +183,15 @@ function processFix(raw: GpsFix): boolean {
   for (const cb of subscribers) {
     try { cb(fix); } catch (e) { ownerSentinel('gps.subscriber.fix', e); }
   }
+  // 2026-05-22 — Course Data Orchestrator: feed every accepted fix into
+  // the sustained-fix buffer so reconciliation + heading-aware logic
+  // have a rolling window to read. Dynamic require avoids the orchestrator
+  // depending on gpsManager and vice-versa at module-load time.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const orch = require('./courseDataOrchestrator');
+    orch.pushSustainedFix?.(fix);
+  } catch { /* non-fatal */ }
   return true;
 }
 

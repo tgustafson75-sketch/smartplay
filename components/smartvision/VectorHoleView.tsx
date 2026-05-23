@@ -51,6 +51,17 @@ interface Props {
    */
   onTeeAnchor?: (latlng: LatLng) => void;
   onGreenAnchor?: (latlng: LatLng) => void;
+  /**
+   * 2026-05-22 — Course Data Orchestrator integration. Optional trust
+   * label like "High confidence — Mapbox tile + Polygons" rendered in
+   * the top-right corner. Honest-degradation discipline: when the data
+   * we're showing is approximate, tell the user so they can decide how
+   * much to trust the rendered hole.
+   */
+  confidenceLabel?: string | null;
+  /** Numeric overall confidence (0..100). Drives the badge color tier
+   *  even when no label is supplied. */
+  confidenceOverall?: number | null;
 }
 
 const METERS_PER_DEG_LAT = 111_111;
@@ -67,6 +78,7 @@ function metersBetween(a: LatLng, b: LatLng): number {
 export default function VectorHoleView({
   hole, par, distance, tee, green, currentPos, width, height,
   onTeeAnchor, onGreenAnchor,
+  confidenceLabel, confidenceOverall,
 }: Props) {
   // Pre-compute projection: rotate so tee→green axis points UP (negative
   // y in SVG coords); player dot inherits the same projection so the
@@ -380,8 +392,31 @@ export default function VectorHoleView({
         <Text style={styles.labelHole}>HOLE {hole}</Text>
         <Text style={styles.labelMeta}>Par {par} · {distance > 0 ? distance + ' yds' : Math.round(teeToGreenYards) + ' yds'}</Text>
       </View>
+      {/* 2026-05-22 — Course Data Orchestrator confidence badge. Renders in
+          top-right; color tier mirrors orchestrator.confidence_label tiers.
+          Defensive: silent when neither label nor numeric overall supplied. */}
+      {(confidenceLabel || confidenceOverall != null) && (
+        <View
+          style={[
+            styles.confBadge,
+            { borderColor: confidenceTierColor(confidenceOverall ?? null) },
+          ]}
+        >
+          <Text style={[styles.confBadgeText, { color: confidenceTierColor(confidenceOverall ?? null) }]}>
+            {confidenceLabel ?? `${confidenceOverall ?? 0}%`}
+          </Text>
+        </View>
+      )}
     </View>
   );
+}
+
+function confidenceTierColor(overall: number | null): string {
+  if (overall == null) return '#9ca3af';
+  if (overall >= 80) return '#10b981'; // emerald — high
+  if (overall >= 60) return '#a3e635'; // lime — good
+  if (overall >= 40) return '#fbbf24'; // amber — approximate
+  return '#f87171';                    // red — unverified
 }
 
 const styles = StyleSheet.create({
@@ -432,6 +467,25 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     marginTop: 1,
+  },
+  // 2026-05-22 — Course Data Orchestrator confidence badge. Top-right
+  // corner; color tier comes from confidenceTierColor() inline so the
+  // border stays in sync with the text without a duplicate enum.
+  confBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    maxWidth: 200,
+  },
+  confBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.6,
   },
   dragHandle: {
     position: 'absolute',
