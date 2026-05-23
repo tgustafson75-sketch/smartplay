@@ -184,6 +184,29 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
           // analysis. addPuttingAnalysis also flips analysis_status='ok'.
           useCageStore.getState().addPuttingAnalysis(sessionId, result);
           uploadLog('putting-analysis-attached', { session_id: sessionId, score: result.overallScore }, sessionId);
+          // 2026-05-23 (Fix #5) — Synthesize an overall-fault PrimaryIssue
+          // from the putting result and persist it alongside the granular
+          // putting card. Closes the gap where glasses POV uploads
+          // showed grip/stroke detail but no overall fault summary —
+          // PrimaryIssueCard now renders BOTH on the swing detail
+          // screen (granular + overall read). Synthesis is purely
+          // structural (no new vision call). DrillCard stays gated on
+          // drill_recommendation being non-null at the render site so
+          // no empty drill card appears for putts.
+          try {
+            const liveSession = useCageStore.getState().sessionHistory.find(s => s.id === sessionId);
+            const firstShotId = liveSession?.shots[0]?.id ?? null;
+            const thumb = liveSession?.shots[0]?.perShotAnalysis?.visual_reference_path ?? null;
+            const synthesized = putting.synthesizePrimaryIssueFromPutting(result, firstShotId, thumb);
+            useCageStore.getState().setSessionAnalysis(sessionId, synthesized, null);
+            uploadLog('putting-primary-issue-synthesized', {
+              session_id: sessionId,
+              name: synthesized.name,
+              severity: synthesized.severity,
+            }, sessionId);
+          } catch (e) {
+            console.log('[videoUpload] putting primary-issue synth failed (non-fatal):', e);
+          }
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           console.log('[videoUpload] putting analyze failed (non-fatal):', msg);

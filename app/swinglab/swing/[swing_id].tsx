@@ -781,17 +781,38 @@ export default function SwingDetail() {
             <Animated.View style={{ opacity: cardsFade }}>
               {/* 2026-05-22 — PuttingLab card. Renders when the session
                   was classified as putting (analyzer-router routed it
-                  through puttingAnalysisService). When the putting
-                  analysis lands the swing-specific cards (primary
-                  issue, drill, biomechanics) are hidden — those are
-                  full-swing constructs that don't apply. */}
-              {session.putting_analysis ? (
+                  through puttingAnalysisService). Granular grip /
+                  stroke / read detail. */}
+              {session.putting_analysis && (
                 <PuttingAnalysisCard analysis={session.putting_analysis} />
-              ) : (
-                <>
-                  <PrimaryIssueCard issue={session.primary_issue ?? null} totalShots={session.shots.length} />
-                  <DrillCard recommendation={session.drill_recommendation ?? null} />
-                </>
+              )}
+              {/* 2026-05-23 (Fix #5) — PrimaryIssueCard renders on BOTH
+                  putting AND full-swing sessions. For full swings it's
+                  the Phase K classifier output (placeholder while
+                  analysis is pending). For putting, it's the synthesized
+                  overall-fault read built from the putting result
+                  (services/puttingAnalysisService.synthesizePrimaryIssueFromPutting)
+                  — closes the gap where glasses POV uploads showed
+                  grip detail but no overall summary. We only suppress
+                  it on putting sessions when the synthesis hasn't
+                  landed yet, otherwise an empty "Analyzing..."
+                  placeholder would appear next to the populated
+                  putting card. */}
+              {(!session.putting_analysis || session.primary_issue) && (
+                <PrimaryIssueCard
+                  issue={session.primary_issue ?? null}
+                  totalShots={session.shots.length}
+                />
+              )}
+              {/* 2026-05-23 (Fix #5) — DrillCard gated on
+                  drill_recommendation being non-null for putting
+                  sessions so no empty drill placeholder appears
+                  alongside the putting + primary-issue cards.
+                  Full-swing sessions keep the existing placeholder
+                  rendering behavior (null → "Drill suggestions will
+                  appear..."). */}
+              {(!session.putting_analysis || session.drill_recommendation) && (
+                <DrillCard recommendation={session.drill_recommendation ?? null} />
               )}
 
               {/* 2026-05-23 — Coach Note card. Lives alongside the AI

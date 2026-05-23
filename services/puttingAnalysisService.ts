@@ -255,6 +255,94 @@ export async function speakPuttingAnalysis(spokenRead: string | null): Promise<P
   return result;
 }
 
+// ─── Public synthesizer ──────────────────────────────────────────────────
+
+/**
+ * 2026-05-23 (Fix #5) — Synthesize a lightweight PrimaryIssue from an
+ * existing PuttingAnalysis result. Closes the diagnosis gap: glasses
+ * POV uploads route to the putting analyzer for granular grip / stroke
+ * / read detail, but the swing detail screen's PrimaryIssueCard
+ * (overall fault read) never landed because no primary_issue was ever
+ * computed for putting sessions.
+ *
+ * This synthesizer uses ONLY the data we already have — no new vision
+ * call, no API round-trip. It maps the PuttingAnalysis's three quality
+ * signals (setup.quality, stroke.quality, readAccuracy.confidence) to a
+ * dominant weak area name + category, derives severity from
+ * overallScore, and lifts the recommendation's technicalCue +
+ * mentalCue verbatim into mechanical_breakdown + feel_cue.
+ *
+ * Persisted via setSessionAnalysis alongside the existing
+ * addPuttingAnalysis call, so BOTH cards render on the swing detail —
+ * granular PuttingAnalysisCard stays as-is, PrimaryIssueCard layers
+ * the overall read on top.
+ *
+ * Drill recommendation is intentionally NOT synthesized here — putting
+ * drills live in a separate small catalog and a generic drill mapping
+ * from putt issues isn't reliable enough to ship without curated content.
+ * The swing-detail render gates DrillCard on drill_recommendation being
+ * non-null so the placeholder card just doesn't appear for putts.
+ */
+export function synthesizePrimaryIssueFromPutting(
+  analysis: PuttingAnalysis,
+  detectedShotId: string | null,
+  thumbnailPath: string | null = null,
+): import('../store/cageStore').PrimaryIssue {
+  const score = analysis.overallScore ?? 50;
+  const severity: 'minor' | 'moderate' | 'significant' =
+    score >= 75 ? 'minor' : score >= 50 ? 'moderate' : 'significant';
+
+  const setupQ = analysis.setup.quality ?? 50;
+  const strokeQ = analysis.stroke.quality ?? 50;
+  const readConf = analysis.readAccuracy.confidence ?? 50;
+
+  // Pick the weakest of the three measured areas as the headline issue.
+  // Ties resolve toward stroke > setup > read (more actionable on the
+  // tee than a green-read coaching note). If everything is solid
+  // (>= 75 on the lowest), fall through to a generic "fundamentals" label.
+  let name: string;
+  let category: import('../store/cageStore').PrimaryIssue['category'];
+  let issueId: string;
+
+  const allHigh = strokeQ >= 75 && setupQ >= 75 && readConf >= 75;
+  if (allHigh) {
+    name = 'Putting fundamentals — solid';
+    category = 'other';
+    issueId = 'putting_fundamentals_solid';
+  } else if (strokeQ <= setupQ && strokeQ <= readConf) {
+    name = 'Stroke path / face control';
+    category = 'swing_path';
+    issueId = 'putting_stroke';
+  } else if (setupQ <= strokeQ && setupQ <= readConf) {
+    name = 'Setup alignment';
+    category = 'setup';
+    issueId = 'putting_setup';
+  } else {
+    name = 'Green read';
+    category = 'other';
+    issueId = 'putting_read';
+  }
+
+  // Confidence on the synthesized issue tracks severity inversely —
+  // significant problems usually surface with high signal in the
+  // putting analyzer; minor ones may be noise.
+  const confidence: 'high' | 'medium' | 'low' =
+    severity === 'significant' ? 'high' : severity === 'moderate' ? 'medium' : 'low';
+
+  return {
+    issue_id: issueId,
+    name,
+    category,
+    severity,
+    occurrence_count: 1,
+    visual_reference_path: thumbnailPath,
+    mechanical_breakdown: analysis.recommendation.technicalCue,
+    feel_cue: analysis.recommendation.mentalCue,
+    detected_in_shots: detectedShotId ? [detectedShotId] : [],
+    confidence,
+  };
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
 function newPuttId(): string {
