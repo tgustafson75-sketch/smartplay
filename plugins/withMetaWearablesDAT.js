@@ -223,25 +223,27 @@ function withManifest(config) {
 
 // ─── 3.5. MainApplication.kt — inject MetaWearablesPackage() ───────
 //
-// Expo prebuild regenerates android/app/src/main/java/.../MainApplication.kt
-// each time. Without an active injection, the React Native runtime
-// can't see our package and `NativeModules.MetaWearablesFrame`
-// resolves to null — the JS bridge falls through to its "no-op"
-// fallback path and frames never flow.
+// 2026-05-23 CRITICAL FIX: the previous regex `val\s+packages\s*=\s*PackageList\(this\).packages`
+// did NOT match the current Expo SDK 54 MainApplication template, which
+// uses an inline `.apply { ... }` block:
+//     PackageList(this).packages.apply {
+//       // Packages that cannot be autolinked yet can be added manually here, for example:
+//       // add(MyReactNativePackage())
+//     }
+// Result: injection silently failed → native module never registered →
+// NativeModules.MetaWearablesFrame === undefined. With the previous APK
+// build we ALSO had the package path wrong (com.smartplaycaddy.* —
+// missing the 'ie'), so even if injection had matched the regex, the
+// referenced class wouldn't have resolved. Both issues fixed now.
 //
-// We patch the Kotlin file's getPackages() body:
-//   - Find the line that initializes `packages` (val packages = PackageList(this).packages)
-//   - Inject `packages.add(com.smartplaycaddy.wearables.MetaWearablesPackage())`
-//     immediately after it.
-//
-// We ALSO copy the two Kotlin source files (MetaWearablesFrameModule.kt,
-// MetaWearablesPackage.kt) from android-native/ into the prebuilt
-// android source tree at the correct package path. That seals the
-// loop — Tim's tracked source in android-native/ is the canonical
-// reviewable copy; prebuild materializes it into the bare tree at
-// every build.
+// New regex matches BOTH templates (legacy `val packages` and modern
+// `.apply { ... }`), injecting inside the apply block via the canonical
+// `add(...)` call (not `packages.add(...)` which only works in the val
+// template).
 function withMainApplicationInjection(config) {
-  // Step 1: copy the Kotlin sources into the prebuilt tree.
+  // Step 1: copy the Kotlin sources into the prebuilt tree at the
+  // CORRECTED package path (com.smartplaycaddie.wearables — matches
+  // the app's `com.smartplaycaddie.app` namespace).
   const next = withDangerousMod(config, [
     'android',
     async (modConfig) => {
@@ -249,63 +251,58 @@ function withMainApplicationInjection(config) {
       const platformRoot = modConfig.modRequest.platformProjectRoot;
       const pkgPath = path.join(
         platformRoot,
-        'app',
-        'src',
-        'main',
-        'java',
-        'com',
-        'smartplaycaddy',
-        'wearables',
+        'app', 'src', 'main', 'java', 'com', 'smartplaycaddie', 'wearables',
       );
       const sourceDir = path.join(projectRoot, 'android-native');
       const files = ['MetaWearablesFrameModule.kt', 'MetaWearablesPackage.kt'];
       try {
-        if (!fs.existsSync(pkgPath)) {
-          fs.mkdirSync(pkgPath, { recursive: true });
-        }
+        if (!fs.existsSync(pkgPath)) fs.mkdirSync(pkgPath, { recursive: true });
         for (const f of files) {
           const src = path.join(sourceDir, f);
           const dst = path.join(pkgPath, f);
-          if (fs.existsSync(src)) {
-            fs.copyFileSync(src, dst);
-          }
+          if (fs.existsSync(src)) fs.copyFileSync(src, dst);
         }
       } catch (e) {
-        console.warn(
-          '[withMetaWearablesDAT] Android source copy failed (non-fatal):',
-          e.message,
-        );
+        console.warn('[withMetaWearablesDAT] Android source copy failed (non-fatal):', e.message);
       }
       return modConfig;
     },
   ]);
 
-  // Step 2: inject packages.add(...) into MainApplication.kt's getPackages().
+  // Step 2: inject the package registration. Supports two Expo
+  // MainApplication template variants. CORRECTED package path.
   return withMainApplication(next, (mainAppConfig) => {
     let contents = mainAppConfig.modResults.contents;
     const marker = 'MetaWearablesPackage()';
-    if (contents.includes(marker)) {
-      return mainAppConfig;
-    }
+    if (contents.includes(marker)) return mainAppConfig;
 
-    // Expo's MainApplication.kt template uses this canonical pattern.
-    // We match the val-line + the // Packages comment block to be
-    // resilient against minor Expo template drift.
+    // Modern Expo template (SDK 54+):
+    //   PackageList(this).packages.apply { ... }
+    const applyRegex = /(PackageList\(this\)\.packages\.apply\s*\{)/;
+    // Legacy template:
+    //   val packages = PackageList(this).packages
     const valLineRegex = /(val\s+packages\s*=\s*PackageList\(this\)\.packages)/;
-    if (valLineRegex.test(contents)) {
+
+    if (applyRegex.test(contents)) {
+      contents = contents.replace(
+        applyRegex,
+        (match) =>
+          `${match}\n              // Auto-injected by withMetaWearablesDAT.js — Meta Wearables DAT native module.\n              add(com.smartplaycaddie.wearables.MetaWearablesPackage())`,
+      );
+      mainAppConfig.modResults.contents = contents;
+      console.log('[withMetaWearablesDAT] injected MetaWearablesPackage into MainApplication.kt (apply-block template)');
+    } else if (valLineRegex.test(contents)) {
       contents = contents.replace(
         valLineRegex,
         (match) =>
-          `${match}\n            // Auto-injected by withMetaWearablesDAT.js — Meta Wearables DAT native module.\n            packages.add(com.smartplaycaddy.wearables.MetaWearablesPackage())`,
+          `${match}\n            // Auto-injected by withMetaWearablesDAT.js — Meta Wearables DAT native module.\n            packages.add(com.smartplaycaddie.wearables.MetaWearablesPackage())`,
       );
       mainAppConfig.modResults.contents = contents;
-      console.log('[withMetaWearablesDAT] injected MetaWearablesPackage into MainApplication.kt');
+      console.log('[withMetaWearablesDAT] injected MetaWearablesPackage into MainApplication.kt (val template)');
     } else {
       console.warn(
-        '[withMetaWearablesDAT] WARNING: could not locate PackageList(this).packages in MainApplication.kt; ' +
-        'package registration NOT injected. NativeModules.MetaWearablesFrame will be null. ' +
-        'This usually means Expo regenerated MainApplication.kt with a new template shape — ' +
-        'update the valLineRegex in plugins/withMetaWearablesDAT.js.',
+        '[withMetaWearablesDAT] WARNING: MainApplication.kt template did not match either known shape. ' +
+        'NativeModules.MetaWearablesFrame will be null at runtime. Update plugins/withMetaWearablesDAT.js.',
       );
     }
     return mainAppConfig;

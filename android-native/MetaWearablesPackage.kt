@@ -26,16 +26,38 @@
  * in the next iteration once Tim greenlights the first EAS Build.
  */
 
-package com.smartplaycaddy.wearables
+package com.smartplaycaddie.wearables
 
+import android.util.Log
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 
+/**
+ * 2026-05-23 — Defensive ReactPackage. If MetaWearablesFrameModule's
+ * constructor throws (e.g. Wearables SDK class-load failure due to a
+ * missing transitive dep, or a static initializer NPE), this catches
+ * the throw + returns an empty module list. MainApplication.onCreate
+ * keeps running, the rest of React Native boots cleanly, and only the
+ * MetaWearablesFrame bridge is silently absent — JS side already
+ * collapses to no-op when NativeModules.MetaWearablesFrame is null.
+ *
+ * Crash hypothesis (sprint log 2026-05-23): previous APK build's app
+ * launch failed because of either the MainApplication regex mismatch
+ * (no inject) OR a Wearables SDK init throw during package
+ * instantiation. The new MainApplication regex is fixed; this catch
+ * is belt-and-suspenders for the second hypothesis.
+ */
 class MetaWearablesPackage : ReactPackage {
-    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
-        listOf(MetaWearablesFrameModule(reactContext))
+    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
+        return try {
+            listOf(MetaWearablesFrameModule(reactContext))
+        } catch (t: Throwable) {
+            Log.e("MetaWearablesPackage", "createNativeModules failed — bridge will be null", t)
+            emptyList()
+        }
+    }
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
         emptyList()

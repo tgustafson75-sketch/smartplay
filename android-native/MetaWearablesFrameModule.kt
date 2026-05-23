@@ -38,7 +38,7 @@
  *   services/metaWearablesBridge.ts.
  */
 
-package com.smartplaycaddy.wearables
+package com.smartplaycaddie.wearables
 
 import android.content.Context
 import android.graphics.Bitmap

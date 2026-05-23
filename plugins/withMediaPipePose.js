@@ -102,7 +102,10 @@ function withAndroidCameraPermission(config) {
 }
 
 function withAndroidSourceCopyAndPackageReg(config) {
-  // (a) copy Kotlin sources into prebuilt tree
+  // (a) copy Kotlin sources into prebuilt tree at the CORRECTED
+  // package path (com.smartplaycaddie.mediapipe — matches the app's
+  // `com.smartplaycaddie.app` namespace; previous typo was
+  // `smartplaycaddy` missing the `ie`).
   const withSourceCopy = withDangerousMod(config, [
     'android',
     async (modConfig) => {
@@ -110,7 +113,7 @@ function withAndroidSourceCopyAndPackageReg(config) {
       const platformRoot = modConfig.modRequest.platformProjectRoot;
       const pkgPath = path.join(
         platformRoot,
-        'app', 'src', 'main', 'java', 'com', 'smartplaycaddy', 'mediapipe',
+        'app', 'src', 'main', 'java', 'com', 'smartplaycaddie', 'mediapipe',
       );
       const sourceDir = path.join(projectRoot, 'android-native');
       const files = ['MediaPipePoseModule.kt', 'MediaPipePosePackage.kt'];
@@ -169,23 +172,42 @@ function withAndroidSourceCopyAndPackageReg(config) {
   ]);
 
   // (c) inject packages.add(MediaPipePosePackage()) into MainApplication.kt
+  //
+  // 2026-05-23 CRITICAL FIX: same root cause as withMetaWearablesDAT —
+  // the old regex matched a `val packages = ...` template that no
+  // longer exists in Expo SDK 54+. The current template uses an inline
+  // `PackageList(this).packages.apply { ... }` block. New code matches
+  // both, with the apply-block taking precedence. Also corrected the
+  // package class reference (com.smartplaycaddie.* — was the typo'd
+  // `smartplaycaddy.*`).
   return withMainApplication(withModelAsset, (mainAppConfig) => {
     let contents = mainAppConfig.modResults.contents;
     const marker = 'MediaPipePosePackage()';
     if (contents.includes(marker)) return mainAppConfig;
+
+    const applyRegex = /(PackageList\(this\)\.packages\.apply\s*\{)/;
     const valLineRegex = /(val\s+packages\s*=\s*PackageList\(this\)\.packages)/;
-    if (valLineRegex.test(contents)) {
+
+    if (applyRegex.test(contents)) {
+      contents = contents.replace(
+        applyRegex,
+        (match) =>
+          `${match}\n              // Auto-injected by withMediaPipePose.js — on-device pose detection.\n              add(com.smartplaycaddie.mediapipe.MediaPipePosePackage())`,
+      );
+      mainAppConfig.modResults.contents = contents;
+      console.log('[withMediaPipePose] injected MediaPipePosePackage into MainApplication.kt (apply-block template)');
+    } else if (valLineRegex.test(contents)) {
       contents = contents.replace(
         valLineRegex,
         (match) =>
-          `${match}\n            // Auto-injected by withMediaPipePose.js — on-device pose detection.\n            packages.add(com.smartplaycaddy.mediapipe.MediaPipePosePackage())`,
+          `${match}\n            // Auto-injected by withMediaPipePose.js — on-device pose detection.\n            packages.add(com.smartplaycaddie.mediapipe.MediaPipePosePackage())`,
       );
       mainAppConfig.modResults.contents = contents;
-      console.log('[withMediaPipePose] injected MediaPipePosePackage into MainApplication.kt');
+      console.log('[withMediaPipePose] injected MediaPipePosePackage into MainApplication.kt (val template)');
     } else {
       console.warn(
-        '[withMediaPipePose] WARNING: could not locate PackageList(this).packages in MainApplication.kt; ' +
-        'package registration NOT injected. NativeModules.MediaPipePose will be null.',
+        '[withMediaPipePose] WARNING: MainApplication.kt template did not match either known shape. ' +
+        'NativeModules.MediaPipePose will be null.',
       );
     }
     return mainAppConfig;

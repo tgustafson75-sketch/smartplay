@@ -31,7 +31,7 @@
  * raising to the caller.
  */
 
-package com.smartplaycaddy.mediapipe
+package com.smartplaycaddie.mediapipe
 
 import android.content.Context
 import android.graphics.Bitmap
