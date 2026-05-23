@@ -22,6 +22,8 @@
 import { useRoundStore } from '../store/roundStore';
 import { useCageStore } from '../store/cageStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { useFamilyStore } from '../store/familyStore';
+import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { getActiveCaddie } from './caddieResolver';
 import { track } from './analytics';
 
@@ -185,8 +187,22 @@ export function commitCapture(
 
   // Phase 110-followup — write all kinds to the swing library so they
   // surface in /swinglab/library with a tag for filtering.
+  // 2026-05-23 (Fix #7) — Attribution: voice "record this" while a
+  // family member is active in familyStore should land under that
+  // member with perspective='watching_someone'. Previously this path
+  // wrote with no swinger field at all, so library entries from voice
+  // captures had no attribution.
   const tag: 'cage' | 'course' = c.kind === 'swing' ? 'cage' : 'course';
   try {
+    const famState = useFamilyStore.getState();
+    const activeMember = famState.active_member_id
+      ? famState.members.find(m => m.id === famState.active_member_id) ?? null
+      : null;
+    const swinger = activeMember?.firstName
+      ?? usePlayerProfileStore.getState().firstName
+      ?? null;
+    const perspective: 'pov_self' | 'watching_someone' =
+      activeMember ? 'watching_someone' : 'pov_self';
     useCageStore.getState().ingestUploadedSwing({
       source: 'uploaded_video',
       clipUri: uri,
@@ -196,6 +212,8 @@ export function commitCapture(
         taken_at: c.startedAt,
         notes: c.raw_utterance ?? null,
         tag,
+        swinger,
+        perspective,
       },
     });
   } catch (e) { console.warn('[mediaCapture] cage ingest failed:', e); }

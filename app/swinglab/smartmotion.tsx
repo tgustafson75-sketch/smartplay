@@ -44,6 +44,7 @@ import { synthesizeSwingMetrics, type SwingMetric } from '../../services/swingMe
 import { extractPoseFramesFromVideo, type PoseFrame, type Keypoint } from '../../services/poseAnalysisApi';
 import { evaluateSwingValidity, type SwingValidity } from '../../services/swingValidity';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { useFamilyStore } from '../../store/familyStore';
 import { useSettingsStore } from '../../store/settingsStore';
 // 2026-05-21 — Fix A: persistent caddie tap-to-talk badge so the user
 // can reach the caddie from SmartMotion the same way they can from the
@@ -123,10 +124,27 @@ export default function SmartMotion() {
   // effects below patch in the primary_issue + biomechanics as they
   // resolve. Never blocks the analysis path — failure here is logged
   // and SmartMotion keeps rendering normally.
+  //
+  // 2026-05-23 (Fix #7) — Attribution: when a family member is active
+  // in familyStore (coach is recording their student / parent recording
+  // their kid), persist the swing under THAT member's name with
+  // perspective='watching_someone' so getAnalyzerKind routes it to
+  // Phase K full-body swing analysis (not the account holder's POV
+  // putting branch). Closes the gap the per-upload picker had: the
+  // SmartMotion record path previously hard-coded the account holder
+  // regardless of who was being filmed. familyStore is read at ingest
+  // time so changing the active member between recordings is honored.
   useEffect(() => {
     if (!clipUri) return;
     if (ingestedForClipUriRef.current === clipUri) return;
     try {
+      const famState = useFamilyStore.getState();
+      const activeMember = famState.active_member_id
+        ? famState.members.find(m => m.id === famState.active_member_id) ?? null
+        : null;
+      const swinger = activeMember?.firstName ?? profile.firstName ?? null;
+      const perspective: 'pov_self' | 'watching_someone' =
+        activeMember ? 'watching_someone' : 'pov_self';
       const sessionId = useCageStore.getState().ingestUploadedSwing({
         clipUri,
         club: 'unknown',
@@ -137,13 +155,15 @@ export default function SmartMotion() {
           has_audio: false,
           source_device: 'phone',
           tag: null,
-          swinger: profile.firstName ?? null,
+          swinger,
+          perspective,
         },
         source: 'live_cage',
       });
       ingestedSessionIdRef.current = sessionId;
       ingestedForClipUriRef.current = clipUri;
-      console.log('[smartmotion] ingested swing into Library', sessionId);
+      console.log('[smartmotion] ingested swing into Library', sessionId,
+        '· swinger:', swinger, '· perspective:', perspective);
     } catch (e) {
       console.log('[smartmotion] Library ingest failed (non-fatal):', e);
     }

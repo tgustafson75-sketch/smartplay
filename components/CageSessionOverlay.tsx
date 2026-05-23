@@ -23,6 +23,8 @@ import {
 } from '../services/cageStorage';
 import type { CageSession } from '../types/cage';
 import { useCageStore } from '../store/cageStore';
+import { useFamilyStore } from '../store/familyStore';
+import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { runPhaseKOnSession } from '../services/videoUpload';
 import { cageLog } from '../services/cageTelemetry';
 import { setActiveSurface } from '../services/activeSurfaceRegistry';
@@ -352,14 +354,31 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
         // at the master so the library entry still exists).
         const storageSession = await getSession(session.id);
         const clipMetadata = storageSession?.clips ?? [];
+        // 2026-05-23 (Fix #7) — Attribution: when a family member is
+        // active in familyStore at session-end (coach hitting in the
+        // cage with the student observing, or vice versa), attribute
+        // this multi-swing cage session to THAT member with
+        // perspective='watching_someone' so Phase K runs the full
+        // swing analyzer. Was previously hardcoded swinger:'Me' which
+        // collapsed everyone into a single account-holder bucket.
+        const famState = useFamilyStore.getState();
+        const activeMember = famState.active_member_id
+          ? famState.members.find(m => m.id === famState.active_member_id) ?? null
+          : null;
+        const swinger = activeMember?.firstName
+          ?? usePlayerProfileStore.getState().firstName
+          ?? 'Me';
+        const perspective: 'pov_self' | 'watching_someone' =
+          activeMember ? 'watching_someone' : 'pov_self';
         const upload = {
           uploaded_at: Date.now(),
           taken_at: sessionStartRef.current,
           has_audio: true,
           duration_sec: durationSeconds,
-          swinger: 'Me' as const,
+          swinger,
           tag: 'cage' as const,
           notes: `${swingCount} swing${swingCount !== 1 ? 's' : ''} detected`,
+          perspective,
         };
         if (clipMetadata.length > 0) {
           libraryEntryId = useCageStore.getState().ingestLiveCageSession({

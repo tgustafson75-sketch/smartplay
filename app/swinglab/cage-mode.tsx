@@ -96,6 +96,7 @@ import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDe
 import { useCageCalibrationStore } from '../../store/cageCalibrationStore';
 import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { useFamilyStore } from '../../store/familyStore';
 // 2026-05-21 — Fix A: shared CaddieMicBadge for consistent
 // tap-to-talk affordance (ring + halo + mic-icon overlay).
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
@@ -430,8 +431,24 @@ export default function CageModeScreen() {
       // reads CAGE not UPLOAD; primary_issue carries the coach's
       // verbal response as the mechanical_breakdown line. Watch +
       // acoustic notes ride along in the upload.notes field.
+      //
+      // 2026-05-23 (Fix #7) — Attribution: same family-aware override
+      // as the SmartMotion path. When a family member is active in
+      // familyStore (a coach is hitting in the cage with the student
+      // recording, or a parent is recording their kid), persist the
+      // swing under THAT member's name with perspective='watching_someone'
+      // so getAnalyzerKind routes it to full-body swing analysis (Phase
+      // K) instead of the account holder's POV branch.
       try {
-        const firstName = usePlayerProfileStore.getState().firstName ?? null;
+        const famState = useFamilyStore.getState();
+        const activeMember = famState.active_member_id
+          ? famState.members.find(m => m.id === famState.active_member_id) ?? null
+          : null;
+        const firstName = activeMember?.firstName
+          ?? usePlayerProfileStore.getState().firstName
+          ?? null;
+        const perspective: 'pov_self' | 'watching_someone' =
+          activeMember ? 'watching_someone' : 'pov_self';
         const club = matched?.club ?? 'unknown';
         const noteParts = [...notes];
         if (matched) {
@@ -449,6 +466,7 @@ export default function CageModeScreen() {
             source_device: 'phone',
             tag: null,
             swinger: firstName,
+            perspective,
           },
           source: 'live_cage',
         });
