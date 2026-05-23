@@ -33,12 +33,20 @@ export interface ShotResultRowProps {
   onLogDistance: (result: ShotDistanceResult) => void;
   onLogDirection: (result: ShotDirectionResult) => void;
   onMarkShot: () => void;
+  /**
+   * 2026-05-22 — Refresh GPS pill. Optional; when supplied, renders a
+   * "📍 GPS" pill on row 2 next to Mark. Calls the shared
+   * services/refreshGpsAction handler (which bumps GPS active, runs
+   * forceHoleReconciliation, and toasts the result).
+   */
+  onRefreshGps?: () => void;
 }
 
 export function ShotResultRow({
   onLogDistance,
   onLogDirection,
   onMarkShot,
+  onRefreshGps,
 }: ShotResultRowProps) {
   const { colors } = useTheme();
   const GOLD = '#F0C030';
@@ -61,6 +69,9 @@ export function ShotResultRow({
         <Pill label="↑ Straight" color={colors.accent} onPress={() => onLogDirection('straight')} />
         <Pill label="Right →"    color={colors.error}  onPress={() => onLogDirection('right')} />
         <Pill label="⊕ Mark"     color={GOLD}          onPress={onMarkShot} />
+        {onRefreshGps && (
+          <Pill label="📍 GPS"    color={BLUE}          onPress={onRefreshGps} />
+        )}
       </View>
     </View>
   );

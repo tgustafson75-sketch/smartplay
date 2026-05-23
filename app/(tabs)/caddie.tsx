@@ -380,6 +380,41 @@ export default function CaddieTab() {
     const id = setInterval(() => setMarkTick(t => t + 1), 4000);
     return () => clearInterval(id);
   }, [isRoundActive]);
+
+  // 2026-05-22 — Auto-reconcile on GPS accuracy improvement.
+  // When the player goes from a weak fix (>30m, the threshold the
+  // reconciliation service refuses to act on) to a strong fix (<15m,
+  // tight enough we're confident the position is real), automatically
+  // run a non-force reconcile. The 55y non-force margin keeps this
+  // conservative — it only acts on a CLEAR hole correction, not a
+  // borderline parallel-hole guess. Quiet on no-op (just devLog);
+  // toasts only on apparent action so we don't spam the user mid-round.
+  useEffect(() => {
+    if (!isRoundActive) return;
+    let prevAccuracy: number | null = null;
+    let unsub: (() => void) | null = null;
+    void (async () => {
+      const gps = await import('../../services/gpsManager');
+      unsub = gps.subscribe((fix) => {
+        const cur = fix.accuracy_m;
+        if (cur == null) { prevAccuracy = null; return; }
+        if (prevAccuracy != null && prevAccuracy > 30 && cur < 15) {
+          console.log(`[reconcile] accuracy improved ${Math.round(prevAccuracy)}m → ${Math.round(cur)}m, auto-reconciling`);
+          const result = useRoundStore.getState().reconcileHole();
+          if (result.applied) {
+            void (async () => {
+              const toastMod = await import('../../store/toastStore');
+              toastMod.useToastStore.getState().show(
+                `Snapped to hole ${result.hole_number} · ${result.confidence}% confidence`,
+              );
+            })();
+          }
+        }
+        prevAccuracy = cur;
+      });
+    })();
+    return () => { if (unsub) unsub(); };
+  }, [isRoundActive]);
   // Phase 107 / B1 — also bump markTick on every smartFinderService fix
   // change (live GPS push). The 4s poll above stays as a safety net but
   // this gives sub-second yardage refresh when gps is in active mode.

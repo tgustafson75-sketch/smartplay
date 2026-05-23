@@ -46,6 +46,7 @@ import {
   type GreenYardages,
 } from '../../services/smartFinderService';
 import { forceMarkPosition } from '../../services/positionMarkBus';
+import { refreshGpsAndReconcile } from '../../services/refreshGpsAction';
 
 import { BrandHeader } from './cockpit/BrandHeader';
 import { StepperPair } from './cockpit/StepperPair';
@@ -243,6 +244,13 @@ export default function CockpitCaddieScreen({
     void forceMarkPosition().catch((e) => console.log('[cockpit] mark failed', e));
   };
 
+  // 2026-05-22 — Refresh GPS / "Where am I?" — shared handler does the
+  // haptic + active-bump + reconcile + toast. Cockpit and SmartFinder
+  // both wire this same call so behavior + copy stay consistent.
+  const handleRefreshGps = () => {
+    void refreshGpsAndReconcile().catch((e) => console.log('[cockpit] refresh gps failed', e));
+  };
+
   // GPS accuracy hint for the SmartFinder card's status dot.
   // Pulled from the most-recent fmb refresh; not perfect but cheap.
   const gpsAccuracy: 'good' | 'weak' | 'off' =
@@ -354,6 +362,7 @@ export default function CockpitCaddieScreen({
           onLogDistance={handleLogDistance}
           onLogDirection={handleLogDirection}
           onMarkShot={handleMarkShot}
+          onRefreshGps={handleRefreshGps}
         />
 
         {/* Caddie advice — the most recent caddie reply. Persistent

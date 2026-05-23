@@ -33,6 +33,7 @@ import {
   type GPSQualityReading,
 } from '../services/smartFinderService';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
+import { refreshGpsAndReconcile } from '../services/refreshGpsAction';
 import { haversineYards, projectToAxis } from '../utils/geoDistance';
 import { computeDistance, buildLock } from '../services/rangefinder';
 import GPSQuality from '../components/smartfinder/GPSQuality';
@@ -245,6 +246,21 @@ export default function SmartFinder() {
             <Text style={[styles.holeBtnText, nextHole == null && styles.holeBtnTextDisabled]}>Next →</Text>
           </TouchableOpacity>
         </View>
+
+        {/* 2026-05-22 — Refresh GPS / "Where am I?" surface. Shared
+            handler does the haptic + active-bump + force-reconcile +
+            toast. Same call site as Cockpit's ShotResultRow pill so
+            behavior + toast copy stay consistent across screens. */}
+        {isRoundActive && (
+          <TouchableOpacity
+            style={styles.refreshGpsBtn}
+            onPress={() => { void refreshGpsAndReconcile(); }}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh GPS — reconcile current hole"
+          >
+            <Text style={styles.refreshGpsBtnText}>📍  Refresh GPS / Where am I?</Text>
+          </TouchableOpacity>
+        )}
 
         <HolePickerModal
           visible={holePickerOpen}
@@ -1332,6 +1348,25 @@ const styles = StyleSheet.create({
   holeBtnText: { color: '#00C896', fontSize: 13, fontWeight: '700' },
   holeBtnTextDisabled: { color: '#374151' },
   holeNavLabel: { color: '#ffffff', fontSize: 14, fontWeight: '800', letterSpacing: 1.2 },
+  // 2026-05-22 — Refresh GPS button. Blue accent to differentiate from
+  // the green hole-nav pills above; full-width, generous touch target.
+  refreshGpsBtn: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#5DADE2',
+    backgroundColor: 'rgba(93,173,226,0.10)',
+    alignItems: 'center',
+  },
+  refreshGpsBtnText: {
+    color: '#5DADE2',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
 
   pickerScrim: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',

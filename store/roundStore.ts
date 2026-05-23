@@ -8,6 +8,11 @@ import type { RoundMode } from '../types/patterns';
 import type { HolePlan } from '../types/plan';
 import type { ShotOutcome } from '../types/shot';
 import type { RulesDecision } from '../types/penalty';
+// 2026-05-22 — Static import. holeReconciliation imports useRoundStore
+// (back-edge) but only USES it at call time inside reconcileCurrentHole,
+// not at module-eval, so Metro's live-binding handles the cycle safely.
+// Switched from require() per the no-anti-pattern refinement pass.
+import { forceHoleReconciliation } from '../services/holeReconciliation';
 
 // ─── TYPES ────────────────────────────────
 
@@ -1141,18 +1146,13 @@ export const useRoundStore = create<RoundState>()(
         } catch {}
       },
 
-      // 2026-05-22 — Hole reconciliation action. Delegates to the
-      // dedicated service so the UI's Refresh GPS button has a clean
-      // import surface (just `useRoundStore.getState().reconcileHole()`).
-      // The service handles all the safety gates (accuracy threshold,
-      // backward-jump prevention, current-hole bias, force-mode margin)
-      // and may or may not actually call setCurrentHole internally.
-      // Returns a ReconcileResult the UI can use to show a toast.
-      reconcileHole: () => {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const mod = require('../services/holeReconciliation') as typeof import('../services/holeReconciliation');
-        return mod.forceHoleReconciliation();
-      },
+      // 2026-05-22 — Hole reconciliation action. Single-line delegate so
+      // the UI's Refresh GPS button has a clean import surface:
+      //   `useRoundStore.getState().reconcileHole()` → ReconcileResult
+      // All safety gates (accuracy, backward-jump, current-hole bias,
+      // force-mode margin, sustained-heading tie-breaker) live in the
+      // service. Returns a result the UI can render as toast / banner.
+      reconcileHole: () => forceHoleReconciliation(),
 
       setCurrentYardage: (yards) => set({ currentYardage: yards }),
       setClub: (club) => set({ club }),
