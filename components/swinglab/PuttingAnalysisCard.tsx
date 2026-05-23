@@ -50,6 +50,16 @@ export default function PuttingAnalysisCard({ analysis }: Props) {
         </Text>
       )}
 
+      {/* 2026-05-23 — Partial capture hint. Surfaces when the analysis
+          ran with thin inputs (no usable frames + no spoken read).
+          Tells the player the read is approximate so they don't
+          treat low-confidence numbers as gospel. */}
+      {analysis.partialCapture && (
+        <Text style={[styles.subtitle, { color: '#fbbf24', fontStyle: 'italic' }]}>
+          Approximate read — limited capture. Coaching is conservative.
+        </Text>
+      )}
+
       {/* Green slope chip */}
       <View style={styles.slopeRow}>
         <SlopeChip

@@ -88,6 +88,13 @@ export default function SwingDetail() {
   const [rightCompareShotId, setRightCompareShotId] = useState<string | null>(null);
   // 2026-05-22 — Compare-to-Reference picker sheet open/close.
   const [compareSheetOpen, setCompareSheetOpen] = useState(false);
+  // 2026-05-23 — Auto-suggested comparisons (1-2 most-relevant
+  // references) computed after analysis_status==='ok'. Renders inline
+  // under the primary issue card so the player sees the matches
+  // without opening the picker. Tap a chip to lock in that reference
+  // via the same compareSwings pass.
+  const [autoSuggestions, setAutoSuggestions] = useState<SimilarMatch[] | null>(null);
+  const autoSuggestComputedFor = useRef<string | null>(null);
   const isComparing = leftCompareShotId != null && rightCompareShotId != null;
   const isPickingCompareTarget = leftCompareShotId != null && rightCompareShotId == null;
   const actionShot = actionShotId
@@ -148,6 +155,39 @@ export default function SwingDetail() {
       analysis_error: session?.analysis_error ?? null,
     }, swing_id);
   }, [analysisStatus, swing_id, session?.primary_issue, session?.drill_recommendation, session?.analysis_error]);
+
+  // 2026-05-23 — Auto-suggest 1-2 relevant comparisons once analysis
+  // completes and biomechanics is present. Idempotent per swing_id;
+  // failures collapse to no-suggestion (the manual Compare button
+  // still works).
+  useEffect(() => {
+    if (!swing_id || autoSuggestComputedFor.current === swing_id) return;
+    if (!session?.biomechanics) return;
+    if ((session.analysis_status ?? 'pending') !== 'ok') return;
+    autoSuggestComputedFor.current = swing_id;
+    void (async () => {
+      try {
+        const dbMod = await import('../../../services/swingDatabase');
+        const current: PoseEstimate = {
+          source: 'video',
+          confidence: 75,
+          frames: session.biomechanics?.frames ?? [],
+          biomechanics: session.biomechanics ?? null,
+          swingVerdict: null,
+          reason: 'auto-suggest comparison',
+          age_band: 'adult',
+          mirrored: false,
+          joint_confidence: { hip: 0.8, shoulder: 0.8, knee: 0.6, wrist: 0.6, ankle: 0.6, head: 0.7 },
+          partial_view: false,
+        };
+        const matches = await dbMod.searchSimilarSwings(current, 2, session.club ? { club: session.club } : undefined);
+        setAutoSuggestions(matches);
+      } catch (e) {
+        console.log('[swing-detail] auto-suggest failed (non-fatal):', e);
+        setAutoSuggestions([]);
+      }
+    })();
+  }, [swing_id, session?.biomechanics, session?.analysis_status, session?.club]);
 
   // Backfill biomechanics for older swings captured before the pose pipeline
   // shipped. Fires once per swing_id; failure is silent (pose API is opt-in
@@ -754,6 +794,39 @@ export default function SwingDetail() {
               >
                 <Text style={[styles.reanalyzeText, { color: colors.text_muted }]}>Re-analyze with latest</Text>
               </TouchableOpacity>
+              {/* 2026-05-23 — Auto-suggested comparisons. Renders 1-2
+                  chips for the most-similar references the database
+                  has, tapping one runs the full compareSwings pass and
+                  surfaces a toast + voice (same path as the picker
+                  onSelect). Hidden when no matches or still loading
+                  silently — never blocks the existing reanalyze flow. */}
+              {session.biomechanics && !session.putting_analysis && autoSuggestions && autoSuggestions.length > 0 && (
+                <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <Text style={[styles.label, { color: colors.accent }]}>SUGGESTED COMPARISONS</Text>
+                  <Text style={[styles.subtleHint, { color: colors.text_muted }]}>
+                    Closest matches in your library. Tap to compare.
+                  </Text>
+                  <View style={styles.suggestRow}>
+                    {autoSuggestions.map((m) => (
+                      <TouchableOpacity
+                        key={m.reference.id}
+                        onPress={() => onCompareToSelect(m)}
+                        style={[styles.suggestChip, { borderColor: colors.accent }]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Compare to ${m.reference.label} — ${m.similarity}% match`}
+                      >
+                        <Text style={[styles.suggestPct, { color: colors.accent }]} numberOfLines={1}>
+                          {m.similarity}%
+                        </Text>
+                        <Text style={[styles.suggestName, { color: colors.text_primary }]} numberOfLines={1}>
+                          {m.reference.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+
               {/* 2026-05-22 — Phase 2 Compare action. Renders ONLY when
                   this is a full-swing session (not putting) with usable
                   biomechanics. Fires searchSimilarSwings → opens a
@@ -1120,4 +1193,19 @@ const styles = StyleSheet.create({
   biomechLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
   biomechSub: { fontSize: 11, fontStyle: 'italic', marginBottom: 4 },
   biomechRow: { fontSize: 13, lineHeight: 19 },
+  // 2026-05-23 — Auto-suggest comparison card styles.
+  subtleHint: { fontSize: 11, marginTop: 4, fontStyle: 'italic' },
+  suggestRow: { flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' },
+  suggestChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    maxWidth: '100%',
+  },
+  suggestPct: { fontSize: 13, fontWeight: '900' },
+  suggestName: { fontSize: 12, fontWeight: '700', flexShrink: 1 },
 });

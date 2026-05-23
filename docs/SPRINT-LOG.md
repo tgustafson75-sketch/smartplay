@@ -1235,5 +1235,82 @@ Tim asked for a focused audit-and-refine pass on the pose layer (no over-enginee
 
 **Day 4 final tally: 3 commits + 0 OTAs + ts-check clean across all three batches.**
 
+---
+
+## Day 5 — 2026-05-23 — Persona Knowledge Layer + Phase 2 close + PuttingLab completion
+
+Three stacked asks landed mid-session:
+1. Persona Knowledge Layer ("The Real Tank") — 60 Q&A pairs in Tank's voice, integrated into the brain prompt + analysis envelope.
+2. Phase 2 UX close — Compare action in Swing Library row + auto-suggest comparisons on the swing detail screen.
+3. PuttingLab service completion — Meta-glasses POV path, Tank-specific copy, partial-capture flag, KB enrichment of the mentalCue.
+
+Also: marketplace add + plugin install for `mwdat-android@mwdat-android-marketplace` (Meta wearables dev assistance) — succeeded; plugin tools surface in future sessions.
+
+### Persona Knowledge Layer
+- **[services/personaKnowledgeBase.ts](../services/personaKnowledgeBase.ts)** (NEW) — 60 seed entries across 10 categories: fundamentals, club_selection, course_management, driving, iron_play, short_game, bunker, putting, mental_game, practice, pre_round_weather. Each entry carries `tankAnswer` (clipped Marine cadence, signature phrases used sparingly, standards applied to the work), `genericAnswer` (neutral baseline), `styleNotes` (annotation of the voice choice — preserves intent when contributors edit).
+  - Voice invariants restated in the header so editors don't drift: article-dropping, no hedging, signature phrases ("Lock it in", "Trust your prep", "Send it", "Execute", "Roger that", "Reset and run it back", "No half-reps", "Standards are non-negotiable"), never stack three in one breath, critique paired with expectation of better next time, standards apply to the work never the person.
+  - Public API: `getPersonaAnswer(persona, question, context?)`, `findPersonaKBEntry(question)`, `findRelevantPersonaKBEntries(question, limit)`, `findPersonaKBEntriesByKeywords(keywords, limit)`, `buildPersonaKBPromptBlock(persona, question, limit)`, `getPersonaKBSize()`, `getPersonaKBCategories()`. Pure keyword scoring — no LLM round-trip — so the matcher is deterministic + fast + free.
+  - Expansion seam: drop entries into `PERSONA_KB`, no code changes needed. Marc Ward's actual material slots into the same schema. Other personas (Serena/Harry/Kevin) add their answers as additional optional fields on existing entries; the helper switch widens to cover them.
+- **[api/kevin.ts](../api/kevin.ts)** — system prompt assembly now imports `personaKnowledgeBase` and, when persona='tank' AND the user message matches an entry above the score threshold, injects a `TANK'S TEACHING WISDOM` block with the top 2 entries (Tank's take + voice notes). The brain references the entries in its own response without quoting verbatim. Non-Tank personas / no-match cases collapse to no injection.
+- **[services/smartAnalysisEngine.ts](../services/smartAnalysisEngine.ts)** — new `enrichWithPersonaWisdom(envelope, persona)` pass runs after dispatch. When persona='tank' and the envelope's voice_summary matches a KB entry, appends ` — Tank's take: <first sentence of tankAnswer>` to voice_summary. Bounded to one sentence so TTS doesn't blow past the spoken-line budget. Idempotent on history replays (skips when voice_summary already contains "Tank's take:").
+
+### Example Tank-vs-generic answers (KB excerpts)
+| Question | Generic (neutral baseline) | Tank (KB entry) |
+|---|---|---|
+| "Should I take more club?" | "When between clubs, most amateurs benefit from taking one more and swinging smoothly." | "Take one more club. Swing smooth. Amateurs short ninety percent of pins — wrong end of the green is short, not long. One more club. Smooth swing. Send it." |
+| "How do I read a green?" | "Read greens from at least two angles. Identify dominant slope first, then speed, then commit to a line." | "Walk the line. Low side, high side, behind the hole. See it from three angles. Read the slope first, the speed second, the line third. Three reads, one stroke. No going back to the well." |
+| "I just had a blow-up hole." | "Accept the score, avoid re-litigating the bad shots, and reset mentally on the next tee." | "Hole's lost. Bag it. Take the number. Walk it off. New hole, new shot. No replays out loud. No 'what if I had.' The mission is the next swing. Reset on the next tee." |
+| "How tight should I grip the club?" | "Light grip pressure — around 4 or 5 out of 10. Tight grip kills wrist hinge." | "Grip pressure's a four out of ten. Not white-knuckle. You squeeze the life out of it, the wrists lock and the club face shuts. Light hands. Heavy contact. That's the order." |
+| "Should I swing harder to hit it further?" | "Distance comes more from clean center-strike contact than from raw swing effort." | "Distance comes from contact, not effort. Eighty-five percent swing, dead center face — that's longer than ninety-eight percent off the toe. Tour pros swing at eighty percent. You're not stronger than them. Smooth fast. Not hard fast." |
+| "Confidence is low — what do I do?" | "Confidence is built through preparation — practice reps, evidence of past successes, a trusted routine." | "Confidence isn't a feeling. It's evidence. You've made the shot a hundred times in the cage. You've done the work. Now you trust the work. Doubt's a luxury. Standards are non-negotiable. Execute." |
+
+### Phase 2 UX close
+- **[app/swinglab/library.tsx](../app/swinglab/library.tsx)** — Compare icon button per row (only when the session has biomechanics). Opens the same `CompareReferencePickerSheet` used in swing detail; `onSelect` runs `compareSwings` against the chosen reference, toasts the headline, then routes the user into the swing detail surface for the deeper read.
+- **[app/swinglab/swing/[swing_id].tsx](../app/swinglab/swing/%5Bswing_id%5D.tsx)** — Auto-suggested comparisons card. When `analysis_status === 'ok'` AND biomechanics is present, `searchSimilarSwings(2)` runs once per swing_id and renders up to 2 chip-style buttons under the biomechanics card. Tap a chip to lock in that reference (same path as the picker's onSelect). Idempotent via a `useRef` per-swing_id guard. Failure paths collapse silently to no suggestions; the manual Compare action still works.
+
+### PuttingLab service completion (Meta-glasses POV ready)
+- **[services/puttingAnalysisService.ts](../services/puttingAnalysisService.ts)** — auto-fetches a putting/green-read frame from the glasses queue when the caller didn't pass `frames_base64`. Reads via the new `glassesVisionInput.getActiveVisionFrameBase64()` only when `detected_mode === 'putting' | 'green_read'` so a tee-shot frame doesn't get mis-folded into a putt analysis.
+- Added `partialCapture` flag to `PuttingAnalysis` (optional, additive — legacy records read fine). Heuristic: no frames + no video + no spoken read → analysis ran on green geometry alone, surface the "Approximate" hint downstream.
+- Tank-specific fallback copy when persona='tank' — recommendation block + caddieComment both use Tank's clipped Marine cadence + signature phrases ("Speed first. Line second. Standards are non-negotiable." / "Lock it in.") instead of the generic "smooth pendulum, eyes still" cues.
+- New `enrichRecommendationWithPersonaKB(analysis, persona)` — when persona='tank' AND the KB has a relevant putting entry for the situation (probe combines `recommendation.line` + slope direction/severity), replaces the generic `mentalCue` with Tank's first-sentence take. Tactical/technical cues stay as-is (server-tuned).
+- **[components/swinglab/PuttingAnalysisCard.tsx](../components/swinglab/PuttingAnalysisCard.tsx)** — surfaces the `partialCapture` hint in amber under the distance line ("Approximate read — limited capture. Coaching is conservative.").
+
+### Example PuttingAnalysis from a typical Meta-glasses POV putting video (Tank persona)
+```json
+{
+  "puttId": "putt_20260523_a91f",
+  "timestamp": "2026-05-23T22:14:08.317Z",
+  "holeNumber": 14,
+  "distanceFeet": 18,
+  "partialCapture": false,
+  "greenSlope": { "direction": "right-to-left", "severity": "moderate", "breakInches": 11, "confidence": 72 },
+  "setup": { "alignment": "slightly-open", "ballPosition": "forward", "stanceWidth": "standard", "gripPressure": "medium", "quality": 78 },
+  "stroke": { "path": "straight", "tempo": "smooth", "faceAngleAtImpact": "square", "deceleration": false, "quality": 82 },
+  "readAccuracy": { "wasCorrect": true, "suggestedAdjustment": "Aim two inches outside the left edge — your read was a hair under.", "confidence": 70 },
+  "recommendation": {
+    "line": "Two inches outside the left edge.",
+    "speedFeel": "Three-foot circle past the hole. Lag distance, not line.",
+    "mentalCue": "Speed first. Line second. Wrong line, wrong-speed putt — you're three-putting.",
+    "technicalCue": "Accelerate through. No decel. Eyes still."
+  },
+  "overallScore": 76,
+  "caddieComment": "Tank here — eighteen feet, right to left, moderate. Two inches outside the left edge. Trust the read. Speed first. Pull the trigger."
+}
+```
+- `mentalCue` was enriched by the KB (`putt_speed` entry — Tank's "Speed first. Line second." take).
+- `partialCapture` is false because both the video and a spoken read were available.
+- `caddieComment` is composed server-side via the persona-aware prompt block.
+
+### Plugin install
+- `claude plugin marketplace add facebook/meta-wearables-dat-android` → ✓ added.
+- `claude plugin install mwdat-android@mwdat-android-marketplace` → ✓ installed (user scope). New plugin tools become available in future sessions; current session continues with its existing tool set.
+
+### Verification
+- `npx tsc --noEmit` → exit 0 across all changes.
+- No regression in SmartMotion UI, analysis cards, drill flows, Meta Glasses bridge, or pose estimation — every new field is additive + optional, every new pass is wrapped in try/catch with a non-fatal fallback.
+
+**Day 5 tally: 1 commit + 0 OTAs + ts-check clean + 1 marketplace + 1 plugin installed.**
+
+
 
 

@@ -380,6 +380,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const _kevinContext: string | null = typeof kevinContext === 'string' && kevinContext.trim() ? kevinContext.trim() : null;
     const _golferModel: string | null = typeof golfer_model_snippet === 'string' && golfer_model_snippet.trim() ? golfer_model_snippet.trim() : null;
     const _recentAnalyses: string | null = typeof recent_analyses_snippet === 'string' && recent_analyses_snippet.trim() ? recent_analyses_snippet.trim() : null;
+    // 2026-05-23 — Persona Knowledge Layer. When persona='tank' AND the
+    // user message matches a KB entry above the score threshold, inject
+    // the top entries as a teaching-wisdom block. The brain riffs off
+    // the entry in Tank's voice rather than freestyling. For other
+    // personas this resolves to null (no injection) — they fall back to
+    // the existing brain logic. Failures (require failure, KB not
+    // present in test env) collapse to null so the brain still works.
+    let _personaKBBlock: string | null = null;
+    try {
+      const kb = await import('../services/personaKnowledgeBase');
+      _personaKBBlock = kb.buildPersonaKBPromptBlock(personaInput, String(message ?? ''), 2);
+    } catch (e) {
+      console.log('[kevin] persona KB load failed (non-fatal):', e);
+    }
     const _persistentPatterns: string | null = typeof persistentPatterns === 'string' && persistentPatterns.trim() ? persistentPatterns.trim() : null;
     const _practiceContext: string | null = typeof practice_context === 'string' && practice_context.trim() ? practice_context.trim() : null;
     type InsightLite = { course?: string; club?: string; insight: string };
@@ -584,6 +598,7 @@ ${todBlock}
 ${_kevinContext ? `ABOUT THIS GOLFER (private; never read aloud — use as background):\n${_kevinContext}` : ''}
 ${_golferModel ? `\nDERIVED TENDENCIES (private; use to be SPECIFIC instead of generic — never recite these literally):\n${_golferModel}` : ''}
 ${_recentAnalyses ? `\nWHAT YOU JUST TOLD THEM (last few exchanges in this session — don't repeat verbatim, but stay coherent):\n${_recentAnalyses}` : ''}
+${_personaKBBlock ? `\n${_personaKBBlock}` : ''}
 
 ${Array.isArray(playerVocabulary) && playerVocabulary.length > 0 ? `PHRASES THIS PLAYER USES (private; mirror their vocabulary, do not list these out loud):\n${(playerVocabulary as unknown[]).filter(p => typeof p === 'string').slice(0, 20).join(', ')}` : ''}
 

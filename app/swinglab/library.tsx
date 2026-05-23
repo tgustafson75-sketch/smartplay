@@ -23,7 +23,11 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useCageStore } from '../../store/cageStore';
+import { useToastStore } from '../../store/toastStore';
 import { getLibrary, type LibraryFilter } from '../../services/swingLibrary';
+import CompareReferencePickerSheet from '../../components/swinglab/CompareReferencePickerSheet';
+import type { PoseEstimate } from '../../services/poseEstimator';
+import type { SimilarMatch } from '../../services/swingDatabase';
 
 const FILTERS: { id: LibraryFilter; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -82,6 +86,69 @@ export default function SwingLibrary() {
 
   const advancedFiltersActive = dateFilter !== 'all' || clubFilter !== 'all';
   const filtersActive = filter !== 'all' || advancedFiltersActive;
+
+  // 2026-05-23 — Library Compare action. When the user taps Compare on
+  // a row, we open the same CompareReferencePickerSheet used in the
+  // swing detail screen. On match selection we run the full
+  // swingComparisonEngine pass and route the user into the swing
+  // detail surface with a toast summary.
+  const [compareSessionId, setCompareSessionId] = useState<string | null>(null);
+  const compareSession = compareSessionId
+    ? sessionHistory.find(s => s.id === compareSessionId) ?? null
+    : null;
+  const compareCurrentPose: PoseEstimate | null = compareSession?.biomechanics
+    ? {
+        source: 'video',
+        confidence: 75,
+        frames: compareSession.biomechanics.frames ?? [],
+        biomechanics: compareSession.biomechanics,
+        swingVerdict: null,
+        reason: 'library compare-to action',
+        age_band: 'adult',
+        mirrored: false,
+        joint_confidence: { hip: 0.8, shoulder: 0.8, knee: 0.6, wrist: 0.6, ankle: 0.6, head: 0.7 },
+        partial_view: false,
+      }
+    : null;
+
+  const handleLibraryCompareSelect = (match: SimilarMatch) => {
+    if (!compareSession || !compareCurrentPose) return;
+    void (async () => {
+      try {
+        const [dbMod, engineMod] = await Promise.all([
+          import('../../services/swingDatabase'),
+          import('../../services/swingComparisonEngine'),
+        ]);
+        await dbMod.touchReference(match.reference.id);
+        const ref = match.reference;
+        const referencePose: PoseEstimate = {
+          source: 'video',
+          confidence: 80,
+          frames: ref.frames ?? [],
+          biomechanics: ref.biomechanics ?? null,
+          swingVerdict: null,
+          reason: `reference: ${ref.label}`,
+          age_band: ref.body?.age_band ?? 'adult',
+          mirrored: ref.body?.handedness === 'left',
+          joint_confidence: { hip: 0.9, shoulder: 0.9, knee: 0.7, wrist: 0.7, ankle: 0.7, head: 0.7 },
+          partial_view: false,
+        };
+        const kind =
+          ref.source === 'self_upload' ? 'self_vs_self' :
+          ref.source === 'archetype'   ? 'self_vs_avatar' :
+                                         'self_vs_pro';
+        const result = engineMod.compareSwings({ current: compareCurrentPose, reference: referencePose, kind });
+        const headline = `${result.overall_match}% match to ${ref.label}. ${result.takeaways[0] ?? ''}`.trim();
+        useToastStore.getState().show(headline);
+        // Push to the swing detail screen so the user can dig into
+        // metrics, hotspots, voice replay, etc.
+        router.push(`/swinglab/swing/${compareSession.id}` as never);
+      } catch (e) {
+        console.log('[library] compare-to failed:', e);
+        useToastStore.getState().show('Compare failed — try again.');
+      }
+    })();
+  };
 
   const onLongPress = (id: string) => {
     Alert.alert(
@@ -304,6 +371,20 @@ export default function SwingLibrary() {
                   )}
                 </View>
                 <View style={styles.rowTrailing}>
+                  {entry.session.biomechanics ? (
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation?.();
+                        setCompareSessionId(entry.session.id);
+                      }}
+                      style={styles.compareBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel="Compare this swing to a reference"
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="git-compare-outline" size={18} color={colors.accent} />
+                    </TouchableOpacity>
+                  ) : null}
                   <View style={[
                     styles.sourceBadge,
                     {
@@ -325,6 +406,21 @@ export default function SwingLibrary() {
           })}
         </ScrollView>
       )}
+
+      {/* 2026-05-23 — Library Compare picker. Renders the same sheet
+          used in the swing detail screen; the picker handles the
+          search + ranked list + add-reference fallback itself. */}
+      <CompareReferencePickerSheet
+        visible={compareSessionId != null}
+        current={compareCurrentPose}
+        clubFilter={compareSession?.club ?? null}
+        onClose={() => setCompareSessionId(null)}
+        onSelect={handleLibraryCompareSelect}
+        onAddReference={() => {
+          setCompareSessionId(null);
+          router.push('/swinglab/upload' as never);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -418,6 +514,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  // 2026-05-23 — Compare icon button on rows with biomechanics.
+  compareBtn: {
+    padding: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sourceBadge: {
     paddingVertical: 3,

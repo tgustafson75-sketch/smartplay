@@ -52,6 +52,12 @@ export interface PuttingAnalysis {
   timestamp: string;        // ISO 8601
   holeNumber?: number;
   distanceFeet: number;
+  /** 2026-05-23 — true when the analysis was produced with thin
+   *  inputs (no frames usable, low-light flag, partial-view frame
+   *  count). UI surfaces a hint when true so the player knows the
+   *  recommendation is approximate. Optional so legacy persisted
+   *  PuttingAnalysis records continue to read clean. */
+  partialCapture?: boolean;
 
   greenSlope: {
     direction: SlopeDirection;
@@ -122,14 +128,34 @@ export async function analyzePutt(
   const holeNumber = input.hole_number ?? (round.isRoundActive ? round.currentHole : undefined);
   const geom = courseId && holeNumber ? getHoleGeometry(courseId, holeNumber) : null;
 
-  // Opportunistic glasses frame (TTL inside glassesVisionInput).
+  // Opportunistic glasses frame. 2026-05-23 — now actually fetches
+  // the latest frame as base64 from the rolling queue (was only
+  // checking URI presence before). When extractPuttKeyFrames isn't
+  // already feeding frames, this picks up a glasses POV frame for
+  // free so Tank/Kevin can see what the player just lined up over.
   let frames = input.frames_base64 ?? [];
   if (frames.length === 0) {
     try {
-      const vision = await getActiveVisionContext();
-      if (vision?.frame.uri) devLog(`[putting] glasses frame uri available: ${vision.frame.uri}`);
+      const visionMod = await import('./glassesVisionInput');
+      const ctx = await visionMod.getActiveVisionContext();
+      if (ctx?.detected_mode === 'putting' || ctx?.detected_mode === 'green_read') {
+        const b64 = await visionMod.getActiveVisionFrameBase64();
+        if (b64?.base64) {
+          frames = [b64.base64];
+          devLog(`[putting] auto-folded glasses frame caption="${b64.caption}"`);
+        }
+      } else if (ctx?.frame.uri) {
+        devLog(`[putting] glasses frame in queue but mode=${ctx.detected_mode} — not auto-folded`);
+      }
     } catch { /* non-fatal */ }
   }
+  // 2026-05-23 — partial_capture flag. The pipeline still runs with
+  // thin inputs, but downstream consumers (cage review card, voice
+  // narration) can surface a "captured under low light / partial
+  // view" hint when this is true. Heuristic: no frames + no video +
+  // no spoken read → mostly working from green geometry alone.
+  const partialCapture =
+    frames.length === 0 && !input.video_url && (!input.spoken_read || input.spoken_read.trim().length < 4);
 
   try {
     const res = await fetch(`${apiUrl()}/api/putting-analysis`, {
@@ -153,15 +179,57 @@ export async function analyzePutt(
     });
     if (!res.ok) {
       console.warn('[putting] api non-ok', res.status);
-      return fallbackAnalysis(input, holeNumber, settings.caddiePersonality);
+      return fallbackAnalysis(input, holeNumber, settings.caddiePersonality, partialCapture);
     }
     const data = (await res.json()) as Partial<PuttingAnalysis>;
     const normalized = normalize(data, input, holeNumber, settings.caddiePersonality);
-    devLog(`[putting] analysis ok overallScore=${normalized.overallScore} dist=${normalized.distanceFeet}ft`);
-    return normalized;
+    // Persona enrichment: fold Tank's putting wisdom into the
+    // mentalCue when the persona is Tank and the KB has a relevant
+    // entry. The server's mentalCue stays as the fallback; this only
+    // strengthens it.
+    const enriched = await enrichRecommendationWithPersonaKB(normalized, settings.caddiePersonality);
+    enriched.partialCapture = partialCapture || normalized.partialCapture;
+    devLog(`[putting] analysis ok overallScore=${enriched.overallScore} dist=${enriched.distanceFeet}ft partial=${enriched.partialCapture ?? false}`);
+    return enriched;
   } catch (e) {
     console.warn('[putting] analyze exception:', e);
-    return fallbackAnalysis(input, holeNumber, settings.caddiePersonality);
+    return fallbackAnalysis(input, holeNumber, settings.caddiePersonality, partialCapture);
+  }
+}
+
+/**
+ * 2026-05-23 — When persona is Tank AND the personaKnowledgeBase has
+ * a relevant putting entry for the situation, replace the generic
+ * mentalCue with Tank's first-sentence take. Tactical/technical cues
+ * stay as-is (server already tuned for putting specifics). Non-Tank
+ * personas pass through unchanged.
+ */
+async function enrichRecommendationWithPersonaKB(
+  analysis: PuttingAnalysis,
+  persona: string,
+): Promise<PuttingAnalysis> {
+  const p = (persona ?? '').toLowerCase();
+  if (p !== 'tank') return analysis;
+  try {
+    const kb = await import('./personaKnowledgeBase');
+    // Probe the KB with the analysis's situation — uses recommendation
+    // lines + slope direction as the input phrase.
+    const probe = `putt ${analysis.recommendation.line} ${analysis.greenSlope.direction} ${analysis.greenSlope.severity}`;
+    const matches = kb.findRelevantPersonaKBEntries(probe, 1);
+    if (matches.length === 0) return analysis;
+    const firstSentence = matches[0].entry.tankAnswer.split(/(?<=[.!?])\s/)[0].trim();
+    if (!firstSentence) return analysis;
+    devLog(`[putting] enriched recommendation with KB ${matches[0].entry.id}`);
+    return {
+      ...analysis,
+      recommendation: {
+        ...analysis.recommendation,
+        mentalCue: firstSentence,
+      },
+    };
+  } catch (e) {
+    devLog(`[putting] persona KB enrich failed (non-fatal): ${String(e)}`);
+    return analysis;
   }
 }
 
@@ -287,32 +355,53 @@ function normalize(
 
 /** Bootstrap path: when frames + voice + network all unavailable, still
  *  return a complete PuttingAnalysis with low confidence. The point is
- *  never to leave the player without coaching. */
+ *  never to leave the player without coaching.
+ *
+ *  2026-05-23 — Tank-specific copy when persona === 'tank'. Marine
+ *  cadence + signature phrases instead of generic putting cues. Other
+ *  personas keep the prior copy. Also stamps `partialCapture` so the
+ *  UI can surface the "approximate" hint. */
 function fallbackAnalysis(
   input: PuttingAnalysisInput,
   holeNumber: number | undefined,
   persona: string,
+  partialCapture: boolean = true,
 ): PuttingAnalysis {
   const caddieName = getCaddieName(persona);
+  const p = (persona ?? '').toLowerCase();
   const echo = input.spoken_read && input.spoken_read.trim().length > 0
     ? `Heard "${input.spoken_read.trim()}". `
     : '';
+  // Tank-specific copy bank — clipped, command-stacked, no fluff.
+  const isTank = p === 'tank';
+  const recommendation = isTank
+    ? {
+        line: 'Trust your read. Pick the apex. Aim there.',
+        speedFeel: 'Three-foot circle past the hole. Lag distance, not line.',
+        mentalCue: 'Speed first. Line second. Standards are non-negotiable.',
+        technicalCue: 'Accelerate through. No decel. Eyes still.',
+      }
+    : {
+        line: 'Trust your read.',
+        speedFeel: 'Die it into the hole — smooth pendulum.',
+        mentalCue: 'Smooth pendulum, eyes still through impact.',
+        technicalCue: 'Accelerate gently — no deceleration.',
+      };
+  const caddieComment = isTank
+    ? `${echo}Limited reads on this one. Run the routine. Speed first. Line second. Lock it in.`
+    : `${caddieName} here. ${echo}Smooth pendulum, eyes still, trust the line.`;
   return {
     puttId: newPuttId(),
     timestamp: new Date().toISOString(),
     holeNumber,
     distanceFeet: input.distance_feet ?? 0,
+    partialCapture,
     greenSlope: { direction: 'straight', severity: 'subtle', breakInches: 0, confidence: 25 },
     setup: { alignment: 'square', ballPosition: 'center', stanceWidth: 'standard', gripPressure: 'medium', quality: 50 },
     stroke: { path: 'straight', tempo: 'smooth', faceAngleAtImpact: 'square', deceleration: false, quality: 50 },
     readAccuracy: { wasCorrect: true, suggestedAdjustment: 'Trust your read.', confidence: 25 },
-    recommendation: {
-      line: 'Trust your read.',
-      speedFeel: 'Die it into the hole — smooth pendulum.',
-      mentalCue: 'Smooth pendulum, eyes still through impact.',
-      technicalCue: 'Accelerate gently — no deceleration.',
-    },
+    recommendation,
     overallScore: 50,
-    caddieComment: `${caddieName} here. ${echo}Smooth pendulum, eyes still, trust the line.`,
+    caddieComment,
   };
 }

@@ -249,6 +249,15 @@ export async function analyze(request: AnalysisRequest): Promise<AnalysisEnvelop
       case 'pose_estimate': envelope = await runPoseEstimate(request, persona, ctx); break;
       case 'lie_enriched':  envelope = await runLieEnriched(request, persona, ctx);  break;
     }
+    // 2026-05-23 — Persona Knowledge Layer enrichment. Folds Tank's
+    // teaching wisdom into voice_summary when the envelope's voice
+    // text + active persona match a KB entry. Non-fatal — failure
+    // collapses to the un-enriched envelope.
+    try {
+      envelope = await enrichWithPersonaWisdom(envelope, persona);
+    } catch (e) {
+      devLog(`[engine] persona enrichment failed (non-fatal): ${String(e)}`);
+    }
     pushHistory(envelope);
     if (request.speak) void speakEnvelope(envelope);
     return envelope;
@@ -701,4 +710,50 @@ async function runLieEnriched(req: LieEnrichedRequest, persona: Persona, ctx: Le
     timestamp_ms: Date.now(),
     analysis_id: newId('lie+'),
   };
+}
+
+// ─── Persona Knowledge Layer enrichment ─────────────────────────────────
+
+/**
+ * 2026-05-23 — Fold Tank's teaching wisdom into voice_summary when:
+ *   - persona === 'tank', AND
+ *   - the envelope's voice_summary matches a KB entry above threshold,
+ *     AND
+ *   - the existing voice_summary doesn't already lead with Tank's
+ *     signature phrasing (avoid double-quoting).
+ *
+ * When all three hit, appends a single "Tank's take: …" tail (first
+ * sentence of the matched tankAnswer) so the player hears the
+ * envelope's tactical content AND Tank's broader philosophy on it.
+ * Non-Tank personas pass through unchanged.
+ *
+ * Tail is bounded: 1 sentence, prefixed with " — ". This keeps
+ * voice_summary readable and bounded so TTS doesn't blow past the
+ * UI's spoken-line budget.
+ */
+export async function enrichWithPersonaWisdom(
+  envelope: AnalysisEnvelope,
+  persona: Persona,
+): Promise<AnalysisEnvelope> {
+  if (persona !== 'tank') return envelope;
+  if (!envelope.voice_summary || envelope.voice_summary.length < 12) return envelope;
+  // Avoid double-enrich on history replays.
+  if (envelope.voice_summary.includes("Tank's take:")) return envelope;
+  let kb: typeof import('./personaKnowledgeBase');
+  try {
+    kb = await import('./personaKnowledgeBase');
+  } catch {
+    return envelope;
+  }
+  // Probe with the voice_summary text — short enough to be a good
+  // matcher input, captures the tactical content already produced.
+  const matches = kb.findRelevantPersonaKBEntries(envelope.voice_summary, 1);
+  if (matches.length === 0) return envelope;
+  const top = matches[0];
+  // Take ONLY the first sentence of Tank's take — bounded tail.
+  const firstSentence = top.entry.tankAnswer.split(/(?<=[.!?])\s/)[0].trim();
+  if (!firstSentence) return envelope;
+  const enrichedSummary = `${envelope.voice_summary} — Tank's take: ${firstSentence}`;
+  devLog(`[engine] enriched envelope id=${envelope.analysis_id} with KB ${top.entry.id} (score=${top.score})`);
+  return { ...envelope, voice_summary: enrichedSummary };
 }
