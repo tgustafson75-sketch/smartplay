@@ -10,10 +10,16 @@ import { getPersistStorage } from '../services/ssrSafeStorage';
 export type SubscriptionStatus = 'trial' | 'expired' | 'active' | 'free' | 'lifetime';
 
 // Owner allow-list: any user whose email matches one of these gets a
-// lifetime grant on first boot, bypassing the trial. Add to this list
-// (or set EXPO_PUBLIC_OWNER_EMAIL) when granting comp access.
+// lifetime grant on first boot, bypassing the trial. Also unlocks the
+// owner-gated debug surfaces (Issue Log, Voice Misses, GPS Test Bench,
+// Kevin Learning, etc.) per useDebugRouteGate + Settings → Owner Tools.
+// Add to this list (or set EXPO_PUBLIC_OWNER_EMAIL) when granting comp
+// access. Matching is case-insensitive on the trimmed profile email.
 export const OWNER_EMAILS: readonly string[] = [
   't.gustafson75@gmail.com',
+  // 2026-05-23 — Tank (Marc Ward), real golf instructor testing the
+  // app on his own device. Owner tools access for the testing surfaces.
+  'marc.ward3533@gmail.com',
 ];
 
 export function isOwnerEmail(email: string | null | undefined): boolean {
