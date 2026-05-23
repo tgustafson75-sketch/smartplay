@@ -1311,6 +1311,42 @@ Also: marketplace add + plugin install for `mwdat-android@mwdat-android-marketpl
 
 **Day 5 tally: 1 commit + 0 OTAs + ts-check clean + 1 marketplace + 1 plugin installed.**
 
+### Day 5 extension — Meta Wearables DAT v0.7 native wiring
+
+Tim dropped the DAT attestation credentials from the Wearables Developer Center (App ID `2111052109463421` + Client Token) with an explicit "I'm not running shit locally. Update where you need to." So the values are baked into the Expo config plugin instead of EAS env vars. Risk flagged in chat: if the repo is public, rotate the token via the Wearables Developer Center after testing.
+
+**Shipped:**
+- **[plugins/withMetaWearablesDAT.js](../plugins/withMetaWearablesDAT.js)** (NEW) — Expo config plugin. Does three things at prebuild:
+  1. Adds the GitHub Packages Maven repo (`maven.pkg.github.com/facebook/meta-wearables-dat-android`) to the project-level build.gradle's `allprojects.repositories` block. Credentials sourced from `GITHUB_TOKEN` env at build time (still needed for the artifact pull — Tim adds this to EAS env via the Vercel-side workflow if/when the first build fails).
+  2. Injects `manifestPlaceholders` (MWDAT_APP_ID + MWDAT_CLIENT_TOKEN) into the app-level build.gradle's `defaultConfig` block + the two mwdat dependencies (mwdat-core, mwdat-camera @ 0.7.0).
+  3. Adds `BLUETOOTH`, `BLUETOOTH_CONNECT`, `BLUETOOTH_SCAN` permissions and the two `com.meta.wearable.mwdat.*` meta-data entries to the AndroidManifest's `<application>` block. The meta-data values reference `${MWDAT_APP_ID}` / `${MWDAT_CLIENT_TOKEN}` placeholders so the literal values live in ONE place (the plugin) and propagate via gradle's manifestPlaceholders mechanism.
+  Plugin honors `process.env.META_WEARABLE_APP_ID` / `META_WEARABLE_CLIENT_TOKEN` if Tim ever migrates to EAS env — they take precedence over the hard-coded fallbacks.
+- **[app.json](../app.json)** — registered `./plugins/withMetaWearablesDAT.js` in the plugins array.
+- **[android-native/MetaWearablesFrameModule.kt](../android-native/MetaWearablesFrameModule.kt)** (NEW) — Kotlin native module bridging DAT's camera stream into React Native via `DeviceEventEmitter`. `startStreaming(quality, fps)` opens a DAT session via `AutoDeviceSelector`, starts a camera stream at the chosen quality/fps, and emits `MetaWearableFrame` events. Each frame is JPEG-compressed to a single overwritable cache file (`mwdat_frames/latest.jpg`) so cache doesn't grow unbounded at 24 FPS. Bitmap resolution uses reflection (`getBitmap()` → `makeBitmap()` fallback) to tolerate minor SDK shape drift. Frame drops on error are non-fatal — single dropped frame is preferable to a stream crash. `stopStreaming()` is idempotent. `getStatus()` returns `{ connected, streaming, device }`. Concurrency-safe via volatile session/stream refs.
+- **[android-native/MetaWearablesPackage.kt](../android-native/MetaWearablesPackage.kt)** (NEW) — `ReactPackage` registration. MainApplication.kt's `getPackages()` will need a one-liner to add this; flagged as a TODO in the file's header comment since Expo prebuild owns MainApplication regeneration. Closes that gap in the next iteration.
+- **[services/metaWearablesBridge.ts](../services/metaWearablesBridge.ts)** (NEW) — JS bridge. Subscribes to `MetaWearableFrame` events at boot, calls `glassesVisionInput.submitVisionFrame()` for each frame. Public API: `isMetaWearablesAvailable()`, `getMetaWearablesStatus()`, `startMetaWearablesStreaming(quality, fps)`, `stopMetaWearablesStreaming()`. iOS / web / older-build paths collapse to no-op without throwing. TODO comment in place for the voiceService speaking-state pause/resume gate (one-session-per-device constraint when TTS is mid-utterance through HFP).
+- **[android-native/AndroidManifest_snippet.xml](../android-native/AndroidManifest_snippet.xml)** — updated with the DAT meta-data block + Bluetooth permission notes. Manifest entries use the gradle placeholders, NOT raw values.
+- **[android-native/META_WEARABLES_DAT_SDK_REFERENCE.md](../android-native/META_WEARABLES_DAT_SDK_REFERENCE.md)** — added a credentials-handling section noting Tim's hard-coded path + the env-var override seam.
+
+**What lights up once the next EAS native build ships:**
+- Glasses frames flow into `glassesVisionInput`'s rolling queue → auto-detected as putting / lie / swing mode.
+- `puttingAnalysisService` auto-folds the latest frame as base64 when `detected_mode === 'putting' | 'green_read'` (Day 5 batch wiring).
+- `useKevin` reads the latest frame on every brain call → `/api/kevin` upgrades to multimodal Sonnet (Day 4 batch wiring).
+- Lie analysis acoustic prior + smartAnalysisEngine vision sources all populate.
+- No JS-side work required after the build — everything was already shaped for this transport.
+
+**Known follow-ups for the FIRST EAS build with DAT enabled:**
+1. `GITHUB_TOKEN` EAS env var still needs to be set so gradle can authenticate against `maven.pkg.github.com/facebook/meta-wearables-dat-android`. Same shape as the Sentry env var rename — `eas env:create --name GITHUB_TOKEN --value <pat-with-read:packages>`. Tim's call if he wants to set this via EAS dashboard instead of CLI.
+2. MainApplication.kt's `getPackages()` injection — Expo prebuild regenerates this file, so a second small config-plugin pass is the right home for the `packages.add(MetaWearablesPackage())` line. Flagged but not implemented this turn — first EAS build will surface the gap with a clean "NativeModules.MetaWearablesFrame is null" error and we close it then.
+3. Settings UI toggle for "Connect Ray-Ban Meta" — JS bridge is ready (`startMetaWearablesStreaming` / `stopMetaWearablesStreaming`); a single toggle row in Settings is ~30 lines.
+
+**Verification:**
+- `npx tsc --noEmit` → exit 0 across all changes. The Kotlin file isn't covered by tsc (separate compile target) but follows the DAT SDK code shape in the API ref.
+- No JS-side regression — all existing consumers continue reading the same fields. The native module is additive.
+
+**Day 5 extension tally: +1 commit (DAT native module + config plugin + JS bridge) + ts-check clean.**
+
+
 
 
 

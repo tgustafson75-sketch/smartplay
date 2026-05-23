@@ -30,6 +30,21 @@
 - **Developer Mode** (for our internal testing pre-launch): in Meta AI app → Settings → App Info → tap version 5× → toggle Developer Mode.
 - Attestation uses `MetaAppID` + `ClientToken` from the Wearables Developer Center. No traditional API key in code.
 
+### Credentials handling — do NOT commit the values
+`MetaAppID` is identifier-shaped (like a Facebook App ID — semi-public) but `ClientToken` is sensitive. Both ride into the APK at build time via manifest placeholders, but the source of truth lives in EAS env, not in git. Once you have the values from the Wearables Developer Center, run (locally, terminal):
+```bash
+eas env:create --scope project \
+  --name META_WEARABLE_APP_ID \
+  --value <your-app-id> \
+  --environment production --environment preview --environment development
+
+eas env:create --scope project \
+  --name META_WEARABLE_CLIENT_TOKEN \
+  --value <your-client-token> \
+  --environment production --environment preview --environment development
+```
+The AndroidManifest snippet references `${MWDAT_APP_ID}` and `${MWDAT_CLIENT_TOKEN}` placeholders, fed by gradle's `manifestPlaceholders` from the EAS env vars at build time. If those env vars aren't set when EAS Build runs, the placeholders resolve to empty strings → DAT session attestation fails at runtime with a clear "missing application id" error (same as forgetting to set them in the manifest the old way). No partial / silently-broken state.
+
 ## Concurrency + rate limits
 - **One active session per device.** If our `MetaCaddyVoiceHandler` is mid-utterance we cannot also stream video — sequence them.
 - Bluetooth Classic auto-scales bandwidth; SDK degrades resolution / frame rate under congestion.

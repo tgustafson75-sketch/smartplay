@@ -23,7 +23,7 @@
         ],
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "2"
+      "buildNumber": "3"
     },
     "android": {
       "package": "com.smartplaycaddie.app",
@@ -95,7 +95,8 @@
             "targetSdkVersion": 35
           }
         }
-      ]
+      ],
+      "./plugins/withMetaWearablesDAT.js"
     ],
     "experiments": {
       "typedRoutes": true,

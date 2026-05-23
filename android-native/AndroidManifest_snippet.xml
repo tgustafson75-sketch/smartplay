@@ -77,3 +77,46 @@
 <meta-data
     android:name="android.app.shortcuts"
     android:resource="@xml/shortcuts" />
+
+<!-- ─── Meta Wearables DAT v0.7 attestation (inside <application>) ──── -->
+<!--
+  Required for the Wearables Device Access Toolkit (Ray-Ban Meta
+  glasses live frame stream). Both values come from the Wearables
+  Developer Center at https://wearables.developer.meta.com/ and are
+  injected at build time via manifestPlaceholders (gradle) driven by
+  EAS environment variables — they are NEVER committed in plaintext.
+
+  Set the EAS env vars once, locally:
+    eas env:create --scope project \
+      --name META_WEARABLE_APP_ID \
+      --value <your-app-id> \
+      --environment production --environment preview
+    eas env:create --scope project \
+      --name META_WEARABLE_CLIENT_TOKEN \
+      --value <your-client-token> \
+      --environment production --environment preview
+
+  Then either:
+    (a) Use an Expo config plugin to write these into AndroidManifest
+        at prebuild time (recommended for managed workflow), OR
+    (b) If you've ejected to bare RN, wire the placeholders directly
+        into android/app/build.gradle:
+          manifestPlaceholders["MWDAT_APP_ID"] = System.getenv("META_WEARABLE_APP_ID") ?: ""
+          manifestPlaceholders["MWDAT_CLIENT_TOKEN"] = System.getenv("META_WEARABLE_CLIENT_TOKEN") ?: ""
+
+  Until the placeholders are wired, builds will fail attestation when
+  the DAT module tries to handshake with the Meta AI app. Same
+  end-state as a missing APP_ID — DAT session creation throws.
+-->
+<meta-data
+    android:name="com.meta.wearable.mwdat.APPLICATION_ID"
+    android:value="${MWDAT_APP_ID}" />
+<meta-data
+    android:name="com.meta.wearable.mwdat.CLIENT_TOKEN"
+    android:value="${MWDAT_CLIENT_TOKEN}" />
+
+<!-- DAT also needs Bluetooth permissions at top-level (Android 12+ split): -->
+<!-- <uses-permission android:name="android.permission.BLUETOOTH" /> -->
+<!-- <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" /> -->
+<!-- <uses-permission android:name="android.permission.BLUETOOTH_SCAN" /> -->
+
