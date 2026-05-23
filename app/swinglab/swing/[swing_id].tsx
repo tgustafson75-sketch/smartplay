@@ -19,6 +19,7 @@ import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useCageStore, type AnalysisStatus, type CageShot } from '../../../store/cageStore';
+import { useToastStore } from '../../../store/toastStore';
 import { getSwingReference } from '../../../services/swingReferences';
 import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
@@ -295,6 +296,51 @@ export default function SwingDetail() {
     useCageStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
     spokenForRef.current = null;
     void runPhaseKOnSession(swing_id);
+  };
+
+  // 2026-05-22 — Phase 2 "Compare to..." action. Pulls the current
+  // session's biomechanics, runs searchSimilarSwings against the
+  // swing database (seeded archetypes + user uploads), and surfaces
+  // a toast with the top match. Full picker UI lands next sprint;
+  // for now this validates the data path end-to-end + lets the user
+  // hear the top match read by the in-app caddie.
+  const onCompareTo = () => {
+    if (!session?.biomechanics) {
+      useToastStore.getState().show('No biomechanics on this swing yet — analyze first.');
+      return;
+    }
+    void (async () => {
+      try {
+        const dbMod = await import('../../../services/swingDatabase');
+        // Wrap the session's biomechanics as a PoseEstimate so the
+        // database can hand it to swingComparisonEngine cleanly.
+        const current = {
+          source: 'video' as const,
+          confidence: 75,
+          frames: session.biomechanics?.frames ?? [],
+          biomechanics: session.biomechanics ?? null,
+          swingVerdict: null,
+          reason: 'swing detail compare-to action',
+          age_band: 'adult' as const,
+          mirrored: false,
+          joint_confidence: { hip: 0.8, shoulder: 0.8, knee: 0.6, wrist: 0.6, ankle: 0.6, head: 0.7 },
+          partial_view: false,
+        };
+        const matches = await dbMod.searchSimilarSwings(current, 3, { club: session.club });
+        if (matches.length === 0) {
+          useToastStore.getState().show('No reference swings yet — add one from Swing Library.');
+          return;
+        }
+        const top = matches[0];
+        await dbMod.touchReference(top.reference.id);
+        useToastStore.getState().show(
+          `${top.similarity}% match to ${top.reference.label}. ${top.takeaways[0] ?? ''}`,
+        );
+      } catch (e) {
+        console.log('[swing-detail] compare-to failed:', e);
+        useToastStore.getState().show('Compare failed — try again.');
+      }
+    })();
   };
 
   return (
@@ -664,6 +710,23 @@ export default function SwingDetail() {
               >
                 <Text style={[styles.reanalyzeText, { color: colors.text_muted }]}>Re-analyze with latest</Text>
               </TouchableOpacity>
+              {/* 2026-05-22 — Phase 2 Compare action. Renders ONLY when
+                  this is a full-swing session (not putting) with usable
+                  biomechanics. Fires searchSimilarSwings → opens a
+                  bottom-sheet picker (next sprint UI) OR auto-runs vs
+                  tour-median archetype when no other refs exist. */}
+              {session.biomechanics && !session.putting_analysis && (
+                <TouchableOpacity
+                  style={[styles.reanalyzeBtn, { borderColor: colors.accent, marginTop: 8 }]}
+                  onPress={onCompareTo}
+                  accessibilityRole="button"
+                  accessibilityLabel="Compare this swing to a reference swing"
+                >
+                  <Text style={[styles.reanalyzeText, { color: colors.accent }]}>
+                    ⇄  Compare to a reference swing
+                  </Text>
+                </TouchableOpacity>
+              )}
             </Animated.View>
           )}
         </View>

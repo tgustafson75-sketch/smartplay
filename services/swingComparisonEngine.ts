@@ -296,6 +296,121 @@ function buildVoiceSummary(kind: CompareKind, overall: number, takeaways: string
   return `${lead}: ${overall}% match. ${takeaways.slice(0, 2).join(' ')}`.trim();
 }
 
+// ─── 2026-05-22 — Multi-reference compare ────────────────────────────────
+//
+// Phase 2 addition: caller wants to see how the current swing stacks
+// up against MULTIPLE references in one pass ("vs my best swing" +
+// "vs Rory 2023" + "vs amateur baseline"). compareSwingsMulti runs
+// compareSwings against each reference and returns a deck of results
+// sorted by overall_match descending, plus a synthesized voice line
+// that pulls the top insight from each comparison.
+
+export interface MultiReferenceInput {
+  current: PoseEstimate;
+  /** Named references to compare against. Each gets its own
+   *  SwingComparison. UI typically renders them as a horizontal card
+   *  carousel. */
+  references: Array<{
+    label: string;
+    estimate: PoseEstimate;
+    kind?: CompareKind;
+  }>;
+}
+
+export interface MultiReferenceComparison {
+  /** Per-reference results, sorted by overall_match desc. */
+  results: Array<{ label: string; comparison: SwingComparison }>;
+  /** Highest match across all references. UI uses this as the
+   *  headline number ("83% match to your best swing"). */
+  best_match: { label: string; overall: number } | null;
+  /** Synthesized 2-3 sentence voice summary blending the top insights
+   *  from each comparison. Persona prepend is the caller's job. */
+  voice_summary: string;
+}
+
+export function compareSwingsMulti(input: MultiReferenceInput): MultiReferenceComparison {
+  if (input.references.length === 0) {
+    return {
+      results: [],
+      best_match: null,
+      voice_summary: 'No references provided.',
+    };
+  }
+  const results = input.references.map((ref) => {
+    const cmp = compareSwings({
+      current: input.current,
+      reference: ref.estimate,
+      kind: ref.kind,
+    });
+    return { label: ref.label, comparison: cmp };
+  });
+  results.sort((a, b) => b.comparison.overall_match - a.comparison.overall_match);
+
+  const top = results[0];
+  const voice = composeMultiVoice(results);
+
+  return {
+    results,
+    best_match: top
+      ? { label: top.label, overall: top.comparison.overall_match }
+      : null,
+    voice_summary: voice,
+  };
+}
+
+function composeMultiVoice(results: MultiReferenceComparison['results']): string {
+  if (results.length === 0) return '';
+  const lead = results[0];
+  if (results.length === 1) {
+    return `${lead.comparison.overall_match}% match to ${lead.label}. ${lead.comparison.takeaways[0] ?? ''}`.trim();
+  }
+  // Two-result case: lead with the highest match + add a contrast from
+  // the next-best reference if it surfaces a different focus area.
+  const contrast = results[1];
+  const leadFocus = lead.comparison.metrics.find((m) => m.direction === 'worse')?.label.toLowerCase();
+  const contrastFocus = contrast.comparison.metrics.find((m) => m.direction === 'worse')?.label.toLowerCase();
+  const different = leadFocus && contrastFocus && leadFocus !== contrastFocus;
+  if (different) {
+    return `${lead.comparison.overall_match}% match to ${lead.label} — focus area: ${leadFocus}. ` +
+      `Vs ${contrast.label}: ${contrast.comparison.overall_match}% — they'd want ${contrastFocus}.`;
+  }
+  return `${lead.comparison.overall_match}% match to ${lead.label}. ` +
+    `${contrast.comparison.overall_match}% match to ${contrast.label}. ` +
+    `${lead.comparison.takeaways[0] ?? ''}`.trim();
+}
+
+// ─── 2026-05-22 — golferModel-aware annotation ──────────────────────────
+//
+// Threads the player's persistent miss pattern into the takeaways so
+// the same metric reads differently for a chronic slicer vs a flusher.
+// Caller passes the result of buildGolferModel(); we layer a short
+// "this looks like your typical X" note onto the comparison.
+
+export function annotateWithGolferModel(
+  cmp: SwingComparison,
+  golferSummary: { miss_direction: string; miss_type: string; is_confident: boolean },
+): SwingComparison {
+  if (!golferSummary.is_confident) return cmp;
+  const knownFault = golferSummary.miss_type !== 'unknown' && golferSummary.miss_type !== 'varies';
+  if (!knownFault) return cmp;
+  // Layer in a takeaway when the dominant miss aligns with a worse
+  // metric in the comparison.
+  const worseLabels = cmp.metrics.filter((m) => m.direction === 'worse').map((m) => m.label.toLowerCase());
+  const aligned =
+    (golferSummary.miss_type === 'slice' && worseLabels.some((l) => l.includes('shoulder') || l.includes('weight'))) ||
+    (golferSummary.miss_type === 'hook' && worseLabels.some((l) => l.includes('hip'))) ||
+    (golferSummary.miss_type === 'thin' && worseLabels.some((l) => l.includes('spine'))) ||
+    (golferSummary.miss_type === 'fat' && worseLabels.some((l) => l.includes('weight')));
+  if (!aligned) return cmp;
+  return {
+    ...cmp,
+    takeaways: [
+      ...cmp.takeaways,
+      `This is similar to your typical ${golferSummary.miss_type} pattern — focus area is consistent.`,
+    ],
+  };
+}
+
 // ─── Small helpers ───────────────────────────────────────────────────────
 
 function round2(n: number): number { return Math.round(n * 100) / 100; }
