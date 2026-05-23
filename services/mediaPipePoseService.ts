@@ -37,6 +37,7 @@
 
 import { NativeModules, AppState, type AppStateStatus } from 'react-native';
 import { devLog } from './devLog';
+import { recordNativeModuleHealth } from './nativeModuleHealth';
 import type { Keypoint, PoseFrame } from './poseAnalysisApi';
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -87,8 +88,13 @@ interface NativeMP {
   close(): Promise<void>;
 }
 
-const NativeMod: NativeMP | null =
-  ((NativeModules as Record<string, unknown>).MediaPipePose as NativeMP | undefined) ?? null;
+// 2026-05-23 — Health-tracked native resolution. Records the probe
+// outcome for the diagnostic surface so a missing native module is
+// debuggable without a logcat.
+const _mpHealth = recordNativeModuleHealth('MediaPipePose');
+const NativeMod: NativeMP | null = _mpHealth.loaded
+  ? ((NativeModules as Record<string, unknown>).MediaPipePose as NativeMP)
+  : null;
 
 // Effective quality flips down when the app is backgrounded. Bridge
 // reads this when calling into the native module.

@@ -101,6 +101,11 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   '/author/reference-assets',
   '/landmark-curate',
   '/owner-logs',
+  // 2026-05-23 — Native module health diagnostic. Lists which native
+  // bridges loaded successfully at boot (Meta Wearables, MediaPipe).
+  // Owner-only; surfaces "X loaded vs Y missing" without needing
+  // adb logcat. Wired in via the centralized DEBUG_ROUTES gate.
+  '/native-modules-debug',
 ]);
 
 function AppNavigator() {

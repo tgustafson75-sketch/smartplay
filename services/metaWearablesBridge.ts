@@ -31,6 +31,7 @@
 import { NativeModules, NativeEventEmitter, Platform, AppState, type AppStateStatus } from 'react-native';
 import { submitVisionFrame, type VisionFrame } from './glassesVisionInput';
 import { devLog } from './devLog';
+import { recordNativeModuleHealth } from './nativeModuleHealth';
 
 // ─── Native module shape (TS-side declaration) ──────────────────────
 
@@ -49,9 +50,13 @@ interface MetaWearablesFrameNativeModule {
 
 // Resolve safely — on iOS / web / older builds without the module,
 // every helper below collapses to a no-op rather than throwing.
+// 2026-05-23 — Probe + record health for the diagnostic surface.
+// Records BEFORE assignment so the probe runs even on the iOS path
+// where NativeMod is forced to null.
+const _mwHealth = recordNativeModuleHealth('MetaWearablesFrame');
 const NativeMod: MetaWearablesFrameNativeModule | null =
-  Platform.OS === 'android'
-    ? ((NativeModules as Record<string, unknown>).MetaWearablesFrame as MetaWearablesFrameNativeModule | undefined) ?? null
+  Platform.OS === 'android' && _mwHealth.loaded
+    ? ((NativeModules as Record<string, unknown>).MetaWearablesFrame as MetaWearablesFrameNativeModule)
     : null;
 
 let emitter: NativeEventEmitter | null = null;
@@ -138,6 +143,14 @@ export async function startMetaWearablesStreaming(
   fps: number = 24,
 ): Promise<string> {
   if (!NativeMod) {
+    // 2026-05-23 — Surface a user-facing toast when the player tries
+    // to use glasses but the native bridge isn't available. Lazy
+    // import of toastStore so this service doesn't pull a store
+    // dependency at module init.
+    try {
+      const { useToastStore } = await import('../store/toastStore');
+      useToastStore.getState().show('Glasses unavailable — using cloud features.');
+    } catch { /* non-fatal */ }
     throw new Error('Meta Wearables DAT not available on this platform / build');
   }
   subscribeOnce();

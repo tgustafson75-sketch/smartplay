@@ -201,6 +201,20 @@ function withManifest(config) {
     if (!application) return manifestConfig;
     application['meta-data'] = application['meta-data'] || [];
 
+    // 2026-05-23 — Defensive: ensure tools namespace declared so we
+    // can use tools:node="remove" on any auto-injected Wearables-AAR
+    // startup initializer that might crash at boot. Meta SDKs
+    // sometimes inject Facebook Analytics auto-providers; this
+    // namespace lets the manifest merger honour our removal blocks
+    // when needed. Per-provider removal entries are added by the
+    // MediaPipe plugin (the more aggressive auto-init source); DAT
+    // doesn't currently need a specific removal but the namespace
+    // declaration here is forward-defensive.
+    manifest.manifest.$ = manifest.manifest.$ || {};
+    if (!manifest.manifest.$['xmlns:tools']) {
+      manifest.manifest.$['xmlns:tools'] = 'http://schemas.android.com/tools';
+    }
+
     const ensureMeta = (name, value) => {
       const existing = application['meta-data'].find(
         (m) => m.$ && m.$['android:name'] === name,

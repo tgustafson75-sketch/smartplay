@@ -40,6 +40,7 @@ import Svg, { Line, Circle } from 'react-native-svg';
 import { useTheme } from '../../contexts/ThemeContext';
 import { analyzeSwing, type SwingAnalysis } from '../../services/poseDetection';
 import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
+import { synthesizeSwingMetrics, type SwingMetric } from '../../services/swingMetricsService';
 import { extractPoseFramesFromVideo, type PoseFrame, type Keypoint } from '../../services/poseAnalysisApi';
 import { evaluateSwingValidity, type SwingValidity } from '../../services/swingValidity';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -390,6 +391,8 @@ export default function SmartMotion() {
             colors={colors}
             poseFrames={poseFrames}
             onVideoDuration={(ms) => setVideoDurationMs(ms)}
+            clipDurationMs={videoDurationMs}
+            handicap={profile.handicap ?? null}
           />
           <InsightCard
             colors={colors}
@@ -518,6 +521,7 @@ function PreRecordAnglePill({ label, sub, icon, active, colors, onPress }: {
 function VisualCard({
   clipUri, angle, setAngle, overlays, playbackSpeed, setPlaybackSpeed,
   analysis, analyzing, validity, colors, poseFrames, onVideoDuration,
+  clipDurationMs, handicap,
 }: {
   clipUri: string | null;
   angle: Angle;
@@ -534,6 +538,10 @@ function VisualCard({
   // person detected → render StubSkeletonOverlay (no regression).
   poseFrames: PoseFrame[] | null;
   onVideoDuration: (ms: number) => void;
+  // 2026-05-23 — Threaded for swingMetricsService synthesis. Both
+  // optional — null falls through to placeholder source.
+  clipDurationMs: number | null;
+  handicap: number | null;
 }) {
   // Phase 418 — render the pose-skeleton and shot-tracer overlays ONLY
   // when the validation gate confirms an analyzable swing AND analysis
@@ -768,16 +776,32 @@ function VisualCard({
         </View>
       </View>
 
-      {/* Metrics strip — Phase 418: render real estimates ONLY when the
-          validity gate passes. On no-swing footage we show "—" across
-          all cells with a clear footer so the user can't mistake fake
-          numbers for a real read. */}
-      <View style={styles.metricsStrip}>
-        <Metric label="Club Speed" value={overlaysGated ? '82' : '—'} unit="mph" estimated={overlaysGated} colors={colors} />
-        <Metric label="Ball Speed" value={overlaysGated ? '113' : '—'} unit="mph" estimated={overlaysGated} colors={colors} />
-        <Metric label="Smash" value={overlaysGated ? '1.37' : '—'} unit="" estimated={overlaysGated} colors={colors} />
-        <Metric label="Carry" value={overlaysGated ? '156' : '—'} unit="yds" estimated={overlaysGated} colors={colors} />
-      </View>
+      {/* Metrics strip — 2026-05-23: synthesized from real signals
+          via swingMetricsService. When pose frames are present, the
+          peak-wrist-velocity heuristic drives club speed → ball
+          speed derives from typical-smash by club → smash factor
+          falls out → carry estimates from ball speed. Each cell
+          shows the value + a small source tag ("measured" /
+          "pose" / "profile" / "est"). Hard-coded placeholders are
+          gone — when no signal is available, we show "—". */}
+      {(() => {
+        const metrics = overlaysGated
+          ? synthesizeSwingMetrics({
+              poseFrames: poseFrames ?? null,
+              clipDurationMs: clipDurationMs ?? null,
+              club: null, // TODO: surface from URL param once SmartMotion's record path tags the club
+              profile: { handicap, clubDistances: null },
+            })
+          : null;
+        return (
+          <View style={styles.metricsStrip}>
+            <MetricCell label="Club Speed" m={metrics?.club_speed} colors={colors} />
+            <MetricCell label="Ball Speed" m={metrics?.ball_speed} colors={colors} />
+            <MetricCell label="Smash" m={metrics?.smash_factor} colors={colors} />
+            <MetricCell label="Carry" m={metrics?.carry_yards} colors={colors} />
+          </View>
+        );
+      })()}
       {!analyzing && !validity.valid ? (
         <Text style={[styles.metricsFooter, { color: colors.text_muted }]}>
           Metrics paused — record a swing with your full body in frame to see estimates.
@@ -798,6 +822,42 @@ function Metric({ label, value, unit, estimated, colors }: {
         {value}{estimated ? <Text style={{ fontSize: 10, color: colors.text_muted }}>~</Text> : null}
       </Text>
       <Text style={[styles.metricUnit, { color: colors.text_muted }]}>{unit}{estimated ? ' (est)' : ''}</Text>
+    </View>
+  );
+}
+
+/** 2026-05-23 — Source-honest metric cell. Replaces the placeholder
+ *  Metric component when called with a SwingMetric object. Shows the
+ *  numeric value (or "—" when null), unit, and a small source tag
+ *  ("measured" / "pose" / "profile" / "est") that matches the
+ *  metric's actual provenance. */
+function MetricCell({ label, m, colors }: {
+  label: string;
+  m: SwingMetric | null | undefined;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  if (!m || m.value == null) {
+    return (
+      <View style={styles.metricCell}>
+        <Text style={[styles.metricLabel, { color: colors.text_muted }]}>{label}</Text>
+        <Text style={[styles.metricValue, { color: colors.text_primary }]}>—</Text>
+        <Text style={[styles.metricUnit, { color: colors.text_muted }]}>{m?.unit ?? ''}</Text>
+      </View>
+    );
+  }
+  const tag =
+    m.source === 'measured'          ? 'measured'  :
+    m.source === 'pose_estimated'    ? 'pose'      :
+    m.source === 'profile_estimated' ? 'profile'   :
+                                       'est';
+  const valueDisplay = m.unit === '' ? m.value.toFixed(2) : String(m.value);
+  return (
+    <View style={styles.metricCell}>
+      <Text style={[styles.metricLabel, { color: colors.text_muted }]}>{label}</Text>
+      <Text style={[styles.metricValue, { color: colors.text_primary }]}>{valueDisplay}</Text>
+      <Text style={[styles.metricUnit, { color: colors.text_muted }]}>
+        {m.unit}{m.unit ? ' · ' : ''}{tag}
+      </Text>
     </View>
   );
 }

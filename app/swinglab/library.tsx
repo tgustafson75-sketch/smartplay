@@ -181,15 +181,69 @@ export default function SwingLibrary() {
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text_primary }]}>Swing Library</Text>
-        <TouchableOpacity
-          onPress={() => router.push('/swinglab/upload' as never)}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          style={styles.headerIcon}
-          accessibilityRole="button"
-          accessibilityLabel="Upload a swing"
-        >
-          <Ionicons name="cloud-upload-outline" size={22} color={colors.accent} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {/* 2026-05-23 — YouTube reference test hook. Opens a small
+              prompt (Alert) for the URL, runs previewYouTubeReference,
+              shows the thumbnail + ok-to-add confirm, then calls
+              addReferenceSwing. The full ingestion path is in
+              swingDatabase.ts; this UI is the manual test seam Tim
+              asked for. */}
+          <TouchableOpacity
+            onPress={async () => {
+              try {
+                const { Alert } = await import('react-native');
+                Alert.prompt?.(
+                  'Add YouTube reference',
+                  'Paste a YouTube URL (pro or favorite swing). We\'ll grab the thumbnail and store the reference for comparisons.',
+                  async (input?: string) => {
+                    if (!input) return;
+                    const dbMod = await import('../../services/swingDatabase');
+                    const preview = await dbMod.previewYouTubeReference(input);
+                    if (preview.kind === 'invalid') {
+                      Alert.alert('Couldn\'t add reference', preview.reason);
+                      return;
+                    }
+                    if (preview.alreadyExists) {
+                      Alert.alert('Already in your library', `That video is already saved as a reference (id ${preview.videoId}).`);
+                      return;
+                    }
+                    Alert.alert(
+                      'Add this reference?',
+                      `Label: ${preview.addInput.label}\nVideo: ${preview.videoId}`,
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Add',
+                          onPress: async () => {
+                            const id = await dbMod.addReferenceSwing(preview.addInput);
+                            useToastStore.getState().show(`Reference added (${id.slice(0, 12)}…)`);
+                          },
+                        },
+                      ],
+                    );
+                  },
+                );
+              } catch (e) {
+                console.log('[library] YouTube ingestion test failed:', e);
+              }
+            }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={styles.headerIcon}
+            accessibilityRole="button"
+            accessibilityLabel="Add a YouTube reference swing"
+          >
+            <Ionicons name="logo-youtube" size={22} color={colors.accent} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push('/swinglab/upload' as never)}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={styles.headerIcon}
+            accessibilityRole="button"
+            accessibilityLabel="Upload a swing"
+          >
+            <Ionicons name="cloud-upload-outline" size={22} color={colors.accent} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* FILTER STRIP — Source chips + Filters toggle. Date/Club live

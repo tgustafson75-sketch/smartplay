@@ -97,6 +97,36 @@ function withAndroidCameraPermission(config) {
       ['android.permission.CAMERA'],
       manifestConfig.modResults,
     );
+
+    // 2026-05-23 — Manifest hardening for AAR-injected auto-init.
+    // MediaPipe `tasks-vision` AND many AndroidX libraries use
+    // androidx.startup's InitializationProvider to run init code
+    // BEFORE Application.onCreate(). If that init throws (native
+    // .so missing for an ABI the device doesn't have, transitive
+    // dep version mismatch, attestation failure), the app crashes
+    // at boot before any of our Kotlin/JS code can defend against
+    // it.
+    //
+    // We declare the `tools` XML namespace so any future provider-
+    // removal entries can use tools:node="remove". We do NOT
+    // pre-emptively remove the MediaPipe InitializationProvider
+    // because (a) the exact class name isn't documented and a wrong
+    // guess does nothing OR breaks unrelated startup tasks, and
+    // (b) MediaPipe Tasks Vision 0.10.x initializes lazily on first
+    // detect() call by default — so the manifest provider is only
+    // dangerous if Tim's specific device hits the missing-.so path.
+    //
+    // The REAL defense is: defensive package classes (already in
+    // place via try/catch in createNativeModules), reflective SDK
+    // access in the Kotlin modules (to prevent class-verification
+    // crashes at module load), and the JS-side native-module health
+    // tracker (services/nativeModuleHealth.ts) that records load
+    // outcomes for the diagnostic surface.
+    const manifest = manifestConfig.modResults;
+    manifest.manifest.$ = manifest.manifest.$ || {};
+    if (!manifest.manifest.$['xmlns:tools']) {
+      manifest.manifest.$['xmlns:tools'] = 'http://schemas.android.com/tools';
+    }
     return manifestConfig;
   });
 }
