@@ -1176,6 +1176,24 @@ export default function Settings() {
                     </View>
                     <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
+                  {/* 2026-05-23 — Voice coverage log. Every voice command
+                      that doesn't match a wired handler (classifier
+                      unknown, no handler registered, or handler threw)
+                      lands here with transcript + surface + reason. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/voice-misses' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="View voice misses log"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Voice Misses</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Phrasings that didn&apos;t match a handler. Tank&apos;s testing surfaces the gaps here for review.
+                      </Text>
+                    </View>
+                    <Ionicons name="mic-off-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.resetRow}
                     onPress={() => router.push('/gps-test' as never)}

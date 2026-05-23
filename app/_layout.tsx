@@ -102,6 +102,9 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   '/author/reference-assets',
   '/landmark-curate',
   '/owner-logs',
+  // 2026-05-23 — Voice coverage log. Lists transcripts of voice commands
+  // that didn't match a wired handler. Owner-only.
+  '/voice-misses',
   // 2026-05-23 — Native module health diagnostic. Lists which native
   // bridges loaded successfully at boot (Meta Wearables, MediaPipe).
   // Owner-only; surfaces "X loaded vs Y missing" without needing
@@ -612,6 +615,11 @@ function AppNavigator() {
             owner email inside the screen itself; non-owners see a
             polite placeholder. Reachable from Settings -> Owner Tools. */}
         <Stack.Screen name="owner-logs" options={{ headerShown: false }} />
+        {/* 2026-05-23 — Owner-only voice-miss log. Same gating as
+            owner-logs; surfaces transcripts of voice commands that
+            failed to match a wired handler so Tim can review what
+            phrasings need building. */}
+        <Stack.Screen name="voice-misses" options={{ headerShown: false }} />
         <Stack.Screen
           name="hole-view"
           options={{ animation: 'slide_from_bottom' }}

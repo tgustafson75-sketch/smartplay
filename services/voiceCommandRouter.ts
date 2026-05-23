@@ -1,5 +1,7 @@
 import type { VoiceIntent, AppContext, IntentHandler, IntentResult } from '../types/voiceIntent';
 import { parseVoiceIntent } from './voiceCommandParser';
+import { useVoiceMissStore, type VoiceMissType } from '../store/voiceMissStore';
+import { getActiveSurface } from './activeSurfaceRegistry';
 
 export interface RoutingLog {
   timestamp: number;
@@ -46,6 +48,12 @@ export class VoiceCommandRouter {
 
   async dispatch(intent: VoiceIntent, context: AppContext): Promise<IntentResult> {
     if (intent.intent_type === 'unknown' || intent.confidence === 'low') {
+      logVoiceMiss({
+        transcript: intent.raw_text,
+        missType: 'classifier_unknown',
+        intent_type: null,
+        error_message: null,
+      });
       return {
         success: false,
         voice_response: intent.follow_up_question ?? null,
@@ -56,6 +64,12 @@ export class VoiceCommandRouter {
 
     const handler = this.handlers.get(intent.intent_type);
     if (!handler) {
+      logVoiceMiss({
+        transcript: intent.raw_text,
+        missType: 'no_handler',
+        intent_type: intent.intent_type,
+        error_message: null,
+      });
       return {
         success: false,
         voice_response: 'I can\'t do that yet, but I will soon.',
@@ -68,6 +82,12 @@ export class VoiceCommandRouter {
       return await handler.execute(intent, context);
     } catch (err) {
       console.log('[voiceCommandRouter] handler error:', err);
+      logVoiceMiss({
+        transcript: intent.raw_text,
+        missType: 'handler_error',
+        intent_type: intent.intent_type,
+        error_message: err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300),
+      });
       return {
         success: false,
         voice_response: 'Hit a snag on that one. Try again?',
@@ -87,5 +107,56 @@ export class VoiceCommandRouter {
     if (this.history.length > this.MAX_HISTORY) {
       this.history = this.history.slice(-this.MAX_HISTORY);
     }
+  }
+}
+
+/**
+ * Capture an unrecognized / failed voice command for owner review.
+ * Pulls persona / round-state context lazily so the router stays
+ * dependency-light. Best-effort — wrapped in try so a logging failure
+ * never breaks the user's voice loop.
+ *
+ * The user's spoken fallback (the honest "I didn't catch that" / "I
+ * can't do that yet" / "Hit a snag") is produced by dispatch() before
+ * this fires — logging is purely behind-the-scenes telemetry.
+ */
+function logVoiceMiss(args: {
+  transcript: string;
+  missType: VoiceMissType;
+  intent_type: string | null;
+  error_message: string | null;
+}): void {
+  try {
+    let persona: string | null = null;
+    let isRoundActive = false;
+    let currentHole: number | null = null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const settings = require('../store/settingsStore') as typeof import('../store/settingsStore');
+      persona = settings.useSettingsStore.getState().caddiePersonality ?? null;
+    } catch { /* settings store not available — leave null */ }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const round = require('../store/roundStore') as typeof import('../store/roundStore');
+      const r = round.useRoundStore.getState();
+      isRoundActive = !!r.isRoundActive;
+      currentHole = isRoundActive ? r.currentHole : null;
+    } catch { /* round store not available — leave defaults */ }
+
+    let surface: string | null = null;
+    try {
+      surface = getActiveSurface();
+    } catch { /* registry not available — leave null */ }
+
+    useVoiceMissStore.getState().addMiss({
+      transcript: args.transcript,
+      missType: args.missType,
+      intent_type: args.intent_type,
+      error_message: args.error_message,
+      surface,
+      context: { persona, isRoundActive, currentHole },
+    });
+  } catch (e) {
+    console.log('[voiceCommandRouter] logVoiceMiss failed (non-fatal):', e);
   }
 }
