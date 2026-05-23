@@ -158,8 +158,24 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       const videoUri = session.shots.find(s => s.clipUri)?.clipUri ?? null;
       void (async () => {
         try {
+          // 2026-05-22 — Extract putt-phase key frames locally before
+          // the analyze call. Mirrors the full-swing pipeline (which
+          // sends 5 keyframes per swing) but uses putt-tuned fractions
+          // (setup/address/impact/follow-through/roll). When extraction
+          // fails (no expo-video-thumbnails / web), analyzePutt's
+          // spoken-read fallback takes over — no regression.
+          let frames_base64: string[] = [];
+          if (videoUri) {
+            try {
+              const extractor = await import('./puttFrameExtractor');
+              frames_base64 = await extractor.extractPuttFramesForAnalysis(videoUri);
+            } catch (e) {
+              console.log('[videoUpload] putt frame extract failed (non-fatal):', e);
+            }
+          }
           const result = await putting.analyzePutt({
             video_url: videoUri,
+            frames_base64,
             spoken_read: session.upload?.notes ?? null,
             notes: session.upload?.notes ?? null,
           });

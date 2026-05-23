@@ -32,6 +32,9 @@ import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCar
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay from '../../../components/swinglab/SwingBodyOverlay';
 import VideoWatermark from '../../../components/swinglab/VideoWatermark';
+import CompareReferencePickerSheet from '../../../components/swinglab/CompareReferencePickerSheet';
+import type { SimilarMatch } from '../../../services/swingDatabase';
+import type { PoseEstimate } from '../../../services/poseEstimator';
 
 // Phase BW — short mm:ss formatter for the per-swing list rows.
 function formatMmSs(seconds: number): string {
@@ -83,6 +86,8 @@ export default function SwingDetail() {
   } | null>(null);
   const [leftCompareShotId, setLeftCompareShotId] = useState<string | null>(null);
   const [rightCompareShotId, setRightCompareShotId] = useState<string | null>(null);
+  // 2026-05-22 — Compare-to-Reference picker sheet open/close.
+  const [compareSheetOpen, setCompareSheetOpen] = useState(false);
   const isComparing = leftCompareShotId != null && rightCompareShotId != null;
   const isPickingCompareTarget = leftCompareShotId != null && rightCompareShotId == null;
   const actionShot = actionShotId
@@ -298,49 +303,88 @@ export default function SwingDetail() {
     void runPhaseKOnSession(swing_id);
   };
 
-  // 2026-05-22 — Phase 2 "Compare to..." action. Pulls the current
-  // session's biomechanics, runs searchSimilarSwings against the
-  // swing database (seeded archetypes + user uploads), and surfaces
-  // a toast with the top match. Full picker UI lands next sprint;
-  // for now this validates the data path end-to-end + lets the user
-  // hear the top match read by the in-app caddie.
+  // 2026-05-22 — Phase 2 "Compare to..." action. Opens the bottom-sheet
+  // picker (CompareReferencePickerSheet); the sheet calls onCompareToSelect
+  // when the user locks in a reference, at which point we run the full
+  // swingComparisonEngine pass and surface the per-metric result.
   const onCompareTo = () => {
     if (!session?.biomechanics) {
       useToastStore.getState().show('No biomechanics on this swing yet — analyze first.');
       return;
     }
+    setCompareSheetOpen(true);
+  };
+
+  // Wraps the session's biomechanics as a PoseEstimate so the sheet
+  // (and the engine) can consume it cleanly. Kept here so both the
+  // sheet's search and the post-pick comparison see the same shape.
+  const currentPoseForCompare: PoseEstimate | null = session?.biomechanics
+    ? {
+        source: 'video',
+        confidence: 75,
+        frames: session.biomechanics.frames ?? [],
+        biomechanics: session.biomechanics,
+        swingVerdict: null,
+        reason: 'swing detail compare-to action',
+        age_band: 'adult',
+        mirrored: false,
+        joint_confidence: { hip: 0.8, shoulder: 0.8, knee: 0.6, wrist: 0.6, ankle: 0.6, head: 0.7 },
+        partial_view: false,
+      }
+    : null;
+
+  const onCompareToSelect = (match: SimilarMatch) => {
+    if (!currentPoseForCompare) return;
     void (async () => {
       try {
-        const dbMod = await import('../../../services/swingDatabase');
-        // Wrap the session's biomechanics as a PoseEstimate so the
-        // database can hand it to swingComparisonEngine cleanly.
-        const current = {
-          source: 'video' as const,
-          confidence: 75,
-          frames: session.biomechanics?.frames ?? [],
-          biomechanics: session.biomechanics ?? null,
+        const [dbMod, engineMod] = await Promise.all([
+          import('../../../services/swingDatabase'),
+          import('../../../services/swingComparisonEngine'),
+        ]);
+        await dbMod.touchReference(match.reference.id);
+        const ref = match.reference;
+        // Wrap the ReferenceSwing as a PoseEstimate so the engine can
+        // diff biomechanics directly. Mirrors the wrap used in
+        // swingDatabase.searchSimilarSwings.
+        const referencePose: PoseEstimate = {
+          source: 'video',
+          confidence: 80,
+          frames: ref.frames ?? [],
+          biomechanics: ref.biomechanics ?? null,
           swingVerdict: null,
-          reason: 'swing detail compare-to action',
-          age_band: 'adult' as const,
-          mirrored: false,
-          joint_confidence: { hip: 0.8, shoulder: 0.8, knee: 0.6, wrist: 0.6, ankle: 0.6, head: 0.7 },
+          reason: `reference: ${ref.label}`,
+          age_band: ref.body?.age_band ?? 'adult',
+          mirrored: ref.body?.handedness === 'left',
+          joint_confidence: { hip: 0.9, shoulder: 0.9, knee: 0.7, wrist: 0.7, ankle: 0.7, head: 0.7 },
           partial_view: false,
         };
-        const matches = await dbMod.searchSimilarSwings(current, 3, { club: session.club });
-        if (matches.length === 0) {
-          useToastStore.getState().show('No reference swings yet — add one from Swing Library.');
-          return;
+        const kind =
+          ref.source === 'self_upload' ? 'self_vs_self' :
+          ref.source === 'archetype'   ? 'self_vs_avatar' :
+                                         'self_vs_pro';
+        const result = engineMod.compareSwings({
+          current: currentPoseForCompare,
+          reference: referencePose,
+          kind,
+        });
+        const headline = `${result.overall_match}% match to ${ref.label}. ${result.takeaways[0] ?? ''}`.trim();
+        useToastStore.getState().show(headline);
+        // Auto-narrate at trust >=2 — keeps parity with the existing
+        // primary-issue auto-narration policy.
+        if (voiceEnabled && trustLevel !== 1) {
+          await configureAudioForSpeech();
+          await speak(result.voice_summary || headline, voiceGender, language, apiUrl);
         }
-        const top = matches[0];
-        await dbMod.touchReference(top.reference.id);
-        useToastStore.getState().show(
-          `${top.similarity}% match to ${top.reference.label}. ${top.takeaways[0] ?? ''}`,
-        );
       } catch (e) {
-        console.log('[swing-detail] compare-to failed:', e);
+        console.log('[swing-detail] compare-to-select failed:', e);
         useToastStore.getState().show('Compare failed — try again.');
       }
     })();
+  };
+
+  const onAddReferenceFromSheet = () => {
+    setCompareSheetOpen(false);
+    router.push('/swinglab/upload' as never);
   };
 
   return (
@@ -766,6 +810,18 @@ export default function SwingDetail() {
         onClose={() => setActionShotId(null)}
         onStartCompare={handleStartCompare}
         multiShotSessionAvailable={session.shots.length > 1}
+      />
+
+      {/* 2026-05-22 — Compare-to-Reference picker. Replaces the toast-only
+          flow with a ranked bottom-sheet list. onSelect runs the actual
+          swingComparisonEngine pass. */}
+      <CompareReferencePickerSheet
+        visible={compareSheetOpen}
+        current={currentPoseForCompare}
+        clubFilter={session.club ?? null}
+        onClose={() => setCompareSheetOpen(false)}
+        onSelect={onCompareToSelect}
+        onAddReference={onAddReferenceFromSheet}
       />
 
       {/* Phase 403b + 404 — "See the moment" modal. Shows the

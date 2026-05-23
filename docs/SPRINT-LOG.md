@@ -1141,3 +1141,27 @@ After the build kicks, Tim asked for a required Terms & Conditions acceptance st
 3. **iOS native** unblocks if Tim completes Apple Developer Program enrollment between sessions.
 
 **Day 3 final-final tally: 17 commits + 5 OTAs + 2 EAS native builds + Sentry env corrected + T&C acceptance gate shipped.**
+
+---
+
+## Day 4 — 2026-05-22 (evening) — Deferred items 1-7 batch
+
+Working through the deferred queue (items 1-7) Tim called for before tomorrow's iOS + Google login pass. Two batches: **Batch 1 (Compare picker + Putt frame extractor)** and **Batch 2 (Lie strategy UI + Kevin vision wire)**. Each batch ships, ts-checks clean, and pushes to main.
+
+### Batch 1 — Compare picker bottom sheet + Putt-phase frame extractor
+
+#### Item 1 — `CompareReferencePickerSheet` wired into swing detail
+- Created [components/swinglab/CompareReferencePickerSheet.tsx](../components/swinglab/CompareReferencePickerSheet.tsx) — full bottom-sheet modal that replaces the toast-only "Compare to a reference swing" flow. useEffect fires `searchSimilarSwings(current, 8, clubFilter)` on open, renders a ranked list with thumbnail + label + source/club/proName meta + first takeaway + a colored match-score badge (≥80 lime, ≥60 lime-green, ≥40 amber, else red). Top match gets accent-colored border. Empty state walks the user toward `/swinglab/upload` to add their first reference.
+- Wired into [app/swinglab/swing/[swing_id].tsx](../app/swinglab/swing/%5Bswing_id%5D.tsx) — `onCompareTo` now opens the sheet instead of running search+toast inline. Picker's `onSelect(match)` runs the full `swingComparisonEngine.compareSwings` pass against the chosen reference (correctly wrapped as a `PoseEstimate` mirroring the swingDatabase pattern) and surfaces `overall_match` + lead takeaway via toast, with persona-aware auto-narration at trust ≥2.
+- Engineering note: kind selection in onCompareToSelect mirrors searchSimilarSwings (`self_upload → self_vs_self`, `archetype → self_vs_avatar`, else `self_vs_pro`) — keeps the engine's prompt logic + voice summary consistent regardless of entry point.
+
+#### Item 6 — `puttFrameExtractor` service
+- Created [services/puttFrameExtractor.ts](../services/puttFrameExtractor.ts) — putts are NOT full swings, so the full-swing extractor's fractions ([0.08, 0.40, 0.60, 0.75, 0.88], biased to the 60-78% downswing-to-impact window) are wrong. New fractions: **setup 0.05 → address 0.20 → impact 0.50 → follow_through 0.70 → roll 0.92**. Each frame carries a `phase` tag so the analyst prompt in /api/putting-analysis can lead with the right cue per frame instead of treating all 5 as undifferentiated.
+- `probeDurationMs` mirrors poseDetection (Audio.Sound → VT lower-bound), with shorter probe steps tuned for typical 1.5-3s putt clips. Fallback duration 2.5s.
+- Two public functions: `extractPuttKeyFrames(uri, boundaries?)` → `PuttFrame[]` (phase-tagged) for callers that need per-phase metadata, and `extractPuttFramesForAnalysis(uri, boundaries?)` → `string[]` for `puttingAnalysisService.analyzePutt({ frames_base64 })`.
+- Wired into [services/videoUpload.ts:158-180](../services/videoUpload.ts#L158-L180) — the putting branch now extracts phase frames before calling `analyzePutt`. Failure is non-fatal: empty frame array falls back to analyzePutt's spoken-read-only path. No regression for clips where extraction is unavailable (web, missing video URI, expo-video-thumbnails error).
+
+#### Verification
+- `npx tsc --noEmit` → exit 0. No regressions in adjacent surfaces (juniorSwingAnalyzer, family dashboard, captain trend strip, the broadcast templates from Day 3's session).
+- The Compare picker preserves the engine's `compareSwings` contract — same return shape (`overall_match`, `takeaways`, `voice_summary`) the existing reanalyze action expects; future PRs can lift the result into a structured side-by-side card without reshaping the engine.
+
