@@ -64,6 +64,15 @@ const path = require('path');
 // ─── Constants ───────────────────────────────────────────────────────
 const MP_VERSION = '0.10.14'; // current stable as of 2026-05
 const MP_MODEL_ASSET_RELPATH = 'mediapipe/pose_landmarker_full.task';
+// 2026-05-23 — All variants the JS service may load. The plugin
+// copies every one that's present in assets/mediapipe/. Missing
+// variants are non-fatal (logged) — the JS service's setPreferredQuality
+// just won't be able to switch to them at runtime.
+const MP_ALL_MODEL_VARIANTS = [
+  'pose_landmarker_lite.task',
+  'pose_landmarker_full.task',
+  'pose_landmarker_heavy.task',
+];
 
 // ─── Android ─────────────────────────────────────────────────────────
 
@@ -119,30 +128,39 @@ function withAndroidSourceCopyAndPackageReg(config) {
     },
   ]);
 
-  // (b) copy the bundled model into android/app/src/main/assets/
+  // (b) copy all available bundled model variants into
+  //     android/app/src/main/assets/mediapipe/. The 'full' variant is
+  //     the only REQUIRED one; missing 'lite' or 'heavy' just means
+  //     setPreferredQuality can't switch to them at runtime — service
+  //     falls back to whichever quality is loaded.
   const withModelAsset = withDangerousMod(withSourceCopy, [
     'android',
     async (modConfig) => {
       const projectRoot = modConfig.modRequest.projectRoot;
       const platformRoot = modConfig.modRequest.platformProjectRoot;
-      const srcAsset = path.join(projectRoot, 'assets', MP_MODEL_ASSET_RELPATH);
+      const srcRoot = path.join(projectRoot, 'assets', 'mediapipe');
       const dstAssetDir = path.join(platformRoot, 'app', 'src', 'main', 'assets', 'mediapipe');
-      const dstAsset = path.join(dstAssetDir, 'pose_landmarker_full.task');
       try {
-        if (!fs.existsSync(srcAsset)) {
-          // Asset is committed at assets/mediapipe/pose_landmarker_full.task;
-          // when missing, log a clear warning + continue (native init
-          // will throw a clean "model file not found" at runtime
-          // rather than crashing the build).
+        if (!fs.existsSync(dstAssetDir)) fs.mkdirSync(dstAssetDir, { recursive: true });
+        let copied = 0;
+        for (const variant of MP_ALL_MODEL_VARIANTS) {
+          const src = path.join(srcRoot, variant);
+          const dst = path.join(dstAssetDir, variant);
+          if (fs.existsSync(src)) {
+            fs.copyFileSync(src, dst);
+            copied++;
+          }
+        }
+        if (copied === 0) {
+          // Required full variant missing.
           console.warn(
             `[withMediaPipePose] missing ${MP_MODEL_ASSET_RELPATH} — ` +
             'add the BlazePose model file before the next build. ' +
             'Download: https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task',
           );
-          return modConfig;
+        } else {
+          console.log(`[withMediaPipePose] copied ${copied} model variant(s) into Android assets`);
         }
-        if (!fs.existsSync(dstAssetDir)) fs.mkdirSync(dstAssetDir, { recursive: true });
-        fs.copyFileSync(srcAsset, dstAsset);
       } catch (e) {
         console.warn('[withMediaPipePose] Android model-asset copy failed (non-fatal):', e.message);
       }
@@ -233,19 +251,28 @@ function withIOSSourceCopyAndModel(config) {
       return modConfig;
     },
   ]);
-  // Copy model file into the iOS bundle resources.
+  // Copy all available model variants into the iOS bundle resources.
   return withDangerousMod(withSourceCopy, [
     'ios',
     async (modConfig) => {
       const projectRoot = modConfig.modRequest.projectRoot;
       const platformRoot = modConfig.modRequest.platformProjectRoot;
-      const srcAsset = path.join(projectRoot, 'assets', MP_MODEL_ASSET_RELPATH);
+      const srcRoot = path.join(projectRoot, 'assets', 'mediapipe');
       const dstAssetDir = path.join(platformRoot, 'SmartPlayCaddie', 'Resources', 'mediapipe');
-      const dstAsset = path.join(dstAssetDir, 'pose_landmarker_full.task');
       try {
-        if (!fs.existsSync(srcAsset)) return modConfig; // warned in android branch
         if (!fs.existsSync(dstAssetDir)) fs.mkdirSync(dstAssetDir, { recursive: true });
-        fs.copyFileSync(srcAsset, dstAsset);
+        let copied = 0;
+        for (const variant of MP_ALL_MODEL_VARIANTS) {
+          const src = path.join(srcRoot, variant);
+          const dst = path.join(dstAssetDir, variant);
+          if (fs.existsSync(src)) {
+            fs.copyFileSync(src, dst);
+            copied++;
+          }
+        }
+        if (copied > 0) {
+          console.log(`[withMediaPipePose] copied ${copied} model variant(s) into iOS bundle resources`);
+        }
       } catch (e) {
         console.warn('[withMediaPipePose] iOS model-asset copy failed (non-fatal):', e.message);
       }

@@ -43,6 +43,7 @@ import {
 } from './poseAnalysisApi';
 import type { SwingAnalysis, Frame } from './poseDetection';
 import { devLog } from './devLog';
+import { recordPoseTelemetry } from './poseTelemetry';
 
 // ─── Public types ────────────────────────────────────────────────────────
 
@@ -103,6 +104,15 @@ export interface PoseEstimate {
    *  cleared the usable threshold across captured frames. UI should
    *  surface a "reframe and try again" hint when this is true. */
   partial_view: boolean;
+  /** 2026-05-23 — Which backend produced the keypoints. Drives the
+   *  "On-device" vs "Cloud" badge in SmartMotion / PuttingLab and
+   *  the brain prompt context. Optional so legacy callers / cached
+   *  PoseEstimate records continue to read clean. */
+  pose_backend?: 'mediapipe' | 'cloud_proxy' | 'cloud_vision_llm' | 'none';
+  /** 2026-05-23 — Average native inference time (ms) when
+   *  pose_backend === 'mediapipe'. Lets the badge show "On-device •
+   *  47ms" when meaningful. Null for cloud paths. */
+  mediapipe_inference_ms?: number | null;
 }
 
 /** Per-joint roll-up across all captured frames. 0..1 — 1 = always
@@ -142,6 +152,20 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
   const lefty = input.context?.handedness === 'left';
   const baseReason = inputDescriptor(input);
   devLog(`[poseEstimator] start ${baseReason} band=${ageBand} lefty=${lefty}`);
+  // Telemetry pump — every estimatePose call eventually publishes its
+  // final state via this helper so the UI's PoseSourceBadge
+  // (subscribed via useLatestPoseTelemetry) stays current. Wrapping
+  // here keeps individual return sites simple.
+  const publish = (est: PoseEstimate): PoseEstimate => {
+    try {
+      recordPoseTelemetry({
+        backend: est.pose_backend ?? 'none',
+        confidence: est.confidence,
+        inferenceMs: est.mediapipe_inference_ms ?? null,
+      });
+    } catch { /* non-fatal */ }
+    return est;
+  };
 
   // ── 1. Video URI → biomechanics + full keypoint stream ─────────────
   if (input.videoUri && input.durationMs) {
@@ -161,7 +185,7 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
     // is softened. Threshold (<55 OR partial_view) is conservative —
     // avoids hedging clean reads.
     const hedgedBio = hedgeBiomechanics(bio, confidence, partial);
-    return {
+    return publish({
       source: 'video',
       confidence,
       frames: adjusted,
@@ -172,7 +196,9 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
       mirrored: lefty,
       joint_confidence: jc,
       partial_view: partial,
-    };
+      pose_backend: bio || adjusted.length > 0 ? 'cloud_proxy' : 'none',
+      mediapipe_inference_ms: null,
+    });
   }
 
   // ── 2. Pre-sampled frames → MediaPipe on-device when available ─────
@@ -189,12 +215,20 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
       const mp = await import('./mediaPipePoseService');
       if (mp.isMediaPipeAvailable()) {
         const poseFrames: PoseFrame[] = [];
+        const inferenceTimings: number[] = [];
         for (let i = 0; i < input.frames.length; i++) {
           const f = input.frames[i];
           const tsMs = Math.round((f.time_sec ?? 0) * 1000);
           const detected = await mp.detectPoseFromBase64(f.b64, undefined, tsMs);
           if (detected) poseFrames.push(detected);
         }
+        // Pick up the last inference time from the status. The native
+        // module exposes lastInferenceMs; we report a coarse average
+        // by reading status once per estimatePose call.
+        try {
+          const status = await mp.getMediaPipeStatus();
+          if (status.lastInferenceMs > 0) inferenceTimings.push(status.lastInferenceMs);
+        } catch { /* non-fatal */ }
         if (poseFrames.length > 0) {
           // Tag frames with canonical swing positions based on index
           // order. The MediaPipe frames branch typically receives the
@@ -222,7 +256,7 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
           const jc = computeJointConfidence(adjusted);
           const partial = detectPartialView(adjusted);
           const hedgedBio = hedgeBiomechanics(bio, confidence, partial);
-          return {
+          return publish({
             source: 'frames',
             confidence,
             frames: adjusted,
@@ -233,13 +267,15 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
             mirrored: lefty,
             joint_confidence: jc,
             partial_view: partial,
-          };
+            pose_backend: 'mediapipe',
+            mediapipe_inference_ms: inferenceTimings[0] ?? null,
+          });
         }
       }
     } catch (e) {
       devLog('[poseEstimator] mediapipe frames path failed (falling back to stub): ' + String(e));
     }
-    return {
+    return publish({
       source: 'frames',
       confidence: 0,
       frames: [],
@@ -250,7 +286,9 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
       mirrored: lefty,
       joint_confidence: { hip: 0, shoulder: 0, knee: 0, wrist: 0, ankle: 0, head: 0 },
       partial_view: true,
-    };
+      pose_backend: 'none',
+      mediapipe_inference_ms: null,
+    });
   }
 
   // ── 3. Single image → one-shot keypoints ───────────────────────────
@@ -260,11 +298,20 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
     // — when MediaPipe is unavailable the legacy cloud path runs
     // exactly as before.
     let frame: PoseFrame | null = null;
+    let backend: PoseEstimate['pose_backend'] = 'none';
+    let inferenceMs: number | null = null;
     try {
       const mp = await import('./mediaPipePoseService');
       if (mp.isMediaPipeAvailable()) {
         frame = await mp.detectPoseFromUri(input.imageUri, undefined, 0);
-        if (frame) devLog('[poseEstimator] mediapipe one-shot ok');
+        if (frame) {
+          backend = 'mediapipe';
+          try {
+            const status = await mp.getMediaPipeStatus();
+            inferenceMs = status.lastInferenceMs > 0 ? status.lastInferenceMs : null;
+          } catch { /* non-fatal */ }
+          devLog('[poseEstimator] mediapipe one-shot ok ' + (inferenceMs ? `(${inferenceMs}ms)` : ''));
+        }
       }
     } catch (e) {
       devLog('[poseEstimator] mediapipe one-shot failed: ' + String(e));
@@ -274,28 +321,31 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
         devLog('[poseEstimator] cloud one-shot failed: ' + String(e));
         return null;
       });
+      if (frame) backend = 'cloud_proxy';
     }
     if (!frame) {
-      return emptyResult('image', ageBand, lefty, 'pose detection returned null (mediapipe + cloud both failed)');
+      return publish(emptyResult('image', ageBand, lefty, 'pose detection returned null (mediapipe + cloud both failed)'));
     }
     const adjusted = adjustFrames([frame], ageBand, lefty);
     const jc = computeJointConfidence(adjusted);
     const partial = detectPartialView(adjusted);
-    return {
+    return publish({
       source: 'image',
       confidence: computeConfidence(adjusted, false),
       frames: adjusted,
       biomechanics: null,
       swingVerdict: null,
-      reason: `single image pose; partial=${partial}`,
+      reason: `single image pose; backend=${backend}; partial=${partial}`,
       age_band: ageBand,
       mirrored: lefty,
       joint_confidence: jc,
       partial_view: partial,
-    };
+      pose_backend: backend,
+      mediapipe_inference_ms: inferenceMs,
+    });
   }
 
-  return emptyResult('unknown', ageBand, lefty, 'no input supplied (need imageUri / videoUri+durationMs / frames)');
+  return publish(emptyResult('unknown', ageBand, lefty, 'no input supplied (need imageUri / videoUri+durationMs / frames)'));
 }
 
 // ─── Adjustments (age + handedness) ─────────────────────────────────────
@@ -518,6 +568,8 @@ function emptyResult(
     mirrored: lefty,
     joint_confidence: { hip: 0, shoulder: 0, knee: 0, wrist: 0, ankle: 0, head: 0 },
     partial_view: true,
+    pose_backend: 'none',
+    mediapipe_inference_ms: null,
   };
 }
 

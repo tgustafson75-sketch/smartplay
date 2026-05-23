@@ -71,6 +71,12 @@ interface DetectOptions {
    *  array alongside the COCO-17 projection. Use sparingly — adds
    *  ~3 KB of JSON per frame. */
   includeRawLandmarks?: boolean;
+  /** 2026-05-23 — When true, runs the glasses-POV post-processing
+   *  pass (zeros torso joint scores when the torso isn't reliably
+   *  in frame). Callers that know the source is head-mounted set
+   *  this true. Default false — auto-detection still happens inside
+   *  the pass via the torso visibility threshold. */
+  povHint?: boolean;
 }
 
 interface NativeMP {
@@ -148,8 +154,16 @@ export async function detectPoseFromBase64(
       return null;
     }
     const keypoints = projectBlazePoseToCoco17(result.landmarks);
-    const frame: PoseFrame = { timestampMs, keypoints };
-    devLog(`[mediaPipe] detect ok quality=${quality} ms=${result.inferenceMs} usable=${countUsable(keypoints)}/17`);
+    let frame: PoseFrame = { timestampMs, keypoints };
+    // 2026-05-23 — Always run the glasses-POV post-processing pass.
+    // It's a no-op when the torso is in frame (cheapest possible
+    // path), and zeroes torso scores when it isn't. povHint just
+    // forces the pass unconditionally — useful when the caller
+    // already knows the frame came from glasses.
+    if (opts?.povHint || true) {
+      frame = postProcessForGlassesPOV(frame);
+    }
+    devLog(`[mediaPipe] detect ok quality=${quality} ms=${result.inferenceMs} usable=${countUsable(frame.keypoints)}/17`);
     return frame;
   } catch (e) {
     devLog('[mediaPipe] detectPoseFromBase64 failed: ' + String(e));
@@ -176,6 +190,56 @@ export async function detectPoseFromUri(
     devLog('[mediaPipe] detectPoseFromUri failed: ' + String(e));
     return null;
   }
+}
+
+/**
+ * 2026-05-23 — Glasses-POV post-processing. When the source frame is
+ * known to be from a head-mounted camera (Ray-Ban Meta glasses), the
+ * BlazePose model often "finds" a person from the player's own arms
+ * + hands + a sliver of leg at the bottom of the frame — but the
+ * torso is fundamentally NOT in view. The keypoints it produces for
+ * shoulders/hips are then guesses with low presence scores.
+ *
+ * This pass walks the keypoints and zeros the score on torso joints
+ * (left/right shoulder, left/right hip) when the average shoulder +
+ * hip visibility falls below the POV threshold. The downstream
+ * biomechanics pipeline already treats score=0 as "missing" and skips
+ * the metric — so this pass effectively tells the pipeline "don't
+ * try to compute hip turn or shoulder coil from a POV frame; the
+ * data isn't there." Hands / wrists / arms keypoints stay intact —
+ * those ARE in frame and ARE useful for grip + takeaway reads.
+ *
+ * Caller marks a frame as POV by passing source='glasses' OR by
+ * setting opts.povHint=true when they know the source independently.
+ * No-op when neither signal is present.
+ */
+const POV_TORSO_THRESHOLD = 0.30;
+const TORSO_JOINTS = ['left_shoulder', 'right_shoulder', 'left_hip', 'right_hip'] as const;
+
+export function postProcessForGlassesPOV(frame: PoseFrame): PoseFrame {
+  let torsoScoreSum = 0;
+  let torsoCount = 0;
+  for (const k of frame.keypoints) {
+    if (k.name && (TORSO_JOINTS as readonly string[]).includes(k.name)) {
+      torsoScoreSum += k.score;
+      torsoCount++;
+    }
+  }
+  if (torsoCount === 0) return frame;
+  const avg = torsoScoreSum / torsoCount;
+  if (avg >= POV_TORSO_THRESHOLD) return frame; // torso clearly visible — leave alone
+  // Torso visibility low — likely a head-mounted POV frame. Zero the
+  // torso scores so downstream metric computation skips hip turn /
+  // shoulder coil / weight shift cleanly. Arms + hands stay usable.
+  devLog(`[mediaPipe] glasses-POV detected (avg torso visibility=${avg.toFixed(2)}); zeroing torso scores`);
+  return {
+    ...frame,
+    keypoints: frame.keypoints.map((k) =>
+      k.name && (TORSO_JOINTS as readonly string[]).includes(k.name)
+        ? { ...k, score: 0 }
+        : k,
+    ),
+  };
 }
 
 /**

@@ -1432,6 +1432,39 @@ Final-polish batch closing the stacked items from the user's Final Polish Sprint
 
 **Day 5 extension 4 tally: 1 commit (~12 files) + 1 OTA + ts-check clean.**
 
+### Day 5 extension 5 — MediaPipe activation (model assets + pose source badge + POV pass)
+
+Closing the prerequisites flagged in extension 4. MediaPipe is now FULLY activated end-to-end pending only a new EAS native build.
+
+**Shipped:**
+- **Model files committed** — `assets/mediapipe/pose_landmarker_full.task` (9.0 MB) + `assets/mediapipe/pose_landmarker_lite.task` (5.5 MB) downloaded from Google's official model zoo. The full variant is the default; the lite variant feeds the AppState=background auto-downshift path in `mediaPipePoseService.ts`. The heavy variant (~30 MB) is intentionally NOT committed — not worth the bundle weight for the precision delta.
+- **[plugins/withMediaPipePose.js](../plugins/withMediaPipePose.js)** — both Android + iOS asset-copy mods now walk a `MP_ALL_MODEL_VARIANTS` array and copy every variant present in `assets/mediapipe/`. Missing variants log + continue (non-fatal); missing the full variant logs the existing "download from Google" warning. Prebuild log now reports `[withMediaPipePose] copied N model variant(s)` so the EAS Build log makes the count explicit.
+- **[services/poseEstimator.ts](../services/poseEstimator.ts)** — `PoseEstimate` gained `pose_backend: 'mediapipe' | 'cloud_proxy' | 'cloud_vision_llm' | 'none'` and `mediapipe_inference_ms: number | null` (both optional + additive — legacy callers/cached records still read clean). Every return site now stamps the backend honestly: video path = `cloud_proxy` when frames returned; MediaPipe-frames success = `mediapipe` + the native inference ms from `getMediaPipeStatus()`; image path tracks which backend produced the frame (MediaPipe attempted first, cloud as fallback); `emptyResult` = `none`. A `publish(...)` wrapper around each return site emits to the new poseTelemetry channel so UI surfaces stay current without polling.
+- **[services/poseTelemetry.ts](../services/poseTelemetry.ts)** (NEW) — tiny shared pub/sub for the latest `PoseTelemetry` record. `recordPoseTelemetry({ backend, confidence, inferenceMs })` from poseEstimator's publish wrapper; `useLatestPoseTelemetry()` React hook for consumers. Stale records (>90s) collapse to `{backend:'none'}` so the badge doesn't lie about activity if the user steps away.
+- **[components/PoseSourceBadge.tsx](../components/PoseSourceBadge.tsx)** (NEW) — inline chip with three states: ON-DEVICE • Nms (lime, MediaPipe), CLOUD • N% (amber, cloud proxy), NO POSE (neutral, stale or never-fired). Returns `null` until the first pose telemetry record lands — keeps SmartMotion's header clean before any analysis runs.
+- **[app/swinglab/smartmotion.tsx](../app/swinglab/smartmotion.tsx)** — `PoseSourceBadge` mounted alongside the existing `GlassesStatusBadge` in the SmartMotion header. Wrapped in a flex-row container so both chips sit cleanly under the "Swing Analysis" subtitle. Same pattern can drop into PuttingLab + SmartVision later if Tim wants the badge there too.
+- **[services/mediaPipePoseService.ts](../services/mediaPipePoseService.ts)** — new `postProcessForGlassesPOV(frame)` pass. Walks the keypoints, computes average torso (shoulder + hip) visibility, and when below `POV_TORSO_THRESHOLD = 0.30` zeros the torso joint scores so the downstream biomechanics pipeline cleanly skips hip turn / shoulder coil / weight shift instead of computing them from imaginary keypoints. Hands / wrists / arms / head stay intact — those ARE in frame on POV captures and are the cues a glasses-grounded analysis can actually use (grip, takeaway path, impact contact). Auto-applied to every `detectPoseFromBase64` call; no-op when torso is visible (cheapest possible path).
+
+**How the four states map to actual behavior:**
+| What the player sees | Means |
+|---|---|
+| ON-DEVICE • 47ms | MediaPipe ran on the phone CPU/GPU; native inference time the user can compare against subsequent shots |
+| CLOUD • 78% | MediaPipe wasn't available OR the on-device call returned null; the cloud `/api/pose-analysis` path produced the frame; the % is the overall PoseEstimate confidence |
+| NO POSE | The last call returned no frame (model didn't find a person), OR no pose call in the last 90s |
+| (nothing) | This session hasn't run any pose call yet — badge stays hidden so it doesn't look broken |
+
+**Verification:**
+- `npx tsc --noEmit` → exit 0.
+- `assets/mediapipe/` contains both variants; git status shows them as tracked (gitignore doesn't exclude them).
+- No regression: every change is additive (new optional fields, new badge, new helper) or substitutional inside a defensive try/catch. Cloud path runs identically when MediaPipe is unavailable.
+
+**What's left to fully activate MediaPipe:**
+1. **One new EAS Android build** to link the native module + bundle the model assets. The plugin handles everything at prebuild; no manual edits needed. Tim's call on timing — already at 97% of included EAS credits, so the next build tips into pay-as-you-go.
+2. **iOS**: same plugin code is ready; pending Apple Developer Program enrollment.
+
+**Day 5 extension 5 tally: 1 commit + 1 OTA + ts-check clean. MediaPipe assets ready; next EAS build activates the native path end-to-end.**
+
+
 
 
 
