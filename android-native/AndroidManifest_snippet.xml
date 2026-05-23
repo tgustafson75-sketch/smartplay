@@ -1,0 +1,79 @@
+<!--
+  AndroidManifest snippet for MetaCaddyVoiceHandler.kt
+  Paste these blocks into your existing AndroidManifest.xml.
+
+  Required permissions: location + internet. (TTS + speech recognition
+  don't require permission declarations on SDK 34.)
+
+  Two intent-filters declared on the activity:
+    1. The custom Google Assistant action your README references.
+    2. Standard VOICE_ASSIST / ASSIST so the activity still launches
+       when the user says "Hey Google, open Smart Play Caddy" without
+       App Actions registered.
+    3. A deep-link smartplay://meta-voice?q=... for explicit dispatch.
+-->
+
+<!-- ─── Permissions (top-level, inside <manifest>) ───────────────── -->
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+<!--
+  Bluetooth audio routing to Ray-Ban Meta glasses is handled by the
+  system audio router once the glasses are paired as a Bluetooth
+  headset (HFP/HSP profile). No app-level Bluetooth permission needed
+  for TTS playback to route there.
+-->
+
+<!-- ─── Activity declaration (inside <application>) ─────────────── -->
+<activity
+    android:name="com.smartplaycaddy.voice.MetaCaddyVoiceHandler"
+    android:exported="true"
+    android:label="Ask Smart Play Caddy"
+    android:launchMode="singleTask"
+    android:theme="@android:style/Theme.Translucent.NoTitleBar">
+
+    <!--
+      Custom App Action target — referenced by res/xml/shortcuts.xml
+      and (once registered) by Google's App Actions system.
+    -->
+    <intent-filter>
+        <action android:name="com.google.android.gms.actions.ASK_SMART_PLAY_CADDY" />
+        <category android:name="android.intent.category.DEFAULT" />
+    </intent-filter>
+
+    <!--
+      Generic "Hey Google, open Smart Play Caddy" fallback. The activity
+      detects an empty query and prompts for dictation via
+      RecognizerIntent.
+    -->
+    <intent-filter>
+        <action android:name="android.intent.action.ASSIST" />
+        <action android:name="android.intent.action.VOICE_ASSIST" />
+        <category android:name="android.intent.category.DEFAULT" />
+    </intent-filter>
+
+    <!--
+      Deep link entry. Useful for testing from adb:
+        adb shell am start -a android.intent.action.VIEW \
+          -d "smartplay://meta-voice?q=145%20to%20pin"
+    -->
+    <intent-filter android:autoVerify="false">
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="smartplay" android:host="meta-voice" />
+    </intent-filter>
+</activity>
+
+<!-- ─── Shortcuts.xml reference (inside <application>) ──────────── -->
+<!--
+  Reference your shortcuts.xml so Google's App Actions framework can
+  discover the BII (Built-In Intent) capabilities. Without this,
+  "Hey Google, ask Smart Play Caddy 145 to pin" will NOT inline the
+  question into your intent extras — Assistant will just launch
+  the app.
+-->
+<meta-data
+    android:name="android.app.shortcuts"
+    android:resource="@xml/shortcuts" />

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  res/xml/shortcuts.xml
+  App Actions capability + dynamic shortcut for SmartPlay Caddy.
+
+  Drop this file at android/app/src/main/res/xml/shortcuts.xml (or
+  wherever your app's res tree lives).
+
+  The <capability> uses the GET_THING BII (Built-In Intent) — Google
+  Assistant maps the user's spoken parameter into thing.name, which we
+  read back via Intent extra "thing_name" and pass to our activity as
+  EXTRA_QUERY.
+
+  Once this file is referenced from AndroidManifest.xml AND the app is
+  registered in Google's Actions console, the user can say:
+
+      "Hey Google, ask Smart Play Caddy 145 to pin"
+      "Hey Google, on Smart Play Caddy how's the wind"
+
+  and Assistant inlines the trailing phrase into thing.name before
+  dispatching to MetaCaddyVoiceHandler. Until App Actions is
+  registered, the trigger phrase falls back to "Hey Google, open
+  Smart Play Caddy", and the activity prompts for dictation.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res-auto">
+
+    <capability android:name="actions.intent.GET_THING">
+        <intent
+            android:action="com.google.android.gms.actions.ASK_SMART_PLAY_CADDY"
+            android:targetPackage="com.smartplaycaddy"
+            android:targetClass="com.smartplaycaddy.voice.MetaCaddyVoiceHandler">
+            <!--
+              The spoken phrase the user added after the app name maps
+              to thing.name. We extract it in the activity as EXTRA_QUERY.
+            -->
+            <parameter
+                android:name="thing.name"
+                android:key="com.smartplaycaddy.voice.QUERY" />
+        </intent>
+    </capability>
+
+</shortcuts>
