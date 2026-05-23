@@ -48,6 +48,15 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // coords when course geometry is missing / wrong. Aliases.
   mark_green: { type: 'navigate', path: '/mark-green' },
   markgreen: { type: 'navigate', path: '/mark-green' },
+  // 2026-05-23 — Coach Mode (Fix #9). Voice phrasings "open coach mode",
+  // "coach Emma", "let's coach Mike", etc. land here. The execute()
+  // path below also reads parameters.player_name (or extracts from
+  // raw_text as a fallback) and pre-sets familyStore.active_member_id
+  // BEFORE navigating, so Coach Mode opens straight to the picked
+  // player. New names quick-add via the same familyStore.addMember
+  // path the Coach Mode UI uses.
+  coach_mode: { type: 'navigate', path: '/swinglab/coach-mode' },
+  coachmode: { type: 'navigate', path: '/swinglab/coach-mode' },
 };
 
 const TOOL_LABEL: Record<string, string> = {
@@ -70,6 +79,8 @@ const TOOL_LABEL: Record<string, string> = {
   gps_test_bench: 'GPS Test Bench',
   mark_green: 'Mark Green',
   markgreen: 'Mark Green',
+  coach_mode: 'Coach Mode',
+  coachmode: 'Coach Mode',
 };
 
 export const openToolHandler: IntentHandler = {
@@ -90,6 +101,13 @@ export const openToolHandler: IntentHandler = {
     'start SmartMotion',
     'record my swing',
     'capture my swing',
+    // 2026-05-23 (Fix #9) — Coach Mode voice phrasings.
+    'open coach mode',
+    'coach mode',
+    'start coaching',
+    "I'm coaching Emma",
+    'coach Mike',
+    'watch my student',
   ],
 
   async execute(intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
@@ -116,6 +134,67 @@ export const openToolHandler: IntentHandler = {
         angleRaw === 'down_the_line' || angleRaw === 'down-the-line' || angleRaw === 'dtl' ? 'down_the_line' :
         null;
       const autoStart = intent.parameters.auto_start === true;
+
+      // 2026-05-23 (Fix #9) — Coach Mode player-name resolution.
+      // Voice "I'm coaching Emma" / "coach Mike" pre-sets the active
+      // family member BEFORE navigating, so Coach Mode opens straight
+      // to the picked player instead of the picker. Same effect Tank
+      // would get by tapping the member's card on entry. New names
+      // quick-add via familyStore.addMember (same path the Coach Mode
+      // quick-add input uses). The Coach Mode screen reads
+      // active_member_id on mount, so the navigation handoff is
+      // synchronous from the screen's perspective.
+      let coachedPlayerName: string | null = null;
+      if (toolName === 'coach_mode' || toolName === 'coachmode') {
+        const fromParam = typeof intent.parameters.player_name === 'string'
+          ? intent.parameters.player_name.trim()
+          : '';
+        // Fallback regex on raw_text — picks up names the classifier
+        // missed. Matches "coaching X", "coach X", "watch my student X"
+        // where X is a capitalized first name. Bounded to one word so
+        // "I'm coaching today" doesn't extract "today".
+        const fromRegex = (() => {
+          const t = intent.raw_text ?? '';
+          const m =
+            t.match(/\bcoaching\s+([A-Z][a-z]{1,20})\b/) ??
+            t.match(/\bcoach\s+([A-Z][a-z]{1,20})\b/) ??
+            t.match(/\bmy\s+student\s+([A-Z][a-z]{1,20})\b/);
+          return m ? m[1] : null;
+        })();
+        const name = (fromParam.length > 0 ? fromParam : (fromRegex ?? '')).trim();
+        if (name) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const fam = require('../../store/familyStore') as typeof import('../../store/familyStore');
+            const state = fam.useFamilyStore.getState();
+            const target = name.toLowerCase();
+            const existing = state.members.find(
+              m => !m.archived && m.firstName.trim().toLowerCase() === target,
+            );
+            if (existing) {
+              state.setActiveMember(existing.id);
+              coachedPlayerName = existing.firstName;
+            } else {
+              // Quick-add — same defaults Coach Mode's UI uses for the
+              // typed quick-add input. Pro doesn't fill out a full
+              // roster entry by voice; just names the student.
+              const id = state.addMember({
+                firstName: name,
+                relationship: 'other',
+                age: null,
+                skillLevel: 'developing',
+                handedness: 'unknown',
+                approximate_handicap: null,
+                avatar_emoji: '🏌️',
+              });
+              state.setActiveMember(id);
+              coachedPlayerName = name;
+            }
+          } catch (e) {
+            console.log('[openToolHandler] coach_mode player resolve failed (non-fatal):', e);
+          }
+        }
+      }
 
       try {
         const { router } = await import('expo-router');
@@ -148,6 +227,8 @@ export const openToolHandler: IntentHandler = {
       } else if ((toolName === 'smartmotion' || toolName === 'smart_motion') && angle) {
         const label = angle === 'down_the_line' ? 'down the line' : 'face on';
         voiceResponse = autoStart ? `Recording ${label}.` : `SmartMotion, ${label}.`;
+      } else if ((toolName === 'coach_mode' || toolName === 'coachmode') && coachedPlayerName) {
+        voiceResponse = `Coach Mode — coaching ${coachedPlayerName}.`;
       } else {
         voiceResponse = 'Opening ' + TOOL_LABEL[toolName] + '.';
       }

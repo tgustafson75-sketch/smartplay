@@ -11,7 +11,7 @@ const buildSystemPrompt = (g: Persona | VoiceGender) => {
 Available intents:
 
 1. open_tool — User wants to launch a tool or screen.
-   parameters: { tool_name: "smartvision" | "smartfinder" | "swinglab" | "scorecard" | "dashboard" | "settings" | "smartmotion" | "tightlie" | "acoustic" | "gps_test" }
+   parameters: { tool_name: "smartvision" | "smartfinder" | "swinglab" | "scorecard" | "dashboard" | "settings" | "smartmotion" | "tightlie" | "acoustic" | "gps_test" | "coach_mode", player_name?: string }
    Examples:
    - "open SmartVision" -> { tool_name: "smartvision" }
    - "show me the smart finder" -> { tool_name: "smartfinder" }
@@ -28,6 +28,8 @@ Available intents:
    - "open acoustic test" / "acoustic test bench" / "test bench" / "test the mic" -> { tool_name: "acoustic" }
    - "open GPS test" / "GPS test bench" / "test the GPS" -> { tool_name: "gps_test" }
    - "mark the green" / "mark green" / "I'm at the green" / "open Mark Green" -> { tool_name: "mark_green" }
+   - "open Coach Mode" / "coach mode" / "start coaching" / "let's coach" / "watch my student" -> { tool_name: "coach_mode" }
+   - "I'm coaching Emma" / "coach Mike" / "let's coach Sarah" / "I'm gonna coach Jenny" -> { tool_name: "coach_mode", player_name: "Emma" } (extract the first name verbatim into player_name; preserves capitalization as spoken)
 
 2. query_status — User wants information about current state.
    parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare", member_name?: string, notes?: string, lie_hint?: string, target_yards?: number, against?: "self_previous" | "tour_median" | "amateur_good" }
