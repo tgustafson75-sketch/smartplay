@@ -6,9 +6,10 @@
  * caller to know what's installed.
  *
  * Backends, best→worst:
- *   1. 'three_gl'  — expo-gl + three + @react-three/fiber-native
+ *   1. 'three_gl'  — expo-gl + three + @react-three/fiber + expo-three
  *                    True 3D scene with shaders. Best fidelity. Heavy.
  *                    Requires explicit npm install + native rebuild.
+ *                    Import path in code: `@react-three/fiber/native`.
  *   2. 'skia'      — @shopify/react-native-skia
  *                    GPU-accelerated 2D. Smooth glow + animated paths.
  *                    Smaller install than three.js.
@@ -74,16 +75,22 @@ export function getBackendOverride(): ArBackend | null {
 // ─── Probes ──────────────────────────────────────────────────────────────
 
 function probeThreeGL(): boolean {
-  // Three.js + @react-three/fiber-native + expo-gl together unlock the
-  // 3D backend. Probing all three is intentional — fiber needs all of
-  // them present to function.
+  // 2026-05-22 — Corrected install:
+  //   npm install expo-gl three @react-three/fiber expo-three
+  // Then import { Canvas } from '@react-three/fiber/native' (NOT
+  // '@react-three/fiber-native' — that older split package is
+  // deprecated; the main fiber package ships the native entrypoint).
+  // Probing all four because fiber's <Canvas> needs all of them at
+  // runtime in a React Native context.
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('expo-gl');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('three');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require('@react-three/fiber-native');
+    require('@react-three/fiber');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('expo-three');
     return true;
   } catch {
     return false;
@@ -123,13 +130,13 @@ function applyOverride(cap: ArCapability): ArCapability {
 
 function buildRationale(best: ArBackend, available: ArBackend[]): string {
   if (best === 'three_gl') {
-    return '3D AR active (expo-gl + three + @react-three/fiber-native).';
+    return '3D AR active (expo-gl + three + @react-three/fiber + expo-three).';
   }
   if (best === 'skia') {
-    return 'GPU 2D AR active (Skia). Install @react-three/fiber-native for 3D.';
+    return 'GPU 2D AR active (Skia). Install @react-three/fiber + expo-gl + three + expo-three for 3D.';
   }
   if (best === 'svg') {
-    return 'SVG fallback active. Install @shopify/react-native-skia (or @react-three/fiber-native for 3D) for richer rendering.';
+    return 'SVG fallback active. Install @shopify/react-native-skia for GPU 2D, or @react-three/fiber + expo-gl + three + expo-three for 3D.';
   }
   void available;
   return 'No AR backend available — render disabled.';
