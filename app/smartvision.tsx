@@ -43,6 +43,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import GlassesStatusBadge from '../components/GlassesStatusBadge';
+import SmartVisionLiveStrategy from '../components/SmartVisionLiveStrategy';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import Svg, { Line as SvgLine, Polygon as SvgPolygon, Text as SvgText, G as SvgG } from 'react-native-svg';
@@ -909,6 +910,18 @@ export default function SmartVisionScreen() {
             color="#ffffff"
           />
         </TouchableOpacity>
+      </View>
+
+      {/* 2026-05-23 — Live Strategy card. Auto-renders when the
+          unified vision context has rich data (active round +
+          green geometry + recent vision frame). Falls back to null
+          off the rich-context path so the SmartVision canvas stays
+          uncluttered. Tapping routes the user to the Caddie tab for
+          a deeper read. */}
+      <View style={{ paddingHorizontal: 12, paddingTop: 6 }} pointerEvents="box-none">
+        <SmartVisionLiveStrategy
+          onPress={() => router.push('/' as never)}
+        />
       </View>
 
       {/* Phase 406 — split-screen container. On landscape, image

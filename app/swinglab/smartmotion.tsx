@@ -21,7 +21,7 @@
  * analysis path (/api/swing-analysis).
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -39,6 +39,7 @@ import { Video, ResizeMode } from 'expo-av';
 import Svg, { Line, Circle } from 'react-native-svg';
 import { useTheme } from '../../contexts/ThemeContext';
 import { analyzeSwing, type SwingAnalysis } from '../../services/poseDetection';
+import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
 import { extractPoseFramesFromVideo, type PoseFrame, type Keypoint } from '../../services/poseAnalysisApi';
 import { evaluateSwingValidity, type SwingValidity } from '../../services/swingValidity';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -105,6 +106,47 @@ export default function SmartMotion() {
   // on the right times in the clip.
   const [poseFrames, setPoseFrames] = useState<PoseFrame[] | null>(null);
   const [videoDurationMs, setVideoDurationMs] = useState<number | null>(null);
+  // 2026-05-23 — Persist this clip + its analysis into the Library
+  // (cageStore.sessionHistory) so the player can review later. The
+  // session is ingested ONCE per clipUri mount (StrictMode-safe via
+  // the ref guard); the analysis result is attached AFTER analyzeSwing
+  // resolves; biomechanics are attached AFTER pose-frame extraction
+  // resolves. Library row then renders with thumbnail + primary
+  // issue + biomechanics card automatically.
+  const ingestedSessionIdRef = useRef<string | null>(null);
+  const ingestedForClipUriRef = useRef<string | null>(null);
+
+  // 2026-05-23 — Library ingestion side-effect. Fires ONCE per clipUri
+  // (per-mount StrictMode guard via ref). Creates the CageSession with
+  // source='live_cage' so the Library badge renders as CAGE; later
+  // effects below patch in the primary_issue + biomechanics as they
+  // resolve. Never blocks the analysis path — failure here is logged
+  // and SmartMotion keeps rendering normally.
+  useEffect(() => {
+    if (!clipUri) return;
+    if (ingestedForClipUriRef.current === clipUri) return;
+    try {
+      const sessionId = useCageStore.getState().ingestUploadedSwing({
+        clipUri,
+        club: 'unknown',
+        upload: {
+          uploaded_at: Date.now(),
+          notes: `SmartMotion ${angle === 'face_on' ? 'face-on' : 'down-the-line'} swing`,
+          duration_sec: null,
+          has_audio: false,
+          source_device: 'phone',
+          tag: null,
+          swinger: profile.firstName ?? null,
+        },
+        source: 'live_cage',
+      });
+      ingestedSessionIdRef.current = sessionId;
+      ingestedForClipUriRef.current = clipUri;
+      console.log('[smartmotion] ingested swing into Library', sessionId);
+    } catch (e) {
+      console.log('[smartmotion] Library ingest failed (non-fatal):', e);
+    }
+  }, [clipUri, angle, profile.firstName]);
 
   // Kick off cloud swing analysis on mount.
   useEffect(() => {
@@ -137,8 +179,53 @@ export default function SmartMotion() {
         if (cancelled) return;
         if (result.kind === 'ok') {
           setAnalysis(result.analysis);
+          // 2026-05-23 — Persist the analysis onto the Library
+          // session. Synthesize a PrimaryIssue from SwingAnalysis so
+          // the Library row + swing detail screen render the same
+          // shape as a video-upload session. Mapping mirrors the
+          // tentative-issue fallback in videoUpload.ts.
+          const sessionId = ingestedSessionIdRef.current;
+          if (sessionId) {
+            try {
+              const a = result.analysis;
+              const issueId = a.detected_issue && a.detected_issue !== 'none'
+                ? a.detected_issue
+                : 'smartmotion_observation';
+              const primaryIssue: PrimaryIssue = {
+                issue_id: issueId,
+                name: issueId === 'smartmotion_observation'
+                  ? 'SmartMotion observation'
+                  : issueId.replace(/_/g, ' '),
+                category: 'other',
+                severity: (a.severity ?? 'minor') as PrimaryIssue['severity'],
+                occurrence_count: 1,
+                visual_reference_path: null,
+                mechanical_breakdown: a.observation
+                  ?? "Captured this swing — see the per-shot details below.",
+                feel_cue: a.follow_up_question
+                  ?? "Re-record from a different angle for a fuller read.",
+                detected_in_shots: [],
+                confidence: (a.confidence ?? 'medium') as PrimaryIssue['confidence'],
+              };
+              useCageStore.getState().setSessionAnalysis(sessionId, primaryIssue, null);
+              useCageStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
+              console.log('[smartmotion] attached analysis to Library session', sessionId);
+            } catch (e) {
+              console.log('[smartmotion] attach analysis failed (non-fatal):', e);
+            }
+          }
         } else {
           setAnalysisError(`Analysis ${result.kind.replace('_', ' ')}`);
+          const sessionId = ingestedSessionIdRef.current;
+          if (sessionId) {
+            try {
+              useCageStore.getState().setSessionAnalysisStatus(
+                sessionId,
+                'failed',
+                `analysis ${result.kind}`,
+              );
+            } catch { /* non-fatal */ }
+          }
         }
       } catch (e) {
         if (!cancelled) setAnalysisError(e instanceof Error ? e.message : String(e));
@@ -163,6 +250,25 @@ export default function SmartMotion() {
       try {
         const frames = await extractPoseFramesFromVideo(clipUri, videoDurationMs);
         if (!cancelled) setPoseFrames(frames);
+        // 2026-05-23 — Persist biomechanics to the Library session if
+        // analyzeSwingFromVideo can derive them from the same pose
+        // frames. Cheap second pass — the pose API was already hit by
+        // extractPoseFramesFromVideo; analyzeSwingFromVideo reuses
+        // those results internally. Library row shows the
+        // biomechanics card when this lands.
+        const sessionId = ingestedSessionIdRef.current;
+        if (sessionId && !cancelled) {
+          try {
+            const poseMod = await import('../../services/poseAnalysisApi');
+            const bio = await poseMod.analyzeSwingFromVideo(clipUri, videoDurationMs);
+            if (bio && !cancelled) {
+              useCageStore.getState().setSessionBiomechanics(sessionId, bio);
+              console.log('[smartmotion] persisted biomechanics to Library', sessionId);
+            }
+          } catch (e) {
+            console.log('[smartmotion] biomechanics persist failed (non-fatal):', e);
+          }
+        }
       } catch (e) {
         console.log('[smartmotion] pose-frame fetch failed (non-fatal):', e);
         if (!cancelled) setPoseFrames(null);

@@ -94,6 +94,8 @@ import {
 } from '../../services/acousticImpactDetector';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
 import { useCageCalibrationStore } from '../../store/cageCalibrationStore';
+import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
+import { usePlayerProfileStore } from '../../store/playerProfileStore';
 // 2026-05-21 — Fix A: shared CaddieMicBadge for consistent
 // tap-to-talk affordance (ring + halo + mic-icon overlay).
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
@@ -410,22 +412,65 @@ export default function CageModeScreen() {
       // responds to what's present. With our sparser payload it leans on
       // strike timing + notes; no fabricated bullseye_offsets to riff on.
       const coachRes = await coachReview(features, voiceGender, caddiePersonality);
-      if (coachRes.kind === 'ok') {
-        setCoach(coachRes.data);
-        if (voiceEnabled) {
-          void (async () => {
-            await configureAudioForSpeech();
-            await speak(coachRes.data.kevin_response, voiceGender, language, apiUrl);
-          })();
-        }
-      } else {
-        // Don't fail the whole flow if Kevin times out — still show the
-        // result card with a soft fallback caption.
-        setCoach({
-          kevin_response: "I saw the swing — couldn't put words to it just now. Take another and we'll see.",
-          confidence: 'low',
-        });
+      const coachData = coachRes.kind === 'ok' ? coachRes.data : {
+        kevin_response: "I saw the swing — couldn't put words to it just now. Take another and we'll see.",
+        confidence: 'low' as const,
+      };
+      setCoach(coachData);
+      if (coachRes.kind === 'ok' && voiceEnabled) {
+        void (async () => {
+          await configureAudioForSpeech();
+          await speak(coachRes.data.kevin_response, voiceGender, language, apiUrl);
+        })();
       }
+
+      // 2026-05-23 — Persist this cage swing + coach review to the
+      // Library (cageStore.sessionHistory) so the player can revisit
+      // it later. Ingests with source='live_cage' so the row badge
+      // reads CAGE not UPLOAD; primary_issue carries the coach's
+      // verbal response as the mechanical_breakdown line. Watch +
+      // acoustic notes ride along in the upload.notes field.
+      try {
+        const firstName = usePlayerProfileStore.getState().firstName ?? null;
+        const club = matched?.club ?? 'unknown';
+        const noteParts = [...notes];
+        if (matched) {
+          noteParts.push(`Watch swing: ${matched.club}`);
+        }
+        if (coachData.kevin_response) noteParts.push(coachData.kevin_response);
+        const sessionId = useCageStore.getState().ingestUploadedSwing({
+          clipUri: recorded.uri,
+          club,
+          upload: {
+            uploaded_at: Date.now(),
+            notes: noteParts.join(' • ') || 'Cage swing',
+            duration_sec: null,
+            has_audio: true,
+            source_device: 'phone',
+            tag: null,
+            swinger: firstName,
+          },
+          source: 'live_cage',
+        });
+        const issue: PrimaryIssue = {
+          issue_id: 'cage_coach_review',
+          name: 'Cage swing — coach review',
+          category: 'other',
+          severity: 'minor',
+          occurrence_count: 1,
+          visual_reference_path: null,
+          mechanical_breakdown: coachData.kevin_response,
+          feel_cue: 'Run another swing and see if the same pattern shows up.',
+          detected_in_shots: [],
+          confidence: (coachData.confidence ?? 'medium') as PrimaryIssue['confidence'],
+        };
+        useCageStore.getState().setSessionAnalysis(sessionId, issue, null);
+        useCageStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
+        console.log('[cage-mode] persisted swing to Library', sessionId);
+      } catch (e) {
+        console.log('[cage-mode] Library persist failed (non-fatal):', e);
+      }
+
       setPhase('RESULT');
     } catch (e) {
       setErrorMessage(e instanceof Error ? e.message : String(e));

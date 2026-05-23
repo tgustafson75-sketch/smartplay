@@ -1464,6 +1464,44 @@ Closing the prerequisites flagged in extension 4. MediaPipe is now FULLY activat
 
 **Day 5 extension 5 tally: 1 commit + 1 OTA + ts-check clean. MediaPipe assets ready; next EAS build activates the native path end-to-end.**
 
+### Day 5 extension 6 — useUnifiedVisionContext + SmartVision live strategy + 12 KB entries + SmartMotion/Cage → Library persistence
+
+Tim asked again for items 1-3 (Swing Library polish + KB expansion + SmartVision tightening). Most was already shipped earlier this session; this extension closes the genuine remaining gaps + adds the missing Library persistence for SmartMotion/Cage swings (Tim's mid-batch addition).
+
+**1. `useUnifiedVisionContext` React hook:**
+- [hooks/useUnifiedVisionContext.ts](../hooks/useUnifiedVisionContext.ts) (NEW) — wraps `subscribeUnifiedContext` with proper cleanup. Returns `UnifiedVisionContext | null` (null while warming up). Consumers branch on null to render a "warming up" state; from there every new vision frame re-renders the consumer.
+
+**2. SmartVision Live Strategy card:**
+- [components/SmartVisionLiveStrategy.tsx](../components/SmartVisionLiveStrategy.tsx) (NEW) — consumes the hook + renders a glance-able strategy panel when `ctx.rich === true`. Surfaces yardages (F/M/B chips with middle highlighted), hazard count, live-glasses indicator (when DAT is streaming + detected mode is tactical), last-shot grounding ("← 7i pull (135y)"), and a dominant-miss tendency tail. Informational, not prescriptive — the brain owns the prescriptive read; this card is a status. Tap routes to the Caddie surface for the deeper call.
+- [app/smartvision.tsx](../app/smartvision.tsx) — mounted under the SmartVision top-bar. Auto-renders nothing when context isn't rich (between rounds, no GPS, no green geometry) so the canvas stays clean.
+
+**3. 12 new KB entries (DAT + MediaPipe coaching extension):**
+- Topics covered: `see_what_you_see` (when player asks "what do you see"), `glasses_pov_swing` (what glasses CAN read vs torso-needs-other-camera), `live_yardage_trust`, `hazard_awareness_live`, `phone_camera_swing_setup`, `compare_to_pro_caution`, `on_device_vs_cloud` (explaining the pose-source choice), `unified_context_question` ("what should I hit" — leverages the full unified context), `when_caddie_disagrees`, `glasses_putting_pov`, `practice_with_data`, `recent_shot_pattern`.
+- Tank coverage on all 12; Serena/Harry/Kevin variants on ~9 of them where the persona voice meaningfully changes the framing. Each new entry's `styleNotes` documents the voice-distinguishing choice.
+- Total KB entries now ~102.
+
+**4. SmartMotion → Library persistence (NEW — Tim's mid-batch request):**
+- [app/swinglab/smartmotion.tsx](../app/swinglab/smartmotion.tsx) — new ingestion useEffect fires ONCE per clipUri (StrictMode-safe via `ingestedForClipUriRef` guard). Calls `useCageStore.getState().ingestUploadedSwing` with `source='live_cage'` so the row badges as CAGE in the Library. After `analyzeSwing` resolves, synthesizes a `PrimaryIssue` from the `SwingAnalysis` shape (issue_id from `detected_issue`, severity + confidence direct, mechanical_breakdown from observation, feel_cue from follow_up_question) and calls `setSessionAnalysis` to attach it. After `extractPoseFramesFromVideo` resolves, also calls `analyzeSwingFromVideo` for the biomechanics summary and persists via `setSessionBiomechanics`. Analysis-failed path stamps the session status='failed' so the Library row shows the honest state.
+- Library now renders the SmartMotion swing with thumbnail (fault-frame fallback), primary issue chip, and biomechanics card — exactly what an uploaded video gets.
+
+**5. Cage-mode → Library persistence (NEW):**
+- [app/swinglab/cage-mode.tsx](../app/swinglab/cage-mode.tsx) — after `coachReview` resolves (or falls back), the recorded clip + coach response now persist via the same `ingestUploadedSwing` → `setSessionAnalysis` → `setSessionAnalysisStatus` pipeline. Watch swing data (club + tempo when matched) joins the acoustic + ball-speed notes into the `upload.notes` field so the Library row reads `Watch swing: 7i • Impact at 1.23s (90% conf) • Estimated ball speed 138 mph...`. A canonical `PrimaryIssue` carries Kevin's coach response as the `mechanical_breakdown`.
+- Live-cage rounds + practice cage sessions are now reviewable history. "Swing Again" no longer destroys the previous result.
+
+**Defensive:**
+- All persistence wrapped in try/catch. Failure logs + lets the existing surface flow continue. Never blocks the player's path.
+- `ingestUploadedSwing` is gated by ref so React StrictMode's double-mount doesn't duplicate.
+- The cloud `analyzeSwing` + pose-frame paths are unchanged — persistence is purely additive side-effect.
+
+**Verification:**
+- `npx tsc --noEmit` → exit 0.
+- Cloud pose fallback path unchanged. DAT integration unchanged. MediaPipe path unchanged. SmartMotion UI cards unchanged.
+
+**OTA-eligible:** Everything in this extension is JS-side. Single OTA delivers the whole batch.
+
+**Day 5 extension 6 tally: 1 commit + 1 OTA + ts-check clean. Library now captures EVERY swing recorded via SmartMotion + Cage Mode.**
+
+
 
 
 
