@@ -43,6 +43,13 @@ export type FamilyRelationship =
   | 'sibling'
   | 'parent'
   | 'friend'
+  // 2026-05-22 — Captain extension: a high-school golf-team captain
+  // uses the same roster shape to manage teammates and coaches. The
+  // Captain screen filters by these relationships; the Family screen
+  // filters them OUT to keep the views distinct without forking the
+  // data model.
+  | 'teammate'
+  | 'coach'
   | 'other';
 
 export type SkillLevel = 'first_swings' | 'learning' | 'developing' | 'competitive';
@@ -67,6 +74,19 @@ export interface FamilyMember {
   approximate_handicap: number | null;
   /** Local-only avatar emoji or initial — never an image upload. */
   avatar_emoji: string;
+  /** 2026-05-22 — Captain extension. Optional team affiliation for
+   *  teammate / coach relationships ("Heritage HS Varsity Girls").
+   *  Members on the same team show up grouped on the Captain screen. */
+  team?: string | null;
+  /** 2026-05-22 — Captain extension. Optional contact for coach
+   *  members so the Captain can tap to call / text / email from the
+   *  Captain screen. Phone is stored as the user typed it; we just
+   *  hand it to tel:/sms: handlers, no normalization. */
+  contact?: { phone?: string | null; email?: string | null } | null;
+  /** 2026-05-22 — Captain extension. The role within the team (e.g.
+   *  "Head Coach", "Assistant Coach", "Captain", "Co-Captain",
+   *  "Senior", "Sophomore"). Free text. */
+  team_role?: string | null;
   /** When the member was added (ms epoch). */
   added_at: number;
   /** When the member's roster entry was last edited. */
@@ -99,6 +119,23 @@ interface FamilyState {
   findByName: (name: string) => FamilyMember | null;
   /** Non-archived members, sorted by added_at ascending. */
   activeRoster: () => FamilyMember[];
+  /** 2026-05-22 — Captain extension. Non-archived members that are
+   *  teammates or coaches, optionally filtered by team name. Sorted
+   *  with coaches first, then teammates by added_at ascending. */
+  teamRoster: (team?: string | null) => FamilyMember[];
+  /** Non-archived family members — excludes teammate/coach so the
+   *  Family screen doesn't show team folks. */
+  familyOnlyRoster: () => FamilyMember[];
+  /** 2026-05-22 — Captain extension. Captain-mode toggle. When ON, the
+   *  Settings → Family link is replaced with a Settings → Team Captain
+   *  link in the navigation (caller wires this). Persists. */
+  captain_mode: boolean;
+  setCaptainMode: (v: boolean) => void;
+  /** 2026-05-22 — Captain extension. The team name the captain manages.
+   *  Used as the default team field when adding a teammate / coach.
+   *  Free text — caller's job to keep it consistent. */
+  team_name: string;
+  setTeamName: (name: string) => void;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -203,6 +240,36 @@ export const useFamilyStore = create<FamilyState>()(
         get()
           .members.filter((m) => !m.archived)
           .sort((a, b) => a.added_at - b.added_at),
+
+      teamRoster: (team) => {
+        const all = get().members.filter(
+          (m) => !m.archived && (m.relationship === 'teammate' || m.relationship === 'coach'),
+        );
+        const scoped = team ? all.filter((m) => (m.team ?? '').toLowerCase() === team.toLowerCase()) : all;
+        // Coaches first (role visibility), teammates after — both by added_at asc.
+        return scoped.sort((a, b) => {
+          if (a.relationship !== b.relationship) {
+            return a.relationship === 'coach' ? -1 : 1;
+          }
+          return a.added_at - b.added_at;
+        });
+      },
+
+      familyOnlyRoster: () =>
+        get()
+          .members.filter(
+            (m) => !m.archived && m.relationship !== 'teammate' && m.relationship !== 'coach',
+          )
+          .sort((a, b) => a.added_at - b.added_at),
+
+      captain_mode: false,
+      setCaptainMode: (v) => {
+        set({ captain_mode: v });
+        console.log(`[family] captain_mode → ${v}`);
+      },
+
+      team_name: '',
+      setTeamName: (name) => set({ team_name: name }),
     }),
     {
       name: 'family-store-v1',
@@ -211,6 +278,8 @@ export const useFamilyStore = create<FamilyState>()(
       partialize: (s) => ({
         members: s.members,
         active_member_id: s.active_member_id,
+        captain_mode: s.captain_mode,
+        team_name: s.team_name,
       }),
     },
   ),

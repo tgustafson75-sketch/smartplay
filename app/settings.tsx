@@ -1027,6 +1027,36 @@ export default function Settings() {
               How to use the app →
             </Text>
           </TouchableOpacity>
+          {/* 2026-05-22 — Family Coaching roster + library link. Single
+              entry into the Family mode (kids, partner, friends). Voice
+              flow already works ("record Emma's swing"); this surfaces
+              the UI for parents who add via tap. */}
+          <TouchableOpacity
+            style={styles.aboutRow}
+            onPress={() => router.push('/family/roster' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Open Family Coaching"
+          >
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Family Coaching</Text>
+            <Text style={[styles.aboutValue, { color: colors.accent }]}>
+              Roster + Swing Library →
+            </Text>
+          </TouchableOpacity>
+          {/* 2026-05-22 — Captain extension. Surfaces Team Captain mode
+              for high-school golfers (e.g. Heritage HS Romoland CA)
+              managing teammates + coach contacts. Same store, distinct
+              screen, voice flows reused. */}
+          <TouchableOpacity
+            style={styles.aboutRow}
+            onPress={() => router.push('/family/captain' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Open Team Captain"
+          >
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Team Captain</Text>
+            <Text style={[styles.aboutValue, { color: colors.accent }]}>
+              Teammates + Coaches →
+            </Text>
+          </TouchableOpacity>
           {/* Phase 411 — Share Feedback shortcut. Pre-fills email
               client with subject + helpful body prompts so testers
               don't stare at a blank message. */}
