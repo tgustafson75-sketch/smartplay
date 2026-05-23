@@ -19,7 +19,7 @@
  * web-only TTS helper.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator, Platform,
 } from 'react-native';
@@ -208,15 +208,15 @@ async function speak(text: string, opts: SpeakOpts = {}): Promise<void> {
   if (Platform.OS === 'web') {
     return speakWeb(text, opts);
   }
-  // Native: fall through to voiceService if available; otherwise no-op.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const voiceMod = require('../services/voiceService') as typeof import('../services/voiceService');
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
-    await voiceMod.speak(text, 'male', 'en', apiUrl, { userInitiated: true });
-  } catch {
-    // No voiceService available — silent pass-through for web preview-only contexts.
-  }
+  // Native fallback: log only. We deliberately do NOT import voiceService
+  // here — Metro statically resolves require() at bundle time and would
+  // pull expo-av (and its transitive native modules) into the web bundle,
+  // breaking `expo export --platform web` on Vercel. The demo page is
+  // primarily a web surface for investor recording; if a native build
+  // ever consumes it, swap this branch for a typed call into the
+  // host app's voice layer at THAT consumer site, not here.
+  console.log('[demo] native TTS skipped (web-only build):', text.slice(0, 80));
+  void opts;
 }
 
 function stopSpeak(): void {
@@ -254,9 +254,6 @@ function speakWeb(text: string, opts: SpeakOpts): Promise<void> {
   });
 }
 
-// Memoize the apiUrl read so the page doesn't re-fetch on every render.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function _memoApiUrl() { return useMemo(() => process.env.EXPO_PUBLIC_API_URL ?? '', []); }
 
 // ─── Styles ─────────────────────────────────────────────────────────────
 
