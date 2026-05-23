@@ -105,6 +105,78 @@ export const queryStatusHandler: IntentHandler = {
         };
       }
 
+      case 'team_progress': {
+        // 2026-05-22 — Captain extension: roll up recent swing trends
+        // across every teammate (excludes coaches). Reads junior-swing
+        // history per teammate and constructs a single warm sentence
+        // the captain can hear during practice without opening the app.
+        const famMod = await import('../../store/familyStore');
+        const family = famMod.useFamilyStore.getState();
+        const teamName = family.team_name;
+        const roster = family.teamRoster(teamName || undefined);
+        const teammates = roster.filter((m) => m.relationship === 'teammate');
+        if (teammates.length === 0) {
+          return {
+            success: true,
+            voice_response:
+              teamName
+                ? `No teammates on ${teamName} yet. Add them in Settings → Team Captain.`
+                : "No team set up yet. Open Team Captain in Settings to add teammates.",
+            side_effects: ['query:team_progress:empty'],
+            follow_up_needed: false,
+          };
+        }
+        const analyzer = await import('../juniorSwingAnalyzer');
+        let totalLatest = 0;
+        let totalEarlier = 0;
+        let withTrend = 0;
+        const standouts: { name: string; delta: number }[] = [];
+        for (const m of teammates) {
+          const history = await analyzer.getMemberSwingHistory(m.id);
+          if (history.length === 0) continue;
+          const latest = history[history.length - 1];
+          totalLatest += latest.overallScore;
+          if (history.length >= 2) {
+            const earlier = history[history.length - 2];
+            totalEarlier += earlier.overallScore;
+            withTrend++;
+            const delta = latest.overallScore - earlier.overallScore;
+            if (Math.abs(delta) >= 5) {
+              standouts.push({ name: m.firstName, delta });
+            }
+          }
+        }
+        const withSwings = teammates.filter(async (m) => (await analyzer.getMemberSwingHistory(m.id)).length > 0).length;
+        if (totalLatest === 0) {
+          return {
+            success: true,
+            voice_response:
+              `${teamName || 'The team'} hasn't logged any swings yet. Start recording and we'll start tracking.`,
+            side_effects: ['query:team_progress:no_swings'],
+            follow_up_needed: false,
+          };
+        }
+        const avgLatest = Math.round(totalLatest / teammates.length);
+        const avgTrendDelta = withTrend > 0 ? Math.round((totalLatest - totalEarlier) / withTrend) : 0;
+        standouts.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+        const top = standouts.slice(0, 2);
+        const trendBit =
+          withTrend === 0 ? '' :
+          avgTrendDelta > 0 ? ` Team's trending up about ${avgTrendDelta} points on average.` :
+          avgTrendDelta < 0 ? ` Team's down about ${Math.abs(avgTrendDelta)} points lately — let's reset tomorrow.` :
+          ` Team's holding steady.`;
+        const standoutBit =
+          top.length === 0 ? '' :
+          ' ' + top.map((s) => `${s.name} ${s.delta > 0 ? 'up' : 'down'} ${Math.abs(s.delta)}`).join(', ') + '.';
+        return {
+          success: true,
+          voice_response:
+            `${teamName || 'Team'} averaging ${avgLatest} across ${teammates.length} player${teammates.length === 1 ? '' : 's'}.${trendBit}${standoutBit}`,
+          side_effects: [`query:team_progress:avg_${avgLatest}`],
+          follow_up_needed: false,
+        };
+      }
+
       case 'family_progress': {
         // Read the named family member's recent junior-swing history
         // and speak a brief progress summary. Lookups: voice intent

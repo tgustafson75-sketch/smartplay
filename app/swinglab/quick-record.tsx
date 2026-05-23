@@ -20,6 +20,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useFamilyStore } from '../../store/familyStore';
+import KidSwingGuideOverlay, { type GuidePhase } from '../../components/KidSwingGuideOverlay';
+import { useWindowDimensions } from 'react-native';
 
 const MAX_RECORD_SECONDS = 8;
 
@@ -43,6 +46,17 @@ export default function QuickRecord() {
   const [micPerm, requestMicPerm] = useMicrophonePermissions();
   const cameraRef = useRef<CameraView>(null);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
+
+  // 2026-05-22 — Family Coaching: when a family member is the active
+  // recording target (set by voice "Coach Emma's swing" or by tapping
+  // Record from the member library), render the KidSwingGuideOverlay
+  // as a static reference. Toggles via a chip in the top-right. The
+  // overlay is UI-only — does not appear in the recorded video.
+  const activeMemberId = useFamilyStore((s) => s.active_member_id);
+  const activeMember = useFamilyStore((s) => s.getMember(activeMemberId));
+  const [guideOn, setGuideOn] = useState<boolean>(true);
+  const [guidePhase, setGuidePhase] = useState<GuidePhase>('all');
+  const { width: winW, height: winH } = useWindowDimensions();
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -172,6 +186,22 @@ export default function QuickRecord() {
         videoQuality="720p"
       />
 
+      {/* 2026-05-22 — Family Coaching guide overlay. Renders ideal swing
+          positions for the active family member as a visible reference
+          the kid can aim at while their parent records. UI-only, not
+          captured in the recorded video. */}
+      {guideOn && activeMember && (
+        <KidSwingGuideOverlay
+          width={winW}
+          height={winH}
+          phase={guidePhase}
+          age={activeMember.age}
+          handedness={activeMember.handedness}
+          firstName={activeMember.firstName}
+          silentMode={recording}
+        />
+      )}
+
       {/* Top bar — back + flip camera */}
       <View style={[styles.topBar, { top: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.topBtn}>
@@ -194,10 +224,42 @@ export default function QuickRecord() {
           which angle was chosen pre-record + lets the user flip
           before they hit record if they entered with the wrong
           one. Hidden during recording so it doesn't distract. */}
+      {/* 2026-05-22 — Family guide phase + visibility toggles. Only
+          renders when a family-member recording is active, so adult
+          self-record stays uncluttered. */}
+      {activeMember && !recording && (
+        <View style={[styles.guideToggleRow, { top: insets.top + 60 }]}>
+          <TouchableOpacity
+            onPress={() => setGuideOn((v) => !v)}
+            style={[styles.guideChip, !guideOn && styles.guideChipMuted]}
+            accessibilityRole="button"
+            accessibilityLabel={guideOn ? 'Hide swing guide overlay' : 'Show swing guide overlay'}
+          >
+            <Text style={[styles.guideChipText, !guideOn && styles.guideChipTextMuted]}>
+              {guideOn ? '👁 GUIDE ON' : '👁 OFF'}
+            </Text>
+          </TouchableOpacity>
+          {guideOn && (
+            <TouchableOpacity
+              onPress={() => {
+                const order: GuidePhase[] = ['all', 'address', 'top', 'impact', 'finish'];
+                const idx = order.indexOf(guidePhase);
+                setGuidePhase(order[(idx + 1) % order.length]);
+              }}
+              style={styles.guideChip}
+              accessibilityRole="button"
+              accessibilityLabel={`Cycle guide phase. Current: ${guidePhase}`}
+            >
+              <Text style={styles.guideChipText}>{guidePhase.toUpperCase()}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       {!recording ? (
         <TouchableOpacity
           onPress={() => setAngle(a => (a === 'down_the_line' ? 'face_on' : 'down_the_line'))}
-          style={[styles.angleChip, { top: insets.top + 60 }]}
+          style={[styles.angleChip, { top: insets.top + (activeMember ? 102 : 60) }]}
           accessibilityRole="button"
           accessibilityLabel={`Camera angle: ${angle === 'down_the_line' ? 'down the line' : 'face on'}. Tap to switch.`}
         >
@@ -328,4 +390,24 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   angleChipText: { color: '#00C896', fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
+
+  // 2026-05-22 — Family guide toggle row (sits just below the top bar).
+  guideToggleRow: {
+    position: 'absolute',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    zIndex: 6,
+  },
+  guideChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(134, 239, 172, 0.55)',
+  },
+  guideChipMuted: { borderColor: 'rgba(156, 163, 175, 0.45)' },
+  guideChipText: { color: '#86efac', fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
+  guideChipTextMuted: { color: '#9ca3af' },
 });

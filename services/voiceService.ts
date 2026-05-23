@@ -325,12 +325,26 @@ export const subscribeToSpeaking = (
 let currentCaption: string | null = null;
 const captionSubscribers = new Set<(text: string | null) => void>();
 
+// 2026-05-22 — Last-spoken-line cache for the hands-free orchestrator's
+// double-tap-to-replay action. Captures every line we START to speak,
+// regardless of whether it completes or is interrupted. Survives across
+// playback cycles so a user can double-tap five seconds after a line
+// finishes to hear it again.
+let lastSpokenLine: string | null = null;
+
 const notifyCaption = (text: string | null) => {
   currentCaption = text;
+  // Cache non-null lines as the most-recent spoken text.
+  if (text && text.trim().length > 0) lastSpokenLine = text;
   captionSubscribers.forEach(cb => cb(text));
 };
 
 export const getCurrentCaption = (): string | null => currentCaption;
+
+/** 2026-05-22 — Hands-free double-tap replay surface. Returns the most
+ *  recent text we tried to speak (whether it completed or was cut off).
+ *  null when nothing has been spoken this session. */
+export const getLastSpokenLine = (): string | null => lastSpokenLine;
 
 export const subscribeToCaption = (
   cb: (text: string | null) => void,

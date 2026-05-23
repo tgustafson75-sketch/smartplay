@@ -589,3 +589,67 @@ function closeSession() {
   void stopCapture().catch(() => {});
   setSessionStateMirror('idle');
 }
+
+/**
+ * 2026-05-22 — Hands-Free path: classify + route a pre-transcribed
+ * utterance WITHOUT opening the phone's listening session (no mic
+ * recording, no opener, no filler — just classify → handler → speak).
+ * Used by the watch bridge when the watch transcribes on-device and
+ * relays text to the phone via handsFreeOrchestrator.
+ *
+ * Defensive: empty / whitespace utterances no-op. Classifier errors
+ * fall back silently (no annoying error voice for a watch tap that
+ * was probably a misfire).
+ */
+export async function handleTranscribedUtterance(utterance: string): Promise<void> {
+  const text = (utterance ?? '').trim();
+  if (!text) return;
+  try {
+    const settings = useSettingsStore.getState();
+    const round = useRoundStore.getState();
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+    const parseRes = await fetch(`${apiUrl}/api/voice-intent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        voiceGender: settings.voiceGender ?? 'male',
+        persona: settings.caddiePersonality,
+      }),
+    });
+    if (!parseRes.ok) {
+      console.log(`[handsFree-route] classifier non-ok ${parseRes.status}`);
+      return;
+    }
+    const intent = await parseRes.json();
+    const handler = voiceCommandRouter.getHandler(intent.intent_type);
+    if (!handler) {
+      console.log(`[handsFree-route] no handler for ${intent.intent_type}`);
+      return;
+    }
+    const ctx: AppContext = {
+      active_screen: 'watch_voice',
+      active_round: round.isRoundActive
+        ? {
+            course: round.activeCourse,
+            mode: round.mode,
+            holesPlayed: round.getHolesPlayed(),
+            totalScore: round.getTotalScore(),
+            scoreVsPar: round.getScoreVsPar(),
+          }
+        : null,
+      current_hole: round.isRoundActive ? round.currentHole : null,
+      recent_shots: round.shots.slice(-5),
+      trust_spectrum_level: 3,
+    };
+    void settings;
+    const result = await handler.execute(intent, ctx);
+    if (result?.voice_response) {
+      const { speak } = await import('./voiceService');
+      void speak(result.voice_response, settings.voiceGender, settings.language ?? 'en', apiUrl, { userInitiated: true })
+        ?.catch?.(() => undefined);
+    }
+  } catch (e) {
+    console.log('[handsFree-route] failed:', e);
+  }
+}

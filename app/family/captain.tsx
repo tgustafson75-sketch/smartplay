@@ -229,6 +229,18 @@ export default function CaptainScreen() {
           ))
         )}
 
+        {/* Team broadcast — opens system SMS composer with every team
+            phone number pre-filled. We never send messages from the app
+            ourselves; the OS handles delivery, so contact lists stay
+            device-local. */}
+        <BroadcastCard
+          recipients={teamRoster
+            .map((m) => m.contact?.phone)
+            .filter((p): p is string => !!p && p.trim().length > 0)}
+          teamName={teamName}
+          colors={colors}
+        />
+
         {/* Captain voice tips */}
         <View style={[styles.tipCard, { borderColor: colors.border }]}>
           <Text style={[styles.tipTitle, { color: colors.text_primary }]}>Captain voice flow</Text>
@@ -254,6 +266,77 @@ export default function CaptainScreen() {
         />
       )}
     </SafeAreaView>
+  );
+}
+
+// ─── Broadcast card ─────────────────────────────────────────────────────
+
+function BroadcastCard({
+  recipients, teamName, colors,
+}: {
+  recipients: string[];
+  teamName: string;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  const [message, setMessage] = useState('');
+
+  if (recipients.length === 0) {
+    return (
+      <View style={[styles.broadcastEmpty, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+        <Text style={[styles.broadcastTitle, { color: colors.text_primary }]}>Team Broadcast</Text>
+        <Text style={[styles.broadcastHint, { color: colors.text_muted }]}>
+          Add phone numbers to coaches or teammates to enable one-tap SMS to the team.
+        </Text>
+      </View>
+    );
+  }
+
+  const send = () => {
+    const text = message.trim();
+    if (!text) {
+      Alert.alert('Empty message', 'Type a message before sending.');
+      return;
+    }
+    // SMS URI format: sms:[phones,joined]?body=[encoded]. iOS + Android
+    // accept comma- or semicolon-joined numbers in the address slot.
+    // We strip non-digit chars per number (defensive — users type "(555) 123-4567").
+    const cleaned = recipients.map((r) => r.replace(/[^0-9+]/g, '')).filter((r) => r.length > 0);
+    const addr = cleaned.join(',');
+    const body = encodeURIComponent(text);
+    const url = `sms:${addr}?body=${body}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert("Couldn't open Messages", 'Try copying the message manually.');
+    });
+  };
+
+  return (
+    <View style={[styles.broadcastCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+      <View style={styles.broadcastHeader}>
+        <Text style={[styles.broadcastTitle, { color: colors.text_primary }]}>Team Broadcast</Text>
+        <Text style={[styles.broadcastCount, { color: colors.text_muted }]}>
+          {recipients.length} number{recipients.length === 1 ? '' : 's'}
+        </Text>
+      </View>
+      <Text style={[styles.broadcastHint, { color: colors.text_muted }]}>
+        Sends through your phone's Messages app to {teamName || 'the team'}. No data leaves the device.
+      </Text>
+      <TextInput
+        value={message}
+        onChangeText={setMessage}
+        placeholder="Practice tomorrow 3pm — Heritage range. Wear team polos."
+        placeholderTextColor={colors.text_muted}
+        multiline
+        style={[styles.broadcastInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text_primary }]}
+      />
+      <View style={styles.broadcastButtonRow}>
+        <Pressable
+          onPress={send}
+          style={[styles.primaryBtn, { backgroundColor: colors.accent, flex: 1 }]}
+        >
+          <Text style={styles.primaryBtnText}>📨 Open Messages</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -643,4 +726,16 @@ const styles = StyleSheet.create({
   emojiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   emojiPill: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   emojiPillText: { fontSize: 22 },
+
+  broadcastCard: { borderWidth: 1, borderRadius: 14, padding: 14, gap: 10, marginTop: 8 },
+  broadcastEmpty: { borderWidth: 1, borderRadius: 14, padding: 14, gap: 6, marginTop: 8 },
+  broadcastHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  broadcastTitle: { fontSize: 14, fontWeight: '900', letterSpacing: 0.4 },
+  broadcastCount: { fontSize: 11, fontWeight: '700', letterSpacing: 0.4 },
+  broadcastHint: { fontSize: 12, lineHeight: 18 },
+  broadcastInput: {
+    borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 14, minHeight: 96, textAlignVertical: 'top',
+  },
+  broadcastButtonRow: { flexDirection: 'row', gap: 10 },
 });

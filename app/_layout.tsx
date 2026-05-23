@@ -14,6 +14,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
 import { initListeningSession } from '../services/listeningSession';
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
+import { startHandsFreeOrchestrator } from '../services/handsFreeOrchestrator';
 import { activateMediaSession, deactivateMediaSession } from '../services/mediaKeyBridge';
 import { startHoleDetection, stopHoleDetection, subscribeToHoleDetection } from '../services/holeDetection';
 import { startOffCourseDetector, stopOffCourseDetector } from '../services/offCourseDetector';
@@ -251,6 +252,14 @@ function AppNavigator() {
   // Phase O — boot earbud listening session bus, honoring user setting
   useEffect(() => {
     initListeningSession();
+    // 2026-05-22 — Hands-Free orchestrator runs alongside the legacy
+    // listeningSession.toggle() subscription. It adds pattern-aware
+    // dispatch (single/double/triple/long-press) + watch-bridge tap
+    // routing + voice-replay. Single-tap behavior stays identical
+    // to before (legacy subscriber inside listeningSession still
+    // calls toggle on every tap), so no regression for users without
+    // pattern-driven habits.
+    startHandsFreeOrchestrator();
     const unsub = useSettingsStore.subscribe((s) => {
       setEarbudEnabled(s.earbudTapToTalk);
     });

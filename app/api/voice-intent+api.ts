@@ -39,6 +39,7 @@ Available intents:
    - "how's Emma's progress" / "show me her progress" / "how's my daughter doing" -> { query_topic: "family_progress", member_name: "Emma" }
    - "analyze Emma's swing" / "analyze my daughter's swing" / "how was that swing" / "coach Emma's swing" -> { query_topic: "family_analysis", member_name: "Emma" }
    - "compare to last week" / "compare to her last swing" -> { query_topic: "family_analysis", member_name: "<active>", notes: "compare to last week" }
+   - "how's the team doing" / "team progress" / "how's the team trending" / "team roll up" -> { query_topic: "team_progress" }
 
 3. change_setting — User wants to modify a setting.
    parameters: { setting_name: string, new_value: string | boolean }
