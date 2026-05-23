@@ -5,6 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -14,10 +15,33 @@ import { analyzeSession } from '../../services/patternEngine';
 export default function CageHistory() {
   const router = useRouter();
   const { sessionHistory } = useCageStore();
+  // 2026-05-23 — Hydration guard. Same pattern as library.tsx — wait
+  // for persist middleware to load sessionHistory from AsyncStorage
+  // before rendering the "No sessions yet" empty state, otherwise the
+  // cold-launch path shows it for a frame even when sessions exist.
+  const hasHydrated = useCageStore(s => s.hasHydrated);
 
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const sessions = sessionHistory.slice().reverse().slice(0, 10);
+
+  if (!hasHydrated) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={styles.backText}>‹ Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Session History</Text>
+          <View style={{ width: 60 }} />
+        </View>
+        <View style={styles.empty}>
+          <ActivityIndicator size="small" color="#00C896" />
+          <Text style={[styles.emptySub, { marginTop: 12 }]}>Loading sessions…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (sessions.length === 0) {
     return (

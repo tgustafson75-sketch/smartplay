@@ -236,6 +236,15 @@ interface CageState {
   // intent and by the on-screen "switch club" tap target. Reset when
   // the user picks a club or cancels. NOT persisted.
   clubMenuOpen: boolean;
+  // 2026-05-23 — Hydration flag. Flipped by onRehydrateStorage when
+  // the persist middleware finishes loading sessionHistory + the rest
+  // of the partialized fields from AsyncStorage. Screens that read
+  // sessionHistory should check this before rendering "No swings yet"
+  // — otherwise the cold-load empty array (initial state) renders for
+  // a frame as a misleading empty state, even though data IS in
+  // storage and arrives a tick later. NOT persisted (always starts
+  // false on each cold launch).
+  hasHydrated: boolean;
 
   // ─── ACTIONS ────────────────────────────
 
@@ -252,6 +261,10 @@ interface CageState {
   /** Phase BL — toggle the manual club picker modal in the active cage
    *  session screen. */
   setClubMenuOpen: (open: boolean) => void;
+  /** 2026-05-23 — Setter for the hasHydrated flag. Only called by the
+   *  persist middleware's onRehydrateStorage hook; UI code subscribes
+   *  to `hasHydrated` and shouldn't call this directly. */
+  setHasHydrated: (b: boolean) => void;
   addShot: (shot: Omit<CageShot, 'id' | 'timestamp'>) => void;
   endSession: (summary: {
     dominantMiss: string | null;
@@ -366,6 +379,9 @@ export const useCageStore = create<CageState>()(
       cameraAlignment: null,
       // Phase BL
       clubMenuOpen: false,
+      // 2026-05-23 — Hydration flag (see interface comment).
+      hasHydrated: false,
+      setHasHydrated: (b) => set({ hasHydrated: b }),
 
       startSession: (club) => {
         const id = `${Date.now()}_cage`;
@@ -780,6 +796,22 @@ export const useCageStore = create<CageState>()(
         cameraAlignment: s.cameraAlignment,
         recentInsights: s.recentInsights,
       }),
+      // 2026-05-23 — Hydration signal. Flipped true when AsyncStorage
+      // has finished loading the partialized snapshot into the store
+      // (or when rehydration fails — in which case the empty initial
+      // state IS the truth and the UI should render the genuine empty
+      // state, not stay in a loading spinner forever).
+      // Library / cage / cage-review screens subscribe to hasHydrated
+      // and avoid rendering "No swings yet" until it's true. Prevents
+      // the cold-launch flash where the initial [] is misread as "data
+      // wiped" while data is actually still in storage and one tick
+      // away from arriving.
+      onRehydrateStorage: () => (_state, error) => {
+        if (error) {
+          console.log('[cageStore] rehydrate error (treating as empty):', error);
+        }
+        useCageStore.getState().setHasHydrated(true);
+      },
     },
   ),
 );

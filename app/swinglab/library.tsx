@@ -17,6 +17,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -50,6 +51,13 @@ export default function SwingLibrary() {
   const { colors } = useTheme();
   const sessionHistory = useCageStore(s => s.sessionHistory);
   const deleteSession = useCageStore(s => s.deleteSession);
+  // 2026-05-23 — hydration guard. AsyncStorage rehydration is async,
+  // so sessionHistory starts as [] before the persist middleware
+  // hydrates. Without this, the cold-launch path renders the "No
+  // swings yet" empty state for a frame even when swings ARE in
+  // storage — which Tim hit on the new build and assumed his library
+  // had been wiped. Wait for hasHydrated before deciding "empty."
+  const hasHydrated = useCageStore(s => s.hasHydrated);
   const [filter, setFilter] = useState<LibraryFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [clubFilter, setClubFilter] = useState<string>('all');
@@ -315,7 +323,14 @@ export default function SwingLibrary() {
         </View>
       )}
 
-      {entries.length === 0 ? (
+      {!hasHydrated ? (
+        <View style={styles.emptyWrap}>
+          <ActivityIndicator size="small" color={colors.accent} />
+          <Text style={[styles.emptyBody, { color: colors.text_muted, marginTop: 12 }]}>
+            Loading library…
+          </Text>
+        </View>
+      ) : entries.length === 0 ? (
         <View style={styles.emptyWrap}>
           <View style={[styles.emptyIcon, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Ionicons

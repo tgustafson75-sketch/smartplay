@@ -73,6 +73,12 @@ export default function SwingDetail() {
   const session = useCageStore(s =>
     swing_id ? s.sessionHistory.find(x => x.id === swing_id) ?? null : null,
   );
+  // 2026-05-23 — Hydration guard. AsyncStorage rehydration is async,
+  // so sessionHistory starts as [] before persist fills it from disk.
+  // Without this, deep-linking to a swing detail before hydration
+  // renders "Swing not found." even though the data IS in storage.
+  // Library hydration race fix — same pattern as app/swinglab/library.tsx.
+  const hasHydrated = useCageStore(s => s.hasHydrated);
   const shot = session?.shots[0];
 
   // Phase BZ-v1 — per-shot action sheet + compare mode state.
@@ -317,6 +323,16 @@ export default function SwingDetail() {
     }
   };
 
+  if (!hasHydrated) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.center}>
+          <ActivityIndicator size="small" color={colors.accent} />
+          <Text style={{ color: colors.text_muted, marginTop: 12 }}>Loading swing…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
   if (!session || !shot?.clipUri) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
