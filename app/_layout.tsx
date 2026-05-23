@@ -353,7 +353,16 @@ function AppNavigator() {
   // Phase Y — rehydration-gated; previously this captured `active=false`
   // pre-hydration and never engaged auto-advance for the round.
   useEffect(() => whenRoundStoreHydrated(() => {
+    // 2026-05-22 — Fix T (TOP PRIORITY after two real Menifee rounds where
+    // auto-advance was racing ahead of the player 1→3→4 unprovoked). The
+    // subscriber callback is now gated on settings.autoHoleAdvance — default
+    // FALSE. When false, holeDetection still polls (cheap) but its emitted
+    // transitions never auto-call setCurrentHole; the player drives hole
+    // changes via cockpit stepper, DataStrip ◀/▶ arrows, or voice. GPS
+    // continues feeding SmartFinder yardages on the player's current
+    // hole — yardages are GPS's strong suit, hole-guessing isn't.
     const unsubDetect = subscribeToHoleDetection((nextHole) => {
+      if (!useSettingsStore.getState().autoHoleAdvance) return;
       const round = useRoundStore.getState();
       if (round.currentHole !== nextHole) round.setCurrentHole(nextHole);
     });
@@ -455,12 +464,26 @@ function AppNavigator() {
     let active = useRoundStore.getState().isRoundActive;
     const apply = (next: boolean) => {
       if (next) {
-        // Apply cart-aware thresholds at every round-start so a toggle
-        // flipped mid-session takes effect on the next round without a
-        // relaunch. Walking mode resets the defaults; cart mode shortens
-        // the stationary window and switches to current-speed suppression.
-        shotDetectionService.configure({ cartMode: useSettingsStore.getState().cartMode });
-        shotDetectionService.start().catch(() => {});
+        // 2026-05-22 — Fix T. shotDetectionService now gated on
+        // settings.autoShotDetection (default FALSE). When off, GPS
+        // still feeds SmartFinder yardages via gpsManager, but no
+        // automatic shot-logging fires — the STROKE counter only
+        // reflects what the player manually enters via stepper or
+        // voice ("I made a 5"). Previous behavior was logging shots
+        // on every GPS displacement signature, which on real cart
+        // rounds produced phantom strokes that drove the STROKE
+        // counter past the actual hole score before the player
+        // could input. Manual is the safe default; advanced users
+        // can flip Settings → Auto Shot Detection ON if they want
+        // the GPS shot-detector running.
+        //
+        // conversationalLoggingOrchestrator still starts — it
+        // handles voice / mic / earbud-tap stuff, not auto-shot
+        // detection. Leaving that on keeps voice commands working.
+        if (useSettingsStore.getState().autoShotDetection) {
+          shotDetectionService.configure({ cartMode: useSettingsStore.getState().cartMode });
+          shotDetectionService.start().catch(() => {});
+        }
         conversationalLoggingOrchestrator.start();
       } else {
         conversationalLoggingOrchestrator.stop();

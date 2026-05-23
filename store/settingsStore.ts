@@ -97,6 +97,18 @@ interface SettingsState {
    *  shorter stationary window (~8s) and current-speed-only suppression
    *  so a sustained cart drive doesn't gate detection forever. */
   cartMode: boolean;
+  /** 2026-05-22 — Fix T. When true, holeDetection's polling can auto-call
+   *  setCurrentHole on the player's behalf. When false (DEFAULT), the
+   *  player manually advances via cockpit stepper / DataStrip arrows /
+   *  voice. Auto-advance was racing ahead on real Menifee Palms rounds
+   *  (1→3→4 climbing on its own); manual is the safe default. */
+  autoHoleAdvance: boolean;
+  /** 2026-05-22 — Fix T. When true, shotDetectionService runs during a
+   *  round and auto-logs swings via GPS displacement signature. When
+   *  false (DEFAULT), the player enters scores manually via stepper /
+   *  voice ("I made a 5"). STROKE count then reflects the player's
+   *  manual score, not derived from auto-detected shots. */
+  autoShotDetection: boolean;
   // 2026-05-17 — Phase 413 — Health Connect just-in-time permission
   // marker. Set to true the first time we ask (whether granted or
   // declined or Health Connect unavailable). Prevents re-asking on
@@ -179,6 +191,9 @@ interface SettingsState {
   setGlassesConnected: (v: boolean) => void;
   setAutoListenEnabled: (v: boolean) => void;
   setCartMode: (v: boolean) => void;
+  // 2026-05-22 — Fix T.
+  setAutoHoleAdvance: (v: boolean) => void;
+  setAutoShotDetection: (v: boolean) => void;
   setHasAskedHealthPermission: (v: boolean) => void;
   setHealthDataEnabled: (v: boolean) => void;
   setSkipBriefings: (v: boolean) => void;
@@ -241,6 +256,18 @@ export const useSettingsStore = create<SettingsState>()(
       // their preference persists. Existing users' persisted value
       // (whatever they previously had) wins via the persist middleware.
       cartMode: true,
+      // 2026-05-22 — Fix T (TOP PRIORITY after two real rounds at Menifee).
+      // Auto hole-advance + auto-shot-detection were racing ahead of the
+      // player (1→3→4 climbing on its own). The Fix L threshold tightening
+      // tonight wasn't enough — the only correct answer on real cart
+      // courses is to put the player in full manual control. GPS keeps
+      // driving live yardages on the current hole; everything ELSE
+      // (which hole, what stroke count) is the player's call via
+      // cockpit stepper, DataStrip ◀/▶ arrows, or voice ("I'm on hole 4"
+      // / "I made a 5"). Both default FALSE — auto features are opt-in
+      // for the few users who actually want them.
+      autoHoleAdvance: false,
+      autoShotDetection: false,
       hasAskedHealthPermission: false,
       healthDataEnabled: true,
       skip_briefings: false,
@@ -372,6 +399,9 @@ export const useSettingsStore = create<SettingsState>()(
       setGlassesConnected: (v) => set({ glassesConnected: v }),
       setAutoListenEnabled: (v) => set({ autoListenEnabled: v }),
       setCartMode: (v) => set({ cartMode: v }),
+      // 2026-05-22 — Fix T setters.
+      setAutoHoleAdvance: (v) => set({ autoHoleAdvance: v }),
+      setAutoShotDetection: (v) => set({ autoShotDetection: v }),
       setHasAskedHealthPermission: (v) => set({ hasAskedHealthPermission: v }),
       setHealthDataEnabled: (v) => set({ healthDataEnabled: v }),
       setSkipBriefings: (v) => set({ skip_briefings: v }),
@@ -511,6 +541,8 @@ export const useSettingsStore = create<SettingsState>()(
         tankSoftIntro: s.tankSoftIntro,
         autoListenEnabled: s.autoListenEnabled,
         cartMode: s.cartMode,
+        autoHoleAdvance: s.autoHoleAdvance,
+        autoShotDetection: s.autoShotDetection,
         // 2026-05-17 — audit B P0: both health-permission flags were
         // missing from partialize, so every cold launch re-asked for
         // Health Connect access on the first round-start. Persisted
