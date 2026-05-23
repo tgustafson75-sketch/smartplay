@@ -46,7 +46,8 @@
     { "src": "/api/pose-analysis",     "dest": "/api/pose-analysis.ts" },
     { "src": "/api/acoustic-detect",   "dest": "/api/acoustic-detect.ts" },
     { "src": "/api/owner-triage",      "dest": "/api/owner-triage.ts" },
-    { "src": "/api/meta-voice",        "dest": "/api/meta-voice.ts" },
+    { "src": "/api/meta-voice/?",      "dest": "/api/meta-voice.ts" },
+    { "src": "/api/meta-voice/(.*)",   "dest": "/api/meta-voice.ts" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
