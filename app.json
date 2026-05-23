@@ -96,7 +96,8 @@
           }
         }
       ],
-      "./plugins/withMetaWearablesDAT.js"
+      "./plugins/withMetaWearablesDAT.js",
+      "./plugins/withMediaPipePose.js"
     ],
     "experiments": {
       "typedRoutes": true,

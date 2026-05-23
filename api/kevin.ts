@@ -370,7 +370,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       image_base64 = null,
       image_media_type = null,
       image_caption = null,
+      // 2026-05-23 — Unified vision context block from
+      // services/unifiedVisionContext.getUnifiedVisionContext. When
+      // present, pasted verbatim into the system prompt as a single
+      // already-composed context section. Lets the brain reason
+      // across GPS + hole + geometry + vision + recent shots from one
+      // coherent block instead of the historic 7+ separate fields.
+      unified_context_block = null,
     } = body;
+    const _unifiedContextBlock: string | null =
+      typeof unified_context_block === 'string' && unified_context_block.trim()
+        ? unified_context_block.trim()
+        : null;
 
     // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
     const personaInput = (typeof persona === 'string' ? persona : voiceGender);
@@ -599,6 +610,7 @@ ${_kevinContext ? `ABOUT THIS GOLFER (private; never read aloud — use as backg
 ${_golferModel ? `\nDERIVED TENDENCIES (private; use to be SPECIFIC instead of generic — never recite these literally):\n${_golferModel}` : ''}
 ${_recentAnalyses ? `\nWHAT YOU JUST TOLD THEM (last few exchanges in this session — don't repeat verbatim, but stay coherent):\n${_recentAnalyses}` : ''}
 ${_personaKBBlock ? `\n${_personaKBBlock}` : ''}
+${_unifiedContextBlock ? `\n${_unifiedContextBlock}` : ''}
 
 ${Array.isArray(playerVocabulary) && playerVocabulary.length > 0 ? `PHRASES THIS PLAYER USES (private; mirror their vocabulary, do not list these out loud):\n${(playerVocabulary as unknown[]).filter(p => typeof p === 'string').slice(0, 20).join(', ')}` : ''}
 

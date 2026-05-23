@@ -257,7 +257,18 @@ async function poseAtTime(videoUri: string, timeMs: number, position: PoseFrame[
 
 /** Compute biomechanics from the per-position frames. Each metric falls
  *  back to null when the prerequisite keypoints are missing, and the
- *  verdict copy is generated from the user's value vs the tour standard. */
+ *  verdict copy is generated from the user's value vs the tour standard.
+ *
+ *  2026-05-23 — Public re-export `computeBiomechanicsFromFrames` lets
+ *  the MediaPipe on-device path (services/poseEstimator.ts) reuse this
+ *  same pipeline without an HTTP round-trip. The function expects
+ *  frames tagged with `position` (P1_address / P4_top / P6_impact)
+ *  for the metric reads — callers must populate those tags before
+ *  calling. */
+export function computeBiomechanicsFromFrames(frames: PoseFrame[]): SwingBiomechanics {
+  return computeBiomechanics(frames);
+}
+
 function computeBiomechanics(frames: PoseFrame[]): SwingBiomechanics {
   const address = frames.find(f => f.position === 'P1_address');
   const top = frames.find(f => f.position === 'P4_top');

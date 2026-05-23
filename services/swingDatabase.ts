@@ -433,6 +433,118 @@ export function parseYouTubeId(url: string): string | null {
   }
 }
 
+/** 2026-05-23 — Two-phase YouTube ingestion: preview first, confirm
+ *  second. Phase 1 (this function) parses the URL, derives the
+ *  thumbnail, and returns a preview object the UI shows in a confirm
+ *  sheet — never adds anything to the database without explicit user
+ *  approval (per Phase 2 safety requirement). Phase 2 is the caller
+ *  invoking `addReferenceSwing` with the preview's confirmed values.
+ *
+ *  Example UI flow:
+ *    const preview = previewYouTubeReference(url, { label, proName, club });
+ *    if (preview.kind === 'invalid') showError(preview.reason);
+ *    else {
+ *      const ok = await confirmDialog(preview.thumbnailUri, preview.label);
+ *      if (ok) await addReferenceSwing(preview.addInput);
+ *    }
+ *
+ *  Returns:
+ *    { kind: 'invalid', reason } — URL didn't parse / unsupported.
+ *    { kind: 'ok', videoId, thumbnailUri, addInput, alreadyExists } —
+ *      ready for the confirm dialog. `alreadyExists` lets the UI
+ *      surface "already in your library" without a separate query.
+ */
+export interface YouTubePreviewInvalid { kind: 'invalid'; reason: string }
+export interface YouTubePreviewOK {
+  kind: 'ok';
+  videoId: string;
+  thumbnailUri: string;
+  /** Pre-built AddReferenceInput — caller passes directly to
+   *  addReferenceSwing on user confirmation. */
+  addInput: AddReferenceInput;
+  /** True when a reference with this exact youtubeUrl is already
+   *  in the database. UI shows "already in library" badge. */
+  alreadyExists: boolean;
+}
+export type YouTubePreview = YouTubePreviewInvalid | YouTubePreviewOK;
+
+export async function previewYouTubeReference(
+  url: string,
+  metadata?: {
+    label?: string;
+    proName?: string | null;
+    club?: string | null;
+    archetype?: PlayerArchetype | null;
+    body?: ReferenceSwing['body'];
+    notes?: string | null;
+    fault_tags?: FaultTag[];
+  },
+): Promise<YouTubePreview> {
+  if (!url || typeof url !== 'string') {
+    return { kind: 'invalid', reason: 'Empty or invalid URL.' };
+  }
+  const videoId = parseYouTubeId(url);
+  if (!videoId) {
+    return { kind: 'invalid', reason: 'Not a recognized YouTube URL (must be youtube.com/watch?v=... or youtu.be/...).' };
+  }
+  const thumbnailUri = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+  const all = await readAll();
+  const alreadyExists = all.some((r) => {
+    if (!r.youtubeUrl) return false;
+    const existingId = parseYouTubeId(r.youtubeUrl);
+    return existingId === videoId;
+  });
+  const label = metadata?.label?.trim() ||
+    (metadata?.proName ? `${metadata.proName} — YouTube reference` : `YouTube reference (${videoId})`);
+  return {
+    kind: 'ok',
+    videoId,
+    thumbnailUri,
+    alreadyExists,
+    addInput: {
+      label,
+      source: 'pro_clip',
+      youtubeUrl: url,
+      proName: metadata?.proName ?? null,
+      club: metadata?.club ?? null,
+      archetype: metadata?.archetype ?? null,
+      body: metadata?.body,
+      notes: metadata?.notes ?? null,
+      fault_tags: metadata?.fault_tags ?? [],
+      // biomechanics + frames intentionally absent — YouTube clips
+      // don't carry pose data unless a future transcode pass runs.
+      biomechanics: null,
+      frames: [],
+    },
+  };
+}
+
+/** Convenience: skip the preview step and go straight to add. UI
+ *  shells that DO show a confirm step still call `previewYouTubeReference`
+ *  first to surface the thumbnail + alreadyExists hint. Use this
+ *  helper only when the UI already collected explicit user consent
+ *  via its own confirm dialog. Returns the new reference id, or null
+ *  on invalid URL. */
+export async function addYouTubeReference(
+  url: string,
+  metadata?: {
+    label?: string;
+    proName?: string | null;
+    club?: string | null;
+    archetype?: PlayerArchetype | null;
+    body?: ReferenceSwing['body'];
+    notes?: string | null;
+    fault_tags?: FaultTag[];
+  },
+): Promise<string | null> {
+  const preview = await previewYouTubeReference(url, metadata);
+  if (preview.kind === 'invalid') {
+    devLog(`[swingDB] addYouTubeReference invalid: ${preview.reason}`);
+    return null;
+  }
+  return addReferenceSwing(preview.addInput);
+}
+
 // ─── Convenience: golferModel-aware match summary ───────────────────────
 //
 // Returns a one-line "this is similar to your typical X" string by

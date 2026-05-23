@@ -1396,6 +1396,43 @@ The first EAS build with DAT enabled surfaced exactly the two gaps I'd flagged i
 
 **Day 5 final tally: 3 commits + 0 OTAs + ts-check clean. DAT integration end-to-end on Android (pending GITHUB_TOKEN env in EAS dashboard); iOS-ready pending Apple Developer enrollment.**
 
+### Day 5 extension 4 — MediaPipe + Persona KB expansion + Unified Vision + YouTube + Audit Prompt
+
+Final-polish batch closing the stacked items from the user's Final Polish Sprint brief.
+
+**1. MediaPipe Pose Landmarker (on-device 33-keypoint pose detection):**
+- [plugins/withMediaPipePose.js](../plugins/withMediaPipePose.js) (NEW) — Expo config plugin: Android gradle dep (`com.google.mediapipe:tasks-vision:0.10.14`), iOS Podfile pod (`MediaPipeTasksVision ~> 0.10.14`), camera permissions, Kotlin/Swift source copy from `*-native/`, model asset copy from `assets/mediapipe/`, `withMainApplication` injection of `MediaPipePosePackage()`. Idempotent across re-prebuilds.
+- [android-native/MediaPipePoseModule.kt](../android-native/MediaPipePoseModule.kt) (NEW) + [android-native/MediaPipePosePackage.kt](../android-native/MediaPipePosePackage.kt) (NEW) — Kotlin native module. `detectPoseFromFrame(b64, options)` one-shot inference. GPU delegate with CPU fallback. Three quality presets (lite/full/heavy).
+- [ios-native/MediaPipePoseModule.swift](../ios-native/MediaPipePoseModule.swift) (NEW) + [ios-native/MediaPipePose.m](../ios-native/MediaPipePose.m) (NEW) — Swift counterpart with RCT bridge.
+- [services/mediaPipePoseService.ts](../services/mediaPipePoseService.ts) (NEW) — JS service. `isMediaPipeAvailable`, `detectPoseFromBase64` / `detectPoseFromUri`, `smoothPoseFrames` multi-frame composite. BlazePose 33→COCO-17 projection so the existing biomechanics pipeline consumes the same shape. Auto-downshifts to `lite` on AppState=background.
+- [services/poseEstimator.ts](../services/poseEstimator.ts) — pre-sampled frames branch is no longer a 0-confidence stub. Tries MediaPipe first, falls back to legacy stub. Single-image branch tries MediaPipe first, falls back to cloud `analyzePoseFromUri`. Backward compatible — when MediaPipe is unavailable, the cloud path runs exactly as before.
+- [services/poseAnalysisApi.ts](../services/poseAnalysisApi.ts) — exposed `computeBiomechanicsFromFrames` so the MediaPipe path can produce real biomechanics without an HTTP round-trip.
+- [docs/README_MEDIA_PIPE.md](README_MEDIA_PIPE.md) (NEW) — setup, model download, API quick reference, troubleshooting.
+- **Prerequisite for first EAS build with MediaPipe enabled**: `assets/mediapipe/pose_landmarker_full.task` (~9 MB) needs to land in the repo (curl one-liner in the README). Until then the config plugin logs a clear warning + falls through to cloud at runtime.
+
+**2. Persona KB expansion (30 new entries + multi-persona schema):**
+- [services/personaKnowledgeBase.ts](../services/personaKnowledgeBase.ts) — `PersonaKBEntry` now carries optional `serenaAnswer`, `harryAnswer`, `kevinAnswer` alongside the existing `tankAnswer`. `getPersonaAnswer` picks the right variant; falls back to `genericAnswer` for personas without a variant on a given entry. `buildPersonaKBPromptBlock` generalized to ALL four personas (was Tank-only).
+- 30 NEW entries across mental_game (8: visualize, commit phrase, breath cue, target lock, match safe-lead, match pressure putt, intimidation, comeback), course_management (5: par 3 strategy, dogleg play, blind shot, drivable par 4, water hazard, ball above/below feet, deep rough, mud ball, divot lie), short_game (5: 30-50yd wedge, wedge calibration, knockdown wedge, spin control, short-sided), driving (4: tee height, low-spin, when-not-to driver, fairway finder), midround adjustments (4: lost feel, fast tempo, mid-round change, walk-reset), junior/family (4: first round, practice intensity, swing pace, frustrated junior), warmup variants (3: putting, driver, skip warmup), health (2: stay loose, hydration). Tank coverage on all; Serena/Harry/Kevin variants on the most-differentiated ~20 of them — voices are distinct (Tank Marine cadence + standards framing, Serena composed-professional + signature "Trust your number", Harry "we" partnership + observational "I'm noticing", Kevin warm-conversational + dry humor).
+
+**3. Unified Vision Context (GPS + geometry + vision + recent shots fusion):**
+- [services/unifiedVisionContext.ts](../services/unifiedVisionContext.ts) (NEW) — `getUnifiedVisionContext()` composes a single object from `roundStore` + `playerProfileStore` + `courseGeometryService` + `glassesVisionInput` + `metaWearablesBridge` status. Pre-computes player-to-front/middle/back yardages via Haversine. Returns a `promptBlock` (newline-separated tagged lines: `[GPS]`, `[GEOMETRY]`, `[HAZARDS]`, `[VISION]`, `[LAST SHOT]`, `[PLAYER]`) the brain pastes verbatim. `subscribeUnifiedContext(cb)` re-emits whenever a new vision frame arrives.
+- [hooks/useKevin.ts](../hooks/useKevin.ts) — pulls the unified context on every brain call, passes as `unified_context_block`.
+- [api/kevin.ts](../api/kevin.ts) — accepts the new field + injects into the system prompt below the persona KB block. Replaces the historic 7+ separate fields with a single coherent context section.
+
+**4. YouTube reference ingestion (Phase 2 deferred — closed):**
+- [services/swingDatabase.ts](../services/swingDatabase.ts) — two-phase ingestion: `previewYouTubeReference(url, metadata)` returns `{ kind: 'ok' | 'invalid', videoId, thumbnailUri, addInput, alreadyExists }` for a confirm dialog WITHOUT mutating the database. `addYouTubeReference(url, metadata)` is the convenience one-shot for UI shells that collect consent via their own dialog. Honors the original Phase 2 safety requirement (explicit approval before add).
+
+**5. Deep Code Walk Audit Prompt:**
+- [docs/AUDIT_PROMPT_DEEP_WALK.md](AUDIT_PROMPT_DEEP_WALK.md) (NEW) — verbatim prompt designed to paste into a fresh Claude Code session for an interconnected-system audit. Specifies the read order across 8 stages (GPS → Pose → Analysis → Comparison → KB → Vision → Voice → Meta Bridge), the cross-stage comparisons to perform, the output format (executive summary + per-stage findings + cross-stage issues + backward-compat risks + ranked fix order), and what NOT to do (no code edits, no refactor proposals, no feature additions). Recommended cadence: before releases + after high-velocity sprints.
+
+**Verification:**
+- `npx tsc --noEmit` → exit 0 across the entire batch.
+- Existing surfaces unchanged: SmartMotion analysis card, drill flow, lie analysis, Meta Glasses voice bridge, Phase K cage pipeline, GPS round flow. Every new field is additive + optional; every new pass is defensive (try/catch + null fallback).
+- MediaPipe smoke-tests deferred to first EAS native build that includes the plugin (config plugin requires the gradle/Pod resolve step to actually link the native modules; the JS service is null-safe until then).
+
+**Day 5 extension 4 tally: 1 commit (~12 files) + 1 OTA + ts-check clean.**
+
+
 
 
 

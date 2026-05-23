@@ -175,20 +175,77 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
     };
   }
 
-  // ── 2. Pre-sampled frames → no-op bootstrap path ───────────────────
-  // The vision-LLM analyzeSwing path requires a clipUri, not base64 frames;
-  // the keypoint pose API requires URIs. Pre-sampled base64 frames don't
-  // fit either backend cleanly, so we return a low-confidence "received
-  // your frames" estimate so the caller can still proceed. When a real
-  // base64→pose backend lands, this branch upgrades to call it.
+  // ── 2. Pre-sampled frames → MediaPipe on-device when available ─────
+  // 2026-05-23 — MediaPipe became the primary path for the pre-sampled
+  // frames branch (was a 0-confidence stub before). Each base64 frame
+  // runs through services/mediaPipePoseService.detectPoseFromBase64;
+  // the resulting COCO-17 PoseFrames feed the existing computeBiomechanics
+  // pipeline (poseAnalysisApi.computeBiomechanics is callable via the
+  // re-export shim below). When MediaPipe is unavailable (web /
+  // pre-build / model file missing), the branch falls back to the
+  // legacy 0-confidence stub so callers still receive a valid envelope.
   if (input.frames && input.frames.length > 0) {
+    try {
+      const mp = await import('./mediaPipePoseService');
+      if (mp.isMediaPipeAvailable()) {
+        const poseFrames: PoseFrame[] = [];
+        for (let i = 0; i < input.frames.length; i++) {
+          const f = input.frames[i];
+          const tsMs = Math.round((f.time_sec ?? 0) * 1000);
+          const detected = await mp.detectPoseFromBase64(f.b64, undefined, tsMs);
+          if (detected) poseFrames.push(detected);
+        }
+        if (poseFrames.length > 0) {
+          // Tag frames with canonical swing positions based on index
+          // order. The MediaPipe frames branch typically receives the
+          // same 5 keyframes the cloud pipeline samples (P1, P2, P4,
+          // P6, P10 fractions) — so a position-by-index mapping is
+          // accurate for the common case. When fewer frames arrive,
+          // we tag the first as address + last as impact and leave
+          // the middle untagged so computeBiomechanics returns what
+          // it can without forcing wrong positions.
+          const positionByIndex: Array<PoseFrame['position']> = poseFrames.length >= 5
+            ? ['P1_address', 'P2_takeaway', 'P4_top', 'P6_impact', 'P10_finish']
+            : poseFrames.length === 3
+              ? ['P1_address', 'P4_top', 'P6_impact']
+              : ['P1_address', undefined, undefined, undefined, 'P6_impact'].slice(0, poseFrames.length) as Array<PoseFrame['position']>;
+          const tagged = poseFrames.map((f, i) => ({ ...f, position: positionByIndex[i] }));
+          const adjusted = adjustFrames(tagged, ageBand, lefty);
+          let bio: SwingBiomechanics | null = null;
+          try {
+            const { computeBiomechanicsFromFrames } = await import('./poseAnalysisApi');
+            bio = computeBiomechanicsFromFrames(adjusted);
+          } catch (e) {
+            devLog('[poseEstimator] computeBiomechanicsFromFrames failed (non-fatal): ' + String(e));
+          }
+          const confidence = computeConfidence(adjusted, !!bio);
+          const jc = computeJointConfidence(adjusted);
+          const partial = detectPartialView(adjusted);
+          const hedgedBio = hedgeBiomechanics(bio, confidence, partial);
+          return {
+            source: 'frames',
+            confidence,
+            frames: adjusted,
+            biomechanics: hedgedBio,
+            swingVerdict: null,
+            reason: `mediapipe on-device frames=${poseFrames.length}/${input.frames.length}; partial=${partial}; biomech=${bio ? 'ok' : 'null'}`,
+            age_band: ageBand,
+            mirrored: lefty,
+            joint_confidence: jc,
+            partial_view: partial,
+          };
+        }
+      }
+    } catch (e) {
+      devLog('[poseEstimator] mediapipe frames path failed (falling back to stub): ' + String(e));
+    }
     return {
       source: 'frames',
       confidence: 0,
       frames: [],
       biomechanics: null,
       swingVerdict: null,
-      reason: `${input.frames.length} frames received; no base64→pose backend wired yet`,
+      reason: `${input.frames.length} frames received; MediaPipe unavailable + no other base64→pose backend wired`,
       age_band: ageBand,
       mirrored: lefty,
       joint_confidence: { hip: 0, shoulder: 0, knee: 0, wrist: 0, ankle: 0, head: 0 },
@@ -198,12 +255,28 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
 
   // ── 3. Single image → one-shot keypoints ───────────────────────────
   if (input.imageUri) {
-    const frame = await analyzePoseFromUri(input.imageUri, 0).catch((e) => {
-      devLog('[poseEstimator] image pose failed: ' + String(e));
-      return null;
-    });
+    // 2026-05-23 — MediaPipe on-device first. Falls back to the cloud
+    // proxy (analyzePoseFromUri) on null / failure. Backward compatible
+    // — when MediaPipe is unavailable the legacy cloud path runs
+    // exactly as before.
+    let frame: PoseFrame | null = null;
+    try {
+      const mp = await import('./mediaPipePoseService');
+      if (mp.isMediaPipeAvailable()) {
+        frame = await mp.detectPoseFromUri(input.imageUri, undefined, 0);
+        if (frame) devLog('[poseEstimator] mediapipe one-shot ok');
+      }
+    } catch (e) {
+      devLog('[poseEstimator] mediapipe one-shot failed: ' + String(e));
+    }
     if (!frame) {
-      return emptyResult('image', ageBand, lefty, 'pose detection returned null');
+      frame = await analyzePoseFromUri(input.imageUri, 0).catch((e) => {
+        devLog('[poseEstimator] cloud one-shot failed: ' + String(e));
+        return null;
+      });
+    }
+    if (!frame) {
+      return emptyResult('image', ageBand, lefty, 'pose detection returned null (mediapipe + cloud both failed)');
     }
     const adjusted = adjustFrames([frame], ageBand, lefty);
     const jc = computeJointConfidence(adjusted);

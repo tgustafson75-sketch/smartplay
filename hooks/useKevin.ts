@@ -79,6 +79,20 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
         console.log('[kevin] vision frame fetch failed (non-fatal):', e);
       }
 
+      // 2026-05-23 — Unified vision context. Composes GPS + hole +
+      // geometry + active vision + recent shots into a single
+      // promptBlock the brain can quote. Best-effort; null on
+      // failure / no active round.
+      let unifiedPromptBlock: string | null = null;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const uv = require('../services/unifiedVisionContext') as typeof import('../services/unifiedVisionContext');
+        const ctx = await uv.getUnifiedVisionContext();
+        unifiedPromptBlock = ctx.promptBlock;
+      } catch (e) {
+        console.log('[kevin] unified context fetch failed (non-fatal):', e);
+      }
+
       // Phase BA — register selection from active surface. Maps the
       // tracked surface to one of three role registers so the API can
       // build a tone-distinct system prompt:
@@ -200,6 +214,11 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
           image_base64: visionImage?.base64 ?? null,
           image_media_type: visionImage?.media_type ?? null,
           image_caption: visionImage?.caption ?? null,
+          // 2026-05-23 — Unified context prompt block — GPS + hole +
+          // geometry + recent shots + vision in one composed
+          // newline-separated block, server pastes verbatim into the
+          // system prompt. Null when no round / no data.
+          unified_context_block: unifiedPromptBlock,
         }),
       }).finally(() => clearTimeout(timeout));
 
