@@ -163,7 +163,6 @@ export default function CaddieTab() {
     nineHoleMode,
     startRound,
     endRound,
-    setCurrentHole,
     logScore,
     logPutts,
     addPenalty,
@@ -192,7 +191,6 @@ export default function CaddieTab() {
     nineHoleMode: s.nineHoleMode,
     startRound: s.startRound,
     endRound: s.endRound,
-    setCurrentHole: s.setCurrentHole,
     logScore: s.logScore,
     logPutts: s.logPutts,
     addPenalty: s.addPenalty,
@@ -1536,6 +1534,14 @@ export default function CaddieTab() {
   };
 
   // ── Log hole score ───────────────────────
+  // Fix T (2026-05-23) — score logging no longer advances the hole.
+  // After two real rounds of GPS+score auto-advance racing ahead of the
+  // player (1→3→4), hole state is now strictly player-driven: this
+  // handler ONLY logs the score and resets local inputs. To advance,
+  // the player taps the cockpit/data-strip arrow or says "next hole" /
+  // "I'm on hole 4". The end-of-round detection still fires here
+  // because logging a final-hole score IS the player's explicit signal
+  // that the round is done.
   const handleLogHole = async () => {
     if (holeScore === 0) return;
     logScore(currentHole, holeScore);
@@ -1544,11 +1550,10 @@ export default function CaddieTab() {
 
     const par = getCurrentPar();
     const maxHole = nineHoleMode ? 9 : 18;
-    const nextHole = currentHole + 1;
 
     useRelationshipStore.getState().updateMentalState(holeScore, par ?? 4);
 
-    if (nextHole > maxHole) {
+    if (currentHole >= maxHole) {
       clearShotPending();
       // Snapshot the score state BEFORE endRound() resets it. The summary
       // copy ("Short round" / "Even par" / etc.) is driven by these
@@ -1565,15 +1570,16 @@ export default function CaddieTab() {
       return;
     }
 
-    setCurrentHole(nextHole);
     setHoleScore(0);
     setHolePutts(0);
     clearShotPending();
     setShowShotCard(false);
 
+    // Post-log commentary is about the JUST-logged hole only. The
+    // next-hole intro now fires from Fix S when the player actually
+    // advances via cockpit/data-strip/voice — not here.
     const holePar = par ?? 4;
     const diff = holeScore - holePar;
-    const nextHoleData = courseHoles.find(h => h.hole === nextHole);
     const scoreVsParSoFar = getScoreVsPar();
 
     let scoreWord = '';
@@ -1584,19 +1590,11 @@ export default function CaddieTab() {
     else if (diff === 2)  scoreWord = 'Double.';
     else                   scoreWord = 'Leave it there.';
 
-    let nextInfo = '';
-    if (nextHoleData) {
-      nextInfo =
-        'Hole ' + nextHole +
-        '. Par ' + nextHoleData.par +
-        '. ' + nextHoleData.distance + ' yards.';
-    }
-
     let contextLine = '';
     if (diff <= -1) {
       contextLine = diff === -1 ? ' Keep that going.' : " That's yours.";
     } else if (diff >= 2 && isSpiralRisk()) {
-      contextLine = ' Reset now. Next hole is a fresh start.';
+      contextLine = ' Reset and stay on it.';
     } else if (diff === 1) {
       contextLine = ' Move on.';
     }
@@ -1607,47 +1605,11 @@ export default function CaddieTab() {
         " You're " + Math.abs(scoreVsParSoFar) + ' under through ' + currentHole + '.';
     }
 
-    const transition = scoreWord + contextLine + (nextInfo ? ' ' + nextInfo : '') + scoreContext;
+    const transition = scoreWord + contextLine + scoreContext;
     setCaddieResponse(transition);
 
     if (voiceEnabled && !discreteMode) {
       speak(transition, voiceGender, language, apiUrl).catch(() => {});
-    }
-
-    // ── Proactive Kevin evaluation (post-hole-transition) ──────────────
-    if (proactive_kevin_enabled) {
-      const storeNow = useRoundStore.getState();
-      const recentScores: number[] = [];
-      for (let h = Math.max(1, nextHole - 3); h < nextHole; h++) {
-        const s = storeNow.scores[h];
-        const hd = storeNow.courseHoles.find(ch => ch.hole === h);
-        if (s != null && hd) recentScores.push(s - hd.par);
-      }
-      const ghostDelta = useGhostStore.getState().getSnapshot()?.overall_delta ?? null;
-      const proactiveTrigger = shouldFireProactive({
-        holesPlayed: nextHole - 1,
-        currentHole: nextHole,
-        recentScores,
-        ghostDelta,
-        dominantMiss: dominantMiss ?? null,
-        firstName: firstName || '',
-        mode: storeNow.mode,
-        trustLevel,
-      });
-      if (proactiveTrigger) {
-        markProactiveFired(proactiveTrigger.id);
-        setTimeout(() => {
-          setCaddieResponse(proactiveTrigger.message);
-          setVoiceState('proactive');
-          if (voiceEnabled && !discreteMode) {
-            speak(proactiveTrigger.message, voiceGender, language, apiUrl)
-              .catch(() => {})
-              .finally(() => setVoiceState('idle'));
-          } else {
-            setTimeout(() => setVoiceState('idle'), 3000);
-          }
-        }, 2200);
-      }
     }
   };
 
@@ -3066,7 +3028,7 @@ export default function CaddieTab() {
               onPress={handleLogHole}
               disabled={holeScore === 0}
             >
-              <Text style={styles.startBtnText}>Next Hole</Text>
+              <Text style={styles.startBtnText}>Log Score</Text>
             </TouchableOpacity>
 
             {isRoundActive && (

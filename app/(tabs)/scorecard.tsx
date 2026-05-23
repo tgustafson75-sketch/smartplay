@@ -271,8 +271,10 @@ export default function Scorecard() {
     }
     logScore(hole, score);
     logPutts(hole, 2);
-    const maxHole = nineHoleMode ? 9 : 18;
-    if (hole < maxHole) setCurrentHole(hole + 1);
+    // Fix T (2026-05-23) — scoring is now decoupled from hole advance.
+    // Player moves the hole via cockpit/data-strip arrow, scorecard row
+    // tap, or voice ("next hole"). Tapping a quick-score number only
+    // records the score for that hole.
   };
 
   const goBack = () => {
