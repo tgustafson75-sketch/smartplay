@@ -266,16 +266,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // wrong diagnosis. Defaults to down-the-line when omitted (the
     // most common swing-analysis convention).
     const angleRaw = typeof ctx.angle === 'string' ? ctx.angle.toLowerCase() : '';
-    const angle: 'down_the_line' | 'face_on' =
+    // 2026-05-22 audit refinement — accept 'glasses_pov' for Meta-glasses
+    // first-person down-look (the player is wearing the camera; no torso
+    // visible). The constraint set is totally different: we can read
+    // grip, takeaway path, impact-zone contact, and follow-through arc,
+    // but body-rotation diagnostics (hip turn, weight shift, spine
+    // angle) are impossible without the torso in frame. The prompt
+    // calls that out explicitly so the analyst leans on the reads it
+    // CAN make and doesn't hallucinate body-pattern faults.
+    const angle: 'down_the_line' | 'face_on' | 'glasses_pov' =
       angleRaw === 'face_on' || angleRaw === 'face-on' || angleRaw === 'faceon'
         ? 'face_on'
+      : angleRaw === 'glasses_pov' || angleRaw === 'glasses-pov' || angleRaw === 'pov'
+        ? 'glasses_pov'
         : 'down_the_line';
-    const angleLabel = angle === 'down_the_line' ? 'down-the-line' : 'face-on';
+    const angleLabel =
+      angle === 'down_the_line' ? 'down-the-line'
+      : angle === 'face_on'     ? 'face-on'
+      :                           'first-person (glasses POV)';
     ctxLines.push(
       `Camera angle: ${angleLabel}. ` +
       (angle === 'down_the_line'
         ? 'Camera is behind the player on the target line. Best reads from this angle: swing path, plane, over-the-top, early extension, attack angle, club position at the top. Do NOT confidently diagnose weight-shift / reverse-pivot / hip-sway from this angle — those need face-on.'
-        : 'Camera is in front of the player, perpendicular to the target line. Best reads from this angle: weight shift, hip rotation, reverse pivot, sway, head movement, posture maintenance. Do NOT confidently diagnose swing path / plane / over-the-top from this angle — those need down-the-line.')
+        : angle === 'face_on'
+        ? 'Camera is in front of the player, perpendicular to the target line. Best reads from this angle: weight shift, hip rotation, reverse pivot, sway, head movement, posture maintenance. Do NOT confidently diagnose swing path / plane / over-the-top from this angle — those need down-the-line.'
+        : 'Camera is on the player\'s head (Meta-glasses first-person POV). No torso is visible. Best reads from this angle: grip, takeaway path direction, impact-zone contact, follow-through arc, and ball-flight start direction if visible. Do NOT diagnose body-rotation patterns (hip turn, weight shift, spine angle, shoulder coil) from this angle — the torso is out of frame and any body-pattern claim would be a guess. When the visible cues do not support a confident fault read, return mode="tentative" with a useful observation.')
     );
     const userText = mode === 'tentative'
       ? (ctxLines.length > 0 ? ctxLines.join('\n') + '\n\n' : '') +

@@ -259,7 +259,12 @@ export async function analyzeSwing(
     // down-the-line vs face-on reads use the correct orientation
     // for biomechanical checks. Defaults to 'down_the_line' (the
     // common swing-analysis convention) when omitted.
-    angle?: 'down_the_line' | 'face_on';
+    //
+    // 2026-05-22 audit refinement — added 'glasses_pov' for the
+    // Meta-glasses first-person down-look (no torso in frame). The
+    // analyst prompt drops body-rotation reads in that mode and
+    // leans on grip / setup / impact-contact cues that ARE visible.
+    angle?: 'down_the_line' | 'face_on' | 'glasses_pov';
     // 2026-05-21 — Fix E: player's selected language. Routes into
     // the swing-analysis prompt so the observation text comes back
     // in the right language (Spanish / Chinese / English).

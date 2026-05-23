@@ -34,23 +34,27 @@ import { devLog } from './devLog';
 const TOUR_MEDIAN: SwingBiomechanics = {
   hipTurnDeg: 45,
   shoulderTurnDeg: 95,
+  shoulderTiltDeg: 30,
   weightShiftPct: 80,
   spineAngleDeltaDeg: 4,
   headDriftPxNorm: 0.02,
   hipSlideRatio: 0.6,
+  sequencingScore: 78,
   frames: [],
-  verdicts: { hipTurn: null, shoulderTurn: null, weightShift: null, posture: null },
+  verdicts: { hipTurn: null, shoulderTurn: null, weightShift: null, posture: null, shoulderTilt: null, sequencing: null },
 };
 
 const AMATEUR_GOOD: SwingBiomechanics = {
   hipTurnDeg: 38,
   shoulderTurnDeg: 88,
+  shoulderTiltDeg: 25,
   weightShiftPct: 72,
   spineAngleDeltaDeg: 6,
   headDriftPxNorm: 0.035,
   hipSlideRatio: 0.7,
+  sequencingScore: 62,
   frames: [],
-  verdicts: { hipTurn: null, shoulderTurn: null, weightShift: null, posture: null },
+  verdicts: { hipTurn: null, shoulderTurn: null, weightShift: null, posture: null, shoulderTilt: null, sequencing: null },
 };
 
 // ─── Public types ────────────────────────────────────────────────────────
@@ -60,7 +64,7 @@ export type CompareKind = 'self_vs_self' | 'self_vs_pro' | 'self_vs_amateur' | '
 export type MetricDirection = 'better' | 'worse' | 'same' | 'unknown';
 
 export interface MetricDelta {
-  key: keyof Omit<SwingBiomechanics, 'frames' | 'verdicts'>;
+  key: keyof Omit<SwingBiomechanics, 'frames' | 'verdicts' | 'metric_confidence'>;
   label: string;
   current: number | null;
   reference: number | null;
@@ -133,10 +137,17 @@ export function compareSwings(input: CompareInput): SwingComparison {
   const metrics: MetricDelta[] = [
     buildMetric('hipTurnDeg', 'Hip turn', currentBio?.hipTurnDeg ?? null, referenceBio.hipTurnDeg, 'higher_better', 15, 'degrees'),
     buildMetric('shoulderTurnDeg', 'Shoulder turn', currentBio?.shoulderTurnDeg ?? null, referenceBio.shoulderTurnDeg, 'higher_better', 18, 'degrees'),
+    // 2026-05-22 audit refinement — shoulder tilt is distinct from
+    // shoulder turn (tilt = lead-shoulder dip at top; turn = rotational
+    // coil). Both metrics ride alongside; older biomech without tilt
+    // simply returns null current → "not enough data" verdict.
+    buildMetric('shoulderTiltDeg', 'Shoulder tilt', currentBio?.shoulderTiltDeg ?? null, referenceBio.shoulderTiltDeg ?? null, 'higher_better', 12, 'degrees'),
     buildMetric('weightShiftPct', 'Weight shift', currentBio?.weightShiftPct ?? null, referenceBio.weightShiftPct, 'higher_better', 15, '% to lead'),
     buildMetric('spineAngleDeltaDeg', 'Spine stability', currentBio?.spineAngleDeltaDeg ?? null, referenceBio.spineAngleDeltaDeg, 'lower_better', 5, 'degrees of change'),
     buildMetric('headDriftPxNorm', 'Head still', currentBio?.headDriftPxNorm ?? null, referenceBio.headDriftPxNorm, 'lower_better', 0.04, 'units of drift'),
     buildMetric('hipSlideRatio', 'Hip rotate vs slide', currentBio?.hipSlideRatio ?? null, referenceBio.hipSlideRatio, 'lower_better', 0.4, 'ratio'),
+    // 2026-05-22 audit refinement — sequencing 0..100 (hips lead = high).
+    buildMetric('sequencingScore', 'Kinematic sequencing', currentBio?.sequencingScore ?? null, referenceBio.sequencingScore ?? null, 'higher_better', 30, 'sequence units'),
   ];
 
   const overall_match = computeOverall(metrics);
@@ -255,10 +266,12 @@ function jointsForMetric(key: MetricDelta['key']): string[] {
   switch (key) {
     case 'hipTurnDeg':         return ['left_hip', 'right_hip'];
     case 'shoulderTurnDeg':    return ['left_shoulder', 'right_shoulder'];
+    case 'shoulderTiltDeg':    return ['left_shoulder', 'right_shoulder'];
     case 'weightShiftPct':     return ['left_ankle', 'right_ankle'];
     case 'spineAngleDeltaDeg': return ['left_shoulder', 'right_hip'];
     case 'headDriftPxNorm':    return ['nose'];
     case 'hipSlideRatio':      return ['left_hip', 'right_hip'];
+    case 'sequencingScore':    return ['left_hip', 'left_shoulder'];
   }
 }
 

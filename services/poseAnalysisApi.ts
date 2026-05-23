@@ -47,12 +47,25 @@ export interface PoseFrame {
 /** Biomechanics summary computed from 5–8 keyframes of a single swing.
  *  Each metric is a number plus a one-line verdict the UI shows
  *  alongside it. Null fields mean we couldn't compute (e.g. pose API
- *  failed for that keyframe). */
+ *  failed for that keyframe).
+ *
+ *  Practical metrics only — see header note. We do not attempt full IK
+ *  or 3D body reconstruction from a single-camera 2D feed; the metrics
+ *  below all reduce to "what can a coach reliably eyeball from this
+ *  angle?" Newer fields are optional so older persisted biomechanics
+ *  in cageStore / swingDatabase remain backward-compatible. */
 export interface SwingBiomechanics {
   /** Hip rotation degrees from address to top of backswing. */
   hipTurnDeg: number | null;
   /** Shoulder turn degrees (coil) from address to top. */
   shoulderTurnDeg: number | null;
+  /** 2026-05-22 audit refinement — Shoulder TILT degrees at top.
+   *  Distinct from shoulderTurnDeg: tilt is the lead-shoulder dip
+   *  (how much the lead shoulder drops below the trail shoulder at
+   *  the top of the backswing) — a tour-standard ~30° tilt
+   *  indicates proper spine-angle preservation. Low tilt (flat
+   *  shoulders) signals an over-the-top / lifted swing pattern. */
+  shoulderTiltDeg?: number | null;
   /** Lead-foot weight shift at impact, in % (positive = forward). */
   weightShiftPct: number | null;
   /** Spine angle change from address to impact, in degrees. */
@@ -62,6 +75,13 @@ export interface SwingBiomechanics {
   headDriftPxNorm: number | null;
   /** Hip slide vs rotate ratio at top. >1 = sliding more than rotating. */
   hipSlideRatio: number | null;
+  /** 2026-05-22 audit refinement — Sequencing score 0..100. Higher
+   *  number = hips initiate the downswing before shoulders (the tour
+   *  "kinematic sequence" hallmark). Lower number = shoulders initiate
+   *  (over-the-top / steep pattern). Computed from the relative
+   *  rotation rates between P4_top and P6_impact. Null when we don't
+   *  have both frames or hip/shoulder widths needed to read it. */
+  sequencingScore?: number | null;
   /** Per-frame pose data we computed metrics from. Empty when the API
    *  failed entirely. UI uses this to render a skeleton overlay later. */
   frames: PoseFrame[];
@@ -71,6 +91,26 @@ export interface SwingBiomechanics {
     shoulderTurn: string | null;
     weightShift: string | null;
     posture: string | null;
+    /** 2026-05-22 audit refinement — verdicts for the two new metrics.
+     *  Optional so existing persisted SwingBiomechanics records (no
+     *  tilt / sequencing computed) don't fail-shape at read. */
+    shoulderTilt?: string | null;
+    sequencing?: string | null;
+  };
+  /** 2026-05-22 audit refinement — per-metric confidence 0..1 derived
+   *  from the source keypoint scores. Lets the poseEstimator facade
+   *  hedge verdict language when keypoints were marginal ("Approximate
+   *  — hip turn ~32°…") without re-running the geometry. Optional so
+   *  legacy records continue to read clean. */
+  metric_confidence?: {
+    hipTurn?: number;
+    shoulderTurn?: number;
+    shoulderTilt?: number;
+    weightShift?: number;
+    spineAngleDelta?: number;
+    headDrift?: number;
+    hipSlide?: number;
+    sequencing?: number;
   };
 }
 
@@ -302,6 +342,54 @@ function computeBiomechanics(frames: PoseFrame[]): SwingBiomechanics {
     }
   }
 
+  // 2026-05-22 audit refinement — Shoulder tilt at top. Angle (degrees)
+  // of the line connecting the two shoulders relative to horizontal in
+  // the P4_top frame. Tour ~30°. Flat (< 15°) reads as a "lifted /
+  // over-the-top" pattern; very steep (> 45°) reads as exaggerated dip.
+  // Pure 2D angle from a single camera — same limitation as every other
+  // metric here; we're approximating spine angle preservation, not
+  // measuring it true.
+  let shoulderTiltDeg: number | null = null;
+  if (top) {
+    const ls = getKp(top, 'left_shoulder');
+    const rs = getKp(top, 'right_shoulder');
+    if (ls && rs) {
+      const tilt = Math.abs(angleDeg(ls, rs));
+      // Wrap into 0..90 — we don't care which side is "up", only how
+      // much off horizontal.
+      shoulderTiltDeg = Math.round(Math.min(90, tilt));
+    }
+  }
+
+  // 2026-05-22 audit refinement — Sequencing score 0..100.
+  // The tour "kinematic sequence" is: hips initiate the downswing,
+  // shoulders follow. We can approximate that with a single-camera 2D
+  // feed by comparing the change in hip-width vs shoulder-width
+  // between P4_top and P6_impact: if hips have "rotated back" (width
+  // widened) MORE than shoulders by impact, the hips led. We map that
+  // delta into 0..100 (50 = even rates, 100 = hips clearly led, 0 =
+  // shoulders clearly led / over-the-top). Conservative — capped and
+  // clamped so a noisy single-frame doesn't peg the dial.
+  let sequencingScore: number | null = null;
+  if (top && impact) {
+    const hipTopW = pairWidth(top, 'left_hip', 'right_hip');
+    const hipImpactW = pairWidth(impact, 'left_hip', 'right_hip');
+    const shTopW = pairWidth(top, 'left_shoulder', 'right_shoulder');
+    const shImpactW = pairWidth(impact, 'left_shoulder', 'right_shoulder');
+    if (hipTopW && hipImpactW && shTopW && shImpactW && hipTopW > 0 && shTopW > 0) {
+      const hipRotRate = (hipImpactW - hipTopW) / hipTopW;
+      const shoulderRotRate = (shImpactW - shTopW) / shTopW;
+      // Diff > 0 means hips rotated more (faster relative open) than
+      // shoulders, which is the desired pattern.
+      const diff = hipRotRate - shoulderRotRate;
+      // Map [-0.30, +0.30] → [0, 100]. The 0.30 spread covers the
+      // realistic range of single-camera 2D-width-derived sequencing
+      // signal; tighter spreads make the score read jumpy on noise.
+      const clamped = Math.max(-0.30, Math.min(0.30, diff));
+      sequencingScore = Math.round(((clamped + 0.30) / 0.60) * 100);
+    }
+  }
+
   // Verdicts — short coaching one-liners based on tour standards.
   const verdicts = {
     hipTurn:
@@ -323,13 +411,58 @@ function computeBiomechanics(frames: PoseFrame[]): SwingBiomechanics {
       spineAngleDeltaDeg == null ? null :
       spineAngleDeltaDeg > 10 ? `Posture changed ${spineAngleDeltaDeg}° — early extension or stand-up move.` :
       `Posture maintained (Δ${spineAngleDeltaDeg}°) — strong base.`,
+    // 2026-05-22 audit refinement — tilt + sequencing verdicts.
+    shoulderTilt:
+      shoulderTiltDeg == null ? null :
+      shoulderTiltDeg < 15 ? `Shoulder tilt ${shoulderTiltDeg}° — flat at the top; risk of over-the-top.` :
+      shoulderTiltDeg > 45 ? `Shoulder tilt ${shoulderTiltDeg}° — exaggerated dip; watch spine angle.` :
+      `Shoulder tilt ${shoulderTiltDeg}° — solid tilt (tour ~30°).`,
+    sequencing:
+      sequencingScore == null ? null :
+      sequencingScore < 35 ? `Sequencing ${sequencingScore}/100 — shoulders leading the downswing.` :
+      sequencingScore > 65 ? `Sequencing ${sequencingScore}/100 — hips lead clearly, tour kinematic order.` :
+      `Sequencing ${sequencingScore}/100 — even hip/shoulder timing.`,
+  };
+
+  // 2026-05-22 audit refinement — per-metric confidence. Each metric's
+  // confidence is the AVERAGE score of the keypoints it actually
+  // depended on; downstream callers (poseEstimator, swing detail UI)
+  // can hedge verdict language when these are low. Pure rollup —
+  // never gates metric computation, just annotates it.
+  const metric_confidence = {
+    hipTurn: avgScore(address, top, ['left_hip', 'right_hip']),
+    shoulderTurn: avgScore(address, top, ['left_shoulder', 'right_shoulder']),
+    shoulderTilt: avgScore(top, null, ['left_shoulder', 'right_shoulder']),
+    weightShift: avgScore(address, impact, ['left_ankle', 'right_ankle']),
+    spineAngleDelta: avgScore(address, impact, ['nose', 'left_hip', 'right_hip']),
+    headDrift: avgScore(address, impact, ['nose', 'left_shoulder', 'right_shoulder']),
+    hipSlide: avgScore(address, top, ['left_hip', 'right_hip']),
+    sequencing: avgScore(top, impact, ['left_hip', 'right_hip', 'left_shoulder', 'right_shoulder']),
   };
 
   return {
-    hipTurnDeg, shoulderTurnDeg, weightShiftPct,
-    spineAngleDeltaDeg, headDriftPxNorm, hipSlideRatio,
-    frames, verdicts,
+    hipTurnDeg, shoulderTurnDeg, shoulderTiltDeg,
+    weightShiftPct, spineAngleDeltaDeg, headDriftPxNorm, hipSlideRatio,
+    sequencingScore,
+    frames, verdicts, metric_confidence,
   };
+}
+
+/** Average keypoint score across the supplied joints in 1 or 2 frames.
+ *  Returns 0 when no keypoints matched (so callers can treat it as
+ *  "unmeasured"). Used to roll up per-metric confidence. */
+function avgScore(frameA: PoseFrame | undefined, frameB: PoseFrame | null | undefined, joints: string[]): number {
+  const samples: number[] = [];
+  const frames = [frameA, frameB].filter((f): f is PoseFrame => !!f);
+  for (const f of frames) {
+    for (const name of joints) {
+      const k = f.keypoints.find((kp) => kp.name === name);
+      if (k) samples.push(k.score);
+    }
+  }
+  if (samples.length === 0) return 0;
+  const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
+  return Math.round(avg * 100) / 100;
 }
 
 /** Full pipeline: extract keyframes from a swing video, run pose detection

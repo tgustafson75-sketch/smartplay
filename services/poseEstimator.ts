@@ -154,13 +154,20 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
     const confidence = computeConfidence(adjusted, !!bio);
     const jc = computeJointConfidence(adjusted);
     const partial = detectPartialView(adjusted);
+    // 2026-05-22 audit refinement — when partial_view OR low overall
+    // confidence is detected, hedge the verdict copy in-place so the
+    // UI doesn't show prescriptive coaching off of marginal keypoints.
+    // The numeric metrics stay untouched; only the user-facing string
+    // is softened. Threshold (<55 OR partial_view) is conservative —
+    // avoids hedging clean reads.
+    const hedgedBio = hedgeBiomechanics(bio, confidence, partial);
     return {
       source: 'video',
       confidence,
       frames: adjusted,
-      biomechanics: bio,
+      biomechanics: hedgedBio,
       swingVerdict: null,
-      reason: `video ${input.durationMs}ms; ${adjusted.length} frames; biomech=${bio ? 'ok' : 'null'}; partial=${partial}`,
+      reason: `video ${input.durationMs}ms; ${adjusted.length} frames; biomech=${bio ? 'ok' : 'null'}; partial=${partial}; hedged=${hedgedBio !== bio}`,
       age_band: ageBand,
       mirrored: lefty,
       joint_confidence: jc,
@@ -346,6 +353,62 @@ function detectPartialView(frames: PoseFrame[]): boolean {
     if (count > bestCount) bestCount = count;
   }
   return bestCount < Math.ceil(anchors.length / 2);
+}
+
+/**
+ * 2026-05-22 audit refinement — hedge biomechanics verdicts when the
+ * underlying pose was unreliable. Two trigger conditions:
+ *   - partial_view: anchor joints (hip + shoulder + head) didn't all
+ *     clear the usable-score threshold in any frame; the metric numbers
+ *     may be off-axis.
+ *   - low overall confidence (<55): pose model produced something, but
+ *     keypoint scores were marginal across the board.
+ * Per-metric confidence (added 2026-05-22) is also folded in: if a
+ * specific metric's avg keypoint score is below METRIC_CONF_HEDGE_AT,
+ * that metric's verdict alone is prefixed "Approximate — " even when
+ * the overall read is clean.
+ *
+ * Returns the SAME bio object when no hedging applies. Returns a NEW
+ * object with rewritten verdicts when hedging triggers (numeric fields
+ * unchanged — callers consuming the numbers see ground truth).
+ */
+const METRIC_CONF_HEDGE_AT = 0.5;
+function hedgeBiomechanics(
+  bio: SwingBiomechanics | null,
+  overallConfidence: number,
+  partialView: boolean,
+): SwingBiomechanics | null {
+  if (!bio) return null;
+  const globalHedge = partialView || overallConfidence < 55;
+  const mc = bio.metric_confidence ?? {};
+  // Map each verdict key to the metric_confidence key it depends on,
+  // so we can hedge individual lines that read marginal.
+  const verdictMap: { vkey: keyof SwingBiomechanics['verdicts']; ckey: keyof NonNullable<SwingBiomechanics['metric_confidence']> }[] = [
+    { vkey: 'hipTurn',      ckey: 'hipTurn' },
+    { vkey: 'shoulderTurn', ckey: 'shoulderTurn' },
+    { vkey: 'weightShift',  ckey: 'weightShift' },
+    { vkey: 'posture',      ckey: 'spineAngleDelta' },
+    { vkey: 'shoulderTilt', ckey: 'shoulderTilt' },
+    { vkey: 'sequencing',   ckey: 'sequencing' },
+  ];
+  let anyHedged = false;
+  const verdicts = { ...bio.verdicts };
+  for (const { vkey, ckey } of verdictMap) {
+    const verdict = verdicts[vkey];
+    if (!verdict) continue;
+    const conf = mc[ckey] ?? 0;
+    const localHedge = conf > 0 && conf < METRIC_CONF_HEDGE_AT;
+    if (globalHedge || localHedge) {
+      // Prefix only once — never double-prefix on re-read.
+      if (!verdict.startsWith('Approximate')) {
+        verdicts[vkey] = `Approximate — ${verdict[0].toLowerCase()}${verdict.slice(1)}`;
+        anyHedged = true;
+      }
+    }
+  }
+  if (!anyHedged) return bio;
+  devLog(`[poseEstimator] hedged biomechanics verdicts (partial=${partialView} conf=${overallConfidence})`);
+  return { ...bio, verdicts };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────

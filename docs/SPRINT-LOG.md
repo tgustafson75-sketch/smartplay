@@ -1199,4 +1199,41 @@ With items 1, 4, 5, 6 shipped this evening (plus items 2, 3, 7 from Day 3), the 
 
 **Day 4 evening tally: 2 commits + 0 OTAs (will publish from Tim's machine on next OTA push) + ts-check clean.**
 
+### Batch 3 — Biomechanics / Pose Estimation audit + refinement
+
+Tim asked for a focused audit-and-refine pass on the pose layer (no over-engineering, no IK, no research-level biomechanics). Phase 2 (Swing Intelligence Database) was already shipped earlier this session in `1b26c65` + tonight's `4ed01a7` (Compare picker), so this batch is the **pose refinement**. Goal: more reliable reads for Meta glasses POV, juniors, and partial-view captures without breaking any existing SmartMotion / analysis card / drill flow.
+
+#### Audit findings (state before this batch)
+- ✅ COCO-17 server-backed pose detection working, 5 keyframes per swing (P1/P2/P4/P6/P10).
+- ✅ 6 metrics already computed: hipTurnDeg, shoulderTurnDeg, weightShiftPct, spineAngleDeltaDeg, headDriftPxNorm, hipSlideRatio.
+- ✅ `poseEstimator.ts` facade with joint_confidence rollup, multi-frame agreement, partial_view detection, junior small-body boost, lefty mirroring.
+- ✅ Defensive null returns everywhere.
+- ⚠️ Gaps vs the audit spec: no **sequencing** metric, no distinct **shoulder TILT** (tilt and turn were conflated), no confidence propagation into verdict copy, no **glasses-POV** angle path (`down_the_line | face_on` only), `partial_view=true` was a flag with no downstream effect.
+
+#### Shipped
+- **[services/poseAnalysisApi.ts](../services/poseAnalysisApi.ts)** — `SwingBiomechanics` extended with `shoulderTiltDeg`, `sequencingScore` (0..100), and an optional `metric_confidence` map (per-metric average of the source keypoint scores). Both new fields are OPTIONAL on the interface so existing persisted records in cageStore / swingDatabase / ReferenceSwing keep reading cleanly. New verdict copy for tilt + sequencing (tour ~30° tilt; sequencing 78/100 hip-leads benchmark). The shoulder-tilt geometry uses the existing keypoints (left/right shoulder at P4_top vs horizontal). The sequencing score compares hip-width vs shoulder-width rate of change between P4 and P6, then maps a [-0.30, +0.30] band to [0, 100] — gentle clamp so a noisy single-frame doesn't peg the dial. Added a small `avgScore` helper to roll the per-metric confidence.
+- **[services/poseDetection.ts](../services/poseDetection.ts) + [api/swing-analysis.ts](../api/swing-analysis.ts)** — third camera angle option `'glasses_pov'` accepted end-to-end. The server prompt explicitly tells the analyst "torso out of frame; lean on grip / takeaway / impact-contact / follow-through arc; do NOT diagnose body-rotation patterns from POV." Prior `'down_the_line' | 'face_on'` continue to work unchanged. The parser also accepts `glasses-pov` / `pov` aliases.
+- **[services/poseEstimator.ts](../services/poseEstimator.ts)** — new `hedgeBiomechanics` helper. When the overall confidence is <55 OR `partial_view=true`, or when any individual metric's avg keypoint score is below `METRIC_CONF_HEDGE_AT=0.5`, the corresponding verdict copy is prefixed `Approximate — …`. Numeric metric values are NEVER modified — the user-facing string is the only thing softened. Existing consumers reading `biomechanics.hipTurnDeg` see ground truth; the swing detail card now hedges the verdict line when keypoints were marginal.
+- **[services/swingComparisonEngine.ts](../services/swingComparisonEngine.ts)** — `TOUR_MEDIAN` + `AMATEUR_GOOD` reference banks gained `shoulderTiltDeg` + `sequencingScore` values (tour 30°/78, single-digit amateur 25°/62). The metrics array in `compareSwings` now includes both, so the Compare picker's `overall_match` percentage reflects them. The `jointsForMetric` switch was kept exhaustive — TS catches any new metric that forgets a joint mapping. `MetricDelta['key']` Omit was updated to exclude the new `metric_confidence` field from valid metric keys.
+
+#### Audit summary — GPS → Pose → Analysis → Comparison → Voice
+1. **GPS / hole context (already solid per Tim)** — `roundStore` knows the active hole and course; `courseGeometryService` resolves green/front/back. No changes this batch.
+2. **Pose** — `poseEstimator.estimatePose()` is the single entry point. It picks the backend (video URI → `poseAnalysisApi.analyzeSwingFromVideo`; image URI → single-frame keypoints; pre-sampled base64 frames → bootstrap result). Adjustments (age-band score boost, lefty mirroring) happen ONCE here. Confidence is now a blend of `usable-keypoint rate × 80 + biomech-present × 15 + multi-frame-agreement × 10`. Partial-view + low-confidence trigger verdict hedging.
+3. **Analysis** — `poseAnalysisApi.computeBiomechanics` produces the 8 numeric metrics (6 prior + tilt + sequencing) plus per-metric confidence. Verdict strings are tour-anchored. `poseDetection.analyzeSwing` is the alternate vision-LLM path for fault classification (canonical issues, observation copy); now accepts `glasses_pov` so first-person captures don't get diagnosed with body-rotation faults.
+4. **Comparison** — `swingComparisonEngine.compareSwings` diffs each metric against the chosen reference (TOUR_MEDIAN / AMATEUR_GOOD / user-supplied ReferenceSwing); produces match score per metric, overall match %, hotspot list, and a persona-aware voice_summary. `compareSwingsMulti` ranks against multiple references; `annotateWithGolferModel` threads chronic-miss context.
+5. **Voice** — Swing detail surface auto-narrates `primary_issue` at trust ≥2. The Compare picker's `onSelect` (shipped earlier tonight) now reads `result.voice_summary` from the engine for persona-aware spoken comparison reads.
+
+#### Scope guardrails honored
+- No new on-device pose model, no IK solver, no 3D body reconstruction — kept entirely within single-camera 2D keypoint reads.
+- All new metric numbers cap at sensible ranges (sequencing clamped, tilt wrapped 0..90) so a single noisy frame can't peg the dial.
+- New fields are optional on the persisted `SwingBiomechanics` shape — older records in `cageStore.sessionHistory` and `swingDatabase` references load fine.
+- No changes to SmartMotion overlay / drill recommendation / cage review surfaces; the swing detail biomechanics card automatically picks up the new verdicts.
+
+#### Verification
+- `npx tsc --noEmit` → exit 0. Exhaustive switch in `jointsForMetric` confirms no new metric was added without a joint mapping.
+- Existing SwingBiomechanics consumers (swing detail card reading `verdicts.hipTurn/shoulderTurn/weightShift/posture`, swingComparisonEngine reading the numeric fields, swingDatabase reference storage, cageStore session shape) continue to read the same fields — new fields are additive + optional.
+
+**Day 4 final tally: 3 commits + 0 OTAs + ts-check clean across all three batches.**
+
+
 
