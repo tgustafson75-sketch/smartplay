@@ -114,9 +114,25 @@ export function noteManualOverride(): void {
 /**
  * Start the polling loop. Idempotent. No-op when no round is active or when
  * the round store reports we're not on a course.
+ *
+ * 2026-05-22 — Fix T hardening (after two real Menifee rounds where the
+ * auto-advance STILL fired despite the _layout.tsx subscriber gate).
+ * Polling itself now gates on settings.autoHoleAdvance — when the user
+ * has manual hole control (DEFAULT), this function returns early without
+ * starting the interval. Zero ticks means zero emissions means zero
+ * chance of leakage through any subscriber path we haven't audited.
+ * Subscribers can re-arm later by toggling Settings → Auto Hole Advance.
  */
 export function startHoleDetection(): void {
   if (pollTimer) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const settingsMod = require('../store/settingsStore') as typeof import('../store/settingsStore');
+    if (!settingsMod.useSettingsStore.getState().autoHoleAdvance) {
+      console.log('[holeDetection] start skipped — autoHoleAdvance is OFF (manual hole control)');
+      return;
+    }
+  } catch { /* defensive — if settings fail to load, fall through to start */ }
   pollTimer = setInterval(() => { void tick(); }, POLL_INTERVAL_MS);
   // Phase BG — subscribe to position-mark bus so Mark events fire an
   // immediate tick. Previous behavior waited for the next poll cycle

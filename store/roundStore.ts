@@ -1041,6 +1041,20 @@ export const useRoundStore = create<RoundState>()(
 
       setCurrentHole: (hole) => {
         const state = get();
+        // 2026-05-22 — Fix T diagnostics. Any call to setCurrentHole now
+        // logs a single line with the source (best-effort via Error().stack
+        // frame parsing). After two real rounds where auto-advance kept
+        // firing despite Fix T's subscriber gate, this lets us SEE exactly
+        // what path is bumping the hole. Voice commands, cockpit stepper,
+        // DataStrip arrows, scorecard taps — all should appear here when
+        // they fire. If ANY anonymous / unexplained path shows up, that's
+        // the next thing to gate.
+        try {
+          const stack = new Error().stack ?? '';
+          const lines = stack.split('\n').slice(2, 5); // skip Error + setCurrentHole frame
+          const caller = lines.find(l => l.trim().length > 0 && !l.includes('setCurrentHole')) ?? '<unknown>';
+          console.log(`[roundStore] setCurrentHole(${hole}) called from: ${caller.trim()}`);
+        } catch { /* stack parsing best-effort */ }
         // 2026-05-16 — Clamp to the course's actual hole count so the
         // stepper / auto-detection / voice "next hole" can't overshoot
         // (Tim's Mariners report: tab showed "Hole 10" at a 9-hole

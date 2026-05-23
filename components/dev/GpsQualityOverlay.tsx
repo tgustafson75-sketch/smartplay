@@ -86,7 +86,13 @@ export default function GpsQualityOverlay() {
   const teeStr = selectedTee === 'unspecified' ? '—' : selectedTee;
 
   return (
-    <View style={[styles.wrap, { top: insets.top + 8 }]}>
+    // 2026-05-22 — Fix: GPS debug overlay was sitting at top-left over the
+    // Caddie mic badge, blocking taps. Two changes: (1) moved to BOTTOM-left
+    // so it's out of every screen's header zone. (2) pointerEvents="none"
+    // so even when it visually overlaps anything else, taps pass through to
+    // whatever's underneath. The badge is for the badge; this debug overlay
+    // is just a readout for Tim's diagnostic eye.
+    <View style={[styles.wrap, { bottom: insets.bottom + 80 }]} pointerEvents="none">
       <View style={[styles.dot, { backgroundColor: color }]} />
       <View>
         <Text style={styles.text}>
