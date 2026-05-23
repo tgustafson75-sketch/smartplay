@@ -414,21 +414,106 @@ function deriveThumbnail(input: AddReferenceInput): string | null {
   return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
 }
 
-/** Strict YouTube id parser. Returns null if not a valid URL form. */
+/** Strict-but-permissive YouTube id parser.
+ *
+ *  2026-05-23 polish — handles the URL shapes the original strict
+ *  parser missed:
+ *    - `youtu.be/<id>?t=42s` (timestamp query)
+ *    - `youtube.com/v/<id>` (legacy embed)
+ *    - `youtube.com/watch?v=<id>&list=...` (playlist context)
+ *    - `youtube.com/shorts/<id>` (shorts)
+ *    - bare IDs ("dQw4w9WgXcQ" — exact 11-char form, common in paste)
+ *    - `m.youtube.com` (mobile)
+ *    - URLs missing the protocol (`youtu.be/<id>`, `youtube.com/...`)
+ *
+ *  The video-id regex enforces YouTube's canonical 11-character
+ *  base64url-style ID — narrower than the original `{6,15}` and rules
+ *  out obvious garbage.
+ *
+ *  Returns the 11-char video ID on success, null on any failure. Pure
+ *  function — safe to call from any context. */
+const YT_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+
 export function parseYouTubeId(url: string): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+
+  // Bare ID (someone pasted just the 11-char ID into the URL field).
+  if (YT_ID_RE.test(trimmed)) return trimmed;
+
+  // Add a protocol so the URL constructor doesn't choke on
+  // "youtu.be/abc" or "youtube.com/watch?v=abc".
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
   try {
-    const u = new URL(url);
-    if (u.hostname.includes('youtu.be')) {
-      return u.pathname.slice(1).split('/')[0] || null;
+    const u = new URL(withProtocol);
+    const host = u.hostname.toLowerCase();
+
+    if (host.includes('youtu.be')) {
+      // youtu.be/<id>?t=...   OR   youtu.be/<id>/
+      const id = u.pathname.slice(1).split('/')[0];
+      return YT_ID_RE.test(id) ? id : null;
     }
-    if (u.hostname.includes('youtube.com')) {
+
+    if (host.includes('youtube.com') || host.includes('youtube-nocookie.com') || host === 'm.youtube.com') {
       const v = u.searchParams.get('v');
-      if (v) return v;
-      const m = u.pathname.match(/^\/(embed|shorts)\/([A-Za-z0-9_-]{6,15})/);
-      if (m) return m[2];
+      if (v && YT_ID_RE.test(v)) return v;
+
+      // Embed / shorts / legacy /v/ paths.
+      const m = u.pathname.match(/^\/(embed|shorts|v|live)\/([A-Za-z0-9_-]+)/);
+      if (m && YT_ID_RE.test(m[2])) return m[2];
     }
+
     return null;
   } catch {
+    return null;
+  }
+}
+
+/** 2026-05-23 — Optional metadata fetch via YouTube's public oEmbed
+ *  endpoint. NO API key required; returns title + channel name +
+ *  high-quality thumbnail. Used by `previewYouTubeReference` when the
+ *  caller didn't pass a `label` — the title becomes the default. The
+ *  endpoint is rate-limited but otherwise free; failure is non-fatal
+ *  (preview falls back to the videoId-based label).
+ *
+ *  Returns null on:
+ *    - Network failure
+ *    - Non-200 response
+ *    - Schema mismatch (YouTube can deprecate fields)
+ *    - Timeout (>4s) — UI can't wait longer
+ *
+ *  The 4s timeout is deliberate: the preview modal renders the
+ *  thumbnail + a spinner over the title field; if the fetch hasn't
+ *  returned by then, the user can confirm with the default label
+ *  while we keep trying. */
+export interface YouTubeOEmbedMetadata {
+  title: string;
+  authorName: string;
+  thumbnailUrl: string | null;
+}
+
+export async function fetchYouTubeMetadata(videoId: string): Promise<YouTubeOEmbedMetadata | null> {
+  if (!videoId || !YT_ID_RE.test(videoId)) return null;
+  try {
+    const url = `https://www.youtube.com/oembed?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D${encodeURIComponent(videoId)}&format=json`;
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 4000);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timeout);
+    if (!res.ok) {
+      devLog(`[swingDB] oEmbed non-ok ${res.status} for ${videoId}`);
+      return null;
+    }
+    const data = (await res.json()) as Record<string, unknown>;
+    const title = typeof data.title === 'string' ? data.title : '';
+    const authorName = typeof data.author_name === 'string' ? data.author_name : '';
+    const thumbnailUrl = typeof data.thumbnail_url === 'string' ? data.thumbnail_url : null;
+    if (!title) return null;
+    return { title, authorName, thumbnailUrl };
+  } catch (e) {
+    devLog('[swingDB] oEmbed fetch failed (non-fatal): ' + String(e));
     return null;
   }
 }
@@ -465,6 +550,14 @@ export interface YouTubePreviewOK {
   /** True when a reference with this exact youtubeUrl is already
    *  in the database. UI shows "already in library" badge. */
   alreadyExists: boolean;
+  /** 2026-05-23 — Title fetched from YouTube oEmbed (no API key
+   *  required). Null when the fetch failed or the caller passed
+   *  `skipMetadataFetch: true`. UI can render this in the preview
+   *  modal as a default label suggestion. */
+  fetchedTitle?: string | null;
+  /** 2026-05-23 — Channel name from oEmbed. Useful as the
+   *  default proName when the user hasn't specified one. */
+  fetchedAuthorName?: string | null;
 }
 export type YouTubePreview = YouTubePreviewInvalid | YouTubePreviewOK;
 
@@ -478,6 +571,9 @@ export async function previewYouTubeReference(
     body?: ReferenceSwing['body'];
     notes?: string | null;
     fault_tags?: FaultTag[];
+    /** When true, skip the oEmbed title fetch — useful for tests or
+     *  for hot-path calls where the caller already has the title. */
+    skipMetadataFetch?: boolean;
   },
 ): Promise<YouTubePreview> {
   if (!url || typeof url !== 'string') {
@@ -485,8 +581,15 @@ export async function previewYouTubeReference(
   }
   const videoId = parseYouTubeId(url);
   if (!videoId) {
-    return { kind: 'invalid', reason: 'Not a recognized YouTube URL (must be youtube.com/watch?v=... or youtu.be/...).' };
+    return {
+      kind: 'invalid',
+      reason: 'That doesn\'t look like a YouTube URL. Try youtube.com/watch?v=… or youtu.be/… (or paste the 11-character video ID directly).',
+    };
   }
+  // hqdefault is the most-reliable size; served for every video
+  // without an API key. The oEmbed thumbnail (when fetched) is
+  // typically higher quality but we keep the i.ytimg.com fallback
+  // for the preview-card visual.
   const thumbnailUri = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
   const all = await readAll();
   const alreadyExists = all.some((r) => {
@@ -494,18 +597,42 @@ export async function previewYouTubeReference(
     const existingId = parseYouTubeId(r.youtubeUrl);
     return existingId === videoId;
   });
-  const label = metadata?.label?.trim() ||
-    (metadata?.proName ? `${metadata.proName} — YouTube reference` : `YouTube reference (${videoId})`);
+
+  // Optional oEmbed metadata fetch. Failure is non-fatal — preview
+  // still resolves with the videoId-based default label.
+  let fetchedTitle: string | null = null;
+  let fetchedAuthorName: string | null = null;
+  let oembedThumbnail: string | null = null;
+  if (!metadata?.skipMetadataFetch) {
+    const meta = await fetchYouTubeMetadata(videoId);
+    if (meta) {
+      fetchedTitle = meta.title;
+      fetchedAuthorName = meta.authorName;
+      oembedThumbnail = meta.thumbnailUrl;
+    }
+  }
+
+  // Label precedence: explicit caller-provided > fetched title >
+  // proName-derived > videoId fallback.
+  const label = metadata?.label?.trim()
+    || (fetchedTitle && fetchedTitle.trim())
+    || (metadata?.proName ? `${metadata.proName} — YouTube reference` : `YouTube reference (${videoId})`);
+
+  // proName precedence: explicit > fetched author > null.
+  const proName = metadata?.proName ?? (fetchedAuthorName || null);
+
   return {
     kind: 'ok',
     videoId,
-    thumbnailUri,
+    thumbnailUri: oembedThumbnail || thumbnailUri,
     alreadyExists,
+    fetchedTitle,
+    fetchedAuthorName,
     addInput: {
       label,
       source: 'pro_clip',
       youtubeUrl: url,
-      proName: metadata?.proName ?? null,
+      proName,
       club: metadata?.club ?? null,
       archetype: metadata?.archetype ?? null,
       body: metadata?.body,

@@ -26,6 +26,7 @@ import { useCageStore } from '../../store/cageStore';
 import { useToastStore } from '../../store/toastStore';
 import { getLibrary, type LibraryFilter } from '../../services/swingLibrary';
 import CompareReferencePickerSheet from '../../components/swinglab/CompareReferencePickerSheet';
+import YouTubeReferenceModal from '../../components/swinglab/YouTubeReferenceModal';
 import type { PoseEstimate } from '../../services/poseEstimator';
 import type { SimilarMatch } from '../../services/swingDatabase';
 
@@ -93,6 +94,9 @@ export default function SwingLibrary() {
   // swingComparisonEngine pass and route the user into the swing
   // detail surface with a toast summary.
   const [compareSessionId, setCompareSessionId] = useState<string | null>(null);
+  // 2026-05-23 — YouTube reference modal state. Replaces the
+  // iOS-only Alert.prompt hack with a real cross-platform modal.
+  const [ytModalOpen, setYtModalOpen] = useState(false);
   const compareSession = compareSessionId
     ? sessionHistory.find(s => s.id === compareSessionId) ?? null
     : null;
@@ -182,51 +186,15 @@ export default function SwingLibrary() {
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text_primary }]}>Swing Library</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {/* 2026-05-23 — YouTube reference test hook. Opens a small
-              prompt (Alert) for the URL, runs previewYouTubeReference,
-              shows the thumbnail + ok-to-add confirm, then calls
-              addReferenceSwing. The full ingestion path is in
-              swingDatabase.ts; this UI is the manual test seam Tim
-              asked for. */}
+          {/* 2026-05-23 — YouTube reference. Cross-platform modal
+              replacing the iOS-only Alert.prompt hack: URL input
+              with debounced preview, thumbnail + title + author
+              fetched from YouTube's public oEmbed endpoint (no API
+              key), editable label/proName/club fields, confirm
+              button. Stores the link + thumbnail only — no video
+              download. */}
           <TouchableOpacity
-            onPress={async () => {
-              try {
-                const { Alert } = await import('react-native');
-                Alert.prompt?.(
-                  'Add YouTube reference',
-                  'Paste a YouTube URL (pro or favorite swing). We\'ll grab the thumbnail and store the reference for comparisons.',
-                  async (input?: string) => {
-                    if (!input) return;
-                    const dbMod = await import('../../services/swingDatabase');
-                    const preview = await dbMod.previewYouTubeReference(input);
-                    if (preview.kind === 'invalid') {
-                      Alert.alert('Couldn\'t add reference', preview.reason);
-                      return;
-                    }
-                    if (preview.alreadyExists) {
-                      Alert.alert('Already in your library', `That video is already saved as a reference (id ${preview.videoId}).`);
-                      return;
-                    }
-                    Alert.alert(
-                      'Add this reference?',
-                      `Label: ${preview.addInput.label}\nVideo: ${preview.videoId}`,
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Add',
-                          onPress: async () => {
-                            const id = await dbMod.addReferenceSwing(preview.addInput);
-                            useToastStore.getState().show(`Reference added (${id.slice(0, 12)}…)`);
-                          },
-                        },
-                      ],
-                    );
-                  },
-                );
-              } catch (e) {
-                console.log('[library] YouTube ingestion test failed:', e);
-              }
-            }}
+            onPress={() => setYtModalOpen(true)}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             style={styles.headerIcon}
             accessibilityRole="button"
@@ -474,6 +442,14 @@ export default function SwingLibrary() {
           setCompareSessionId(null);
           router.push('/swinglab/upload' as never);
         }}
+      />
+
+      {/* 2026-05-23 — YouTube reference ingestion modal. Cross-platform
+          (replaces Alert.prompt). Debounced preview + oEmbed title
+          fetch + editable label/proName/club + alreadyExists guard. */}
+      <YouTubeReferenceModal
+        visible={ytModalOpen}
+        onClose={() => setYtModalOpen(false)}
       />
     </SafeAreaView>
   );

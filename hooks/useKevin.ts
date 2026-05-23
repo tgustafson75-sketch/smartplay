@@ -238,6 +238,20 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
       setIsThinking(false);
       setPresenceThinking(false);
 
+      // 2026-05-23 — Surface API overload as a clear toast so the
+      // player understands the "servers are busy" message isn't a
+      // bug. The brain endpoint returns the overload-specific
+      // string starting with "Servers are busy" (see api/kevin.ts
+      // OVERLOAD_FALLBACK_KEVIN). When we detect that prefix, emit
+      // a one-time toast in addition to the normal spoken reply.
+      if (text && /^Servers are busy|servidores están saturados|服务器目前繁忙/i.test(text)) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const toast = require('../store/toastStore') as typeof import('../store/toastStore');
+          toast.useToastStore.getState().show('Servers busy — try in a few seconds');
+        } catch { /* non-fatal */ }
+      }
+
       if (audioBase64) {
         await speakFromBase64(audioBase64);
       }

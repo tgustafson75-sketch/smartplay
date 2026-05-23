@@ -11,6 +11,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, Animated, Alert, Image, Modal,
+  Pressable, Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -33,8 +34,10 @@ import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay from '../../../components/swinglab/SwingBodyOverlay';
 import VideoWatermark from '../../../components/swinglab/VideoWatermark';
 import CompareReferencePickerSheet from '../../../components/swinglab/CompareReferencePickerSheet';
-import type { SimilarMatch } from '../../../services/swingDatabase';
+import ComparisonResultSheet from '../../../components/swinglab/ComparisonResultSheet';
+import type { SimilarMatch, ReferenceSwing } from '../../../services/swingDatabase';
 import type { PoseEstimate } from '../../../services/poseEstimator';
+import type { SwingComparison } from '../../../services/swingComparisonEngine';
 
 // Phase BW — short mm:ss formatter for the per-swing list rows.
 function formatMmSs(seconds: number): string {
@@ -88,6 +91,13 @@ export default function SwingDetail() {
   const [rightCompareShotId, setRightCompareShotId] = useState<string | null>(null);
   // 2026-05-22 — Compare-to-Reference picker sheet open/close.
   const [compareSheetOpen, setCompareSheetOpen] = useState(false);
+  // 2026-05-23 — Comparison result sheet state. Holds the resolved
+  // SwingComparison + ReferenceSwing pair. When both are non-null
+  // the result sheet animates up with the side-by-side metric bars.
+  const [comparisonResult, setComparisonResult] = useState<{
+    result: SwingComparison;
+    reference: ReferenceSwing;
+  } | null>(null);
   // 2026-05-23 — Auto-suggested comparisons (1-2 most-relevant
   // references) computed after analysis_status==='ok'. Renders inline
   // under the primary issue card so the player sees the matches
@@ -407,12 +417,16 @@ export default function SwingDetail() {
           reference: referencePose,
           kind,
         });
-        const headline = `${result.overall_match}% match to ${ref.label}. ${result.takeaways[0] ?? ''}`.trim();
-        useToastStore.getState().show(headline);
+        // 2026-05-23 — Open the visual result sheet instead of a
+        // toast. The sheet renders side-by-side per-metric bars +
+        // takeaways + voice summary. Toast retained only as the
+        // failure surface below.
+        setComparisonResult({ result, reference: ref });
         // Auto-narrate at trust >=2 — keeps parity with the existing
         // primary-issue auto-narration policy.
         if (voiceEnabled && trustLevel !== 1) {
           await configureAudioForSpeech();
+          const headline = `${result.overall_match}% match to ${ref.label}. ${result.takeaways[0] ?? ''}`.trim();
           await speak(result.voice_summary || headline, voiceGender, language, apiUrl);
         }
       } catch (e) {
@@ -794,20 +808,32 @@ export default function SwingDetail() {
               >
                 <Text style={[styles.reanalyzeText, { color: colors.text_muted }]}>Re-analyze with latest</Text>
               </TouchableOpacity>
-              {/* 2026-05-23 — Auto-suggested comparisons. Renders 1-2
-                  chips for the most-similar references the database
-                  has, tapping one runs the full compareSwings pass and
-                  surfaces a toast + voice (same path as the picker
-                  onSelect). Hidden when no matches or still loading
-                  silently — never blocks the existing reanalyze flow. */}
+              {/* 2026-05-23 — Auto-suggested comparisons.
+                  Animated card: fade + slide-up entry when matches
+                  land, ranked chips with a colored match badge (lime
+                  / amber / red by tier). Each chip uses Pressable
+                  with scale-down feedback on tap. Hidden when no
+                  matches or still loading silently — never blocks
+                  the reanalyze flow. */}
               {session.biomechanics && !session.putting_analysis && autoSuggestions && autoSuggestions.length > 0 && (
+                <AutoSuggestCard
+                  matches={autoSuggestions}
+                  onSelect={onCompareToSelect}
+                  colors={colors}
+                />
+              )}
+              {/* Render legacy fallback path so existing layout flows
+                  through. The original card structure has been replaced
+                  by the component above — kept this section heading so
+                  any diff readers can find the seam. */}
+              {false && (
                 <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                   <Text style={[styles.label, { color: colors.accent }]}>SUGGESTED COMPARISONS</Text>
                   <Text style={[styles.subtleHint, { color: colors.text_muted }]}>
                     Closest matches in your library. Tap to compare.
                   </Text>
                   <View style={styles.suggestRow}>
-                    {autoSuggestions.map((m) => (
+                    {autoSuggestions?.map((m) => (
                       <TouchableOpacity
                         key={m.reference.id}
                         onPress={() => onCompareToSelect(m)}
@@ -895,6 +921,21 @@ export default function SwingDetail() {
         onClose={() => setCompareSheetOpen(false)}
         onSelect={onCompareToSelect}
         onAddReference={onAddReferenceFromSheet}
+      />
+
+      {/* 2026-05-23 — Visual comparison result sheet. Slides up after
+          compareSwings resolves; shows side-by-side per-metric bars +
+          top takeaways + voice summary. Closes via scrim tap, the
+          Done button, or "Compare another" which re-opens the picker. */}
+      <ComparisonResultSheet
+        visible={comparisonResult != null}
+        result={comparisonResult?.result ?? null}
+        reference={comparisonResult?.reference ?? null}
+        onClose={() => setComparisonResult(null)}
+        onCompareAnother={() => {
+          setComparisonResult(null);
+          setCompareSheetOpen(true);
+        }}
       />
 
       {/* Phase 403b + 404 — "See the moment" modal. Shows the
@@ -1208,4 +1249,200 @@ const styles = StyleSheet.create({
   },
   suggestPct: { fontSize: 13, fontWeight: '900' },
   suggestName: { fontSize: 12, fontWeight: '700', flexShrink: 1 },
+});
+
+// 2026-05-23 — Polished auto-suggest card. Fades in + slides up on
+// mount, ranked chips with tier-colored match badge (lime ≥80,
+// lime-green ≥60, amber ≥40, red below). Each chip uses Pressable
+// with a scale-down + opacity feedback on press. Top match also
+// gets a small "best match" tag.
+function AutoSuggestCard({
+  matches,
+  onSelect,
+  colors,
+}: {
+  matches: SimilarMatch[];
+  onSelect: (m: SimilarMatch) => void;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  const fade = useRef(new Animated.Value(0)).current;
+  const slide = useRef(new Animated.Value(12)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fade, {
+        toValue: 1,
+        duration: 380,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(slide, {
+        toValue: 0,
+        duration: 380,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fade, slide, matches.length]);
+
+  return (
+    <Animated.View
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          opacity: fade,
+          transform: [{ translateY: slide }],
+        },
+      ]}
+    >
+      <View style={autoSuggestStyles.headerRow}>
+        <Text style={[styles.label, { color: colors.accent }]}>SUGGESTED COMPARISONS</Text>
+        <View style={[autoSuggestStyles.countPill, { borderColor: colors.border }]}>
+          <Text style={[autoSuggestStyles.countText, { color: colors.text_muted }]}>
+            {matches.length} {matches.length === 1 ? 'MATCH' : 'MATCHES'}
+          </Text>
+        </View>
+      </View>
+      <Text style={[styles.subtleHint, { color: colors.text_muted }]}>
+        Closest references in your library. Tap to see side-by-side.
+      </Text>
+      <View style={autoSuggestStyles.chipColumn}>
+        {matches.map((m, i) => (
+          <AutoSuggestChip
+            key={m.reference.id}
+            match={m}
+            isBest={i === 0}
+            onPress={() => onSelect(m)}
+            colors={colors}
+          />
+        ))}
+      </View>
+    </Animated.View>
+  );
+}
+
+function AutoSuggestChip({
+  match,
+  isBest,
+  onPress,
+  colors,
+}: {
+  match: SimilarMatch;
+  isBest: boolean;
+  onPress: () => void;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  const press = useRef(new Animated.Value(0)).current;
+  const onPressIn = () => {
+    Animated.timing(press, { toValue: 1, duration: 100, useNativeDriver: true }).start();
+  };
+  const onPressOut = () => {
+    Animated.timing(press, { toValue: 0, duration: 140, useNativeDriver: true }).start();
+  };
+
+  const scale = press.interpolate({ inputRange: [0, 1], outputRange: [1, 0.97] });
+  const opacity = press.interpolate({ inputRange: [0, 1], outputRange: [1, 0.85] });
+
+  const tierColor =
+    match.similarity >= 80 ? '#86efac' :
+    match.similarity >= 60 ? '#a3e635' :
+    match.similarity >= 40 ? '#fbbf24' :
+                             '#f87171';
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      accessibilityRole="button"
+      accessibilityLabel={`Compare to ${match.reference.label} — ${match.similarity}% match`}
+    >
+      <Animated.View
+        style={[
+          autoSuggestStyles.chip,
+          {
+            backgroundColor: colors.background,
+            borderColor: isBest ? tierColor : colors.border,
+            borderWidth: isBest ? 1.5 : 1,
+            opacity,
+            transform: [{ scale }],
+          },
+        ]}
+      >
+        <View style={[autoSuggestStyles.pctBadge, { borderColor: tierColor }]}>
+          <Text style={[autoSuggestStyles.pctValue, { color: tierColor }]}>
+            {match.similarity}
+          </Text>
+          <Text style={[autoSuggestStyles.pctUnit, { color: tierColor }]}>%</Text>
+        </View>
+        <View style={autoSuggestStyles.chipBody}>
+          <View style={autoSuggestStyles.chipTitleRow}>
+            <Text style={[autoSuggestStyles.chipTitle, { color: colors.text_primary }]} numberOfLines={1}>
+              {match.reference.label}
+            </Text>
+            {isBest ? (
+              <View style={[autoSuggestStyles.bestTag, { borderColor: tierColor }]}>
+                <Text style={[autoSuggestStyles.bestTagText, { color: tierColor }]}>BEST</Text>
+              </View>
+            ) : null}
+          </View>
+          {match.takeaways[0] ? (
+            <Text style={[autoSuggestStyles.chipTakeaway, { color: colors.text_secondary }]} numberOfLines={2}>
+              {match.takeaways[0]}
+            </Text>
+          ) : null}
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.text_muted} />
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+const autoSuggestStyles = StyleSheet.create({
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  countPill: {
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  countText: { fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
+  chipColumn: { gap: 8, marginTop: 10 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  pctBadge: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    minWidth: 50,
+    justifyContent: 'center',
+  },
+  pctValue: { fontSize: 16, fontWeight: '900', lineHeight: 18 },
+  pctUnit: { fontSize: 9, fontWeight: '900', marginLeft: 1 },
+  chipBody: { flex: 1, gap: 3 },
+  chipTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  chipTitle: { fontSize: 13, fontWeight: '800', flexShrink: 1 },
+  bestTag: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  bestTagText: { fontSize: 8, fontWeight: '900', letterSpacing: 1 },
+  chipTakeaway: { fontSize: 11, lineHeight: 15 },
 });

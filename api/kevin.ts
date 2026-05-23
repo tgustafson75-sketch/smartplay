@@ -11,7 +11,13 @@ import {
 } from './_voiceTuning';
 import { getCaddieName, getCharacterSpec } from '../lib/persona';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+// 2026-05-23 — maxRetries bumped from 1 → 3 after a user-reported
+// API overload incident. Anthropic returns 529 `overloaded_error`
+// during peak capacity; the SDK's built-in retry (with exponential
+// backoff) handles transient cases without surfacing failure to
+// the user. 3 retries × backoff ≈ 4-8s worst case before our 25s
+// timeout — still fits inside the brain-call deadline budget.
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 3 });
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 });
 
 const CLASSIFIER_SYSTEM = `You are a fast classifier. Given a user's question to a golf caddie, output ONLY one word: either "TACTICAL" or "CONVERSATIONAL".
@@ -1107,20 +1113,22 @@ ${onCourseContextBlock}${baseMessage}`
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : undefined;
-    console.error('[kevin] error:', msg);
+    // 2026-05-23 — Detect Anthropic overload specifically (the SDK
+    // exposes `.status` on APIError). Even with maxRetries:3 the
+    // SDK can run out of retries during sustained capacity events.
+    // When that happens we surface a SPECIFIC fallback string so
+    // the user knows it's transient (Anthropic is overloaded) and
+    // not a permanent app bug. Same shape for any 5xx upstream.
+    const status = (err as { status?: number } | null)?.status;
+    const isOverloaded =
+      status === 529 ||
+      status === 503 ||
+      (typeof msg === 'string' && /overloaded|overloaded_error|too many requests|rate.?limit/i.test(msg));
+    console.error('[kevin] error:', msg, isOverloaded ? '(OVERLOAD)' : '', status ? `(status ${status})` : '');
     if (stack) console.error('[kevin] stack:', stack);
     // 2026-05-21 — Fix I shape C: return 200 with an honest localized
-    // fallback string instead of HTTP 500. The client's chat-fallback
-    // path in services/listeningSession.ts only spoke replies when
-    // `chatRes.ok` was true; on a 500 it fell through to dead silence.
-    // By landing the fallback string here, every caller (including any
-    // future client) gets a speakable response on failure without
-    // having to special-case 500. This is NOT fabrication — only the
-    // honest error message is delivered, never a fake answer to the
-    // user's question. Per-language map mirrors listeningSession's
-    // FAILURE_FALLBACK so the contract is consistent across all caddie
-    // surfaces. Error details still surface via the `error` field for
-    // logging/debugging.
+    // fallback string instead of HTTP 500. See full rationale below
+    // the fallback maps.
     const reqLang = (() => {
       try {
         const lang = (req.body as { language?: unknown })?.language;
@@ -1132,8 +1140,15 @@ ${onCourseContextBlock}${baseMessage}`
       es: 'Tengo problemas para conectarme — inténtalo de nuevo.',
       zh: '我连接遇到问题——请再试一次。',
     };
+    const OVERLOAD_FALLBACK_KEVIN: Record<string, string> = {
+      en: "Servers are busy right now — give me a few seconds and ask again.",
+      es: 'Los servidores están saturados — espera unos segundos e inténtalo de nuevo.',
+      zh: '服务器目前繁忙——请等几秒后再问。',
+    };
     const langKey = reqLang.toLowerCase().slice(0, 2);
-    const text = FAILURE_FALLBACK_KEVIN[langKey] ?? FAILURE_FALLBACK_KEVIN.en;
+    const text = (isOverloaded
+      ? (OVERLOAD_FALLBACK_KEVIN[langKey] ?? OVERLOAD_FALLBACK_KEVIN.en)
+      : (FAILURE_FALLBACK_KEVIN[langKey] ?? FAILURE_FALLBACK_KEVIN.en));
     return res.status(200).json({
       text,
       audioBase64: null,
