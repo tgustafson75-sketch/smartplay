@@ -50,6 +50,7 @@ import CaddieSuggestionCard from '../components/CaddieSuggestionCard';
 import GpsQualityOverlay from '../components/dev/GpsQualityOverlay';
 import CaptureOverlay from '../components/CaptureOverlay';
 import { UpdateAvailableBanner } from '../components/UpdateAvailableBanner';
+import NativeFallbackBanner from '../components/NativeFallbackBanner';
 import CaptionStrip from '../components/CaptionStrip';
 import { GlobalToolsMenu } from '../components/tools/GlobalToolsMenu';
 import { GlobalToast } from '../components/toast/GlobalToast';
@@ -535,6 +536,11 @@ function AppNavigator() {
           reload. Suppressed mid-round and during voice interaction so
           the user isn't yanked off mid-hole / mid-conversation. */}
       <UpdateAvailableBanner />
+      {/* 2026-05-23 — Native fallback banner. Surfaces when DAT or
+          MediaPipe native bridges fail to load at boot, so the player
+          knows they're in cloud mode rather than confused by silent
+          feature absence. Renders nothing on healthy builds. */}
+      <NativeFallbackBanner />
       {/* Phase 106 — caddie team handoff suggestion overlay. */}
       <CaddieSuggestionCard />
       {/* Phase 107 — GPS quality debug overlay (gated by settings flag). */}

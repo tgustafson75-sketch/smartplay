@@ -80,9 +80,20 @@ function withAndroidGradleDeps(config) {
   return withAppBuildGradle(config, (gradleConfig) => {
     const marker = 'com.google.mediapipe:tasks-vision';
     if (gradleConfig.modResults.contents.includes(marker)) return gradleConfig;
+    // 2026-05-23 — Exclude androidx.startup transitively. tasks-vision
+    // 0.10.x pulls it in for the on-boot init provider that we strip
+    // from the manifest above. Removing the gradle dep too closes
+    // the loop — even if the manifest strip somehow misses, the
+    // startup classes won't be on classpath to instantiate.
     const dep = `
     // MediaPipe Pose Landmarker (BlazePose) — on-device pose detection.
-    implementation "com.google.mediapipe:tasks-vision:${MP_VERSION}"`;
+    // 2026-05-23 NUCLEAR-HARDENED: exclude androidx.startup so the
+    // tasks-vision AAR's auto-init container can't run at boot.
+    // MediaPipe Tasks initializes per-detect() instead.
+    implementation("com.google.mediapipe:tasks-vision:${MP_VERSION}") {
+        exclude group: 'androidx.startup'
+        exclude group: 'androidx.profileinstaller'
+    }`;
     gradleConfig.modResults.contents = gradleConfig.modResults.contents.replace(
       /(dependencies\s*\{)/,
       `$1${dep}`,
@@ -98,35 +109,72 @@ function withAndroidCameraPermission(config) {
       manifestConfig.modResults,
     );
 
-    // 2026-05-23 — Manifest hardening for AAR-injected auto-init.
-    // MediaPipe `tasks-vision` AND many AndroidX libraries use
-    // androidx.startup's InitializationProvider to run init code
-    // BEFORE Application.onCreate(). If that init throws (native
-    // .so missing for an ABI the device doesn't have, transitive
-    // dep version mismatch, attestation failure), the app crashes
-    // at boot before any of our Kotlin/JS code can defend against
-    // it.
+    // 2026-05-23 — NUCLEAR manifest hardening.
     //
-    // We declare the `tools` XML namespace so any future provider-
-    // removal entries can use tools:node="remove". We do NOT
-    // pre-emptively remove the MediaPipe InitializationProvider
-    // because (a) the exact class name isn't documented and a wrong
-    // guess does nothing OR breaks unrelated startup tasks, and
-    // (b) MediaPipe Tasks Vision 0.10.x initializes lazily on first
-    // detect() call by default — so the manifest provider is only
-    // dangerous if Tim's specific device hits the missing-.so path.
+    // ContentProviders run BEFORE Application.attachBaseContext +
+    // onCreate. If an AAR-registered provider throws during its own
+    // onCreate, the app crashes BEFORE any of our Kotlin or JS
+    // defenses can fire — no try/catch reaches that high in the
+    // boot order. The ONLY defense is to strip the provider from
+    // the merged manifest with tools:node="remove".
     //
-    // The REAL defense is: defensive package classes (already in
-    // place via try/catch in createNativeModules), reflective SDK
-    // access in the Kotlin modules (to prevent class-verification
-    // crashes at module load), and the JS-side native-module health
-    // tracker (services/nativeModuleHealth.ts) that records load
-    // outcomes for the diagnostic surface.
+    // We strip `androidx.startup.InitializationProvider` entirely.
+    // It's the canonical auto-init container used by MediaPipe
+    // Tasks, WorkManager 2.6+, Lifecycle, and Profile-Installer.
+    // Trade-off: any library relying on it for boot-time init must
+    // initialize lazily instead. For Smart Play Caddie's stack
+    // (Expo + RN + Sentry + custom services), nothing depends on
+    // startup for correctness — MediaPipe Tasks Vision in
+    // particular initializes per-detect() call, not at boot.
+    //
+    // Also strip the Profile Installer initializer (a known
+    // crash-suspect on some devices) and the Crash Reporter
+    // provider (in case any AAR brought one in transitively).
     const manifest = manifestConfig.modResults;
     manifest.manifest.$ = manifest.manifest.$ || {};
     if (!manifest.manifest.$['xmlns:tools']) {
       manifest.manifest.$['xmlns:tools'] = 'http://schemas.android.com/tools';
     }
+    const application = manifest.manifest.application?.[0];
+    if (!application) return manifestConfig;
+    application.provider = application.provider || [];
+
+    // Helper — add a tools:node="remove" entry idempotently.
+    const ensureProviderRemoved = (className) => {
+      const existing = application.provider.find(
+        (p) => p.$ && p.$['android:name'] === className,
+      );
+      if (existing) {
+        // Coerce any existing entry to a removal.
+        existing.$['tools:node'] = 'remove';
+        return;
+      }
+      application.provider.push({
+        $: {
+          'android:name': className,
+          'tools:node': 'remove',
+        },
+      });
+    };
+
+    [
+      // AndroidX Startup — the modern auto-init container. MediaPipe
+      // Tasks Vision and others register Initializers under this
+      // provider. Removing the whole provider forces all initializers
+      // to be lazy / explicit.
+      'androidx.startup.InitializationProvider',
+      // Profile Installer — auto-installs PGO profiles at boot.
+      // Known crash-prone on some Samsung + Pixel devices on older
+      // Android versions.
+      'androidx.profileinstaller.ProfileInstallerInitializer',
+      // Firebase init provider — defensive in case any transitive
+      // dep pulled it in. SmartPlay doesn't use Firebase, so
+      // removing is safe.
+      'com.google.firebase.provider.FirebaseInitProvider',
+      // Crashlytics init provider — same defense.
+      'com.google.firebase.crashlytics.ndk.CrashlyticsNdkInitProvider',
+    ].forEach(ensureProviderRemoved);
+
     return manifestConfig;
   });
 }
@@ -222,18 +270,31 @@ function withAndroidSourceCopyAndPackageReg(config) {
       contents = contents.replace(
         applyRegex,
         (match) =>
-          `${match}\n              // Auto-injected by withMediaPipePose.js — on-device pose detection.\n              add(com.smartplaycaddie.mediapipe.MediaPipePosePackage())`,
+          `${match}
+              // Auto-injected by withMediaPipePose.js — try/catch wrap
+              // so a class-load failure never crashes MainApplication.
+              try {
+                add(com.smartplaycaddie.mediapipe.MediaPipePosePackage())
+              } catch (t: Throwable) {
+                android.util.Log.e("MainApplication", "MediaPipePosePackage failed to load — continuing without it", t)
+              }`,
       );
       mainAppConfig.modResults.contents = contents;
-      console.log('[withMediaPipePose] injected MediaPipePosePackage into MainApplication.kt (apply-block template)');
+      console.log('[withMediaPipePose] injected MediaPipePosePackage into MainApplication.kt (apply-block + try/catch)');
     } else if (valLineRegex.test(contents)) {
       contents = contents.replace(
         valLineRegex,
         (match) =>
-          `${match}\n            // Auto-injected by withMediaPipePose.js — on-device pose detection.\n            packages.add(com.smartplaycaddie.mediapipe.MediaPipePosePackage())`,
+          `${match}
+            // Auto-injected by withMediaPipePose.js — try/catch wrap.
+            try {
+              packages.add(com.smartplaycaddie.mediapipe.MediaPipePosePackage())
+            } catch (t: Throwable) {
+              android.util.Log.e("MainApplication", "MediaPipePosePackage failed to load — continuing without it", t)
+            }`,
       );
       mainAppConfig.modResults.contents = contents;
-      console.log('[withMediaPipePose] injected MediaPipePosePackage into MainApplication.kt (val template)');
+      console.log('[withMediaPipePose] injected MediaPipePosePackage into MainApplication.kt (val template + try/catch)');
     } else {
       console.warn(
         '[withMediaPipePose] WARNING: MainApplication.kt template did not match either known shape. ' +

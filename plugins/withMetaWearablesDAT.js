@@ -161,9 +161,18 @@ function withAppGradle(config, { appId, clientToken }) {
     }
 
     // 2b. mwdat dependencies — inject inside the dependencies { } block.
+    // 2026-05-23 NUCLEAR-HARDENED: exclude androidx.startup +
+    // profileinstaller transitively in case the Wearables SDK pulls
+    // them in. Mirrors the MediaPipe plugin's same defense.
     const deps = `
-    implementation "com.meta.wearable:mwdat-core:0.7.0"
-    implementation "com.meta.wearable:mwdat-camera:0.7.0"`;
+    implementation("com.meta.wearable:mwdat-core:0.7.0") {
+        exclude group: 'androidx.startup'
+        exclude group: 'androidx.profileinstaller'
+    }
+    implementation("com.meta.wearable:mwdat-camera:0.7.0") {
+        exclude group: 'androidx.startup'
+        exclude group: 'androidx.profileinstaller'
+    }`;
     if (!contents.includes('com.meta.wearable:mwdat-core')) {
       contents = contents.replace(
         /(dependencies\s*\{)/,
@@ -201,19 +210,41 @@ function withManifest(config) {
     if (!application) return manifestConfig;
     application['meta-data'] = application['meta-data'] || [];
 
-    // 2026-05-23 — Defensive: ensure tools namespace declared so we
-    // can use tools:node="remove" on any auto-injected Wearables-AAR
-    // startup initializer that might crash at boot. Meta SDKs
-    // sometimes inject Facebook Analytics auto-providers; this
-    // namespace lets the manifest merger honour our removal blocks
-    // when needed. Per-provider removal entries are added by the
-    // MediaPipe plugin (the more aggressive auto-init source); DAT
-    // doesn't currently need a specific removal but the namespace
-    // declaration here is forward-defensive.
+    // 2026-05-23 — NUCLEAR manifest hardening (DAT side).
+    // Mirrors the withMediaPipePose.js block: strip auto-init
+    // providers that could crash at boot. We don't know if the
+    // Wearables AAR specifically injects these, but the strip is
+    // idempotent + safe to over-apply (manifest merger no-ops on
+    // entries that don't exist in the merged set).
     manifest.manifest.$ = manifest.manifest.$ || {};
     if (!manifest.manifest.$['xmlns:tools']) {
       manifest.manifest.$['xmlns:tools'] = 'http://schemas.android.com/tools';
     }
+    application.provider = application.provider || [];
+    const ensureProviderRemoved = (className) => {
+      const existing = application.provider.find(
+        (p) => p.$ && p.$['android:name'] === className,
+      );
+      if (existing) {
+        existing.$['tools:node'] = 'remove';
+        return;
+      }
+      application.provider.push({
+        $: {
+          'android:name': className,
+          'tools:node': 'remove',
+        },
+      });
+    };
+    [
+      'androidx.startup.InitializationProvider',
+      'androidx.profileinstaller.ProfileInstallerInitializer',
+      'com.google.firebase.provider.FirebaseInitProvider',
+      'com.google.firebase.crashlytics.ndk.CrashlyticsNdkInitProvider',
+      // Meta-specific guesses — these may not exist but a missing
+      // class is a manifest-merger no-op, not an error.
+      'com.facebook.appevents.AppEventsLoggerInitProvider',
+    ].forEach(ensureProviderRemoved);
 
     const ensureMeta = (name, value) => {
       const existing = application['meta-data'].find(
@@ -283,36 +314,50 @@ function withMainApplicationInjection(config) {
     },
   ]);
 
-  // Step 2: inject the package registration. Supports two Expo
-  // MainApplication template variants. CORRECTED package path.
+  // Step 2: inject the package registration WRAPPED in try/catch.
+  // 2026-05-23 NUCLEAR: even with defensive ReactPackage classes,
+  // the `add(MetaWearablesPackage())` line itself can fail at class-
+  // load time (NoClassDefFoundError from a missing transitive dep).
+  // Wrapping the add() in a try/catch at MainApplication scope means
+  // even a class-load failure won't crash the app — it just logs +
+  // continues with the rest of the packages.
   return withMainApplication(next, (mainAppConfig) => {
     let contents = mainAppConfig.modResults.contents;
     const marker = 'MetaWearablesPackage()';
     if (contents.includes(marker)) return mainAppConfig;
 
-    // Modern Expo template (SDK 54+):
-    //   PackageList(this).packages.apply { ... }
     const applyRegex = /(PackageList\(this\)\.packages\.apply\s*\{)/;
-    // Legacy template:
-    //   val packages = PackageList(this).packages
     const valLineRegex = /(val\s+packages\s*=\s*PackageList\(this\)\.packages)/;
 
     if (applyRegex.test(contents)) {
       contents = contents.replace(
         applyRegex,
         (match) =>
-          `${match}\n              // Auto-injected by withMetaWearablesDAT.js — Meta Wearables DAT native module.\n              add(com.smartplaycaddie.wearables.MetaWearablesPackage())`,
+          `${match}
+              // Auto-injected by withMetaWearablesDAT.js — try/catch
+              // so a class-load failure never crashes MainApplication.
+              try {
+                add(com.smartplaycaddie.wearables.MetaWearablesPackage())
+              } catch (t: Throwable) {
+                android.util.Log.e("MainApplication", "MetaWearablesPackage failed to load — continuing without it", t)
+              }`,
       );
       mainAppConfig.modResults.contents = contents;
-      console.log('[withMetaWearablesDAT] injected MetaWearablesPackage into MainApplication.kt (apply-block template)');
+      console.log('[withMetaWearablesDAT] injected MetaWearablesPackage into MainApplication.kt (apply-block + try/catch)');
     } else if (valLineRegex.test(contents)) {
       contents = contents.replace(
         valLineRegex,
         (match) =>
-          `${match}\n            // Auto-injected by withMetaWearablesDAT.js — Meta Wearables DAT native module.\n            packages.add(com.smartplaycaddie.wearables.MetaWearablesPackage())`,
+          `${match}
+            // Auto-injected by withMetaWearablesDAT.js — try/catch
+            try {
+              packages.add(com.smartplaycaddie.wearables.MetaWearablesPackage())
+            } catch (t: Throwable) {
+              android.util.Log.e("MainApplication", "MetaWearablesPackage failed to load — continuing without it", t)
+            }`,
       );
       mainAppConfig.modResults.contents = contents;
-      console.log('[withMetaWearablesDAT] injected MetaWearablesPackage into MainApplication.kt (val template)');
+      console.log('[withMetaWearablesDAT] injected MetaWearablesPackage into MainApplication.kt (val template + try/catch)');
     } else {
       console.warn(
         '[withMetaWearablesDAT] WARNING: MainApplication.kt template did not match either known shape. ' +
