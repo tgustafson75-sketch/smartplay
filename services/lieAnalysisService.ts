@@ -150,3 +150,150 @@ export async function analyzeLie(
     visionController.end(myController);
   }
 }
+
+// ─── 2026-05-22 — Enriched lie analysis ────────────────────────────────
+//
+// Higher-level wrapper that folds in adjacent signals the base
+// analyzeLie() doesn't have visibility into:
+//   - Acoustic strike data from the player's last shot (if captured) —
+//     informs turf quality + suggests realistic spin / launch range
+//   - Strategic risk/reward overlay derived from metaCourseIntelligence
+//     so the recommendation isn't just "what's possible" but "what's
+//     SMART given the hole + ghost + miss bias"
+//
+// All side signals are OPTIONAL. With only the vision result it returns
+// the base analysis untouched; with everything it returns a richer
+// EnrichedLieAnalysis the caller can render as multiple cards.
+
+export interface AcousticPriorSignal {
+  /** Strike location from the player's most recent shot. */
+  strike: 'flush' | 'fat' | 'thin' | 'heel' | 'toe' | 'unknown';
+  /** Turf the club brushed through. */
+  turf: 'grass' | 'sand' | 'hardpan' | 'rough' | 'unknown';
+  /** 0..100 acoustic-classifier confidence. */
+  confidence: number;
+}
+
+export interface RiskRewardCall {
+  /** Coarse band the recommendation lands in. Mirrors
+   *  metaCourseIntelligence's RiskAssessment. */
+  band: 'conservative' | 'standard' | 'aggressive' | 'go_for_it';
+  /** One-line summary of what we're trading off. */
+  tradeoff: string;
+  /** The "if you're feeling cautious" alternative, when one exists. */
+  alternative_play: string | null;
+}
+
+export interface EnrichedLieAnalysis {
+  /** Base lie result from the vision endpoint. Always present (even on
+   *  failure — falls back to a minimal LieAnalysis when the vision call
+   *  errored, with confidence_level='low'). */
+  base: LieAnalysis;
+  /** Optional acoustic prior from the player's last strike. */
+  acoustic_prior: AcousticPriorSignal | null;
+  /** Risk/reward overlay synthesized from the hole + ghost + miss bias. */
+  risk_reward: RiskRewardCall | null;
+  /** Sources used in the enrichment — surfaces as chip row. */
+  sources_used: ('vision' | 'acoustic' | 'meta_strategy')[];
+  /** Composed voice summary the caddie speaks. Persona-aware via the
+   *  base analysis's tactical_advice + our risk overlay. */
+  voice_summary: string;
+}
+
+export interface EnrichLieInput {
+  imageBase64: string;
+  imageMediaType?: 'image/jpeg' | 'image/png';
+  voiceGender?: 'male' | 'female';
+  /** Optional pre-built acoustic signal. When omitted, no acoustic
+   *  enrichment is attempted (we don't want a stale strike to bias the
+   *  CURRENT lie call). */
+  acoustic?: AcousticPriorSignal | null;
+  /** When true, also runs metaCourseIntelligence.recommendShot to layer
+   *  a risk/reward call. Optional — caller decides whether the user
+   *  wants strategic depth or just the tactical lie read. */
+  include_strategy?: boolean;
+}
+
+/**
+ * Enrich the existing analyzeLie pipeline with adjacent signals.
+ * Defensive: every enrichment branch tolerates failure of its source.
+ * Returns a fully-populated EnrichedLieAnalysis even when only the base
+ * vision call succeeded.
+ */
+export async function enrichedLieAnalysis(input: EnrichLieInput): Promise<EnrichedLieAnalysis> {
+  // 1. Base vision call — bundled context.
+  const ctxMod = await import('./lieAnalysisContext');
+  const context = await ctxMod.bundleLieAnalysisContext(null);
+  const baseResult = await analyzeLie(
+    input.imageBase64,
+    context,
+    input.imageMediaType ?? 'image/jpeg',
+    input.voiceGender ?? 'male',
+  );
+
+  let base: LieAnalysis;
+  if (baseResult.kind === 'ok') {
+    base = baseResult.analysis;
+  } else {
+    base = {
+      situation_description: 'Lie read unavailable — try a fresh capture.',
+      tactical_advice: 'Trust your eyes and pick the safer play.',
+      recommended_club: null,
+      alternative_play: 'Lay up to a comfortable yardage.',
+      confidence_level: 'low',
+      conservative_call: true,
+      follow_up_question: null,
+    };
+  }
+
+  const sources_used: EnrichedLieAnalysis['sources_used'] = ['vision'];
+  if (input.acoustic) sources_used.push('acoustic');
+
+  // 2. Risk/reward synthesis via metaCourseIntelligence.
+  let riskReward: RiskRewardCall | null = null;
+  if (input.include_strategy) {
+    try {
+      const meta = await import('./metaCourseIntelligence');
+      const rec = await meta.recommendShot({
+        lie_hint: base.situation_description,
+      });
+      sources_used.push('meta_strategy');
+      riskReward = {
+        band: rec.risk,
+        tradeoff:
+          rec.risk === 'conservative' ? 'Protect the score — middle of the green.'
+          : rec.risk === 'standard' ? 'Standard play — execute the shot.'
+          : rec.risk === 'aggressive' ? 'Take the smart aggressive line.'
+          : 'Send it — green light.',
+        alternative_play: rec.alternative_play,
+      };
+    } catch (e) {
+      console.log('[lie] meta strategy enrichment failed (non-fatal):', e);
+    }
+  }
+
+  // 3. Compose the spoken summary.
+  const voice = composeEnrichedVoice(base, input.acoustic ?? null, riskReward);
+
+  return {
+    base,
+    acoustic_prior: input.acoustic ?? null,
+    risk_reward: riskReward,
+    sources_used,
+    voice_summary: voice,
+  };
+}
+
+function composeEnrichedVoice(
+  base: LieAnalysis,
+  acoustic: AcousticPriorSignal | null,
+  rr: RiskRewardCall | null,
+): string {
+  const parts: string[] = [];
+  parts.push(base.tactical_advice);
+  if (acoustic && acoustic.confidence >= 60 && acoustic.turf !== 'unknown') {
+    parts.push(`Last strike was ${acoustic.turf} — factor that in.`);
+  }
+  if (rr) parts.push(rr.tradeoff);
+  return parts.join(' ').trim();
+}

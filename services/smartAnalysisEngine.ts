@@ -60,7 +60,12 @@ export type AnalysisKind =
   | 'club_recommend'
   | 'course_context'
   | 'ghost_status'
-  | 'mental_check';
+  | 'mental_check'
+  // 2026-05-22 — Caddie Brain expansions.
+  | 'shot_strategy'      // metaCourseIntelligence.recommendShot
+  | 'swing_compare'      // swingComparisonEngine.compareSwings
+  | 'pose_estimate'      // poseEstimator.estimatePose
+  | 'lie_enriched';      // enrichedLieAnalysis (acoustics + risk overlay)
 
 interface BaseRequest {
   /** Persona override — defaults to active caddiePersonality. Lets the
@@ -113,6 +118,59 @@ export interface MentalCheckRequest extends BaseRequest {
   state_note: string;
 }
 
+// 2026-05-22 — Caddie Brain request types.
+
+export interface ShotStrategyRequest extends BaseRequest {
+  kind: 'shot_strategy';
+  /** Optional lie hint ("rough", "fairway", "sand"). When omitted the
+   *  meta-intel service infers from the last shot. */
+  lie_hint?: string | null;
+  /** Optional explicit yardage override. */
+  target_yards?: number | null;
+}
+
+export interface SwingCompareRequest extends BaseRequest {
+  kind: 'swing_compare';
+  /** Current swing (from poseEstimator). */
+  current_swing_id?: string | null;
+  /** What to compare against. */
+  against?: 'self_previous' | 'tour_median' | 'amateur_good';
+  /** Optional video URI of the current swing. The engine runs
+   *  poseEstimator on it before comparing. */
+  current_video_uri?: string | null;
+  current_video_duration_ms?: number | null;
+  /** Optional reference video URI (e.g. instructor swing). */
+  reference_video_uri?: string | null;
+  reference_video_duration_ms?: number | null;
+}
+
+export interface PoseEstimateRequestX extends BaseRequest {
+  kind: 'pose_estimate';
+  imageUri?: string;
+  videoUri?: string;
+  durationMs?: number;
+  context?: {
+    age?: number | null;
+    handedness?: 'right' | 'left' | 'unknown';
+    club?: string | null;
+  };
+}
+
+export interface LieEnrichedRequest extends BaseRequest {
+  kind: 'lie_enriched';
+  imageBase64: string;
+  imageMediaType?: 'image/jpeg' | 'image/png';
+  /** Optional acoustic prior from the player's last strike (caller
+   *  supplies; we don't synthesize one). */
+  acoustic?: {
+    strike: 'flush' | 'fat' | 'thin' | 'heel' | 'toe' | 'unknown';
+    turf: 'grass' | 'sand' | 'hardpan' | 'rough' | 'unknown';
+    confidence: number;
+  } | null;
+  /** When true, layer the risk/reward strategic call. */
+  include_strategy?: boolean;
+}
+
 export type AnalysisRequest =
   | PuttingRequest
   | LieRequest
@@ -120,7 +178,11 @@ export type AnalysisRequest =
   | ClubRecommendRequest
   | CourseContextRequest
   | GhostStatusRequest
-  | MentalCheckRequest;
+  | MentalCheckRequest
+  | ShotStrategyRequest
+  | SwingCompareRequest
+  | PoseEstimateRequestX
+  | LieEnrichedRequest;
 
 // ─── Public response envelope ────────────────────────────────────────────
 
@@ -182,6 +244,10 @@ export async function analyze(request: AnalysisRequest): Promise<AnalysisEnvelop
       case 'course_context':envelope = runCourseContext(request, persona, ctx);   break;
       case 'ghost_status':  envelope = runGhostStatus(request, persona, ctx);     break;
       case 'mental_check':  envelope = runMentalCheck(request, persona, ctx);     break;
+      case 'shot_strategy': envelope = await runShotStrategy(request, persona, ctx); break;
+      case 'swing_compare': envelope = await runSwingCompare(request, persona, ctx); break;
+      case 'pose_estimate': envelope = await runPoseEstimate(request, persona, ctx); break;
+      case 'lie_enriched':  envelope = await runLieEnriched(request, persona, ctx);  break;
     }
     pushHistory(envelope);
     if (request.speak) void speakEnvelope(envelope);
@@ -507,4 +573,132 @@ function errorEnvelope(kind: AnalysisKind, persona: Persona, reason: string): An
 
 function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
+// ─── 2026-05-22 — Caddie Brain dispatchers ──────────────────────────────
+
+async function runShotStrategy(req: ShotStrategyRequest, persona: Persona, ctx: LearningContext): Promise<AnalysisEnvelope> {
+  const meta = await import('./metaCourseIntelligence');
+  const result = await meta.recommendShot({
+    lie_hint: req.lie_hint ?? null,
+    target_yards: req.target_yards ?? null,
+    hole_number: ctx.holeNumber,
+    player_location: ctx.holeView?.player_location ?? null,
+  });
+  return {
+    kind: 'shot_strategy',
+    status: result.confidence > 30 ? 'ok' : 'partial',
+    result,
+    confidence: result.confidence,
+    sources_used: result.sources_used.map(mapMetaSource),
+    persona,
+    voice_summary: result.voice_summary,
+    timestamp_ms: Date.now(),
+    analysis_id: newId('shot'),
+  };
+}
+
+function mapMetaSource(s: string): AnalysisSource {
+  switch (s) {
+    case 'course_geometry': return 'course_geometry';
+    case 'gps_position':    return 'gps';
+    case 'vision_frame':    return 'glasses_vision';
+    case 'ghost_match':     return 'ghost_match';
+    case 'golfer_model':    return 'player_profile';
+    case 'lie_analysis':    return 'image_capture';
+    default:                return 'gps';
+  }
+}
+
+async function runSwingCompare(req: SwingCompareRequest, persona: Persona, ctx: LearningContext): Promise<AnalysisEnvelope> {
+  const poseMod = await import('./poseEstimator');
+  const compareMod = await import('./swingComparisonEngine');
+
+  const current = req.current_video_uri && req.current_video_duration_ms
+    ? await poseMod.estimatePose({
+        videoUri: req.current_video_uri,
+        durationMs: req.current_video_duration_ms,
+      })
+    : null;
+
+  if (!current) {
+    return errorEnvelope('swing_compare', persona, 'no current swing video supplied');
+  }
+
+  const reference = req.reference_video_uri && req.reference_video_duration_ms
+    ? await poseMod.estimatePose({
+        videoUri: req.reference_video_uri,
+        durationMs: req.reference_video_duration_ms,
+      })
+    : null;
+
+  const kind =
+    req.against === 'tour_median' ? 'self_vs_pro' :
+    req.against === 'amateur_good' ? 'self_vs_amateur' :
+    reference ? 'self_vs_self' : 'self_vs_pro';
+
+  const cmp = compareMod.compareSwings({ current, reference, kind });
+  void ctx;
+
+  return {
+    kind: 'swing_compare',
+    status: cmp.overall_match >= 30 ? 'ok' : 'partial',
+    result: cmp,
+    confidence: cmp.overall_match,
+    sources_used: reference ? ['player_profile', 'voice'] : ['player_profile'],
+    persona,
+    voice_summary: cmp.voice_summary,
+    timestamp_ms: Date.now(),
+    analysis_id: newId('cmp'),
+  };
+}
+
+async function runPoseEstimate(req: PoseEstimateRequestX, persona: Persona, ctx: LearningContext): Promise<AnalysisEnvelope> {
+  const poseMod = await import('./poseEstimator');
+  const estimate = await poseMod.estimatePose({
+    imageUri: req.imageUri,
+    videoUri: req.videoUri,
+    durationMs: req.durationMs,
+    context: req.context,
+  });
+  void ctx;
+  return {
+    kind: 'pose_estimate',
+    status: estimate.confidence > 0 ? 'ok' : 'partial',
+    result: estimate,
+    confidence: estimate.confidence,
+    sources_used: estimate.frames.length > 0 ? ['glasses_vision', 'voice'] : ['voice'],
+    persona,
+    voice_summary: estimate.reason,
+    timestamp_ms: Date.now(),
+    analysis_id: newId('pose'),
+  };
+}
+
+async function runLieEnriched(req: LieEnrichedRequest, persona: Persona, ctx: LearningContext): Promise<AnalysisEnvelope> {
+  const lieMod = await import('./lieAnalysisService');
+  const enriched = await lieMod.enrichedLieAnalysis({
+    imageBase64: req.imageBase64,
+    imageMediaType: req.imageMediaType,
+    voiceGender: persona === 'serena' ? 'female' : 'male',
+    acoustic: req.acoustic,
+    include_strategy: req.include_strategy,
+  });
+  void ctx;
+  const confidence =
+    enriched.base.confidence_level === 'high' ? 88 :
+    enriched.base.confidence_level === 'medium' ? 65 : 35;
+  return {
+    kind: 'lie_enriched',
+    status: enriched.base.confidence_level === 'low' ? 'partial' : 'ok',
+    result: enriched,
+    confidence,
+    sources_used: ['image_capture', 'course_geometry'].concat(
+      enriched.sources_used.includes('acoustic') ? ['mental_state' as AnalysisSource] : [],
+    ) as AnalysisSource[],
+    persona,
+    voice_summary: enriched.voice_summary,
+    timestamp_ms: Date.now(),
+    analysis_id: newId('lie+'),
+  };
 }
