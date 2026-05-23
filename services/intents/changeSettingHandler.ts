@@ -1,6 +1,7 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useSettingsStore, type Persona } from '../../store/settingsStore';
 import { useRoundStore } from '../../store/roundStore';
+import { useGhostStore } from '../../store/ghostStore';
 import type { RoundMode } from '../../types/patterns';
 import { getCaddieName } from '../../lib/persona';
 
@@ -109,6 +110,38 @@ export const changeSettingHandler: IntentHandler = {
         round.setCurrentRoundMode(v as RoundMode);
         const label = v === 'free_play' ? 'free play' : v.replace('_', ' ');
         return ack(`Switched to ${label}.`, ['round_mode:' + v]);
+      }
+
+      case 'ghost':
+      case 'ghost_round':
+      case 'ghost_mode': {
+        const v = asBool(rawValue);
+        if (v === null) return clarify('Ghost mode on or off?');
+        const settingsState = useSettingsStore.getState();
+        settingsState.setGhostAutoActivate(v);
+        const round = useRoundStore.getState();
+        if (!v) {
+          // Off → wipe any active ghost so the row disappears immediately.
+          round.clearActiveGhost();
+          useGhostStore.getState().deactivateGhost();
+          return ack('Ghost off — playing this round solo.', ['ghost:off']);
+        }
+        // On → if a round is active and we have a prior round on the same
+        // course, activate it now (otherwise the setting just enables for
+        // the NEXT round).
+        if (round.isRoundActive && round.activeCourseId) {
+          const prior = round.roundHistory
+            .filter(r => r.courseId === round.activeCourseId && r.totalScore > 0 && r.holesPlayed >= 1 && r.id !== round.currentRoundId)
+            .sort((a, b) => b.endedAt - a.endedAt);
+          const auto = prior[0];
+          if (auto) {
+            const label = `${auto.courseName ?? 'Past round'} (${auto.totalScore})`;
+            round.setActiveGhost({ source_round_id: auto.id, label });
+            useGhostStore.getState().activateGhost(auto);
+            return ack(`Ghost on — pacing against ${label}.`, ['ghost:on:activated']);
+          }
+        }
+        return ack('Ghost on — I\'ll pull up your last round next time you tee it up here.', ['ghost:on:no_prior']);
       }
 
       case 'caddie_persona':

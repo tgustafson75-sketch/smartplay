@@ -29,10 +29,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useShallow } from 'zustand/react/shallow';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 
 import { useRoundStore, type ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useToastStore } from '../../store/toastStore';
+// 2026-05-22 — Ghost Rounds. "vs last time" row renders only when a ghost
+// is active. Subscribed inline; refreshes on activate/deactivate and on
+// every logScore (roundStore.logScore → ghostStore.updateHole).
+import { useGhostStore } from '../../store/ghostStore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getCaddieName } from '../../lib/persona';
 import {
@@ -120,6 +125,14 @@ export default function CockpitCaddieScreen({
   const caddiePersonality = useSettingsStore((s) => s.caddiePersonality);
   const distance_unit = useSettingsStore((s) => s.distance_unit);
   const caddieName = getCaddieName(caddiePersonality);
+
+  // 2026-05-22 — Ghost line for the current hole. Null when no ghost is
+  // active, which collapses the row entirely (no chrome).
+  const ghostLine = useGhostStore((s) => {
+    if (!s.ghostRecord) return null;
+    return s.getHoleDeltaLine(currentHole);
+  });
+  const ghostLabel = useGhostStore((s) => s.getLabel());
 
   // Live FRONT/CENTER/BACK from Pro's existing SmartFinder. Re-reads
   // on every GPS fix change so yardages update as the player walks.
@@ -278,6 +291,23 @@ export default function CockpitCaddieScreen({
           onChangePutts={handleStepperPutts}
         />
 
+        {/* 2026-05-22 — Ghost Rounds "vs last time" row. Strong current-hole
+            bias: ghostLine leads with per-hole delta, then appends overall.
+            Renders only when a ghost is active (no ghost → no row). */}
+        {ghostLine && (
+          <View style={[styles.ghostRow, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
+            <Ionicons name="footsteps-outline" size={14} color="#a78bfa" />
+            <View style={styles.ghostRowText}>
+              <Text style={[styles.ghostRowLine, { color: '#c4b5fd' }]}>{ghostLine}</Text>
+              {ghostLabel && (
+                <Text style={[styles.ghostRowLabel, { color: colors.text_muted }]} numberOfLines={1}>
+                  {ghostLabel}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
         <DistanceCard
           fmb={fmb}
           baseYardage={baseYardage}
@@ -412,5 +442,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: 'italic',
     paddingHorizontal: 24,
+  },
+  // 2026-05-22 — Ghost Rounds vs-last row. Purple icon + line color; the
+  // label underneath shows which past round we're comparing against.
+  ghostRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 12,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  ghostRowText: {
+    flex: 1,
+    gap: 1,
+  },
+  ghostRowLine: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  ghostRowLabel: {
+    fontSize: 10,
+    fontStyle: 'italic',
   },
 });

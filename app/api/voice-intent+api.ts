@@ -34,7 +34,7 @@ Available intents:
    Examples:
    - "what's my score" -> { query_topic: "score" }
    - "what hole am I on" -> { query_topic: "hole" }
-   - "how am I doing against the ghost" -> { query_topic: "ghost_match" }
+   - "how am I doing vs last time" / "how am I doing against the ghost" / "what's my ghost match" / "where am I vs last round" -> { query_topic: "ghost_match" }
 
 3. change_setting — User wants to modify a setting.
    parameters: { setting_name: string, new_value: string | boolean }
@@ -48,6 +48,7 @@ Available intents:
    - "response_mode" (short/neutral/detailed)
    - "round_mode" (break_100/break_90/break_80/free_play) — the player's score-target mode for the round
    - "caddie_persona" (kevin/tank/serena/harry) — which AI caddie persona is active
+   - "ghost" (true/false) — also recognized as "ghost mode" / "ghost round" — controls auto-activation of a prior-round ghost match on the same course
    Examples:
    - "switch to dark mode" -> { setting_name: "theme", new_value: "dark" }
    - "mute ${caddieName}" -> { setting_name: "voice_enabled", new_value: false }
@@ -63,6 +64,8 @@ Available intents:
    - "switch to Serena" / "I want Serena" -> { setting_name: "caddie_persona", new_value: "serena" }
    - "switch to Harry" / "let me hear Harry" -> { setting_name: "caddie_persona", new_value: "harry" }
    - "switch back to Kevin" / "give me Kevin" -> { setting_name: "caddie_persona", new_value: "kevin" }
+   - "ghost on" / "turn on ghost mode" / "race the ghost" / "compare to last round" -> { setting_name: "ghost", new_value: true }
+   - "ghost off" / "turn off ghost" / "stop comparing" / "drop the ghost" / "no ghost" -> { setting_name: "ghost", new_value: false }
 
 4. navigate — User wants navigation: back, forward, home, close, next/previous hole.
    parameters: { direction: "back" | "home" | "close" | "next_hole" | "previous_hole" | "main_menu" }

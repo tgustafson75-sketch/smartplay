@@ -154,6 +154,13 @@ interface SettingsState {
   // utterance but show the manual picker instead of registering.
   cageAutoClubDetection: boolean;
 
+  // 2026-05-22 — Ghost Rounds as first-class. When true (DEFAULT), startRound
+  // auto-activates the most-recent prior round on the same course so the
+  // player gets a "vs last time" comparison without needing to touch the
+  // picker. The picker still wins when the user explicitly chose a ghost
+  // in Round Setup. Voice intent "ghost off" / "ghost on" flips this.
+  ghostAutoActivate: boolean;
+
   // Phase Cockpit — opt-in alternate Caddie tab layout (v3-style:
   // brand header + HOLE/SHOTS/PUTTS stepper + big SmartFinder card +
   // Vision/Motion/Play/Settings pill row + Tap-to-Ask pill + manual
@@ -212,6 +219,8 @@ interface SettingsState {
   setCageAutoClubDetection: (v: boolean) => void;
   // Phase Cockpit
   setCockpitMode: (v: boolean) => void;
+  // 2026-05-22 — Ghost Rounds.
+  setGhostAutoActivate: (v: boolean) => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -283,6 +292,9 @@ export const useSettingsStore = create<SettingsState>()(
       yardageMode: 'live' as const,
       cageAutoClubDetection: true,
       cockpitMode: false,
+      // 2026-05-22 — Ghost Rounds default ON. 95%-case is the player wants
+      // to know how they're tracking against their last round at this course.
+      ghostAutoActivate: true,
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
       setVoiceGender: (g) => set({ voiceGender: g }),
@@ -448,6 +460,7 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setCageAutoClubDetection: (v) => set({ cageAutoClubDetection: v }),
       setCockpitMode: (v) => set({ cockpitMode: v }),
+      setGhostAutoActivate: (v) => set({ ghostAutoActivate: v }),
       // Phase 105 — per-pillar assignment.
       setCaddieForPillar: (pillar, p) => set((s) => ({
         caddieAssignments: { ...s.caddieAssignments, [pillar]: p },
@@ -572,6 +585,7 @@ export const useSettingsStore = create<SettingsState>()(
         yardageMode: s.yardageMode,
         cageAutoClubDetection: s.cageAutoClubDetection,
         cockpitMode: s.cockpitMode,
+        ghostAutoActivate: s.ghostAutoActivate,
         // watchConnected / glassesConnected not persisted — rechecked on mount
       }),
     },

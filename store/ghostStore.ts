@@ -16,6 +16,18 @@ interface GhostState {
   getLabel: () => string | null;
   getSummaryText: () => string | null;
   getSnapshot: () => GhostMatchSnapshot | null;
+  /** 2026-05-22 — UI accessor. The ghost score on `holeNumber` from the
+   *  prior round, when present. Null when no ghost is active or the past
+   *  round didn't have a score for that hole. Strong current-hole bias:
+   *  callers pass the current hole and get back the directly-comparable
+   *  prior-round score. */
+  getGhostScoreForHole: (holeNumber: number) => number | null;
+  /** 2026-05-22 — UI accessor. Compact one-line "vs last time" string for
+   *  the current hole, suitable for rendering in DataStrip / Cockpit.
+   *  Strong current-hole bias plus the running overall_delta for context.
+   *  Returns null when no ghost is active.
+   *  Example: "vs last: -1 hole · -2 round" */
+  getHoleDeltaLine: (holeNumber: number) => string | null;
 }
 
 export const useGhostStore = create<GhostState>((set, get) => ({
@@ -77,6 +89,36 @@ export const useGhostStore = create<GhostState>((set, get) => ({
       : overall_delta < 0 ? `ahead by ${abs} ${strokes}`
       : `behind by ${abs} ${strokes}`;
     return `vs ${label}: ${status} through ${holes_compared} holes.`;
+  },
+
+  getGhostScoreForHole: (holeNumber) => {
+    const r = get().ghostRecord;
+    if (!r) return null;
+    return r.scores[holeNumber] ?? null;
+  },
+
+  getHoleDeltaLine: (holeNumber) => {
+    const { ghostRecord, holeResults, overall_delta, holes_compared } = get();
+    if (!ghostRecord) return null;
+    const ghostScore = ghostRecord.scores[holeNumber] ?? null;
+    const hole = holeResults[holeNumber];
+    // Hole-level delta first (strong current-hole bias).
+    let holePart: string;
+    if (hole?.delta != null) {
+      holePart = hole.delta === 0
+        ? 'even hole'
+        : hole.delta < 0 ? `-${Math.abs(hole.delta)} hole` : `+${hole.delta} hole`;
+    } else if (ghostScore != null) {
+      holePart = `last: ${ghostScore}`;
+    } else {
+      holePart = 'no ghost data';
+    }
+    // Add running overall context when at least one hole has been compared.
+    if (holes_compared === 0) return `vs last · ${holePart}`;
+    const overallPart = overall_delta === 0
+      ? 'even round'
+      : overall_delta < 0 ? `-${Math.abs(overall_delta)} round` : `+${overall_delta} round`;
+    return `vs last · ${holePart} · ${overallPart}`;
   },
 
   getSnapshot: () => {

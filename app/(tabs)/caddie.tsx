@@ -1410,12 +1410,38 @@ export default function CaddieTab() {
       }
     })();
 
+    // 2026-05-22 — Ghost Rounds as first-class.
+    // Priority order:
+    //   1. Explicit picker selection wins (opts.ghostRoundId).
+    //   2. Auto-activate the most-recent prior round on the SAME course
+    //      when settings.ghostAutoActivate is true (default).
+    //   3. Otherwise clear any stale ghost.
+    // Golf-aware: only matches when courseId is set AND equal. Defensive:
+    // skips rounds with totalScore <= 0 or holesPlayed < 1 (incomplete /
+    // discarded). Picks the latest by endedAt so the most-recent visit
+    // anchors the comparison.
     if (opts.ghostRoundId) {
       const ghostRecord = roundHistory.find(r => r.id === opts.ghostRoundId);
       if (ghostRecord) {
         const label = `${ghostRecord.courseName ?? 'Past round'} (${ghostRecord.totalScore})`;
         setActiveGhost({ source_round_id: opts.ghostRoundId, label });
         useGhostStore.getState().activateGhost(ghostRecord);
+        console.log(`[ghost] auto-activated picker: ${label}`);
+      }
+    } else if (useSettingsStore.getState().ghostAutoActivate && courseId) {
+      const priorOnCourse = roundHistory
+        .filter(r => r.courseId === courseId && r.totalScore > 0 && r.holesPlayed >= 1)
+        .sort((a, b) => b.endedAt - a.endedAt);
+      const auto = priorOnCourse[0];
+      if (auto) {
+        const label = `${auto.courseName ?? 'Past round'} (${auto.totalScore})`;
+        setActiveGhost({ source_round_id: auto.id, label });
+        useGhostStore.getState().activateGhost(auto);
+        console.log(`[ghost] auto-activated: ${label} (course=${courseId} prior=${priorOnCourse.length})`);
+      } else {
+        clearActiveGhost();
+        useGhostStore.getState().deactivateGhost();
+        console.log(`[ghost] no prior round on course ${courseId} — no ghost`);
       }
     } else {
       clearActiveGhost();

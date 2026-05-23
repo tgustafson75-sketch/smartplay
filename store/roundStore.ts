@@ -1152,8 +1152,22 @@ export const useRoundStore = create<RoundState>()(
       setMentalState: (state) => set({ mentalState: state }),
       setRiskMode: (mode) => set({ riskMode: mode }),
 
-      logScore: (hole, score) =>
-        set(s => ({ scores: { ...s.scores, [hole]: score } })),
+      logScore: (hole, score) => {
+        set(s => ({ scores: { ...s.scores, [hole]: score } }));
+        // 2026-05-22 — Ghost Rounds. Push the just-logged score into the
+        // active ghost match so the per-hole delta + running overall
+        // refresh immediately. No-op when no ghost is active. Dynamic
+        // require avoids the circular import (ghostStore depends on
+        // RoundRecord from this file).
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const ghostMod = require('./ghostStore');
+          if (ghostMod.useGhostStore.getState().ghostRecord) {
+            ghostMod.useGhostStore.getState().updateHole(hole, score);
+            console.log(`[ghost] hole ${hole} score ${score} → updateHole`);
+          }
+        } catch { /* non-fatal */ }
+      },
 
       logEmotionalState: (state, valence, hole) =>
         set(s => ({

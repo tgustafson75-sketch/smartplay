@@ -18,6 +18,10 @@ import { useMovementModeStore } from '../services/movementModeDetector';
 // calls noteManualOverride() so a user correcting a wrong auto-transition
 // holds for 20s before holeDetection can re-fire — manual wins.
 import { useRoundStore } from '../store/roundStore';
+// 2026-05-22 — Ghost Rounds. Subscribed inline so the "vs last" row updates
+// the moment a score is logged (logScore → ghostStore.updateHole). Only
+// renders when a ghost is active; defensive against null ghostRecord.
+import { useGhostStore } from '../store/ghostStore';
 
 export interface CaddieDataStripProps {
   yardage: number | null;
@@ -77,6 +81,14 @@ export default function CaddieDataStrip({
     void Haptics.selectionAsync().catch(() => undefined);
     setCurrentHole(Math.min(hole.total, hole.current + 1));
   };
+  // 2026-05-22 — Ghost line. Re-renders when ghostStore mutates (activate
+  // or per-hole delta from logScore). getHoleDeltaLine returns null when
+  // no ghost is active, which collapses the row entirely (no chrome cost).
+  const ghostLine = useGhostStore(s => {
+    if (!s.ghostRecord) return null;
+    return s.getHoleDeltaLine(hole.current);
+  });
+
   // Phase 405 — off-course badge. When the offCourseDetector observes
   // the player >200y from every hole's reference points for 20s, this
   // store flips and the strip shows an amber "OFF COURSE · ~Xy" badge
@@ -431,6 +443,19 @@ export default function CaddieDataStrip({
             />
           </View>
         )}
+        {/* 2026-05-22 — Ghost Rounds. A thin top stripe that renders only
+            when a ghost is active. Doesn't displace the existing cells
+            (positioned absolute above the data row) so the strip's height
+            stays at 84 in the layout sense. Tap routes the same as the
+            rest of the strip (expand cockpit). */}
+        {ghostLine && (
+          <View style={styles.ghostStripe}>
+            <Ionicons name="footsteps-outline" size={9} color="#a78bfa" />
+            <Text style={styles.ghostStripeText} numberOfLines={1}>
+              {ghostLine}
+            </Text>
+          </View>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -610,5 +635,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(156,163,175,0.45)',
     backgroundColor: 'rgba(156,163,175,0.10)',
+  },
+  // 2026-05-22 — Ghost stripe (purple = "from the past"). Absolute-positioned
+  // along the bottom edge of the strip so it doesn't squeeze the existing
+  // cells. ~14px tall; intentionally small so the live data stays primary.
+  ghostStripe: {
+    position: 'absolute',
+    bottom: 2,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    height: 14,
+  },
+  ghostStripeText: {
+    color: '#c4b5fd',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
   },
 });
