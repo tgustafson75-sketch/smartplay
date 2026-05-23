@@ -10,7 +10,13 @@ import { useKeepAwake } from 'expo-keep-awake';
 import CourseDetailBanner from '../components/course/CourseDetailBanner';
 import AnalysisResult from '../components/lieAnalysis/AnalysisResult';
 import { bundleLieAnalysisContext, type PlayIntent } from '../services/lieAnalysisContext';
-import { analyzeLie, type LieAnalysisResult, type LieAnalysis } from '../services/lieAnalysisService';
+import {
+  analyzeLie,
+  enrichedLieAnalysis,
+  type LieAnalysisResult,
+  type LieAnalysis,
+  type RiskRewardCall,
+} from '../services/lieAnalysisService';
 import { speak, stopSpeaking } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
 // Phase 409 — persist the lie analysis onto the pending slot so the
@@ -59,6 +65,14 @@ export default function LieAnalysisScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [followUp, setFollowUp] = useState<string | null>(null);
   const [speaking, setSpeaking] = useState(false);
+  // 2026-05-22 — include_strategy toggle. When ON, the capture path
+  // calls enrichedLieAnalysis (lie vision + acoustic prior +
+  // metaCourseIntelligence risk band). When OFF (default), the
+  // existing tactical-only analyzeLie path runs — same as before, no
+  // regression. Persisted? Intentionally NOT — strategy depth is a
+  // per-shot decision, not a profile setting.
+  const [includeStrategy, setIncludeStrategy] = useState(false);
+  const [riskReward, setRiskReward] = useState<RiskRewardCall | null>(null);
 
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const trustLevel = useTrustLevelStore(s => s.level);
@@ -94,6 +108,7 @@ export default function LieAnalysisScreen() {
 
   const runAnalysis = useCallback(async (uri: string) => {
     setPhase('analyzing');
+    setRiskReward(null);
     try {
       // Resize to 1024px on long edge, JPEG ~75% to keep upload fast.
       const manipulated = await ImageManipulator.manipulateAsync(
@@ -107,6 +122,26 @@ export default function LieAnalysisScreen() {
         setErrorMessage('Could not encode image — try again.');
         return;
       }
+
+      // 2026-05-22 — when "Include strategy" is toggled on, route
+      // through enrichedLieAnalysis (vision + acoustic prior +
+      // metaCourseIntelligence risk band). The enriched result still
+      // contains the tactical LieAnalysis so we hand the same shape
+      // to AnalysisResult, just with an additional riskReward overlay.
+      if (includeStrategy) {
+        const enriched = await enrichedLieAnalysis({
+          imageBase64: b64,
+          imageMediaType: 'image/jpeg',
+          voiceGender,
+          include_strategy: true,
+        });
+        setAnalysis(enriched.base);
+        setRiskReward(enriched.risk_reward);
+        setPhase('result');
+        speakAnalysis(enriched.base);
+        return;
+      }
+
       const ctx = await bundleLieAnalysisContext(playIntent);
       const result: LieAnalysisResult = await analyzeLie(b64, ctx, 'image/jpeg', voiceGender);
 
@@ -133,7 +168,7 @@ export default function LieAnalysisScreen() {
       setErrorMessage(e instanceof Error ? e.message : 'Unknown error');
       setPhase('error');
     }
-  }, [playIntent, speakAnalysis, voiceEnabled, voiceGender, language]);
+  }, [playIntent, speakAnalysis, voiceEnabled, voiceGender, language, includeStrategy]);
 
   const handleCapture = useCallback(async () => {
     if (!cameraRef.current) return;
@@ -248,6 +283,7 @@ export default function LieAnalysisScreen() {
         <AnalysisResult
           imageUri={imageUri}
           analysis={analysis}
+          riskReward={riskReward}
           speaking={speaking}
           onReplay={handleReplay}
           onGotIt={() => {
@@ -334,6 +370,32 @@ export default function LieAnalysisScreen() {
         </View>
       )}
 
+      {/* 2026-05-22 — Strategy toggle pill. ON routes capture through
+          enrichedLieAnalysis (lie + acoustic prior + meta strategy
+          risk band). OFF (default) keeps the tactical-only flow. */}
+      {phase === 'camera' && (
+        <View style={[styles.strategyToggleRow, { bottom: insets.bottom + 130 }]} pointerEvents="box-none">
+          <TouchableOpacity
+            onPress={() => setIncludeStrategy(v => !v)}
+            activeOpacity={0.85}
+            style={[styles.strategyToggle, includeStrategy && styles.strategyToggleOn]}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: includeStrategy }}
+            accessibilityLabel="Include strategy in the lie read"
+          >
+            <View style={[styles.strategyDot, includeStrategy && styles.strategyDotOn]} />
+            <Text style={[styles.strategyToggleText, includeStrategy && styles.strategyToggleTextOn]}>
+              {includeStrategy ? 'STRATEGY ON' : 'TACTICAL ONLY'}
+            </Text>
+          </TouchableOpacity>
+          {includeStrategy && (
+            <Text style={styles.strategyHint}>
+              Adds risk-band + alt play from course geometry
+            </Text>
+          )}
+        </View>
+      )}
+
       {/* Bottom — capture button or analyzing spinner */}
       <View style={[styles.cameraBottom, { paddingBottom: insets.bottom + 24 }]}>
         {phase === 'camera' ? (
@@ -389,6 +451,53 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     fontSize: 14,
     fontWeight: '600',
+  },
+
+  // 2026-05-22 — Strategy toggle pill (above the shutter, below the
+  // instruction). Distinguished from the SAFE PLAY tag in
+  // AnalysisResult by living on the capture surface, not the result
+  // card. Default OFF — strategy is opt-in per shot.
+  strategyToggleRow: {
+    position: 'absolute',
+    left: 0, right: 0,
+    alignItems: 'center',
+    gap: 6,
+  },
+  strategyToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  strategyToggleOn: {
+    borderColor: '#00C896',
+    backgroundColor: 'rgba(0,200,150,0.18)',
+  },
+  strategyDot: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+  },
+  strategyDotOn: {
+    backgroundColor: '#00C896',
+  },
+  strategyToggleText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 11, fontWeight: '900', letterSpacing: 1.4,
+  },
+  strategyToggleTextOn: {
+    color: '#00C896',
+  },
+  strategyHint: {
+    color: 'rgba(255,255,255,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    fontSize: 11, fontWeight: '600',
+    paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 8,
   },
 
   cameraBottom: {

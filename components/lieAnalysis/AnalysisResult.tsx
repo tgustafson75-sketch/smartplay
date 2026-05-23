@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
-import type { LieAnalysis } from '../../services/lieAnalysisService';
+import type { LieAnalysis, RiskRewardCall } from '../../services/lieAnalysisService';
 
 type Props = {
   imageUri: string;
@@ -9,6 +9,26 @@ type Props = {
   onReplay: () => void;
   onGotIt: () => void;
   onTryAgain: () => void;
+  /** 2026-05-22 — Optional strategy overlay. When the camera surface
+   *  had "Include strategy" toggled on, enrichedLieAnalysis returned a
+   *  risk_reward band + tradeoff + alternative play; the strategy
+   *  block renders below the tactical advice without re-shaping the
+   *  base card. */
+  riskReward?: RiskRewardCall | null;
+};
+
+const RISK_COLOR: Record<RiskRewardCall['band'], string> = {
+  conservative: '#86efac',
+  standard:     '#cbd5e1',
+  aggressive:   '#fbbf24',
+  go_for_it:    '#f87171',
+};
+
+const RISK_LABEL: Record<RiskRewardCall['band'], string> = {
+  conservative: 'CONSERVATIVE',
+  standard:     'STANDARD',
+  aggressive:   'AGGRESSIVE',
+  go_for_it:    'GO FOR IT',
 };
 
 const CONFIDENCE_COLOR: Record<LieAnalysis['confidence_level'], string> = {
@@ -29,7 +49,7 @@ const CONFIDENCE_LABEL: Record<LieAnalysis['confidence_level'], string> = {
  * confidence dot, and three actions (replay / got it / try again).
  */
 export default function AnalysisResult({
-  imageUri, analysis, speaking, onReplay, onGotIt, onTryAgain,
+  imageUri, analysis, speaking, onReplay, onGotIt, onTryAgain, riskReward,
 }: Props) {
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
@@ -67,6 +87,25 @@ export default function AnalysisResult({
           <View style={styles.goalBlock}>
             <Text style={styles.goalLabel}>FOR YOUR GOAL</Text>
             <Text style={styles.goalText}>{analysis.goal_aware_note}</Text>
+          </View>
+        )}
+
+        {riskReward && (
+          <View style={styles.strategyBlock}>
+            <View style={styles.strategyHeaderRow}>
+              <Text style={styles.strategyHeaderLabel}>STRATEGY</Text>
+              <View style={[styles.bandTag, { borderColor: RISK_COLOR[riskReward.band] }]}>
+                <Text style={[styles.bandTagText, { color: RISK_COLOR[riskReward.band] }]}>
+                  {RISK_LABEL[riskReward.band]}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.strategyTradeoff}>{riskReward.tradeoff}</Text>
+            {riskReward.alternative_play && (
+              <Text style={styles.strategyAlt}>
+                If you&apos;re feeling cautious: {riskReward.alternative_play}
+              </Text>
+            )}
           </View>
         )}
       </View>
@@ -135,4 +174,21 @@ const styles = StyleSheet.create({
   actionBtnPrimary: { borderColor: '#00C896', backgroundColor: '#003d20' },
   actionBtnText: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
   actionBtnTextPrimary: { color: '#00C896' },
+  // 2026-05-22 — strategy overlay (rendered when enrichedLieAnalysis
+  // included a risk_reward call). Distinct from the goal/alt blocks
+  // because the band carries hue semantics.
+  strategyBlock: {
+    marginTop: 14, paddingTop: 14,
+    borderTopWidth: 1, borderTopColor: '#1e3a28',
+  },
+  strategyHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  strategyHeaderLabel: { color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 1.4 },
+  bandTag: {
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1,
+  },
+  bandTagText: { fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
+  strategyTradeoff: { color: '#e8f5e9', fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  strategyAlt: {
+    color: '#9ca3af', fontSize: 12, lineHeight: 17, marginTop: 6, fontStyle: 'italic',
+  },
 });

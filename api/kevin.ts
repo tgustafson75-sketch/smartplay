@@ -360,6 +360,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // says to him; surfacing those phrases here lets him pick up the
       // user's shorthand. Capped at 20 phrases / ~400 chars by client.
       playerVocabulary = null,
+      // 2026-05-22 — Vision context. When the client has a recent
+      // frame in glassesVisionInput's queue (lie capture, glasses POV,
+      // putting setup), it ships the base64-encoded JPEG + a short
+      // caption. When present we switch the user-message content into
+      // a multi-block array ([image, text]) and force the Sonnet model
+      // regardless of TACTICAL/CONVERSATIONAL — multimodal grounding
+      // is the whole reason vision is on this call.
+      image_base64 = null,
+      image_media_type = null,
+      image_caption = null,
     } = body;
 
     // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
@@ -826,17 +836,56 @@ ${sv.analysisText ? 'SmartVision analysis: ' + sv.analysisText : ''}
 ${onCourseContextBlock}${baseMessage}`
       : `${recentShotsBlock}${onCourseContextBlock}${baseMessage}`;
 
+    // 2026-05-22 — Vision frame normalization. When the client passed
+    // an image, validate the shape and prefer it as the primary user-
+    // message content. Sanity-bound the base64 length (3 MB raw ≈ 4 MB
+    // base64 — Claude's vision input limit is well above that, but
+    // we don't want to bill a multi-MB payload on every Kevin turn).
+    const VISION_MAX_B64 = 4 * 1024 * 1024;
+    const visionBase64 =
+      typeof image_base64 === 'string' && image_base64.length > 100 && image_base64.length <= VISION_MAX_B64
+        ? image_base64
+        : null;
+    const visionMediaType: 'image/jpeg' | 'image/png' =
+      image_media_type === 'image/png' ? 'image/png' : 'image/jpeg';
+    const visionCaption = typeof image_caption === 'string' && image_caption.trim()
+      ? image_caption.trim()
+      : null;
+
     // SmartVision-open requests are always tactical — we have the numbers, deliver the read.
     // Phase BH — in-round diagnostic always Sonnet (reasoning across patterns).
-    const tier = sv ? 'TACTICAL' : inRoundDiagnostic ? 'CONVERSATIONAL' : await classifyQuestion(baseMessage);
+    // 2026-05-22 — vision present forces Sonnet (Haiku's multimodal
+    // grounding is weaker for the kind of cues we're handing it — lie
+    // texture, body angle in glasses POV, putter face read).
+    const tier = visionBase64
+      ? 'CONVERSATIONAL'
+      : sv ? 'TACTICAL'
+      : inRoundDiagnostic ? 'CONVERSATIONAL'
+      : await classifyQuestion(baseMessage);
     const model = tier === 'TACTICAL' ? 'claude-haiku-4-5' : 'claude-sonnet-4-5';
 
-    console.log(`[kevin] tier=${tier} model=${model} q="${userMessage.slice(0, 60)}"`);
+    console.log(`[kevin] tier=${tier} model=${model} vision=${visionBase64 ? 'yes' : 'no'} q="${userMessage.slice(0, 60)}"`);
     console.log(`[kevin] smartVisionContext:`, JSON.stringify(sv));
     if (courseContext) console.log(`[kevin] courseContext loaded (${String(courseContext).length} chars)`);
 
     // ─── Agentic loop: resolve data tools before generating final response ────
-    const messages: Anthropic.MessageParam[] = [{ role: 'user', content: userMessage }];
+    // 2026-05-22 — When the client supplied a vision frame, wrap the
+    // first user message as a multi-block content array so the model
+    // sees [image, caption, question]. The agentic loop's subsequent
+    // turns (tool results, etc.) keep their plain-text content shape;
+    // only the FIRST turn carries the image — re-sending the image on
+    // every tool round would re-bill the vision tokens with no benefit.
+    const initialUserContent: Anthropic.ContentBlockParam[] | string = visionBase64
+      ? [
+          {
+            type: 'image',
+            source: { type: 'base64', media_type: visionMediaType, data: visionBase64 },
+          },
+          ...(visionCaption ? [{ type: 'text' as const, text: `[VISION FRAME] ${visionCaption}` }] : []),
+          { type: 'text', text: userMessage },
+        ]
+      : userMessage;
+    const messages: Anthropic.MessageParam[] = [{ role: 'user', content: initialUserContent }];
     let text = '';
     let toolAction: Record<string, unknown> | null = null;
     const MAX_TOOL_ROUNDS = 3;

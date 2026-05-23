@@ -63,6 +63,22 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25_000);
 
+      // 2026-05-22 — Vision context. When a recent frame is in the
+      // glassesVisionInput queue (lie capture, glasses POV, putting
+      // setup), read it as base64 + pipe to the kevin endpoint as
+      // image_base64. Server then switches to a multimodal Sonnet
+      // call. Best-effort: failure paths (no frame queued, file gone,
+      // expo-file-system not available) return null and Kevin
+      // continues with text-only — no regression.
+      let visionImage: { base64: string; media_type: 'image/jpeg' | 'image/png'; caption: string } | null = null;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const vis = require('../services/glassesVisionInput') as typeof import('../services/glassesVisionInput');
+        visionImage = await vis.getActiveVisionFrameBase64();
+      } catch (e) {
+        console.log('[kevin] vision frame fetch failed (non-fatal):', e);
+      }
+
       // Phase BA — register selection from active surface. Maps the
       // tracked surface to one of three role registers so the API can
       // build a tone-distinct system prompt:
@@ -176,6 +192,14 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
                 .join('\n');
             } catch { return null; }
           })(),
+          // 2026-05-22 — Vision frame. When present, api/kevin upgrades
+          // the call to a multimodal Sonnet pass so the caddie can
+          // "see" what the player just captured (lie photo, glasses
+          // POV, putting setup). Server treats absent / null as the
+          // existing text-only path.
+          image_base64: visionImage?.base64 ?? null,
+          image_media_type: visionImage?.media_type ?? null,
+          image_caption: visionImage?.caption ?? null,
         }),
       }).finally(() => clearTimeout(timeout));
 

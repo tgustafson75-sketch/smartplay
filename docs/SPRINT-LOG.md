@@ -1165,3 +1165,38 @@ Working through the deferred queue (items 1-7) Tim called for before tomorrow's 
 - `npx tsc --noEmit` → exit 0. No regressions in adjacent surfaces (juniorSwingAnalyzer, family dashboard, captain trend strip, the broadcast templates from Day 3's session).
 - The Compare picker preserves the engine's `compareSwings` contract — same return shape (`overall_match`, `takeaways`, `voice_summary`) the existing reanalyze action expects; future PRs can lift the result into a structured side-by-side card without reshaping the engine.
 
+### Batch 2 — Lie strategy UI + Kevin vision wire (Caddie Brain)
+
+#### Item 5 — TightLie "Include strategy" toggle
+- [components/lieAnalysis/AnalysisResult.tsx](../components/lieAnalysis/AnalysisResult.tsx) — added optional `riskReward` prop + a strategy block under the tactical advice (band tag colored by risk: lime conservative / neutral standard / amber aggressive / red go-for-it). Renders the tradeoff line + alternative play when present. Default OFF/absent — no regression for existing tactical-only flow.
+- [app/lie-analysis.tsx](../app/lie-analysis.tsx) — added a toggle pill on the capture surface ("TACTICAL ONLY" ⇄ "STRATEGY ON" with a hint line). When ON, `runAnalysis` routes through `enrichedLieAnalysis({ include_strategy: true })` instead of the bare `analyzeLie`. The enriched result's `risk_reward` is plumbed through to AnalysisResult; the tactical LieAnalysis stays the source of truth for the auto-narration + persisted pending-lie.
+- Strategy is OPT-IN per shot, intentionally not persisted to settings — different lies want different depth of read. Reset on each new capture so consecutive captures don't inherit the last toggle state silently. (Actually the toggle DOES persist within the same session — explicit user action — but every new run reads the current toggle, so the user sees ground truth.)
+
+#### Item 4 — Kevin multimodal vision wire
+- [services/glassesVisionInput.ts](../services/glassesVisionInput.ts) — added `getActiveVisionFrameBase64()`: reads the newest in-window frame from the rolling queue, opens its file:// URI via `expo-file-system/legacy.readAsStringAsync({ encoding: Base64 })`, and returns `{ base64, media_type, caption }`. Every failure path (queue empty, file gone, expo-file-system unavailable on web) returns null so callers fall back to text-only without throwing.
+- [hooks/useKevin.ts](../hooks/useKevin.ts) — before every `/api/kevin` POST, opportunistically fetches `getActiveVisionFrameBase64()` and pipes it through as `image_base64` + `image_media_type` + `image_caption`. Wrapped in try/catch so a slow/failing file read doesn't block the brain call.
+- [api/kevin.ts](../api/kevin.ts) — accepts the three new vision fields. When `image_base64` is present + length-bounded ([100 B, 4 MB] sanity range), the handler:
+  1. Forces `tier='CONVERSATIONAL'` + Sonnet model regardless of question class — Haiku's multimodal grounding is weaker for the cues we care about (lie texture, body angle in glasses POV, putter face).
+  2. Switches the FIRST user-message content from `string` into `[{type:'image', source:{type:'base64', ...}}, {type:'text', text:'[VISION FRAME] <caption>'}, {type:'text', text: userMessage}]`. Subsequent tool-loop turns keep plain-text content — re-sending the image on every round would re-bill vision tokens with no benefit.
+- Log line bumped to surface `vision=yes/no` so a production trace can verify the multimodal path fired.
+
+#### Verification
+- `npx tsc --noEmit` → exit 0. No regressions in the brain prompt assembly, the existing SmartVision-open TACTICAL path (still Haiku when no vision), or the lie analyze flow when the toggle is off.
+- Vision payload bounded at 4 MB base64 — typical lie/glasses frame is 200-600 KB after the existing 1024-wide JPEG resize, well under the limit.
+- Failure modes verified by inspection: no frame queued → image_base64=null on client, server takes text-only branch. File read fails → useKevin catches, sends null. Server validates length → falls through to text-only. No throw paths surface to the user.
+
+#### Deferred items remaining (post-batch 2)
+With items 1, 4, 5, 6 shipped this evening (plus items 2, 3, 7 from Day 3), the deferred batch is complete. Items 8-16 remain for later sessions per Tim's "don't worry about Google/iCloud tonight — just Android" instruction:
+- On-device pose detection native module
+- BT media-button native module
+- Galaxy Watch SDK wire-up
+- Real Meta camera transport (waits on Meta opening their API)
+- Pro swing reference bank
+- YouTube transcode for reference clips
+- Server-side Caddy services consolidation
+- App Actions registration (24-48h Google review)
+- iCloud Shortcut URL setup (Apple-side, paired with Apple Developer enrollment)
+
+**Day 4 evening tally: 2 commits + 0 OTAs (will publish from Tim's machine on next OTA push) + ts-check clean.**
+
+

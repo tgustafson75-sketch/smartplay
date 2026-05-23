@@ -234,6 +234,50 @@ export function clearVisionContext(): void {
 }
 
 /**
+ * 2026-05-22 — Read the active vision frame as base64 for multimodal
+ * Claude calls. Returns null when:
+ *   - queue is empty / all frames aged out
+ *   - file read fails (file:// gone, content:// revoked)
+ *   - expo-file-system isn't available (test env / web)
+ *
+ * The frame is resized down + JPEG-compressed by the caller of
+ * submitVisionFrame already; we don't manipulate further here. Caller
+ * (useKevin) bounds this call to the existing fetch timeout — slow
+ * file I/O should NOT block the brain call. Keep this function
+ * defensive: every failure path returns null so Kevin falls back to
+ * text-only as if no vision was ever present.
+ */
+export async function getActiveVisionFrameBase64(): Promise<{
+  base64: string;
+  media_type: 'image/jpeg' | 'image/png';
+  caption: string;
+} | null> {
+  pruneQueue();
+  const newest = queue[queue.length - 1];
+  if (!newest) return null;
+  try {
+    const ctx = await newest.context_promise;
+    const uri = ctx.frame.uri;
+    if (!uri) return null;
+    const FS = await import('expo-file-system/legacy');
+    const base64 = await FS.readAsStringAsync(uri, { encoding: FS.EncodingType.Base64 });
+    if (!base64) return null;
+    const media_type: 'image/jpeg' | 'image/png' = uri.toLowerCase().endsWith('.png')
+      ? 'image/png'
+      : 'image/jpeg';
+    // Caption gives the LLM a one-liner about what it's looking at —
+    // mode + source + (optional) hole. Plain text only, no PII.
+    const caption =
+      `${ctx.detected_mode} frame from ${ctx.frame.source}` +
+      (ctx.hole_number ? ` (hole ${ctx.hole_number})` : '');
+    return { base64, media_type, caption };
+  } catch (e) {
+    devLog('[vision] getActiveVisionFrameBase64 failed (non-fatal): ' + String(e));
+    return null;
+  }
+}
+
+/**
  * Subscribe to new vision frames. Returned cleanup unsubscribes. Useful
  * for smartAnalysisEngine to react to glasses pushes in real time (when
  * transport eventually lands) and for the active screen to refresh
