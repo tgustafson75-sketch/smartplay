@@ -29,12 +29,24 @@ export interface LibraryEntry {
 
 /**
  * 2026-05-22 — Analyzer routing. Putting needs a different vision model
- * than full-body swing. Returns 'putting' when:
- *   - upload.tag is 'putt' or 'chip', OR
- *   - upload.source_device is 'meta_glasses' (POV downward video — the
- *     swing-pose model can't read those frames, they're hands + putter
- *     + ball, not a full-body swing)
- * Otherwise returns 'swing' (the legacy Phase K poseAnalysisApi path).
+ * than full-body swing.
+ *
+ * 2026-05-23 update — Added perspective awareness. Previously ANY
+ * meta_glasses upload was forced to putting, which miscategorized
+ * "wearing glasses while watching someone else swing" videos (full-body
+ * subject, needs Phase K). Now the upload.perspective field — auto-
+ * inferred from familyStore.active_member_id at ingest, overridable
+ * via the upload-screen picker — wins over source_device.
+ *
+ * Decision order:
+ *   1. perspective === 'watching_someone' → 'swing' (Phase K full-body
+ *      pose analyzer), even if source_device is meta_glasses
+ *   2. perspective === 'pov_self' AND tag is 'putt'|'chip' → 'putting'
+ *      (POV downward putt video — grip / putter / green visible)
+ *   3. perspective === 'pov_self' (no tag) → 'swing' (rare niche: self-
+ *      recorded full-body via glasses; default safest path)
+ *   4. perspective null/missing (legacy uploads) → original routing:
+ *      'putt'/'chip' tag → putting; meta_glasses → putting; else swing
  *
  * Consumers: cage-review / SwingLab upload flow checks this BEFORE
  * kicking off pose analysis, and routes glasses POV clips through
@@ -44,6 +56,16 @@ export type AnalyzerKind = 'putting' | 'swing';
 
 export function getAnalyzerKind(session: CageSession): AnalyzerKind {
   const tag = session.upload?.tag;
+  const perspective = session.upload?.perspective;
+
+  // Explicit perspective wins over source_device.
+  if (perspective === 'watching_someone') return 'swing';
+  if (perspective === 'pov_self') {
+    if (tag === 'putt' || tag === 'chip') return 'putting';
+    return 'swing';
+  }
+
+  // Legacy / null-perspective fallback: original source_device routing.
   if (tag === 'putt' || tag === 'chip') return 'putting';
   if (session.upload?.source_device === 'meta_glasses') return 'putting';
   return 'swing';

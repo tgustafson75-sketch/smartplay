@@ -18,6 +18,7 @@ import { pickVideo, probeVideo, ingestVideoFromPick, MAX_FILE_SIZE_MB } from '..
 import { uploadLog } from '../../services/uploadDiagnostic';
 import type { SwingTag } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useFamilyStore } from '../../store/familyStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 
 const CLUBS = ['Driver', '3W', '5W', 'Hybrid', '4i', '5i', '6i', '7i', '8i', '9i', 'PW', 'GW', 'SW', 'LW', 'Putter'];
@@ -43,13 +44,28 @@ export default function UploadSwing() {
   const [durationSec, setDurationSec] = useState<number | null>(null);
   const [club, setClub] = useState<string>('7i');
   const [notes, setNotes] = useState('');
-  const [swinger, setSwinger] = useState('Me');
+  // 2026-05-23 — Auto-default the swinger name from the active family
+  // member when one is selected (Tim's been coaching Emma → upload
+  // assumes Emma is the subject). User can edit either field.
+  const activeMember = useFamilyStore(s =>
+    s.active_member_id ? s.members.find(m => m.id === s.active_member_id) : null,
+  );
+  const [swinger, setSwinger] = useState(activeMember?.firstName ?? 'Me');
   const [tag, setTag] = useState<SwingTag | null>(null);
   // 2026-05-22 — Meta Ray-Ban glasses tag. POV downward video of hands/
   // putter/ball can't be read by the full-body swing-pose model. When
   // ON, the session is routed through puttingAnalysisService instead of
   // Phase K's pose pipeline. Auto-implies the 'putt' tag for clarity.
   const [sourceDevice, setSourceDevice] = useState<'meta_glasses' | 'phone' | null>(null);
+  // 2026-05-23 — Camera perspective. Distinguishes "You looking down at
+  // your own hands/setup" (POV → putting analyzer for the granular grip
+  // detail) from "You watching someone ELSE swing" (full-body subject →
+  // Phase K swing analyzer for the overall fault read). Defaults to
+  // 'watching_someone' when a family member is active, else 'pov_self'.
+  // User can override either way before saving.
+  const [perspective, setPerspective] = useState<'pov_self' | 'watching_someone'>(
+    activeMember ? 'watching_someone' : 'pov_self',
+  );
 
   const onPick = async () => {
     const result = await pickVideo();
@@ -76,12 +92,16 @@ export default function UploadSwing() {
     // 2026-05-22 — When the user flagged Meta glasses but didn't pick
     // a tag, auto-imply 'putt' (most common glasses POV use case so
     // the library + analyzer-router agree on intent).
+    // 2026-05-23 — Only auto-imply for POV self; "watching someone"
+    // glasses video is full-body and should keep an unset tag (the
+    // analyzer routes on perspective, not the implicit putt tag).
     const effectiveTag: SwingTag | null =
-      sourceDevice === 'meta_glasses' && !tag ? 'putt' : tag;
+      sourceDevice === 'meta_glasses' && !tag && perspective === 'pov_self' ? 'putt' : tag;
     const sessionId = ingestVideoFromPick({
       uri, club, notes: notes.trim() || null, swinger: swinger.trim() || 'Me',
       tag: effectiveTag, has_audio: hasAudio, duration_sec: durationSec,
       source_device: sourceDevice,
+      perspective,
     });
     // Phase V — Kevin acknowledges the upload immediately and we navigate
     // straight to the swing detail surface. Feels like submitting work to
@@ -177,6 +197,51 @@ export default function UploadSwing() {
               />
             </View>
 
+            {/* 2026-05-23 — Camera perspective. Splits glasses video into
+                its two real use cases: looking DOWN at your own hands
+                (POV grip/setup detail → putting analyzer) vs watching
+                someone ELSE swing (full body → Phase K swing analyzer).
+                Defaults to "Someone else" when a family member is
+                active in the family roster; "You" otherwise. */}
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.label, { color: colors.text_muted }]}>PERSPECTIVE</Text>
+              <View style={styles.tagRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.pill,
+                    { borderColor: colors.border, backgroundColor: colors.surface_elevated },
+                    perspective === 'pov_self' && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
+                  ]}
+                  onPress={() => setPerspective('pov_self')}
+                >
+                  <Text style={[
+                    styles.pillText,
+                    { color: colors.text_muted },
+                    perspective === 'pov_self' && { color: colors.accent, fontWeight: '700' },
+                  ]}>👤 You (POV)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.pill,
+                    { borderColor: colors.border, backgroundColor: colors.surface_elevated },
+                    perspective === 'watching_someone' && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
+                  ]}
+                  onPress={() => setPerspective('watching_someone')}
+                >
+                  <Text style={[
+                    styles.pillText,
+                    { color: colors.text_muted },
+                    perspective === 'watching_someone' && { color: colors.accent, fontWeight: '700' },
+                  ]}>👥 Someone else</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={[styles.helperText, { color: colors.text_muted }]}>
+                {perspective === 'pov_self'
+                  ? 'Looking down at your own setup — routes to grip / putting analysis.'
+                  : 'Watching another golfer swing — routes to full swing fault analysis.'}
+              </Text>
+            </View>
+
             {/* 2026-05-22 — Capture device. Meta Ray-Ban POV video routes
                 to the putting analyzer (puttingAnalysisService) instead
                 of Phase K's full-body swing pose pipeline. */}
@@ -212,9 +277,14 @@ export default function UploadSwing() {
                   ]}>🕶️ Meta Glasses</Text>
                 </TouchableOpacity>
               </View>
-              {sourceDevice === 'meta_glasses' && (
+              {sourceDevice === 'meta_glasses' && perspective === 'pov_self' && (
                 <Text style={[styles.helperText, { color: colors.text_muted }]}>
                   POV downward video — routes to PuttingLab analysis (face / stroke / read).
+                </Text>
+              )}
+              {sourceDevice === 'meta_glasses' && perspective === 'watching_someone' && (
+                <Text style={[styles.helperText, { color: colors.text_muted }]}>
+                  Outward camera — routes to full swing analysis (fault + drill).
                 </Text>
               )}
             </View>

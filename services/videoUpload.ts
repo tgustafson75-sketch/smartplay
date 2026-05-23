@@ -585,7 +585,31 @@ export function ingestVideoFromPick(args: {
    *  through puttingAnalysisService (POV downward video the swing-pose
    *  model can't read). 'phone' = legacy full-body upload. */
   source_device?: 'meta_glasses' | 'phone' | 'unknown' | null;
+  /** 2026-05-23 — Camera perspective override. When provided, wins over
+   *  the auto-infer from familyStore.active_member_id. Caller (upload
+   *  screen perspective picker) sets this when the user explicitly
+   *  picks "You" vs "Someone else." */
+  perspective?: 'pov_self' | 'watching_someone' | null;
 }): string {
+  // 2026-05-23 — Perspective auto-inference. If the caller didn't pass
+  // an explicit perspective, look at familyStore — when a family
+  // member is currently active (Tim tapped Emma to coach her), this
+  // video is almost certainly Tim WATCHING someone else swing → route
+  // to full Phase K swing analysis. Otherwise default to 'pov_self'.
+  // The upload-screen picker can override either way. Wrapped in
+  // try/catch because familyStore may not be loaded in test envs.
+  let inferredPerspective: 'pov_self' | 'watching_someone' = 'pov_self';
+  if (args.perspective != null) {
+    inferredPerspective = args.perspective;
+  } else {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fam = require('../store/familyStore') as typeof import('../store/familyStore');
+      const activeId = fam.useFamilyStore.getState().active_member_id;
+      if (activeId) inferredPerspective = 'watching_someone';
+    } catch { /* no-op — familyStore absent, keep default 'pov_self' */ }
+  }
+
   const upload: UploadMetadata = {
     uploaded_at: Date.now(),
     taken_at: args.taken_at ?? null,
@@ -595,6 +619,7 @@ export function ingestVideoFromPick(args: {
     has_audio: args.has_audio ?? false,
     duration_sec: args.duration_sec ?? null,
     source_device: args.source_device ?? null,
+    perspective: inferredPerspective,
   };
   const sessionId = useCageStore.getState().ingestUploadedSwing({
     clipUri: args.uri,

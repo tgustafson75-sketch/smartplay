@@ -118,6 +118,21 @@ export interface UploadMetadata {
    *  'phone' is the legacy upload path (full-body tripod or partner-
    *  held). 'unknown' = unset, treat as 'phone' for compatibility. */
   source_device?: 'meta_glasses' | 'phone' | 'unknown' | null;
+  /** 2026-05-23 — Camera perspective. Disambiguates glasses video,
+   *  which can be either POV downward (Tim looking at his own setup
+   *  → putting-style hand/putter analyzer) OR outward (Tim wearing
+   *  glasses while watching someone else swing — full-body subject,
+   *  Phase K swing analyzer). Without this, source_device='meta_glasses'
+   *  forced everything to putting and miscategorized "watching daughter
+   *  swing" videos.
+   *
+   *  Auto-inferred at ingest in services/videoUpload.ingestVideoFromPick()
+   *  from useFamilyStore.active_member_id (non-null → watching_someone)
+   *  and overridable via the upload-screen perspective picker.
+   *
+   *  Legacy uploads have null/undefined here — getAnalyzerKind falls
+   *  back to the original source_device-only routing for those. */
+  perspective?: 'pov_self' | 'watching_someone' | null;
 }
 
 export interface CageSession {
