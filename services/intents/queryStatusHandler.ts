@@ -58,7 +58,7 @@ export const queryStatusHandler: IntentHandler = {
       try { require('../gpsManager').bumpToActive('voice_query:' + topic); } catch {}
     }
 
-    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like' || topic === 'green_front' || topic === 'green_back' || topic === 'green_middle') /* end_session, next_focus, swing_observation, tell_me_more deliberately allowed off-round */) {
+    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like' || topic === 'green_front' || topic === 'green_back' || topic === 'green_middle') /* end_session, next_focus, swing_observation, tell_me_more, putt_analysis deliberately allowed off-round */) {
       return {
         success: true,
         voice_response: 'You\'re not in a round yet. Want to start one?',
@@ -101,6 +101,34 @@ export const queryStatusHandler: IntentHandler = {
             ? ghostText
             : 'No ghost loaded for this round.',
           side_effects: ['query:ghost_match'],
+          follow_up_needed: false,
+        };
+      }
+
+      case 'putt_analysis': {
+        // 2026-05-22 — PuttingLab voice route. Pulls the freshest
+        // glasses-attached frame (when present) + the player's last
+        // utterance, runs the multimodal analysis, and speaks the
+        // persona-aware summary back. Defensive: with no frames + no
+        // read the service returns a course-context baseline so the
+        // player still gets actionable feedback.
+        const putting = await import('../puttingAnalysisService');
+        const spoken = typeof intent.parameters.spoken_read === 'string'
+          ? intent.parameters.spoken_read
+          : null;
+        const result = await putting.analyzePutt({ spoken_read: spoken });
+        if (!result) {
+          return {
+            success: false,
+            voice_response: "Couldn't run the putting analysis right now.",
+            side_effects: ['query:putt_analysis:error'],
+            follow_up_needed: false,
+          };
+        }
+        return {
+          success: true,
+          voice_response: result.voice_summary,
+          side_effects: [`query:putt_analysis:conf_${result.confidence}`],
           follow_up_needed: false,
         };
       }

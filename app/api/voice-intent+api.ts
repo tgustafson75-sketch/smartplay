@@ -30,11 +30,12 @@ Available intents:
    - "mark the green" / "mark green" / "I'm at the green" / "open Mark Green" -> { tool_name: "mark_green" }
 
 2. query_status — User wants information about current state.
-   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" }
+   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "putt_analysis" }
    Examples:
    - "what's my score" -> { query_topic: "score" }
    - "what hole am I on" -> { query_topic: "hole" }
    - "how am I doing vs last time" / "how am I doing against the ghost" / "what's my ghost match" / "where am I vs last round" -> { query_topic: "ghost_match" }
+   - "analyze my putt" / "how's my putting stroke" / "how's my read" / "look at my putt" -> { query_topic: "putt_analysis" }
 
 3. change_setting — User wants to modify a setting.
    parameters: { setting_name: string, new_value: string | boolean }
