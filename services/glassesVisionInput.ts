@@ -44,6 +44,12 @@ export interface VisionFrame {
    *  signal for putting-mode auto-detection). */
   pitch_deg?: number | null;
   source: VisionSource;
+  /** 2026-05-22 — Family Coaching tagging. When a parent records a
+   *  kid's swing via voice ("record Emma's swing"), the recording
+   *  flow stamps the family-member id onto every frame so the
+   *  juniorSwingAnalyzer + library know which roster member the
+   *  capture belongs to. null = account holder's own swing (default). */
+  golfer_id?: string | null;
 }
 
 export interface VisionContext {
@@ -58,6 +64,10 @@ export interface VisionContext {
   detected_mode: VisionMode;
   /** 0..100 confidence in detected_mode. */
   mode_confidence: number;
+  /** 2026-05-22 — Family Coaching: which roster member this frame
+   *  belongs to. Mirrors frame.golfer_id so consumers don't have to
+   *  reach back into the frame. */
+  golfer_id: string | null;
 }
 
 interface QueuedFrame {
@@ -103,21 +113,35 @@ export async function submitVisionFrame(frame: VisionFrame): Promise<VisionConte
   const round = useRoundStore.getState();
   const location = await getCurrentLocation().catch(() => null);
   const detected = detectMode(frame);
+  // Auto-stamp the active family member when the caller didn't pass one.
+  // The "record Emma's swing" voice intent sets the active member on
+  // useFamilyStore before triggering capture; submitVisionFrame reads it
+  // so callers don't have to plumb the id through every layer.
+  let golferId: string | null = frame.golfer_id ?? null;
+  if (!golferId) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fam = require('../store/familyStore') as typeof import('../store/familyStore');
+      golferId = fam.useFamilyStore.getState().active_member_id;
+    } catch { /* non-fatal */ }
+  }
   const context: VisionContext = {
-    frame,
+    frame: { ...frame, golfer_id: golferId },
     hole_number: round.isRoundActive ? round.currentHole : null,
     course_id: round.activeCourseId,
     player_location: location,
     voice_utterance: null,
     detected_mode: detected.mode,
     mode_confidence: detected.confidence,
+    golfer_id: golferId,
   };
 
   queue.push({ frame, context_promise: Promise.resolve(context) });
   pruneQueue();
   devLog(
     `[vision] frame queued source=${frame.source} hole=${context.hole_number} ` +
-    `mode=${detected.mode} (${detected.confidence}%) queue_size=${queue.length}`,
+    `mode=${detected.mode} (${detected.confidence}%) golfer=${golferId ?? 'self'} ` +
+    `queue_size=${queue.length}`,
   );
 
   // Fan out to subscribers — fire-and-forget so a slow listener can't
@@ -395,4 +419,56 @@ export function registerGlassesTransport(t: GlassesVisionTransport): void {
 
 export function getGlassesTransport(): GlassesVisionTransport | null {
   return activeTransport;
+}
+
+// ─── Family-recording session helper (Pass 4) ─────────────────────────────
+//
+// Voice intent "record Emma's swing" calls beginFamilyRecording(memberId)
+// to start a capture session tagged for that roster member. Any
+// subsequent submitVisionFrame inside the session window auto-stamps
+// golfer_id. The session ends on endFamilyRecording() or after
+// FAMILY_SESSION_TIMEOUT_MS of inactivity. Self-recordings (account
+// holder) skip this entirely — submitVisionFrame leaves golfer_id null
+// when no session is active.
+
+const FAMILY_SESSION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+let activeRecordingMemberId: string | null = null;
+let recordingExpiresAt = 0;
+
+/**
+ * Begin tagging incoming frames with the given family-member id. Also
+ * sets useFamilyStore.active_member_id so other surfaces (junior
+ * analyzer, library) see the same active golfer.
+ */
+export function beginFamilyRecording(memberId: string | null): void {
+  activeRecordingMemberId = memberId;
+  recordingExpiresAt = Date.now() + FAMILY_SESSION_TIMEOUT_MS;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fam = require('../store/familyStore') as typeof import('../store/familyStore');
+    fam.useFamilyStore.getState().setActiveMember(memberId);
+  } catch { /* non-fatal */ }
+  devLog(`[vision] family recording session started for member=${memberId ?? 'self'}`);
+}
+
+export function endFamilyRecording(): void {
+  if (activeRecordingMemberId) devLog(`[vision] family recording session ended (was ${activeRecordingMemberId})`);
+  activeRecordingMemberId = null;
+  recordingExpiresAt = 0;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fam = require('../store/familyStore') as typeof import('../store/familyStore');
+    fam.useFamilyStore.getState().setActiveMember(null);
+  } catch { /* non-fatal */ }
+}
+
+/** Returns the active family-recording member id, or null when no
+ *  session is running / session has timed out. */
+export function getActiveFamilyRecordingMember(): string | null {
+  if (!activeRecordingMemberId) return null;
+  if (Date.now() > recordingExpiresAt) {
+    endFamilyRecording();
+    return null;
+  }
+  return activeRecordingMemberId;
 }

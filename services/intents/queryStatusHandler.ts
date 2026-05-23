@@ -105,6 +105,96 @@ export const queryStatusHandler: IntentHandler = {
         };
       }
 
+      case 'family_progress': {
+        // Read the named family member's recent junior-swing history
+        // and speak a brief progress summary. Lookups: voice intent
+        // passes `member_name`; we map that to the roster via family
+        // store's findByName. Falls back to the active member when
+        // no name given (e.g. "how's HER progress" mid-session).
+        const famMod = await import('../../store/familyStore');
+        const family = famMod.useFamilyStore.getState();
+        const requested = String(intent.parameters.member_name ?? '').trim();
+        const member = requested
+          ? family.findByName(requested)
+          : family.getMember(family.active_member_id);
+        if (!member) {
+          return {
+            success: false,
+            voice_response: requested
+              ? `I don\'t have ${requested} on the family roster yet.`
+              : "Tell me which family member — say their name.",
+            side_effects: ['query:family_progress:no_member'],
+            follow_up_needed: true,
+          };
+        }
+        const analyzer = await import('../juniorSwingAnalyzer');
+        const history = await analyzer.getMemberSwingHistory(member.id);
+        if (history.length === 0) {
+          return {
+            success: true,
+            voice_response: `No swings logged for ${member.firstName} yet. Record one and I\'ll start tracking progress.`,
+            side_effects: ['query:family_progress:empty'],
+            follow_up_needed: false,
+          };
+        }
+        const latest = history[history.length - 1];
+        const trend = history.length >= 3
+          ? buildSimpleTrend(history.slice(-5).map(h => h.overallScore))
+          : null;
+        const progressBit = trend ? ` ${trend}.` : '';
+        return {
+          success: true,
+          voice_response:
+            `${member.firstName}: last swing scored ${latest.overallScore}.` +
+            (latest.wins[0] ? ` Big win — ${latest.wins[0]}` : '') +
+            progressBit,
+          side_effects: [`query:family_progress:${member.id}`],
+          follow_up_needed: false,
+        };
+      }
+
+      case 'family_analysis': {
+        // Trigger junior-swing analysis on the freshest capture for the
+        // named member. The submitVisionFrame pipeline has already
+        // stamped golfer_id; we just kick analysis + speak the result.
+        const famMod = await import('../../store/familyStore');
+        const family = famMod.useFamilyStore.getState();
+        const requested = String(intent.parameters.member_name ?? '').trim();
+        const member = requested
+          ? family.findByName(requested)
+          : family.getMember(family.active_member_id);
+        if (!member) {
+          return {
+            success: false,
+            voice_response: requested
+              ? `I don\'t have ${requested} on the family roster yet.`
+              : "Tell me whose swing — say their name.",
+            side_effects: ['query:family_analysis:no_member'],
+            follow_up_needed: true,
+          };
+        }
+        const notes = typeof intent.parameters.notes === 'string' ? intent.parameters.notes : null;
+        const analyzer = await import('../juniorSwingAnalyzer');
+        const result = await analyzer.speakJuniorAnalysis(member.id, notes);
+        if (!result) {
+          return {
+            success: false,
+            voice_response: `Couldn\'t analyze ${member.firstName}\'s swing right now.`,
+            side_effects: ['query:family_analysis:error'],
+            follow_up_needed: false,
+          };
+        }
+        // speakJuniorAnalysis already piped the coachComment through
+        // voiceService; the returned voice_response is a no-op but keep
+        // it populated for the trace log + any text-display surface.
+        return {
+          success: true,
+          voice_response: result.coachComment,
+          side_effects: [`query:family_analysis:${member.id}:score_${result.overallScore}`],
+          follow_up_needed: false,
+        };
+      }
+
       case 'putt_analysis': {
         // 2026-05-22 — PuttingLab voice route. Pulls the freshest
         // glasses-attached frame (when present) + the player's last
@@ -625,3 +715,18 @@ export const queryStatusHandler: IntentHandler = {
     }
   },
 };
+
+/**
+ * 2026-05-22 — Trend phrase for the family_progress query. Looks at the
+ * last few overallScore values; returns a warm one-sentence read of
+ * direction. Conservative — when scores are flat we say so.
+ */
+function buildSimpleTrend(scores: number[]): string {
+  if (scores.length < 2) return '';
+  const first = scores[0];
+  const last = scores[scores.length - 1];
+  const diff = last - first;
+  if (Math.abs(diff) < 3) return 'Trending steady — staying consistent';
+  if (diff > 0) return `Up ${diff} points over the last ${scores.length} swings`;
+  return `Down ${Math.abs(diff)} points lately — just need a couple clean reps`;
+}

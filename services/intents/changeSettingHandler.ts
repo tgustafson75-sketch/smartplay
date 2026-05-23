@@ -144,6 +144,35 @@ export const changeSettingHandler: IntentHandler = {
         return ack('Ghost on — I\'ll pull up your last round next time you tee it up here.', ['ghost:on:no_prior']);
       }
 
+      case 'family_recording':
+      case 'family':
+      case 'record_family': {
+        // 2026-05-22 — Family Coaching capture session start/stop.
+        // new_value is either "stop" / "off" / "end" to end the
+        // session, or a roster member name to start one. Lookup is
+        // case-insensitive against family.firstName OR nickname.
+        const v = String(rawValue ?? '').trim();
+        if (!v) return clarify("Whose swing — say their name?");
+        const lower = v.toLowerCase();
+        const fam = await import('../../store/familyStore');
+        const gv = await import('../glassesVisionInput');
+        if (lower === 'stop' || lower === 'off' || lower === 'end' || lower === 'me') {
+          gv.endFamilyRecording();
+          return ack('Stopped — back to you.', ['family_recording:stop']);
+        }
+        const member = fam.useFamilyStore.getState().findByName(v);
+        if (!member) {
+          return clarify(
+            `I don\'t have ${v} on the family roster yet. Add them in Settings → Family first.`,
+          );
+        }
+        gv.beginFamilyRecording(member.id);
+        return ack(
+          `Recording ${member.firstName}\'s swing — tee it up and let it rip.`,
+          [`family_recording:${member.id}`],
+        );
+      }
+
       case 'caddie_persona':
       case 'caddie':
       case 'persona': {

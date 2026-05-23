@@ -30,12 +30,15 @@ Available intents:
    - "mark the green" / "mark green" / "I'm at the green" / "open Mark Green" -> { tool_name: "mark_green" }
 
 2. query_status — User wants information about current state.
-   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "putt_analysis" }
+   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "putt_analysis" | "family_progress" | "family_analysis", member_name?: string, notes?: string }
    Examples:
    - "what's my score" -> { query_topic: "score" }
    - "what hole am I on" -> { query_topic: "hole" }
    - "how am I doing vs last time" / "how am I doing against the ghost" / "what's my ghost match" / "where am I vs last round" -> { query_topic: "ghost_match" }
    - "analyze my putt" / "how's my putting stroke" / "how's my read" / "look at my putt" -> { query_topic: "putt_analysis" }
+   - "how's Emma's progress" / "show me her progress" / "how's my daughter doing" -> { query_topic: "family_progress", member_name: "Emma" }
+   - "analyze Emma's swing" / "analyze my daughter's swing" / "how was that swing" / "coach Emma's swing" -> { query_topic: "family_analysis", member_name: "Emma" }
+   - "compare to last week" / "compare to her last swing" -> { query_topic: "family_analysis", member_name: "<active>", notes: "compare to last week" }
 
 3. change_setting — User wants to modify a setting.
    parameters: { setting_name: string, new_value: string | boolean }
@@ -50,6 +53,7 @@ Available intents:
    - "round_mode" (break_100/break_90/break_80/free_play) — the player's score-target mode for the round
    - "caddie_persona" (kevin/tank/serena/harry) — which AI caddie persona is active
    - "ghost" (true/false) — also recognized as "ghost mode" / "ghost round" — controls auto-activation of a prior-round ghost match on the same course
+   - "family_recording" (member name / "stop") — starts or stops a Family Coaching capture session for a specific roster member ("record Emma's swing" / "stop recording")
    Examples:
    - "switch to dark mode" -> { setting_name: "theme", new_value: "dark" }
    - "mute ${caddieName}" -> { setting_name: "voice_enabled", new_value: false }
@@ -67,6 +71,12 @@ Available intents:
    - "switch back to Kevin" / "give me Kevin" -> { setting_name: "caddie_persona", new_value: "kevin" }
    - "ghost on" / "turn on ghost mode" / "race the ghost" / "compare to last round" -> { setting_name: "ghost", new_value: true }
    - "ghost off" / "turn off ghost" / "stop comparing" / "drop the ghost" / "no ghost" -> { setting_name: "ghost", new_value: false }
+
+   FAMILY COACHING recording controls (recognized setting_name = "family_recording"):
+   - "record Emma's swing" / "start recording Emma's swing" / "record my daughter's swing" / "coach Emma" -> { setting_name: "family_recording", new_value: "Emma" }
+   - "record Buddy's swing" / "start junior swing recording" -> { setting_name: "family_recording", new_value: "Buddy" }
+   - "stop recording" / "end family recording" / "back to me" -> { setting_name: "family_recording", new_value: "stop" }
+   The new_value string is the family member's name (or 'stop'). Resolver does the roster lookup.
 
 4. navigate — User wants navigation: back, forward, home, close, next/previous hole.
    parameters: { direction: "back" | "home" | "close" | "next_hole" | "previous_hole" | "main_menu" }
