@@ -328,6 +328,13 @@ interface RoundState {
     notes: string;
   } | null) => void;
   setCurrentHole: (hole: number) => void;
+  /** 2026-05-22 — User-initiated hole reconciliation against fresh GPS.
+   *  Delegates to services/holeReconciliation. The UI's "Refresh GPS"
+   *  button calls this. Returns a result the UI can surface as toast /
+   *  banner ("Snapped to hole 7" / "GPS too weak — step into open sky").
+   *  This is the manual counterpart to the (dormant) auto-detection in
+   *  services/holeDetection.ts. */
+  reconcileHole: () => import('../services/holeReconciliation').ReconcileResult;
   setCurrentYardage: (yards: number | null) => void;
   setClub: (club: string) => void;
   setMentalState: (state: string) => void;
@@ -1125,6 +1132,19 @@ export const useRoundStore = create<RoundState>()(
         try {
           require('../services/gpsManager').bumpToActive('hole_change');
         } catch {}
+      },
+
+      // 2026-05-22 — Hole reconciliation action. Delegates to the
+      // dedicated service so the UI's Refresh GPS button has a clean
+      // import surface (just `useRoundStore.getState().reconcileHole()`).
+      // The service handles all the safety gates (accuracy threshold,
+      // backward-jump prevention, current-hole bias, force-mode margin)
+      // and may or may not actually call setCurrentHole internally.
+      // Returns a ReconcileResult the UI can use to show a toast.
+      reconcileHole: () => {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const mod = require('../services/holeReconciliation') as typeof import('../services/holeReconciliation');
+        return mod.forceHoleReconciliation();
       },
 
       setCurrentYardage: (yards) => set({ currentYardage: yards }),
