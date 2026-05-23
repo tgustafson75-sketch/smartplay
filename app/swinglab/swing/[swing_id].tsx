@@ -9,7 +9,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
   ActivityIndicator, Animated, Alert, Image, Modal,
   Pressable, Easing,
 } from 'react-native';
@@ -793,6 +793,20 @@ export default function SwingDetail() {
                   <DrillCard recommendation={session.drill_recommendation ?? null} />
                 </>
               )}
+
+              {/* 2026-05-23 — Coach Note card. Lives alongside the AI
+                  analysis (PrimaryIssue / Putting / Biomechanics) so
+                  the coach's own observation reads side-by-side with
+                  Kevin's read. Persisted via setSessionCoachNote on
+                  cageStore; appears on the Coach Mode player swing
+                  list too. Tank's "hips stalled at impact" lives
+                  here. Visible on every swing detail — POV self
+                  swings get it too if the user wants to journal. */}
+              <CoachNoteCard
+                sessionId={session.id}
+                initialNote={session.coach_note ?? null}
+              />
+
               {/* Pose-derived biomechanics — only renders when the
                   pose API was configured AND returned at least one
                   usable frame, AND this is NOT a putting session
@@ -1033,6 +1047,147 @@ export default function SwingDetail() {
     </SafeAreaView>
   );
 }
+
+/**
+ * 2026-05-23 — Coach Note card. Inline-editable text area persisted
+ * via setSessionCoachNote. Closes Coach Mode's loop: pro watches the
+ * swing, AI analysis lands, pro reads the AI fault + adds their own
+ * note ("hips stalled at impact"), both live alongside on the swing
+ * detail surface and on Coach Mode's per-player list.
+ *
+ * Editing model: tap into the text area to edit (controlled local
+ * state); tap Save to commit. Cancel reverts to the persisted note.
+ * Empty save clears the note (setSessionCoachNote treats empty/null
+ * as a delete).
+ */
+function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialNote: string | null }) {
+  const { colors } = useTheme();
+  const setSessionCoachNote = useCageStore(s => s.setSessionCoachNote);
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(initialNote ?? '');
+
+  // Sync local draft to persisted note if it changes externally (e.g.
+  // user navigated away and back, or another surface updated it).
+  React.useEffect(() => {
+    if (!editing) setDraft(initialNote ?? '');
+  }, [initialNote, editing]);
+
+  const onSave = () => {
+    setSessionCoachNote(sessionId, draft);
+    setEditing(false);
+  };
+
+  const onCancel = () => {
+    setDraft(initialNote ?? '');
+    setEditing(false);
+  };
+
+  if (!editing && !initialNote) {
+    return (
+      <TouchableOpacity
+        onPress={() => setEditing(true)}
+        style={[coachNoteStyles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}
+        accessibilityRole="button"
+        accessibilityLabel="Add a coach note to this swing"
+      >
+        <View style={coachNoteStyles.headerRow}>
+          <Ionicons name="create-outline" size={16} color={colors.accent} />
+          <Text style={[coachNoteStyles.label, { color: colors.accent }]}>COACH NOTE</Text>
+        </View>
+        <Text style={[coachNoteStyles.placeholder, { color: colors.text_muted }]}>
+          Tap to add your own observation — &ldquo;hips stalled at impact&rdquo;, &ldquo;came over the top&rdquo;.
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+
+  if (!editing) {
+    return (
+      <TouchableOpacity
+        onPress={() => setEditing(true)}
+        style={[coachNoteStyles.card, { borderColor: colors.accent, backgroundColor: colors.surface }]}
+        accessibilityRole="button"
+        accessibilityLabel="Edit coach note"
+      >
+        <View style={coachNoteStyles.headerRow}>
+          <Ionicons name="create-outline" size={16} color={colors.accent} />
+          <Text style={[coachNoteStyles.label, { color: colors.accent }]}>COACH NOTE</Text>
+        </View>
+        <Text style={[coachNoteStyles.body, { color: colors.text_primary }]}>{initialNote}</Text>
+      </TouchableOpacity>
+    );
+  }
+
+  return (
+    <View style={[coachNoteStyles.card, { borderColor: colors.accent, backgroundColor: colors.surface }]}>
+      <View style={coachNoteStyles.headerRow}>
+        <Ionicons name="create-outline" size={16} color={colors.accent} />
+        <Text style={[coachNoteStyles.label, { color: colors.accent }]}>COACH NOTE</Text>
+      </View>
+      <TextInput
+        value={draft}
+        onChangeText={setDraft}
+        placeholder="Your read on the swing — say it like you'd say it to the player."
+        placeholderTextColor={colors.text_muted}
+        multiline
+        autoFocus
+        style={[
+          coachNoteStyles.input,
+          { backgroundColor: colors.background, borderColor: colors.border, color: colors.text_primary },
+        ]}
+      />
+      <View style={coachNoteStyles.actionsRow}>
+        <TouchableOpacity onPress={onCancel} accessibilityRole="button" accessibilityLabel="Cancel">
+          <Text style={[coachNoteStyles.cancelText, { color: colors.text_muted }]}>Cancel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={onSave}
+          style={[coachNoteStyles.saveBtn, { backgroundColor: colors.accent }]}
+          accessibilityRole="button"
+          accessibilityLabel="Save coach note"
+        >
+          <Text style={coachNoteStyles.saveBtnText}>Save</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const coachNoteStyles = StyleSheet.create({
+  card: {
+    margin: 12,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  label: { fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
+  placeholder: { fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
+  body: { fontSize: 14, lineHeight: 21, fontWeight: '600' },
+  input: {
+    minHeight: 80,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlignVertical: 'top',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 10,
+  },
+  cancelText: { fontSize: 13, fontWeight: '700' },
+  saveBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  saveBtnText: { color: '#0d1a0d', fontSize: 13, fontWeight: '900', letterSpacing: 0.4 },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1 },

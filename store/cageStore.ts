@@ -184,6 +184,13 @@ export interface CageSession {
    *  Phase K). Cage-review's Putting tab renders this. Null when the
    *  session was a full-swing recording or analysis hasn't landed. */
   putting_analysis?: import('../services/puttingAnalysisService').PuttingAnalysis | null;
+  /** 2026-05-23 — Coach Mode note. Free-text observation the coach
+   *  attached to the swing AFTER analysis (e.g. "hips stalled at
+   *  impact" — the human read alongside Kevin's AI fault read).
+   *  Written via setSessionCoachNote from the swing-detail screen;
+   *  rendered as its own card on that screen. Independent of
+   *  primary_issue / putting_analysis — they coexist. */
+  coach_note?: string | null;
 }
 
 export type AnalysisStatus =
@@ -342,6 +349,12 @@ interface CageState {
    *  by the live cage post-session pipeline (already in app/cage/summary.tsx)
    *  and by the upload analysis pipeline. */
   setSessionAnalysis: (sessionId: string, primary_issue: PrimaryIssue | null, drill_recommendation: DrillRecommendation | null) => void;
+  /** 2026-05-23 — Save a coach note onto a session. Coach Mode flow:
+   *  pro watches the swing, AI analysis lands, pro types their own
+   *  read ("hips stalled at impact") and saves. Independent of the
+   *  AI analysis path — both display side-by-side on the swing
+   *  detail screen. Pass empty string or null to clear. */
+  setSessionCoachNote: (sessionId: string, note: string | null) => void;
   /** Pose-API biomechanics result. Fire-and-forget after Phase K, so
    *  this commits independently from setSessionAnalysis. */
   setSessionBiomechanics: (sessionId: string, biomechanics: import('../services/poseAnalysisApi').SwingBiomechanics | null) => void;
@@ -739,6 +752,16 @@ export const useCageStore = create<CageState>()(
             session.id !== sessionId ? session : {
               ...session, primary_issue, drill_recommendation,
               analysis_status: 'ok' as AnalysisStatus, analysis_error: null,
+            }
+          ),
+        })),
+
+      setSessionCoachNote: (sessionId, note) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              coach_note: note && note.trim().length > 0 ? note.trim() : null,
             }
           ),
         })),

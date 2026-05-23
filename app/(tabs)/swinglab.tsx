@@ -73,6 +73,19 @@ const CARDS: LauncherCardSpec[] = [
     sub: 'Practice + lessons · bullseye gate · ball-speed · 1/3/5/10 swing batches',
     route: '/swinglab/cage-mode',
   },
+  // 2026-05-23 — Coach Mode (Fix #8). Wrapper for "watching someone
+  // else swing" — pro picks/adds a student, captures their swing
+  // (glasses or phone), gets full Phase K swing analysis routed
+  // correctly via Fix #7's perspective threading, adds coach notes.
+  // For Tank (real golf instructor) — also handles parent-coaching-
+  // kid via the family roster.
+  {
+    key: 'coach-mode',
+    icon: 'school-outline',
+    title: 'Coach Mode',
+    sub: 'Watch + analyze someone else\'s swing · player roster · coach notes',
+    route: '/swinglab/coach-mode',
+  },
   {
     key: 'range',
     icon: 'videocam-outline',

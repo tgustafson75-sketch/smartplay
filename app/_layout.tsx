@@ -668,6 +668,12 @@ function AppNavigator() {
           name="swinglab/cage-mode"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
+        {/* 2026-05-23 — Coach Mode (Fix #8). Watching-someone wrapper
+            built on Fix #7's perspective threading. */}
+        <Stack.Screen
+          name="swinglab/coach-mode"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
         <Stack.Screen
           name="cage-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
