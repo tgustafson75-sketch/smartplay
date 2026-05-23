@@ -35,11 +35,13 @@ import { useCourseGeometryOverrideStore } from '../store/courseGeometryOverrideS
 // hole image, the markers come up there on every subsequent visit.
 import { useHoleMarkerCalibrationStore } from '../store/holeMarkerCalibrationStore';
 import VectorHoleView from '../components/smartvision/VectorHoleView';
+import GolfshotHoleView from '../components/smartvision/GolfshotHoleView';
+import { getHoleGeometry } from '../services/courseGeometryService';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import PALMS_IMAGES from '../data/palmsImages';
 import { getLocalHoleImageById, getLocalHoleImage } from '../data/localCourseImages';
-import { getHoleImageryUrl } from '../services/mapboxImagery';
+import { getHoleImageryUrl, isMapboxConfigured } from '../services/mapboxImagery';
 import {
   getLandmarksForHole,
   resolveCourseKey,
@@ -378,10 +380,21 @@ export default function HoleView() {
   const hasVectorCoords = Math.abs(teeLat) > 0.01 && Math.abs(teeLng) > 0.01 &&
                           Math.abs(middleLat) > 0.01 && Math.abs(middleLng) > 0.01;
 
+  // 2026-05-22 — Golfshot-style routing.
+  // Priority:
+  //   1. bundled screenshot exists → Golfshot UX on top (Tim's photos)
+  //   2. tee+green coords + Mapbox/Google configured → Golfshot UX on remote tile
+  //   3. tee+green coords only → SVG vector view (Phase AN)
+  //   4. Google URL only → legacy satellite + measure-mode UI
+  //   5. nothing → empty state
+  // GolfshotHoleView handles cases 1+2 (holeImageMapper picks source).
   type DisplayType = 'satellite' | 'none' | 'bundled' | 'vector';
+  const canGolfshotRemote =
+    hasVectorCoords && (isMapboxConfigured() || (process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ?? '').length > 0);
   const displayType: DisplayType =
-    hasVectorCoords ? 'vector'
-    : bundledImage ? 'bundled'
+    bundledImage ? 'bundled'
+    : canGolfshotRemote ? 'bundled' // route remote-tile holes through Golfshot too
+    : hasVectorCoords ? 'vector'
     : satelliteUrl ? 'satellite'
     : 'none';
 
@@ -799,17 +812,34 @@ export default function HoleView() {
                   }
                 : undefined}
             />
-          ) : imageSource ? (
-            <Image
-              source={imageSource}
-              style={styles.holeImage}
-              // Always 'contain' so teeboxes and greens at the edges of
-              // the source image are never cropped. Tim 2026-05-14: "The
-              // holeview are curring off teeboxes and greens in some
-              // bases." 'cover' was filling the box but cropping the
-              // critical features on the aspect-ratio mismatch.
-              resizeMode="contain"
-              onLoad={() => setImageReady(true)}
+          ) : displayType === 'bundled' ? (
+            // 2026-05-22 — Golfshot-style hole view. Renders the resolved
+            // image (bundled screenshot OR Mapbox/Google fallback for
+            // golfcourseapi courses we don't have bundled) with semi-
+            // transparent green disk, draggable yellow Y (layup) + red P
+            // (pin) markers, dynamic distance line, top header, and
+            // bottom F/M/B bar. Refreshes when holeReconciliation flips
+            // `hole` upstream (component effect resets markers on
+            // holeNumber change). Internal holeImageMapper picks: local
+            // bundled (highest fidelity) → Mapbox → Google.
+            <GolfshotHoleView
+              courseId={courseId ?? null}
+              courseName={courseName}
+              holeNumber={hole}
+              par={par}
+              distanceYd={distance}
+              tee={teeLat && teeLng ? { lat: teeLat, lng: teeLng } : null}
+              green={middleLat && middleLng ? { lat: middleLat, lng: middleLng } : null}
+              greenFront={(() => {
+                const g = courseId ? getHoleGeometry(courseId, hole) : null;
+                return g?.green_front ?? null;
+              })()}
+              greenBack={(() => {
+                const g = courseId ? getHoleGeometry(courseId, hole) : null;
+                return g?.green_back ?? null;
+              })()}
+              width={IMAGE_WIDTH}
+              height={IMAGE_HEIGHT}
             />
           ) : (
             <View style={styles.noImage}>
