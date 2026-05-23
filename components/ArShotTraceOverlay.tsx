@@ -40,14 +40,28 @@ import type { FlightPoint } from '../utils/ballFlightPhysics';
 
 export type QualityTier = 'high' | 'balanced' | 'battery_saver';
 
+export interface CameraPose {
+  /** Compass heading in degrees (0=N, 90=E). */
+  headingDeg: number;
+  /** Pitch in degrees. Negative = camera looking down, positive = up. */
+  pitchDeg: number;
+}
+
 export interface ArShotTraceOverlayProps {
   width: number;
   height: number;
   /** Horizontal field of view in degrees. iPhone main camera ~70°. */
   fovDeg?: number;
-  /** Upward camera pitch in degrees. Slight positive helps frame the
+  /** Upward camera pitch in degrees — used ONLY when cameraPose is
+   *  not supplied (static fallback). Slight positive helps frame the
    *  apex without losing the landing zone. */
   cameraPitchDeg?: number;
+  /** 2026-05-22 — Pass 2: live device pose from hooks/useDeviceCameraPose.
+   *  When supplied, projection uses the real phone heading + pitch so
+   *  the trace tracks as the player pans the camera around. The
+   *  trajectory rotates relative to (cameraPose.headingDeg − trace
+   *  azimuth) so when the camera faces target, downrange = into screen. */
+  cameraPose?: CameraPose | null;
   /** Quality tier — caller may downgrade based on device thermal /
    *  battery state. 'battery_saver' caps at 12 points + no trail. */
   quality?: QualityTier;
@@ -64,6 +78,7 @@ const PROJECTION_NEAR_Z = 2; // yards — ignore points closer than this
 export default function ArShotTraceOverlay({
   width, height,
   fovDeg = 70, cameraPitchDeg = 5,
+  cameraPose = null,
   quality = 'balanced',
   onBeat,
 }: ArShotTraceOverlayProps) {
@@ -114,10 +129,14 @@ export default function ArShotTraceOverlay({
   }, [trace, quality, onBeat]);
 
   // ─── Projection (memoized per trace + container size + quality) ────
+  // 2026-05-22 — Pass 2: when cameraPose supplied, use real heading/pitch
+  // so trace tracks panning. Otherwise fall back to static cameraPitchDeg.
+  const effectivePitch = cameraPose?.pitchDeg ?? cameraPitchDeg;
+  const cameraHeading = cameraPose?.headingDeg ?? null;
   const projected = useMemo(() => {
     if (!trace || trace.flight.points.length === 0) return null;
-    return projectFlight(trace, width, height, fovDeg, cameraPitchDeg, quality);
-  }, [trace, width, height, fovDeg, cameraPitchDeg, quality]);
+    return projectFlight(trace, width, height, fovDeg, effectivePitch, cameraHeading, quality);
+  }, [trace, width, height, fovDeg, effectivePitch, cameraHeading, quality]);
 
   if (!trace || !projected) return null;
 
@@ -236,7 +255,9 @@ interface ProjectedTrace {
 
 function projectFlight(
   trace: ActiveTrace, w: number, h: number,
-  fovDeg: number, cameraPitchDeg: number, quality: QualityTier,
+  fovDeg: number, cameraPitchDeg: number,
+  cameraHeadingDeg: number | null,
+  quality: QualityTier,
 ): ProjectedTrace | null {
   const fovRad = (fovDeg * Math.PI) / 180;
   const fx = (w / 2) / Math.tan(fovRad / 2);
@@ -247,6 +268,17 @@ function projectFlight(
   const cosP = Math.cos(pitchRad);
   const sinP = Math.sin(pitchRad);
 
+  // Pass 2 — heading offset.
+  // When cameraHeadingDeg is supplied, we yaw the world's "downrange"
+  // axis by (cameraHeading − traceAzimuth) so the trace rotates as the
+  // player pans. When null, behave as before (forward = camera-facing).
+  const yawDeg = cameraHeadingDeg != null
+    ? angleDelta(cameraHeadingDeg, trace.azimuth_deg)
+    : 0;
+  const yawRad = (yawDeg * Math.PI) / 180;
+  const cosY = Math.cos(yawRad);
+  const sinY = Math.sin(yawRad);
+
   const maxPoints = quality === 'high' ? 32 : quality === 'battery_saver' ? 12 : 24;
   const stride = Math.max(1, Math.floor(trace.flight.points.length / maxPoints));
 
@@ -255,7 +287,7 @@ function projectFlight(
   let apexAlt = -Infinity;
   for (let i = 0; i < trace.flight.points.length; i += stride) {
     const p = trace.flight.points[i];
-    const proj = projectPoint(p, fx, fyVal, cx, cy, cosP, sinP);
+    const proj = projectPoint(p, fx, fyVal, cx, cy, cosP, sinP, cosY, sinY);
     if (proj) {
       projected.push(proj);
       if (p.altitude_ft > apexAlt) { apexAlt = p.altitude_ft; apex = proj; }
@@ -263,7 +295,7 @@ function projectFlight(
   }
   const landingFlight = trace.flight.points[trace.flight.points.length - 1];
   const landing = landingFlight
-    ? projectPoint(landingFlight, fx, fyVal, cx, cy, cosP, sinP)
+    ? projectPoint(landingFlight, fx, fyVal, cx, cy, cosP, sinP, cosY, sinY)
     : null;
   if (landing && projected.length > 0) {
     projected[projected.length - 1] = landing;
@@ -278,16 +310,29 @@ function projectFlight(
 
 function projectPoint(
   p: FlightPoint, fx: number, fy: number, cx: number, cy: number,
-  cosP: number, sinP: number,
+  cosP: number, sinP: number, cosY: number, sinY: number,
 ): ProjectedPoint | null {
   // World axes: x=downrange, y=lateral (right+), z=up (ft → yd via /3).
-  const xCam = p.lateral_yd;
-  const yCam = -p.downrange_yd * sinP + (p.altitude_ft / 3) * cosP;
-  const zCam = p.downrange_yd * cosP + (p.altitude_ft / 3) * sinP;
+  // Pass 2 — yaw rotation: when player pans the camera, the trace's
+  // downrange axis rotates relative to the camera frame. Apply yaw first
+  // (rotation around the up axis), THEN pitch (rotation around lateral).
+  const xWorld = p.lateral_yd;
+  const zWorld = p.downrange_yd;
+  const xCam0 = xWorld * cosY - zWorld * sinY;
+  const zCam0 = xWorld * sinY + zWorld * cosY;
+  const yWorld = p.altitude_ft / 3;
+  const xCam = xCam0;
+  const yCam = -zCam0 * sinP + yWorld * cosP;
+  const zCam = zCam0 * cosP + yWorld * sinP;
   if (zCam < PROJECTION_NEAR_Z) return null;
   const x = cx + (xCam * fx) / zCam;
   const y = cy - (yCam * fy) / zCam;
   return { x, y, z: zCam };
+}
+
+/** Smallest signed angle delta in degrees. */
+function angleDelta(a: number, b: number): number {
+  return ((a - b + 540) % 360) - 180;
 }
 
 // ─── Path string builders ────────────────────────────────────────────────

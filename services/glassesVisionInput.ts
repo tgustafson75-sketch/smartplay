@@ -284,19 +284,113 @@ function pruneQueue(): void {
   if (dropped > 0) devLog(`[vision] queue pruned ${dropped} frame(s), now ${queue.length}`);
 }
 
-// ─── Transport adapter (unchanged) ───────────────────────────────────────
+// ─── Transport adapter (Pass 2: stronger contract) ──────────────────────
+//
+// The transport is the seam between SmartPlay and whatever glasses
+// hardware actually streams frames. Today no transport implementation
+// exists (Meta hasn't opened the camera API to third parties); this
+// contract is what we'll plug into when they do, or what an experimental
+// USB / WebRTC bridge would implement.
+//
+// Wire protocol contract:
+//   - The transport delivers JPEG/PNG frames via submitVisionFrame()
+//     (above), tagged with source: 'glasses'.
+//   - Optional pitch_deg / heading_deg come from the glasses IMU when
+//     available — used by detectMode() to auto-classify swing/putting.
+//   - Connection lifecycle is start() / stop(); isConnected() is the
+//     instantaneous truth. onStatusChange() lets the AR overlay
+//     surface a "glasses connected" indicator.
+//   - Capability advertise: prefersFrameRate() lets a transport tell
+//     consumers what cadence it can sustain (e.g. BT-LE ~5 fps,
+//     Wi-Fi-direct ~30 fps) so submitVisionFrame can pace appropriately.
+
+export type GlassesTransportStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export interface GlassesVisionTransport {
+  /** Start the connection. Resolves once the transport is ready to push
+   *  frames OR rejects with a reason consumers can surface ("Bluetooth
+   *  off", "no paired device"). */
   start(): Promise<void>;
+  /** Stop and release resources. Idempotent. */
   stop(): Promise<void>;
+  /** Current instantaneous connection state. Cheaper than awaiting
+   *  start() to know if the transport is up. */
   isConnected(): boolean;
+  /** Sustained frames-per-second the transport can deliver. Used by
+   *  the consumer to decide whether to render live-AR (~15 fps min)
+   *  or burst-capture-only (<5 fps). */
+  prefersFrameRate(): number;
+  /** Subscribe to connection-status changes. Returned cleanup
+   *  unsubscribes. */
+  onStatusChange(cb: (status: GlassesTransportStatus) => void): () => void;
+  /** Friendly transport identifier shown in Settings → Glasses (e.g.
+   *  "Meta Ray-Ban (Aviator)", "Test rig over WebRTC"). */
+  label: string;
+}
+
+/**
+ * 2026-05-22 — Stub BluetoothGlassesTransport.
+ *
+ * Documents the contract a real implementation would fulfill against a
+ * paired Meta Ray-Ban (or experimental bridge) using BLE GATT for
+ * control + L2CAP for frame bytes. Today this stub:
+ *   - Reports disconnected always
+ *   - Returns 0 fps capability
+ *   - start() rejects with a "not yet implemented" message that
+ *     surfaces honestly in Settings if the user attempts to enable it
+ *
+ * When Meta opens the API (or a custom hardware partner ships one),
+ * the only thing that has to change is the body of this class plus
+ * registering it via registerGlassesTransport() at app start.
+ */
+export class BluetoothGlassesTransport implements GlassesVisionTransport {
+  readonly label = 'Meta Ray-Ban (Bluetooth)';
+  private status: GlassesTransportStatus = 'disconnected';
+  private listeners = new Set<(s: GlassesTransportStatus) => void>();
+
+  async start(): Promise<void> {
+    devLog('[vision] BluetoothGlassesTransport.start() — not yet implemented');
+    this.setStatus('error');
+    throw new Error(
+      'Glasses transport not yet implemented. Meta has not opened the ' +
+      'camera frames API to third-party apps. PuttWatch + manual upload ' +
+      'remain the supported capture paths.',
+    );
+  }
+
+  async stop(): Promise<void> {
+    this.setStatus('disconnected');
+  }
+
+  isConnected(): boolean {
+    return this.status === 'connected';
+  }
+
+  prefersFrameRate(): number {
+    return 0; // stub — real BT-LE bridge would advertise 5-10 fps
+  }
+
+  onStatusChange(cb: (s: GlassesTransportStatus) => void): () => void {
+    this.listeners.add(cb);
+    // Fire immediately with current status.
+    try { cb(this.status); } catch { /* non-fatal */ }
+    return () => { this.listeners.delete(cb); };
+  }
+
+  private setStatus(next: GlassesTransportStatus): void {
+    if (this.status === next) return;
+    this.status = next;
+    for (const cb of this.listeners) {
+      try { cb(next); } catch { /* non-fatal */ }
+    }
+  }
 }
 
 let activeTransport: GlassesVisionTransport | null = null;
 
 export function registerGlassesTransport(t: GlassesVisionTransport): void {
   activeTransport = t;
-  devLog('[vision] glasses transport registered');
+  devLog(`[vision] glasses transport registered: ${t.label} (target fps=${t.prefersFrameRate()})`);
 }
 
 export function getGlassesTransport(): GlassesVisionTransport | null {
