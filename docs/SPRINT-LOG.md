@@ -1527,9 +1527,26 @@ Before this change, the brain (`api/kevin.ts`) consumed the rich unified context
 
 **Day 5 extension 7 tally: 1 commit + 1 OTA + ts-check clean. Analysis engine now grounded in the same unified context as the brain — no more split-vision between the two.**
 
+---
 
+## Day 6 — 2026-05-23
 
+### Lessons logged (no code) — data-loss rule + cloud-backup need
 
+**Tonight's library loss.** After the boot-crash native fix (5bc4e67, expo-gl + skia version pin), a fresh APK install replaced the broken one. Sideloaded APK installs on Android typically require uninstall-first when signatures don't match — and **uninstall wipes the app's AsyncStorage and app-scoped file storage**. That deleted the entire `cage-store-v1` persisted blob (the swing library `sessionHistory`) AND every recorded mp4 file whose `clipUri` pointed into the app's internal Documents/Cache dirs. The hydration guard shipped earlier in the day (3f9a5e9) was correctly wired and unrelated — there was simply nothing left in storage to read.
+
+**RULE — NEVER uninstall, always update in place.**
+Always upgrade the APK over the existing install (same package name + matching signature keeps AsyncStorage + app files). Uninstall wipes the swing library, recorded videos, ghost rounds, club profiles, every persisted Zustand store, and all app-scoped data. **There is no local-only recovery path** — the wipe is irrecoverable. This applies to every native build going forward; OTA updates are safe (they don't touch storage), only native APK reinstalls are dangerous.
+
+**ROADMAP — cloud backup of library + videos (real need, surfaced by tonight's loss).**
+Today the library is entirely device-local: persisted state in AsyncStorage (`cage-store-v1`), recorded videos in app-scoped storage. A reinstall, factory reset, lost phone, or storage corruption destroys all of it with no recovery. [services/videoUpload.ts:14](../services/videoUpload.ts#L14) explicitly notes "no cloud upload in v1.0" — that's a known gap, just one we hadn't paid the bill on yet.
+
+What real cloud backup would need (sketched, not built):
+1. **Persist-store sync** — push the `cage-store-v1` blob (or just `sessionHistory`) to a cloud row keyed by user. Diff-and-merge on rehydrate. Smallest delta — gets metadata + analysis records off device.
+2. **Video file upload** — push mp4 clips to object storage (Supabase Storage / S3 / Cloudflare R2) keyed by session id. Library entries store the cloud URL instead of (or alongside) the local `file://` URI. This is the heavier delta — bandwidth, quota, auth — but the only real protection for the videos themselves.
+3. **Pre-install nudge / version-mismatch banner** — when the app launches and detects a runtime/version gap suggesting a reinstall happened (vs an OTA), surface a banner so users know the library state isn't a bug.
+
+**Status:** logging only tonight. No code. The uninstall rule is the only protection in place until cloud backup ships. Logged here so it's visible in the next sprint planning pass.
 
 
 
