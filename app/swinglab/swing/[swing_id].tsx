@@ -27,6 +27,7 @@ import { runPhaseKOnSession } from '../../../services/videoUpload';
 import { uploadLog } from '../../../services/uploadDiagnostic';
 import PrimaryIssueCard from '../../../components/swinglab/PrimaryIssueCard';
 import DrillCard from '../../../components/swinglab/DrillCard';
+import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay from '../../../components/swinglab/SwingBodyOverlay';
 import VideoWatermark from '../../../components/swinglab/VideoWatermark';
@@ -618,13 +619,25 @@ export default function SwingDetail() {
 
           {analysisStatus === 'ok' && (
             <Animated.View style={{ opacity: cardsFade }}>
-              <PrimaryIssueCard issue={session.primary_issue ?? null} totalShots={session.shots.length} />
-              <DrillCard recommendation={session.drill_recommendation ?? null} />
+              {/* 2026-05-22 — PuttingLab card. Renders when the session
+                  was classified as putting (analyzer-router routed it
+                  through puttingAnalysisService). When the putting
+                  analysis lands the swing-specific cards (primary
+                  issue, drill, biomechanics) are hidden — those are
+                  full-swing constructs that don't apply. */}
+              {session.putting_analysis ? (
+                <PuttingAnalysisCard analysis={session.putting_analysis} />
+              ) : (
+                <>
+                  <PrimaryIssueCard issue={session.primary_issue ?? null} totalShots={session.shots.length} />
+                  <DrillCard recommendation={session.drill_recommendation ?? null} />
+                </>
+              )}
               {/* Pose-derived biomechanics — only renders when the
                   pose API was configured AND returned at least one
-                  usable frame. Pure additive surface; nothing
-                  regresses when null. */}
-              {session.biomechanics && (
+                  usable frame, AND this is NOT a putting session
+                  (those use PuttingAnalysisCard above). */}
+              {session.biomechanics && !session.putting_analysis && (
                 <View style={[styles.biomechCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                   <Text style={[styles.biomechLabel, { color: colors.accent }]}>BIOMECHANICS</Text>
                   <Text style={[styles.biomechSub, { color: colors.text_muted }]}>

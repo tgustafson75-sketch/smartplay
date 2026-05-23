@@ -163,6 +163,12 @@ export interface CageSession {
    *  or returned no usable frames. UI hides the biomechanics card
    *  when null — zero regression for non-configured installs. */
   biomechanics?: import('../services/poseAnalysisApi').SwingBiomechanics | null;
+  /** 2026-05-22 — PuttingLab result attached to this session when the
+   *  session was classified as putting (analyzer-router routed glasses
+   *  POV / putt/chip tag through puttingAnalysisService instead of
+   *  Phase K). Cage-review's Putting tab renders this. Null when the
+   *  session was a full-swing recording or analysis hasn't landed. */
+  putting_analysis?: import('../services/puttingAnalysisService').PuttingAnalysis | null;
 }
 
 export type AnalysisStatus =
@@ -324,6 +330,15 @@ interface CageState {
   deleteShot: (sessionId: string, shotId: string) => void;
   // Phase AQ
   addCageInsight: (session_id: string, club: string, insight: string) => void;
+  /** 2026-05-22 — Attach a PuttingAnalysis result to a session.
+   *  Idempotent — overwrites prior result for the same sessionId so
+   *  re-analysis after a video re-upload lands cleanly. Used by the
+   *  Phase K analyzer-router when getAnalyzerKind() returns 'putting'
+   *  and by the cage-review screen's "Re-analyze" button. */
+  addPuttingAnalysis: (
+    sessionId: string,
+    analysis: import('../services/puttingAnalysisService').PuttingAnalysis,
+  ) => void;
   /** Phase V — track analysis lifecycle so the swing detail surface can
    *  show real progress and surface failures honestly. */
   setSessionAnalysisStatus: (sessionId: string, status: AnalysisStatus, error?: string | null) => void;
@@ -674,6 +689,17 @@ export const useCageStore = create<CageState>()(
             ...s.recentInsights.filter(x => x.session_id !== session_id),
             { session_id, club, insight, created_at: Date.now() },
           ].slice(-5),
+        })),
+
+      addPuttingAnalysis: (sessionId, analysis) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              putting_analysis: analysis,
+              analysis_status: 'ok' as AnalysisStatus,
+            },
+          ),
         })),
 
       setSessionAnalysis: (sessionId, primary_issue, drill_recommendation) =>

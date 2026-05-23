@@ -156,14 +156,23 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       V6('STAGE 0 SKIP — putting session routes to puttingAnalysisService');
       const putting = await import('./puttingAnalysisService');
       const videoUri = session.shots.find(s => s.clipUri)?.clipUri ?? null;
-      void putting.analyzePutt({
-        video_url: videoUri,
-        spoken_read: session.upload?.notes ?? null,
-        notes: session.upload?.notes ?? null,
-      }).catch((e: unknown) => {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.log('[videoUpload] putting analyze failed (non-fatal):', msg);
-      });
+      void (async () => {
+        try {
+          const result = await putting.analyzePutt({
+            video_url: videoUri,
+            spoken_read: session.upload?.notes ?? null,
+            notes: session.upload?.notes ?? null,
+          });
+          // 2026-05-22 — Persist the PuttingAnalysis on the session so
+          // the cage-review Putting tab can render it without re-running
+          // analysis. addPuttingAnalysis also flips analysis_status='ok'.
+          useCageStore.getState().addPuttingAnalysis(sessionId, result);
+          uploadLog('putting-analysis-attached', { session_id: sessionId, score: result.overallScore }, sessionId);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.log('[videoUpload] putting analyze failed (non-fatal):', msg);
+        }
+      })();
       return { primary_issue: null, drill_recommendation: null };
     }
   } catch (e) {

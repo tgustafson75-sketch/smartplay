@@ -75,7 +75,7 @@ export interface PoseEstimate {
   /** Where the pose came from. */
   source: PoseSource;
   /** 0..100 — engine confidence. Combines server confidence + frame
-   *  quality + age-band adjustment. */
+   *  quality + age-band adjustment + multi-frame agreement. */
   confidence: number;
   /** Per-frame keypoints (COCO-17). Empty when only single-image input
    *  or when detection failed. */
@@ -93,6 +93,27 @@ export interface PoseEstimate {
   age_band: 'tiny' | 'junior' | 'teen' | 'adult';
   /** Was this lefty? When true, keypoint labels were mirrored. */
   mirrored: boolean;
+  /** 2026-05-22 — Per-joint robustness summary. Higher numbers mean we
+   *  trust that joint more across the captured frames. UI uses this to
+   *  shade keypoints on the swing overlay; analyzers use it to weight
+   *  metric outputs ("hip turn measured with high confidence" vs
+   *  "approximate"). */
+  joint_confidence: JointConfidence;
+  /** 2026-05-22 — true when fewer than half of expected keypoints
+   *  cleared the usable threshold across captured frames. UI should
+   *  surface a "reframe and try again" hint when this is true. */
+  partial_view: boolean;
+}
+
+/** Per-joint roll-up across all captured frames. 0..1 — 1 = always
+ *  detected with strong score; 0 = never reliably visible. */
+export interface JointConfidence {
+  hip: number;
+  shoulder: number;
+  knee: number;
+  wrist: number;
+  ankle: number;
+  head: number;
 }
 
 // ─── Tunables ────────────────────────────────────────────────────────────
@@ -131,15 +152,19 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
     const frames = bio?.frames ?? (await extractPoseFramesFromVideo(input.videoUri, input.durationMs).catch(() => null)) ?? [];
     const adjusted = adjustFrames(frames, ageBand, lefty);
     const confidence = computeConfidence(adjusted, !!bio);
+    const jc = computeJointConfidence(adjusted);
+    const partial = detectPartialView(adjusted);
     return {
       source: 'video',
       confidence,
       frames: adjusted,
       biomechanics: bio,
       swingVerdict: null,
-      reason: `video ${input.durationMs}ms; ${adjusted.length} frames; biomech=${bio ? 'ok' : 'null'}`,
+      reason: `video ${input.durationMs}ms; ${adjusted.length} frames; biomech=${bio ? 'ok' : 'null'}; partial=${partial}`,
       age_band: ageBand,
       mirrored: lefty,
+      joint_confidence: jc,
+      partial_view: partial,
     };
   }
 
@@ -159,6 +184,8 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
       reason: `${input.frames.length} frames received; no base64→pose backend wired yet`,
       age_band: ageBand,
       mirrored: lefty,
+      joint_confidence: { hip: 0, shoulder: 0, knee: 0, wrist: 0, ankle: 0, head: 0 },
+      partial_view: true,
     };
   }
 
@@ -172,15 +199,19 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
       return emptyResult('image', ageBand, lefty, 'pose detection returned null');
     }
     const adjusted = adjustFrames([frame], ageBand, lefty);
+    const jc = computeJointConfidence(adjusted);
+    const partial = detectPartialView(adjusted);
     return {
       source: 'image',
       confidence: computeConfidence(adjusted, false),
       frames: adjusted,
       biomechanics: null,
       swingVerdict: null,
-      reason: 'single image pose',
+      reason: `single image pose; partial=${partial}`,
       age_band: ageBand,
       mirrored: lefty,
+      joint_confidence: jc,
+      partial_view: partial,
     };
   }
 
@@ -233,7 +264,88 @@ function computeConfidence(frames: PoseFrame[], hasBiomech: boolean): number {
   const rate = total > 0 ? usableCount / total : 0;
   const base = Math.round(rate * 80);
   const bioBoost = hasBiomech ? 15 : 0;
-  return Math.max(0, Math.min(100, base + bioBoost));
+  // 2026-05-22 — Multi-frame agreement bonus. When the SAME critical
+  // joints (hip + shoulder) consistently score above the threshold
+  // across MOST frames, we're seeing a clean stable subject; bump
+  // confidence so downstream consumers trust the result.
+  const agreement = multiFrameAgreement(frames);
+  const agreementBonus = Math.round(agreement * 10);
+  return Math.max(0, Math.min(100, base + bioBoost + agreementBonus));
+}
+
+/**
+ * Per-joint agreement across the frame stream. Returns 0..1 — fraction
+ * of frames where BOTH hips AND BOTH shoulders cleared the usable
+ * threshold. These are the two anchor pairs every Phase K metric
+ * depends on; if they're flaky the whole analysis is flaky.
+ */
+function multiFrameAgreement(frames: PoseFrame[]): number {
+  if (frames.length === 0) return 0;
+  let goodCount = 0;
+  for (const f of frames) {
+    const lh = f.keypoints.find((k) => k.name === 'left_hip');
+    const rh = f.keypoints.find((k) => k.name === 'right_hip');
+    const ls = f.keypoints.find((k) => k.name === 'left_shoulder');
+    const rs = f.keypoints.find((k) => k.name === 'right_shoulder');
+    if (lh && rh && ls && rs &&
+        lh.score >= USABLE_KEYPOINT_SCORE && rh.score >= USABLE_KEYPOINT_SCORE &&
+        ls.score >= USABLE_KEYPOINT_SCORE && rs.score >= USABLE_KEYPOINT_SCORE) {
+      goodCount++;
+    }
+  }
+  return goodCount / frames.length;
+}
+
+/**
+ * 2026-05-22 — Roll up per-joint confidence across all frames. For
+ * each tracked joint family (hip / shoulder / knee / wrist / ankle /
+ * head) we take the MAX score observed for either side across the
+ * frame stream — the joint was "visible enough" if it showed up
+ * clearly even ONCE. Returns 0..1 per family.
+ */
+function computeJointConfidence(frames: PoseFrame[]): JointConfidence {
+  const empty: JointConfidence = { hip: 0, shoulder: 0, knee: 0, wrist: 0, ankle: 0, head: 0 };
+  if (frames.length === 0) return empty;
+  const pairs: { name: keyof JointConfidence; joints: string[] }[] = [
+    { name: 'hip',      joints: ['left_hip', 'right_hip'] },
+    { name: 'shoulder', joints: ['left_shoulder', 'right_shoulder'] },
+    { name: 'knee',     joints: ['left_knee', 'right_knee'] },
+    { name: 'wrist',    joints: ['left_wrist', 'right_wrist'] },
+    { name: 'ankle',    joints: ['left_ankle', 'right_ankle'] },
+    { name: 'head',     joints: ['nose'] },
+  ];
+  const out: JointConfidence = { ...empty };
+  for (const p of pairs) {
+    let maxScore = 0;
+    for (const f of frames) {
+      for (const j of p.joints) {
+        const k = f.keypoints.find((kp) => kp.name === j);
+        if (k && k.score > maxScore) maxScore = k.score;
+      }
+    }
+    out[p.name] = Math.round(maxScore * 100) / 100;
+  }
+  return out;
+}
+
+/**
+ * 2026-05-22 — Partial-view detector. Returns true when fewer than
+ * half of the expected anchor joints (hip + shoulder + head) cleared
+ * the usable threshold in the BEST frame. Signals the UI to surface
+ * a "step back / reframe" hint.
+ */
+function detectPartialView(frames: PoseFrame[]): boolean {
+  if (frames.length === 0) return true;
+  const anchors = ['left_hip', 'right_hip', 'left_shoulder', 'right_shoulder', 'nose'];
+  let bestCount = 0;
+  for (const f of frames) {
+    const count = anchors.filter((name) => {
+      const k = f.keypoints.find((kp) => kp.name === name);
+      return k && k.score >= USABLE_KEYPOINT_SCORE;
+    }).length;
+    if (count > bestCount) bestCount = count;
+  }
+  return bestCount < Math.ceil(anchors.length / 2);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -268,6 +380,8 @@ function emptyResult(
     reason,
     age_band: band,
     mirrored: lefty,
+    joint_confidence: { hip: 0, shoulder: 0, knee: 0, wrist: 0, ankle: 0, head: 0 },
+    partial_view: true,
   };
 }
 
