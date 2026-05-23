@@ -102,6 +102,16 @@ export async function analyzeLie(
 
   try {
     const timeoutId = setTimeout(() => myController.abort(), REQUEST_TIMEOUT_MS);
+    // 2026-05-22 — Fix Q follow-up audit. lieAnalysisService was sending
+    // voiceGender only; backend resolvePersona(voiceGender) fell back to
+    // Kevin for non-Serena even when Serena/Tank was selected. Threading
+    // persona now closes that silent bleed.
+    let _persona: 'kevin' | 'serena' | 'harry' | 'tank' | undefined;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mod = require('../store/settingsStore') as typeof import('../store/settingsStore');
+      _persona = mod.useSettingsStore.getState().caddiePersonality;
+    } catch { /* fall through to voiceGender on backend */ }
     const res = await fetch(`${apiUrl}/api/lie-analysis`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -110,6 +120,7 @@ export async function analyzeLie(
         image_media_type: imageMediaType,
         context,
         voiceGender,
+        persona: _persona,
       }),
       signal: myController.signal,
     }).finally(() => clearTimeout(timeoutId));

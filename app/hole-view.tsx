@@ -161,6 +161,9 @@ export default function HoleView() {
   const backYards = Number(String(params.back ?? '')) || 0;
 
   const { voiceGender, language } = useSettingsStore();
+  // 2026-05-22 — Fix Q follow-up audit. Pull persona too so the vision
+  // call below renders in the active caddie's voice.
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const { dominantMiss, firstName } = usePlayerProfileStore();
   const { setSmartVisionState } = useSmartVision();
   const {
@@ -655,6 +658,11 @@ export default function HoleView() {
           mode: 'hole', image: base64, hole, par,
           distance: centerYards, courseName,
           playerFirstName: firstName, dominantMiss, isRoundActive,
+          // 2026-05-22 — Fix Q follow-up audit: thread persona +
+          // voiceGender so the vision response lands in the active
+          // caddie's voice instead of getCaddieNameFor(null)→Kevin.
+          voiceGender,
+          persona: caddiePersonality,
         }),
       });
       if (!res.ok) throw new Error('API error ' + res.status);

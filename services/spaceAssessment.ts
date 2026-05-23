@@ -70,10 +70,17 @@ export async function scanSpace(
 
   try {
     const timeoutId = setTimeout(() => myController.abort(), REQUEST_TIMEOUT_MS);
+    // 2026-05-22 — Fix Q follow-up audit. Threading persona.
+    let _persona: 'kevin' | 'serena' | 'harry' | 'tank' | undefined;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mod = require('../store/settingsStore') as typeof import('../store/settingsStore');
+      _persona = mod.useSettingsStore.getState().caddiePersonality;
+    } catch { /* fall through to voiceGender on backend */ }
     const res = await fetch(`${apiUrl}/api/space-scan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image_b64: imageBase64, image_media_type: imageMediaType, voiceGender }),
+      body: JSON.stringify({ image_b64: imageBase64, image_media_type: imageMediaType, voiceGender, persona: _persona }),
       signal: myController.signal,
     }).finally(() => clearTimeout(timeoutId));
 

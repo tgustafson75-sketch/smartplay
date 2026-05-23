@@ -23,10 +23,19 @@ async function callSynthesis(
   payload: Record<string, unknown>,
 ): Promise<string | null> {
   try {
+    // 2026-05-22 — Fix Q follow-up audit. Threading persona alongside
+    // voiceGender so the synthesized context lands in the selected
+    // caddie's voice, not the gender→Kevin fallback.
+    const _settings = useSettingsStore.getState();
     const res = await fetch(`${apiUrl()}/api/context-synthesis`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, payload, voiceGender: useSettingsStore.getState().voiceGender ?? 'male' }),
+      body: JSON.stringify({
+        type,
+        payload,
+        voiceGender: _settings.voiceGender ?? 'male',
+        persona: _settings.caddiePersonality,
+      }),
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) {

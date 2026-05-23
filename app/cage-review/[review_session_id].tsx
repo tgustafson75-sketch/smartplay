@@ -60,6 +60,10 @@ export default function CageReviewInterview() {
   const router = useRouter();
   const { sessionHistory, updateShotLabels } = useCageStore();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
+  // 2026-05-22 — Fix Q follow-up audit. Thread persona on every
+  // /api/cage-review fetch below so responses stay in the active
+  // caddie's voice.
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
   const [review, setReview] = useState<ReviewSession | null>(null);
@@ -152,6 +156,9 @@ export default function CageReviewInterview() {
           feel: shot.feel,
           shape: shot.shape,
           club: shot.club,
+          // 2026-05-22 — Fix Q audit. Question is spoken in caddie's voice.
+          voiceGender,
+          persona: caddiePersonality,
         }),
       });
       const data = await res.json() as { question?: string };
@@ -212,7 +219,14 @@ export default function CageReviewInterview() {
       const res = await fetch(apiUrl + '/api/cage-review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'extract', transcript: responseText }),
+        body: JSON.stringify({
+          action: 'extract',
+          transcript: responseText,
+          // 2026-05-22 — Fix Q audit. Extract is structured (labels) but
+          // server-side system prompt still benefits from persona context.
+          voiceGender,
+          persona: caddiePersonality,
+        }),
       });
       const data = await res.json() as { labels?: Record<string, unknown> };
       const rawLabels = (data.labels ?? {}) as Record<string, unknown>;
@@ -284,6 +298,10 @@ export default function CageReviewInterview() {
             action: 'vocab',
             transcripts: completed.vocabulary_observations,
             total_reviewed: completed.shots_reviewed.length,
+            // 2026-05-22 — Fix Q audit. Vocab summary string is the
+            // caddie's perspective — must render in active persona.
+            voiceGender,
+            persona: caddiePersonality,
           }),
         });
         const data = await res.json() as {

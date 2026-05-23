@@ -38,6 +38,22 @@ export function getCachedContent(courseId: string): CourseContent | null {
   return memCache.get(courseId) ?? null;
 }
 
+/** 2026-05-22 — Fix Q follow-up audit. Wipes both mem + AsyncStorage
+ *  caches so the next fetchCourseContent() request lands in the active
+ *  caddie's voice. Called from setCaddiePersonality when persona changes
+ *  so a cached Kevin-voice course-content blob doesn't keep surfacing
+ *  after the user picks Serena. */
+export async function clearCourseContentCache(): Promise<void> {
+  memCache.clear();
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const courseKeys = keys.filter(k => k.startsWith('coursecontent:'));
+    if (courseKeys.length > 0) await AsyncStorage.multiRemove(courseKeys);
+  } catch (e) {
+    console.log('[courseContent] clearCache persisted-wipe failed (non-fatal):', e);
+  }
+}
+
 async function readPersisted(courseId: string): Promise<CourseContent | null> {
   try {
     const raw = await AsyncStorage.getItem(key(courseId));
@@ -75,10 +91,19 @@ export async function fetchCourseContent(input: CourseContentInput): Promise<Cou
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   try {
+    // 2026-05-22 — Fix Q follow-up audit. Threading persona so
+    // course About / Caddie Tips / Hole Notes render in the active
+    // caddie's voice rather than the voiceGender→Kevin fallback.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const _settings = require('../store/settingsStore').useSettingsStore.getState();
     const res = await fetch(`${apiUrl}/api/course-content`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...input, voiceGender: require('../store/settingsStore').useSettingsStore.getState().voiceGender ?? 'male' }),
+      body: JSON.stringify({
+        ...input,
+        voiceGender: _settings.voiceGender ?? 'male',
+        persona: _settings.caddiePersonality,
+      }),
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) {

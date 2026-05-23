@@ -379,6 +379,16 @@ export const useSettingsStore = create<SettingsState>()(
             const briefMod = require('../services/briefingGenerator');
             briefMod.clearBriefingCache?.();
           } catch { /* ignore */ }
+          // 2026-05-22 — Fix Q follow-up audit. Also clear the course-
+          // content cache (About / Caddie Tips / Hole Notes). That blob
+          // was generated in the prior persona's voice and would keep
+          // surfacing on every course detail view until the weekly TTL
+          // refresh — long enough to be a visible bleed.
+          try {
+            const courseMod = require('../services/courseContentService');
+            void courseMod.clearCourseContentCache?.().catch?.(() => {});
+          } catch { /* ignore */ }
+          console.log(`[persona] switched ${prev} → ${p}; cleared filler + briefing + course-content caches`);
         }
       },
       setThemePreference: (p) => set({ theme_preference: p }),
