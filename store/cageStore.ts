@@ -111,6 +111,13 @@ export interface UploadMetadata {
   tag?: SwingTag | null;
   has_audio?: boolean;
   duration_sec?: number | null;
+  /** 2026-05-22 — Capture device. Drives analyzer routing in
+   *  swingLibrary.getAnalyzerKind(): 'meta_glasses' POV downward video
+   *  (hands + putter + ball) does NOT fit poseAnalysisApi's full-body
+   *  swing model — those route to puttingAnalysisService instead.
+   *  'phone' is the legacy upload path (full-body tripod or partner-
+   *  held). 'unknown' = unset, treat as 'phone' for compatibility. */
+  source_device?: 'meta_glasses' | 'phone' | 'unknown' | null;
 }
 
 export interface CageSession {

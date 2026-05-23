@@ -117,18 +117,10 @@ export const queryStatusHandler: IntentHandler = {
           ? intent.parameters.spoken_read
           : null;
         const result = await putting.analyzePutt({ spoken_read: spoken });
-        if (!result) {
-          return {
-            success: false,
-            voice_response: "Couldn't run the putting analysis right now.",
-            side_effects: ['query:putt_analysis:error'],
-            follow_up_needed: false,
-          };
-        }
         return {
           success: true,
-          voice_response: result.voice_summary,
-          side_effects: [`query:putt_analysis:conf_${result.confidence}`],
+          voice_response: result.caddieComment,
+          side_effects: [`query:putt_analysis:score_${result.overallScore}`],
           follow_up_needed: false,
         };
       }

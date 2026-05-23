@@ -45,6 +45,11 @@ export default function UploadSwing() {
   const [notes, setNotes] = useState('');
   const [swinger, setSwinger] = useState('Me');
   const [tag, setTag] = useState<SwingTag | null>(null);
+  // 2026-05-22 — Meta Ray-Ban glasses tag. POV downward video of hands/
+  // putter/ball can't be read by the full-body swing-pose model. When
+  // ON, the session is routed through puttingAnalysisService instead of
+  // Phase K's pose pipeline. Auto-implies the 'putt' tag for clarity.
+  const [sourceDevice, setSourceDevice] = useState<'meta_glasses' | 'phone' | null>(null);
 
   const onPick = async () => {
     const result = await pickVideo();
@@ -68,9 +73,15 @@ export default function UploadSwing() {
     if (!uri) return;
     setStep('saving');
     uploadLog('save-tap', { club, has_audio: hasAudio, duration_sec: durationSec });
+    // 2026-05-22 — When the user flagged Meta glasses but didn't pick
+    // a tag, auto-imply 'putt' (most common glasses POV use case so
+    // the library + analyzer-router agree on intent).
+    const effectiveTag: SwingTag | null =
+      sourceDevice === 'meta_glasses' && !tag ? 'putt' : tag;
     const sessionId = ingestVideoFromPick({
       uri, club, notes: notes.trim() || null, swinger: swinger.trim() || 'Me',
-      tag, has_audio: hasAudio, duration_sec: durationSec,
+      tag: effectiveTag, has_audio: hasAudio, duration_sec: durationSec,
+      source_device: sourceDevice,
     });
     // Phase V — Kevin acknowledges the upload immediately and we navigate
     // straight to the swing detail surface. Feels like submitting work to
@@ -166,6 +177,48 @@ export default function UploadSwing() {
               />
             </View>
 
+            {/* 2026-05-22 — Capture device. Meta Ray-Ban POV video routes
+                to the putting analyzer (puttingAnalysisService) instead
+                of Phase K's full-body swing pose pipeline. */}
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.label, { color: colors.text_muted }]}>CAPTURE DEVICE</Text>
+              <View style={styles.tagRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.pill,
+                    { borderColor: colors.border, backgroundColor: colors.surface_elevated },
+                    sourceDevice === 'phone' && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
+                  ]}
+                  onPress={() => setSourceDevice(sourceDevice === 'phone' ? null : 'phone')}
+                >
+                  <Text style={[
+                    styles.pillText,
+                    { color: colors.text_muted },
+                    sourceDevice === 'phone' && { color: colors.accent, fontWeight: '700' },
+                  ]}>📱 Phone</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.pill,
+                    { borderColor: colors.border, backgroundColor: colors.surface_elevated },
+                    sourceDevice === 'meta_glasses' && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
+                  ]}
+                  onPress={() => setSourceDevice(sourceDevice === 'meta_glasses' ? null : 'meta_glasses')}
+                >
+                  <Text style={[
+                    styles.pillText,
+                    { color: colors.text_muted },
+                    sourceDevice === 'meta_glasses' && { color: colors.accent, fontWeight: '700' },
+                  ]}>🕶️ Meta Glasses</Text>
+                </TouchableOpacity>
+              </View>
+              {sourceDevice === 'meta_glasses' && (
+                <Text style={[styles.helperText, { color: colors.text_muted }]}>
+                  POV downward video — routes to PuttingLab analysis (face / stroke / read).
+                </Text>
+              )}
+            </View>
+
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text style={[styles.label, { color: colors.text_muted }]}>TAG</Text>
               <View style={styles.tagRow}>
@@ -233,6 +286,7 @@ const styles = StyleSheet.create({
   },
   pillText: { fontSize: 13, fontWeight: '600' },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 },
+  helperText: { fontSize: 11, marginTop: 8, fontStyle: 'italic' },
   primaryBtn: {
     marginHorizontal: 16, marginTop: 18, borderRadius: 12,
     paddingVertical: 14, alignItems: 'center',

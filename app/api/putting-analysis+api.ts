@@ -1,27 +1,24 @@
 /**
- * 2026-05-22 — PuttingLab analysis endpoint.
+ * 2026-05-22 — PuttingLab analysis endpoint (v2 — structured schema).
  *
- * Receives frames (or a video URL) + the player's spoken read + course
- * geometry, runs a Claude Sonnet multimodal call tuned for PUTTING
- * cues (NOT full-body swing — Phase K's swing analyzer handles that
- * separately), and returns a structured PuttingAnalysis JSON.
+ * Receives frames + spoken read + course context + optional distance,
+ * runs Claude Sonnet 4.5 vision tuned for PUTTING cues (not full-body
+ * swing — that lives in cage-analysis), and returns the full structured
+ * PuttingAnalysis JSON the client's normalize() expects.
  *
  * Defensive:
- *   - No frames + no spoken_read → returns a baseline "unknown" shell
- *     the client's normalize() handles. We don't 4xx in that case
- *     because the player wants ANY feedback, not an error toast.
- *   - Frames cap: first 6 frames passed to the model. More than that
- *     burns vision tokens without adding signal — putting has at most
- *     setup, address, top-of-back, impact, follow-through, roll.
- *   - 25s timeout on the Anthropic call; longer than chat but shorter
- *     than the client's 30s so the client always gets a response.
+ *   - Empty inputs → "unknown" shell with low confidence. We never 5xx
+ *     on missing media; the player wants ANY feedback, not an error.
+ *   - MAX_FRAMES=6 cap. Putting has at most setup / address / top-of-back
+ *     / impact / follow-through / roll.
+ *   - 25s Anthropic timeout (< client's 30s) so the client always sees
+ *     a response.
  */
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName } from '../../lib/persona';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
-
 const MAX_FRAMES = 6;
 
 interface RequestBody {
@@ -29,6 +26,7 @@ interface RequestBody {
   video_url?: string | null;
   spoken_read?: string | null;
   notes?: string | null;
+  distance_feet?: number | null;
   hole_number?: number | null;
   course_id?: string | null;
   green_centroid?: { lat: number; lng: number } | null;
@@ -54,18 +52,14 @@ export async function POST(request: Request) {
       hasVideo,
       hasRead,
       hole: body.hole_number,
-      course: body.course_id,
+      dist: body.distance_feet,
     });
 
-    // Defensive bootstrap path: with no frames AND no spoken read, return
-    // an "unknown" shell — the client's normalize() turns this into a
-    // useful fallback without erroring out. Anything is better than a
-    // server 5xx the player has to recover from mid-round.
     if (!hasFrames && !hasVideo && !hasRead) {
-      return Response.json(makeUnknownShell(caddieName));
+      return Response.json(unknownShell(caddieName, body));
     }
 
-    // Build the multimodal content array.
+    // Multimodal user content: frames, then context text.
     const userContent: Anthropic.Messages.ContentBlockParam[] = [];
     for (const b64 of frames) {
       userContent.push({
@@ -73,22 +67,24 @@ export async function POST(request: Request) {
         source: { type: 'base64', media_type: 'image/jpeg', data: b64 },
       });
     }
-    const contextLines: string[] = [];
-    if (hasRead) contextLines.push(`Player's spoken read: "${body.spoken_read!.trim()}"`);
-    if (body.notes) contextLines.push(`Notes: ${body.notes}`);
-    if (body.hole_number) contextLines.push(`Hole: ${body.hole_number}`);
-    if (body.video_url) contextLines.push(`Video URL: ${body.video_url}`);
+    const ctx: string[] = [];
+    if (hasRead) ctx.push(`Player's spoken read: "${body.spoken_read!.trim()}"`);
+    if (body.notes) ctx.push(`Notes: ${body.notes}`);
+    if (typeof body.distance_feet === 'number') ctx.push(`Stated putt distance: ${body.distance_feet} feet`);
+    if (body.hole_number) ctx.push(`Hole: ${body.hole_number}`);
+    if (body.video_url) ctx.push(`Video URL: ${body.video_url}`);
+    if (body.green_centroid) ctx.push(`Green centroid: ${JSON.stringify(body.green_centroid)}`);
     userContent.push({
       type: 'text',
-      text: contextLines.join('\n') + '\n\nReturn ONLY the JSON object described in the system prompt. No preamble.',
+      text: (ctx.length ? ctx.join('\n') + '\n\n' : '') +
+        'Return ONLY the JSON object described in the system prompt. No preamble.',
     });
 
-    const system = buildSystemPrompt(caddieName);
     const result = await anthropic.messages.create({
       model: 'claude-sonnet-4-5',
-      max_tokens: 800,
+      max_tokens: 1000,
       temperature: 0.2,
-      system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+      system: [{ type: 'text', text: buildSystem(caddieName), cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userContent }],
     });
 
@@ -97,56 +93,90 @@ export async function POST(request: Request) {
     const parsed = safeParse(raw);
     if (!parsed) {
       console.warn('[putting] parse failed, returning shell');
-      return Response.json(makeUnknownShell(caddieName));
+      return Response.json(unknownShell(caddieName, body));
     }
     return Response.json(parsed);
   } catch (err) {
     console.log('[putting] error:', err);
-    return Response.json(makeUnknownShell('Kevin'));
+    return Response.json(unknownShell('Kevin', null));
   }
 }
 
-function buildSystemPrompt(caddieName: string): string {
-  return `You are ${caddieName}, a putting-specialist caddie inside SmartPlay. You are analyzing a PUTT — not a full swing. The video / frames are usually POV (Meta Ray-Ban glasses) showing the hands, putter, ball, and green from the player's eye-line.
+function buildSystem(caddieName: string): string {
+  return `You are ${caddieName}, a putting-specialist coach inside SmartPlay. You analyze PUTTS — not full swings. Frames are typically POV (Meta Ray-Ban glasses) showing hands, putter, ball, and green from the player's eye-line.
 
-What to look for:
-  - Putter face angle at address (square / open / closed)
-  - Stroke path (straight-back-straight-through, slight arc, strong arc)
-  - Tempo and deceleration through impact
-  - Ball position relative to stance (forward / center / back)
-  - Head and eye stability
-  - Green texture cues (grain direction, sheen, undulation) when visible
+Read every visible cue:
+  - Putter face angle (address + impact): square / open / slightly-open / closed
+  - Stroke path: straight / slight-arc / outside-in / inside-out
+  - Tempo: smooth / decelerating / jerky / accelerating (deceleration flag = true when present)
+  - Ball position: center / forward / back (relative to stance)
+  - Stance width: narrow / standard / wide
+  - Grip pressure cues from knuckle whitening / wrist tension: light / medium / firm
+  - Head + eye stability (informs setup.quality)
+  - Green texture: grain direction, sheen, undulation → infer slope direction + severity
+  - Combine visual with player's spoken read + provided course context
 
-Combine the visual evidence with the player's spoken read and any course context provided.
-
-Return EXACTLY this JSON shape — no preamble, no code fences:
+Return EXACTLY this JSON shape — no preamble, no code fences, no extra fields:
 
 {
-  "alignment": "square" | "open" | "closed" | "unknown",
-  "stroke_path": "straight" | "slight_arc" | "strong_arc" | "unknown",
-  "speed": "firmer" | "softer" | "on_pace" | "unknown",
-  "recommended_line": string (one sentence — "two ball-widths outside left edge"),
-  "break_estimate": string | null ("~12 inches L→R" or null when unknown),
-  "mental_cue": string (one short sentence the player can rehearse pre-shot),
-  "alignment_note": string (one sentence about face/aim correction or confirmation),
-  "stroke_note": string (one sentence about stroke path / tempo / acceleration),
-  "confidence": integer 0..100 (your honest confidence, lower when frames are missing/poor),
-  "voice_summary": string (15-25 words in ${caddieName}'s voice — calm/measured/intense per persona)
+  "puttId": string,                        // e.g. "putt_20260522_abcd" — generate fresh
+  "timestamp": string,                     // ISO 8601 UTC, current moment
+  "holeNumber": integer | undefined,       // copy from input if provided
+  "distanceFeet": integer,                 // your best estimate; honor input if given
+
+  "greenSlope": {
+    "direction": "left-to-right" | "right-to-left" | "straight" | "uphill" | "downhill",
+    "severity": "flat" | "subtle" | "moderate" | "severe",
+    "breakInches": number,                 // best estimate of total side-break
+    "confidence": integer 0..100
+  },
+
+  "setup": {
+    "alignment": "square" | "open" | "closed" | "slightly-open" | "slightly-closed",
+    "ballPosition": "center" | "forward" | "back",
+    "stanceWidth": "narrow" | "standard" | "wide",
+    "gripPressure": "light" | "medium" | "firm",
+    "quality": integer 0..100
+  },
+
+  "stroke": {
+    "path": "straight" | "slight-arc" | "outside-in" | "inside-out",
+    "tempo": "smooth" | "decelerating" | "jerky" | "accelerating",
+    "faceAngleAtImpact": "square" | "open" | "closed",
+    "deceleration": boolean,
+    "quality": integer 0..100
+  },
+
+  "readAccuracy": {
+    "wasCorrect": boolean,                 // was the spoken read consistent with green cues?
+    "suggestedAdjustment": string,         // "Play 2-3 inches right of cup" etc
+    "confidence": integer 0..100
+  },
+
+  "recommendation": {
+    "line": string,                        // "Aim one ball outside right edge"
+    "speedFeel": string,                   // "Die it into the hole — smooth pendulum"
+    "mentalCue": string,                   // "Trust the subtle break. Breathe easy."
+    "technicalCue": string                 // "Maintain slight acceleration through impact"
+  },
+
+  "overallScore": integer 0..100,          // weighted blend of setup + stroke + read
+  "caddieComment": string                  // 25-45 word persona-aware spoken summary
 }
 
-Tone:
+Persona tone for caddieComment (prefix with "${caddieName} here — " when natural):
   - Kevin: calm, conversational, friendly
   - Serena: measured, professional, precise vocabulary
-  - Tank: direct, intense, no fluff
+  - Tank: direct, intense, no fluff ("Roger that")
   - Harry: encouraging, light, brief
 
-Confidence guide:
+Confidence calibration (the four 0..100 numbers):
   - 80-100: clear frames + spoken read aligned with what you see
   - 50-79: one source strong, the other thin
   - 25-49: heavy inference from limited evidence
-  - 0-24: not enough to call — recommend re-recording
+  - 0-24: not enough to call
 
-Never invent geometric numbers you can't see. Use "unknown" liberally.`;
+Never invent numbers you can't see. If unsure on a category, pick the most conservative enum (e.g. "straight" slope, "smooth" tempo) and lower the corresponding confidence/quality score. The caddieComment should be honest about what was and wasn't visible.`;
 }
 
 function safeParse(raw: string): Record<string, unknown> | null {
@@ -160,17 +190,23 @@ function safeParse(raw: string): Record<string, unknown> | null {
   }
 }
 
-function makeUnknownShell(caddieName: string): Record<string, unknown> {
+function unknownShell(caddieName: string, body: RequestBody | null): Record<string, unknown> {
   return {
-    alignment: 'unknown',
-    stroke_path: 'unknown',
-    speed: 'unknown',
-    recommended_line: 'Trust your read.',
-    break_estimate: null,
-    mental_cue: 'Smooth pendulum, eyes still through impact.',
-    alignment_note: 'Square the face to your line.',
-    stroke_note: 'Accelerate gently — no deceleration.',
-    confidence: 25,
-    voice_summary: `${caddieName} here. Smooth pendulum. Eyes still. Trust your line.`,
+    puttId: 'putt_' + Date.now().toString(36),
+    timestamp: new Date().toISOString(),
+    holeNumber: body?.hole_number ?? undefined,
+    distanceFeet: body?.distance_feet ?? 0,
+    greenSlope: { direction: 'straight', severity: 'subtle', breakInches: 0, confidence: 25 },
+    setup: { alignment: 'square', ballPosition: 'center', stanceWidth: 'standard', gripPressure: 'medium', quality: 50 },
+    stroke: { path: 'straight', tempo: 'smooth', faceAngleAtImpact: 'square', deceleration: false, quality: 50 },
+    readAccuracy: { wasCorrect: true, suggestedAdjustment: 'Trust your read.', confidence: 25 },
+    recommendation: {
+      line: 'Trust your read.',
+      speedFeel: 'Die it into the hole — smooth pendulum.',
+      mentalCue: 'Smooth pendulum, eyes still through impact.',
+      technicalCue: 'Accelerate gently — no deceleration.',
+    },
+    overallScore: 50,
+    caddieComment: `${caddieName} here. Smooth pendulum, eyes still, trust the line.`,
   };
 }

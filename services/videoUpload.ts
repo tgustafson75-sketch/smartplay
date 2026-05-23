@@ -142,6 +142,34 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     return { primary_issue: null, drill_recommendation: null };
   }
 
+  // 2026-05-22 — Putting sessions (glasses POV or putt/chip tag) do NOT
+  // fit Phase K's full-body swing pose model. Route through the dedicated
+  // puttingAnalysisService instead. Phase K returns nulls so the legacy
+  // swing-biomechanics card hides on the cage-review surface; PuttingLab
+  // result lands via puttingAnalysisService.analyzePutt and is rendered
+  // by the cage-review "Putting" tab (next sprint).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getAnalyzerKind } = require('./swingLibrary') as typeof import('./swingLibrary');
+    if (getAnalyzerKind(session) === 'putting') {
+      uploadLog('phase-k-skip-putting', { session_id: sessionId, source_device: session.upload?.source_device ?? null, tag: session.upload?.tag ?? null }, sessionId);
+      V6('STAGE 0 SKIP — putting session routes to puttingAnalysisService');
+      const putting = await import('./puttingAnalysisService');
+      const videoUri = session.shots.find(s => s.clipUri)?.clipUri ?? null;
+      void putting.analyzePutt({
+        video_url: videoUri,
+        spoken_read: session.upload?.notes ?? null,
+        notes: session.upload?.notes ?? null,
+      }).catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.log('[videoUpload] putting analyze failed (non-fatal):', msg);
+      });
+      return { primary_issue: null, drill_recommendation: null };
+    }
+  } catch (e) {
+    console.log('[videoUpload] analyzer-router check failed (non-fatal, continuing with swing pipeline):', e);
+  }
+
   const swings = session.shots.filter(s => s.clipUri);
   V6('STAGE 0 — session loaded', {
     source: session.source ?? 'live_cage',
@@ -528,6 +556,10 @@ export function ingestVideoFromPick(args: {
   taken_at?: number | null;
   has_audio?: boolean;
   duration_sec?: number | null;
+  /** 2026-05-22 — Source device tag. 'meta_glasses' routes the session
+   *  through puttingAnalysisService (POV downward video the swing-pose
+   *  model can't read). 'phone' = legacy full-body upload. */
+  source_device?: 'meta_glasses' | 'phone' | 'unknown' | null;
 }): string {
   const upload: UploadMetadata = {
     uploaded_at: Date.now(),
@@ -537,6 +569,7 @@ export function ingestVideoFromPick(args: {
     tag: args.tag ?? null,
     has_audio: args.has_audio ?? false,
     duration_sec: args.duration_sec ?? null,
+    source_device: args.source_device ?? null,
   };
   const sessionId = useCageStore.getState().ingestUploadedSwing({
     clipUri: args.uri,

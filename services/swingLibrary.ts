@@ -27,6 +27,34 @@ export interface LibraryEntry {
   thumbnail_uri: string | null;
 }
 
+/**
+ * 2026-05-22 — Analyzer routing. Putting needs a different vision model
+ * than full-body swing. Returns 'putting' when:
+ *   - upload.tag is 'putt' or 'chip', OR
+ *   - upload.source_device is 'meta_glasses' (POV downward video — the
+ *     swing-pose model can't read those frames, they're hands + putter
+ *     + ball, not a full-body swing)
+ * Otherwise returns 'swing' (the legacy Phase K poseAnalysisApi path).
+ *
+ * Consumers: cage-review / SwingLab upload flow checks this BEFORE
+ * kicking off pose analysis, and routes glasses POV clips through
+ * puttingAnalysisService.analyzePutt() instead.
+ */
+export type AnalyzerKind = 'putting' | 'swing';
+
+export function getAnalyzerKind(session: CageSession): AnalyzerKind {
+  const tag = session.upload?.tag;
+  if (tag === 'putt' || tag === 'chip') return 'putting';
+  if (session.upload?.source_device === 'meta_glasses') return 'putting';
+  return 'swing';
+}
+
+/** True when the session should be rendered with the PuttingLab card
+ *  shape (not the full-body swing biomechanics card). */
+export function isPuttingSession(session: CageSession): boolean {
+  return getAnalyzerKind(session) === 'putting';
+}
+
 function describe(session: CageSession): string {
   if (session.source === 'uploaded_video' && session.upload?.notes) {
     return session.upload.notes.slice(0, 60);
