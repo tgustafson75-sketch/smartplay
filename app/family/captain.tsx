@@ -20,7 +20,7 @@
  * we never ship contact data off the device.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, Pressable, TextInput, StyleSheet, Linking, Alert,
 } from 'react-native';
@@ -35,6 +35,11 @@ import {
   type SkillLevel,
   type AgeBand,
 } from '../../store/familyStore';
+import JuniorSwingTrendChart from '../../components/JuniorSwingTrendChart';
+import {
+  getMemberSwingHistory,
+  type JuniorSwingAnalysis,
+} from '../../services/juniorSwingAnalyzer';
 
 type CaptainRoleId = 'teammate' | 'coach';
 
@@ -309,6 +314,33 @@ function BroadcastCard({
     });
   };
 
+  // 2026-05-22 — Pre-built broadcast templates. Tap to populate the
+  // input. Captains type the same handful of messages every week
+  // (practice notice / match alert / tee time / weather call-off);
+  // this turns them into one-tap drafts. Free edit afterwards.
+  const templates: { label: string; build: () => string }[] = [
+    {
+      label: '🏌️ Practice',
+      build: () => `Practice tomorrow 3pm — ${teamName || 'team'} range. Bring rangefinder + 18 balls minimum.`,
+    },
+    {
+      label: '🏆 Match',
+      build: () => `Match this week — bus rolls 2:30pm. Match polos + clean shoes. Show up early to warm up.`,
+    },
+    {
+      label: '⛳ Tee time',
+      build: () => `Tee times posted. Check the group text. Be on the range 45 min before your block.`,
+    },
+    {
+      label: '🌧️ Weather call',
+      build: () => `Practice cancelled — weather. Indoor putting drills at home tonight. We're back Thursday.`,
+    },
+    {
+      label: '💯 Tournament prep',
+      build: () => `Tournament next weekend. Two course-prep rounds this week. Lock in your warmup routine.`,
+    },
+  ];
+
   return (
     <View style={[styles.broadcastCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
       <View style={styles.broadcastHeader}>
@@ -320,6 +352,18 @@ function BroadcastCard({
       <Text style={[styles.broadcastHint, { color: colors.text_muted }]}>
         Sends through your phone's Messages app to {teamName || 'the team'}. No data leaves the device.
       </Text>
+      {/* Template pills — tap to draft. Edit before send. */}
+      <View style={styles.templateRow}>
+        {templates.map((t) => (
+          <Pressable
+            key={t.label}
+            onPress={() => setMessage(t.build())}
+            style={[styles.templatePill, { borderColor: colors.border, backgroundColor: colors.surface_elevated }]}
+          >
+            <Text style={[styles.templatePillText, { color: colors.text_primary }]}>{t.label}</Text>
+          </Pressable>
+        ))}
+      </View>
       <TextInput
         value={message}
         onChangeText={setMessage}
@@ -447,6 +491,11 @@ function TeammateRow({
         </View>
         <Text style={[styles.rowChevron, { color: colors.text_muted }]}>›</Text>
       </Pressable>
+      {/* 2026-05-22 — Inline trend strip. Fetches per-teammate junior
+          history on mount; renders the sparkline + last/avg score
+          summary so the captain can scan the team at a glance without
+          tapping into each member. */}
+      <TeammateTrendStrip memberId={member.id} colors={colors} />
       <Pressable
         onPress={onEdit}
         hitSlop={8}
@@ -454,6 +503,51 @@ function TeammateRow({
       >
         <Text style={[styles.rowEditText, { color: colors.text_muted }]}>Edit</Text>
       </Pressable>
+    </View>
+  );
+}
+
+function TeammateTrendStrip({
+  memberId, colors,
+}: { memberId: string; colors: ReturnType<typeof useTheme>['colors'] }) {
+  const [history, setHistory] = useState<JuniorSwingAnalysis[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const h = await getMemberSwingHistory(memberId);
+      if (!cancelled) setHistory(h);
+    })();
+    return () => { cancelled = true; };
+  }, [memberId]);
+
+  if (!history || history.length < 2) return null;
+
+  const latest = history[history.length - 1]?.overallScore ?? 0;
+  const prior = history[history.length - 2]?.overallScore ?? latest;
+  const delta = latest - prior;
+
+  return (
+    <View style={[styles.trendStrip, { borderColor: colors.border }]}>
+      <View style={styles.trendChart}>
+        <JuniorSwingTrendChart
+          history={history}
+          width={170}
+          height={36}
+          color={colors.accent}
+        />
+      </View>
+      <View style={styles.trendNumbers}>
+        <Text style={[styles.trendLatest, { color: colors.text_primary }]}>{latest}</Text>
+        <Text
+          style={[
+            styles.trendDelta,
+            { color: delta >= 3 ? '#86efac' : delta <= -3 ? '#f87171' : colors.text_muted },
+          ]}
+        >
+          {delta === 0 ? '—' : `${delta > 0 ? '+' : ''}${delta}`}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -738,4 +832,20 @@ const styles = StyleSheet.create({
     fontSize: 14, minHeight: 96, textAlignVertical: 'top',
   },
   broadcastButtonRow: { flexDirection: 'row', gap: 10 },
+
+  trendStrip: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingTop: 8, paddingHorizontal: 4,
+    borderTopWidth: 1, marginTop: 4,
+  },
+  trendChart: { flex: 1 },
+  trendNumbers: { alignItems: 'flex-end', minWidth: 56 },
+  trendLatest: { fontSize: 18, fontWeight: '900', letterSpacing: -0.3 },
+  trendDelta: { fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
+
+  templateRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: -2 },
+  templatePill: {
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, borderWidth: 1,
+  },
+  templatePillText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
 });

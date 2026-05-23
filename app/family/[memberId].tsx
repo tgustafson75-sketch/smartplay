@@ -32,6 +32,8 @@ import {
 } from '../../services/glassesVisionInput';
 import JuniorSwingResultCard from '../../components/JuniorSwingResultCard';
 import JuniorSwingCompare from '../../components/JuniorSwingCompare';
+import JuniorSwingTrendChart from '../../components/JuniorSwingTrendChart';
+import { useWindowDimensions } from 'react-native';
 
 const BAND_LABEL: Record<AgeBand, string> = {
   tiny: 'Tiny',
@@ -242,6 +244,22 @@ export default function FamilyMemberScreen() {
           </View>
         ) : latest ? (
           <>
+            {/* 2026-05-22 — Progress dashboard. Trend strip lives ABOVE
+                the latest-swing card so the long-arc progress story
+                lands first. Renders when ≥2 swings are in history. */}
+            {history && history.length >= 2 && (
+              <View style={[styles.trendCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <JuniorSwingTrendChart
+                  history={history}
+                  width={Math.max(240, useWindowDimensions().width - 64)}
+                  height={84}
+                  label={`${member.firstName}'s LAST ${Math.min(12, history.length)} SWINGS`}
+                  showRange
+                  color={colors.accent}
+                />
+              </View>
+            )}
+
             <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>LATEST SWING</Text>
             <JuniorSwingResultCard analysis={latest} />
 
@@ -333,6 +351,9 @@ const styles = StyleSheet.create({
 
   loading: { padding: 24, alignItems: 'center', borderRadius: 14 },
 
+  trendCard: {
+    borderRadius: 14, borderWidth: 1, padding: 12, marginTop: 4,
+  },
   empty: {
     borderWidth: 1, borderRadius: 14, padding: 22, gap: 8, alignItems: 'center',
   },
