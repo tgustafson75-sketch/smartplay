@@ -28,6 +28,7 @@ import { getGreenOverride } from './courseGreenOverrides';
 // below mirrors resolveGreenCoords. The pair powers the "anchored
 // hole length" computation (marked tee → marked green).
 import { getTeeOverride } from './courseTeeOverrides';
+import { getCourseTruthSync } from './courseTruth';
 
 /**
  * Phase D-2 — SmartFinder data layer.
@@ -228,10 +229,29 @@ export function resolveGreenCoords(holeNumber: number): {
   front: ShotLocation | null;
   middle: ShotLocation | null;
   back: ShotLocation | null;
-  source: 'override' | 'courseHoles' | 'geometryCache' | 'none';
+  source: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none';
 } {
   const round = useRoundStore.getState();
   const courseId = round.activeCourseId ?? null;
+  // 2026-05-24 — Surveyed ground truth wins over EVERYTHING. The dev
+  // screen at app/dev/CourseTruth.tsx captures on-foot GPS at the
+  // green center; getCourseTruthSync reads from a cache hydrated at
+  // boot (services/courseTruth.ts → hydrateCourseTruthCache in
+  // app/_layout.tsx). TRUTH only carries a center coord; F/B stay
+  // null unless the user also has a Mark Green override (handled
+  // below — but truth short-circuits so override F/B is preserved
+  // only via that branch's own flow when truth is absent).
+  if (courseId) {
+    const truth = getCourseTruthSync(courseId, holeNumber);
+    if (truth) {
+      return {
+        front: null,
+        middle: { lat: truth.lat, lng: truth.lng },
+        back: null,
+        source: 'truth',
+      };
+    }
+  }
   // 2026-05-19 — user-captured Mark Green override wins. F/B are
   // approximated as middle ± 12 yards along the bearing axis only if
   // we have a tee anchor to compute bearing from; otherwise F/B stay

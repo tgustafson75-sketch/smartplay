@@ -27,12 +27,11 @@ Available intents:
    - "let me see SwingLab" -> { tool_name: "swinglab" }
    - "open the rangefinder" -> { tool_name: "smartfinder" }
    - "pull up my scorecard" -> { tool_name: "scorecard" }
-   - "I want to record a swing" -> { tool_name: "smartmotion" }
    - "show my dashboard" -> { tool_name: "dashboard" }
    - "open dashboard" -> { tool_name: "dashboard" }
    - "open settings" -> { tool_name: "settings" }
    - "go to settings" -> { tool_name: "settings" }
-   - "open SmartMotion" / "capture my swing" -> { tool_name: "smartmotion" }
+   - "open SmartMotion" -> { tool_name: "smartmotion" }
    - "open TightLie" / "check my lie" / "what's the play" / "analyze my lie" -> { tool_name: "tightlie" }
    - "open acoustic test" / "acoustic test bench" / "test bench" / "test the mic" -> { tool_name: "acoustic" }
    - "open GPS test" / "GPS test bench" / "test the GPS" -> { tool_name: "gps_test" }
@@ -42,7 +41,7 @@ Available intents:
    - "I'm coaching Emma" / "coach Mike" / "let's coach Sarah" / "I'm gonna coach Jenny" -> { tool_name: "coach_mode", player_name: "Emma" } (extract the first name verbatim into player_name; preserves capitalization as spoken)
 
 2. query_status — User wants information about current state.
-   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare" | "distance_to_green", member_name?: string, notes?: string, lie_hint?: string, target_yards?: number, against?: "self_previous" | "tour_median" | "amateur_good" }
+   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare" | "distance_to_green" | "what_did_meta_say", member_name?: string, notes?: string, lie_hint?: string, target_yards?: number, against?: "self_previous" | "tour_median" | "amateur_good" }
    Examples:
    - "what's my score" -> { query_topic: "score" }
    - "what hole am I on" -> { query_topic: "hole" }
@@ -56,6 +55,7 @@ Available intents:
    - "what's the play from the rough" / "what's the play from fluffy lie" -> { query_topic: "shot_strategy", lie_hint: "rough" }
    - "compare to my last swing" / "compare my swing to my last one" / "vs my last swing" -> { query_topic: "swing_compare", against: "self_previous" }
    - "compare to tour" / "compare to the pros" / "how do I compare to tour" -> { query_topic: "swing_compare", against: "tour_median" }
+   - "what did Meta say" / "what did Meta tell me" / "what'd the glasses say" / "what did Meta AI say" / "Meta's advice" / "what did Meta say on this hole" -> { query_topic: "what_did_meta_say" }
    - "what's my yardage" / "what's my distance" / "how far" / "how far am I" / "yardage" -> { query_topic: "distance_to_green" }
    - "how far to the pin" / "how far to the green" / "yardage to the pin" / "yardage to the green" / "distance to the pin" / "distance to the hole" / "how far to the flag" -> { query_topic: "distance_to_green" }
    - "going for my second shot" / "going for my third shot" / "what's the yardage for my approach" -> { query_topic: "distance_to_green" }
@@ -153,7 +153,7 @@ Available intents:
     parameters: { capture_type: "shot" | "swing", raw_utterance: string }
     Examples:
     - "record this shot" / "capture this shot" / "record this" -> { capture_type: "shot" }
-    - "record my swing" / "record this swing" -> { capture_type: "swing" }
+    - "record my swing" / "record this swing" / "capture my swing" / "I want to record a swing" -> { capture_type: "swing" }
     - "watch this" -> { intent_type: "media_capture", parameters: { capture_type: "swing" } }
     The clip lands in the swing library and on the shot record; user can replay/share later from the library — there is no auto-opening "hero shot" review pane (intentionally removed 2026-05-17).
 
@@ -193,6 +193,13 @@ Available intents:
    - "hole 9" -> { hole_number: 9 }
    Disambiguation: "next hole" / "previous hole" → navigate (relative). "I'm on hole N" / "starting hole N" / "teeing off N" → declare_hole (absolute). A bare score number ("I got a 5") → log_score, not declare_hole.
 
+16. ask_golf_father — User wants strategic in-round advice from Tank ("the Golf Father"). Hardcoded-rule channel for "what would Tank do here" / "Golf Father help" / "Tank advice" / "what's the play here". Distinct from query_status/shot_strategy (which is a generic shot question) — fires ONLY when the user names Tank / Golf Father OR asks for in-context strategic read.
+   parameters: { topic?: "course_management" | "mental" | "swing", subtopic?: "tank_advice", use_context?: boolean }
+   Examples:
+   - "what would Tank do here" / "Tank advice" / "give me Tank" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
+   - "what would the Golf Father do" / "Golf Father help" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
+   - "tell me what to do here" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
+
 15. sequence — User chained two or more independent commands in one utterance (separated by "and", "then", commas, or implicit pause). Each step is a real first-class intent above. Use ONLY when the steps are distinct actions; don't bundle a single clause that already encodes multiple params.
    parameters: { steps: [{ intent_type, parameters }, ...] }
    Examples:
@@ -215,7 +222,7 @@ The language reflects the transcript itself, not the user's preferred app langua
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "ask_golf_father" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null,

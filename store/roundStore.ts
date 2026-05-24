@@ -13,6 +13,7 @@ import type { RulesDecision } from '../types/penalty';
 // not at module-eval, so Metro's live-binding handles the cycle safely.
 // Switched from require() per the no-anti-pattern refinement pass.
 import { forceHoleReconciliation } from '../services/holeReconciliation';
+import { haversineYards } from '../utils/geoDistance';
 
 // ─── TYPES ────────────────────────────────
 
@@ -35,6 +36,39 @@ export interface CourseHole {
 }
 
 export type ShotLocation = { lat: number; lng: number };
+
+/**
+ * 2026-05-24 — External-source voice/AI utterance log entry.
+ *
+ * Today the only writer is services/metaGlassesIngest.ts (Meta View JSON
+ * import). Shape is intentionally source-agnostic so future bridges
+ * (AirPods on-device transcript export, Bose Soundscape voice exchanges,
+ * a real-time WebSocket bridge) can land in the same log without a
+ * schema change. The caddie brain reads this via
+ * useRoundStore.getState().externalContext to answer questions like
+ * "what did Meta say on this hole?".
+ *
+ *   source         — 'meta_glasses' today; widen the literal union as
+ *                    new bridges land
+ *   timestamp      — utterance epoch ms (assistant reply time)
+ *   hole           — best-effort attribution via GPS-nearest-green
+ *                    bucketing in metaGlassesIngest (300yd radius). May
+ *                    be the active currentHole when GPS is missing or
+ *                    null when neither resolves.
+ *   user_prompt    — what the human said TO the assistant
+ *   ai_response    — what the assistant replied
+ *   gps            — captured at utterance time; used for downstream
+ *                    hole-attribution sanity checks and for surfacing
+ *                    location on a future map view
+ */
+export type ExternalContext = {
+  source: 'meta_glasses' | string;
+  timestamp: number;
+  hole: number | null;
+  user_prompt: string;
+  ai_response: string;
+  gps: { lat: number; lng: number } | null;
+};
 
 // Phase 405 wave 3 — tee box selection. Standard course colors; the
 // 'unspecified' default fires when the user starts a round without
@@ -239,6 +273,39 @@ interface RoundState {
   // now this is just storage.
   emotionalLog: { state: string; valence: 'positive' | 'neutral' | 'negative'; hole: number; timestamp: number }[];
 
+  // 2026-05-24 — External-source utterance log. Today only fed by
+  // services/metaGlassesIngest.ts (Meta View JSON import); designed to
+  // be the destination for any third-party AI voice transcript we
+  // ingest (Bose / AirPods on-device transcription, future bridges).
+  // Soft-capped to 500 entries in appendExternalContext to prevent
+  // unbounded growth across rounds. Persisted so a query like "what did
+  // Meta say on hole 7" survives an app restart.
+  externalContext: ExternalContext[];
+
+  // 2026-05-24 — Location-type tagging from GPS-vs-courseHoles geometry.
+  // Tee/green detection via 30yd / 40yd radii; defaults to 'fairway' when
+  // GPS is inside the course bbox but not near a tee or the current
+  // green; 'unknown' before the first fix lands.
+  //
+  // CRITICAL: This does NOT advance currentHole. holeDetection.ts is the
+  // sole owner of hole transitions (10s sustained position + 60yd green
+  // gate + 30yd transition margin + cart-mode bonus + sequence-aware).
+  // The spec asked for inline auto-advance on tee detection — DROPPED
+  // because it would race holeDetection and reintroduce the H14→H15
+  // premature-transition regression documented at holeDetection.ts:36-46.
+  // Surface this state to consumers (SG-tee detector, pace tracker,
+  // strategy brain) — let holeDetection own the actual hole index.
+  currentLocationType: 'tee' | 'fairway' | 'green' | 'unknown';
+  currentTeeBox: { hole: number; lat: number; lng: number } | null;
+
+  // 2026-05-24 — Round-end timestamp. Currently always null during an
+  // active round; reserved for completed-round ingestion paths
+  // (metaGlassesIngest's roundStart..roundEnd filter). endRound() does
+  // not yet set this field — the active-round case uses Date.now() as
+  // the upper bound. Wire endRound to set this when historical
+  // ingestion is needed.
+  roundEndTime: number | null;
+
   // ─── ACTIONS ────────────────────────────
 
   startRound: (
@@ -302,6 +369,15 @@ interface RoundState {
   discardRound: () => void;
   // Phase AQ — append a synthesized round insight (rolling 10).
   addRoundInsight: (round_id: string, course: string, insight: string) => void;
+  /** 2026-05-24 — Append a single external-source utterance (e.g. one
+   *  Meta glasses voice exchange) to the externalContext log.
+   *  Soft-capped at 500 (FIFO) so persistence doesn't bloat. */
+  appendExternalContext: (ctx: ExternalContext) => void;
+  /** 2026-05-24 — Update currentLocationType from a fresh GPS fix.
+   *  Called by gpsManager on every accepted fix. Cheap: early-returns
+   *  when no courseHoles loaded; dedups when the type+tee box didn't
+   *  change. Does NOT touch currentHole — holeDetection owns that. */
+  setLocationContext: (coords: ShotLocation) => void;
   /** Phase R — capture a memory photo at the current hole during an active round. */
   addRoundPhoto: (uri: string) => void;
   /** Phase Q.5b — pending course id signaled by Play tab / Course Detail
@@ -408,12 +484,18 @@ export const useRoundStore = create<RoundState>()(
       holeStats: [],
       currentRoundPhotos: [],
       roundStartTime: null,
+      roundEndTime: null,
       roundNumber: 0,
       roundHistory: [],
       // Phase AQ
       recentInsights: [],
       // Phase BJ
       emotionalLog: [],
+      // 2026-05-24 — Meta glasses + future external voice context.
+      externalContext: [],
+      // 2026-05-24 — Tee/fairway/green tagging from GPS geometry.
+      currentLocationType: 'unknown',
+      currentTeeBox: null,
       active_ghost: null,
       // Phase 405 wave 3 — tee box selection. 'unspecified' until user picks.
       selectedTee: 'unspecified',
@@ -425,6 +507,56 @@ export const useRoundStore = create<RoundState>()(
       setSelectedTee: (color) => set({ selectedTee: color }),
       setPendingLieAnalysis: (analysis) => set({ pendingLieAnalysis: analysis }),
       clearPendingLieAnalysis: () => set({ pendingLieAnalysis: null }),
+
+      // 2026-05-24 — Append + soft-cap. 500-entry FIFO keeps the
+      // persisted footprint bounded across multiple rounds of imports.
+      appendExternalContext: (ctx) => set((s) => {
+        const next = [...(s.externalContext ?? []), ctx];
+        return { externalContext: next.length > 500 ? next.slice(-500) : next };
+      }),
+
+      // 2026-05-24 — Location-type tagging. Pure geometry against
+      // courseHoles, no side effects on currentHole. Dedup on unchanged
+      // type+box so a steady fairway-walking GPS stream doesn't churn
+      // subscribers every 1-2s. See header comment on
+      // currentLocationType for why hole auto-advance was DROPPED.
+      setLocationContext: (coords) => set((s) => {
+        if (!s.courseHoles.length) return {};
+        const TEE_RADIUS_YARDS = 30;
+        const GREEN_RADIUS_YARDS = 40;
+
+        // Tee check across ALL holes (so SG-tee tagging works even
+        // before holeDetection has transitioned).
+        for (const hole of s.courseHoles) {
+          if (!hole.teeLat || !hole.teeLng) continue;
+          const distToTee = haversineYards(coords, { lat: hole.teeLat, lng: hole.teeLng });
+          if (distToTee <= TEE_RADIUS_YARDS) {
+            if (
+              s.currentLocationType === 'tee' &&
+              s.currentTeeBox?.hole === hole.hole
+            ) return {};
+            return {
+              currentLocationType: 'tee',
+              currentTeeBox: { hole: hole.hole, lat: hole.teeLat, lng: hole.teeLng },
+            };
+          }
+        }
+
+        // Green check against the active hole only — if you're standing
+        // on the wrong green, that's a different problem.
+        const green = s.courseHoles.find(h => h.hole === s.currentHole);
+        if (green?.middleLat && green?.middleLng) {
+          const distToGreen = haversineYards(coords, { lat: green.middleLat, lng: green.middleLng });
+          if (distToGreen <= GREEN_RADIUS_YARDS) {
+            if (s.currentLocationType === 'green' && s.currentTeeBox === null) return {};
+            return { currentLocationType: 'green', currentTeeBox: null };
+          }
+        }
+
+        // Default fairway. Dedup.
+        if (s.currentLocationType === 'fairway' && s.currentTeeBox === null) return {};
+        return { currentLocationType: 'fairway', currentTeeBox: null };
+      }),
 
       startRound: (course, holes, options) => {
         const courseId = options.courseId ?? null;
@@ -1435,7 +1567,11 @@ export const useRoundStore = create<RoundState>()(
         riskMode: s.riskMode,
         currentRoundPhotos: s.currentRoundPhotos,
         roundStartTime: s.roundStartTime,
+        roundEndTime: s.roundEndTime,
         emotionalLog: s.emotionalLog,
+        // 2026-05-24 — Persist Meta glasses + external context so a
+        // query about a prior hole survives an app restart.
+        externalContext: s.externalContext,
         // 2026-05-17 — second audit pass found two more in-round
         // fields that were initialized + mutated but missing from
         // partialize, so a crash mid-round lost them:

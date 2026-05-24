@@ -192,6 +192,12 @@ function processFix(raw: GpsFix): boolean {
     const orch = require('./courseDataOrchestrator');
     orch.pushSustainedFix?.(fix);
   } catch { /* non-fatal */ }
+  // 2026-05-24 — Location-type tagging (tee/fairway/green). roundStore
+  // dedups on unchanged state so this is cheap to call every fix.
+  // Does NOT touch currentHole — holeDetection.ts owns that.
+  try {
+    useRoundStore.getState().setLocationContext({ lat: fix.lat, lng: fix.lng });
+  } catch (e) { ownerSentinel('gps.setLocationContext', e); }
   return true;
 }
 

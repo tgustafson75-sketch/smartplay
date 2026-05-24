@@ -19,7 +19,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -145,9 +145,16 @@ export default function PermissionsScreen() {
           })}
         </View>
 
-        <Text style={styles.warningText}>
-          iOS will ask twice. First tap &quot;Allow While Using&quot;, then &quot;Change to Always Allow&quot; on the next screen.
-        </Text>
+        {Platform.OS === 'ios' && (
+          <Text style={styles.warningText}>
+            iOS will ask twice. First tap &quot;Allow While Using&quot;, then &quot;Change to Always Allow&quot; on the next screen.
+          </Text>
+        )}
+        {Platform.OS === 'android' && (
+          <Text style={styles.warningText}>
+            Tap &quot;Allow all the time&quot; so yardages keep updating when your phone is in the cart.
+          </Text>
+        )}
 
         <TouchableOpacity
           style={[styles.allowBtn, busy && styles.allowBtnBusy]}

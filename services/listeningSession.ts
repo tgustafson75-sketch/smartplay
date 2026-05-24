@@ -384,7 +384,7 @@ async function openSession() {
       if (responseAllowed) {
         if (intent.follow_up_question) {
           await stopSpeaking().catch(() => {});
-          await speak(intent.follow_up_question, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
+          await speak(intent.follow_up_question, settings.voiceGender, intent.language ?? settings.language, apiUrl, { userInitiated: true })
             .catch((e) => console.log('[listeningSession] follow_up speak failed', e));
         } else {
           // 2026-05-21 — Fix I shape A: every silent-failure branch below
@@ -507,7 +507,13 @@ async function openSession() {
         // doesn't queue behind a long conversational bridge — Tim's
         // "generic-then-relevant" disconnect on the 2nd question.
         await stopSpeaking().catch(() => {});
-        await speak(result.voice_response, settings.voiceGender, settings.language, apiUrl, { userInitiated: true });
+        // 2026-05-24 — Prefer the classifier-detected utterance language
+        // over the user's Settings language so a Spanish/Chinese
+        // utterance is spoken back through eleven_multilingual_v2 with
+        // matching pronunciation. Falls through to settings.language
+        // when the classifier didn't emit one (older Vercel route,
+        // English transcript, or no triggers matched).
+        await speak(result.voice_response, settings.voiceGender, intent.language ?? settings.language, apiUrl, { userInitiated: true });
       } else if (!result.voice_response && responseAllowed) {
         // 2026-05-21 — Fix I shape A: handler returned no voice_response
         // (e.g. an internal failure path with no fallback string). Don't
@@ -646,7 +652,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
     const result = await handler.execute(intent, ctx);
     if (result?.voice_response) {
       const { speak } = await import('./voiceService');
-      void speak(result.voice_response, settings.voiceGender, settings.language ?? 'en', apiUrl, { userInitiated: true })
+      void speak(result.voice_response, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })
         ?.catch?.(() => undefined);
     }
   } catch (e) {

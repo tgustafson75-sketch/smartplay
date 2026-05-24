@@ -13,6 +13,7 @@ import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
 import { initListeningSession } from '../services/listeningSession';
+import { hydrateCourseTruthCache } from '../services/courseTruth';
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
 import { startHandsFreeOrchestrator } from '../services/handsFreeOrchestrator';
 import { activateMediaSession, deactivateMediaSession } from '../services/mediaKeyBridge';
@@ -284,6 +285,11 @@ function AppNavigator() {
     // calls toggle on every tap), so no regression for users without
     // pattern-driven habits.
     startHandsFreeOrchestrator();
+    // 2026-05-24 — Hydrate surveyed green-truth cache from AsyncStorage
+    // so the sync resolveGreenCoords chain can short-circuit to TRUTH
+    // when present. Fire-and-forget; failures fall through to existing
+    // API sources.
+    void hydrateCourseTruthCache();
     const unsub = useSettingsStore.subscribe((s) => {
       setEarbudEnabled(s.earbudTapToTalk);
     });

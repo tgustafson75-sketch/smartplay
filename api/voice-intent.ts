@@ -36,7 +36,7 @@ Available intents:
    - "${caddieName} what should I do here" / "analyze my lie" / "what's my play" / "look at this lie" / "take a look at this" / "what do you see" / "open TightLie" / "tight lie" / "check my lie" / "show me TightLie" -> { tool_name: "lie_analysis" }
    - "should I go for it" / "can I go at this pin" -> { tool_name: "lie_analysis", play_intent: "aggressive" }
    - "should I lay up" / "should I play safe here" -> { tool_name: "lie_analysis", play_intent: "conservative" }
-   - "open SmartMotion" / "start SmartMotion" / "smart motion" / "I want to record a swing" / "capture my swing" / "quick swing" -> { tool_name: "smartmotion" }
+   - "open SmartMotion" / "start SmartMotion" / "smart motion" / "quick swing" -> { tool_name: "smartmotion" }
    - "record me down the line" / "record down the line" / "down the line swing" / "DTL" -> { tool_name: "smartmotion", angle: "down_the_line", auto_start: true }
    - "record me face on" / "record face on" / "face-on swing" / "front view swing" -> { tool_name: "smartmotion", angle: "face_on", auto_start: true }
    - "record my swing down the line" -> { tool_name: "smartmotion", angle: "down_the_line", auto_start: true }
@@ -47,7 +47,7 @@ Available intents:
    IMPORTANT: "smartmotion" is the COURSE-MODE simplified swing capture (no setup, acoustic auto-stop). "swinglab" is the full practice/analysis hub. Default casual "record a swing" to "smartmotion" since it's the quicker path; only emit "swinglab" if the user explicitly says SwingLab / practice / drills. When the user names the angle ("down the line" / "DTL" / "face on" / "face-on" / "front view"), emit BOTH the angle parameter AND auto_start:true so the camera fires immediately on the right orientation.
 
 2. query_status — User wants information about current state.
-   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "shot_distance" | "hole_progress" | "distance_to_green" | "wind" | "conditions" | "plays_like" | "green_front" | "green_back" | "green_middle" | "end_session" | "next_focus" | "swing_observation" | "tell_me_more" | "hole_history" | "look_at_swing" | "carry_check" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare", target_yards?: number, swing_phrase?: string, hazard_phrase?: string, member_name?: string, notes?: string, lie_hint?: string, against?: "self_previous" | "tour_median" | "amateur_good" }
+   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "shot_distance" | "hole_progress" | "distance_to_green" | "wind" | "conditions" | "plays_like" | "green_front" | "green_back" | "green_middle" | "end_session" | "next_focus" | "swing_observation" | "tell_me_more" | "hole_history" | "look_at_swing" | "carry_check" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare" | "what_did_meta_say", target_yards?: number, swing_phrase?: string, hazard_phrase?: string, member_name?: string, notes?: string, lie_hint?: string, against?: "self_previous" | "tour_median" | "amateur_good" }
    Examples:
    - "what's my score" -> { query_topic: "score" }
    - "what hole am I on" -> { query_topic: "hole" }
@@ -81,6 +81,7 @@ Available intents:
    - "what's the play from the rough" / "what's the play from fluffy lie" -> { query_topic: "shot_strategy", lie_hint: "rough" }
    - "compare to my last swing" / "compare my swing to my last one" / "vs my last swing" -> { query_topic: "swing_compare", against: "self_previous" }
    - "compare to tour" / "compare to the pros" / "how do I compare to tour" -> { query_topic: "swing_compare", against: "tour_median" }
+   - "what did Meta say" / "what did Meta tell me" / "what'd the glasses say" / "what did Meta AI say" / "Meta's advice" / "what did Meta say on this hole" -> { query_topic: "what_did_meta_say" }
 
 8. rules_query — User is asking about a Rules of Golf situation.
    parameters: { query_text: string }
@@ -266,7 +267,7 @@ Available intents:
    parameters: { capture_type: "shot" | "swing", raw_utterance: string }
    Examples:
    - "record this shot" / "capture this" / "record my shot" / "record this" -> { capture_type: "shot" }
-   - "record my swing" / "watch my swing" / "record this swing" -> { capture_type: "swing" }
+   - "record my swing" / "watch my swing" / "record this swing" / "capture my swing" / "I want to record a swing" -> { capture_type: "swing" }
    - "watch this" -> { intent_type: "media_capture", parameters: { capture_type: "swing" } }
    - "watch this putt" -> { intent_type: "putt_watch", parameters: { shot_type: "putt" } }
    - "watch this chip" -> { intent_type: "putt_watch", parameters: { shot_type: "chip" } }
@@ -292,6 +293,15 @@ Available intents:
    - "ball position" -> { intent_type: "at_my_ball" }
    DO NOT match shot-logging phrases ("I hit driver 240 left") — those are log_shot. at_my_ball is the position-capture, not a shot.
 
+22. ask_golf_father — User wants strategic in-round advice from Tank ("the Golf Father"). Triggered by "what would Tank do", "Tank advice", "what's the play here", "Golf Father help", etc. Distinct from in_round_diagnostic (which reasons about multi-shot patterns) and from query_status/shot_strategy (which asks about a specific shot). This is the "give me Tank's read" channel.
+   parameters: { topic?: "course_management" | "mental" | "swing", subtopic?: "tank_advice", use_context?: boolean }
+   Examples:
+   - "what would Tank do here" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
+   - "what would the Golf Father do" / "Golf Father help" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
+   - "Tank advice" / "give me Tank" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
+   - "tell me what to do here" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
+   Default subtopic = "tank_advice" and use_context = true when omitted. Use this intent ONLY when the user names Tank / Golf Father OR explicitly asks for in-context strategic advice; "what should I hit" with no Tank reference stays on query_status/shot_strategy.
+
 20. sequence — User chained two or more distinct commands in a single utterance, separated by "and", "then", commas, or implicit pause. Each step is a real first-class intent above (open_tool, change_setting, log_shot, etc.). Use this ONLY when the steps are independent actions; do NOT use for a single clause with multiple parameters (e.g. "log driver 240 left" is one log_shot, not a sequence).
    parameters: { steps: [{ intent_type, parameters }, ...] }
    Examples:
@@ -314,7 +324,7 @@ The language reflects the transcript itself, not the user's preferred app langua
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "declare_hole" | "putt_watch" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "declare_hole" | "putt_watch" | "ask_golf_father" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null,

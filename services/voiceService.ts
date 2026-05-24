@@ -630,10 +630,19 @@ export const speak = async (
       persona = require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? null;
     } catch { /* ignore */ }
 
+    // 2026-05-24 — Derive ElevenLabs model_id from language at the
+    // client and pass it through. Server still falls back to a
+    // language-based default if model_id is absent, so this is purely
+    // additive — older / future callers that omit model_id still work.
+    // The fix this unlocks: detected-language Spanish/Chinese now
+    // routes to eleven_multilingual_v2 instead of being read
+    // monolingual_v1 with an English accent.
+    const ttsModel = language === 'en' ? 'eleven_monolingual_v1' : 'eleven_multilingual_v2';
+
     const response = await fetch(apiUrl + '/api/voice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, gender, language, persona }),
+      body: JSON.stringify({ text, gender, language, persona, model_id: ttsModel }),
       signal: abortController.signal,
     }).finally(() => clearTimeout(voiceTimeout));
 

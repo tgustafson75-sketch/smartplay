@@ -68,8 +68,8 @@ const resolveVoiceId = (persona: string | null | undefined, gender: string, lang
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as Record<string, string>;
-    const { text, gender = 'male', language = 'en', persona = '' } = body;
+    const body = await request.json() as Record<string, string | undefined>;
+    const { text, gender = 'male', language = 'en', persona = '', model_id } = body;
 
     if (!text) {
       return new Response(
@@ -84,9 +84,13 @@ export async function POST(request: Request) {
     if (ELEVENLABS_KEY) {
       try {
         const voiceId = resolveVoiceId(persona, gender, language);
-        const model = language === 'en'
+        // 2026-05-24 — Prefer client-provided model_id (carries the
+        // detected utterance language) over the language-based
+        // fallback. Older clients that omit model_id still resolve to
+        // the same monolingual/multilingual pair.
+        const model = model_id ?? (language === 'en'
           ? 'eleven_monolingual_v1'
-          : 'eleven_multilingual_v2';
+          : 'eleven_multilingual_v2');
         // Phase 408 — per-persona voice settings.
         const personaKey = typeof persona === 'string' ? persona.toLowerCase() : '';
         const voiceSettings = ELEVEN_SETTINGS_BY_PERSONA[personaKey] ?? ELEVEN_SETTINGS_DEFAULT;

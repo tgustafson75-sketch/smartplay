@@ -905,6 +905,45 @@ export const queryStatusHandler: IntentHandler = {
         };
       }
 
+      // 2026-05-24 — Meta glasses voice-exchange recall. The user asks
+      // "what did Meta say?" and Tank/Kevin repeats the most recent
+      // assistant reply that's bucketed to the current hole (or any
+      // unattributed entry as a fallback). Data comes from
+      // services/metaGlassesIngest.ts via JSON import. Localized
+      // wrappers; the ai_response text itself is whatever Meta said
+      // (Meta AI replies are usually English even when the user spoke
+      // Spanish — that's Meta's choice, not ours).
+      case 'what_did_meta_say': {
+        const lang: 'en' | 'es' | 'zh' = context.language ?? 'en';
+        const ctx = round.externalContext?.filter((c) =>
+          c.source === 'meta_glasses' &&
+          (c.hole === context.current_hole || !c.hole)
+        );
+        if (!ctx?.length) {
+          const noNotes =
+            lang === 'es' ? 'Aún no tengo notas de Meta AI para este hoyo.'
+            : lang === 'zh' ? '这洞还没有Meta AI的笔记。'
+            : "I don't have any Meta AI notes for this hole yet.";
+          return {
+            success: true,
+            voice_response: noNotes,
+            side_effects: ['query:what_did_meta_say:empty', `lang:${lang}`],
+            follow_up_needed: false,
+          };
+        }
+        const last = ctx[ctx.length - 1];
+        const wrapped =
+          lang === 'es' ? `En este hoyo, Meta dijo: ${last.ai_response}`
+          : lang === 'zh' ? `这洞上,Meta 说:${last.ai_response}`
+          : `On this hole, Meta said: ${last.ai_response}`;
+        return {
+          success: true,
+          voice_response: wrapped,
+          side_effects: ['query:what_did_meta_say', `lang:${lang}`, `meta_entries:${ctx.length}`],
+          follow_up_needed: false,
+        };
+      }
+
       // Phase R — swing library lookup ("look at last Tuesday's swing")
       case 'look_at_swing': {
         const phrase = String(intent.parameters.swing_phrase ?? '');
