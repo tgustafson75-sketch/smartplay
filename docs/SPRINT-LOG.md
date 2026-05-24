@@ -1548,6 +1548,46 @@ What real cloud backup would need (sketched, not built):
 
 **Status:** logging only tonight. No code. The uninstall rule is the only protection in place until cloud backup ships. Logged here so it's visible in the next sprint planning pass.
 
+### Roadmap — Visual swing annotation (coach markup + AI auto-annotation)
+
+**Surfaced from a real BBQ moment.** A competitor app's hook is VISUAL MARKUP on the swing — lines drawn over the frame to explain faults. Novices found it authoritative even when the analysis underneath was thin: SEEING the line beats reading "your swing path is out-to-in." SmartMotion's text-only PrimaryIssueCard, however accurate, doesn't carry that same instant-credibility punch. To match and beat the competitor, swing analysis needs a visual annotation layer.
+
+**Two layers — both needed:**
+
+1. **Coach markup (manual telestration).** On the swing detail screen, the coach (Tank) can draw lines, circles, arrows, and captions over the frame or video to teach — same UX shape as Hudl, V1 Golf, CoachNow. Per-frame strokes with simple tools (pen + line + circle + caption). Saves alongside the swing in cageStore (new `annotations: SwingAnnotation[]` field on `CageSession`) so the markup persists across sessions and renders next time Tank opens that swing with his student. Pairs directly with Coach Mode — Tank watches Mike's swing, AI lands the analysis, Tank draws the lines on the frame to drive the point home.
+
+2. **AI auto-annotation (the differentiator).** When the analysis pipeline lands a `primary_issue`, the system AUTOMATICALLY draws the fault on the captured frame at `fault_frame_index` (already computed by Phase K). Concrete mappings:
+   - "Over-the-top transition" → draw the actual club-path line from transition through impact at the fault frame
+   - "Hip slide" → circle the lead hip with a "sliding right" / "no rotation" caption
+   - "Sway off the ball" → vertical guideline at address + at top, showing the head shift
+   - "Reverse weight shift" → arrow showing weight moving back-foot at impact
+   - "Cast / early release" → arrow on the club shaft showing wrist angle loss
+   - Generic fallback: the existing `visual_reference_path` thumbnail with a single fault-frame caption overlay
+   
+   The caddie doesn't just SAY the fault — it SHOWS it. We already have the fault_frame and the issue_id classification; the missing piece is the rendering layer that maps issue_id → annotation primitives + draws them at the fault frame's timestamp.
+
+**Why this matters:**
+- **Demo gold.** A side-by-side of "competitor says you sliced it — here, manually draw a line if you want" vs "SmartMotion automatically shows you the over-the-top path line on your fault frame" is the kind of moment that converts skeptics on the spot.
+- **BBQ / influencer shareable.** A swing with an AI-drawn red path line + a "Over-the-Top — Casts the club from outside the target line" caption is screenshot-friendly and instantly readable on social. Tim's competitor is sharing manual markups; we'd be sharing auto-annotations the player didn't draw themselves.
+- **Trust + authority for novices.** Per the BBQ observation: novices believed the competitor's coaching because they could SEE the line. Text fault summaries don't carry that weight. Visual annotation closes that gap regardless of who's holding the phone.
+- **Pairs naturally with Coach Mode (Fix #8).** Tank picks his student, captures the swing, AI auto-draws the dominant fault, Tank overlays his own marks on top. Both layers visible at once — the coach uses the AI's annotation as a starting point.
+
+**Implementation sketch (real build, next session):**
+
+- New persistence: `CageSession.annotations?: SwingAnnotation[]` where `SwingAnnotation = { id, frame_index OR time_ms, kind: 'line' | 'circle' | 'arrow' | 'caption' | 'angle', points: Array<{x_norm, y_norm}>, color, stroke_width, label?, author: 'ai' | 'coach', created_at }`. Normalize coords so they survive different render sizes.
+- New service: `services/swingAnnotation.ts` — maps `primary_issue.issue_id` → `SwingAnnotation[]` using the pose/biomechanics frames we already capture. AI annotations land with `author: 'ai'`. Tank's strokes land with `author: 'coach'`.
+- New component: `components/swinglab/SwingAnnotationCanvas.tsx` — `react-native-svg` overlay rendered over the `<Video>` (or `<Image>` for fault-frame view). Renders all annotations matched to the current playback time. When Tank is in edit mode, a small toolbar (pen / line / circle / arrow / caption) lets him add strokes; tap an existing stroke to select/edit/delete. Save persists to cageStore.
+- Integration: render the canvas inside the swing detail screen's existing video block. AI auto-annotations populate on `primary_issue` resolution (after `setSessionAnalysis`). Coach annotations save through a new `setSessionAnnotations(sessionId, annotations)` action.
+- Phase K hook: when the classifier emits a known `issue_id`, fire `synthesizeAnnotationForIssue(issue, biomechanicsFrames)` → array of SwingAnnotation → persist. Synth uses the same biomechanics keypoints already extracted (no new vision call needed for the common faults).
+- Sharing: extend the existing video-share path ([swing/[swing_id].tsx:306-324](../app/swinglab/swing/%5Bswing_id%5D.tsx#L306)) to optionally export a single-frame PNG WITH annotations baked in (canvas snapshot) — the screenshot-shareable artifact.
+
+**Scope:** Real build, own focused session. Annotation rendering layer + drawing tools + AI issue→annotation mapping + persistence. Watching-someone (Coach Mode) is the primary use case but the visual layer ships for POV self-analysis too — the auto-annotation differentiator works equally well there.
+
+**Not in scope for the first session:** video-time-locked annotation playback (annotations scrubbing with video timeline) and multi-frame keyframe animation. V1 anchors to fault_frame_index — a single annotated frame is enough to ship the demo moment.
+
+**Status:** logged tonight, build next session. Competitor-parity floor (manual markup) and differentiator ceiling (AI auto-annotation) in one focused effort.
+
+
 
 
 
