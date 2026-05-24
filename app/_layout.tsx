@@ -16,6 +16,7 @@ import i18n from '../i18n';
 import { initFeelCapture } from '../services/feelCaptureService';
 import { initListeningSession } from '../services/listeningSession';
 import { hydrateCourseTruthCache } from '../services/courseTruth';
+import { initVoiceTriggers } from '../services/voiceTriggers';
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
 import { startHandsFreeOrchestrator } from '../services/handsFreeOrchestrator';
 import { activateMediaSession, deactivateMediaSession } from '../services/mediaKeyBridge';
@@ -342,11 +343,20 @@ function AppNavigator() {
     // when present. Fire-and-forget; failures fall through to existing
     // API sources.
     void hydrateCourseTruthCache();
+    // 2026-05-24 — Native BT media-button bridge + voice-assistant
+    // launch heuristic. Both funnel through notifyEarbudTap() so they
+    // share the existing earbudControl pattern (no orchestrator change).
+    // Native BluetoothMediaButton module is absent in Expo Go — JS
+    // wiring gracefully no-ops in that case.
+    const teardownVoiceTriggers = initVoiceTriggers();
     const unsub = useSettingsStore.subscribe((s) => {
       setEarbudEnabled(s.earbudTapToTalk);
     });
     setEarbudEnabled(useSettingsStore.getState().earbudTapToTalk);
-    return () => { unsub(); };
+    return () => {
+      unsub();
+      teardownVoiceTriggers();
+    };
   }, []);
 
   // 2026-05-21 — Fix Q (Path B): the prior `syncFromSurface` and

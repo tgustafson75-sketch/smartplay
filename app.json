@@ -101,6 +101,7 @@
       ],
       "./plugins/withMetaWearablesDAT.js",
       "./plugins/withMediaPipePose.js",
+      "./plugins/withBluetoothMediaButton.js",
       "./plugins/withPrebuildSafetyCheck.js"
     ],
     "experiments": {
