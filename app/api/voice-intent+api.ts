@@ -200,6 +200,12 @@ Available intents:
    - "what would Tank do here" / "Tank advice" / "give me Tank" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
    - "what would the Golf Father do" / "Golf Father help" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
    - "tell me what to do here" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
+   - "red penalty vs yellow" / "red stake vs yellow" / "what's the difference between red and yellow" -> { topic: "rules", subtopic: "red_vs_yellow" }
+   - "driver or 3 wood" / "should I hit driver" / "what club off the tee" -> { topic: "course_management", subtopic: "driver_or_3wood", use_context: true }
+   - "should I lay up" / "lay up or go for it" / "go for the green" -> { topic: "course_management", subtopic: "lay_up" }
+   - "nearest point of relief" / "free drop here" / "cart path relief" -> { topic: "rules", subtopic: "nearest_point_relief" }
+   - "can I ground my club" / "can I touch the sand" / "ground club in bunker" -> { topic: "rules", subtopic: "can_ground_club", use_context: true }
+   - "flag or center" / "should I attack the pin" / "pin or middle" -> { topic: "course_management", subtopic: "flag_or_center", use_context: true }
 
 15. sequence — User chained two or more independent commands in one utterance (separated by "and", "then", commas, or implicit pause). Each step is a real first-class intent above. Use ONLY when the steps are distinct actions; don't bundle a single clause that already encodes multiple params.
    parameters: { steps: [{ intent_type, parameters }, ...] }

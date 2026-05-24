@@ -301,6 +301,12 @@ Available intents:
    - "what would the Golf Father do" / "Golf Father help" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
    - "Tank advice" / "give me Tank" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
    - "tell me what to do here" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
+   - "red penalty vs yellow" / "red stake vs yellow" / "what's the difference between red and yellow" -> { topic: "rules", subtopic: "red_vs_yellow" }
+   - "driver or 3 wood" / "should I hit driver" / "what club off the tee" -> { topic: "course_management", subtopic: "driver_or_3wood", use_context: true }
+   - "should I lay up" / "lay up or go for it" / "go for the green" -> { topic: "course_management", subtopic: "lay_up" }
+   - "nearest point of relief" / "free drop here" / "cart path relief" -> { topic: "rules", subtopic: "nearest_point_relief" }
+   - "can I ground my club" / "can I touch the sand" / "ground club in bunker" -> { topic: "rules", subtopic: "can_ground_club", use_context: true }
+   - "flag or center" / "should I attack the pin" / "pin or middle" -> { topic: "course_management", subtopic: "flag_or_center", use_context: true }
    Default subtopic = "tank_advice" and use_context = true when omitted. Use this intent ONLY when the user names Tank / Golf Father OR explicitly asks for in-context strategic advice; "what should I hit" with no Tank reference stays on query_status/shot_strategy.
 
 20. sequence — User chained two or more distinct commands in a single utterance, separated by "and", "then", commas, or implicit pause. Each step is a real first-class intent above (open_tool, change_setting, log_shot, etc.). Use this ONLY when the steps are independent actions; do NOT use for a single clause with multiple parameters (e.g. "log driver 240 left" is one log_shot, not a sequence).

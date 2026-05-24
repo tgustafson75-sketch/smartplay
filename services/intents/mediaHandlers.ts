@@ -23,6 +23,7 @@ import { getActiveSurface } from '../activeSurfaceRegistry';
 import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak } from '../voiceService';
+import { usePracticeStore } from '../../store/practiceStore';
 
 const ANALYSIS_WATCHDOG_MS = 20_000;
 
@@ -55,6 +56,18 @@ function watchAndSpeakNextSwingAnalysis(): void {
     spoke = true;
     clearTimeout(watchdog);
     unsub();
+    // 2026-05-24 — Pipe analyzed swing into practiceStore so Tank rules
+    // (askGolfFatherHandler.ts) can branch on tendencies like
+    // overTheTopCount / typicalMiss. Wrap because store writes shouldn't
+    // ever block the speak path.
+    try {
+      usePracticeStore.getState().updateFromSwing({
+        ...latest.perShotAnalysis,
+        club: latest.club,
+      });
+    } catch (e) {
+      console.log('[mediaCapture] practiceStore update failed (non-fatal):', e);
+    }
     const settings = useSettingsStore.getState();
     const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
     // userInitiated: true because this is a direct consequence of a

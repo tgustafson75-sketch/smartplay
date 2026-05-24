@@ -40,6 +40,74 @@ import { useRoundStore } from '../../store/roundStore';
 import { getOneShotFix } from '../gpsManager';
 import { resolveGreenCoords } from '../smartFinderService';
 import { haversineYards } from '../../utils/geoDistance';
+import { usePracticeStore } from '../../store/practiceStore';
+
+// 2026-05-24 — Tier-1 Tank rules. Keyed by `${topic}_${subtopic}` so the
+// classifier emits a rule pointer directly (e.g. topic=rules,
+// subtopic=red_vs_yellow → 'rules_red_vs_yellow'). Strings are static;
+// functions receive a `ctx` shape that merges AppContext + roundStore +
+// practiceStore signals and return a tailored line. When a rule isn't
+// matched, execute() falls through to the existing location × distance
+// cascade so the older subtopic='tank_advice' path keeps working.
+type TankCtx = {
+  currentLocationType?: 'tee' | 'fairway' | 'green' | 'unknown';
+  distance_to_pin?: number;
+  wind?: 'into' | 'with' | 'cross' | null;
+  lie?: string;
+  user_handicap?: number;
+  // Practice signals merged in below.
+  overTheTopCount: number;
+  swingCount: number;
+  avgCarryDriver: number;
+  avgCarry3Wood: number;
+  typicalMiss: 'left' | 'right' | 'straight';
+  fatShotCount: number;
+};
+
+type TankRule = string | ((ctx: TankCtx) => string);
+
+const TANK_RULES: Record<string, TankRule> = {
+  rules_red_vs_yellow:
+    'Red stake: lateral drop, 2 club lengths, no nearer hole. Yellow: back-on-line only. Both 1 stroke.',
+
+  course_management_driver_or_3wood: (ctx) => {
+    if (ctx.currentLocationType !== 'tee') return "You're not on a tee. That's a fairway wood decision.";
+    const dist = ctx.distance_to_pin;
+    if (ctx.wind === 'into' && typeof dist === 'number' && dist > 240) {
+      return "Wind's in your face. 3-wood. Find the fairway.";
+    }
+    if (ctx.overTheTopCount > 3 && ctx.swingCount > 5) {
+      return "You've been over the top in practice. Feel right field. Take 3-wood.";
+    }
+    if (ctx.avgCarryDriver > 0 && typeof dist === 'number' && dist > ctx.avgCarryDriver + 20) {
+      return `It's ${dist}. Your gamer averages ${Math.round(ctx.avgCarryDriver)}. You don't have it. 3-wood.`;
+    }
+    return 'If you can carry the trouble, driver. If not, 3-wood.';
+  },
+
+  course_management_lay_up:
+    'Add up the trouble. If water plus bunker plus OB equals more than 2, lay up to your favorite wedge number.',
+
+  rules_nearest_point_relief:
+    'Find nearest point, no nearer hole, where you get full relief from cart path or sprinkler. Drop within 1 club length. No penalty.',
+
+  rules_can_ground_club: (ctx) => {
+    const lie = String(ctx.lie ?? 'unknown').toLowerCase();
+    if (lie === 'hazard' || lie === 'bunker' || lie === 'penalty_area') {
+      return "No. Penalty area or bunker - don't ground it. 2 stroke penalty.";
+    }
+    return 'Yes. Fairway or rough, ground it.';
+  },
+
+  course_management_flag_or_center: (ctx) => {
+    const hcp = ctx.user_handicap ?? 18;
+    if (hcp > 15) return "Center of the green. Every time. You don't have the skill to hunt flags yet.";
+    if (typeof ctx.distance_to_pin === 'number' && ctx.distance_to_pin < 125) {
+      return 'Attack it. Wedge in hand, go at it.';
+    }
+    return 'Center. A 30-foot putt is better than a short-sided bunker.';
+  },
+};
 
 export const askGolfFatherHandler: IntentHandler = {
   intent_type: 'ask_golf_father',
@@ -58,13 +126,53 @@ export const askGolfFatherHandler: IntentHandler = {
     'Tank advice',
   ],
 
-  async execute(intent): Promise<IntentResult> {
+  async execute(intent, context): Promise<IntentResult> {
+    const topic = String((intent.parameters as { topic?: unknown }).topic ?? '');
     const subtopic = String((intent.parameters as { subtopic?: unknown }).subtopic ?? 'tank_advice');
     const useContext = (intent.parameters as { use_context?: unknown }).use_context !== false;
 
     const round = useRoundStore.getState();
     const locType = round.currentLocationType;
     const currentHole = round.currentHole;
+
+    // ── Tier-1 rule lookup (BEFORE the location cascade) ──────────
+    // If the classifier emitted a rules- or course-management-keyed
+    // subtopic, return the Tank rule for that key directly.
+    // Functions receive a merged context with practice signals so the
+    // rule can branch on swing history (e.g. "you've been over the top").
+    const ruleKey = `${topic}_${subtopic}`;
+    const rule = TANK_RULES[ruleKey];
+    if (rule) {
+      // Best-effort distance for rule branches that read it. Cheap GPS
+      // lookup; if it fails the rule's distance branches just don't fire.
+      let distYds: number | undefined = undefined;
+      if (useContext) {
+        try {
+          const fix = await getOneShotFix({ maxAgeMs: 3_000 });
+          const green = resolveGreenCoords(currentHole).middle;
+          if (fix && green) {
+            distYds = Math.round(haversineYards({ lat: fix.lat, lng: fix.lng }, green));
+          }
+        } catch { /* distance optional */ }
+      }
+      const practice = usePracticeStore.getState();
+      const ctxShape: TankCtx = {
+        currentLocationType: locType,
+        distance_to_pin: distYds,
+        wind: null,
+        lie: undefined,
+        user_handicap: 18,
+        overTheTopCount: practice.overTheTopCount,
+        swingCount: practice.swingCount,
+        avgCarryDriver: practice.avgCarryDriver,
+        avgCarry3Wood: practice.avgCarry3Wood,
+        typicalMiss: practice.typicalMiss,
+        fatShotCount: practice.fatShotCount,
+      };
+      void context;
+      const answer = typeof rule === 'function' ? rule(ctxShape) : rule;
+      return tank(answer, ['tank_advice_given', ruleKey, `loc:${locType}`]);
+    }
 
     // Best-effort distance to pin. Cap at 3s freshness so the cascade
     // doesn't hang on a GPS retry.
