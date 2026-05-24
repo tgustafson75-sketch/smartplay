@@ -90,7 +90,7 @@ export async function POST(request: Request): Promise<Response> {
 
     if (!body.gps && intent === 'distance_request') {
       return Response.json({
-        speak: 'I need your location. Open Caddy on phone.',
+        speak: 'I need your location. Open Caddie on phone.',
         state,
         tone: 'calm',
       } satisfies ResponsePayload);

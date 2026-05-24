@@ -41,6 +41,7 @@ import { getOneShotFix } from '../gpsManager';
 import { resolveGreenCoords } from '../smartFinderService';
 import { haversineYards } from '../../utils/geoDistance';
 import { usePracticeStore } from '../../store/practiceStore';
+import i18n from '../../i18n';
 
 // 2026-05-24 — Tier-1 Tank rules. Keyed by `${topic}_${subtopic}` so the
 // classifier emits a rule pointer directly (e.g. topic=rules,
@@ -66,46 +67,50 @@ type TankCtx = {
 
 type TankRule = string | ((ctx: TankCtx) => string);
 
+// 2026-05-24 v1.2 — Rule strings now come from i18n (en + es). Function
+// rules keep their TypeScript branching logic; static rules collapse to
+// a single i18n key. The function rules read i18n.t() for the actual
+// strings so EN and ES variants ship without code change.
 const TANK_RULES: Record<string, TankRule> = {
-  rules_red_vs_yellow:
-    'Red stake: lateral drop, 2 club lengths, no nearer hole. Yellow: back-on-line only. Both 1 stroke.',
+  rules_red_vs_yellow: () => i18n.t('tank.red_vs_yellow'),
 
   course_management_driver_or_3wood: (ctx) => {
-    if (ctx.currentLocationType !== 'tee') return "You're not on a tee. That's a fairway wood decision.";
+    if (ctx.currentLocationType !== 'tee') return i18n.t('tank.driver_or_3wood_clean');
     const dist = ctx.distance_to_pin;
     if (ctx.wind === 'into' && typeof dist === 'number' && dist > 240) {
-      return "Wind's in your face. 3-wood. Find the fairway.";
+      return i18n.t('tank.par3_wind');
     }
     if (ctx.overTheTopCount > 3 && ctx.swingCount > 5) {
-      return "You've been over the top in practice. Feel right field. Take 3-wood.";
+      return i18n.t('tank.driver_or_3wood');
     }
     if (ctx.avgCarryDriver > 0 && typeof dist === 'number' && dist > ctx.avgCarryDriver + 20) {
+      // Number-bearing branch keeps a templated string; i18n's
+      // interpolation could replace this later if Spanish needs a
+      // different word order.
       return `It's ${dist}. Your gamer averages ${Math.round(ctx.avgCarryDriver)}. You don't have it. 3-wood.`;
     }
-    return 'If you can carry the trouble, driver. If not, 3-wood.';
+    return i18n.t('tank.driver_or_3wood_clean');
   },
 
-  course_management_lay_up:
-    'Add up the trouble. If water plus bunker plus OB equals more than 2, lay up to your favorite wedge number.',
+  course_management_lay_up: () => i18n.t('tank.layup'),
 
-  rules_nearest_point_relief:
-    'Find nearest point, no nearer hole, where you get full relief from cart path or sprinkler. Drop within 1 club length. No penalty.',
+  rules_nearest_point_relief: () => i18n.t('tank.nearest_point_relief'),
 
   rules_can_ground_club: (ctx) => {
     const lie = String(ctx.lie ?? 'unknown').toLowerCase();
     if (lie === 'hazard' || lie === 'bunker' || lie === 'penalty_area') {
-      return "No. Penalty area or bunker - don't ground it. 2 stroke penalty.";
+      return i18n.t('tank.can_ground_club_no');
     }
-    return 'Yes. Fairway or rough, ground it.';
+    return i18n.t('tank.can_ground_club_yes');
   },
 
   course_management_flag_or_center: (ctx) => {
     const hcp = ctx.user_handicap ?? 18;
-    if (hcp > 15) return "Center of the green. Every time. You don't have the skill to hunt flags yet.";
+    if (hcp > 15) return i18n.t('tank.flag_or_center_safe');
     if (typeof ctx.distance_to_pin === 'number' && ctx.distance_to_pin < 125) {
-      return 'Attack it. Wedge in hand, go at it.';
+      return i18n.t('tank.flag_or_center_attack');
     }
-    return 'Center. A 30-foot putt is better than a short-sided bunker.';
+    return i18n.t('tank.flag_or_center_balanced');
   },
 };
 

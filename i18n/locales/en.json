@@ -1,0 +1,39 @@
+{
+  "tank": {
+    "driver_or_3wood": "You've been over the top in practice. Feel right field. Take 3-wood.",
+    "driver_or_3wood_clean": "Driver is fine today. Trust your swing.",
+    "red_vs_yellow": "Red stake: lateral drop within 2 club lengths, no nearer the hole. Yellow: back-on-line only.",
+    "yellow_vs_red": "Yellow stake: back-on-line drop only. Red allows lateral relief.",
+    "par3_wind": "Wind in your face. Take one more club and swing smooth.",
+    "layup": "Lay up to your favorite wedge number. Avoid the trouble short.",
+    "nearest_point_relief": "Find nearest point, no nearer hole, where you get full relief from cart path or sprinkler. Drop within 1 club length. No penalty.",
+    "can_ground_club_yes": "Yes. Fairway or rough, ground it.",
+    "can_ground_club_no": "No. Penalty area or bunker - don't ground it. 2 stroke penalty.",
+    "flag_or_center_safe": "Center of the green. Every time. You don't have the skill to hunt flags yet.",
+    "flag_or_center_attack": "Attack it. Wedge in hand, go at it.",
+    "flag_or_center_balanced": "Center. A 30-foot putt is better than a short-sided bunker."
+  },
+  "buttons": {
+    "start_cage": "Start Cage Session",
+    "watch_swing": "Watch My Swing",
+    "share_swing": "Share to Instagram",
+    "what_would_tank_do": "What would Tank do?",
+    "analyze_swing": "Analyze Swing",
+    "your_caddie": "Your AI Caddie"
+  },
+  "labels": {
+    "analyzing": "Analyzing your swing...",
+    "cage_session": "Cage Session",
+    "driver": "Driver",
+    "wood3": "3-Wood"
+  },
+  "voice": {
+    "analyzing_swing": "Analyzing your swing now",
+    "over_the_top_detected": "Detected over the top. Here's the fix."
+  },
+  "brand": {
+    "app_name": "SmartPlay Caddie",
+    "tagline": "Real-time on-course intelligence",
+    "built_by": "Built by SmartPlay AI"
+  }
+}

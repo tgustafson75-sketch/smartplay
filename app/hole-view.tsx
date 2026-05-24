@@ -36,6 +36,7 @@ import { useCourseGeometryOverrideStore } from '../store/courseGeometryOverrideS
 import { useHoleMarkerCalibrationStore } from '../store/holeMarkerCalibrationStore';
 import VectorHoleView from '../components/smartvision/VectorHoleView';
 import GolfshotHoleView from '../components/smartvision/GolfshotHoleView';
+import { ShareToSocial } from '../components/ShareToSocial';
 import { getHoleGeometry } from '../services/courseGeometryService';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSmartVision } from '../contexts/SmartVisionContext';
@@ -234,6 +235,11 @@ export default function HoleView() {
 
   const prevDraggingRef = useRef(false);
   const planSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 2026-05-24 v1.2 — Share-to-Instagram capture target. react-native-
+  // view-shot snapshots whatever's inside this ref. We wrap the imagery
+  // card below so the share image is just the hole view, not the whole
+  // screen chrome.
+  const shareViewRef = useRef<View>(null);
 
   // Mutable refs — read inside PanResponder callbacks (stable, captured once)
   const teePosRef = useRef(teePos);
@@ -785,6 +791,8 @@ export default function HoleView() {
   // claim is safe in bundled mode too.
   const holeImagePane = (
     <View
+      ref={shareViewRef}
+      collapsable={false}
       style={[styles.imageWrapper, { width: IMAGE_WIDTH, height: IMAGE_HEIGHT }]}
       onStartShouldSetResponder={() => true}
       onMoveShouldSetResponder={() => true}
@@ -1219,6 +1227,11 @@ export default function HoleView() {
           {modeBadgeRow}
           <View style={{ alignItems: 'center', justifyContent: 'flex-start' }}>
             {holeImagePane}
+          </View>
+          {/* v1.2 — Share to Instagram. Captures shareViewRef (the
+              imagery card) and opens the platform share sheet. */}
+          <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+            <ShareToSocial viewRef={shareViewRef} />
           </View>
           {/* Controls in a constrained region at the bottom; inner scroll
               handles overflow without moving the image above. */}

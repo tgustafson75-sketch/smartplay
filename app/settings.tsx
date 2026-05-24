@@ -1146,6 +1146,15 @@ export default function Settings() {
               {caddieName}
             </Text>
           </View>
+          {/* 2026-05-24 v1.2 — Company attribution. Built by SmartPlay
+              AI (the company). All four caddies (Kevin / Serena / Tank
+              / Harry) are equal personas — none is "the face" in the
+              About row. Tank is named only where his feature scope
+              requires it (ask_golf_father). */}
+          <View style={styles.aboutRow}>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Built by</Text>
+            <Text style={[styles.aboutValue, { color: colors.text_primary }]}>SmartPlay AI</Text>
+          </View>
         </CollapsibleSection>
 
         {/* 2026-05-17 — Owner-only Issue Log. Tim asked for a way to

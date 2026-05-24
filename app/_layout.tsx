@@ -12,6 +12,7 @@ import { usePlayerProfileStore, isOwnerEmail, OWNER_EMAILS } from '../store/play
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
+import i18n from '../i18n';
 import { initListeningSession } from '../services/listeningSession';
 import { hydrateCourseTruthCache } from '../services/courseTruth';
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
@@ -272,6 +273,24 @@ function AppNavigator() {
     });
 
     return () => { unsubAccept(); };
+  }, []);
+
+  // 2026-05-24 — Keep i18n in sync with settingsStore.language. Voice
+  // "switch to Spanish" / Settings picker both write to settings; this
+  // subscription mirrors the change into i18n.changeLanguage so UI
+  // text + Tank rule lookups follow the same source of truth as voice
+  // + TTS. i18n imported above for the side-effect of initialization.
+  useEffect(() => {
+    void i18n;
+    const apply = (lng: 'en' | 'es' | 'zh') => {
+      const target = lng === 'es' ? 'es' : 'en';
+      if (i18n.language !== target) {
+        void i18n.changeLanguage(target);
+      }
+    };
+    apply(useSettingsStore.getState().language);
+    const unsub = useSettingsStore.subscribe((s) => apply(s.language));
+    return () => { unsub(); };
   }, []);
 
   // Phase O — boot earbud listening session bus, honoring user setting

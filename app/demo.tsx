@@ -1,7 +1,7 @@
 /**
  * /demo — Investor / Meta demo page.
  *
- * Auto-plays the 9-turn Ray-Ban Caddy interaction from
+ * Auto-plays the 9-turn Ray-Ban Caddie interaction from
  * GET /api/meta-voice?demo=1, with dual captions showing
  * what Meta AI hears vs what the API sent.
  *
@@ -112,7 +112,7 @@ export default function MetaCaddyDemoPage() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>SmartPlay Caddy</Text>
+        <Text style={styles.headerTitle}>SmartPlay Caddie</Text>
         <Text style={styles.headerSubtitle}>Ray-Ban Meta · 9-hole demo</Text>
       </View>
 

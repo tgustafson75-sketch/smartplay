@@ -1,0 +1,39 @@
+{
+  "tank": {
+    "driver_or_3wood": "Has estado haciendo swing por fuera en la práctica. Piensa en el lado derecho del fairway. Usa la madera 3.",
+    "driver_or_3wood_clean": "El driver está bien hoy. Confía en tu swing.",
+    "red_vs_yellow": "Estaca roja: drop lateral hasta 2 palos de largo, sin ganar distancia al hoyo. Amarilla: solo puedes dropar hacia atrás en línea con la bandera.",
+    "yellow_vs_red": "Estaca amarilla: solo drop hacia atrás en línea con bandera. Roja permite alivio lateral hasta 2 palos.",
+    "par3_wind": "Viento en contra. Toma un palo más y haz swing suave, sin forzar.",
+    "layup": "Déjala corta a tu distancia favorita de wedge. Evita el agua o penalidad de enfrente.",
+    "nearest_point_relief": "Busca el punto más cercano sin acercarte al hoyo donde tengas alivio completo del camino de carro o aspersor. Drop a 1 palo. Sin penalidad.",
+    "can_ground_club_yes": "Sí. En fairway o rough, puedes apoyar el palo.",
+    "can_ground_club_no": "No. En zona de penalidad o bunker no apoyes el palo. 2 golpes de penalidad.",
+    "flag_or_center_safe": "Centro del green, siempre. Aún no tienes el nivel para atacar la bandera.",
+    "flag_or_center_attack": "Atácala. Tienes wedge, ve por ella.",
+    "flag_or_center_balanced": "Centro. Un putt de 30 pies es mejor que un bunker corto."
+  },
+  "buttons": {
+    "start_cage": "Iniciar Práctica",
+    "watch_swing": "Grabar Mi Swing",
+    "share_swing": "Compartir en Instagram",
+    "what_would_tank_do": "¿Qué haría Tank?",
+    "analyze_swing": "Analizar Swing",
+    "your_caddie": "Tu Caddie con IA"
+  },
+  "labels": {
+    "analyzing": "Analizando tu swing...",
+    "cage_session": "Sesión de Práctica",
+    "driver": "Driver",
+    "wood3": "Madera 3"
+  },
+  "voice": {
+    "analyzing_swing": "Analizando tu swing ahora",
+    "over_the_top_detected": "Detecté swing por fuera. Te explico cómo arreglarlo."
+  },
+  "brand": {
+    "app_name": "SmartPlay Caddie",
+    "tagline": "Inteligencia en tiempo real en el campo",
+    "built_by": "Creado por SmartPlay AI"
+  }
+}

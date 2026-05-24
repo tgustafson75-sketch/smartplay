@@ -227,7 +227,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     id: 'club_attacking_pin',
     category: 'club_selection',
     questionPatterns: ['go at the pin', 'attack flag', 'pin hunting', 'tight pin'],
-    tankAnswer: "Tight pin, tucked corner, water short — that's not a pin to attack. That's an ego shot. Middle of the green's twenty feet from any pin. Make the smart play. Birdie putts come from somewhere safe first.",
+    tankAnswer: "Tight pin, tucked corner, water short — that's not a pin to attack. That's an ego shot. Middle of the green's twenty feet from any pin. Take the percentage shot. Birdie putts come from somewhere safe first.",
     genericAnswer: "Attacking tight pins is rarely the percentage play. Middle of the green is rarely more than 20-25 feet from any pin and removes the cost of a miss to the wrong side.",
     styleNotes: "Tank calls out 'ego shot' — strong, demanding word, aimed at the decision, not the player. The standard violated is the work (decision-making), not the person.",
   },
