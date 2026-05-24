@@ -257,6 +257,37 @@ export default function CoachMode() {
           </View>
         </View>
 
+        {/* 2026-05-24 — Scan Student (BETA). Captures a per-player
+            calibration profile (typed height + full-body upright scan
+            + address baseline) that the per-player metric pipeline
+            will consume in a follow-up. Available whether or not a
+            family member is active — falls through to scanning the
+            account holder (Tim's self-profile) when no member is
+            picked. Spec: "also needs to work for my profile Tim". */}
+        <Text style={[styles.sectionHeader, { color: colors.text_muted, marginTop: 16 }]}>CALIBRATION (BETA)</Text>
+        <TouchableOpacity
+          style={[
+            styles.captureCard,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+          onPress={() => router.push('/swinglab/scan-student' as never)}
+          accessibilityRole="button"
+          accessibilityLabel="Scan student for per-player calibration profile"
+        >
+          <View style={[styles.captureIcon, { backgroundColor: colors.accent_muted, borderColor: colors.accent }]}>
+            <Ionicons name="body-outline" size={26} color={colors.accent} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[styles.captureTitle, { color: colors.text_primary }]}>
+              Scan {activeMember ? activeMember.firstName : 'yourself'}
+            </Text>
+            <Text style={[styles.captureSub, { color: colors.text_muted }]}>
+              Two quick captures — upright + address. Builds the calibration ruler used by future per-player metrics.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+        </TouchableOpacity>
+
         {/* CAPTURE BUTTONS */}
         <Text style={[styles.sectionHeader, { color: colors.text_muted, marginTop: 16 }]}>CAPTURE</Text>
         <TouchableOpacity

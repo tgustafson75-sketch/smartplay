@@ -683,6 +683,14 @@ function AppNavigator() {
           name="swinglab/coach-mode"
           options={{ animation: 'slide_from_right', headerShown: false }}
         />
+        {/* 2026-05-24 — Coach Mode player scan (BETA). Two-step
+            calibration flow producing a per-player profile keyed by
+            player_id. Foundation for downstream per-player metric
+            pipeline; does not modify swingMetricsService. */}
+        <Stack.Screen
+          name="swinglab/scan-student"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
         <Stack.Screen
           name="cage-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
