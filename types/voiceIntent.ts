@@ -9,6 +9,7 @@ export interface VoiceIntent {
   confidence: IntentConfidence;
   follow_up_question: string | null;
   raw_text: string;
+  language?: 'en' | 'es' | 'zh';
 }
 
 export interface AppContext {
@@ -23,6 +24,7 @@ export interface AppContext {
   current_hole: number | null;
   recent_shots: ShotResult[];
   trust_spectrum_level: 1 | 2 | 3 | 4 | 5;
+  language?: 'en' | 'es' | 'zh';
 }
 
 export interface IntentResult {

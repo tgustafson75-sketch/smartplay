@@ -45,7 +45,7 @@ const PERMISSIONS = [
   {
     icon: 'walk-outline' as const,
     label: 'Background Location',
-    why: 'So GPS keeps working when your phone is in your pocket between shots. Without this, yardages freeze when the screen turns off.',
+    why: 'Tap "Allow all the time" so yardages keep updating when your phone is in the cart. If you pick "While Using Only", GPS stops when your screen turns off.',
   },
   {
     icon: 'images-outline' as const,
@@ -145,6 +145,10 @@ export default function PermissionsScreen() {
           })}
         </View>
 
+        <Text style={styles.warningText}>
+          iOS will ask twice. First tap &quot;Allow While Using&quot;, then &quot;Change to Always Allow&quot; on the next screen.
+        </Text>
+
         <TouchableOpacity
           style={[styles.allowBtn, busy && styles.allowBtnBusy]}
           onPress={handleAllowAll}
@@ -198,6 +202,7 @@ const styles = StyleSheet.create({
   },
   rowLabel: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
   rowWhy: { color: '#9ca3af', fontSize: 12, marginTop: 4, lineHeight: 17 },
+  warningText: { color: '#FFA500', fontSize: 12, marginBottom: 8, textAlign: 'center' },
   allowBtn: {
     backgroundColor: '#00C896', borderRadius: 14, paddingVertical: 14,
     alignItems: 'center', marginTop: 6,

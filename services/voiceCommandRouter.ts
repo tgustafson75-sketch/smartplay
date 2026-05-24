@@ -79,7 +79,13 @@ export class VoiceCommandRouter {
     }
 
     try {
-      return await handler.execute(intent, context);
+      // 2026-05-24 — Thread classifier-detected utterance language into
+      // AppContext so handlers can localize voice_response without a
+      // Settings change. Detection happens in api/voice-intent.ts based
+      // on transcript triggers ("cuántas yardas" → es, "多少码" → zh).
+      // Falls through unchanged when intent.language is undefined.
+      const ctx: AppContext = intent.language ? { ...context, language: intent.language } : context;
+      return await handler.execute(intent, ctx);
     } catch (err) {
       console.log('[voiceCommandRouter] handler error:', err);
       logVoiceMiss({

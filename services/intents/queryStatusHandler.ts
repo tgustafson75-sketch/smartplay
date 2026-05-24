@@ -13,6 +13,41 @@ import { getGreenYardages, resolveGreenCoords } from '../smartFinderService';
 // directly from gpsManager for the yardage handler enrichment.
 import { getOneShotFix } from '../gpsManager';
 
+// 2026-05-24 — Voice-language localization for distance_to_green
+// responses. Source of truth for `lang` is AppContext.language, which
+// voiceCommandRouter populates from the classifier-detected utterance
+// language (api/voice-intent.ts emits es/zh on Spanish/Chinese triggers).
+// English text is preserved verbatim from the prior implementation so
+// the default path has zero regression; es/zh siblings translate the
+// same meaning (green-middle yardage, soft-GPS hedge, no-green hint,
+// no-GPS hint). Lookup falls back to en on any unrecognized value.
+//
+// NOTE: this localizes the TEXT only. The TTS voice model is still
+// selected from Settings (services/voiceService.ts → /api/voice), so
+// es/zh text spoken under an English Settings language plays through
+// eleven_monolingual_v1 with an English voice. Voice-model threading
+// is a separate follow-up.
+const TTS_STRINGS = {
+  en: {
+    noGreen: "I don't have the green location for this hole — try marking it next time you pass through.",
+    noGps: 'No GPS lock yet — give it a few seconds and try again.',
+    distance: (y: number) => `${y} yards to the middle of the green.`,
+    softGps: (y: number) => `${y} yards to the middle of the green — but my GPS is a little soft right now.`,
+  },
+  es: {
+    noGreen: 'No tengo la ubicación del green para este hoyo — intenta marcarla la próxima vez que pases.',
+    noGps: 'Aún no tengo señal GPS — espera unos segundos e intenta otra vez.',
+    distance: (y: number) => `${y} yardas al centro del green.`,
+    softGps: (y: number) => `${y} yardas al centro del green — pero mi GPS está un poco débil ahora.`,
+  },
+  zh: {
+    noGreen: '这洞的果岭位置我还没有数据——下次经过时可以试试标记一下。',
+    noGps: '还没有GPS信号——等几秒再试一次。',
+    distance: (y: number) => `到果岭中心${y}码。`,
+    softGps: (y: number) => `到果岭中心${y}码——不过我的GPS信号现在有点弱。`,
+  },
+} as const;
+
 const COMPASS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
 function compassDirFromDeg(deg: number): string {
   const idx = Math.round(((deg % 360) + 360) % 360 / 45) % 8;
@@ -548,11 +583,19 @@ export const queryStatusHandler: IntentHandler = {
         const greenHole = context.current_hole ?? round.currentHole;
         const resolved = resolveGreenCoords(greenHole);
         const green = resolved.middle;
+        // 2026-05-24 — Lang is the classifier-detected utterance language
+        // threaded through voiceCommandRouter; falls back to 'en' when
+        // unset (older Vercel route, English transcript, or no triggers
+        // matched). The bracket access is safe because TTS_STRINGS has
+        // entries for all three values + the 'en' fallback guards
+        // anything unexpected.
+        const lang: 'en' | 'es' | 'zh' = context.language ?? 'en';
+        const t = TTS_STRINGS[lang] ?? TTS_STRINGS.en;
         if (!green) {
           return {
             success: true,
-            voice_response: 'I don\'t have the green location for this hole — try marking it next time you pass through.',
-            side_effects: ['query:distance_to_green:no_green'],
+            voice_response: t.noGreen,
+            side_effects: ['query:distance_to_green:no_green', `lang:${lang}`],
             follow_up_needed: false,
           };
         }
@@ -563,8 +606,8 @@ export const queryStatusHandler: IntentHandler = {
         if (!fix) {
           return {
             success: true,
-            voice_response: 'No GPS lock yet — give it a few seconds and try again.',
-            side_effects: ['query:distance_to_green:no_gps'],
+            voice_response: t.noGps,
+            side_effects: ['query:distance_to_green:no_gps', `lang:${lang}`],
             follow_up_needed: false,
           };
         }
@@ -577,17 +620,14 @@ export const queryStatusHandler: IntentHandler = {
         // rather than guessing.
         const SOFT_GPS_ACCURACY_M = 15;
         const softGps = typeof fix.accuracy_m === 'number' && fix.accuracy_m > SOFT_GPS_ACCURACY_M;
-        const baseLine = `${yds} yards to the middle of the green`;
-        const voiceResponse = softGps
-          ? `${baseLine} — but my GPS is a little soft right now.`
-          : `${baseLine}.`;
         return {
           success: true,
-          voice_response: voiceResponse,
+          voice_response: softGps ? t.softGps(yds) : t.distance(yds),
           side_effects: [
             'query:distance_to_green',
             `gps_accuracy_m:${typeof fix.accuracy_m === 'number' ? Math.round(fix.accuracy_m) : 'unknown'}`,
             `green_source:${resolved.source}`,
+            `lang:${lang}`,
           ],
           follow_up_needed: false,
         };

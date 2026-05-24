@@ -55,6 +55,37 @@ export const mediaCaptureHandler: IntentHandler = {
 
   async execute(intent): Promise<IntentResult> {
     const kind = normalizeKind((intent.parameters as { capture_type?: unknown }).capture_type);
+
+    const rawUtterance = String(
+      (intent.parameters as { raw_utterance?: unknown }).raw_utterance ?? intent.raw_text ?? '',
+    ).trim() || undefined;
+
+    // 2026-05-24 — Hands-free swing fallback. When the swing capture
+    // surface isn't wired (user not on Cage Mode), route to Quick Record
+    // instead of blocking with an instructional reply. Keeps "record my
+    // swing" / "watch my swing" as a one-shot voice action from any
+    // screen — voice opens the camera, user doesn't have to navigate
+    // into Cage Mode first.
+    if (kind === 'swing' && !isCaptureWired('swing')) {
+      try {
+        router.push('/swinglab/quick-record' as never);
+        track('media_capture_handler_quick_record_route');
+        return {
+          success: true,
+          voice_response: 'Opening camera. Get ready.',
+          side_effects: ['media:capture_quick_record_opened'],
+          follow_up_needed: false,
+        };
+      } catch {
+        return {
+          success: false,
+          voice_response: "Couldn't open the camera.",
+          side_effects: ['media:capture_quick_record_route_error'],
+          follow_up_needed: false,
+        };
+      }
+    }
+
     const pre = canCapture(kind);
     if (!pre.ok) {
       return {
@@ -65,23 +96,15 @@ export const mediaCaptureHandler: IntentHandler = {
       };
     }
 
-    const rawUtterance = String(
-      (intent.parameters as { raw_utterance?: unknown }).raw_utterance ?? intent.raw_text ?? '',
-    ).trim() || undefined;
-
     // Phase 110-followup — surface availability check (per-kind).
-    // 'shot' / 'highlight' wired by CaptureOverlay (mounted at app root,
-    // active during round-active). 'swing' is owned by the cage session
-    // flow — voice during an active cage session is redundant (the
-    // session already records every detected swing); voice outside cage
-    // gets an honest "open cage mode" reply.
+    // 'shot' wired by CaptureOverlay (mounted at app root, active during
+    // round-active). 'swing' is short-circuited above to Quick Record
+    // when not in Cage Mode, so this gate only applies to 'shot'.
     if (!isCaptureWired(kind)) {
       track('media_capture_handler_no_surface', { kind });
       return {
         success: false,
-        voice_response: kind === 'swing'
-          ? "Open Cage Mode and I'll capture every swing of your session."
-          : "Start a round and I'll record shots and highlights from there.",
+        voice_response: "Start a round and I'll record shots and highlights from there.",
         side_effects: [`media:capture_no_surface:${kind}`],
         follow_up_needed: false,
       };

@@ -1,3 +1,12 @@
+// CRITICAL: LOCKSTEP TWIN
+// This file has an identical twin:
+// - api/voice-intent.ts (Vercel serverless)
+// - app/api/voice-intent+api.ts (Expo Router)
+//
+// Any change to intent mappings, prompts, or types MUST be made in BOTH files.
+// If they drift, voice breaks in production. You will debug for hours.
+// Before committing, diff both files: git diff api/voice-intent.ts app/api/voice-intent+api.ts
+
 import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName, type VoiceGender, type Persona } from '../../lib/persona';
 
@@ -23,7 +32,7 @@ Available intents:
    - "open dashboard" -> { tool_name: "dashboard" }
    - "open settings" -> { tool_name: "settings" }
    - "go to settings" -> { tool_name: "settings" }
-   - "open SmartMotion" / "record my swing" / "capture my swing" -> { tool_name: "smartmotion" }
+   - "open SmartMotion" / "capture my swing" -> { tool_name: "smartmotion" }
    - "open TightLie" / "check my lie" / "what's the play" / "analyze my lie" -> { tool_name: "tightlie" }
    - "open acoustic test" / "acoustic test bench" / "test bench" / "test the mic" -> { tool_name: "acoustic" }
    - "open GPS test" / "GPS test bench" / "test the GPS" -> { tool_name: "gps_test" }
@@ -145,6 +154,7 @@ Available intents:
     Examples:
     - "record this shot" / "capture this shot" / "record this" -> { capture_type: "shot" }
     - "record my swing" / "record this swing" -> { capture_type: "swing" }
+    - "watch this" -> { intent_type: "media_capture", parameters: { capture_type: "swing" } }
     The clip lands in the swing library and on the shot record; user can replay/share later from the library — there is no auto-opening "hero shot" review pane (intentionally removed 2026-05-17).
 
 12. media_playback — User wants to replay / share a previously captured clip.
@@ -197,12 +207,19 @@ Available intents:
 
 If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_type "unknown" with confidence "medium" and a clarifying follow_up_question. Don't guess between candidates; ask once.
 
+Language detection — emit a "language" field on EVERY response based on transcript content:
+- Spanish triggers (any of these substrings, case-insensitive): "cuántas yardas", "cuantas yardas", "qué distancia", "que distancia", "distancia al", "al banderín", "al centro del green", "cuánto al", "cuanto al" → "es"
+- Chinese triggers (any of these substrings): "多少码", "到旗杆", "到果岭", "码到", "到中心" → "zh"
+- Otherwise → "en"
+The language reflects the transcript itself, not the user's preferred app language — a single Spanish utterance gets "es" even if their app is set to English. Default "en" when no triggers match.
+
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
   "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
-  "follow_up_question": string | null
+  "follow_up_question": string | null,
+  "language": "en" | "es" | "zh"
 }
 
 Confidence guide:
@@ -272,12 +289,14 @@ Parse the intent. Return JSON only.`;
       ? parsed.confidence
       : 'low';
     const follow_up_question = typeof parsed.follow_up_question === 'string' ? parsed.follow_up_question : null;
+    const language: 'en' | 'es' | 'zh' = parsed.language === 'es' || parsed.language === 'zh' ? parsed.language : 'en';
 
     return new Response(JSON.stringify({
       intent_type,
       parameters,
       confidence,
       follow_up_question,
+      language,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
   } catch (err) {

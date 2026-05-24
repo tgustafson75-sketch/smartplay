@@ -1,3 +1,12 @@
+// CRITICAL: LOCKSTEP TWIN
+// This file has an identical twin:
+// - api/voice-intent.ts (Vercel serverless)
+// - app/api/voice-intent+api.ts (Expo Router)
+//
+// Any change to intent mappings, prompts, or types MUST be made in BOTH files.
+// If they drift, voice breaks in production. You will debug for hours.
+// Before committing, diff both files: git diff api/voice-intent.ts app/api/voice-intent+api.ts
+
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName, type VoiceGender, type Persona } from '../lib/persona';
@@ -27,7 +36,7 @@ Available intents:
    - "${caddieName} what should I do here" / "analyze my lie" / "what's my play" / "look at this lie" / "take a look at this" / "what do you see" / "open TightLie" / "tight lie" / "check my lie" / "show me TightLie" -> { tool_name: "lie_analysis" }
    - "should I go for it" / "can I go at this pin" -> { tool_name: "lie_analysis", play_intent: "aggressive" }
    - "should I lay up" / "should I play safe here" -> { tool_name: "lie_analysis", play_intent: "conservative" }
-   - "open SmartMotion" / "start SmartMotion" / "smart motion" / "I want to record a swing" / "record my swing" / "capture my swing" / "quick swing" -> { tool_name: "smartmotion" }
+   - "open SmartMotion" / "start SmartMotion" / "smart motion" / "I want to record a swing" / "capture my swing" / "quick swing" -> { tool_name: "smartmotion" }
    - "record me down the line" / "record down the line" / "down the line swing" / "DTL" -> { tool_name: "smartmotion", angle: "down_the_line", auto_start: true }
    - "record me face on" / "record face on" / "face-on swing" / "front view swing" -> { tool_name: "smartmotion", angle: "face_on", auto_start: true }
    - "record my swing down the line" -> { tool_name: "smartmotion", angle: "down_the_line", auto_start: true }
@@ -258,6 +267,10 @@ Available intents:
    Examples:
    - "record this shot" / "capture this" / "record my shot" / "record this" -> { capture_type: "shot" }
    - "record my swing" / "watch my swing" / "record this swing" -> { capture_type: "swing" }
+   - "watch this" -> { intent_type: "media_capture", parameters: { capture_type: "swing" } }
+   - "watch this putt" -> { intent_type: "putt_watch", parameters: { shot_type: "putt" } }
+   - "watch this chip" -> { intent_type: "putt_watch", parameters: { shot_type: "chip" } }
+   - "watch this bunker shot" -> { intent_type: "putt_watch", parameters: { shot_type: "chip" } }
    capture_type 'shot' = on-course shot capture (~5s). 'swing' = full swing for review (~8s, saves to swing library). The clip lands in the swing library and on the shot's clip_uri for later playback/share; there is no auto-opening "hero shot" review pane (intentionally removed 2026-05-17).
    DO NOT match commands that are about playback ("show me video", "replay") — those are media_playback.
 
@@ -293,12 +306,19 @@ Available intents:
 
 If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_type "unknown" with confidence "medium" and a clarifying follow_up_question. Don't guess between candidates; ask once.
 
+Language detection — emit a "language" field on EVERY response based on transcript content:
+- Spanish triggers (any of these substrings, case-insensitive): "cuántas yardas", "cuantas yardas", "qué distancia", "que distancia", "distancia al", "al banderín", "al centro del green", "cuánto al", "cuanto al" → "es"
+- Chinese triggers (any of these substrings): "多少码", "到旗杆", "到果岭", "码到", "到中心" → "zh"
+- Otherwise → "en"
+The language reflects the transcript itself, not the user's preferred app language — a single Spanish utterance gets "es" even if their app is set to English. Default "en" when no triggers match.
+
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "declare_hole" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "declare_hole" | "putt_watch" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
-  "follow_up_question": string | null
+  "follow_up_question": string | null,
+  "language": "en" | "es" | "zh"
 }
 
 Confidence guide:
@@ -374,12 +394,14 @@ Parse the intent. Return JSON only.`;
       ? parsed.confidence
       : 'low';
     const follow_up_question = typeof parsed.follow_up_question === 'string' ? parsed.follow_up_question : null;
+    const language: 'en' | 'es' | 'zh' = parsed.language === 'es' || parsed.language === 'zh' ? parsed.language : 'en';
 
     return res.status(200).json({
       intent_type,
       parameters,
       confidence,
       follow_up_question,
+      language,
     });
 
   } catch (err) {

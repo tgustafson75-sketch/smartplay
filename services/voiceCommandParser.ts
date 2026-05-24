@@ -54,6 +54,7 @@ export async function parseVoiceIntent(
       parameters?: Record<string, unknown>;
       confidence?: string;
       follow_up_question?: string | null;
+      language?: 'en' | 'es' | 'zh';
     };
 
     const confidence: IntentConfidence =
@@ -61,12 +62,23 @@ export async function parseVoiceIntent(
         ? data.confidence
         : 'low';
 
+    // 2026-05-24 — Classifier-detected utterance language ("cuántas yardas"
+    // → es, "多少码" → zh). Carried on VoiceIntent so the router can
+    // thread it into AppContext for localized voice_response strings.
+    // Undefined when the classifier doesn't emit a value (older Vercel
+    // route or unrecognized triggers) — handlers fall back to 'en'.
+    const language: 'en' | 'es' | 'zh' | undefined =
+      data.language === 'en' || data.language === 'es' || data.language === 'zh'
+        ? data.language
+        : undefined;
+
     return {
       intent_type: data.intent_type ?? 'unknown',
       parameters: data.parameters ?? {},
       confidence,
       follow_up_question: data.follow_up_question ?? null,
       raw_text: text,
+      language,
     };
 
   } catch (err) {
