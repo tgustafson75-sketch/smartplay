@@ -33,6 +33,15 @@ export interface CourseHole {
   backLng: number;
   note: string;
   estimated: boolean;
+  // 2026-05-24 — Optional screenshot override URI for holes where the
+  // Mapbox / Google tile is poor (low-resolution, occluded by trees,
+  // wrong orientation, etc.). When set, GolfshotHoleView uses it as
+  // the image source instead of resolveHoleImage's chain. Existing
+  // marker calibration (useHoleMarkerCalibrationStore) overlays on
+  // top, so once dragged to the right spot, the player's tee / pin
+  // marker positions persist across rounds. Leave undefined to fall
+  // through to the existing local bundled → Mapbox → Google chain.
+  backgroundImageUri?: string;
 }
 
 export type ShotLocation = { lat: number; lng: number };

@@ -52,6 +52,12 @@ export interface GolfshotHoleViewProps {
   /** Optional: persist Y / P moves up to a caller-managed store. */
   onLayupMoved?: (positionFrac: { x: number; y: number }) => void;
   onPinMoved?: (positionFrac: { x: number; y: number }) => void;
+  /** 2026-05-24 — Per-hole screenshot override URI. When set, used as
+   *  the image source instead of holeImageMapper's chain (Mapbox /
+   *  bundled / Google). Marker calibration overlays still render on
+   *  top so existing tee/pin drag persistence keeps working. Sourced
+   *  by callers from CourseHole.backgroundImageUri. */
+  imageOverrideUri?: string;
 }
 
 // Calibration constants tuned against the bundled Palms-aspect screenshots.
@@ -68,15 +74,30 @@ export default function GolfshotHoleView({
   tee, green, greenFront, greenBack,
   width, height,
   onLayupMoved, onPinMoved,
+  imageOverrideUri,
 }: GolfshotHoleViewProps) {
   // ─── Image resolution ──────────────────────────────────────────────
+  // 2026-05-24 — If caller provided an override URI (CourseHole.
+  // backgroundImageUri), use it directly. Skip holeImageMapper's
+  // resolution chain. Caller has decided this screenshot is better
+  // than whatever Mapbox / bundled would produce for this hole.
   const resolution: HoleImageResolution = useMemo(
-    () => resolveHoleImage({
-      courseId, courseName, holeNumber,
-      par, yardage: distanceYd, tee, green,
-      width, height,
-    }),
-    [courseId, courseName, holeNumber, par, distanceYd, tee, green, width, height],
+    () => {
+      if (imageOverrideUri) {
+        return {
+          source: { uri: imageOverrideUri },
+          url: imageOverrideUri,
+          source_type: 'local_by_id',
+          confidence: 100,
+        };
+      }
+      return resolveHoleImage({
+        courseId, courseName, holeNumber,
+        par, yardage: distanceYd, tee, green,
+        width, height,
+      });
+    },
+    [imageOverrideUri, courseId, courseName, holeNumber, par, distanceYd, tee, green, width, height],
   );
   const imageSource: ImageSourcePropType | null = resolution.source;
 

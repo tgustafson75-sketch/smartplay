@@ -54,6 +54,21 @@ const CLUBS = [
   'PW', 'GW', 'SW', 'LW', 'Putter',
 ];
 
+// 2026-05-24 — Per-hole screenshot override. When a CourseHole entry has
+// `backgroundImageUri` set (Tim or owner curated a hand-picked image for
+// a hole where Mapbox is poor), return that URI; otherwise null and the
+// existing local → Mapbox → Google chain in holeImageMapper takes over.
+// Caller passes the result as `imageOverrideUri` to GolfshotHoleView.
+// Note: this is a one-shot read; if the user mutates courseHoles
+// mid-screen the override won't refresh until the next mount. Good
+// enough — overrides are curated at course-data ingest, not at runtime.
+function getHoleBackgroundUri(courseId: string | null, holeNumber: number): string | null {
+  void courseId;
+  const { courseHoles } = useRoundStore.getState();
+  const courseHole = courseHoles.find((h) => h.hole === holeNumber);
+  return courseHole?.backgroundImageUri ?? null;
+}
+
 function timeAgo(ms: number): string {
   const diff = Date.now() - ms;
   if (diff < 60_000) return 'just now';
@@ -840,6 +855,7 @@ export default function HoleView() {
               })()}
               width={IMAGE_WIDTH}
               height={IMAGE_HEIGHT}
+              imageOverrideUri={getHoleBackgroundUri(courseId ?? null, hole) ?? undefined}
             />
           ) : (
             <View style={styles.noImage}>

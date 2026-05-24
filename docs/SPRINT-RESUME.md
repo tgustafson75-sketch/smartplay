@@ -6,7 +6,32 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-- **Sprint:** Two-week consolidation sprint, started 2026-05-20. Target: app ready by June.
+- **Sprint:** Two-week consolidation sprint, started 2026-05-20. Target: app ready by June. **Day 5 — 2026-05-24.**
+
+### TL;DR (2026-05-24)
+
+**Canonical inventory now lives at [BUILD-STATE-AUDIT.md](../BUILD-STATE-AUDIT.md)** (repo root). Read that for the full feature-by-feature breakdown across BUILT-VERIFIED / BUILT-UNVERIFIED / LEFT-FOR-1.0 / FUTURE. The list below is the running operational state — the audit is the authoritative classification.
+
+**Days 3-5 (2026-05-22 → 2026-05-24) — major shipped items, all OTA-able + tagged `[SHIPPED-UNVERIFIED]` in the audit:**
+
+- **Metric honesty system landed.** Forward-compatible source taxonomy (`38727de`) — pose wired, acoustic/watch/calibrated/profile/placeholder reserved, sources[] slot for fusion. Confidence labels + ranges on every metric (`31156de`) — killed the silent clamp, retired the fake-precision flag. Acoustic re-tiered as estimate not truth-grade (`ae58836`). Acoustic ball speed for SmartMotion in-app captures via parallel recorder (`516aab9`, Option C).
+- **BUG #1 — Frame extraction regression diagnosed + fixed.** Diagnosis (`3bb96ee`, read-only) ruled OUT extraction collapse: 5 frames still ship through `/api/swing-analysis`. Fix (`45dfe0e`) rewrote the Sonnet prompt to read full motion + stopped frame-1 anchoring + logged image-count. Owner debug card (`3ef0c67`) makes frames-sent vs server-saw visible in-app.
+- **Layman translation layer (`dedba52`).** `layman_explanation` field added to swing-analysis response; rendered as progressive disclosure on PrimaryIssueCard. **Gap:** NOT yet ported to `/api/putting-analysis`.
+- **Fault-frame persistence (`c974779`).** Diagnostic frame saved as JPEG (`fault_frame_index` + `visual_reference_path`) — annotation + share prerequisite, opp #4 from the roadmap.
+- **Coach Mode player scan + calibration profile (`c777743`).** Player calibration store, scan-student route, beta-tagged for Tank. **Critical gap:** profile is written but NOT yet consumed by `swingMetricsService` — flagged for 1.0 in the audit.
+- **GPS-verify three-flow build.** Discovery (`fd7ad07`, read-only). Flow A — raw yardage to pin (`a347e0b`). Flow B — confidence-gated proactive hole ask (`98511a6`, gpsConfidenceAsk orchestrator + gpsHealthStore). Flow C — declared-position cross-check + silent Mark on divergence + UndoMarkBanner (`406ab3a`).
+- **Hands-free spine batch (`291a207`, `ecf57d9`, `56a769c`, `bebe100`, `5f08032`).** "watch this" + putt_watch classifier reachability. media_capture swing falls back to /swinglab/quick-record when Cage not mounted (one-phrase-one-path). ES/ZH localization — text-path (`TTS_STRINGS`) AND TTS voice model threading (`eleven_multilingual_v2` swap). iOS/Android-specific permissions copy coaching "Allow all the time". CourseTruth dev tool (`app/dev/CourseTruth.tsx` + `services/courseTruth.ts`, AsyncStorage-backed survey workflow). `resolveGreenCoords` extended to TRUTH > override > courseHoles > geometryCache, sync via boot-hydrated cache. Meta glasses voice-ingest v1 (`metaGlassesIngest.ts` + `externalContext` on roundStore + `what_did_meta_say` voice intent). Tee box geofence (`currentLocationType` on roundStore — fed by gpsManager on every fix, does NOT touch currentHole). `ask_golf_father` intent with location × distance cascade + Tier-1 hardcoded TANK_RULES for 6 questions. `cage_mode` voice route + `watchAndSpeakNextSwingAnalysis()` Cage swing auto-coach. `practiceStore` persisting cage tendencies (overTheTopCount / fatShotCount / typicalMiss / avgCarry) fed from `perShotAnalysis` adapter. AsyncStorage dump panel on `/cage-debug` for on-device persistence verification (no Flipper needed).
+- **BUILD-STATE-AUDIT.md (`d97c22e`)** — full read-only reconciliation of sprint log vs code. Authoritative source for "what's actually built vs claimed" going forward.
+
+**NOT on main — pending native EAS Build cut:**
+- **Worktree `feat/bt-media-button` @ `7504099`.** Bluetooth headset media-button native bridge (Kotlin Android + Swift iOS) + plugin + JS voiceTriggers + app/_layout integration. Mirrors AirPods/Bose play-pause → `notifyEarbudTap()` → `listeningSession.toggle()`. Not OTA-eligible (native deps). Awaits `eas build --platform all --profile preview`.
+
+**Headline observation from the audit:** ~40 items shipped to `main`, only 2 verified. The dominant 1.0 gap is **verification on real hardware** — a Menifee cart round, a real swing capture, a real Spanish utterance — not more code. See BUILD-STATE-AUDIT.md §B for the per-item verification gate.
+
+---
+
+### Earlier day-by-day fixes (Day 1-2 history — preserved for context)
+
 - **Fix P shipped — voice score-telling intent (OTA-able).** Same silent-contract bug-class as Fix O: `services/intents/logScoreHandler.ts` was fully implemented + registered with the canonical `round.logScore` write path, but `log_score` was completely absent from `api/voice-intent.ts`'s classifier prompt (not in the numbered intent list, not in the JSON schema union). Haiku classifier can't emit an intent it hasn't been told exists, so "I got a 4 on hole 1" classified as `unknown` → triggered the "are you asking or telling?" clarifier. Fix: added the full `log_score` intent definition (#21) with examples covering numeric phrasings ("I got a 4", "took a 5", "carded a 6") AND par-relative names ("made par", "bogey", "birdie", "eagle", "double bogey"); added explicit number-vs-hole disambiguation rules ("4 on hole 1" → strokes 4 hole 1; "I bogeyed 7" → bogey on hole 7); added `"log_score"` to the schema union. Handler extended with `parseScoreName(raw, par)` to resolve par-relative names against the current hole's par; par lookup reordered to happen before strokes parsing. Caddie confirms with "Got it — 4 (par)" via existing listeningSession TTS (persona voice). Strategy questions still route to the brain — log_score only matches past-tense reports.
 - **Fix O shipped — hole nav + scoring resilience (OTA-able).** The cockpit's SHOTS / PUTTS steppers were silently no-op'ing on device — `CockpitCaddieScreen.tsx` was calling `setScore` / `setPutts` via `(s as unknown as {...}).setScore?.(...)`, but the store exposes those actions as `logScore` / `logPutts`. Optional chaining swallowed every tap with no error. Replaced with the canonical `logScore` / `logPutts` (same write path the scorecard, voice intents, and harness use). Added manual hole ◀/▶ nav arrows to `CaddieDataStrip` in both layouts (horizontal portrait + grid Fold-open) — calls `setCurrentHole`, which already fires `holeDetection.noteManualOverride()` so a correction holds for 20s against auto-detection. Scorecard already had manual nav via row tap. One canonical write path everywhere: `setCurrentHole` for hole, `logScore` for score, `logPutts` for putts. No parallel logic. GPS / holeDetection untouched (Fix L territory). OTA-able.
 - **Fix N (THE GATE) shipped — Start Round crash-proofed (EAS-build-required, not OTA).** Tim's Z Fold (One UI 6 / Android 14 / targetSdk 35) crashed hard on every Start Round; round persisted via Zustand+AsyncStorage but the post-persist GPS orchestration died. Strongest cause: foreground location service posts a persistent notification, but `POST_NOTIFICATIONS` was missing from the manifest → Android 13+ SecurityException → native process kill (JS try/catch can't catch). **Defensive fix shipped without waiting for a stack trace:** (1) added `POST_NOTIFICATIONS` to app.json Android permissions; (2) `services/backgroundLocationTask.ts` now probes the runtime permission via `PermissionsAndroid.check`/`request` BEFORE calling `Location.startLocationUpdatesAsync` — when denied (or the probe itself throws), skips the foreground service entirely and lets foreground `watchPositionAsync` carry the round (loses Doze coverage, NOT the round); the native call is also wrapped in an inner try/catch as a third defense layer; (3) `app/(tabs)/caddie.tsx` no longer double-fires `startGpsManager` — collapsed to a single call site in `roundStore.startRound`, with caddie.tsx only running the post-GPS `refreshFix`+`forceMarkPosition` initial-fix sync after a brief wait; (4) `eas.json` gets an `EXPO_PUBLIC_SENTRY_DSN: ""` slot so Tim can wire runtime crash capture via EAS secrets without further code changes (kept `SENTRY_DISABLE_AUTO_UPLOAD: true` since source-map upload requires the full SENTRY_AUTH_TOKEN/ORG/PROJECT trio — runtime capture works without it). EAS rebuild required for the manifest change; hole-jumping (Fix L) re-evaluation deferred until a clean Start Round runs on device.
@@ -38,6 +63,8 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## What's done and verified
 
+> As of Day 5 (2026-05-24): **[BUILD-STATE-AUDIT.md](../BUILD-STATE-AUDIT.md) is the canonical inventory.** Section A = verified, Section B = shipped-unverified (each with explicit gates), Section C = 1.0 blockers, Section D = future. The lists below are kept for historical continuity but the audit doc has the strict bar.
+
 **Code on `main`, server-side will deploy via Vercel automatically:**
 - Phase 416 SmartMotion two-card system + cleanup
 - Persona-aware Kevin TTS — `/api/kevin.ts` no longer hardcodes Kevin's voice for every persona
@@ -60,13 +87,25 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## What's actively in progress
 
-Nothing — Day 1 closing. Day 2 should start with **empirical verification on Z Fold** of:
-1. SmartMotion validation gate stops fabrication on floor footage
-2. Each of Kevin/Serena/Tank/Harry speaks in their own voice
-3. Tools FAB on caddie tab expands left correctly
-4. End-Round flow does not crash with "Maximum update depth exceeded"
+**Day 5 close (2026-05-24):**
+- ~40 OTA-eligible items shipped + verified TS-clean + bundled OTA. Update group history: `ac5045ea` (voice spine extensions) → `ab644d16` (voice→cage + auto-coach) → `dcf96941` (Tank rules + practice store) → `23197688` (AsyncStorage dump panel). All on preview channel.
+- BUILD-STATE-AUDIT.md committed and pushed (`d97c22e`). Surfaces the verification debt as the dominant 1.0 gap.
+- BT media-button native module sitting on worktree `feat/bt-media-button` @ `7504099`. Awaits an EAS Build cut.
 
-OTA push for the most recent bundle (`e872f9b`) failed 5× on Expo's asset processor. May need a retry, a fresh hash bump, or rely on the next APK build to ship the client-side changes.
+**What Day 6+ should do — verification, not more code:**
+1. **Cart round at Menifee** covering H12–H17 (the H14→H15 regression case from `holeDetection.ts:36-46`). Verifies the hardened gates + tee geofence + truth resolver + GPS Flow C in one pass. Per memory rule: cart is the default, walker-only / harness-only verification is insufficient.
+2. **Real swing capture** in Cage Mode → confirm BUG #1 fix (full motion described, not just setup) + acoustic ball speed + metric ranges + auto-speak observation.
+3. **Spanish utterance test** ("¿cuántas yardas?") → confirm Spanish text emitted AND spoken via `eleven_multilingual_v2` (not English-accented monolingual).
+4. **AsyncStorage dump panel** verification at `/cage-debug` → confirms practice-store accumulates from real swings.
+5. **CourseTruth survey** on Menifee Lakes → walk-to-green + "I'm Here" snap on each hole → confirm truth wins over courseHoles via `side_effects: green_source:truth`.
+
+**1.0 blockers from the audit (not yet addressed):**
+- Stripe / RevenueCat real billing wiring (only paywallGuard stub today)
+- TestFlight + Play Store submission
+- Putt-analysis prompt parity + layman_explanation (parallel of BUG #1 fix not yet ported)
+- Calibration profile consumer wiring (`playerCalibrationStore` writes, nothing reads)
+- Cloud backup of swing library + videos (data-loss-on-uninstall protection)
+- EAS Build cut to ship the BT worktree
 
 ---
 
@@ -118,4 +157,4 @@ Sprint isn't done until ALL of these are confirmed on a real Z Fold (from the Sp
 
 ---
 
-**Last refreshed:** 2026-05-21 (Day 2 end — Fix N crash-proof Start Round needs EAS rebuild; Fixes O + P resilience cluster OTA-ready (cockpit scoring + DataStrip hole nav + voice score-telling); Fix L hole-jumping re-eval deferred until clean post-N Start Round). Update this doc at the end of every session.
+**Last refreshed:** 2026-05-24 (Day 5 end — voice spine + Meta integration + metric honesty + GPS-verify flows + Tank rules + CourseTruth all shipped OTA. BUILD-STATE-AUDIT.md is now the canonical inventory. BT media-button native module on worktree, awaits EAS Build. Verification debt is the dominant 1.0 gap — Day 6+ should be hardware testing on a real cart round, not more code). Update this doc at the end of every session.
