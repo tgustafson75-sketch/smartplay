@@ -66,11 +66,25 @@ export type MetricSource =
 
 // Truth-grade sources skip the `~` prefix, suppress the range, and
 // can reach the 'high' confidence bucket. Pose / profile / placeholder
-// always render as estimates with `~` + range. Single source-of-truth
-// for the UI predicate so adding a new truth-grade sensor is one
-// array push, not a code-search.
+// / acoustic always render as estimates with `~` + range. Single
+// source-of-truth for the UI predicate so adding a new truth-grade
+// sensor is one array push, not a code-search.
+//
+// 2026-05-24 (C1) — Removed 'acoustic' from this set. The
+// single-mic-impact-time × club-typical-peak heuristic that drives
+// /api/acoustic-detect is a SHARPER estimate than pose-derived ball
+// speed, but it's not ground truth — Cage's own SDK comment is
+// explicit: "True ball speed needs 2 mics / radar / doppler"
+// (acousticDetectApi.ts:24). Acoustic now lives in the estimate tier
+// with a tighter range (~±10% vs pose's ±18%) and a med confidence
+// ceiling — never bare, never 'high'. Reserved for truth-grade
+// remain 'measured' (legacy generic), 'calibrated' (spec 2 — pose
+// heuristic with a validated empirical constant), and 'watch' (IMU
+// is real motion measurement — we revisit its club-head range in the
+// watch pass; for now it's the only on-device truth-grade sensor for
+// club speed).
 const TRUTH_GRADE_SOURCES: readonly MetricSource[] = [
-  'acoustic', 'watch', 'calibrated', 'measured',
+  'measured', 'calibrated', 'watch',
 ];
 
 export function isTruthGrade(source: MetricSource): boolean {
@@ -144,6 +158,17 @@ function bucketize(confidence: number): 'high' | 'med' | 'low' {
 function rangeFactor(source: MetricSource, label: 'high' | 'med' | 'low'): number {
   if (isTruthGrade(source)) return 0; // caller passes null range
   if (source === 'placeholder') return 0.25;
+  // 2026-05-24 (C1) — Acoustic is a sharper estimate than pose-derived
+  // metrics: a real impact transient + cage-distance triangulation,
+  // even when the speed math itself is a club-typical heuristic.
+  // Tighter range (~±10% at med) reflects that without claiming
+  // truth-grade. Confidence still ceilings at 'med' so the bare-number
+  // / no-range / can-hit-high promotion never fires.
+  if (source === 'acoustic') {
+    if (label === 'high') return 0.08; // unreachable at the 0.65 ceiling — defensive
+    if (label === 'med')  return 0.10;
+    return 0.15;
+  }
   // 'pose' / 'profile' (+ their legacy aliases): width by confidence
   if (label === 'high') return 0.12;
   if (label === 'med')  return 0.18;
@@ -330,12 +355,20 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
   // this today; 1B will wire it.
   let ballSpeed: SwingMetric;
   if (typeof inputs.measuredBallSpeedMph === 'number' && Number.isFinite(inputs.measuredBallSpeedMph)) {
+    // 2026-05-24 (C1) — Acoustic is the sharpest estimate available
+    // for ball speed on a single-mic capture, but it's STILL an
+    // estimate: the math is a club-typical-peak heuristic, not a
+    // ground-truth radar/doppler reading. Confidence ceilings at 0.65
+    // (top of the 'med' bucket) so it reads as a sharper estimate
+    // than pose without claiming truth — mirrors Cage's tone
+    // "(single-mic impact, club-typical)". `~` prefix kept; the
+    // tighter rangeFactor in rangeFor() produces ~±10% vs pose's ±18%.
     ballSpeed = finalize({
       value: Math.round(inputs.measuredBallSpeedMph),
       unit: 'mph',
       source: 'acoustic',
-      confidence: 0.80,
-      estimateNote: undefined,
+      confidence: 0.65,
+      estimateNote: 'acoustic (single-mic impact, club-typical)',
     });
   } else if (clubSpeed.value != null) {
     const typicalSmash = TYPICAL_SMASH_BY_CLUB[clubKey] ?? TYPICAL_SMASH_BY_CLUB.unknown;
@@ -366,19 +399,18 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
     const bothTruthGrade = isTruthGrade(clubSpeed.source) && isTruthGrade(ballSpeed.source);
     const eitherLow = bucketize(clubSpeed.confidence) === 'low' || bucketize(ballSpeed.confidence) === 'low';
     if (bothTruthGrade) {
+      // 2026-05-24 (C1) — Acoustic is no longer truth-grade, so this
+      // branch only fires when BOTH parents are watch / calibrated /
+      // legacy 'measured'. Acoustic ball speed + watch club speed
+      // correctly falls into the compounded-pose branch below (med
+      // confidence at best, never auto-promoted to 'high'). Headline
+      // source is just clubSpeed.source — both parents are truth-grade
+      // so either is honest.
       const ratio = ballSpeed.value / clubSpeed.value;
-      // Surface the smash with the headline source picked from the
-      // less-direct parent (acoustic and watch are both truth-grade
-      // but discriminating the smash's source as 'calibrated' isn't
-      // right yet — use the parent that's the bottleneck).
-      const source: MetricSource =
-        clubSpeed.source === 'watch' && ballSpeed.source === 'acoustic'
-          ? 'acoustic' // watch club × acoustic ball — ball drives ratio honesty
-          : clubSpeed.source;
       smashFactor = finalize({
         value: Math.round(ratio * 100) / 100,
         unit: '',
-        source,
+        source: clubSpeed.source,
         confidence: 0.85,
         estimateNote: undefined,
       });
