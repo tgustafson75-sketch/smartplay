@@ -39,12 +39,46 @@ const CANONICAL_ISSUES = [
 
 type CanonicalIssue = typeof CANONICAL_ISSUES[number];
 
+// 2026-05-24 — Structured primary-fault catalog (GolfFix #1 step). Faults
+// genuinely visible in 2D phone video (no 3D, no launch monitor). The
+// model picks ONE from this list per analysis and ALSO returns a paired
+// cause / fix / drill. Distinct from CANONICAL_ISSUES (which includes
+// ball-flight inferences like club_face_open / swing_path_*); those
+// stay on detected_issue for back-compat with the existing classifier
+// pipeline. primary_fault is the new headline surface.
+const PRIMARY_FAULTS = [
+  'over_the_top',
+  'early_extension',
+  'casting',           // loss of lag / early release
+  'sway',              // lateral hip slide off the ball during backswing
+  'reverse_pivot',
+  'chicken_wing',
+  'plane_too_flat',
+  'plane_too_steep',
+  'head_movement',     // significant lateral / vertical head shift
+  'spine_angle_loss',  // standing up / changing posture during downswing
+  'inconclusive',      // model is not confident or footage doesn't support a confident call
+] as const;
+type PrimaryFault = typeof PRIMARY_FAULTS[number];
+
 type SwingAnalysisResponse = {
   detected_issue: CanonicalIssue;
   severity: 'minor' | 'moderate' | 'significant' | 'none';
   confidence: 'high' | 'medium' | 'low';
   observation: string;          // 1-sentence what was visible in the frames
   follow_up_question?: string | null;  // when frames were too poor to read
+  // 2026-05-24 — GolfFix #1 structured payload. Same single Sonnet call
+  // produces ALL fields. primary_fault is the headline; cause/fix/drill
+  // expand it into something actionable. When confidence is low or the
+  // read isn't clean, primary_fault MUST be 'inconclusive' (server
+  // normalises to this when confidence='low' AND no canonical issue
+  // was named, OR when the model's primary_fault doesn't pass the
+  // allowlist check). cause/fix/drill are empty strings when
+  // primary_fault is 'inconclusive'.
+  primary_fault?: PrimaryFault;
+  cause?: string;
+  fix?: string;
+  drill?: string;
   // Phase 403b — 0-based index into the submitted frames identifying the
   // most diagnostic frame for the detected issue. Used downstream to
   // persist that exact frame as a JPEG so the review UI can show the
@@ -181,6 +215,29 @@ Confidence scale (pick honestly — low-confidence is fine and useful):
 - medium: pattern visible but partially obscured, or visible in only one frame
 - low: tendency is suggested but evidence is thin (still name it; explain in observation)
 
+PRIMARY FAULT — structured GolfFix-style output (CRITICAL).
+In addition to detected_issue (canonical, kept for the existing classifier pipeline), pick ONE primary_fault from this FIXED list of faults that are genuinely visible in 2D phone video. Do NOT pick anything not on this list. Do NOT invent variants.
+
+Allowed primary_fault values:
+- over_the_top: the club moves OUT and OVER the swing plane on transition from the top
+- early_extension: hips/spine push toward the ball during the downswing (loss of posture at impact)
+- casting: lead wrist hinge releases early in the downswing (loss of lag)
+- sway: lateral hip slide AWAY from the target during the backswing (vs. centered rotation)
+- reverse_pivot: weight stays on lead foot at top, shifts to trail foot through impact
+- chicken_wing: lead arm bends/folds through impact instead of extending
+- plane_too_flat: shaft tracks well below the ideal plane through transition and downswing
+- plane_too_steep: shaft tracks well above the ideal plane through transition and downswing
+- head_movement: notable lateral or vertical head shift across the sequence
+- spine_angle_loss: posture / spine angle straightens during the downswing
+- inconclusive: footage is unclear OR confidence is low OR no single fault dominates. Use this — never guess.
+
+Then for that primary_fault, return THREE structured fields the player can act on:
+- cause: ONE sentence — WHY this player is doing this fault based on what you see in the frames (e.g. "Your weight is hanging back through impact, so you're flipping the wrists to make contact"). Specific to THIS swing, not a textbook definition.
+- fix: ONE concrete swing-cue change. Imperative. Specific. Avoid jargon ("Feel like your trail hip clears toward the target before your hands release" — NOT "improve your kinematic sequence").
+- drill: ONE specific drill the player can do at the range or in front of a mirror to groove the fix (e.g. "Step-through drill: address the ball, then take a small step toward the target with your lead foot as you start the downswing — feel the weight shift before you swing").
+
+When primary_fault is 'inconclusive': cause/fix/drill MUST be empty strings "". Do NOT fabricate generic advice. The honest read is "I'm not sure yet — record a clearer angle / another swing and I'll have more to say." That message goes in observation, NOT in fix/drill.
+
 Output ONLY a JSON object:
 {
   "valid_swing": true | false,
@@ -191,7 +248,11 @@ Output ONLY a JSON object:
   "observation": "<one short sentence describing what was actually visible — no advice, just observation>",
   "fault_frame_index": <0-based integer index into the submitted frames identifying the single most diagnostic frame for the detected issue, or -1 if no specific frame stood out>,
   "follow_up_question": "<short retake suggestion ONLY when frames are genuinely unreadable; else null>",
-  "layman_explanation": "<plain-language translation of the detected_issue per the EXPLAIN rules below — see quality bar. Empty string '' when detected_issue is 'none'.>"
+  "layman_explanation": "<plain-language translation of the detected_issue per the EXPLAIN rules below — see quality bar. Empty string '' when detected_issue is 'none'.>",
+  "primary_fault": "<one of the PRIMARY_FAULTS values above, OR 'inconclusive' when confidence is low or no single fault dominates>",
+  "cause": "<one sentence: WHY this player is doing this fault, specific to the frames. Empty string '' when primary_fault is 'inconclusive'.>",
+  "fix": "<one concrete imperative swing cue. Empty string '' when primary_fault is 'inconclusive'.>",
+  "drill": "<one specific actionable drill. Empty string '' when primary_fault is 'inconclusive'.>"
 }
 
 EXPLAIN — layman_explanation quality bar (CRITICAL).
@@ -445,6 +506,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (parsed.detected_issue === 'none' || parsed.valid_swing === false) {
       parsed.layman_explanation = '';
+    }
+
+    // 2026-05-24 — GolfFix #1 normalisation. primary_fault must be in the
+    // PRIMARY_FAULTS allowlist; anything else collapses to 'inconclusive'.
+    // cause/fix/drill must be non-empty strings when primary_fault is
+    // diagnostic; force empty when primary_fault is 'inconclusive' OR
+    // the swing is invalid OR confidence is 'low' AND the model didn't
+    // commit to a specific fault. Never let the API return invented
+    // cause/fix/drill when the structured fault didn't pass.
+    if (typeof parsed.primary_fault !== 'string' || !PRIMARY_FAULTS.includes(parsed.primary_fault as PrimaryFault)) {
+      parsed.primary_fault = 'inconclusive';
+    }
+    if (parsed.valid_swing === false) {
+      parsed.primary_fault = 'inconclusive';
+    }
+    // Coerce strings; trim and bail on accidental whitespace-only.
+    const coerceStr = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+    parsed.cause = coerceStr(parsed.cause);
+    parsed.fix = coerceStr(parsed.fix);
+    parsed.drill = coerceStr(parsed.drill);
+    if (parsed.primary_fault === 'inconclusive') {
+      parsed.cause = '';
+      parsed.fix = '';
+      parsed.drill = '';
+    }
+    // Defensive: if model returned a diagnostic primary_fault but left
+    // any of cause/fix/drill blank, collapse to inconclusive rather than
+    // ship a partial card. Honest > partial.
+    if (parsed.primary_fault !== 'inconclusive' &&
+        (parsed.cause.length === 0 || parsed.fix.length === 0 || parsed.drill.length === 0)) {
+      parsed.primary_fault = 'inconclusive';
+      parsed.cause = '';
+      parsed.fix = '';
+      parsed.drill = '';
     }
 
     // 2026-05-24 — Owner-tool telemetry echo. The server returns the

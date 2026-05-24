@@ -134,13 +134,46 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
 
       <View style={styles.divider} />
 
-      <Text style={styles.sectionLabel}>WHAT&apos;S HAPPENING</Text>
-      <Text style={styles.body}>{breakdown}</Text>
+      {/* 2026-05-24 — GolfFix #1 structured render. When the server
+          returned a named primary_fault + cause/fix/drill, render that
+          structured card (CAUSE → FIX → DRILL). When primary_fault is
+          'inconclusive', show the honest "not enough to read yet"
+          callout instead of fabricating cause/fix/drill. Legacy /
+          putt synthesizer paths without primary_fault fall through to
+          the prior mechanical_breakdown + feel_cue layout below. */}
+      {issue.primary_fault === 'inconclusive' ? (
+        <View style={styles.inconclusiveBox}>
+          <Text style={styles.sectionLabel}>NOT ENOUGH TO READ YET</Text>
+          <Text style={styles.body}>
+            I couldn&apos;t pin a single dominant fault from this recording. Try a clearer angle (down-the-line from behind, or face-on from the front) so I can give you a specific fix.
+          </Text>
+        </View>
+      ) : issue.fix && issue.drill ? (
+        <>
+          <Text style={styles.sectionLabel}>CAUSE</Text>
+          <Text style={styles.body}>{issue.cause || breakdown}</Text>
 
-      <Text style={[styles.sectionLabel, styles.feelLabel]}>FEEL CUE</Text>
-      <View style={styles.feelBox}>
-        <Text style={styles.feelText}>{issue.feel_cue}</Text>
-      </View>
+          <Text style={[styles.sectionLabel, styles.fixLabel]}>FIX</Text>
+          <View style={styles.fixBox}>
+            <Text style={styles.fixText}>{issue.fix}</Text>
+          </View>
+
+          <Text style={[styles.sectionLabel, styles.drillLabel]}>DRILL</Text>
+          <View style={styles.drillBox}>
+            <Text style={styles.drillText}>{issue.drill}</Text>
+          </View>
+        </>
+      ) : (
+        <>
+          <Text style={styles.sectionLabel}>WHAT&apos;S HAPPENING</Text>
+          <Text style={styles.body}>{breakdown}</Text>
+
+          <Text style={[styles.sectionLabel, styles.feelLabel]}>FEEL CUE</Text>
+          <View style={styles.feelBox}>
+            <Text style={styles.feelText}>{issue.feel_cue}</Text>
+          </View>
+        </>
+      )}
     </View>
   );
 }
@@ -194,6 +227,39 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   feelText: { color: '#e8f5e9', fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
+  // 2026-05-24 — GolfFix #1 structured-card styles. Distinct visual
+  // treatments for CAUSE (informational, no chrome), FIX (actionable
+  // accent, like the existing feel_cue but green), and DRILL (a
+  // separate box with a play icon-color tint so users can tell at a
+  // glance "this is what I should DO at the range").
+  fixLabel: { color: '#00C896', marginTop: 12 },
+  fixBox: {
+    backgroundColor: 'rgba(0,200,150,0.07)',
+    borderLeftWidth: 3,
+    borderLeftColor: '#00C896',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 4,
+  },
+  fixText: { color: '#e8f5e9', fontSize: 13, lineHeight: 19, fontWeight: '600' },
+  drillLabel: { color: '#7dd3a8', marginTop: 12 },
+  drillBox: {
+    backgroundColor: 'rgba(125,211,168,0.06)',
+    borderLeftWidth: 3,
+    borderLeftColor: '#7dd3a8',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 4,
+  },
+  drillText: { color: '#e8f5e9', fontSize: 13, lineHeight: 19 },
+  inconclusiveBox: {
+    backgroundColor: 'rgba(156,163,175,0.06)',
+    borderLeftWidth: 3,
+    borderLeftColor: '#9ca3af',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 4,
+  },
   // 2026-05-24 — Progressive-disclosure affordance for the
   // layman_explanation. Inline button beneath the headline; tapping
   // toggles the laymanBox below. No fixed heights — text wraps so

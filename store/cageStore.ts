@@ -262,6 +262,22 @@ export interface PrimaryIssue {
    *  synthesizer, or none/invalid swings). Putting follow-up will add
    *  parallel generation in puttingAnalysisService. */
   layman_explanation?: string;
+  /** 2026-05-24 — GolfFix #1 structured payload. primary_fault is the
+   *  named fault from a fixed allowlist of faults visible in 2D phone
+   *  video (over_the_top / early_extension / casting / sway /
+   *  reverse_pivot / chicken_wing / plane_too_flat / plane_too_steep /
+   *  head_movement / spine_angle_loss / inconclusive). cause / fix /
+   *  drill are one-sentence each, produced in the same Sonnet call.
+   *  When primary_fault === 'inconclusive', cause/fix/drill arrive
+   *  empty — the card renders an honest "not enough to read yet"
+   *  state. Optional + back-compat: absent on legacy / putt paths. */
+  primary_fault?:
+    | 'over_the_top' | 'early_extension' | 'casting' | 'sway'
+    | 'reverse_pivot' | 'chicken_wing' | 'plane_too_flat' | 'plane_too_steep'
+    | 'head_movement' | 'spine_angle_loss' | 'inconclusive';
+  cause?: string;
+  fix?: string;
+  drill?: string;
 }
 
 export interface DrillRecommendation {

@@ -54,6 +54,24 @@ export type SwingAnalysis = {
   // re-run. Empty string when there's no fault to translate; absent
   // on legacy server deploys (client hides the affordance entirely).
   layman_explanation?: string;
+  // 2026-05-24 — GolfFix #1 structured payload. Named fault from a
+  // fixed allowlist of faults visible in 2D phone video + paired
+  // cause / fix / drill produced in the SAME Sonnet call. The card
+  // renders primary_fault as the expert headline, fix + drill
+  // beneath, layman_explanation behind a "What does this mean?"
+  // info-tap (expert headline, plain-language one tap down).
+  // primary_fault === 'inconclusive' means the model isn't
+  // confident — cause/fix/drill arrive empty in that case, and the
+  // card renders an honest "not enough to read yet" state instead
+  // of fabricating advice. Optional + back-compat: absent on legacy
+  // server deploys.
+  primary_fault?:
+    | 'over_the_top' | 'early_extension' | 'casting' | 'sway'
+    | 'reverse_pivot' | 'chicken_wing' | 'plane_too_flat' | 'plane_too_steep'
+    | 'head_movement' | 'spine_angle_loss' | 'inconclusive';
+  cause?: string;
+  fix?: string;
+  drill?: string;
   // 2026-05-24 — Owner-tool telemetry. The server echoes the REAL
   // counts of image + text content blocks it sent to Sonnet so the
   // in-app swing-analysis debug screen can prove the whole pipe

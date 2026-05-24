@@ -161,6 +161,14 @@ export function classifySession(
       // Empty string when the server didn't produce one (none/invalid);
       // the card hides the "What does this mean?" affordance on falsy.
       layman_explanation: (only.analysis.layman_explanation ?? '').trim() || undefined,
+      // 2026-05-24 — GolfFix #1 structured fields, threaded straight
+      // through from the single Sonnet call. When the server returned
+      // 'inconclusive', cause/fix/drill are empty strings and the card
+      // renders the honest "not enough to read yet" state.
+      primary_fault: only.analysis.primary_fault,
+      cause: (only.analysis.cause ?? '').trim() || undefined,
+      fix: (only.analysis.fix ?? '').trim() || undefined,
+      drill: (only.analysis.drill ?? '').trim() || undefined,
     };
   }
 
@@ -194,6 +202,11 @@ export function classifySession(
     // back to canonical only if no swing produced a usable observation.
     const observation = pickBestObservation(swingAnalyses, top.issue);
     const layman = pickBestLayman(swingAnalyses, top.issue);
+    // 2026-05-24 — GolfFix #1 multi-swing pickup. Use the consensus
+    // issue's highest-confidence swing as the source of primary_fault /
+    // cause / fix / drill. Falls back gracefully if none of the matching
+    // swings produced the structured payload (legacy / inconclusive).
+    const best = pickBestStructured(swingAnalyses, top.issue);
     return {
       issue_id: top.issue,
       name: ISSUE_DISPLAY_NAME[top.issue],
@@ -206,6 +219,10 @@ export function classifySession(
       detected_in_shots: top.swing_ids,
       confidence: 'high',
       layman_explanation: layman || undefined,
+      primary_fault: best?.primary_fault,
+      cause: (best?.cause ?? '').trim() || undefined,
+      fix: (best?.fix ?? '').trim() || undefined,
+      drill: (best?.drill ?? '').trim() || undefined,
     };
   }
 
@@ -236,7 +253,31 @@ export function classifySession(
     detected_in_shots: [fallback.swing_id],
     confidence: 'low',
     layman_explanation: (fallback.analysis.layman_explanation ?? '').trim() || undefined,
+    primary_fault: fallback.analysis.primary_fault,
+    cause: (fallback.analysis.cause ?? '').trim() || undefined,
+    fix: (fallback.analysis.fix ?? '').trim() || undefined,
+    drill: (fallback.analysis.drill ?? '').trim() || undefined,
   };
+}
+
+// 2026-05-24 — GolfFix #1 multi-swing helper. Find the highest-confidence
+// per-swing analysis among the consensus issue's matches and return its
+// structured payload (primary_fault / cause / fix / drill). Null when no
+// match produced one (legacy server, or all matches were inconclusive).
+function pickBestStructured(
+  swingAnalyses: { swing_id: string; analysis: SwingAnalysis }[],
+  consensusIssue: CanonicalIssue,
+): { primary_fault?: SwingAnalysis['primary_fault']; cause?: string; fix?: string; drill?: string } | null {
+  const matches = swingAnalyses
+    .filter((s) => s.analysis.detected_issue === consensusIssue)
+    .filter((s) => (s.analysis.fix ?? '').trim().length > 0)
+    .sort((a, b) => {
+      const w: Record<SwingAnalysis['confidence'], number> = { high: 3, medium: 2, low: 1 };
+      return w[b.analysis.confidence] - w[a.analysis.confidence];
+    });
+  if (matches.length === 0) return null;
+  const a = matches[0].analysis;
+  return { primary_fault: a.primary_fault, cause: a.cause, fix: a.fix, drill: a.drill };
 }
 
 // 2026-05-16 — Pick the highest-confidence per-swing observation that
