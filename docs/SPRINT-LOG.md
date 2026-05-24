@@ -1587,6 +1587,52 @@ What real cloud backup would need (sketched, not built):
 
 **Status:** logged tonight, build next session. Competitor-parity floor (manual markup) and differentiator ceiling (AI auto-annotation) in one focused effort.
 
+### Roadmap — Coach Mode markup + audio/voice notes layer (merges with visual annotation)
+
+**Context.** Coach Mode shipped tonight ([Fix #8](#fix-8) — `app/swinglab/coach-mode.tsx`, `coach_note` field on `CageSession`, `setSessionCoachNote`) but the coach note is text-only — the coach types after the fact, at a desk. That doesn't match how a teaching pro (Tank) actually works during a lesson: hands on the student, watching the swing, talking through the read in seconds. Typing is the wrong primitive.
+
+This is the **coach-manual half** of the [visual swing annotation roadmap](#roadmap--visual-swing-annotation-coach-markup--ai-auto-annotation) logged above. The two layers should be designed together because they're the same UX moment: coach watches a swing on the detail screen → AI has auto-circled the dominant fault → coach speaks their read into a voice note + adds 1-2 quick circles on top of the AI's markup → done. Build them as one focused effort, not two passes.
+
+**Three components — all in service of "seconds, not minutes":**
+
+1. **Voice-to-text into the coach note (default, what Tank reaches for first).**
+   - Coach taps a mic icon on the swing detail's Coach Note card → speaks ("hip stalled at impact, lead arm folded — work the right elbow drill") → on-device or server transcription lands as clean written text in the `coach_note` field via the existing `setSessionCoachNote`.
+   - Outcome: searchable, readable, copy-pasteable note. Same `coach_note` field; no schema change.
+   - Implementation candidates: native iOS/Android speech-to-text APIs (free, on-device, latency low) via `@react-native-voice/voice` or `expo-speech-recognition` (check current Expo SDK availability) — falls back to typing on transcription failure. Server-side Whisper (`/api/transcribe` — doesn't exist yet) as a fallback only if on-device is unreliable.
+
+2. **Raw audio clip attached to the swing (bonus, when the coach wants the actual voice on it).**
+   - Optional toggle on the same card: keep the recording, not just the transcript. "Your hip stalled here" in Tank's actual voice + cadence attached to the swing.
+   - New persisted field: `coach_audio_uri?: string | null` on `CageSession` alongside `coach_note`. New action: `setSessionCoachAudio(sessionId, uri)`. Uses `expo-av` `Audio.Recording` (already a dep — Cage Mode uses it). Stored in `FileSystem.documentDirectory` for survival across rounds.
+   - Replay: small ▶︎ icon next to the coach note when an audio clip exists; tap to play through the device speaker. Doesn't replace the transcript — both available.
+
+3. **Simple markup on the swing frame (the coach-manual half of visual annotation).**
+   - Two tools: **circle** (drag from center to set radius — for "circle the hip", "circle the hands", "circle the swing path issue") and **point/dot** (tap to drop — for quick "look here" markers). That's it. No pen, no arrow, no caption — those can come later; the spec is `seconds while teaching`, not "comprehensive coaching whiteboard".
+   - Anchored to a single frame (fault_frame_index when the AI has already chosen one; defaults to the address frame otherwise). Coordinates normalized [0,1] so the markup survives different render sizes (Z Fold-safe per the parent annotation entry).
+   - Persisted on `CageSession` as `coach_markup?: Array<{ kind: 'circle' | 'point', x_norm: number, y_norm: number, r_norm?: number, color?: string }>` — same path as the parent annotation roadmap's `SwingAnnotation` shape, but minimal-tools subset for Coach Mode v1. Sub-typing means the AI auto-annotation can drop alongside as the same array entries with `author: 'ai'`.
+
+**UX bar.** A coach can mark up + note a swing in **seconds** while teaching: tap mic, talk the note, tap circle, drag once, lift finger, save. That's the bar — anything slower fails the in-the-moment test.
+
+**Merges with visual annotation.** Build together as one effort:
+- Same `app/swinglab/swing/[swing_id].tsx` surface
+- Same persisted-array shape (`SwingAnnotation[]`) on `CageSession` (the parent roadmap entry's proposed field), with `author: 'coach' | 'ai'` discriminating manual vs auto
+- Same `react-native-svg` overlay component (`SwingAnnotationCanvas`) renders both AI auto-annotations and coach manual markup in the same canvas — AI's red over-the-top path line + coach's blue hip circle stack naturally
+- Same share-with-annotations baked-PNG export ([swing/[swing_id].tsx:306-324](../app/swinglab/swing/%5Bswing_id%5D.tsx#L306)) captures both layers in the screenshot the coach hands to the student
+
+**Builds on already-shipped scaffolding:**
+- [`coach_note` field](../store/cageStore.ts) + [`setSessionCoachNote`](../store/cageStore.ts) action — voice-to-text just feeds this; no new persistence for the text path
+- [`CoachNoteCard`](../app/swinglab/swing/%5Bswing_id%5D.tsx) inline editor — add a mic icon next to the existing Save / Cancel; keeps text-edit as a fallback when voice-to-text isn't available or the coach prefers
+- `expo-av` `Audio.Recording` (already used by `services/acousticImpactDetector.ts`) — same dep covers the optional raw-audio attach
+
+**Scope:** Real build, own focused session, paired with the visual-annotation parent entry. Three components — voice-to-text default, optional raw-audio attach, two-tool circle/point markup — all on the same swing detail surface, sharing the persisted-annotation array with the AI auto-annotation layer.
+
+**Not in scope for the first session:**
+- Pen / freehand drawing (defer to v2 once two-tool minimal proves out)
+- Multi-frame markup (anchor to `fault_frame_index` only for v1)
+- Server-side Whisper transcription (use on-device speech-to-text first; only add server if the device path is unreliable)
+- Markup playback synced with video timeline (markup is a stamp on one frame in v1; animated timeline-scrubbing is the v2 unlock the parent annotation entry already noted)
+
+**Status:** Logged 2026-05-24. Build pairs with the visual-annotation parent entry — they ship together, not separately, because the UX moment is shared: AI auto-circles the detected fault while Tank's voice note transcribes itself into the card and his blue hip-circle drops on the same frame. That's the demo.
+
 
 
 
