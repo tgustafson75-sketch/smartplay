@@ -48,6 +48,12 @@ export type SwingAnalysis = {
   // text for backward compat.
   valid_swing?: boolean;
   validity_reason?: string | null;
+  // 2026-05-24 — Layman translation of the detected_issue produced in
+  // the SAME analysis call so the PrimaryIssueCard can render a
+  // progressive-disclosure "What does this mean?" toggle without a
+  // re-run. Empty string when there's no fault to translate; absent
+  // on legacy server deploys (client hides the affordance entirely).
+  layman_explanation?: string;
   // 2026-05-24 — Owner-tool telemetry. The server echoes the REAL
   // counts of image + text content blocks it sent to Sonnet so the
   // in-app swing-analysis debug screen can prove the whole pipe

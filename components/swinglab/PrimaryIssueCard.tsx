@@ -1,5 +1,6 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { PrimaryIssue } from '../../store/cageStore';
 
 /**
@@ -45,6 +46,14 @@ const SEVERITY_LABEL: Record<PrimaryIssue['severity'], string> = {
 };
 
 export default function PrimaryIssueCard({ issue, totalShots }: Props) {
+  // 2026-05-24 — Progressive-disclosure state for layman_explanation.
+  // Collapsed by default per spec; the expert term stays the always-
+  // visible headline (trust), and the plain-language line is revealed
+  // beneath via an explicit "What does this mean?" affordance. Hooks
+  // must be declared unconditionally — keep this above the !issue
+  // early return.
+  const [explainOpen, setExplainOpen] = useState(false);
+
   if (!issue) {
     return (
       <View style={[styles.card, styles.cardPlaceholder]}>
@@ -65,6 +74,13 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
     ? "Tentative read — your swing was hard to read clearly, but " + lowercaseFirst(issue.mechanical_breakdown)
     : issue.mechanical_breakdown;
 
+  // 2026-05-24 — Hide the "What does this mean?" affordance entirely
+  // when the server didn't produce a translation (legacy deploy,
+  // 'none'/invalid issue, or the putt synthesizer which doesn't
+  // produce layman_explanation yet — that's the parallel follow-up).
+  const layman = (issue.layman_explanation ?? '').trim();
+  const hasLayman = layman.length > 0;
+
   return (
     <View style={[styles.card, { borderColor: SEVERITY_COLOR[issue.severity] }]}>
       <View style={styles.headerRow}>
@@ -82,6 +98,39 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
           </Text>
         </View>
       </View>
+
+      {hasLayman && (
+        <TouchableOpacity
+          onPress={() => setExplainOpen(open => !open)}
+          style={styles.explainToggle}
+          accessibilityRole="button"
+          accessibilityLabel={explainOpen ? 'Hide plain-language explanation' : 'Show plain-language explanation'}
+          accessibilityState={{ expanded: explainOpen }}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <Ionicons
+            name={explainOpen ? 'information-circle' : 'information-circle-outline'}
+            size={15}
+            color="#7dd3a8"
+            style={{ marginRight: 5 }}
+          />
+          <Text style={styles.explainToggleText}>
+            {explainOpen ? 'Hide explanation' : 'What does this mean?'}
+          </Text>
+          <Ionicons
+            name={explainOpen ? 'chevron-up' : 'chevron-down'}
+            size={13}
+            color="#7dd3a8"
+            style={{ marginLeft: 4 }}
+          />
+        </TouchableOpacity>
+      )}
+
+      {hasLayman && explainOpen && (
+        <View style={styles.laymanBox}>
+          <Text style={styles.laymanText}>{layman}</Text>
+        </View>
+      )}
 
       <View style={styles.divider} />
 
@@ -145,4 +194,32 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   feelText: { color: '#e8f5e9', fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
+  // 2026-05-24 — Progressive-disclosure affordance for the
+  // layman_explanation. Inline button beneath the headline; tapping
+  // toggles the laymanBox below. No fixed heights — text wraps so
+  // Z Fold / narrow-screen layouts breathe.
+  explainToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  explainToggleText: {
+    color: '#7dd3a8',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  laymanBox: {
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,200,150,0.06)',
+    borderLeftWidth: 3,
+    borderLeftColor: '#00C896',
+  },
+  laymanText: { color: '#e8f5e9', fontSize: 13, lineHeight: 20 },
 });

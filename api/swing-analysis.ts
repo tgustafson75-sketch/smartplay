@@ -63,6 +63,13 @@ type SwingAnalysisResponse = {
   // fallback on observation text.
   valid_swing?: boolean;
   validity_reason?: string | null;
+  // 2026-05-24 — Layman translation. Plain-language explanation of the
+  // detected_issue produced in the SAME call so the result card can
+  // surface a progressive-disclosure "What does this mean?" toggle
+  // without a re-run. Optional so legacy clients ignore it gracefully;
+  // the new client hides the affordance entirely when this is absent
+  // or empty. Quality bar enforced by the SYSTEM_PROMPT below.
+  layman_explanation?: string;
 };
 
 // Phase BL/U1 — Tentative observation mode. Used by the upload pipeline
@@ -183,8 +190,29 @@ Output ONLY a JSON object:
   "confidence": "high" | "medium" | "low",
   "observation": "<one short sentence describing what was actually visible — no advice, just observation>",
   "fault_frame_index": <0-based integer index into the submitted frames identifying the single most diagnostic frame for the detected issue, or -1 if no specific frame stood out>,
-  "follow_up_question": "<short retake suggestion ONLY when frames are genuinely unreadable; else null>"
+  "follow_up_question": "<short retake suggestion ONLY when frames are genuinely unreadable; else null>",
+  "layman_explanation": "<plain-language translation of the detected_issue per the EXPLAIN rules below — see quality bar. Empty string '' when detected_issue is 'none'.>"
 }
+
+EXPLAIN — layman_explanation quality bar (CRITICAL).
+Most of this app's users are higher-handicap golfers. "Early extension" lands as noise to them and the diagnosis gets lost. The expert term stays the headline of the card (kept for trust); your job in layman_explanation is to TRANSLATE the term into something a beginner reads once and understands. Rules:
+
+- 1-2 sentences. Second person ("you"). Encouraging cadence, never condescending.
+- Stay in the active caddie's voice (Kevin / Serena / Tank / Harry per Caddie voice context). Default Kevin neutral when no voice is set.
+- MUST contain BOTH (a) what the fault FEELS or LOOKS like in plain body terms, AND (b) the common MISS it causes — the bad shot the golfer already knows (thin, fat, slice, pull, push, lost distance, weak contact, etc.).
+- NO biomechanical jargon. Do NOT define or rephrase the technical term using its own words.
+- FORBIDDEN (circular and useless): "Early extension means your hips and spine extend early." That just repeats the term — it teaches nothing.
+- TARGET shape: "You're standing up out of your posture coming into the ball — that's what's behind your thin shots and the distance you're leaving out there."
+- Stay consistent with the paired detected_issue + observation. Same fault, plain words.
+- When detected_issue is 'none' OR valid_swing is false, return an empty string "" — there's nothing to translate.
+- When confidence is 'low' the translation should still land, but soften slightly ("You might be ...", "It looks like you may be ..."). Do not abandon the field on low confidence.
+
+EXAMPLES (use these as the bar — do NOT copy verbatim):
+- early_extension → "You're standing up out of your posture coming into the ball. That's the thin shots and the lost distance you're feeling."
+- over_the_top → "Your club is coming around your body from outside the line before it drops in — that's the slice or the pull you keep fighting."
+- club_face_open → "Your clubface is pointing right of where you're aiming at impact — that's the high weak slice that costs you yards."
+- chicken_wing → "Your lead arm is folding through impact instead of extending — that's the thin contact and the loss of compression on your irons."
+- reverse_pivot → "Your weight stays on your front foot at the top and finishes on your back foot — that's the inconsistent contact and the lost power."
 
 Rules:
 - Default to NAMING what you see at low confidence rather than returning 'none'. The player can rule out a low-confidence read; they cannot act on silence.
@@ -406,6 +434,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       parsed.severity = 'none';
       parsed.confidence = 'low';
       parsed.fault_frame_index = -1;
+    }
+
+    // 2026-05-24 — Layman explanation normalisation. Coerce missing /
+    // non-string to empty string so the client-side "hide affordance
+    // when absent" rule has a single contract to check. Force empty
+    // when there's no fault to translate.
+    if (typeof parsed.layman_explanation !== 'string') {
+      parsed.layman_explanation = '';
+    }
+    if (parsed.detected_issue === 'none' || parsed.valid_swing === false) {
+      parsed.layman_explanation = '';
     }
 
     // 2026-05-24 — Owner-tool telemetry echo. The server returns the

@@ -217,6 +217,14 @@ export interface PrimaryIssue {
    *  to keep the honesty bar intact. Optional for back-compat with existing
    *  multi-swing classifications. */
   confidence?: 'high' | 'medium' | 'low';
+  /** 2026-05-24 — Plain-language translation of the detected fault.
+   *  Produced in the same /api/swing-analysis call as the technical
+   *  read; surfaced behind a "What does this mean?" toggle on the
+   *  PrimaryIssueCard. Optional + back-compat: absent or empty string
+   *  means the affordance is hidden entirely (legacy server, putt
+   *  synthesizer, or none/invalid swings). Putting follow-up will add
+   *  parallel generation in puttingAnalysisService. */
+  layman_explanation?: string;
 }
 
 export interface DrillRecommendation {

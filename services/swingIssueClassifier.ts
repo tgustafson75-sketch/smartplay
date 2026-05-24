@@ -157,6 +157,10 @@ export function classifySession(
       feel_cue: voice.feel,
       detected_in_shots: [only.swing_id],
       confidence: only.analysis.confidence,
+      // 2026-05-24 — Carry the layman translation through unchanged.
+      // Empty string when the server didn't produce one (none/invalid);
+      // the card hides the "What does this mean?" affordance on falsy.
+      layman_explanation: (only.analysis.layman_explanation ?? '').trim() || undefined,
     };
   }
 
@@ -189,6 +193,7 @@ export function classifySession(
     // that detected the consensus issue. Highest-confidence first; falls
     // back to canonical only if no swing produced a usable observation.
     const observation = pickBestObservation(swingAnalyses, top.issue);
+    const layman = pickBestLayman(swingAnalyses, top.issue);
     return {
       issue_id: top.issue,
       name: ISSUE_DISPLAY_NAME[top.issue],
@@ -200,6 +205,7 @@ export function classifySession(
       feel_cue: voice.feel,
       detected_in_shots: top.swing_ids,
       confidence: 'high',
+      layman_explanation: layman || undefined,
     };
   }
 
@@ -229,6 +235,7 @@ export function classifySession(
     feel_cue: voice.feel,
     detected_in_shots: [fallback.swing_id],
     confidence: 'low',
+    layman_explanation: (fallback.analysis.layman_explanation ?? '').trim() || undefined,
   };
 }
 
@@ -252,4 +259,27 @@ function pickBestObservation(
     return sevRank[b.analysis.severity] - sevRank[a.analysis.severity];
   });
   return (matches[0].analysis.observation ?? '').trim();
+}
+
+// 2026-05-24 — Mirror of pickBestObservation for the plain-language
+// translation. When multiple swings detected the consensus issue, pick
+// the highest-confidence translation so the layman line on the card
+// matches the strongest read. Falls back to empty when no swing
+// produced a layman_explanation (legacy server / 'none' issue).
+function pickBestLayman(
+  swingAnalyses: { swing_id: string; analysis: SwingAnalysis }[],
+  consensusIssue: CanonicalIssue,
+): string {
+  const matches = swingAnalyses
+    .filter(s => s.analysis.detected_issue === consensusIssue)
+    .filter(s => (s.analysis.layman_explanation ?? '').trim().length > 0);
+  if (matches.length === 0) return '';
+  const confRank: Record<SwingAnalysis['confidence'], number> = { high: 3, medium: 2, low: 1 };
+  const sevRank: Record<SwingAnalysis['severity'], number> = { significant: 3, moderate: 2, minor: 1, none: 0 };
+  matches.sort((a, b) => {
+    const c = confRank[b.analysis.confidence] - confRank[a.analysis.confidence];
+    if (c !== 0) return c;
+    return sevRank[b.analysis.severity] - sevRank[a.analysis.severity];
+  });
+  return (matches[0].analysis.layman_explanation ?? '').trim();
 }
