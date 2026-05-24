@@ -73,7 +73,24 @@ type SpeedRate = 0.25 | 0.5 | 1;
 export default function SmartMotion() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { clipUri, angle: angleParam } = useLocalSearchParams<{ clipUri?: string; angle?: string }>();
+  // 2026-05-24 (C2) — measuredBallSpeedMph is set by quick-record's
+  // acoustic chain (parallel Audio.Recording → stopAndDetectImpact →
+  // /api/acoustic-detect) on in-app captures only. When present, the
+  // synthesizer emits source:'acoustic' for ball speed with the
+  // honest estimate-tier shape per C1 (~ prefix, ±10% range, med
+  // confidence). Absent on camera-roll uploads → pose-only fallback.
+  const { clipUri, angle: angleParam, measuredBallSpeedMph: measuredBallSpeedParam } = useLocalSearchParams<{
+    clipUri?: string;
+    angle?: string;
+    measuredBallSpeedMph?: string;
+  }>();
+  // Parse the acoustic ball speed string param to a finite number.
+  // Defensive: ignore non-numeric / negative / zero / NaN.
+  const measuredBallSpeedMph = (() => {
+    if (typeof measuredBallSpeedParam !== 'string' || measuredBallSpeedParam.length === 0) return null;
+    const n = Number(measuredBallSpeedParam);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  })();
   const profile = usePlayerProfileStore();
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const language = useSettingsStore(s => s.language);
@@ -413,6 +430,7 @@ export default function SmartMotion() {
             onVideoDuration={(ms) => setVideoDurationMs(ms)}
             clipDurationMs={videoDurationMs}
             handicap={profile.handicap ?? null}
+            measuredBallSpeedMph={measuredBallSpeedMph}
           />
           <InsightCard
             colors={colors}
@@ -541,7 +559,7 @@ function PreRecordAnglePill({ label, sub, icon, active, colors, onPress }: {
 function VisualCard({
   clipUri, angle, setAngle, overlays, playbackSpeed, setPlaybackSpeed,
   analysis, analyzing, validity, colors, poseFrames, onVideoDuration,
-  clipDurationMs, handicap,
+  clipDurationMs, handicap, measuredBallSpeedMph,
 }: {
   clipUri: string | null;
   angle: Angle;
@@ -562,6 +580,12 @@ function VisualCard({
   // optional — null falls through to placeholder source.
   clipDurationMs: number | null;
   handicap: number | null;
+  // 2026-05-24 (C2) — Acoustic ball speed in mph from the in-app
+  // capture path (quick-record's parallel recorder). Null on
+  // camera-roll uploads or when the acoustic chain produced no
+  // value (no impact, silent clip, network failure). When non-null
+  // the synthesizer emits source:'acoustic' for ball speed per C1.
+  measuredBallSpeedMph: number | null;
 }) {
   // Phase 418 — render the pose-skeleton and shot-tracer overlays ONLY
   // when the validation gate confirms an analyzable swing AND analysis
@@ -811,6 +835,13 @@ function VisualCard({
               clipDurationMs: clipDurationMs ?? null,
               club: null, // TODO: surface from URL param once SmartMotion's record path tags the club
               profile: { handicap, clubDistances: null },
+              // 2026-05-24 (C2) — Acoustic ball speed from the
+              // in-app capture path (quick-record's parallel
+              // recorder → /api/acoustic-detect). Null on camera-roll
+              // uploads → ball speed falls back to pose-derivation
+              // through the existing chain. Synthesizer emits
+              // source:'acoustic' (estimate tier, per C1) when present.
+              measuredBallSpeedMph,
             })
           : null;
         return (

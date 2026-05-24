@@ -23,6 +23,19 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useFamilyStore } from '../../store/familyStore';
 import KidSwingGuideOverlay, { type GuidePhase } from '../../components/KidSwingGuideOverlay';
 import { useWindowDimensions } from 'react-native';
+// 2026-05-24 (Metrics C2) — Mirror Cage Mode's parallel-audio-recorder
+// pattern so SmartMotion's IN-APP record path produces a discrete
+// audio file + impact_ms for /api/acoustic-detect. Same lifecycle,
+// same detector, same endpoint — zero new deps. Camera-roll uploads
+// have no parallel recording → stay pose-only by construction
+// (this screen only fires on the in-app capture flow).
+import {
+  startImpactRecording,
+  stopAndDetectImpact,
+  cleanupImpactRecording,
+  abortImpactRecording,
+} from '../../services/acousticImpactDetector';
+import { detectBallSpeed } from '../../services/acousticDetectApi';
 
 const MAX_RECORD_SECONDS = 8;
 
@@ -59,6 +72,11 @@ export default function QuickRecord() {
   const { width: winW, height: winH } = useWindowDimensions();
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  // 2026-05-24 (C2) — Brief post-stop spinner while we await the
+  // acoustic chain (stopAndDetectImpact + detectBallSpeed). Mirrors
+  // Cage's UPLOADING phase. Typically <2s; never blocks navigation
+  // for more than detectBallSpeed's server response.
+  const [processing, setProcessing] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoStartedRef = useRef(false);
 
@@ -75,6 +93,17 @@ export default function QuickRecord() {
     };
   }, []);
 
+  // 2026-05-24 (C2) — Belt-and-suspenders: if the user backs out
+  // mid-recording (Close button, hardware back) we don't want the
+  // parallel Audio.Recording to leak. abortImpactRecording is
+  // idempotent (no-op when nothing is active), safe on every unmount.
+  // Mirrors cage-mode.tsx:531-535.
+  useEffect(() => {
+    return () => {
+      void abortImpactRecording().catch(() => undefined);
+    };
+  }, []);
+
   const handleRecord = useCallback(async () => {
     if (recording) {
       try { cameraRef.current?.stopRecording(); } catch {}
@@ -83,6 +112,14 @@ export default function QuickRecord() {
     if (!cameraRef.current) return;
     setElapsed(0);
     setRecording(true);
+    // 2026-05-24 (C2) — Parallel audio recording starts ALONGSIDE the
+    // camera so the meter time-series captures the same window as the
+    // video. Fire-and-forget per Cage's pattern: if mic permission is
+    // already-denied or the device is busy, the parallel recorder
+    // silently skips and stopAndDetectImpact returns null → falls
+    // through to pose-only (honest degradation). Mirrors Cage's
+    // line 288 exactly.
+    void startImpactRecording().catch(() => undefined);
     timerRef.current = setInterval(() => {
       setElapsed(e => {
         if (e + 1 >= MAX_RECORD_SECONDS) {
@@ -97,19 +134,71 @@ export default function QuickRecord() {
       setRecording(false);
       setElapsed(0);
       const uri = (result as { uri?: string } | undefined)?.uri ?? null;
-      if (uri) {
-        router.replace({
-          pathname: '/swinglab/smartmotion',
-          // 2026-05-21 — Fix B: hand the angle back to smartmotion so
-          // analyzeSwing fires with the SETUP-chosen orientation,
-          // not the default.
-          params: { clipUri: uri, angle },
-        } as never);
+      if (!uri) {
+        // No video → also abort the parallel audio so nothing leaks.
+        void abortImpactRecording().catch(() => undefined);
+        return;
       }
+
+      // 2026-05-24 (C2) — Run the acoustic chain inline so the
+      // resolved ball speed can ride into SmartMotion as a URL param.
+      // Mirrors Cage's lines 344-358 exactly: stopAndDetectImpact →
+      // detectBallSpeed (when an impact landed AND we have an audio
+      // file) → cleanup. Every step is honest-degradation: any null
+      // anywhere along the chain skips the acoustic value and the
+      // video routes to SmartMotion pose-only.
+      setProcessing(true);
+      let measuredBallSpeedMph: number | null = null;
+      try {
+        const impact = await stopAndDetectImpact();
+        if (impact && impact.audio_uri) {
+          const speed = await detectBallSpeed({
+            audioUri: impact.audio_uri,
+            impact_ms: impact.impact_ms,
+            // No club selection on this screen — detectBallSpeed
+            // defaults to '7I' for the club-typical heuristic. SmartMotion's
+            // record path doesn't expose a club picker today; future
+            // wiring can pass `club` once it lands here.
+          });
+          if (speed && typeof speed.ball_speed_mph === 'number' && Number.isFinite(speed.ball_speed_mph)) {
+            measuredBallSpeedMph = speed.ball_speed_mph;
+          }
+          // Audio file consumed — clean up regardless of speed result
+          // so it doesn't linger in cache.
+          void cleanupImpactRecording(impact.audio_uri).catch(() => undefined);
+        }
+      } catch (e) {
+        // Acoustic chain failure is non-fatal — pose-only fallback.
+        console.log('[quick-record] acoustic chain failed (non-fatal):', e);
+      }
+      setProcessing(false);
+
+      router.replace({
+        pathname: '/swinglab/smartmotion',
+        // 2026-05-21 — Fix B: hand the angle back to smartmotion so
+        // analyzeSwing fires with the SETUP-chosen orientation,
+        // not the default.
+        // 2026-05-24 (C2) — measuredBallSpeedMph carries the acoustic
+        // estimate (when one was produced) so smartmotion's
+        // synthesizeSwingMetrics emits source:'acoustic' for ball speed
+        // with the honest estimate-tier shape (~ + tighter range + med
+        // ceiling per C1). Absent when the chain produced no value.
+        params: {
+          clipUri: uri,
+          angle,
+          ...(measuredBallSpeedMph != null
+            ? { measuredBallSpeedMph: String(Math.round(measuredBallSpeedMph)) }
+            : {}),
+        },
+      } as never);
     } catch (e) {
       console.log('[quick-record] recordAsync failed:', e);
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+      // Video recording failed mid-flight — abort the parallel audio
+      // so the recorder state is clean for the next attempt.
+      void abortImpactRecording().catch(() => undefined);
       setRecording(false);
+      setProcessing(false);
       setElapsed(0);
     }
   }, [recording, router, angle]);
@@ -289,13 +378,18 @@ export default function QuickRecord() {
       {/* Bottom — big record button */}
       <View style={[styles.bottomArea, { bottom: insets.bottom + 24 }]}>
         <Text style={styles.hint}>
-          {recording ? 'Tap to stop' : 'Frame the swing · phone vertical · stable mount'}
+          {recording
+            ? 'Tap to stop'
+            : processing
+            ? 'Reading impact…'
+            : 'Frame the swing · phone vertical · stable mount'}
         </Text>
         <TouchableOpacity
           onPress={handleRecord}
+          disabled={processing}
           style={[
             styles.recordOuter,
-            { borderColor: recording ? '#ef4444' : '#ffffff' },
+            { borderColor: recording ? '#ef4444' : '#ffffff', opacity: processing ? 0.5 : 1 },
           ]}
           accessibilityRole="button"
           accessibilityLabel={recording ? 'Stop recording' : 'Start recording'}
@@ -308,6 +402,20 @@ export default function QuickRecord() {
           ]} />
         </TouchableOpacity>
       </View>
+
+      {/* 2026-05-24 (C2) — Brief post-stop overlay while the acoustic
+          chain resolves. Mirrors Cage's UPLOADING phase but lighter —
+          single spinner + label, no full-screen takeover. Disappears
+          when measuredBallSpeedMph lands (or the chain returns null
+          and we route pose-only). */}
+      {processing && (
+        <View style={styles.processingOverlay} pointerEvents="none">
+          <View style={styles.processingPill}>
+            <ActivityIndicator size="small" color="#00C896" />
+            <Text style={styles.processingText}>Reading impact…</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -410,4 +518,24 @@ const styles = StyleSheet.create({
   guideChipMuted: { borderColor: 'rgba(156, 163, 175, 0.45)' },
   guideChipText: { color: '#86efac', fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
   guideChipTextMuted: { color: '#9ca3af' },
+  // 2026-05-24 (C2) — Post-stop acoustic-chain overlay.
+  processingOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    zIndex: 20,
+  },
+  processingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,200,150,0.5)',
+  },
+  processingText: { color: '#fff', fontSize: 13, fontWeight: '700', letterSpacing: 0.3 },
 });
