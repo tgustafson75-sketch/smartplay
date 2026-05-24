@@ -20,6 +20,62 @@ import {
 } from '../mediaCapture';
 import { track } from '../analytics';
 import { getActiveSurface } from '../activeSurfaceRegistry';
+import { useCageStore } from '../../store/cageStore';
+import { useSettingsStore } from '../../store/settingsStore';
+import { speak } from '../voiceService';
+
+const ANALYSIS_WATCHDOG_MS = 20_000;
+
+// 2026-05-24 — Background watcher: subscribes to cageStore for the
+// active session's shots; when the latest shot's perShotAnalysis goes
+// from null → populated, speaks the observation field via the existing
+// speak() API and tears down. Watchdog at ANALYSIS_WATCHDOG_MS keeps a
+// stuck pipeline from leaving a dangling subscriber. No-op when there's
+// no active cage session at subscription time.
+function watchAndSpeakNextSwingAnalysis(): void {
+  const snapshotShotsCount = useCageStore.getState().activeSession?.shots.length ?? -1;
+  if (snapshotShotsCount < 0) {
+    // No active cage session — auto-speak path doesn't apply here.
+    return;
+  }
+
+  let spoke = false;
+
+  const unsub = useCageStore.subscribe((s) => {
+    if (spoke) return;
+    const shots = s.activeSession?.shots ?? [];
+    // Trigger on either a new shot landing OR the latest shot getting
+    // its analysis populated. Both forms are tolerated because the
+    // capture-then-analyze ordering varies by detection mode (manual
+    // vs audio-transient).
+    const latest = shots[shots.length - 1];
+    if (!latest || !latest.perShotAnalysis) return;
+    const obs = latest.perShotAnalysis.observation;
+    if (!obs || obs.trim().length === 0) return;
+    spoke = true;
+    clearTimeout(watchdog);
+    unsub();
+    const settings = useSettingsStore.getState();
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+    // userInitiated: true because this is a direct consequence of a
+    // user voice command ("watch my swing") — preserves L1-Quiet behavior
+    // per the voiceUserInitiated rule in memory.
+    void speak(obs, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
+      .catch((e) => console.log('[mediaCapture] speak observation failed:', e));
+  });
+
+  const watchdog = setTimeout(() => {
+    if (spoke) return;
+    spoke = true;
+    unsub();
+    const settings = useSettingsStore.getState();
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+    void speak(
+      'Analysis is taking longer than usual. Check the app for results.',
+      settings.voiceGender, settings.language, apiUrl, { userInitiated: true },
+    ).catch(() => { /* ignore */ });
+  }, ANALYSIS_WATCHDOG_MS);
+}
 
 function normalizeKind(raw: unknown): CaptureKind {
   // 2026-05-21 — Fix G: screen-aware default. When the user is on a
@@ -113,6 +169,40 @@ export const mediaCaptureHandler: IntentHandler = {
     try {
       await requestCapture({ kind, raw_utterance: rawUtterance });
       track('media_capture_handler_ok', { kind });
+
+      // 2026-05-24 — Voice-triggered swing → auto-speak the analysis
+      // observation when it lands. Background-only: subscribe to
+      // cageStore for the next shot whose perShotAnalysis populates,
+      // speak its `observation` field via the existing speak() API,
+      // then unsubscribe. Bounded by a 20s watchdog so a stuck
+      // analysis pipeline never leaves a dangling subscriber.
+      //
+      // Coverage notes:
+      //   - In Cage Mode: cageStore session captures the shot, analysis
+      //     populates perShotAnalysis async, we catch and speak.
+      //   - NOT in Cage Mode: the earlier branch short-circuits to
+      //     Quick Record (router.push) — this auto-speak doesn't fire
+      //     because no cage shot is written. Quick Record auto-analysis
+      //     coverage is a follow-up that needs the same listener wired
+      //     against whatever store/event Quick Record uses.
+      //   - settingsStore exposes voiceGender / language (NOT gender /
+      //     apiUrl); apiUrl is sourced from EXPO_PUBLIC_API_URL env, the
+      //     same pattern voiceCommandParser uses.
+      if (kind === 'swing') {
+        try {
+          watchAndSpeakNextSwingAnalysis();
+          return {
+            success: true,
+            voice_response: 'Swing captured. Analyzing...',
+            side_effects: ['swing_captured', 'analysis_started'],
+            follow_up_needed: false,
+          };
+        } catch (e) {
+          // Listener arming failure shouldn't break the success path —
+          // capture itself succeeded.
+          console.log('[mediaCapture] analysis listener arm failed (non-fatal):', e);
+        }
+      }
       return {
         success: true,
         voice_response: buildCaddieAck(kind),

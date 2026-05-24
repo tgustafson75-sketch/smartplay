@@ -64,6 +64,13 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // path the Coach Mode UI uses.
   coach_mode: { type: 'navigate', path: '/swinglab/coach-mode' },
   coachmode: { type: 'navigate', path: '/swinglab/coach-mode' },
+  // 2026-05-24 — Hands-free Cage Mode entry. Voice triggers
+  // ("start cage session", "start practice", "open cage mode") land
+  // here. The cage-mode screen already wires its own swing-capture
+  // flow on mount; this handler just routes there. cagemode alias
+  // catches the no-space variant the classifier sometimes emits.
+  cage_mode: { type: 'navigate', path: '/swinglab/cage-mode' },
+  cagemode: { type: 'navigate', path: '/swinglab/cage-mode' },
 };
 
 const TOOL_LABEL: Record<string, string> = {
@@ -91,6 +98,8 @@ const TOOL_LABEL: Record<string, string> = {
   mark_tee_box: 'Mark Tee',
   coach_mode: 'Coach Mode',
   coachmode: 'Coach Mode',
+  cage_mode: 'Cage Mode',
+  cagemode: 'Cage Mode',
 };
 
 export const openToolHandler: IntentHandler = {
@@ -239,14 +248,22 @@ export const openToolHandler: IntentHandler = {
         voiceResponse = autoStart ? `Recording ${label}.` : `SmartMotion, ${label}.`;
       } else if ((toolName === 'coach_mode' || toolName === 'coachmode') && coachedPlayerName) {
         voiceResponse = `Coach Mode — coaching ${coachedPlayerName}.`;
+      } else if (toolName === 'cage_mode' || toolName === 'cagemode') {
+        // 2026-05-24 — Hands-free Cage Mode opener — phrasing per spec
+        // signals the user that auto-swing-capture is about to engage.
+        voiceResponse = "Cage mode starting. I'll capture every swing.";
       } else {
         voiceResponse = 'Opening ' + TOOL_LABEL[toolName] + '.';
       }
 
+      const sideEffects =
+        toolName === 'cage_mode' || toolName === 'cagemode'
+          ? ['tool_opened']
+          : ['navigate:' + action.path];
       return {
         success: true,
         voice_response: voiceResponse,
-        side_effects: ['navigate:' + action.path],
+        side_effects: sideEffects,
         follow_up_needed: false,
       };
     }
