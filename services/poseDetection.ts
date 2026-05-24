@@ -75,8 +75,23 @@ export type SwingAnalysisResult =
       // Phase 403b — local file URI for the persisted fault-frame JPEG.
       // Null when fault_frame_index was -1 or when persistence failed
       // (consumers tolerate missing image — text diagnostic still
-      // renders).
+      // renders). WIRE-QUALITY (1024px / 75% JPEG — the same downscaled
+      // frame the vision model received).
       fault_frame_uri?: string | null;
+      // 2026-05-24 — DISPLAY-QUALITY fault frame. Re-extracted from
+      // the source clip at native resolution (not the wire-quality
+      // downscale) via expo-video-thumbnails. Crisp enough for
+      // annotation and one-tap social sharing — the unit the
+      // visual-annotation feature and the share flywheel render on.
+      // Null on the same conditions as fault_frame_uri above (no
+      // diagnostic frame OR persist failure); the wire-quality
+      // path may still succeed independently.
+      fault_frame_display_uri?: string | null;
+      // 2026-05-24 — Source-clip fraction the fault frame was sampled
+      // at (e.g. 0.40 = early-downswing slot in FRAME_TIME_FRACTIONS).
+      // Lets annotation tooling map back to a scrub position on the
+      // video timeline.
+      fault_frame_fraction?: number | null;
     }
   | { kind: 'no_frames' }
   | { kind: 'no_network' }
@@ -393,6 +408,15 @@ export async function analyzeSwing(
     // directory under a stable shot-id-keyed name. Failures are
     // non-fatal — the text diagnostic still renders.
     let faultFrameUri: string | null = null;
+    // 2026-05-24 — Display-quality companion to the wire-quality
+    // fault frame. Annotation + social-share require a crisp source;
+    // the wire frame above is 1024px / 75% JPEG (sized for the
+    // vision model, not human consumption). Re-extracted from the
+    // SOURCE clip at native resolution via expo-video-thumbnails
+    // at the SAME timestamp the wire frame was sampled at. Persist
+    // failure here is independent of the wire-quality path.
+    let faultFrameDisplayUri: string | null = null;
+    let faultFrameFraction: number | null = null;
     const idx = typeof data.fault_frame_index === 'number' ? data.fault_frame_index : -1;
     if (idx >= 0 && idx < frames.length && persistOpts?.faultFrameBaseName) {
       try {
@@ -400,14 +424,43 @@ export async function analyzeSwing(
         const dir = FS.documentDirectory ?? FS.cacheDirectory;
         if (dir) {
           const safeName = persistOpts.faultFrameBaseName.replace(/[^a-zA-Z0-9_-]/g, '_');
-          const uri = `${dir}smartmotion/${safeName}.jpg`;
+          const wireUri = `${dir}smartmotion/${safeName}.jpg`;
           await FS.makeDirectoryAsync(`${dir}smartmotion`, { intermediates: true }).catch(() => {});
-          await FS.writeAsStringAsync(uri, frames[idx].b64, { encoding: FS.EncodingType.Base64 });
-          faultFrameUri = uri;
-          V6('STAGE 4 — fault frame persisted', {
-            uri_tail: uri.slice(-40),
+          await FS.writeAsStringAsync(wireUri, frames[idx].b64, { encoding: FS.EncodingType.Base64 });
+          faultFrameUri = wireUri;
+          V6('STAGE 4 — fault frame persisted (wire quality)', {
+            uri_tail: wireUri.slice(-40),
             frame_index: idx,
           });
+
+          // 2026-05-24 — Display-quality re-extract. Same timestamp,
+          // native resolution, JPEG quality 1.0. Copies the
+          // VideoThumbnails-produced temp file into the same stable
+          // dir under a `_display` suffix so consumers can pick one
+          // (wire for vision-pipeline replay, display for human eyes).
+          // Wrapped in its own try/catch — wire-quality persist
+          // already succeeded above; display-quality is bonus.
+          try {
+            const timeMs = Math.round(frames[idx].time_sec * 1000);
+            const r = await VT.getThumbnailAsync(clipUri, { time: timeMs, quality: 1.0 });
+            const displayUri = `${dir}smartmotion/${safeName}_display.jpg`;
+            await FS.deleteAsync(displayUri, { idempotent: true }).catch(() => {});
+            await FS.copyAsync({ from: r.uri, to: displayUri });
+            faultFrameDisplayUri = displayUri;
+            // Source-clip fraction. FRAME_TIME_FRACTIONS is the
+            // canonical sampling array — using the index directly
+            // gives the most-meaningful fraction value regardless
+            // of whether the clip used a bounded window.
+            faultFrameFraction = FRAME_TIME_FRACTIONS[idx] ?? null;
+            V6('STAGE 4 — fault frame persisted (display quality)', {
+              uri_tail: displayUri.slice(-40),
+              fraction: faultFrameFraction,
+            });
+          } catch (eDisplay) {
+            V6('STAGE 4 — display-quality fault frame persist failed (non-fatal)', {
+              error: eDisplay instanceof Error ? eDisplay.message : String(eDisplay),
+            });
+          }
         }
       } catch (e) {
         V6('STAGE 4 — fault frame persist failed (non-fatal)', {
@@ -421,6 +474,8 @@ export async function analyzeSwing(
       analysis: data,
       frame_timestamps_sec: frames.map(f => f.time_sec),
       fault_frame_uri: faultFrameUri,
+      fault_frame_display_uri: faultFrameDisplayUri,
+      fault_frame_fraction: faultFrameFraction,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

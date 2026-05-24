@@ -386,6 +386,20 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
           fault_frame_index: r.analysis.fault_frame_index ?? -1,
           visual_reference_path: r.fault_frame_uri ?? null,
         });
+        // 2026-05-24 — Promote the display-quality fault frame to the
+        // session level so the visual-annotation feature and the
+        // social-share flywheel have a stable, crisp source to draw
+        // on / export. Last successful analysis with a non-null
+        // display URI wins for multi-shot sessions (most recent
+        // diagnostic frame). Wire-quality `visual_reference_path`
+        // above is kept for the per-shot review card.
+        if (r.fault_frame_display_uri || r.analysis.fault_frame_index != null) {
+          useCageStore.getState().setSessionFaultFrame(sessionId, {
+            uri: r.fault_frame_display_uri ?? null,
+            index: r.analysis.fault_frame_index ?? null,
+            fraction: r.fault_frame_fraction ?? null,
+          });
+        }
       }
     }
 

@@ -191,6 +191,43 @@ export interface CageSession {
    *  rendered as its own card on that screen. Independent of
    *  primary_issue / putting_analysis — they coexist. */
   coach_note?: string | null;
+  /** 2026-05-24 — Display-quality diagnostic fault frame persisted to
+   *  FileSystem at session-creation time. Pre-requisite for the
+   *  visual-annotation feature (coach markup + AI auto-annotation)
+   *  and the social-share flywheel — an annotated clip is the
+   *  shareable unit, can't draw on a frame you didn't keep. Re-
+   *  extracted from the source clip at native resolution (not the
+   *  downscaled wire frames the vision model received), so the
+   *  result is crisp enough for annotation + sharing. Null when:
+   *    - analysis picked no specific frame (fault_frame_index === -1)
+   *    - the clip was degenerate (validity gate false, none detected)
+   *    - persist failed (FS write error / OOM) — honest degradation
+   *  Coexists with PrimaryIssue.visual_reference_path (wire-quality,
+   *  legacy field used by the per-shot review card). */
+  fault_frame_uri?: string | null;
+  /** 2026-05-24 — 0-based index into the 5-frame sample the vision
+   *  model received. Mirrors the analysis's `fault_frame_index`
+   *  promoted to session level so consumers don't have to dig into
+   *  shots[0].perShotAnalysis. -1 = no specific frame (analysis
+   *  declined to anchor). */
+  fault_frame_index?: number | null;
+  /** 2026-05-24 — Source-clip fraction the fault frame was sampled
+   *  at (matches FRAME_TIME_FRACTIONS in poseDetection: 0.08, 0.40,
+   *  0.60, 0.75, 0.88). Lets annotation tooling map back to a
+   *  scrub-position on the video timeline. */
+  fault_frame_fraction?: number | null;
+  /** 2026-05-24 — Stable player id this swing is attributed to.
+   *  Data-model rule (mirrors types/cage.ts:3): every swing/library
+   *  record carries a player_id so historical queries don't have
+   *  to fuzzy-match on the upload.swinger free-text field. Derived
+   *  at ingest time:
+   *    1. familyStore.active_member_id when a member is active
+   *       (Coach Mode / family-recording flows)
+   *    2. playerProfileStore.email when no member is active
+   *    3. 'account_holder' fallback for guest installs
+   *  Optional for back-compat with sessions ingested before the
+   *  rule landed; new ingests always populate it. */
+  player_id?: string;
 }
 
 export type AnalysisStatus =
@@ -363,6 +400,17 @@ interface CageState {
    *  AI analysis path — both display side-by-side on the swing
    *  detail screen. Pass empty string or null to clear. */
   setSessionCoachNote: (sessionId: string, note: string | null) => void;
+  /** 2026-05-24 — Persist the display-quality diagnostic fault frame
+   *  metadata on a session after analyzeSwing returns successfully.
+   *  Wires the annotation + share prerequisite: a stable file URI
+   *  the player / coach can draw on. All three pieces written
+   *  atomically so consumers can rely on uri != null implying
+   *  index and fraction are usable. Pass uri:null to clear (e.g.
+   *  if a re-analysis produces no fault). */
+  setSessionFaultFrame: (
+    sessionId: string,
+    frame: { uri: string | null; index: number | null; fraction: number | null },
+  ) => void;
   /** Pose-API biomechanics result. Fire-and-forget after Phase K, so
    *  this commits independently from setSessionAnalysis. */
   setSessionBiomechanics: (sessionId: string, biomechanics: import('../services/poseAnalysisApi').SwingBiomechanics | null) => void;
@@ -400,6 +448,39 @@ interface CageState {
   setDistanceCalibration: (yards: number, cageId?: string) => void;
   getClubProfile: (club: string) => CageState['clubProfiles'][string] | null;
   updateShotLabels: (sessionId: string, shotId: string, labels: ReviewLabels, transcript: string) => void;
+}
+
+// ─── Helpers ──────────────────────────────
+
+/**
+ * 2026-05-24 — Derive the player_id for a new swing/library record per
+ * the data-model rule (types/cage.ts:3 — every session carries
+ * player_id). Priority:
+ *   1. familyStore.active_member_id when a member is currently the
+ *      coaching subject (Coach Mode / family-recording flows)
+ *   2. playerProfileStore.email for self-recorded swings
+ *   3. 'account_holder' guest fallback
+ *
+ * Dynamic require so cageStore avoids a hard static dep on either
+ * store (which would create a circular import via playerProfileStore
+ * → settingsStore → cageStore through indirect references). Defensive
+ * try/catch — derivation failure returns the guest fallback, never
+ * blocks ingest.
+ */
+function derivePlayerId(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fam = require('./familyStore') as typeof import('./familyStore');
+    const id = fam.useFamilyStore.getState().active_member_id;
+    if (id) return id;
+  } catch { /* no-op — familyStore unavailable */ }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const profile = require('./playerProfileStore') as typeof import('./playerProfileStore');
+    const email = profile.usePlayerProfileStore.getState().email;
+    if (email && email.trim().length > 0) return email.trim().toLowerCase();
+  } catch { /* no-op — profile store unavailable */ }
+  return 'account_holder';
 }
 
 // ─── STORE ────────────────────────────────
@@ -608,6 +689,10 @@ export const useCageStore = create<CageState>()(
           upload,
           analysis_status: 'pending',
           analysis_error: null,
+          // 2026-05-24 — Data-model rule: every swing record carries
+          // a stable player_id. Auto-derived (familyStore active
+          // member → profile email → guest fallback).
+          player_id: derivePlayerId(),
         };
         set(s => ({ sessionHistory: [...s.sessionHistory, session].slice(-50) }));
         return sessionId;
@@ -652,6 +737,9 @@ export const useCageStore = create<CageState>()(
           upload,
           analysis_status: 'pending',
           analysis_error: null,
+          // 2026-05-24 — Data-model rule. Same derivation as the
+          // uploaded-swing path.
+          player_id: derivePlayerId(),
         };
         set(s => ({ sessionHistory: [...s.sessionHistory, session].slice(-50) }));
         return sessionId;
@@ -770,6 +858,18 @@ export const useCageStore = create<CageState>()(
             session.id !== sessionId ? session : {
               ...session,
               coach_note: note && note.trim().length > 0 ? note.trim() : null,
+            }
+          ),
+        })),
+
+      setSessionFaultFrame: (sessionId, frame) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              fault_frame_uri: frame.uri,
+              fault_frame_index: frame.index,
+              fault_frame_fraction: frame.fraction,
             }
           ),
         })),
