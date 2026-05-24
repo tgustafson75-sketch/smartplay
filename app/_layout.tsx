@@ -20,6 +20,13 @@ import { startHoleDetection, stopHoleDetection, subscribeToHoleDetection } from 
 import { startOffCourseDetector, stopOffCourseDetector } from '../services/offCourseDetector';
 import { startMovementModeDetector, stopMovementModeDetector } from '../services/movementModeDetector';
 import { subscribePoorSignal } from '../services/gpsManager';
+// 2026-05-24 — GPS confidence-gated proactive ask orchestrator (Flow B).
+// Wires the existing subscribePoorSignal → speak() with trust-level
+// and cooldown gates so Kevin only asks "what hole?" when GPS is
+// soft AND the user hasn't been asked recently. The proactive ask
+// IS the honest "we don't know" tell. Initialized at app root next
+// to the existing toast subscriber.
+import { initGpsConfidenceAsk } from '../services/gpsConfidenceAsk';
 // Phase 411-hotfix — REMOVED the side-effect import of
 // services/backgroundLocationTask. That module's TaskManager.defineTask
 // at module load was the root cause of a white-screen boot crash on
@@ -399,6 +406,12 @@ function AppNavigator() {
       const acc = info.accuracy_m != null ? `~${Math.round(info.accuracy_m)}m` : 'unknown';
       useToastStore.getState().show(`GPS weak (${acc}) — step into open sky or tap Mark.`);
     });
+    // 2026-05-24 (Flow B) — GPS confidence-gated proactive ask
+    // orchestrator. Init alongside the toast subscriber. Subscribes
+    // to the SAME poor-signal gate and adds a spoken "what hole?"
+    // question on top with cooldown + trust-level gates. Idempotent
+    // — multiple init calls no-op.
+    const unsubGpsAsk = initGpsConfidenceAsk();
     let active = useRoundStore.getState().isRoundActive;
     if (active) {
       startHoleDetection();
@@ -425,6 +438,7 @@ function AppNavigator() {
       unsubDetect();
       unsubRound();
       unsubPoor();
+      unsubGpsAsk();
       stopHoleDetection();
       stopOffCourseDetector();
       stopMovementModeDetector();
