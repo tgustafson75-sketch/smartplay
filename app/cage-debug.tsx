@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import {
   listSessions,
@@ -76,6 +77,33 @@ export default function CageDebug() {
   const [fillerStatus, setFillerStatus] = useState<ReturnType<typeof getLibraryInfo>>(null);
   const [fillerGenerating, setFillerGenerating] = useState(false);
   const [fillerPlayingCategory, setFillerPlayingCategory] = useState<FillerCategory | null>(null);
+
+  // 2026-05-24 — AsyncStorage dump for hands-free verification (Batch 2
+  // QA). Static snapshot read by tapping "Dump AsyncStorage" below;
+  // renders the parsed JSON inline so persistence of round-store-v1,
+  // practice-store, settings-store-v2, cage-store, truth_* keys, etc.
+  // can be verified on-device without Flipper / react-native-debugger.
+  const [storageDump, setStorageDump] = useState<Record<string, unknown> | null>(null);
+  const [storageLoading, setStorageLoading] = useState(false);
+
+  const dumpStorage = useCallback(async () => {
+    setStorageLoading(true);
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const entries = await AsyncStorage.multiGet(keys);
+      const obj: Record<string, unknown> = {};
+      for (const [k, v] of entries) {
+        if (v === null) { obj[k] = null; continue; }
+        try { obj[k] = JSON.parse(v); }
+        catch { obj[k] = v; /* preserve raw string when not JSON */ }
+      }
+      setStorageDump(obj);
+    } catch (e) {
+      setStorageDump({ __error: String(e) });
+    } finally {
+      setStorageLoading(false);
+    }
+  }, []);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const fillerInfo = useMemo(() => getLibraryInfo(), [fillerStatus]);
@@ -261,6 +289,37 @@ export default function CageDebug() {
           <Text style={styles.synthBtnText}>+ Synthetic test</Text>
         </TouchableOpacity>
       </View>
+
+      {/* 2026-05-24 — AsyncStorage dump panel. Tap to snapshot all
+          keys + JSON values for on-device verification of store
+          persistence (round-store-v1, practice-store, settings-store-v2,
+          cage-store, truth_* survey coords, etc.). */}
+      <View style={styles.storageDumpRow}>
+        <TouchableOpacity
+          style={styles.storageDumpBtn}
+          onPress={dumpStorage}
+          disabled={storageLoading}
+        >
+          <Text style={styles.storageDumpBtnText}>
+            {storageLoading ? 'Reading…' : 'Dump AsyncStorage'}
+          </Text>
+        </TouchableOpacity>
+        {storageDump && (
+          <TouchableOpacity
+            style={styles.storageDumpClearBtn}
+            onPress={() => setStorageDump(null)}
+          >
+            <Text style={styles.storageDumpBtnText}>Clear</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      {storageDump && (
+        <ScrollView style={styles.storageDumpBody}>
+          <Text style={styles.storageDumpText}>
+            {JSON.stringify(storageDump, null, 2)}
+          </Text>
+        </ScrollView>
+      )}
 
       {/* Inline video player */}
       {selectedClip && (
@@ -569,6 +628,50 @@ const styles = StyleSheet.create({
     color: '#00C896',
     fontSize: 12,
     fontWeight: '700',
+  },
+
+  // 2026-05-24 — AsyncStorage dump panel
+  storageDumpRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#0d1a0d',
+    borderBottomColor: '#1e3a28',
+    borderBottomWidth: 1,
+  },
+  storageDumpBtn: {
+    flex: 1,
+    backgroundColor: '#1a3a5c',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  storageDumpClearBtn: {
+    backgroundColor: '#3a1a1a',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storageDumpBtnText: {
+    color: '#cfe8ff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  storageDumpBody: {
+    maxHeight: 360,
+    backgroundColor: '#020503',
+    borderBottomColor: '#1e3a28',
+    borderBottomWidth: 1,
+    padding: 10,
+  },
+  storageDumpText: {
+    color: '#9ca3af',
+    fontSize: 10,
+    fontFamily: 'Courier',
   },
 
   // Video player
