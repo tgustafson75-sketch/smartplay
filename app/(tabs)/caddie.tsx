@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { QuickTutorial } from '../../components/QuickTutorial';
 import {
   View,
   Text,
@@ -3273,6 +3274,16 @@ export default function CaddieTab() {
           </View>
         </TouchableOpacity>
       </Modal>
+      <QuickTutorial
+        slug="caddie_intro"
+        title="Caddie"
+        lines={[
+          "This is your round home — start a round, see live yardages, log shots.",
+          "Tap the mic badge or call my name to ask anything during the round.",
+          "I'll surface honest distances, watch your swings, and call the play.",
+        ]}
+        spokenText="Your caddie home. Tap the mic or call my name during the round."
+      />
 
     </View>
   );

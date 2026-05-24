@@ -22,6 +22,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { QuickTutorial } from '../../components/QuickTutorial';
 import {
   View,
   Text,
@@ -460,6 +461,16 @@ export default function SmartMotion() {
           />
         </View>
       ) : null}
+      <QuickTutorial
+        slug="smartmotion_intro"
+        title="SmartMotion"
+        lines={[
+          "This is SmartMotion — record a swing and I'll break it down.",
+          "Hit record, take your swing, I'll read the whole motion back — not just your setup.",
+          "Tap any term you don't know — I'll put it in plain English.",
+        ]}
+        spokenText="This is SmartMotion. Hit record, take your swing, I'll read it back."
+      />
     </SafeAreaView>
   );
 }

@@ -27,6 +27,7 @@
  */
 
 import React from 'react';
+import { QuickTutorial } from '../../components/QuickTutorial';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -139,6 +140,16 @@ export default function SwingLab() {
           />
         ))}
       </ScrollView>
+      <QuickTutorial
+        slug="swinglab_intro"
+        title="SwingLab"
+        lines={[
+          "SwingLab is your practice hub — capture swings, run drills, study reps.",
+          "Tap any card to jump in — SmartMotion for quick, Cage Mode for full sessions.",
+          "Every swing you analyze feeds my read of your tendencies on the course.",
+        ]}
+        spokenText="SwingLab. Practice hub. Tap a card to jump in."
+      />
     </SafeAreaView>
   );
 }

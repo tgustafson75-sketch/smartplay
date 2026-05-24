@@ -1213,6 +1213,41 @@ export default function Settings() {
                     </View>
                     <Ionicons name="film-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
+                  {/* 2026-05-24 — Reset Tutorials. Clears every
+                      tutorialsSeen flag so the standardized 3-line
+                      first-run tutorial replays on next entry of
+                      every feature screen (Caddie / SwingLab /
+                      SmartMotion / Quick Record / Cage / Coach).
+                      Owner test path for the QuickTutorial system. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => {
+                      Alert.alert(
+                        'Reset Tutorials',
+                        'Every first-run tutorial will replay on next entry. Continue?',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Reset',
+                            style: 'destructive',
+                            onPress: () => {
+                              useSettingsStore.getState().resetTutorials();
+                            },
+                          },
+                        ],
+                      );
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Reset all first-run tutorials"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Reset Tutorials</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Replay every feature&apos;s 3-line first-run tutorial on next entry. Owner test path.
+                      </Text>
+                    </View>
+                    <Ionicons name="refresh-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.resetRow}
                     onPress={() => router.push('/gps-test' as never)}

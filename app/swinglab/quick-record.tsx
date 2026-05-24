@@ -14,6 +14,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { QuickTutorial } from '../../components/QuickTutorial';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -416,6 +417,16 @@ export default function QuickRecord() {
           </View>
         </View>
       )}
+      <QuickTutorial
+        slug="quick_record_intro"
+        title="Quick Record"
+        lines={[
+          "Quick Record is the fast camera for capturing a swing on the fly.",
+          "Tap the record button, take your swing — the clip lands in your library.",
+          "For full analysis with metrics, use SmartMotion or Cage Mode after.",
+        ]}
+        spokenText="Quick Record. Tap record, take your swing. Saved to your library."
+      />
     </View>
   );
 }
