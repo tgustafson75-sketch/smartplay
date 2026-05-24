@@ -172,6 +172,17 @@ Available intents:
     - "I bogeyed seven" -> { strokes: <par+1 — leave as null, the handler computes par-relative; but if you can resolve, fine> }
     Prefer log_score over log_shot when the user is reporting a TOTAL ("I made a five") rather than a single swing.
 
+15b. declare_hole — User is telling the caddie which hole they are starting / on. NOT a relative move (next/previous), NOT a score report. Use this when the user says they're TEEING OFF on a specific hole or just declares the absolute hole number.
+   parameters: { hole_number: integer 1..18 }
+   Examples:
+   - "I'm teeing off on hole 4" -> { hole_number: 4 }
+   - "starting hole 7" -> { hole_number: 7 }
+   - "on hole 3 now" -> { hole_number: 3 }
+   - "I'm on hole 5" -> { hole_number: 5 }
+   - "teeing off 12" -> { hole_number: 12 }
+   - "hole 9" -> { hole_number: 9 }
+   Disambiguation: "next hole" / "previous hole" → navigate (relative). "I'm on hole N" / "starting hole N" / "teeing off N" → declare_hole (absolute). A bare score number ("I got a 5") → log_score, not declare_hole.
+
 15. sequence — User chained two or more independent commands in one utterance (separated by "and", "then", commas, or implicit pause). Each step is a real first-class intent above. Use ONLY when the steps are distinct actions; don't bundle a single clause that already encodes multiple params.
    parameters: { steps: [{ intent_type, parameters }, ...] }
    Examples:
@@ -188,7 +199,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null

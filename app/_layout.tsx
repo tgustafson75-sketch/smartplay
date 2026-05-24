@@ -61,6 +61,10 @@ import NativeFallbackBanner from '../components/NativeFallbackBanner';
 import CaptionStrip from '../components/CaptionStrip';
 import { GlobalToolsMenu } from '../components/tools/GlobalToolsMenu';
 import { GlobalToast } from '../components/toast/GlobalToast';
+// 2026-05-24 (Flow C) — Tap-to-undo banner for silent tee Marks
+// fired by the declare-hole cross-check. Reads from undoMarkStore;
+// hides itself after the visibility window. Sibling to GlobalToast.
+import { UndoMarkBanner } from '../components/UndoMarkBanner';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 // 2026-05-21 — Consolidation 4: routine status logs gated.
 import { devLog } from '../services/devLog';
@@ -579,6 +583,10 @@ function AppNavigator() {
       <GlobalToolsMenu />
       {/* Tiny snackbar for one-shot confirmations (mode change, etc.). */}
       <GlobalToast />
+      {/* 2026-05-24 (Flow C) — Tap-to-undo affordance for silent
+          tee Marks fired by the declare-hole cross-check. Auto-hides
+          when the 30-second visibility window expires. */}
+      <UndoMarkBanner />
       <RoundActiveDevIndicator />
       <Stack
         screenOptions={{

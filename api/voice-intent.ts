@@ -199,6 +199,17 @@ Available intents:
    Examples: "show clubs", "club menu", "switch club", "change club", "open the club picker"
    Use this when the user wants to PICK from a list (vs club_change which already names a specific club).
 
+15b. declare_hole — User is telling the caddie which hole they are starting / on. NOT a relative move (next/previous), NOT a score report. Use this when the user says they're TEEING OFF on a specific hole or just declares the absolute hole number.
+   parameters: { hole_number: integer 1..18 }
+   Examples:
+   - "I'm teeing off on hole 4" -> { hole_number: 4 }
+   - "starting hole 7" -> { hole_number: 7 }
+   - "on hole 3 now" -> { hole_number: 3 }
+   - "I'm on hole 5" -> { hole_number: 5 }
+   - "teeing off 12" -> { hole_number: 12 }
+   - "hole 9" -> { hole_number: 9 }
+   Disambiguation: "next hole" / "previous hole" → navigate (relative). "I'm on hole N" / "starting hole N" / "teeing off N" → declare_hole (absolute). A bare score number ("I got a 5") → log_score, not declare_hole.
+
 16. log_shot — User is on the course logging a shot they just hit. They name the club, optional distance, optional outcome.
    parameters: { club_phrase: string, distance_yards?: number, outcome_phrase?: string, raw_utterance: string }
    Examples:
@@ -284,7 +295,7 @@ If the request is ambiguous (e.g. "open the menu" — which menu?), use intent_t
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "declare_hole" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null
