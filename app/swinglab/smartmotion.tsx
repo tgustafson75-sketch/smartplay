@@ -755,15 +755,23 @@ function VisualCard({
           // 2026-05-22 — Path A — render real pose keypoints from
           // /api/pose-analysis when available; falls back to the
           // animated stub when the backend isn't configured or no
-          // person was detected. Honest by construction: no fake
-          // skeleton renders against floor footage (validity gate
-          // upstream already suppresses) and no fake skeleton renders
-          // if the pose backend silently fails (we know it's stub).
+          // person was detected.
+          //
+          // 2026-05-24 — Honesty hardening for launch. RealSkeletonOverlay
+          // renders whenever pose data exists (today: env-gated off, so
+          // effectively never). StubSkeletonOverlay is now gated behind
+          // __DEV__ — production never shows the hardcoded-joint mock.
+          // The result screen still surfaces the real diagnostic payload
+          // (fault frame as primary visual + Sonnet observation + layman
+          // explanation + metric cells with confidence tiers). The stub
+          // stays in the code for dev visual-regression use; if/when
+          // real pose lands (RapidAPI MoveNet env vars or TFJS native
+          // build), this branch automatically uses it.
           poseFrames && poseFrames.length > 0 ? (
             <RealSkeletonOverlay videoRect={videoRect} accent={colors.accent} frames={poseFrames} />
-          ) : (
+          ) : __DEV__ ? (
             <StubSkeletonOverlay videoRect={videoRect} accent={colors.accent} />
-          )
+          ) : null
         )}
         {clipUri && overlays.shot_tracer && overlaysGated && (
           <Svg
