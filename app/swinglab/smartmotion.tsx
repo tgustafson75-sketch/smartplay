@@ -40,7 +40,7 @@ import Svg, { Line, Circle } from 'react-native-svg';
 import { useTheme } from '../../contexts/ThemeContext';
 import { analyzeSwing, type SwingAnalysis } from '../../services/poseDetection';
 import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
-import { synthesizeSwingMetrics, type SwingMetric } from '../../services/swingMetricsService';
+import { synthesizeSwingMetrics, isTruthGrade, type SwingMetric } from '../../services/swingMetricsService';
 import { extractPoseFramesFromVideo, type PoseFrame, type Keypoint } from '../../services/poseAnalysisApi';
 import { evaluateSwingValidity, type SwingValidity } from '../../services/swingValidity';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -876,9 +876,10 @@ function MetricCell({ label, m, colors }: {
   // Null value with non-placeholder source is suppression-on-purpose
   // (e.g. compounded smash where a parent was low confidence). Render
   // an explicit LOW CONFIDENCE chip rather than a dash so the user
-  // knows we chose not to show a number.
+  // knows we chose not to show a number. Placeholder + low is the
+  // default "no inputs at all" state which already reads as a dash.
   if (m.value == null) {
-    const isSuppressed = m.source !== 'placeholder' || m.confidenceLabel === 'low';
+    const isSuppressed = m.source !== 'placeholder';
     return (
       <View style={styles.metricCell}>
         <Text style={[styles.metricLabel, { color: colors.text_muted }]}>{label}</Text>
@@ -890,16 +891,25 @@ function MetricCell({ label, m, colors }: {
     );
   }
 
-  const isMeasured = m.source === 'measured';
+  // 2026-05-24 — Truth-grade sources (acoustic / watch / calibrated /
+  // legacy measured) skip the `~` prefix and render the raw number
+  // (truth, no estimate caveat). Estimate sources (pose / profile /
+  // placeholder) keep `~` so the user reads them as honest hedges.
+  const truthGrade = isTruthGrade(m.source);
   const tag =
+    m.source === 'acoustic'          ? 'acoustic'  :
+    m.source === 'watch'             ? 'watch'     :
+    m.source === 'calibrated'        ? 'calibrated':
     m.source === 'measured'          ? 'measured'  :
+    m.source === 'pose'              ? 'pose'      :
     m.source === 'pose_estimated'    ? 'pose'      :
+    m.source === 'profile'           ? 'profile'   :
     m.source === 'profile_estimated' ? 'profile'   :
                                        'est';
   // Cage's pattern: "~95 mph" with the tilde baked into the number.
   // Smash (ratio) gets two decimals; everything else integer.
   const numeric = m.unit === '' ? m.value.toFixed(2) : String(m.value);
-  const valueDisplay = isMeasured ? numeric : `~${numeric}`;
+  const valueDisplay = truthGrade ? numeric : `~${numeric}`;
 
   // Confidence dot color — high green, med amber, low red. Hidden for
   // measured (the tag itself is the credibility signal).
@@ -921,7 +931,7 @@ function MetricCell({ label, m, colors }: {
       <Text style={[styles.metricValue, { color: colors.text_primary }]}>{valueDisplay}</Text>
       <Text style={[styles.metricUnit, { color: colors.text_muted }]}>
         {m.unit}{m.unit ? ' · ' : ''}{tag}
-        {!isMeasured && (
+        {!truthGrade && (
           <Text style={{ color: confColor }}>{' '}● {m.confidenceLabel}</Text>
         )}
       </Text>
@@ -930,7 +940,7 @@ function MetricCell({ label, m, colors }: {
           {rangeStr}{m.unit ? ` ${m.unit}` : ''}
         </Text>
       )}
-      {!isMeasured && m.estimateNote && (
+      {!truthGrade && m.estimateNote && (
         <Text style={[styles.metricNote, { color: colors.text_muted }]} numberOfLines={2}>
           {m.estimateNote}
         </Text>

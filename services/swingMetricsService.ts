@@ -34,11 +34,48 @@ import { devLog } from './devLog';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
+// 2026-05-24 (Metrics 1A — change 2) — Forward-compatible source
+// taxonomy. The framework distinguishes WHICH sensor produced the
+// value rather than collapsing them into a single 'measured' bucket.
+// Wired this run: 'pose', 'profile', 'placeholder'. Reserved slots
+// (declared, not yet emitted) so 1B / 2 / watch integration are
+// additive — no migration when they land:
+//   'acoustic'   — 1B: ball speed from /api/acoustic-detect double-peak
+//   'watch'      — Galaxy Watch IMU peak wrist speed (already in
+//                  watchStore.ts for Cage Mode; SmartMotion plumbing
+//                  is the missing piece per the metric-provenance audit)
+//   'calibrated' — Spec 2: pose heuristic with the 150 m/s constant
+//                  ground-truth-validated against a launch monitor so
+//                  confidence can legitimately reach 'high'
+//
+// Legacy aliases kept so old code paths / any future migration of
+// stored snapshots doesn't break. New emissions use the new names.
 export type MetricSource =
-  | 'measured'         // Galaxy Watch IMU, acoustic ball-speed, etc.
-  | 'pose_estimated'   // Derived from MediaPipe / cloud pose at P6 impact
-  | 'profile_estimated'// Pulled from player profile typical distances
-  | 'placeholder';     // Fallback when nothing else available
+  | 'pose'
+  | 'acoustic'
+  | 'watch'
+  | 'calibrated'
+  | 'profile'
+  | 'placeholder'
+  // Legacy — superseded by the more specific lexicon above. Type
+  // remains wide enough to accept these so consumers reading older
+  // SwingMetric objects (none today, but defensive) don't break.
+  | 'measured'           // → 'acoustic' for ball, 'watch' for club
+  | 'pose_estimated'     // → 'pose'
+  | 'profile_estimated'; // → 'profile'
+
+// Truth-grade sources skip the `~` prefix, suppress the range, and
+// can reach the 'high' confidence bucket. Pose / profile / placeholder
+// always render as estimates with `~` + range. Single source-of-truth
+// for the UI predicate so adding a new truth-grade sensor is one
+// array push, not a code-search.
+const TRUTH_GRADE_SOURCES: readonly MetricSource[] = [
+  'acoustic', 'watch', 'calibrated', 'measured',
+];
+
+export function isTruthGrade(source: MetricSource): boolean {
+  return TRUTH_GRADE_SOURCES.includes(source);
+}
 
 export interface SwingMetric {
   /** Numeric value when present; null when unknown OR when inputs
@@ -69,6 +106,20 @@ export interface SwingMetric {
    *  "(single-mic, club-typical × peak)" pattern. Surfaces next to
    *  the value so the estimate is honest about HOW it was derived. */
   estimateNote?: string;
+  /** 2026-05-24 — RESERVED for future multi-sensor fusion. When more
+   *  than one sensor produces a value for the same metric (e.g.
+   *  acoustic ball speed AND pose-derived ball speed for the same
+   *  swing), this array carries each per-source contribution and the
+   *  fusion logic picks the headline `value` + `source` from them.
+   *  Today (1A) only one source produces each metric → undefined.
+   *  1B (acoustic) and watch integration will populate this so a
+   *  future "agreement boost" rule ("two sensors agree within 5% →
+   *  confidence='high'") drops in without any schema change. */
+  sources?: Array<{
+    source: MetricSource;
+    value: number;
+    confidence: number;
+  }>;
 }
 
 // 2026-05-24 — Map continuous confidence into the discrete bucket the
@@ -88,11 +139,12 @@ function bucketize(confidence: number): 'high' | 'med' | 'low' {
 // Range is `[value × (1 - factor), value × (1 + factor)]` so the user
 // reads "~92 mph (78–105)" rather than a bare number that masks the
 // 20% error band a 2D pose heuristic actually carries. Wider on low
-// confidence; collapsed entirely on measured (range = null at caller).
+// confidence; collapsed entirely on truth-grade sources (acoustic /
+// watch / calibrated / legacy 'measured' — range = null).
 function rangeFactor(source: MetricSource, label: 'high' | 'med' | 'low'): number {
-  if (source === 'measured') return 0; // caller passes null range
+  if (isTruthGrade(source)) return 0; // caller passes null range
   if (source === 'placeholder') return 0.25;
-  // pose_estimated / profile_estimated
+  // 'pose' / 'profile' (+ their legacy aliases): width by confidence
   if (label === 'high') return 0.12;
   if (label === 'med')  return 0.18;
   return 0.25;
@@ -100,7 +152,7 @@ function rangeFactor(source: MetricSource, label: 'high' | 'med' | 'low'): numbe
 
 function rangeFor(value: number | null, source: MetricSource, label: 'high' | 'med' | 'low', unit: string): [number, number] | null {
   if (value == null) return null;
-  if (source === 'measured') return null; // truth — no range needed
+  if (isTruthGrade(source)) return null; // truth — no range needed
   const f = rangeFactor(source, label);
   if (f <= 0) return null;
   const lo = value * (1 - f);
@@ -222,16 +274,23 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
   // 2026-05-24 — Per spec ("Lead with what's real"): club head speed
   // is the hardest metric from 2D video. Ceiling pose-derived
   // confidence at 'med' (0.45-0.55); never claim 'high' without a
-  // measured signal. Out-of-band raw values get forced to 'low' inside
-  // clubSpeedFromPose; extreme values return null (no number rendered).
+  // truth-grade signal. Out-of-band raw values get forced to 'low'
+  // inside clubSpeedFromPose; extreme values return null (no number
+  // rendered).
+  //
+  // Reserved input — measuredClubSpeedMph: when a caller passes a
+  // Galaxy Watch IMU peak-wrist-speed value, source is 'watch'
+  // (truth-grade — no `~` prefix, no range, can reach 'high'). No
+  // SmartMotion caller passes this today; reserved for the upcoming
+  // watch integration per the metric-provenance audit.
   let clubSpeed: SwingMetric;
   if (typeof inputs.measuredClubSpeedMph === 'number' && Number.isFinite(inputs.measuredClubSpeedMph)) {
     clubSpeed = finalize({
       value: Math.round(inputs.measuredClubSpeedMph),
       unit: 'mph',
-      source: 'measured',
-      confidence: 0.95,
-      estimateNote: undefined, // measured — no methodology label needed
+      source: 'watch',
+      confidence: 0.85,
+      estimateNote: undefined, // truth-grade — no methodology label needed
     });
   } else {
     const fromPose = clubSpeedFromPose(inputs.poseFrames, inputs.clipDurationMs);
@@ -239,7 +298,7 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
       clubSpeed = finalize({
         value: Math.round(fromPose.value),
         unit: 'mph',
-        source: 'pose_estimated',
+        source: 'pose',
         confidence: fromPose.confidence,
         estimateNote: fromPose.outOfBand
           ? 'pose heuristic, out-of-band'
@@ -250,7 +309,7 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
       clubSpeed = finalize({
         value: fromProfile,
         unit: 'mph',
-        source: handicap != null ? 'profile_estimated' : 'placeholder',
+        source: handicap != null ? 'profile' : 'placeholder',
         confidence: handicap != null ? 0.40 : 0.20, // profile speeds never reach 'med'
         estimateNote: handicap != null ? 'handicap default' : 'placeholder',
       });
@@ -264,13 +323,18 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
   // "ball speed" carries the same uncertainty as club speed × a
   // club-typical multiplier. Confidence inherits the parent and
   // ceilings at 'med'.
+  //
+  // Reserved input — measuredBallSpeedMph: when a caller passes an
+  // acoustic-detected ball speed (server /api/acoustic-detect, 1B),
+  // source is 'acoustic' (truth-grade). No SmartMotion caller passes
+  // this today; 1B will wire it.
   let ballSpeed: SwingMetric;
   if (typeof inputs.measuredBallSpeedMph === 'number' && Number.isFinite(inputs.measuredBallSpeedMph)) {
     ballSpeed = finalize({
       value: Math.round(inputs.measuredBallSpeedMph),
       unit: 'mph',
-      source: 'measured',
-      confidence: 0.92,
+      source: 'acoustic',
+      confidence: 0.80,
       estimateNote: undefined,
     });
   } else if (clubSpeed.value != null) {
@@ -278,10 +342,11 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
     ballSpeed = finalize({
       value: Math.round(clubSpeed.value * typicalSmash),
       unit: 'mph',
-      // Mirror parent source — measured club speed times typical smash
-      // is still pose_estimated for downstream consumers (the ratio is
-      // assumed, not measured).
-      source: clubSpeed.source === 'measured' ? 'pose_estimated' : clubSpeed.source,
+      // Derived from club_speed × typical-smash — always 'pose'
+      // regardless of parent (the smash ratio is assumed, not
+      // measured). When the parent is truth-grade, the derived ball
+      // speed still inherits the assumed-ratio uncertainty.
+      source: isTruthGrade(clubSpeed.source) ? 'pose' : clubSpeed.source,
       confidence: Math.min(clubSpeed.confidence, 0.45),
       estimateNote: 'club speed × typical smash for ' + clubKey,
     });
@@ -296,15 +361,25 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
   // confidence = worst-of-parents.
   let smashFactor: SwingMetric;
   if (clubSpeed.value != null && ballSpeed.value != null && clubSpeed.value > 0) {
-    const bothMeasured = clubSpeed.source === 'measured' && ballSpeed.source === 'measured';
+    // Both parents truth-grade (watch + acoustic, or future fused
+    // sources) → real measured smash factor at high confidence.
+    const bothTruthGrade = isTruthGrade(clubSpeed.source) && isTruthGrade(ballSpeed.source);
     const eitherLow = bucketize(clubSpeed.confidence) === 'low' || bucketize(ballSpeed.confidence) === 'low';
-    if (bothMeasured) {
+    if (bothTruthGrade) {
       const ratio = ballSpeed.value / clubSpeed.value;
+      // Surface the smash with the headline source picked from the
+      // less-direct parent (acoustic and watch are both truth-grade
+      // but discriminating the smash's source as 'calibrated' isn't
+      // right yet — use the parent that's the bottleneck).
+      const source: MetricSource =
+        clubSpeed.source === 'watch' && ballSpeed.source === 'acoustic'
+          ? 'acoustic' // watch club × acoustic ball — ball drives ratio honesty
+          : clubSpeed.source;
       smashFactor = finalize({
         value: Math.round(ratio * 100) / 100,
         unit: '',
-        source: 'measured',
-        confidence: 0.95,
+        source,
+        confidence: 0.85,
         estimateNote: undefined,
       });
     } else if (eitherLow) {
@@ -315,7 +390,7 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
       smashFactor = finalize({
         value: Math.round(ratio * 100) / 100,
         unit: '',
-        source: 'pose_estimated',
+        source: 'pose',
         confidence: Math.min(clubSpeed.confidence, ballSpeed.confidence) * 0.7,
         estimateNote: 'compounded — inherits both estimates',
       });
@@ -333,7 +408,7 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
     carryYards = finalize({
       value: profileCarry,
       unit: 'yds',
-      source: 'profile_estimated',
+      source: 'profile',
       confidence: 0.60,
       estimateNote: 'your typical for this club',
     });
@@ -348,7 +423,11 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
       carryYards = finalize({
         value: Math.round(ballSpeed.value * factor),
         unit: 'yds',
-        source: ballSpeed.source === 'measured' ? 'pose_estimated' : ballSpeed.source,
+        // Carry from ball-speed × tour-avg factor is always 'pose'-
+        // class regardless of parent (the factor is an assumed
+        // constant, not measured). Truth-grade parents lift the
+        // confidence but not the source label.
+        source: isTruthGrade(ballSpeed.source) ? 'pose' : ballSpeed.source,
         confidence: Math.min(ballSpeed.confidence, 0.35),
         estimateNote: 'ball speed × tour-avg factor',
       });
