@@ -1633,9 +1633,39 @@ This is the **coach-manual half** of the [visual swing annotation roadmap](#road
 
 **Status:** Logged 2026-05-24. Build pairs with the visual-annotation parent entry — they ship together, not separately, because the UX moment is shared: AI auto-circles the detected fault while Tank's voice note transcribes itself into the card and his blue hip-circle drops on the same frame. That's the demo.
 
+---
 
+## Post-launch / Roadmap
 
+### Social-share flywheel (prioritize BEFORE booking)
 
+**Make app outputs share-native.** Every analyzed swing, every annotated frame, every recap card should be one tap from Reels / TikTok / Shorts in a vertical, branded, auto-captioned format. The video-content engine produces the artifact; the share layer is the distribution.
+
+**What lands:**
+- Vertical 9:16 output as a first-class export, alongside the existing horizontal video share at [swing/[swing_id].tsx:306-324](../app/swinglab/swing/%5Bswing_id%5D.tsx#L306). The native share sheet handoff stays — the new piece is the right aspect ratio + watermark + caption baked in.
+- Watermark already exists ([components/swinglab/VideoWatermark.tsx](../components/swinglab/VideoWatermark.tsx)) — repurpose it for the share path. Brand mark + per-user handle when set.
+- Auto-caption: the analysis already produces the technical term, the layman line (`feat: layman translation`, Day 6), and the spoken caddie line. Combine into a short overlay sentence per clip — readable while scrolling muted.
+- One-tap targets: Reels, TikTok, Shorts. iOS Share Sheet handles the routing; the work is producing the file in a format each accepts.
+
+**The enabler:** the visual-annotation feature (coach markup + AI auto-annotation) logged above. An annotated clip is the shareable unit — "Tank circles the hip stall, AI draws the over-the-top line, the layman explanation captions itself." That's the screenshot/clip a player actually wants to send.
+
+**Why before booking:** every user becomes a micro-creator. Each shared clip is paid distribution for the app (visible to the player's network), and each share carries the analysis layer that's the product's actual moat. Booking is monetization; share is acquisition. Acquisition first.
+
+**Status:** logged 2026-05-24, post-launch priority. Ships AFTER visual annotation (clips need the annotated layer to be worth sharing) and BEFORE the deals/booking roadmap item below.
+
+### Deals / booking (concierge, not a marketplace)
+
+**Do NOT build a marketplace.** Kevin surfaces deals as a concierge — never a booking tab, never a course-search browser. The product stays a caddie that happens to know about prices, not a tee-time site that happens to have a caddie.
+
+**Two sources of supply:**
+1. **Curated local promos** — relationships Tim and Tank already have or are building with courses, ranges, and twilight slots. Depth, not breadth. Hand-curated entries land in a small content layer; Kevin reads them when the player asks "anywhere cheap to play this week" or when proactive context fits (player just finished a round + asks what's next).
+2. **Affiliate / aggregator tee-time feed** — breadth via existing tee-time APIs (GolfNow, Supreme Golf, others) plumbed through a single adapter so Kevin can answer "any tee times under $40 near me?" without the player ever leaving the caddie conversation.
+
+**Built on the planned Google Places course-discovery integration** (separately roadmapped) — that integration already gives Kevin the "what courses are around the player" map. Deals + tee times layer on top: same place data, new pricing/availability fields.
+
+**Validation before building:** prove with a tiny manual concierge pass first. A handful of Tim's curated promos hard-coded for one weekend, Kevin surfacing them by voice. If the answer-rate is high enough to justify the supply pipeline, build the proper aggregator adapter. If not, the curated layer alone is the V1 — Kevin's value as a concierge stands without a marketplace behind it.
+
+**Status:** logged 2026-05-24, post-launch. Sequenced AFTER the social-share flywheel because acquisition compounds and monetization lags acquisition — share-driven user growth makes the eventual deals layer more valuable per booking when it ships.
 
 
 
