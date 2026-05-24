@@ -48,6 +48,17 @@ export type SwingAnalysis = {
   // text for backward compat.
   valid_swing?: boolean;
   validity_reason?: string | null;
+  // 2026-05-24 — Owner-tool telemetry. The server echoes the REAL
+  // counts of image + text content blocks it sent to Sonnet so the
+  // in-app swing-analysis debug screen can prove the whole pipe
+  // (frames sent client-side === blocks server saw). Optional so
+  // legacy responses without the field are still typed correctly.
+  _debug?: {
+    imageBlocks: number;
+    textBlocks: number;
+    mode: 'analysis' | 'tentative';
+    shortGame: boolean;
+  };
 };
 
 export type SwingAnalysisResult =
@@ -342,6 +353,33 @@ export async function analyzeSwing(
       follow_up_question: data.follow_up_question ?? null,
       fault_frame_index: data.fault_frame_index ?? null,
     });
+
+    // 2026-05-24 — Owner-tool telemetry. Stash the frames-sent vs
+    // server-saw counts so /swing-analysis-debug can flash PASS/CHECK
+    // without dashboards. The server's _debug field carries its real
+    // counts; we pair them with wireFrames.length to prove the whole
+    // pipe end-to-end. Wrapped in try/catch so a store hiccup never
+    // blocks the analysis return path.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const dbg = require('../store/swingAnalysisDebugStore') as typeof import('../store/swingAnalysisDebugStore');
+      // Perspective isn't on the analyzeSwing context type today; the
+      // store field is null-tolerant and future-proofed if a caller
+      // starts forwarding it. Defensive read via unknown cast.
+      const ctxRecord = context as unknown as Record<string, unknown>;
+      const perspective = typeof ctxRecord.perspective === 'string' ? ctxRecord.perspective : null;
+      dbg.useSwingAnalysisDebugStore.getState().record({
+        at: Date.now(),
+        framesSent: wireFrames.length,
+        imageBlocks: data._debug?.imageBlocks ?? null,
+        textBlocks: data._debug?.textBlocks ?? null,
+        mode: data._debug?.mode ?? null,
+        shortGame: data._debug?.shortGame ?? null,
+        perspective,
+      });
+    } catch (e) {
+      console.log('[poseDetection] swing-analysis debug stash failed (non-fatal):', e);
+    }
 
     // Phase 403b — persist the fault frame as a JPEG so the review UI
     // can show the user the moment of the fault. We already have the

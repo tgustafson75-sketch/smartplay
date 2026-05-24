@@ -1194,6 +1194,25 @@ export default function Settings() {
                     </View>
                     <Ionicons name="mic-off-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
+                  {/* 2026-05-24 — Swing-analysis telemetry card. Pairs
+                      the client's frames-sent count with the server's
+                      echoed image-block count so the multi-frame pipe
+                      is verifiable in-app (no Vercel logs). Refreshes
+                      on every real swing through SmartMotion. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/swing-analysis-debug' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="View swing analysis telemetry"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Swing Analysis Telemetry</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Last swing: frames sent vs. server image blocks. PASS proves the multi-frame pipe end-to-end.
+                      </Text>
+                    </View>
+                    <Ionicons name="film-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.resetRow}
                     onPress={() => router.push('/gps-test' as never)}

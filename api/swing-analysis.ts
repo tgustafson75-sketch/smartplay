@@ -326,10 +326,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // regression collapses multi-frame input at this boundary, the
     // mismatch (client posted 5, server saw 1) will be visible without
     // any synthetic test. Additive, zero behavior change.
+    const imageBlocks = userContent.filter(b => b.type === 'image').length;
+    const textBlocks = userContent.filter(b => b.type === 'text').length;
     console.log('[swing-analysis] image blocks ->',
-      userContent.filter(b => b.type === 'image').length,
+      imageBlocks,
       '· text blocks ->',
-      userContent.filter(b => b.type === 'text').length,
+      textBlocks,
       '· mode ->', mode,
       '· short_game ->', isShortGame);
 
@@ -406,7 +408,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       parsed.fault_frame_index = -1;
     }
 
-    return res.status(200).json(parsed);
+    // 2026-05-24 — Owner-tool telemetry echo. The server returns the
+    // REAL count of image / text blocks it just sent to Sonnet so the
+    // in-app debug screen can prove the whole pipe end-to-end
+    // (frames sent client-side === blocks server saw). Same values
+    // already logged at the messages.create call above. Existing
+    // consumers ignore unknown fields; no schema change to the
+    // analysis itself.
+    return res.status(200).json({
+      ...parsed,
+      _debug: {
+        imageBlocks,
+        textBlocks,
+        mode,
+        shortGame: isShortGame,
+      },
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Unknown error';
     console.error('[swing-analysis] exception:', msg);

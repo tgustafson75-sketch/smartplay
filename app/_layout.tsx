@@ -105,6 +105,10 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   // 2026-05-23 — Voice coverage log. Lists transcripts of voice commands
   // that didn't match a wired handler. Owner-only.
   '/voice-misses',
+  // 2026-05-24 — Swing-analysis telemetry. Compares client frames-sent
+  // vs server image-blocks-saw from the last /api/swing-analysis call.
+  // Owner-only verification surface for the BUG #1 fix.
+  '/swing-analysis-debug',
   // 2026-05-23 — Native module health diagnostic. Lists which native
   // bridges loaded successfully at boot (Meta Wearables, MediaPipe).
   // Owner-only; surfaces "X loaded vs Y missing" without needing
@@ -620,6 +624,11 @@ function AppNavigator() {
             failed to match a wired handler so Tim can review what
             phrasings need building. */}
         <Stack.Screen name="voice-misses" options={{ headerShown: false }} />
+        {/* 2026-05-24 — Owner-only swing-analysis telemetry surface.
+            Compares client frames-sent vs server image-blocks for the
+            most recent /api/swing-analysis call. PASS/CHECK badge
+            proves the multi-frame pipe without dashboards. */}
+        <Stack.Screen name="swing-analysis-debug" options={{ headerShown: false }} />
         <Stack.Screen
           name="hole-view"
           options={{ animation: 'slide_from_bottom' }}
