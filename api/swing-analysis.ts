@@ -135,6 +135,14 @@ const SYSTEM_PROMPT = `You are a swing analyst looking at golf-swing frames capt
 
 You will see 1-5 frames from a single swing. Identify the most prominent tendency you can see and return it with appropriate confidence. Use the confidence scale to express uncertainty — a low-confidence tendency is more useful than 'none', because the player can confirm or rule it out.
 
+TEMPORAL ANALYSIS — CRITICAL. Read this block carefully; previous outputs anchored on the first frame and missed the actual swing.
+
+- The frames you are given are sampled in CHRONOLOGICAL ORDER across ONE golf swing. Frame 1 (index 0) is the EARLIEST in time; the last frame is the LATEST. The intended sampling is roughly address → takeaway → top / transition → impact → follow-through, in that order.
+- You MUST analyze the swing as MOTION, not as a single still. Describe what CHANGES from frame to frame: where the club starts vs. where it ends, how the hips/shoulders/weight shift across the sequence, what happens at transition, what impact looks like, where the follow-through finishes. Your fault diagnosis MUST be supported by what changes across the later frames — not by the appearance of frame 1 alone.
+- Frame 1 is frequently the LEAST informative frame. It may show only the player at address with no swing motion yet, OR — in a POV / glasses-down recording or a botched camera angle — it may show the GROUND, the player's feet, the cart path, the tee box surface, or empty turf with no body visible. NEVER base your diagnosis on frame 1 alone. If frame 1 is uninformative (ground, feet, empty scenery, address-only with no other reads available from it), say so briefly in the observation and base your read on the frames that actually show the swing.
+- When a fault is visible (over-the-top transition, early extension at impact, hip slide on the downswing, reverse pivot, etc.), name WHICH frame index(es) show the fault clearly. The fault_frame_index field below should point to the single most diagnostic frame; if the fault progresses across multiple frames, pick the one where it is most visually obvious so the player has a clean visual anchor.
+- If only the address frame is informative because the later frames are blurry/cropped/unreadable, the correct response is LOW confidence with an observation that says so honestly — not a confident fault claim built from address alone.
+
 FIRST — VALIDITY GATE (Phase 418). Before classifying any fault, decide whether the frames actually contain an analyzable swing:
 - valid_swing: true ONLY if a person is visible in at least 2 frames AND they are clearly making a golf-swing motion (or in a recognizable swing position — address, top, impact, follow-through).
 - valid_swing: false when ANY of these are true: no person in any frame, camera pointed at the floor / sky / wall, person fully out of frame, footage entirely too dark to read, frames show only equipment or static scenery.
@@ -310,6 +318,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })),
       { type: 'text' as const, text: userText },
     ];
+
+    // 2026-05-24 (BUG #1 fix) — Telemetry: surface the real count of
+    // image blocks Sonnet receives, alongside the text-block count.
+    // Pairs with the client-side V6 log at poseDetection.ts:299 so the
+    // pipeline is self-verifying on every real run: if a future
+    // regression collapses multi-frame input at this boundary, the
+    // mismatch (client posted 5, server saw 1) will be visible without
+    // any synthetic test. Additive, zero behavior change.
+    console.log('[swing-analysis] image blocks ->',
+      userContent.filter(b => b.type === 'image').length,
+      '· text blocks ->',
+      userContent.filter(b => b.type === 'text').length,
+      '· mode ->', mode,
+      '· short_game ->', isShortGame);
 
     const completion = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',

@@ -105,3 +105,60 @@ Instead, in priority order:
 ## Summary
 
 The "setup-only analysis" symptom is real but the proximate cause is NOT in the frame-extraction pipeline. That pipeline is intact and multi-frame end-to-end. The bug lives in either (a) the Sonnet prompt's framing of multi-image input or (b) an undetected boundary issue that server-side telemetry would surface immediately. Fix should start with telemetry + prompt audit, not extraction code.
+
+---
+
+## FIX — Applied 2026-05-24
+
+**Confirmation that closed the diagnosis:** the diff audit proved `content[]` carries 5 distinct image blocks (one per extracted frame). Tim then confirmed the SYMPTOM: the analysis output literally described the floor / POV ground shot that happened to be in frame 1 of a recording — definitive evidence of frame-1 anchoring, not pipeline collapse. Prompt-framing bug confirmed.
+
+**Scope:** `/api/swing-analysis` (full-swing path: `watching_someone` + phone-recorded swings). `/api/putting-analysis` deliberately untouched this run — see "Parallel follow-up" below. `services/poseDetection.ts` deliberately untouched (extraction proven correct).
+
+### Change 1 — Server telemetry (additive, kept permanently)
+
+Added at [api/swing-analysis.ts:314-322](api/swing-analysis.ts#L314-L322), immediately before `anthropic.messages.create`:
+
+```ts
+console.log('[swing-analysis] image blocks ->',
+  userContent.filter(b => b.type === 'image').length,
+  '· text blocks ->',
+  userContent.filter(b => b.type === 'text').length,
+  '· mode ->', mode,
+  '· short_game ->', isShortGame);
+```
+
+Pairs with the existing client-side V6 log at [services/poseDetection.ts:299](services/poseDetection.ts#L299). Every future real run becomes self-verifying — if a future regression collapses multi-frame input at the API boundary, the mismatch (client posted 5 / server saw 1) will be visible in logs without any synthetic test. Zero behavior change.
+
+### Change 2 — Rewrite the SYSTEM_PROMPT (anti-anchoring + temporal framing)
+
+Inserted a new **TEMPORAL ANALYSIS — CRITICAL** block at the top of `SYSTEM_PROMPT` ([api/swing-analysis.ts:138-144](api/swing-analysis.ts#L138-L144)), positioned BEFORE the validity gate so the model reads the temporal rules before it begins fault classification. The block enforces all four required rules from the spec:
+
+1. **Chronological framing** — explicit "Frame 1 is earliest; the last frame is latest. Sampled in chronological order across ONE swing."
+2. **Motion, not stills** — "Analyze as MOTION; describe what CHANGES frame to frame; diagnosis MUST be supported by changes across later frames, not the appearance of frame 1 alone."
+3. **Frame 1 anti-anchoring** — "Frame 1 is frequently the LEAST informative — may show address only, or in a POV / glasses-down recording may show the GROUND, the player's feet, the cart path, empty turf. NEVER base your diagnosis on frame 1 alone. If frame 1 is uninformative, say so briefly in the observation and base your read on the frames that actually show the swing."
+4. **Frame anchoring for faults** — "When a fault is visible, name WHICH frame index(es) show it clearly. The fault_frame_index should point to the single most diagnostic frame."
+
+Existing instructions left intact: validity gate, canonical issues catalog, severity scale, confidence scale, output schema, language rules, persona voicing, player-context tailoring, angle-specific reads, fault_frame_index normalization. **No schema change.**
+
+### Verification
+
+**Synthetic 5-color test — SKIPPED, not faked.** The spec authorized skipping if a live model call isn't runnable here. My shell does not have `ANTHROPIC_API_KEY` exported (the key lives in the project's `.env.local` for Next.js dev-server, not in my shell env), and I am not authorized to read `.env.local` to extract it. Per the spec's explicit instruction ("If a live model call isn't runnable here (no key/server), say so plainly, skip the synthetic call, and confirm via the new server log on the next real swing. Do NOT fake a pass."), no claim of empirical verification is made here.
+
+**Verification path post-deploy:** the new server log at [api/swing-analysis.ts:314](api/swing-analysis.ts#L314) prints the real image-block count on every call. The first real Tim/Tank swing through the pipeline will produce a log line like `[swing-analysis] image blocks -> 5 · text blocks -> 1 · mode -> analysis · short_game -> false`. That + the analysis output describing motion (not just the setup / floor / feet) is the verification.
+
+**Static verification done:**
+- `npx tsc --noEmit` → exit 0 (no type regressions)
+- Existing schema fields preserved (detected_issue, severity, confidence, observation, fault_frame_index, valid_swing, validity_reason, follow_up_question)
+- Tentative-mode and short-game prompts left untouched
+- No client-side changes; the OTA delta is server-only — does not require an `eas update` push to take effect (the Vercel deploy of `api/swing-analysis.ts` is the propagation path)
+
+### Parallel follow-up — note for the next session
+
+`/api/putting-analysis` (Vercel handler) has the same multi-image vision-call shape and a similar prompt structure. It is NOT known to have the frame-anchoring bug — putting analysis on a static putt setup may legitimately read from a single frame. But if Tim sees putting-style outputs that describe only frame 1 going forward, the same prompt fix applies there. Deliberately not touched this run to keep the change scoped + observable.
+
+### Files changed this run
+
+- [api/swing-analysis.ts](api/swing-analysis.ts) — telemetry log (additive) + SYSTEM_PROMPT TEMPORAL block (additive prompt strengthening, no schema change)
+- [SPRINT-DIAGNOSIS-frame-extraction.md](SPRINT-DIAGNOSIS-frame-extraction.md) — this FIX section
+
+NOT changed: `services/poseDetection.ts`, `services/smartAnalysisEngine.ts`, `services/swingMetricsService.ts`, `services/unifiedVisionContext.ts`, `api/putting-analysis.ts`, every client-side caller of `/api/swing-analysis`.
