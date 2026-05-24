@@ -846,38 +846,95 @@ function Metric({ label, value, unit, estimated, colors }: {
   );
 }
 
-/** 2026-05-23 — Source-honest metric cell. Replaces the placeholder
- *  Metric component when called with a SwingMetric object. Shows the
- *  numeric value (or "—" when null), unit, and a small source tag
- *  ("measured" / "pose" / "profile" / "est") that matches the
- *  metric's actual provenance. */
+/** 2026-05-23 — Source-honest metric cell.
+ *  2026-05-24 (Metrics 1A) — Now renders the full honest-presentation
+ *  shape: '~' prefix on every non-measured value, the estimated range
+ *  on a secondary line when present, a confidence dot, and the
+ *  methodology note. Matches Cage Mode's "(single-mic, club-typical
+ *  × peak)" tone — never bare confident numbers from a pose heuristic.
+ *
+ *  When the metric returns null with a low confidence label (e.g.
+ *  compounded smash/carry suppressed because their parents were low),
+ *  we render a "LOW CONFIDENCE" pill instead of a dash so the user
+ *  knows the system intentionally chose not to show a number rather
+ *  than a sensor failure.
+ */
 function MetricCell({ label, m, colors }: {
   label: string;
   m: SwingMetric | null | undefined;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
-  if (!m || m.value == null) {
+  if (!m) {
     return (
       <View style={styles.metricCell}>
         <Text style={[styles.metricLabel, { color: colors.text_muted }]}>{label}</Text>
         <Text style={[styles.metricValue, { color: colors.text_primary }]}>—</Text>
-        <Text style={[styles.metricUnit, { color: colors.text_muted }]}>{m?.unit ?? ''}</Text>
+        <Text style={[styles.metricUnit, { color: colors.text_muted }]}>—</Text>
       </View>
     );
   }
+  // Null value with non-placeholder source is suppression-on-purpose
+  // (e.g. compounded smash where a parent was low confidence). Render
+  // an explicit LOW CONFIDENCE chip rather than a dash so the user
+  // knows we chose not to show a number.
+  if (m.value == null) {
+    const isSuppressed = m.source !== 'placeholder' || m.confidenceLabel === 'low';
+    return (
+      <View style={styles.metricCell}>
+        <Text style={[styles.metricLabel, { color: colors.text_muted }]}>{label}</Text>
+        <Text style={[styles.metricValue, { color: colors.text_primary }]}>—</Text>
+        <Text style={[styles.metricUnit, { color: isSuppressed ? '#F5A623' : colors.text_muted }]}>
+          {isSuppressed ? 'low conf' : (m.unit || '')}
+        </Text>
+      </View>
+    );
+  }
+
+  const isMeasured = m.source === 'measured';
   const tag =
     m.source === 'measured'          ? 'measured'  :
     m.source === 'pose_estimated'    ? 'pose'      :
     m.source === 'profile_estimated' ? 'profile'   :
                                        'est';
-  const valueDisplay = m.unit === '' ? m.value.toFixed(2) : String(m.value);
+  // Cage's pattern: "~95 mph" with the tilde baked into the number.
+  // Smash (ratio) gets two decimals; everything else integer.
+  const numeric = m.unit === '' ? m.value.toFixed(2) : String(m.value);
+  const valueDisplay = isMeasured ? numeric : `~${numeric}`;
+
+  // Confidence dot color — high green, med amber, low red. Hidden for
+  // measured (the tag itself is the credibility signal).
+  const confColor =
+    m.confidenceLabel === 'high' ? '#00C896' :
+    m.confidenceLabel === 'med'  ? '#F5A623' :
+                                   '#ef4444';
+
+  // Range string: "78–105" for unit'd metrics, "1.32–1.42" for ratios.
+  const rangeStr = m.range
+    ? (m.unit === ''
+        ? `${m.range[0].toFixed(2)}–${m.range[1].toFixed(2)}`
+        : `${m.range[0]}–${m.range[1]}`)
+    : null;
+
   return (
     <View style={styles.metricCell}>
       <Text style={[styles.metricLabel, { color: colors.text_muted }]}>{label}</Text>
       <Text style={[styles.metricValue, { color: colors.text_primary }]}>{valueDisplay}</Text>
       <Text style={[styles.metricUnit, { color: colors.text_muted }]}>
         {m.unit}{m.unit ? ' · ' : ''}{tag}
+        {!isMeasured && (
+          <Text style={{ color: confColor }}>{' '}● {m.confidenceLabel}</Text>
+        )}
       </Text>
+      {rangeStr && (
+        <Text style={[styles.metricRange, { color: colors.text_muted }]}>
+          {rangeStr}{m.unit ? ` ${m.unit}` : ''}
+        </Text>
+      )}
+      {!isMeasured && m.estimateNote && (
+        <Text style={[styles.metricNote, { color: colors.text_muted }]} numberOfLines={2}>
+          {m.estimateNote}
+        </Text>
+      )}
     </View>
   );
 }
@@ -1765,6 +1822,12 @@ const styles = StyleSheet.create({
   metricLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1, marginBottom: 4 },
   metricValue: { fontSize: 22, fontWeight: '900' },
   metricUnit: { fontSize: 10, marginTop: 2 },
+  // 2026-05-24 (Metrics 1A) — Honest-presentation rows beneath the
+  // value: an estimated range when present, and a short methodology
+  // note ("pose heuristic", "club speed × typical smash"). No fixed
+  // heights — let text wrap.
+  metricRange: { fontSize: 10, marginTop: 2, fontVariant: ['tabular-nums'] },
+  metricNote: { fontSize: 9, marginTop: 3, fontStyle: 'italic', textAlign: 'center', paddingHorizontal: 4 },
   metricsFooter: { fontSize: 11, marginTop: 8, textAlign: 'center', fontStyle: 'italic', lineHeight: 16 },
   noSwingBadge: {
     position: 'absolute', top: 10, left: 10, right: 80,

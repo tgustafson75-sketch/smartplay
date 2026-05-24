@@ -41,15 +41,75 @@ export type MetricSource =
   | 'placeholder';     // Fallback when nothing else available
 
 export interface SwingMetric {
-  /** Numeric value when present; null when unknown. */
+  /** Numeric value when present; null when unknown OR when inputs
+   *  were degenerate enough that any number would be a lie (see the
+   *  "kill silent clamp" rules in clubSpeedFromPose). */
   value: number | null;
   /** Unit string for display ('mph', 'yds', or '' for ratios). */
   unit: string;
   /** Where this number came from — drives the UI's "est" badge. */
   source: MetricSource;
-  /** 0..1 — engine's confidence in the value. Below 0.5 the UI
-   *  should hedge ('~' or 'est') vs above 0.8 it can be unhedged. */
+  /** 0..1 — engine's confidence in the value. Continuous for upstream
+   *  math; the discrete `confidenceLabel` is what the UI renders. */
   confidence: number;
+  /** 2026-05-24 — Discrete confidence bucket the UI consumes. Derived
+   *  from `confidence` via `bucketize()`. Compounding gates downgrade
+   *  it (smash/carry inherit the worst of their parents). 'high' is
+   *  reserved for measured inputs; pose-derived metrics ceiling at
+   *  'med' even with clean keypoints. */
+  confidenceLabel: 'high' | 'med' | 'low';
+  /** 2026-05-24 — [lo, hi] estimated range in the metric's unit.
+   *  Null when (a) the source is 'measured' (no range needed — it's
+   *  the truth), (b) the value itself is null, or (c) the range
+   *  would be wider than usefully informative. The UI shows this
+   *  when present so the user never sees a bare confident number
+   *  from a pose heuristic that can't back it up. */
+  range: [number, number] | null;
+  /** 2026-05-24 — Short methodology label, mirrors Cage Mode's
+   *  "(single-mic, club-typical × peak)" pattern. Surfaces next to
+   *  the value so the estimate is honest about HOW it was derived. */
+  estimateNote?: string;
+}
+
+// 2026-05-24 — Map continuous confidence into the discrete bucket the
+// UI consumes. Thresholds chosen so:
+//   high — only reachable when an actual sensor (watch IMU / acoustic
+//          / launch monitor) produced the value
+//   med  — pose-derived with clean keypoints + plausible raw value
+//   low  — pose-derived with noisy inputs OR out-of-band raw value OR
+//          any compounded metric whose parent was low
+function bucketize(confidence: number): 'high' | 'med' | 'low' {
+  if (confidence >= 0.70) return 'high';
+  if (confidence >= 0.45) return 'med';
+  return 'low';
+}
+
+// 2026-05-24 — Per-source range factor as a fraction of the value.
+// Range is `[value × (1 - factor), value × (1 + factor)]` so the user
+// reads "~92 mph (78–105)" rather than a bare number that masks the
+// 20% error band a 2D pose heuristic actually carries. Wider on low
+// confidence; collapsed entirely on measured (range = null at caller).
+function rangeFactor(source: MetricSource, label: 'high' | 'med' | 'low'): number {
+  if (source === 'measured') return 0; // caller passes null range
+  if (source === 'placeholder') return 0.25;
+  // pose_estimated / profile_estimated
+  if (label === 'high') return 0.12;
+  if (label === 'med')  return 0.18;
+  return 0.25;
+}
+
+function rangeFor(value: number | null, source: MetricSource, label: 'high' | 'med' | 'low', unit: string): [number, number] | null {
+  if (value == null) return null;
+  if (source === 'measured') return null; // truth — no range needed
+  const f = rangeFactor(source, label);
+  if (f <= 0) return null;
+  const lo = value * (1 - f);
+  const hi = value * (1 + f);
+  // Ratios (smash) round to 2 decimals; mph/yds to int.
+  if (unit === '') {
+    return [Math.round(lo * 100) / 100, Math.round(hi * 100) / 100];
+  }
+  return [Math.round(lo), Math.round(hi)];
 }
 
 export interface SwingMetricSet {
@@ -159,95 +219,150 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
     : null;
 
   // ── Club speed ──
-  let clubSpeed: SwingMetric = nullMetric('mph');
+  // 2026-05-24 — Per spec ("Lead with what's real"): club head speed
+  // is the hardest metric from 2D video. Ceiling pose-derived
+  // confidence at 'med' (0.45-0.55); never claim 'high' without a
+  // measured signal. Out-of-band raw values get forced to 'low' inside
+  // clubSpeedFromPose; extreme values return null (no number rendered).
+  let clubSpeed: SwingMetric;
   if (typeof inputs.measuredClubSpeedMph === 'number' && Number.isFinite(inputs.measuredClubSpeedMph)) {
-    clubSpeed = {
+    clubSpeed = finalize({
       value: Math.round(inputs.measuredClubSpeedMph),
       unit: 'mph',
       source: 'measured',
       confidence: 0.95,
-    };
+      estimateNote: undefined, // measured — no methodology label needed
+    });
   } else {
     const fromPose = clubSpeedFromPose(inputs.poseFrames, inputs.clipDurationMs);
     if (fromPose != null) {
-      clubSpeed = { value: Math.round(fromPose.value), unit: 'mph', source: 'pose_estimated', confidence: fromPose.confidence };
+      clubSpeed = finalize({
+        value: Math.round(fromPose.value),
+        unit: 'mph',
+        source: 'pose_estimated',
+        confidence: fromPose.confidence,
+        estimateNote: fromPose.outOfBand
+          ? 'pose heuristic, out-of-band'
+          : 'pose heuristic',
+      });
     } else {
       const fromProfile = defaultClubSpeedFromHandicap(clubKey, handicap);
-      clubSpeed = {
+      clubSpeed = finalize({
         value: fromProfile,
         unit: 'mph',
         source: handicap != null ? 'profile_estimated' : 'placeholder',
-        confidence: handicap != null ? 0.45 : 0.20,
-      };
+        confidence: handicap != null ? 0.40 : 0.20, // profile speeds never reach 'med'
+        estimateNote: handicap != null ? 'handicap default' : 'placeholder',
+      });
     }
   }
 
   // ── Ball speed ──
-  let ballSpeed: SwingMetric = nullMetric('mph');
+  // Derived: club_speed × typical_smash[club]. Honest tag: when the
+  // parent (club_speed) is itself an estimate, the derivation is
+  // tautological — the smash ratio is implicit so the resulting
+  // "ball speed" carries the same uncertainty as club speed × a
+  // club-typical multiplier. Confidence inherits the parent and
+  // ceilings at 'med'.
+  let ballSpeed: SwingMetric;
   if (typeof inputs.measuredBallSpeedMph === 'number' && Number.isFinite(inputs.measuredBallSpeedMph)) {
-    ballSpeed = {
+    ballSpeed = finalize({
       value: Math.round(inputs.measuredBallSpeedMph),
       unit: 'mph',
       source: 'measured',
       confidence: 0.92,
-    };
+      estimateNote: undefined,
+    });
   } else if (clubSpeed.value != null) {
-    // Back-derive from club_speed × typical smash for the club.
     const typicalSmash = TYPICAL_SMASH_BY_CLUB[clubKey] ?? TYPICAL_SMASH_BY_CLUB.unknown;
-    ballSpeed = {
+    ballSpeed = finalize({
       value: Math.round(clubSpeed.value * typicalSmash),
       unit: 'mph',
-      // Tag with the SAME source as club_speed — ball speed is a
-      // derived metric here, so honesty requires it not claim a
-      // higher confidence than its parent.
-      source: clubSpeed.source === 'measured' ? 'profile_estimated' : clubSpeed.source,
-      confidence: Math.min(clubSpeed.confidence, 0.6),
-    };
+      // Mirror parent source — measured club speed times typical smash
+      // is still pose_estimated for downstream consumers (the ratio is
+      // assumed, not measured).
+      source: clubSpeed.source === 'measured' ? 'pose_estimated' : clubSpeed.source,
+      confidence: Math.min(clubSpeed.confidence, 0.45),
+      estimateNote: 'club speed × typical smash for ' + clubKey,
+    });
+  } else {
+    ballSpeed = nullMetric('mph');
   }
 
   // ── Smash factor ──
-  let smashFactor: SwingMetric = nullMetric('');
+  // Compounding gate (spec change 4): smash is ball/club; if EITHER
+  // parent is low confidence the ratio is just noise — suppress the
+  // hard number entirely. When both are at least 'med', render with
+  // confidence = worst-of-parents.
+  let smashFactor: SwingMetric;
   if (clubSpeed.value != null && ballSpeed.value != null && clubSpeed.value > 0) {
-    const ratio = ballSpeed.value / clubSpeed.value;
-    // Only compute when both upstream metrics had real sources;
-    // when both fall back to a typical-smash-derived ball speed
-    // off a profile_estimated club speed, the resulting smash is
-    // tautological (just the typical smash back). Surface that
-    // honestly with lower confidence.
     const bothMeasured = clubSpeed.source === 'measured' && ballSpeed.source === 'measured';
-    smashFactor = {
-      value: Math.round(ratio * 100) / 100,
-      unit: '',
-      source: bothMeasured ? 'measured' : 'pose_estimated',
-      confidence: bothMeasured ? 0.95 : Math.min(clubSpeed.confidence, ballSpeed.confidence) * 0.8,
-    };
+    const eitherLow = bucketize(clubSpeed.confidence) === 'low' || bucketize(ballSpeed.confidence) === 'low';
+    if (bothMeasured) {
+      const ratio = ballSpeed.value / clubSpeed.value;
+      smashFactor = finalize({
+        value: Math.round(ratio * 100) / 100,
+        unit: '',
+        source: 'measured',
+        confidence: 0.95,
+        estimateNote: undefined,
+      });
+    } else if (eitherLow) {
+      // Suppress — any value here would mislead the user.
+      smashFactor = nullMetric('');
+    } else {
+      const ratio = ballSpeed.value / clubSpeed.value;
+      smashFactor = finalize({
+        value: Math.round(ratio * 100) / 100,
+        unit: '',
+        source: 'pose_estimated',
+        confidence: Math.min(clubSpeed.confidence, ballSpeed.confidence) * 0.7,
+        estimateNote: 'compounded — inherits both estimates',
+      });
+    }
+  } else {
+    smashFactor = nullMetric('');
   }
 
   // ── Carry yards ──
-  let carryYards: SwingMetric = nullMetric('yds');
+  // Profile carry wins when populated (player's own typical for this
+  // club is the most honest number). Otherwise derive from ball speed
+  // — and gate: if ball speed is low, carry is low too (compounds).
+  let carryYards: SwingMetric;
   if (profileCarry != null) {
-    carryYards = {
+    carryYards = finalize({
       value: profileCarry,
       unit: 'yds',
       source: 'profile_estimated',
-      confidence: 0.75,
-    };
+      confidence: 0.60,
+      estimateNote: 'your typical for this club',
+    });
   } else if (ballSpeed.value != null) {
-    // Rough carry estimate from ball speed: ball_speed × 1.4 yards/mph
-    // for irons, × 1.65 for woods. Calibrated to PGA Tour averages.
-    const factor = ['driver', '3w', '5w', 'hybrid'].includes(clubKey) ? 1.65 : 1.4;
-    carryYards = {
-      value: Math.round(ballSpeed.value * factor),
-      unit: 'yds',
-      source: ballSpeed.source === 'measured' ? 'pose_estimated' : ballSpeed.source,
-      confidence: Math.min(ballSpeed.confidence, 0.5),
-    };
+    const ballLow = bucketize(ballSpeed.confidence) === 'low';
+    if (ballLow) {
+      // Compounding gate: derivative of a low parent is also low.
+      // Suppress the value rather than render a confident wrong yardage.
+      carryYards = nullMetric('yds');
+    } else {
+      const factor = ['driver', '3w', '5w', 'hybrid'].includes(clubKey) ? 1.65 : 1.4;
+      carryYards = finalize({
+        value: Math.round(ballSpeed.value * factor),
+        unit: 'yds',
+        source: ballSpeed.source === 'measured' ? 'pose_estimated' : ballSpeed.source,
+        confidence: Math.min(ballSpeed.confidence, 0.35),
+        estimateNote: 'ball speed × tour-avg factor',
+      });
+    }
+  } else {
+    carryYards = nullMetric('yds');
   }
 
   devLog(
-    `[swingMetrics] club=${clubKey} speed=${clubSpeed.value}mph(${clubSpeed.source}) ` +
-    `ball=${ballSpeed.value}mph(${ballSpeed.source}) smash=${smashFactor.value}(${smashFactor.source}) ` +
-    `carry=${carryYards.value}y(${carryYards.source})`,
+    `[swingMetrics] club=${clubKey} ` +
+    `speed=${clubSpeed.value}mph(${clubSpeed.source}/${clubSpeed.confidenceLabel}) ` +
+    `ball=${ballSpeed.value}mph(${ballSpeed.source}/${ballSpeed.confidenceLabel}) ` +
+    `smash=${smashFactor.value}(${smashFactor.source}/${smashFactor.confidenceLabel}) ` +
+    `carry=${carryYards.value}y(${carryYards.source}/${carryYards.confidenceLabel})`,
   );
 
   return {
@@ -258,29 +373,86 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
   };
 }
 
+// 2026-05-24 — Finalize a partially-built metric by deriving the
+// discrete confidenceLabel and range from the continuous confidence +
+// source. Single chokepoint so every metric flows through the same
+// honest-presentation shape — Metrics 1B (acoustic ball speed) and 2
+// (calibration) just set source / confidence and inherit the rest.
+function finalize(partial: {
+  value: number | null;
+  unit: string;
+  source: MetricSource;
+  confidence: number;
+  estimateNote?: string;
+}): SwingMetric {
+  const label = bucketize(partial.confidence);
+  const range = rangeFor(partial.value, partial.source, label, partial.unit);
+  return {
+    value: partial.value,
+    unit: partial.unit,
+    source: partial.source,
+    confidence: partial.confidence,
+    confidenceLabel: label,
+    range,
+    estimateNote: partial.estimateNote,
+  };
+}
+
 function nullMetric(unit: string): SwingMetric {
-  return { value: null, unit, source: 'placeholder', confidence: 0 };
+  return {
+    value: null,
+    unit,
+    source: 'placeholder',
+    confidence: 0,
+    confidenceLabel: 'low',
+    range: null,
+  };
 }
 
 /**
  * Pose-derived club speed estimate. Reads peak wrist velocity around
- * the P6 impact frame in the pose stream. Returns null when:
+ * the P6 impact frame in the pose stream.
+ *
+ * 2026-05-24 (Metrics 1A) — Killed the silent [45, 130] clamp. The
+ * clamp coerced every reading into a plausible-looking number, which
+ * meant a degenerate input (camera at the floor, partial view, glasses
+ * POV, blur) still rendered "Club Speed: 95 mph · pose" with no caller
+ * visible signal that the underlying number was junk.
+ *
+ * New behavior:
+ *   - Compute the raw mph honestly
+ *   - When mph falls extremely outside swing range [25, 180] → return
+ *     null (degenerate — never present a number)
+ *   - When mph falls outside plausible [45, 130] but inside the
+ *     extreme bounds → return the raw value with `outOfBand: true`
+ *     so caller can force confidence to 'low' and widen the range
+ *   - Confidence ceiling lowered from 0.70 → 0.55 (pose-derived
+ *     metrics should never reach the 'high' bucket reserved for
+ *     measured signals)
+ *
+ * Returns null when:
  *   - Fewer than 3 pose frames present (no velocity baseline)
  *   - Wrist keypoints missing or low-confidence at impact
- *   - Clip duration unknown (can't scale to mph)
+ *   - Clip duration unknown / implausible
+ *   - Raw mph is extremely out of any conceivable swing range
  *
  * Math: peak inter-frame wrist displacement in normalized image
- * coordinates × image-to-real-world scale (rough: assume ~2m tall
- * subject, ~0.5m frame-relative arm length → conversion constant).
- * This is a HEURISTIC estimate — designed to land within ±15% of
- * truth on a typical full-body down-the-line clip, but unreliable
- * for partial-view / glasses-POV / heavily-cropped frames.
+ * coordinates × empirical conversion constant. Heuristic ±15-25%
+ * error band on typical full-body down-the-line clips; significantly
+ * worse on partial-view / cropped / glasses-POV frames (which is
+ * exactly when the out-of-band path now fires).
  */
 function clubSpeedFromPose(
   frames: PoseFrame[] | null | undefined,
   clipDurationMs: number | null | undefined,
-): { value: number; confidence: number } | null {
+): { value: number; confidence: number; outOfBand: boolean } | null {
   if (!frames || frames.length < 3) return null;
+  // Duration sanity: < 200ms or > 12s is implausible for a real swing
+  // clip; bail rather than scale by an absurd factor.
+  if (clipDurationMs != null && (clipDurationMs <= 200 || clipDurationMs > 12_000)) {
+    devLog(`[swingMetrics] club_speed: bad duration ${clipDurationMs}ms → null`);
+    return null;
+  }
   const duration = clipDurationMs && clipDurationMs > 200 ? clipDurationMs : 3000;
   // Track lead wrist (left for right-handed; mirroring handled
   // upstream in poseEstimator.adjustKeypoint when lefty).
@@ -311,12 +483,25 @@ function clubSpeedFromPose(
   // typical full-body downswing capture at ~3s total clip length.
   // Then m/s → mph: × 2.237.
   const mph = peakVelocity * 150 * 2.237 * (3000 / duration);
-  // Clamp to realistic golf-swing range (45-130 mph for irons +
-  // drivers) so outlier frames don't produce nonsense values.
-  const clamped = Math.max(45, Math.min(130, mph));
-  return {
-    value: clamped,
-    // Confidence scales with keypoint quality + frame count.
-    confidence: Math.min(0.7, avgScore * (wrists.length >= 5 ? 1 : 0.8)),
-  };
+
+  // Hard implausible: nothing in this range is a real golf swing.
+  // Return null rather than fake a number — caller falls back to
+  // profile-derived value (handicap defaults) which is at least
+  // honestly labeled.
+  if (mph < 25 || mph > 180) {
+    devLog(`[swingMetrics] club_speed: extreme out-of-band ${mph.toFixed(1)}mph → null`);
+    return null;
+  }
+
+  // Borderline implausible: 25-44 or 131-180 mph. Still a swing-shaped
+  // motion but the heuristic almost certainly read something wrong
+  // (camera angle off, partial view, blur smearing wrist position).
+  // Surface the raw value but flag outOfBand so caller forces low
+  // confidence + widens the range — no silent clamp.
+  const outOfBand = mph < 45 || mph > 130;
+
+  let confidence = Math.min(0.55, avgScore * (wrists.length >= 5 ? 1 : 0.8));
+  if (outOfBand) confidence = Math.min(confidence, 0.30);
+
+  return { value: mph, confidence, outOfBand };
 }
