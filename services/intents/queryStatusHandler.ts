@@ -6,7 +6,12 @@ import { getCurrentLocation, getGreenCentroid, getTeeCentroid } from '../shotLoc
 import { fetchWeatherAt, getCachedWeather, type WeatherSnapshot } from '../weatherService';
 import { playsLikeDistance, playsLikePhrase } from '../../utils/playsLike';
 import type { ShotLocation } from '../../store/roundStore';
-import { getGreenYardages } from '../smartFinderService';
+import { getGreenYardages, resolveGreenCoords } from '../smartFinderService';
+// 2026-05-24 — Flow A (GPS-verify) — getOneShotFix is the only GPS
+// accessor that exposes accuracy_m. shotLocationService.getCurrentLocation()
+// strips to { lat, lng }, so it can't drive the soft-GPS tell. Importing
+// directly from gpsManager for the yardage handler enrichment.
+import { getOneShotFix } from '../gpsManager';
 
 const COMPASS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
 function compassDirFromDeg(deg: number): string {
@@ -526,30 +531,64 @@ export const queryStatusHandler: IntentHandler = {
       }
 
       case 'distance_to_green': {
+        // 2026-05-24 — Flow A (GPS-verify): RAW haversine yardage to the
+        // middle of the green, never plays-like adjusted. This is the
+        // Golfshot-comparable number Tim cross-checks during the test
+        // round. Three upgrades from the prior implementation:
+        //   1. resolveGreenCoords (Mark Green override > courseHoles >
+        //      geometry cache) replaces getGreenCentroid (courseHoles
+        //      only). Player-marked pin wins, matching the rest of the
+        //      yardage pipeline.
+        //   2. getOneShotFix replaces getCurrentLocation so we have
+        //      accuracy_m for the soft-GPS tell.
+        //   3. accuracy_m > 15 (the same threshold subscribePoorSignal
+        //      uses) appends "...but my GPS is a little soft right now"
+        //      so the player knows when to take the number with a
+        //      grain of salt.
         const greenHole = context.current_hole ?? round.currentHole;
-        const green = getGreenCentroid(greenHole);
+        const resolved = resolveGreenCoords(greenHole);
+        const green = resolved.middle;
         if (!green) {
           return {
             success: true,
-            voice_response: 'I don\'t know the green location for this hole yet.',
+            voice_response: 'I don\'t have the green location for this hole — try marking it next time you pass through.',
             side_effects: ['query:distance_to_green:no_green'],
             follow_up_needed: false,
           };
         }
-        const here = await getCurrentLocation();
-        if (!here) {
+        // 5-second freshness for the voice query — cache hit feels
+        // responsive, stale cache (>5s) refreshes inline. Defaults to
+        // OS-reported accuracy when GPS is locked.
+        const fix = await getOneShotFix({ maxAgeMs: 5_000 });
+        if (!fix) {
           return {
             success: true,
-            voice_response: 'I can\'t read your location right now — try again in a moment.',
+            voice_response: 'No GPS lock yet — give it a few seconds and try again.',
             side_effects: ['query:distance_to_green:no_gps'],
             follow_up_needed: false,
           };
         }
+        const here: ShotLocation = { lat: fix.lat, lng: fix.lng };
         const yds = Math.round(haversineYards(here, green));
+        // Soft-GPS tell threshold matches the existing
+        // subscribePoorSignal threshold in gpsManager.ts:436-462 (>15m
+        // sustained accuracy triggers a poor-signal toast today). Null
+        // accuracy_m means the OS didn't report a value — keep silent
+        // rather than guessing.
+        const SOFT_GPS_ACCURACY_M = 15;
+        const softGps = typeof fix.accuracy_m === 'number' && fix.accuracy_m > SOFT_GPS_ACCURACY_M;
+        const baseLine = `${yds} yards to the middle of the green`;
+        const voiceResponse = softGps
+          ? `${baseLine} — but my GPS is a little soft right now.`
+          : `${baseLine}.`;
         return {
           success: true,
-          voice_response: `${yds} yards to the middle of the green.`,
-          side_effects: ['query:distance_to_green'],
+          voice_response: voiceResponse,
+          side_effects: [
+            'query:distance_to_green',
+            `gps_accuracy_m:${typeof fix.accuracy_m === 'number' ? Math.round(fix.accuracy_m) : 'unknown'}`,
+            `green_source:${resolved.source}`,
+          ],
           follow_up_needed: false,
         };
       }

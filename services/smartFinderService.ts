@@ -219,7 +219,12 @@ function safeLoc(lat: number, lng: number): ShotLocation | null {
  * path produced the coords. source='none' when no usable coords exist
  * in either place.
  */
-function resolveGreenCoords(holeNumber: number): {
+// 2026-05-24 — Exported for the voice yardage handler (Flow A,
+// queryStatusHandler.ts `distance_to_green` case). The handler needs
+// raw pin coords through the same Mark-Green-override-aware cascade
+// the visual yardage strip uses, so the spoken number agrees with the
+// on-screen number. Resolver itself unchanged.
+export function resolveGreenCoords(holeNumber: number): {
   front: ShotLocation | null;
   middle: ShotLocation | null;
   back: ShotLocation | null;

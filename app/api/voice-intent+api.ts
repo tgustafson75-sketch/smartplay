@@ -33,7 +33,7 @@ Available intents:
    - "I'm coaching Emma" / "coach Mike" / "let's coach Sarah" / "I'm gonna coach Jenny" -> { tool_name: "coach_mode", player_name: "Emma" } (extract the first name verbatim into player_name; preserves capitalization as spoken)
 
 2. query_status — User wants information about current state.
-   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare", member_name?: string, notes?: string, lie_hint?: string, target_yards?: number, against?: "self_previous" | "tour_median" | "amateur_good" }
+   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare" | "distance_to_green", member_name?: string, notes?: string, lie_hint?: string, target_yards?: number, against?: "self_previous" | "tour_median" | "amateur_good" }
    Examples:
    - "what's my score" -> { query_topic: "score" }
    - "what hole am I on" -> { query_topic: "hole" }
@@ -47,6 +47,9 @@ Available intents:
    - "what's the play from the rough" / "what's the play from fluffy lie" -> { query_topic: "shot_strategy", lie_hint: "rough" }
    - "compare to my last swing" / "compare my swing to my last one" / "vs my last swing" -> { query_topic: "swing_compare", against: "self_previous" }
    - "compare to tour" / "compare to the pros" / "how do I compare to tour" -> { query_topic: "swing_compare", against: "tour_median" }
+   - "what's my yardage" / "what's my distance" / "how far" / "how far am I" / "yardage" -> { query_topic: "distance_to_green" }
+   - "how far to the pin" / "how far to the green" / "yardage to the pin" / "yardage to the green" / "distance to the pin" / "distance to the hole" / "how far to the flag" -> { query_topic: "distance_to_green" }
+   - "going for my second shot" / "going for my third shot" / "what's the yardage for my approach" -> { query_topic: "distance_to_green" }
 
 3. change_setting — User wants to modify a setting.
    parameters: { setting_name: string, new_value: string | boolean }

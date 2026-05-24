@@ -46,6 +46,9 @@ Available intents:
    - "how far was that shot" / "how far did I hit it" / "what was that one" -> { query_topic: "shot_distance" }
    - "how far have I gone" / "how far have I hit it on this hole" / "total yardage" -> { query_topic: "hole_progress" }
    - "how far to the green" / "yardage to the pin" / "how far to the flag" -> { query_topic: "distance_to_green" }
+   - "what's my yardage" / "what's my distance" / "how far" / "how far am I" / "yardage" -> { query_topic: "distance_to_green" }
+   - "how far to the pin" / "distance to the pin" / "how far to the hole" -> { query_topic: "distance_to_green" }
+   - "going for my second shot" / "going for my third shot" / "what's the yardage for my approach" -> { query_topic: "distance_to_green" }
    - "what's the wind doing" / "how's the wind" / "any wind out there" -> { query_topic: "wind" }
    - "is it going to rain" / "any rain" / "what are conditions like" / "how's the weather" -> { query_topic: "conditions" }
    - "plays like" alone -> { query_topic: "plays_like" }
