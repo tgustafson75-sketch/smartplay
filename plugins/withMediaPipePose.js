@@ -104,10 +104,26 @@ function withAndroidGradleDeps(config) {
 
 function withAndroidCameraPermission(config) {
   return withAndroidManifest(config, async (manifestConfig) => {
-    AndroidConfig.Permissions.addPermissionsToManifest(
-      ['android.permission.CAMERA'],
-      manifestConfig.modResults,
-    );
+    // 2026-05-25 — SDK 54 removed AndroidConfig.Permissions.
+    // addPermissionsToManifest. Manual mutation of the uses-permission
+    // array, idempotent (skip names already present).
+    {
+      const manifest = manifestConfig.modResults;
+      const perms = ['android.permission.CAMERA'];
+      if (!Array.isArray(manifest.manifest['uses-permission'])) {
+        manifest.manifest['uses-permission'] = [];
+      }
+      const existing = new Set(
+        manifest.manifest['uses-permission']
+          .map(p => p?.$?.['android:name'])
+          .filter(Boolean),
+      );
+      for (const name of perms) {
+        if (!existing.has(name)) {
+          manifest.manifest['uses-permission'].push({ $: { 'android:name': name } });
+        }
+      }
+    }
 
     // 2026-05-23 — NUCLEAR manifest hardening.
     //

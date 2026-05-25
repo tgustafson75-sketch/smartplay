@@ -191,14 +191,29 @@ function withManifest(config) {
     const manifest = manifestConfig.modResults;
 
     // 3a. Top-level Bluetooth permissions.
-    AndroidConfig.Permissions.addPermissionsToManifest(
-      [
+    // 2026-05-25 — Expo SDK 54 removed AndroidConfig.Permissions.
+    // addPermissionsToManifest. Manual mutation of the uses-permission
+    // array is the replacement (idempotent: skip names already present).
+    {
+      const perms = [
         'android.permission.BLUETOOTH',
         'android.permission.BLUETOOTH_CONNECT',
         'android.permission.BLUETOOTH_SCAN',
-      ],
-      manifest,
-    );
+      ];
+      if (!Array.isArray(manifest.manifest['uses-permission'])) {
+        manifest.manifest['uses-permission'] = [];
+      }
+      const existing = new Set(
+        manifest.manifest['uses-permission']
+          .map(p => p?.$?.['android:name'])
+          .filter(Boolean),
+      );
+      for (const name of perms) {
+        if (!existing.has(name)) {
+          manifest.manifest['uses-permission'].push({ $: { 'android:name': name } });
+        }
+      }
+    }
 
     // 3b. <meta-data> inside <application>. The literal credential
     //     values are pulled from manifestPlaceholders at build time via

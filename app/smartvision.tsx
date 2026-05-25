@@ -281,8 +281,31 @@ export default function SmartVisionScreen() {
   // looking at. SmartVision now requires an actual context
   // (activeCourseId | pendingStartCourseId | previewCourseId);
   // otherwise courseId stays null and the empty-state UI renders.
-  const effectiveCourseId =
+  // 2026-05-25 — Last-resort homeCourse fallback for the courseId path
+  // ONLY (not for courseName — see comment block below for why that's
+  // dangerous). Tim reported pre-round SmartVision showed no yardages
+  // because he hadn't selected a course on Play tab first → all three
+  // context vars were null → courseHoles empty → no F/M/B numbers. Now
+  // when the explicit context cascade is null AND a homeCourse string
+  // is set, resolve it to a local slug via getLocalCourseSlug and use
+  // that local:<slug> id. Falls through to null when the resolver
+  // doesn't recognize the home course name. Pure additive — existing
+  // explicit-context paths get the same effectiveCourseId they had.
+  const explicitCourseId =
     activeCourseId ?? pendingStartCourseId ?? previewCourseId ?? null;
+  const homeFallbackCourseId = (() => {
+    if (explicitCourseId) return null;
+    if (!homeCourseName) return null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getLocalCourseSlug } = require('../data/localCourseImages') as typeof import('../data/localCourseImages');
+      const slug = getLocalCourseSlug(homeCourseName);
+      return slug ? `local:${slug}` : null;
+    } catch {
+      return null;
+    }
+  })();
+  const effectiveCourseId = explicitCourseId ?? homeFallbackCourseId;
   // homeCourseIdFromProfile still computed for any read-only consumer
   // below that wants it; it's no longer in the cascade.
   void homeCourseIdFromProfile;
