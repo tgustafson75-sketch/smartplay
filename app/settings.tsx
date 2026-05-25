@@ -22,6 +22,8 @@ import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore
 import { useToastStore } from '../store/toastStore';
 import { useTrustLevelStore, TRUST_LEVEL_META, TRUST_LEVEL_SLIDER_ORDER } from '../store/trustLevelStore';
 import * as Haptics from 'expo-haptics';
+import { Audio } from 'expo-av';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import type { ThemeColors } from '../theme/tokens';
 import { getCaddieName, ACTIVE_PERSONAS } from '../lib/persona';
@@ -1170,6 +1172,23 @@ export default function Settings() {
             return (
               <>
                 <CollapsibleSection title="Owner Tools">
+                  {/* 2026-05-24 v1.2.1 — Glasses Mode toggle. Pre-
+                      configures the audio session for background
+                      Bluetooth so Tank's voice routes to Ray-Ban Meta
+                      glasses when paired. Persisted on settingsStore.
+                      Audio mode applied on toggle ON via existing
+                      voiceService.configureAudioForSpeech (queued, no
+                      race with the rest of voice stack). */}
+                  <GlassesModeRow colors={colors} />
+                  {/* 2026-05-24 — Feel Capture toggle. When ON, every
+                      cage swing's clip audio is transcribed via
+                      Whisper and stored as feel_narration_transcript
+                      paired with perShotAnalysis. Owner-only dataset
+                      for future feel-vs-real calibration. Doubly
+                      gated (flag + isOwnerEmail) — never fires for
+                      production users. Review tuples at /cage-debug. */}
+                  <FeelCaptureRow colors={colors} />
+
                   <TouchableOpacity
                     style={styles.resetRow}
                     onPress={() => router.push('/owner-logs' as never)}
@@ -1441,6 +1460,191 @@ function DeveloperToolsSection({ cardStyle, colors }: { cardStyle: object[]; col
         )}
       </View>
     </>
+  );
+}
+
+/**
+ * 2026-05-24 v1.2.1 — Glasses Mode toggle component.
+ *
+ * Lives inside Settings → Owner Tools. Switch reflects + writes
+ * settingsStore.glassesMode (persisted). On toggle ON:
+ *   1. Request mic permission via expo-av. If denied → revert toggle +
+ *      surface an Alert with a deep-link to system Settings.
+ *   2. Pre-configure the audio session for background Bluetooth via
+ *      voiceService.configureAudioForSpeech (already queued + idempotent;
+ *      sets staysActiveInBackground:true + DuckOthers, which routes TTS
+ *      to BT headset glasses when paired).
+ *   3. Show the setup tutorial Alert.
+ *
+ * Boot-time re-configure lives in app/_layout.tsx (one useEffect that
+ * reads settingsStore.glassesMode on mount and calls
+ * configureAudioForSpeech if true).
+ *
+ * NOTE: No new Meta SDK or auto-pair. Ray-Ban Meta is paired by the
+ * user in iPhone Settings → Bluetooth one time, then this toggle
+ * configures SmartPlay to play nicely with it.
+ */
+function GlassesModeRow({ colors }: { colors: ThemeColors }) {
+  const { t } = useTranslation();
+  const glassesMode = useSettingsStore((s) => s.glassesMode);
+  const setGlassesMode = useSettingsStore((s) => s.setGlassesMode);
+  const [busy, setBusy] = useState(false);
+
+  const onToggle = async (next: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (!next) {
+        // Disabling — no permission flow needed, just flip + persist.
+        setGlassesMode(false);
+        return;
+      }
+
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          t('settings.mic_required_title'),
+          t('settings.mic_required_body'),
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ],
+        );
+        return;
+      }
+
+      // Pre-configure audio session via the existing queued helper.
+      try {
+        const voice = await import('../services/voiceService');
+        await voice.configureAudioForSpeech();
+      } catch (e) {
+        console.log('[glassesMode] audio config failed (non-fatal):', e);
+      }
+
+      setGlassesMode(true);
+      Alert.alert(
+        t('settings.glasses_tutorial_title'),
+        t('settings.glasses_tutorial_body'),
+        [
+          { text: 'Got it', style: 'default' },
+          {
+            text: 'Watch Tutorial',
+            onPress: () => Linking.openURL('https://smartplaygolf.com/glasses-setup').catch(() => {}),
+          },
+        ],
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onTestMic = async () => {
+    const { status } = await Audio.getPermissionsAsync();
+    Alert.alert(
+      t('settings.glasses_mode'),
+      status === 'granted' ? t('settings.mic_ready') : t('settings.mic_not_enabled'),
+    );
+  };
+
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <View style={styles.resetRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.rowLabel, { color: colors.text_primary }]}>
+            🕶️ {t('settings.glasses_mode')}
+          </Text>
+          <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+            {t('settings.glasses_mode_desc')}
+          </Text>
+          {glassesMode && (
+            <Text style={[styles.rowSub, { color: colors.accent, marginTop: 6 }]}>
+              ✓ {t('settings.glasses_mode_active')}
+            </Text>
+          )}
+        </View>
+        <Switch
+          value={glassesMode}
+          onValueChange={onToggle}
+          disabled={busy}
+          trackColor={{ false: '#767577', true: colors.accent }}
+        />
+      </View>
+      {glassesMode && (
+        <View
+          style={{
+            padding: 12,
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            borderWidth: 1,
+            borderRadius: 10,
+            marginTop: 4,
+          }}
+        >
+          <Text style={[styles.rowLabel, { color: colors.text_primary, marginBottom: 6 }]}>
+            {t('settings.glasses_how_to_title')}
+          </Text>
+          <Text style={[styles.rowSub, { color: colors.text_muted, lineHeight: 19 }]}>
+            {t('settings.glasses_how_to_body')}
+          </Text>
+          <TouchableOpacity
+            onPress={onTestMic}
+            style={{
+              marginTop: 10,
+              alignSelf: 'flex-start',
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderRadius: 8,
+              backgroundColor: colors.accent,
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={t('settings.test_microphone')}
+          >
+            <Text style={{ color: colors.background, fontSize: 12, fontWeight: '800' }}>
+              {t('settings.test_microphone')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/**
+ * 2026-05-24 — Feel Capture toggle component.
+ *
+ * Owner-only dev tooling. When ON, every cage swing's clip audio is
+ * transcribed via Whisper (existing /api/transcribe) and stored on
+ * the shot as `feel_narration_transcript`, paired with the existing
+ * perShotAnalysis. Forms labeled tuples {clip, transcript, analysis}
+ * for future feel-vs-real calibration. No user surface — only the
+ * /cage-debug viewer surfaces the captured data.
+ *
+ * Defense-in-depth: the service ALSO checks isOwnerEmail at the call
+ * site, so a leaked persisted flag from a previous account doesn't
+ * accidentally fire transcription on a non-owner's audio.
+ */
+function FeelCaptureRow({ colors }: { colors: ThemeColors }) {
+  const feelCaptureEnabled = useSettingsStore((s) => s.feelCaptureEnabled);
+  const setFeelCaptureEnabled = useSettingsStore((s) => s.setFeelCaptureEnabled);
+  return (
+    <View style={[styles.resetRow, { marginBottom: 8 }]}>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Feel Capture (dev)</Text>
+        <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+          Transcribe each swing&apos;s clip audio + pair with the analysis. Owner-only — never fires on production users. Review tuples at /cage-debug.
+        </Text>
+        {feelCaptureEnabled && (
+          <Text style={[styles.rowSub, { color: colors.accent, marginTop: 6 }]}>
+            ✓ Active — capturing on every cage swing
+          </Text>
+        )}
+      </View>
+      <Switch
+        value={feelCaptureEnabled}
+        onValueChange={setFeelCaptureEnabled}
+        trackColor={{ false: '#767577', true: colors.accent }}
+      />
+    </View>
   );
 }
 

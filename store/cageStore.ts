@@ -77,6 +77,14 @@ export interface CageShot {
   // at 280 chars by the UI.
   isGoodRep?: boolean | null;
   userNotes?: string | null;
+  // 2026-05-24 — Feel-capture dataset (owner-only, dev tooling). When the
+  // owner has enabled feelCaptureEnabled in Settings, the session audio
+  // for THIS clip is transcribed via Whisper and stored here PAIRED
+  // with the existing perShotAnalysis. Forms labeled tuples
+  // {clip, transcript, analysis} for future feel-vs-real calibration.
+  // No user surface — only owner debug at /cage-debug surfaces it.
+  // Empty / absent on every production user (transcription gated off).
+  feel_narration_transcript?: string;
 }
 
 // Phase BL — how the active club was identified for a given segment.
@@ -415,6 +423,13 @@ interface CageState {
    *  by the live cage post-session pipeline (already in app/cage/summary.tsx)
    *  and by the upload analysis pipeline. */
   setSessionAnalysis: (sessionId: string, primary_issue: PrimaryIssue | null, drill_recommendation: DrillRecommendation | null) => void;
+  /** 2026-05-24 — Feel-capture dataset writer (owner-only). Whisper
+   *  transcribes the clip's audio off the captured mp4 and writes the
+   *  raw narration string back onto the shot. Paired with the existing
+   *  perShotAnalysis so the tuple {clip, transcript, analysis} is
+   *  reviewable in the owner debug surface. No-op when sessionId or
+   *  shotId not found. */
+  setShotFeelTranscript: (sessionId: string, shotId: string, transcript: string) => void;
   /** 2026-05-23 — Save a coach note onto a session. Coach Mode flow:
    *  pro watches the swing, AI analysis lands, pro types their own
    *  read ("hips stalled at impact") and saves. Independent of the
@@ -765,6 +780,28 @@ export const useCageStore = create<CageState>()(
         set(s => ({ sessionHistory: [...s.sessionHistory, session].slice(-50) }));
         return sessionId;
       },
+
+      // 2026-05-24 — Feel-capture transcript writer. Searches BOTH the
+      // activeSession (in-flight cage) AND sessionHistory (saved
+      // sessions / uploads) for the shot — feel transcription may
+      // finish before OR after the session is finalized.
+      setShotFeelTranscript: (sessionId, shotId, transcript) =>
+        set(s => {
+          const trim = (transcript ?? '').trim();
+          if (!trim) return s;
+          const updateShots = (shots: CageShot[]): CageShot[] =>
+            shots.map(shot => shot.id !== shotId ? shot : { ...shot, feel_narration_transcript: trim });
+          return {
+            ...s,
+            activeSession:
+              s.activeSession && s.activeSession.id === sessionId
+                ? { ...s.activeSession, shots: updateShots(s.activeSession.shots) }
+                : s.activeSession,
+            sessionHistory: s.sessionHistory.map(session =>
+              session.id !== sessionId ? session : { ...session, shots: updateShots(session.shots) },
+            ),
+          };
+        }),
 
       setShotAnalysis: (sessionId, shotId, analysis) =>
         set(s => ({

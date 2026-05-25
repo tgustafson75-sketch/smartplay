@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { listFeelCaptureTuples, type FeelCaptureTuple } from '../services/feelCaptureService';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import {
   listSessions,
@@ -78,6 +79,7 @@ export default function CageDebug() {
   const [fillerGenerating, setFillerGenerating] = useState(false);
   const [fillerPlayingCategory, setFillerPlayingCategory] = useState<FillerCategory | null>(null);
 
+  void useCageStore; // keep store referenced for viewer subscription
   // 2026-05-24 — AsyncStorage dump for hands-free verification (Batch 2
   // QA). Static snapshot read by tapping "Dump AsyncStorage" below;
   // renders the parsed JSON inline so persistence of round-store-v1,
@@ -320,6 +322,14 @@ export default function CageDebug() {
           </Text>
         </ScrollView>
       )}
+
+      {/* 2026-05-24 — Feel Capture viewer. Lists labeled tuples
+          {clip, transcript, analysis} for owner review. Captures
+          happen automatically in the background when the Feel Capture
+          toggle is on (Settings → Owner Tools) AND the active profile
+          is owner-allowlisted. Read-only here — toggle/disable lives
+          in Settings. */}
+      <FeelCaptureViewer />
 
       {/* Inline video player */}
       {selectedClip && (
@@ -970,4 +980,73 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 4,
   },
+});
+
+// 2026-05-24 — Feel Capture viewer (owner-only dataset reviewer).
+function FeelCaptureViewer() {
+  const tuples = useCageStore((s) => {
+    void s.activeSession;
+    void s.sessionHistory;
+    return listFeelCaptureTuples(50);
+  });
+  if (tuples.length === 0) {
+    return (
+      <View style={feelStyles.empty}>
+        <Text style={feelStyles.emptyTitle}>FEEL CAPTURE</Text>
+        <Text style={feelStyles.emptyBody}>
+          No paired tuples yet. Toggle Feel Capture in Settings → Owner Tools and capture a cage swing while narrating what you felt.
+        </Text>
+      </View>
+    );
+  }
+  return (
+    <View style={feelStyles.wrap}>
+      <Text style={feelStyles.heading}>FEEL CAPTURE — {tuples.length} TUPLE{tuples.length === 1 ? '' : 'S'}</Text>
+      <ScrollView style={feelStyles.list}>
+        {tuples.map((t: FeelCaptureTuple) => (
+          <View key={t.shotId} style={feelStyles.tuple}>
+            <Text style={feelStyles.tupleMeta}>
+              {new Date(t.date).toLocaleString()} · {t.club || 'unknown'} · {t.detected_issue ?? '—'} ({t.severity ?? '—'})
+            </Text>
+            <Text style={feelStyles.tupleLabel}>FEEL (you said)</Text>
+            <Text style={feelStyles.feelBody}>{t.transcript}</Text>
+            <Text style={feelStyles.tupleLabel}>READ (analysis)</Text>
+            <Text style={feelStyles.readBody}>{t.observation ?? '(no observation)'}</Text>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+const feelStyles = StyleSheet.create({
+  wrap: {
+    backgroundColor: '#0d1a0d',
+    borderBottomColor: '#1e3a28',
+    borderBottomWidth: 1,
+    padding: 10,
+  },
+  heading: { color: '#cfe8ff', fontSize: 11, fontWeight: '800', letterSpacing: 1.2, marginBottom: 8 },
+  list: { maxHeight: 320 },
+  tuple: {
+    backgroundColor: '#020503',
+    borderColor: '#1e3a28',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+  },
+  tupleMeta: { color: '#9ca3af', fontSize: 10, marginBottom: 6 },
+  tupleLabel: { color: '#7dd3a8', fontSize: 9, fontWeight: '800', letterSpacing: 1.2, marginTop: 6 },
+  feelBody: { color: '#e8f5e9', fontSize: 12, lineHeight: 17, fontStyle: 'italic', marginTop: 3 },
+  readBody: { color: '#e8f5e9', fontSize: 12, lineHeight: 17, marginTop: 3 },
+  empty: {
+    backgroundColor: '#0d1a0d',
+    borderBottomColor: '#1e3a28',
+    borderBottomWidth: 1,
+    padding: 14,
+    alignItems: 'center',
+  },
+  emptyTitle: { color: '#9ca3af', fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
+  emptyBody: { color: '#6b7280', fontSize: 11, textAlign: 'center', marginTop: 6, lineHeight: 16 },
 });

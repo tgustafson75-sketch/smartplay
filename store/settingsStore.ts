@@ -132,6 +132,20 @@ interface SettingsState {
   fillerEnabled: boolean;
   // Phase O — earbud tap-to-talk control
   earbudTapToTalk: boolean;
+  // 2026-05-24 v1.2.1 — Glasses Mode. Owner-gated toggle that pre-
+  // configures the audio session for background Bluetooth (so audio
+  // routes to Ray-Ban Meta or similar BT headset glasses while phone
+  // is pocketed). Persisted. UI lives in Settings → Owner Tools.
+  glassesMode: boolean;
+  // 2026-05-24 — Feel-capture dataset (owner/dev tooling). When ON,
+  // every captured swing's clip audio is transcribed via Whisper and
+  // stored on the shot as feel_narration_transcript. Forms the
+  // {clip, transcript, analysis} tuple set for future feel-vs-real
+  // calibration. NEVER on by default — transcribing every user's
+  // audio is a cost + privacy problem. Gated additionally on
+  // isOwnerEmail at the call site so only the owner's testing
+  // sessions produce data even if the flag leaks.
+  feelCaptureEnabled: boolean;
   voiceOnPhoneSpeaker: boolean;
   kevinGreetingEnabled: boolean;
   // Phase AW — SmartVision imagery source.
@@ -211,6 +225,8 @@ interface SettingsState {
   resetTutorials: () => void;
   setFillerEnabled: (v: boolean) => void;
   setEarbudTapToTalk: (v: boolean) => void;
+  setGlassesMode: (v: boolean) => void;
+  setFeelCaptureEnabled: (v: boolean) => void;
   setVoiceOnPhoneSpeaker: (v: boolean) => void;
   setKevinGreetingEnabled: (v: boolean) => void;
   setSmartVisionImagery: (v: 'curated' | 'gps' | 'auto') => void;
@@ -286,6 +302,8 @@ export const useSettingsStore = create<SettingsState>()(
       introOpens: {},
       fillerEnabled: true,
       earbudTapToTalk: true,
+      glassesMode: false,
+      feelCaptureEnabled: false,
       voiceOnPhoneSpeaker: true,
       kevinGreetingEnabled: true,
       smartVisionImagery: 'auto' as const,
@@ -438,6 +456,8 @@ export const useSettingsStore = create<SettingsState>()(
       resetTutorials: () => set({ tutorialsSeen: {} }),
       setFillerEnabled: (v) => set({ fillerEnabled: v }),
       setEarbudTapToTalk: (v) => set({ earbudTapToTalk: v }),
+      setGlassesMode: (v) => set({ glassesMode: v }),
+      setFeelCaptureEnabled: (v) => set({ feelCaptureEnabled: v }),
       setVoiceOnPhoneSpeaker: (v) => set({ voiceOnPhoneSpeaker: v }),
       setKevinGreetingEnabled: (v) => set({ kevinGreetingEnabled: v }),
       setSmartVisionImagery: (v) => set({ smartVisionImagery: v }),
@@ -579,6 +599,8 @@ export const useSettingsStore = create<SettingsState>()(
         introOpens: s.introOpens,
         fillerEnabled: s.fillerEnabled,
         earbudTapToTalk: s.earbudTapToTalk,
+        glassesMode: s.glassesMode,
+        feelCaptureEnabled: s.feelCaptureEnabled,
         voiceOnPhoneSpeaker: s.voiceOnPhoneSpeaker,
         kevinGreetingEnabled: s.kevinGreetingEnabled,
         smartVisionImagery: s.smartVisionImagery,

@@ -13,6 +13,7 @@ import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
 import i18n from '../i18n';
+import { initFeelCapture } from '../services/feelCaptureService';
 import { initListeningSession } from '../services/listeningSession';
 import { hydrateCourseTruthCache } from '../services/courseTruth';
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
@@ -273,6 +274,33 @@ function AppNavigator() {
     });
 
     return () => { unsubAccept(); };
+  }, []);
+
+  // 2026-05-24 — Feel-capture init (owner-only). Subscribes to cage
+  // store changes and transcribes each shot's clip audio via Whisper
+  // when (a) settings.feelCaptureEnabled AND (b) isOwnerEmail. No-op
+  // when either gate fails; cheap on every other user.
+  useEffect(() => {
+    const teardown = initFeelCapture();
+    return () => { teardown(); };
+  }, []);
+
+  // 2026-05-24 v1.2.1 — Glasses Mode boot-time audio config. When
+  // settingsStore.glassesMode is persisted true, pre-configure the
+  // audio session for background Bluetooth so TTS routes to Ray-Ban
+  // Meta or similar BT headset glasses on launch (not waiting for the
+  // first speak() to fire configureAudioForSpeech). Uses the existing
+  // queued helper to avoid racing the voice stack's audio mode writes.
+  useEffect(() => {
+    if (!useSettingsStore.getState().glassesMode) return;
+    (async () => {
+      try {
+        const voice = await import('../services/voiceService');
+        await voice.configureAudioForSpeech();
+      } catch (e) {
+        console.log('[glassesMode boot] audio config failed (non-fatal):', e);
+      }
+    })();
   }, []);
 
   // 2026-05-24 — Keep i18n in sync with settingsStore.language. Voice
