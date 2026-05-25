@@ -40,8 +40,12 @@ interface SuccessBody {
   /** Cage distance derived from echo delay. Math is real and reliable. */
   cage_distance_yards: number;
   /** Ball-speed HEURISTIC (club-typical × peak factor). Real ball-speed
-   *  measurement needs hardware we don't have. */
-  ball_speed_mph: number;
+   *  measurement needs hardware we don't have. null when the client
+   *  posted no club / 'unknown' — we won't fake a 7I calibration just
+   *  because we don't know the club. Honest read: detection is real,
+   *  speed estimate is unavailable for this swing. Client falls back
+   *  to pose-derivation when null. */
+  ball_speed_mph: number | null;
   /** Confidence 0-1 in the peak-pair detection. */
   confidence: number;
   /** Peak loudness at impact in dBFS (for diagnostics). */
@@ -105,9 +109,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Peak factor: -10 dBFS = 1.0× (clean center hit), -25 dBFS = 0.75×
   // (heel/toe/thin). Linearly interpolated between -10 and -40.
   const peakFactor = Math.max(0.5, Math.min(1.05, 1 + (detection.peakDb + 10) / 30));
-  const clubKey = body.club ?? '7I';
-  const clubTypical = CLUB_TYPICAL[clubKey] ?? CLUB_TYPICAL['7I'];
-  const ballSpeed = Math.round(clubTypical * peakFactor * 10) / 10;
+  // 2026-05-24 P1.1 — Removed silent '7I' fallback. When the client
+  // posts no club (or 'unknown' / empty), we DO NOT fake-calibrate
+  // against 7-iron. The audio detection IS real (impact time, cage
+  // distance, peak dB) — but ball-speed needs a known club factor
+  // and we don't have one. Return null; client falls through to
+  // pose-derived ball speed instead of presenting a wrong number.
+  // SmartMotion + Quick Record's post-v1.2.2 "honest untagged" path
+  // is the canonical caller for this branch.
+  const rawClub = typeof body.club === 'string' ? body.club.trim() : '';
+  const hasKnownClub = rawClub.length > 0 && rawClub.toLowerCase() !== 'unknown' && CLUB_TYPICAL[rawClub] !== undefined;
+  const ballSpeed: number | null = hasKnownClub
+    ? Math.round(CLUB_TYPICAL[rawClub] * peakFactor * 10) / 10
+    : null;
 
   const reply: SuccessBody = {
     impact_ms: detection.impactMs,

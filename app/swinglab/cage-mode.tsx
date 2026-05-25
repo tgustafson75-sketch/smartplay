@@ -18,8 +18,8 @@
  *
  * 2026-05-21 — Fix F diagnosis: Galaxy Watch IMU is the SIXTH planned
  * capability but is NOT wired yet. services/watchService.ts has only
- * tempo math + a simulateSwing test helper + a "FUTURE: REAL SDK HOOK"
- * comment block; nothing writes to useWatchStore in production
+ * tempo math + a "FUTURE: REAL SDK HOOK" comment block; nothing
+ * writes to useWatchStore in production
  * (zero callers of setConnected / recordSwing). The render path in
  * this file IS correctly defensive (`watchSwing && ...` gate at the
  * results card) so no fake "watch connected" UI shows up — the

@@ -890,9 +890,22 @@ export const queryStatusHandler: IntentHandler = {
             follow_up_needed: false,
           };
         }
-        // Use player's typical driver yardage from accumulated patterns; fallback
-        // 230y if nothing observed yet.
-        const driverYards = 230; // TODO: read from accumulated club distances when wired
+        // 2026-05-24 P1.2 — Read driver carry from accumulated practice stats
+        // instead of the old hardcoded 230y. If the player hasn't built up any
+        // driver data yet (avgCarryDriver === 0), answer honestly — we can
+        // tell them the carry distance to the hazard, but we can't tell them
+        // whether THEY can carry it without their own baseline.
+        const { usePracticeStore } = await import('../../store/practiceStore');
+        const driverYards = usePracticeStore.getState().avgCarryDriver;
+        if (driverYards <= 0) {
+          const { carry_yards } = canPlayerCarry(geom.tee, matchedHazard.location, 0);
+          return {
+            success: true,
+            voice_response: `It's ${carry_yards} yards to carry. I don't have your driver number locked in yet — hit a few in cage mode and I'll know for sure.`,
+            side_effects: [`query:carry:${matchedHazard.label}:no_baseline`],
+            follow_up_needed: false,
+          };
+        }
         const result = canPlayerCarry(geom.tee, matchedHazard.location, driverYards);
         const voice = result.in_range
           ? `Yeah — about ${result.carry_yards} yards to clear it. You've got ${result.margin_yards} to spare with driver.`

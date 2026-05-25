@@ -71,46 +71,8 @@ export const getKevinTempoLine = (metrics: SwingMetrics, club: string): string =
   return 'One more — feeling out the tempo.';
 };
 
-// ─── SIMULATE SWING (TESTING ONLY) ────────
-// Replace with real Samsung Health SDK when integrated
-
-export const simulateSwing = (club: string, feel: string | null): SwingMetrics => {
-  const isFat = feel === 'fat';
-  const isThin = feel === 'thin';
-
-  const backswingMs = isFat
-    ? 650 + Math.random() * 100
-    : isThin
-    ? 900 + Math.random() * 100
-    : 750 + Math.random() * 150;
-
-  const downswingMs = isFat
-    ? 200 + Math.random() * 50
-    : isThin
-    ? 350 + Math.random() * 50
-    : 250 + Math.random() * 50;
-
-  const peakWristSpeed = 8 + Math.random() * 6;
-  const tempo = analyzeTempoRatio(backswingMs, downswingMs);
-
-  return {
-    backswingMs,
-    downswingMs,
-    tempoRatio: tempo.ratio,
-    peakWristSpeed,
-    wristAcceleration: peakWristSpeed * 0.7,
-    impactAcceleration: peakWristSpeed * 1.2,
-    transitionDetected: true,
-    earlyTransition: tempo.ratio < 2.3,
-    tempoGood: tempo.tempoGood,
-    clubHeadSpeedEst: estimateClubSpeed(peakWristSpeed),
-    timestamp: Date.now(),
-    club,
-  };
-};
-
 // ─── FUTURE: REAL SDK HOOK ─────────────────
-// When Samsung Health SDK is integrated replace simulateSwing:
+// When Samsung Health SDK is integrated:
 //
 // import { SamsungHealth } from '@samsung/health-sdk';
 // SamsungHealth.onSwingDetected((data) => {

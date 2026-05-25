@@ -71,11 +71,6 @@ import { playsLikeDistance } from '../../utils/playsLike';
 import { useTrustLevelStore, TRUST_LEVEL_META, TRUST_LEVEL_SLIDER_ORDER } from '../../store/trustLevelStore';
 import { useToastStore } from '../../store/toastStore';
 import { useToolsMenuStore } from '../../store/toolsMenuStore';
-// Phase U2 — KevinAvatar import removed. The L1 SmartPlay-badge mic-trigger
-// it used to wrap was deleted in Phase AU; the import sat as orphan dead
-// code with no JSX consumer. The component file itself is preserved for
-// future re-use (see services/README.md). If a surface needs the
-// liveliness ring again, re-import here from '../../components/kevin/KevinAvatar'.
 import L1HolePreview from '../../components/caddie/L1HolePreview';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
 // Phase AT — KevinHelpButton import removed; ? button no longer rendered
@@ -121,10 +116,6 @@ export default function CaddieTab() {
   // L2/L3 avatar treatments stay literal (intentional brand consistency).
   const theme = useTheme();
 
-  // Phase F — kevinAvatarState was derived below from voiceState/kevinThinking
-  // for L1's mic-button KevinAvatar wrapping. Phase U2 removed the
-  // declaration alongside the orphaned KevinAvatar import (Phase AU killed
-  // L1's standalone badge mic-trigger, leaving this state unused).
   const { width: W, height: H } = useWindowDimensions();
   // Natural 9:16 frame height — shows Kevin's full portrait without over-zoom
   // Phase AU.1 — natural 9:16 frame for Kevin (canonical).
@@ -861,9 +852,6 @@ export default function CaddieTab() {
 
   // ── Kevin programmatic hook ──────────────
   const { isThinking: kevinThinking } = useKevin();
-
-  // Phase U2 — kevinAvatarState removed (dead code; see Phase F comment
-  // above). Re-derive here if a future surface uses KevinAvatar again.
 
   // ── Tool action handler ──────────────────
   const handleToolAction = useCallback((action: ToolAction) => {
