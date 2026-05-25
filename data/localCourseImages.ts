@@ -166,7 +166,51 @@ export const MARINERS_POINT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   9: require('../assets/courses/mariners-point/hole-09.jpg'),
 };
 
-export type LocalCourseSlug = 'palms' | 'lakes' | 'rancho-california' | 'crystal-springs' | 'mariners-point' | 'san-jose-muni' | 'sunnyvale';
+// 2026-05-24 — Maplewood Golf Club, Lunenburg MA (9 holes). Bundled for
+// the 2026 Hayes Open. Tim playing Friday + Saturday of Memorial Day
+// weekend — day-to-day GPS + functionality validation opportunity.
+// Cropped from Golfshot Android screenshots (IMG 7274–7282, 1768x2208)
+// via sips: 820,300 → 640x1500. Removes status bar, ad strip, left
+// stats column, "Get Pro!" bar, and bottom Holes/Preview/Track nav so
+// only the hole map remains (Lakes/Palms aesthetic).
+export const MAPLEWOOD_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1: require('../assets/courses/maplewood/hole-01.jpg'),
+  2: require('../assets/courses/maplewood/hole-02.jpg'),
+  3: require('../assets/courses/maplewood/hole-03.jpg'),
+  4: require('../assets/courses/maplewood/hole-04.jpg'),
+  5: require('../assets/courses/maplewood/hole-05.jpg'),
+  6: require('../assets/courses/maplewood/hole-06.jpg'),
+  7: require('../assets/courses/maplewood/hole-07.jpg'),
+  8: require('../assets/courses/maplewood/hole-08.jpg'),
+  9: require('../assets/courses/maplewood/hole-09.jpg'),
+};
+
+// 2026-05-24 — Pembroke Pines Country Club, Pembroke NH (18 holes).
+// Bundled for the 2026 Hayes Open. Tim playing Sunday before Memorial
+// Day. Cropped from Golfshot Android screenshots (IMG 7283–7300,
+// 1768x2208) via sips with same params as Maplewood.
+export const PEMBROKE_PINES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1:  require('../assets/courses/pembroke-pines/hole-01.jpg'),
+  2:  require('../assets/courses/pembroke-pines/hole-02.jpg'),
+  3:  require('../assets/courses/pembroke-pines/hole-03.jpg'),
+  4:  require('../assets/courses/pembroke-pines/hole-04.jpg'),
+  5:  require('../assets/courses/pembroke-pines/hole-05.jpg'),
+  6:  require('../assets/courses/pembroke-pines/hole-06.jpg'),
+  7:  require('../assets/courses/pembroke-pines/hole-07.jpg'),
+  8:  require('../assets/courses/pembroke-pines/hole-08.jpg'),
+  9:  require('../assets/courses/pembroke-pines/hole-09.jpg'),
+  10: require('../assets/courses/pembroke-pines/hole-10.jpg'),
+  11: require('../assets/courses/pembroke-pines/hole-11.jpg'),
+  12: require('../assets/courses/pembroke-pines/hole-12.jpg'),
+  13: require('../assets/courses/pembroke-pines/hole-13.jpg'),
+  14: require('../assets/courses/pembroke-pines/hole-14.jpg'),
+  15: require('../assets/courses/pembroke-pines/hole-15.jpg'),
+  16: require('../assets/courses/pembroke-pines/hole-16.jpg'),
+  17: require('../assets/courses/pembroke-pines/hole-17.jpg'),
+  18: require('../assets/courses/pembroke-pines/hole-18.jpg'),
+};
+
+export type LocalCourseSlug = 'palms' | 'lakes' | 'rancho-california' | 'crystal-springs' | 'mariners-point' | 'san-jose-muni' | 'sunnyvale' | 'maplewood' | 'pembroke-pines';
 
 export const LOCAL_COURSE_IMAGES: Record<LocalCourseSlug, Record<number, ImageSourcePropType>> = {
   'palms': PALMS_HOLE_IMAGES,
@@ -176,6 +220,8 @@ export const LOCAL_COURSE_IMAGES: Record<LocalCourseSlug, Record<number, ImageSo
   'mariners-point': MARINERS_POINT_HOLE_IMAGES,
   'san-jose-muni': SAN_JOSE_MUNI_HOLE_IMAGES,
   'sunnyvale': SUNNYVALE_HOLE_IMAGES,
+  'maplewood': MAPLEWOOD_HOLE_IMAGES,
+  'pembroke-pines': PEMBROKE_PINES_HOLE_IMAGES,
 };
 
 /**
@@ -205,6 +251,11 @@ export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng:
   'mariners-point':   { lat: 37.5731586, lng: -122.2823681 },
   'san-jose-muni':    { lat: 37.3771789, lng: -121.8881051 },
   'sunnyvale':        { lat: 37.3983857, lng: -122.0417245 },
+  // 2026-05-24 — Hayes Open courses. Approximate centroids from
+  // public records; refine on-site via OSM Overpass once Tim has
+  // walked the property (same correction the other 4 courses got).
+  'maplewood':        { lat: 42.5965,    lng: -71.7253 },
+  'pembroke-pines':   { lat: 43.1417,    lng: -71.4544 },
 };
 
 /**
@@ -222,6 +273,8 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   if (c.includes('rancho')) return 'rancho-california';
   if (c.includes('san jose')) return 'san-jose-muni';
   if (c.includes('sunnyvale')) return 'sunnyvale';
+  if (c.includes('pembroke')) return 'pembroke-pines';
+  if (c.includes('maplewood')) return 'maplewood';
   return null;
 }
 
@@ -251,6 +304,8 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   if (c.includes('rancho')) return RANCHO_CALIFORNIA_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('san jose')) return SAN_JOSE_MUNI_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('sunnyvale')) return SUNNYVALE_HOLE_IMAGES[holeNumber] ?? null;
+  if (c.includes('pembroke')) return PEMBROKE_PINES_HOLE_IMAGES[holeNumber] ?? null;
+  if (c.includes('maplewood')) return MAPLEWOOD_HOLE_IMAGES[holeNumber] ?? null;
   return null;
 }
 

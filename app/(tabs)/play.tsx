@@ -42,6 +42,8 @@ import {
   RANCHO_CALIFORNIA_HOLE_IMAGES,
   SAN_JOSE_MUNI_HOLE_IMAGES,
   SUNNYVALE_HOLE_IMAGES,
+  MAPLEWOOD_HOLE_IMAGES,
+  PEMBROKE_PINES_HOLE_IMAGES,
 } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
@@ -168,7 +170,40 @@ const LOCAL_COURSES: CourseSummary[] = [
     lat: 37.3983857,
     lng: -122.0417245,
   },
+  // 2026-05-24 — Hayes Open courses (Memorial Day weekend trip).
+  // Maplewood: Fri+Sat day-to-day GPS validation. Pembroke Pines: Sun.
+  // Centroids approximate; refine on-site from OSM Overpass like the
+  // other 4 corrected courses did 2026-05-17.
+  {
+    id: 'local:maplewood',
+    club_name: 'Maplewood Golf Club',
+    location: 'Lunenburg, MA',
+    rating: null,
+    slope: null,
+    isLocal: true,
+    thumbnail: (MAPLEWOOD_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    lat: 42.5965,
+    lng: -71.7253,
+  },
+  {
+    id: 'local:pembroke-pines',
+    club_name: 'Pembroke Pines Country Club',
+    location: 'Pembroke, NH',
+    rating: null,
+    slope: null,
+    isLocal: true,
+    thumbnail: (PEMBROKE_PINES_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    lat: 43.1417,
+    lng: -71.4544,
+  },
 ];
+
+// 2026-05-24 — Hayes Open: Tim's Memorial Day weekend golf trip.
+// Maplewood Fri+Sat (back-to-back GPS validation), Pembroke Pines Sun.
+// Tagline dedication to Polly and Harry Hayes. Skin only — both courses
+// also appear in LOCAL_COURSES so they're reachable via the normal
+// course discovery flow; this card is a pinned shortcut + theming.
+const HAYES_OPEN_COURSE_IDS = ['local:maplewood', 'local:pembroke-pines'] as const;
 
 type SearchKind = 'courses' | 'range_practice';
 
@@ -626,6 +661,44 @@ export default function PlayTab() {
           <AppIcon name="trophy" size={22} color="#00C896" />
         </TouchableOpacity>
 
+        {/* 2026-05-24 — 2026 Hayes Open card. Memorial Day weekend trip
+            skin (Maplewood Fri+Sat, Pembroke Pines Sun). Dedicated to
+            Polly and Harry Hayes. Each row taps into the standard
+            selectSummary flow so the rest of the app — round start,
+            Caddie, SmartVision, hole imagery — receives an unmodified
+            CourseSummary. No new pathways; pure pinning. */}
+        <View style={styles.hayesCard}>
+          <View style={styles.hayesStripeTop} />
+          <View style={styles.hayesHeader}>
+            <Text style={styles.hayesStar}>★</Text>
+            <Text style={styles.hayesTitle}>2026 Hayes Open</Text>
+            <Text style={styles.hayesStar}>★</Text>
+          </View>
+          <Text style={styles.hayesDedication}>Dedicated to Polly and Harry Hayes</Text>
+          <Text style={styles.hayesDates}>Memorial Day weekend</Text>
+          {HAYES_OPEN_COURSE_IDS.map(id => {
+            const c = LOCAL_COURSES.find(x => x.id === id);
+            if (!c) return null;
+            return (
+              <TouchableOpacity
+                key={id}
+                style={styles.hayesRow}
+                onPress={() => { void selectSummary(c); }}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={`Select ${c.club_name}`}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.hayesRowTitle} numberOfLines={1}>{c.club_name}</Text>
+                  <Text style={styles.hayesRowSub} numberOfLines={1}>{c.location}</Text>
+                </View>
+                <AppIcon name="chevron-forward" size={18} color="#cbd5e1" />
+              </TouchableOpacity>
+            );
+          })}
+          <View style={styles.hayesStripeBottom} />
+        </View>
+
         {/* Active-round banner — End Round lives here so the user doesn't
             have to dig into the Tools menu. Confirms before tearing down
             the round to avoid an accidental tap during course browsing. */}
@@ -1051,6 +1124,36 @@ const styles = StyleSheet.create({
   },
   tournamentCtaTitle: { color: '#00C896', fontSize: 15, fontWeight: '900' },
   tournamentCtaSub: { color: '#9ca3af', fontSize: 11, marginTop: 4, lineHeight: 16 },
+
+  // 2026-05-24 — Hayes Open card (Memorial Day weekend skin). Subtle
+  // red/blue stripe motif (USA flag colors) without going overboard;
+  // matches the dark-green Play tab palette in the body.
+  hayesCard: {
+    marginHorizontal: 12, marginTop: 10,
+    backgroundColor: '#0d1830',
+    borderRadius: 10,
+    borderWidth: 1, borderColor: '#1e3a5a',
+    overflow: 'hidden',
+  },
+  hayesStripeTop:    { height: 4, backgroundColor: '#b91c1c' },
+  hayesStripeBottom: { height: 4, backgroundColor: '#1d4ed8' },
+  hayesHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingTop: 12, paddingHorizontal: 14,
+    gap: 8,
+  },
+  hayesStar:       { color: '#fbbf24', fontSize: 16, fontWeight: '900' },
+  hayesTitle:      { color: '#f8fafc', fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
+  hayesDedication: { color: '#cbd5e1', fontSize: 11, fontStyle: 'italic', textAlign: 'center', marginTop: 4, paddingHorizontal: 14 },
+  hayesDates:      { color: '#94a3b8', fontSize: 10, textAlign: 'center', marginTop: 2, marginBottom: 10, paddingHorizontal: 14 },
+  hayesRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 10,
+    backgroundColor: '#0a132b',
+    borderTopWidth: 1, borderTopColor: '#1e3a5a',
+  },
+  hayesRowTitle: { color: '#f8fafc', fontSize: 13, fontWeight: '700' },
+  hayesRowSub:   { color: '#94a3b8', fontSize: 11, marginTop: 2 },
 
   banner: {
     flexDirection: 'row', alignItems: 'center',
