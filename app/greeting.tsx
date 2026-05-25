@@ -301,8 +301,12 @@ export default function GreetingScreen() {
 
   // Slow breathing pulse during SPEAKING — opacity 0.94↔1.0 at ~0.45 Hz with
   // sine easing. The previous 0.85↔1.0 / 180ms cycle read as a strobe.
+  // 2026-05-25 — Skip the pulse when the D-ID Kevin video is rendering.
+  // The video already has natural face/mouth motion; layering an opacity
+  // pulse on top read as distracting "blinking" per Tim's on-device feedback.
   useEffect(() => {
     if (phase !== 'SPEAKING' || reduceMotion) return;
+    if (useKevinIntroVideo) return;
     const loop = Animated.loop(Animated.sequence([
       Animated.timing(opacity, { toValue: 0.94, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       Animated.timing(opacity, { toValue: 1.00, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
@@ -310,7 +314,7 @@ export default function GreetingScreen() {
     loop.start();
     return () => loop.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, reduceMotion]);
+  }, [phase, reduceMotion, useKevinIntroVideo]);
 
   return (
     <TouchableWithoutFeedback onPress={handleSkip} accessibilityLabel="Skip greeting">
@@ -346,10 +350,16 @@ export default function GreetingScreen() {
                 back to the static portrait when the clip isn't available
                 or for non-Kevin personas. */}
             {useKevinIntroVideo ? (
+              // 2026-05-25 — Per-axis scale crops D-ID's side watermarks
+              // out of the circular wrap. The portrait video at COVER mode
+              // in a square container shows the full horizontal extent
+              // (where the watermarks live). transform: scale 1.4 zooms
+              // Kevin's face up 40%; the overflow:'hidden' on the wrap
+              // clips the now-overflowing sides. Face stays centered.
               <Video
                 ref={videoRef}
                 source={getCaddieClip('kevin', 'intro') as number}
-                style={styles.avatarPhoto}
+                style={[styles.avatarPhoto, { transform: [{ scale: 1.4 }] }]}
                 resizeMode={ResizeMode.COVER}
                 shouldPlay
                 isLooping={false}
