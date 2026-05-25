@@ -11,7 +11,9 @@
     "can_ground_club_no": "No. Penalty area or bunker - don't ground it. 2 stroke penalty.",
     "flag_or_center_safe": "Center of the green. Every time. You don't have the skill to hunt flags yet.",
     "flag_or_center_attack": "Attack it. Wedge in hand, go at it.",
-    "flag_or_center_balanced": "Center. A 30-foot putt is better than a short-sided bunker."
+    "flag_or_center_balanced": "Center. A 30-foot putt is better than a short-sided bunker.",
+    "analyze_hole_photo": "I've got the hole photo — let me read the layout and call your line.",
+    "analyze_swing_video": "Swing video detected. I'll have the full read once the backend's wired."
   },
   "buttons": {
     "start_cage": "Start Cage Session",
@@ -25,7 +27,12 @@
     "analyzing": "Analyzing your swing...",
     "cage_session": "Cage Session",
     "driver": "Driver",
-    "wood3": "3-Wood"
+    "wood3": "3-Wood",
+    "meta_glasses_setup": "Using Ray-Ban Meta?",
+    "meta_glasses_instructions": "1. In Meta View: Settings → Save to Camera Roll = ON.\n2. Grant SmartPlay access to Photos.\n3. Say \"Hey Meta, take a photo\" on course. Tank will auto-detect it.",
+    "meta_glasses_new_photo": "New photo from Ray-Ban Meta detected",
+    "meta_glasses_analyze_btn": "Ask Tank to analyze",
+    "meta_glasses_dismiss": "Dismiss"
   },
   "voice": {
     "analyzing_swing": "Analyzing your swing now",
@@ -35,5 +42,19 @@
     "app_name": "SmartPlay Caddie",
     "tagline": "Real-time on-course intelligence",
     "built_by": "Built by SmartPlay AI"
+  },
+  "settings": {
+    "glasses_mode": "Glasses Mode",
+    "glasses_mode_desc": "Use Ray-Ban Meta for hands-free Tank",
+    "glasses_mode_active": "Active — audio routes to glasses",
+    "glasses_tutorial_title": "Glasses Mode Enabled",
+    "glasses_tutorial_body": "Quick setup:\n\n1. Pair Ray-Ban Meta in iPhone Bluetooth\n2. iPhone Settings → Accessibility → Touch → Call Audio Routing → Bluetooth Headset\n3. Keep SmartPlay open in background\n4. Say \"Hey Meta\" then ask Tank\n\nTank will respond in your glasses.",
+    "glasses_how_to_title": "How to use on course:",
+    "glasses_how_to_body": "1. Phone in pocket, SmartPlay open\n2. Say \"Hey Meta\" to glasses\n3. Ask: \"Tank, driver or 3-wood?\"\n4. Hear the answer in your glasses",
+    "test_microphone": "Test Microphone",
+    "mic_ready": "Microphone ready",
+    "mic_not_enabled": "Microphone not enabled",
+    "mic_required_title": "Microphone Required",
+    "mic_required_body": "SmartPlay needs mic access to hear you through glasses. Enable in Settings."
   }
 }

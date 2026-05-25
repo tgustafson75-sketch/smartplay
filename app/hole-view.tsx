@@ -16,6 +16,7 @@ import {
   useWindowDimensions,
   ActivityIndicator,
   PanResponder,
+  Alert,
 } from 'react-native';
 import KevinBadge from '../components/KevinBadge';
 import { useKevinPresence } from '../contexts/KevinPresenceContext';
@@ -37,6 +38,12 @@ import { useHoleMarkerCalibrationStore } from '../store/holeMarkerCalibrationSto
 import VectorHoleView from '../components/smartvision/VectorHoleView';
 import GolfshotHoleView from '../components/smartvision/GolfshotHoleView';
 import { ShareToSocial } from '../components/ShareToSocial';
+import { useTranslation } from 'react-i18next';
+import {
+  getLatestMetaGlassesMedia,
+  processMetaGlassesPhoto,
+  type MetaGlassesAsset,
+} from '../services/metaGlasses/importService';
 import { getHoleGeometry } from '../services/courseGeometryService';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSmartVision } from '../contexts/SmartVisionContext';
@@ -240,6 +247,42 @@ export default function HoleView() {
   // card below so the share image is just the hole view, not the whole
   // screen chrome.
   const shareViewRef = useRef<View>(null);
+
+  // 2026-05-24 v1.2.1 — Meta glasses media auto-detect. Polls the
+  // Ray-Ban/Meta album every 10s while hole-view is mounted. Surfaces
+  // a banner when a <60s-old photo lands. Native dep (expo-media-
+  // library) is in package.json but lights up only after the next EAS
+  // Build cuts; getLatestMetaGlassesMedia returns [] in the meantime.
+  const { t: tMeta } = useTranslation();
+  const [pendingMetaMedia, setPendingMetaMedia] = useState<MetaGlassesAsset | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const NEW_WINDOW_MS = 60_000;
+    const POLL_MS = 10_000;
+    const check = async () => {
+      const recent = await getLatestMetaGlassesMedia(5);
+      if (cancelled) return;
+      const cutoff = Date.now() - NEW_WINDOW_MS;
+      const newPhoto = recent.find((a) => a.mediaType === 'photo' && a.creationTime > cutoff);
+      setPendingMetaMedia(newPhoto ?? null);
+    };
+    void check();
+    const interval = setInterval(check, POLL_MS);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+  const handleAnalyzeMetaPhoto = useCallback(async () => {
+    if (!pendingMetaMedia) return;
+    try {
+      const result = await processMetaGlassesPhoto(pendingMetaMedia.uri);
+      // TODO (next sprint): POST result.processedUri to Tank vision API.
+      // v1.2.1 confirmation only — flagged in the spec.
+      Alert.alert('Tank', result.tankPrompt);
+    } catch (e) {
+      console.log('[hole-view] meta photo analyze failed:', e);
+    } finally {
+      setPendingMetaMedia(null);
+    }
+  }, [pendingMetaMedia]);
 
   // Mutable refs — read inside PanResponder callbacks (stable, captured once)
   const teePosRef = useRef(teePos);
@@ -1225,6 +1268,45 @@ export default function HoleView() {
         <View style={[styles.scroll, { flex: 1 }]}>
           {headerRow}
           {modeBadgeRow}
+          {/* 2026-05-24 v1.2.1 — Meta glasses media auto-detect banner.
+              Visible only when a <60s-old photo lands in the Ray-Ban /
+              Meta album. Dormant until the next EAS Build cuts the
+              expo-media-library native module — the JS is OTA-safe and
+              gracefully no-ops when the native binding isn't bundled. */}
+          {pendingMetaMedia && (
+            <View style={metaBannerStyles.wrap}>
+              <Text style={metaBannerStyles.heading}>
+                {tMeta('labels.meta_glasses_new_photo')}
+              </Text>
+              <Image
+                source={{ uri: pendingMetaMedia.uri }}
+                style={metaBannerStyles.thumb}
+                resizeMode="cover"
+              />
+              <View style={metaBannerStyles.btnRow}>
+                <TouchableOpacity
+                  style={metaBannerStyles.primaryBtn}
+                  onPress={handleAnalyzeMetaPhoto}
+                  accessibilityRole="button"
+                  accessibilityLabel={tMeta('labels.meta_glasses_analyze_btn')}
+                >
+                  <Text style={metaBannerStyles.primaryBtnText}>
+                    {tMeta('labels.meta_glasses_analyze_btn')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={metaBannerStyles.dismissBtn}
+                  onPress={() => setPendingMetaMedia(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel={tMeta('labels.meta_glasses_dismiss')}
+                >
+                  <Text style={metaBannerStyles.dismissText}>
+                    {tMeta('labels.meta_glasses_dismiss')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
           <View style={{ alignItems: 'center', justifyContent: 'flex-start' }}>
             {holeImagePane}
           </View>
@@ -1548,4 +1630,41 @@ const styles = StyleSheet.create({
   clubChipClear: { borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)' },
   clubChipText: { color: '#9ca3af', fontSize: 13, fontWeight: '600' },
   clubChipTextActive: { color: '#00C896' },
+});
+
+// 2026-05-24 v1.2.1 — Meta glasses auto-detect banner styles. Kept
+// separate from the main styles so the new banner block is easy to
+// remove if the feature evolves into a different surface.
+const metaBannerStyles = StyleSheet.create({
+  wrap: {
+    backgroundColor: '#0d1a0d',
+    borderColor: '#1e3a28',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: 8,
+    marginTop: 8,
+    gap: 10,
+  },
+  heading: { color: '#ffffff', fontSize: 13, fontWeight: '800' },
+  thumb: { width: '100%', height: 160, borderRadius: 8, backgroundColor: '#020503' },
+  btnRow: { flexDirection: 'row', gap: 8 },
+  primaryBtn: {
+    flex: 1,
+    backgroundColor: '#00C896',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  primaryBtnText: { color: '#0d1a0d', fontSize: 13, fontWeight: '800' },
+  dismissBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dismissText: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
 });

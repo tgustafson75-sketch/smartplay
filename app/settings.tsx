@@ -41,6 +41,7 @@ export default function Settings() {
   const insets = useSafeAreaInsets();
 
   const { colors } = useTheme();
+  const { t } = useTranslation();
 
   const {
     voiceEnabled,
@@ -1156,6 +1157,19 @@ export default function Settings() {
           <View style={styles.aboutRow}>
             <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Built by</Text>
             <Text style={[styles.aboutValue, { color: colors.text_primary }]}>SmartPlay AI</Text>
+          </View>
+          {/* 2026-05-24 v1.2.1 — Meta glasses media-ingest setup
+              instructions. The capture path is automatic once the
+              user has set up Meta View; this section documents the
+              one-time iPhone steps required. Localized via i18n
+              labels.meta_glasses_setup / .meta_glasses_instructions. */}
+          <View style={[styles.aboutRow, { flexDirection: 'column', alignItems: 'flex-start', gap: 6 }]}>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>
+              {t('labels.meta_glasses_setup')}
+            </Text>
+            <Text style={[styles.aboutValue, { color: colors.text_primary, lineHeight: 18 }]}>
+              {t('labels.meta_glasses_instructions')}
+            </Text>
           </View>
         </CollapsibleSection>
 

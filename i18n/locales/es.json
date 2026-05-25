@@ -11,7 +11,9 @@
     "can_ground_club_no": "No. En zona de penalidad o bunker no apoyes el palo. 2 golpes de penalidad.",
     "flag_or_center_safe": "Centro del green, siempre. Aún no tienes el nivel para atacar la bandera.",
     "flag_or_center_attack": "Atácala. Tienes wedge, ve por ella.",
-    "flag_or_center_balanced": "Centro. Un putt de 30 pies es mejor que un bunker corto."
+    "flag_or_center_balanced": "Centro. Un putt de 30 pies es mejor que un bunker corto.",
+    "analyze_hole_photo": "Tengo la foto del hoyo — déjame leer el layout y darte la línea.",
+    "analyze_swing_video": "Video de swing detectado. Tendré el análisis completo cuando el backend esté listo."
   },
   "buttons": {
     "start_cage": "Iniciar Práctica",
@@ -25,7 +27,12 @@
     "analyzing": "Analizando tu swing...",
     "cage_session": "Sesión de Práctica",
     "driver": "Driver",
-    "wood3": "Madera 3"
+    "wood3": "Madera 3",
+    "meta_glasses_setup": "¿Usando Ray-Ban Meta?",
+    "meta_glasses_instructions": "1. En Meta View: Ajustes → Guardar en Camera Roll = ON.\n2. Permite a SmartPlay acceder a Fotos.\n3. Di \"Hey Meta, take a photo\" en el campo. Tank lo detectará automáticamente.",
+    "meta_glasses_new_photo": "Nueva foto de Ray-Ban Meta detectada",
+    "meta_glasses_analyze_btn": "Pídele a Tank que analice",
+    "meta_glasses_dismiss": "Descartar"
   },
   "voice": {
     "analyzing_swing": "Analizando tu swing ahora",
@@ -35,5 +42,19 @@
     "app_name": "SmartPlay Caddie",
     "tagline": "Inteligencia en tiempo real en el campo",
     "built_by": "Creado por SmartPlay AI"
+  },
+  "settings": {
+    "glasses_mode": "Modo Lentes",
+    "glasses_mode_desc": "Usa Ray-Ban Meta para Tank manos libres",
+    "glasses_mode_active": "Activo — el audio se enruta a los lentes",
+    "glasses_tutorial_title": "Modo Lentes Activado",
+    "glasses_tutorial_body": "Configuración rápida:\n\n1. Empareja Ray-Ban Meta en Bluetooth del iPhone\n2. Ajustes iPhone → Accesibilidad → Tocar → Ruta de audio de llamadas → Auriculares Bluetooth\n3. Mantén SmartPlay abierto en segundo plano\n4. Di \"Hey Meta\" y pregúntale a Tank\n\nTank te responderá en tus lentes.",
+    "glasses_how_to_title": "Cómo usar en el campo:",
+    "glasses_how_to_body": "1. Teléfono en el bolsillo, SmartPlay abierto\n2. Di \"Hey Meta\" a los lentes\n3. Pregunta: \"Tank, ¿driver o madera 3?\"\n4. Escucha la respuesta en tus lentes",
+    "test_microphone": "Probar Micrófono",
+    "mic_ready": "Micrófono listo",
+    "mic_not_enabled": "Micrófono no habilitado",
+    "mic_required_title": "Se Requiere Micrófono",
+    "mic_required_body": "SmartPlay necesita acceso al micrófono para escucharte a través de los lentes. Actívalo en Ajustes."
   }
 }
