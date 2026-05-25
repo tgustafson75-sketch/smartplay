@@ -334,15 +334,33 @@ export default function GreetingScreen() {
           <Animated.View
             style={[
               styles.avatarWrap,
-              {
-                width: avatarSize,
-                height: avatarSize,
-                borderRadius: avatarSize / 2,
-                borderColor: colors.accent,
-                opacity,
-                transform: [{ scale }],
-                overflow: 'hidden', // Required for Android to actually clip child to borderRadius circle
-              },
+              useKevinIntroVideo
+                ? {
+                    // 2026-05-25 — Portrait rectangle "framed photo" treatment
+                    // for the D-ID video. Narrower than the video's 9:16
+                    // aspect, so ResizeMode COVER scales the video to fill
+                    // HEIGHT and CROPS the sides — pushing D-ID's side-panel
+                    // watermarks outside the visible area. Rounded corners
+                    // (radius 18) read as "frame," not a circle. avatarSize
+                    // is the smaller-edge anchor; width = 70% of that to
+                    // produce a comfortable portrait frame on phone + fold.
+                    width: avatarSize * 0.55,
+                    height: avatarSize,
+                    borderRadius: 18,
+                    borderColor: colors.accent,
+                    opacity,
+                    transform: [{ scale }],
+                    overflow: 'hidden',
+                  }
+                : {
+                    width: avatarSize,
+                    height: avatarSize,
+                    borderRadius: avatarSize / 2,
+                    borderColor: colors.accent,
+                    opacity,
+                    transform: [{ scale }],
+                    overflow: 'hidden',
+                  },
             ]}
           >
             {/* 2026-05-25 — Kevin D-ID intro video. When the bundled
@@ -354,16 +372,17 @@ export default function GreetingScreen() {
                 back to the static portrait when the clip isn't available
                 or for non-Kevin personas. */}
             {useKevinIntroVideo ? (
-              // 2026-05-25 — Per-axis scale crops D-ID's side watermarks
-              // out of the circular wrap. The portrait video at COVER mode
-              // in a square container shows the full horizontal extent
-              // (where the watermarks live). transform: scale 1.4 zooms
-              // Kevin's face up 40%; the overflow:'hidden' on the wrap
-              // clips the now-overflowing sides. Face stays centered.
+              // 2026-05-25 — With the new narrow portrait wrap
+              // (width = 0.55 × height), ResizeMode COVER naturally
+              // crops the video's side panels (D-ID watermarks) because
+              // the wrap aspect (~0.55) is narrower than the video's
+              // (~0.5625). The transform: scale 1.3 is a mild extra
+              // zoom for nice face framing; if Android ignores it the
+              // narrow-wrap geometry alone still hides watermarks.
               <Video
                 ref={videoRef}
                 source={getCaddieClip('kevin', 'intro') as number}
-                style={[styles.avatarPhoto, { transform: [{ scale: 2.0 }] }]}
+                style={[styles.avatarPhoto, { transform: [{ scale: 1.3 }] }]}
                 resizeMode={ResizeMode.COVER}
                 shouldPlay
                 isLooping={false}
