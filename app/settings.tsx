@@ -1224,6 +1224,40 @@ export default function Settings() {
                     </View>
                     <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
+                  {/* 2026-05-24 — Field Manual. Comprehensive current-state
+                      reference + verification checklist with notes + export
+                      as markdown. Owner-only. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/field-manual' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="View field manual and verification checklist"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Field Manual</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Current-state reference + pre-beta verification checklist with notes + export.
+                      </Text>
+                    </View>
+                    <Ionicons name="book-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
+                  {/* 2026-05-24 — Scenario harness. Owner-gated test runner
+                      for 17 scenarios covering the shipped-unverified items
+                      from BUILD-STATE-AUDIT §B. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/harness' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="View scenario harness"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Scenario Harness</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        17 scenarios (9 critical + 5 high-value + 3 nice-to-have) — exercises real stores via the production voice router.
+                      </Text>
+                    </View>
+                    <Ionicons name="flask-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
                   {/* 2026-05-23 — Voice coverage log. Every voice command
                       that doesn't match a wired handler (classifier
                       unknown, no handler registered, or handler threw)

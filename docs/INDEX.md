@@ -4,6 +4,7 @@ Navigation hub for the `docs/` tree. Updated as part of Phase 100 / Component 8.
 
 ## Read first
 
+- **[field-manual/](field-manual/) — comprehensive current-state reference (post-pre-beta sprint, 2026-05-24). Start here.**
 - [../CLAUDE.md](../CLAUDE.md) — project conventions (critical-path gates, locked elements, polyfill + persona conventions, commit format)
 - [critical-paths.md](critical-paths.md) — the four PATH 1–4 MIN VERIFY scenarios
 - [v1-scope-final.md](v1-scope-final.md) — v1.1 scope contract
