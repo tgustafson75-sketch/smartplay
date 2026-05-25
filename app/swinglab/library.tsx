@@ -422,6 +422,24 @@ export default function SwingLibrary() {
                       <Ionicons name="git-compare-outline" size={18} color={colors.accent} />
                     </TouchableOpacity>
                   ) : null}
+                  {/* 2026-05-25 — Visible trash icon. Long-press still
+                      works (existing behavior), but the icon makes
+                      delete discoverable per Tim's "need to delete
+                      videos" ask. e.stopPropagation prevents the row
+                      tap (which navigates to the swing detail) from
+                      firing alongside. */}
+                  <TouchableOpacity
+                    onPress={(e) => {
+                      e.stopPropagation?.();
+                      onLongPress(entry.session.id);
+                    }}
+                    style={styles.compareBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete this swing from library"
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="trash-outline" size={18} color={colors.text_muted} />
+                  </TouchableOpacity>
                   <View style={[
                     styles.sourceBadge,
                     {

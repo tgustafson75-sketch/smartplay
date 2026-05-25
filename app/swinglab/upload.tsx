@@ -14,6 +14,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
+// 2026-05-25 — Z Fold open: upload flow was left-aligned in the wide
+// viewport. Same isWide + WIDE_CONTENT_MAX_WIDTH pattern used by Play
+// tab + SmartMotion analysis (commits 538cfb3, 446b537).
+import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 import { pickVideo, probeVideo, ingestVideoFromPick, MAX_FILE_SIZE_MB } from '../../services/videoUpload';
 import { uploadLog } from '../../services/uploadDiagnostic';
 import type { SwingTag } from '../../store/cageStore';
@@ -35,6 +39,7 @@ const TAGS: { id: SwingTag; label: string }[] = [
 export default function UploadSwing() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { isWide } = useDeviceLayout();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
 
@@ -118,7 +123,8 @@ export default function UploadSwing() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={[styles.scroll, isWide && { alignItems: 'center' }]}>
+       <View style={isWide ? { width: '100%', maxWidth: WIDE_CONTENT_MAX_WIDTH } : undefined}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Text style={[styles.back, { color: colors.accent }]}>‹ Back</Text>
@@ -324,6 +330,7 @@ export default function UploadSwing() {
             <Text style={[styles.copy, { color: colors.text_primary, marginTop: 16 }]}>Saving…</Text>
           </View>
         )}
+       </View>
       </ScrollView>
     </SafeAreaView>
   );
