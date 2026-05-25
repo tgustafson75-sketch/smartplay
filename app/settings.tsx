@@ -1262,6 +1262,25 @@ export default function Settings() {
                     </View>
                     <Ionicons name="flask-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
+                  {/* 2026-05-25 — Caddie clip test surface. Lists all 11
+                      canonical Kevin slots; tap a row to play the bundled
+                      D-ID clip with native controls. TODO slots (hazard,
+                      celebrate) render disabled. Owner-only at the screen
+                      level too via isOwnerEmail. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/caddie-clip-test' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="View caddie clip test"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Caddie Clip Test (Kevin)</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        11 slot tiles — 9 wired Kevin clips + 2 TODO. Tap to play in-screen with native controls.
+                      </Text>
+                    </View>
+                    <Ionicons name="film-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
                   {/* 2026-05-23 — Voice coverage log. Every voice command
                       that doesn't match a wired handler (classifier
                       unknown, no handler registered, or handler threw)
