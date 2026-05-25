@@ -25,7 +25,26 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
-import { ALL_SCENARIOS, type Scenario, type ScenarioCategory } from '../services/harness/scenarios';
+
+// Lazy-load the harness scenarios so a top-level import-time error
+// (e.g. a transitive module crashing at load) surfaces as a visible
+// error message rather than white-screening the whole route.
+let _allScenariosCache: typeof import('../services/harness/scenarios').ALL_SCENARIOS | null = null;
+let _scenariosLoadError: string | null = null;
+function loadScenarios() {
+  if (_allScenariosCache || _scenariosLoadError) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('../services/harness/scenarios') as typeof import('../services/harness/scenarios');
+    _allScenariosCache = mod.ALL_SCENARIOS;
+  } catch (e) {
+    _scenariosLoadError = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e);
+    console.log('[harness] scenarios module failed to load:', _scenariosLoadError);
+  }
+}
+loadScenarios();
+
+import type { Scenario, ScenarioCategory } from '../services/harness/scenarios';
 import type { ScenarioReport } from '../services/harness/assert';
 
 type RowState =
@@ -51,13 +70,39 @@ export default function HarnessScreen() {
   const ownerEmail = usePlayerProfileStore(s => s.email);
   const isOwner = useMemo(() => isOwnerEmail(ownerEmail), [ownerEmail]);
 
+  const ALL_SCENARIOS = _allScenariosCache ?? [];
   const [states, setStates] = useState<Record<string, RowState>>({});
   const [running, setRunning] = useState(false);
 
+  if (_scenariosLoadError) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <Text style={styles.back}>‹ Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Scenario Harness</Text>
+          <View style={{ width: 60 }} />
+        </View>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
+          <Text style={[styles.lockedText, { color: '#ef4444' }]}>
+            Scenarios module failed to load. Force-quit + reopen if you just received an OTA. If this
+            persists, the error below points at the import that crashed.
+          </Text>
+          <Text selectable style={{ color: '#9ca3af', fontSize: 11, marginTop: 16, fontFamily: 'Courier' }}>
+            {_scenariosLoadError}
+          </Text>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   const runOne = async (s: Scenario) => {
+    console.log(`[harness ${s.id}] START "${s.title}"`);
     setStates(prev => ({ ...prev, [s.id]: { kind: 'running' } }));
     try {
       const report = await s.run();
+      console.log(`[harness ${s.id}] DONE  status=${report.status} duration=${report.durationMs}ms checks=${report.checks.length}`);
       setStates(prev => ({ ...prev, [s.id]: { kind: 'done', report } }));
       return report;
     } catch (e) {

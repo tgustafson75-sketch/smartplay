@@ -782,41 +782,18 @@ export default function CaddieTab() {
   }, []);
 
   // ── Opening prompt ───────────────────────
+  // 2026-05-24 — Replaced the six-branch interrogative opener with a
+  // single invitational, brand-led greeting. The prior copy ended each
+  // variant with a question ("What are we working on?") even though
+  // the launch flow does NOT auto-listen, leaving the user staring at
+  // an unanswered prompt. The new copy is brand-led + persona-equal
+  // (no hardcoded "I'm Kevin"), and the closing line tells the user to
+  // tap the mic rather than implying the app is already listening.
   useEffect(() => {
-    const hour = new Date().getHours();
-    const tod =
-      hour < 12 ? 'morning' :
-      hour < 17 ? 'afternoon' : 'evening';
     const name = firstName || '';
-    const lastHero = heroMoments.slice(-1)[0];
-
-    let prompt = '';
-
-    if (roundsTogether === 0 && sessionsTogether === 0) {
-      prompt =
-        'Hey' + (name ? ' ' + name : '') +
-        ". I'm Kevin. Let's go play some golf.";
-    } else if (sessionsTogether > 0 && roundsTogether === 0) {
-      prompt =
-        'Good ' + tod + (name ? ' ' + name : '') +
-        '. Ready to take that range work to the course?';
-    } else if (roundsTogether > 0 && currentMentalState === 'confident') {
-      prompt =
-        'Good ' + tod + (name ? ' ' + name : '') +
-        ". You've been playing well. What are we working on?";
-    } else if (roundsTogether >= 10) {
-      prompt =
-        'Good ' + tod + (name ? ' ' + name : '') +
-        (goal ? '. Still chasing ' + goal + '?' : '. What can I help with?');
-    } else if (lastHero && roundsTogether > 0) {
-      prompt =
-        'Good ' + tod + (name ? ' ' + name : '') +
-        '. Ready to add to the reel?';
-    } else {
-      prompt =
-        'Good ' + tod + (name ? ' ' + name : '') +
-        '. What can I help with today?';
-    }
+    const prompt = name
+      ? `Welcome to SmartPlay Caddie, ${name}. Let me know what you wanna work on today.`
+      : 'Welcome to SmartPlay Caddie. Let me know what you wanna work on today.';
 
     setOpeningPrompt(prompt);
 
