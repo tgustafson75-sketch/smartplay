@@ -17,7 +17,11 @@
  * so success/failure rates can be tracked over time.
  */
 
-import * as FileSystem from 'expo-file-system';
+// 2026-05-25 — SDK 54 moved readAsStringAsync to the legacy module.
+// Same fix pattern as the tutorialAnalysis + custom-caddie SDK 54
+// sweep. Without /legacy this throws "undefined is not a function" as
+// soon as a club sole photo upload fires.
+import * as FileSystem from 'expo-file-system/legacy';
 import { track } from './analytics';
 
 // Catalog matches the legacy CLUBS array in app/cage/index.tsx so values

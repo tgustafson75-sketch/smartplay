@@ -13,7 +13,11 @@
  * transcript into the same /api/tutorial-analysis endpoint.
  */
 
-import * as FileSystem from 'expo-file-system';
+// 2026-05-25 — SDK 54 moved readAsStringAsync to the legacy module.
+// Same fix pattern as services/glassesVisionInput.ts:262 and
+// app/profile/custom-caddie.tsx. Without /legacy this throws "undefined
+// is not a function" at runtime as soon as a tutorial video read fires.
+import * as FileSystem from 'expo-file-system/legacy';
 import { track } from './analytics';
 import type { ClubId } from './clubRecognition';
 

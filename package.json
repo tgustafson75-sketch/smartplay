@@ -14,6 +14,8 @@
     "generate:greetings": "node scripts/generate-kevin-greetings.mjs",
     "sim": "tsx scripts/simulations/run-sim.ts",
     "sim:round": "tsx scripts/simulations/synthetic-round.ts",
+    "kevin": "tsx --env-file=.env.local scripts/generate-caddie.ts kevin",
+    "caddie": "tsx --env-file=.env.local scripts/generate-caddie.ts",
     "ios:build:preview": "eas build --profile preview --platform ios",
     "ios:build:production": "eas build --profile production --platform ios",
     "ios:submit": "eas submit --profile production --platform ios --latest",
@@ -96,6 +98,7 @@
     "@vercel/node": "^5.7.13",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "tsx": "^4.22.3",
     "typescript": "~5.9.2"
   },
   "private": true,

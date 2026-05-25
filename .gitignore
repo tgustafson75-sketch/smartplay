@@ -34,6 +34,10 @@ yarn-error.*
 .env
 .env*
 .env.*
+# 2026-05-25 — Commit the template so teammates / future-Tim / Claude
+# know which env vars the D-ID pipeline + app need. Real values live in
+# the gitignored .env.local.
+!.env.example
 
 # typescript
 *.tsbuildinfo
