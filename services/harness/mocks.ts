@@ -34,30 +34,39 @@ export function seedCageSession(opts: {
   club?: string;
   shot?: Partial<{ feel: string; shape: string; contact: string; direction: string; clipUri: string }>;
 }): { sessionId: string; shotId: string; teardown: Teardown } {
-  const store = useCageStore.getState();
-  store.startSession(opts.club ?? 'driver');
-  const sessionId = useCageStore.getState().activeSession?.id ?? '';
-  store.addShot({
-    club: opts.club ?? 'driver',
-    feel: opts.shot?.feel ?? null,
-    shape: opts.shot?.shape ?? null,
-    contact: opts.shot?.contact ?? null,
-    direction: opts.shot?.direction ?? null,
-    clipUri: opts.shot?.clipUri ?? null,
-    acousticContact: null,
-    aiAnalysis: null,
-  });
-  const shotId = useCageStore.getState().activeSession?.shots[0]?.id ?? '';
+  let sessionId = '';
+  let shotId = '';
+  try {
+    const store = useCageStore.getState();
+    store.startSession(opts.club ?? 'driver');
+    sessionId = useCageStore.getState().activeSession?.id ?? '';
+    store.addShot({
+      club: opts.club ?? 'driver',
+      feel: opts.shot?.feel ?? null,
+      shape: opts.shot?.shape ?? null,
+      contact: opts.shot?.contact ?? null,
+      direction: opts.shot?.direction ?? null,
+      clipUri: opts.shot?.clipUri ?? null,
+      acousticContact: null,
+      aiAnalysis: null,
+    });
+    shotId = useCageStore.getState().activeSession?.shots[0]?.id ?? '';
+  } catch (e) {
+    console.log('[harness mocks] seedCageSession failed:', e);
+  }
   return {
     sessionId,
     shotId,
     teardown: () => {
-      // Closing the session keeps the harness from leaving an open
-      // session that persists across app launches via the live cage
-      // hooks. The end-of-session reducer accepts an empty summary.
+      // Direct activeSession clear — bypasses endSession's heavier
+      // sessionHistory write to keep teardown infallible. End-user
+      // session tracking is a separate concern; we never want a
+      // harness teardown to push fake state into the user's library.
       try {
-        useCageStore.getState().endSession({ dominantMiss: null, rootCause: null, summary: null });
-      } catch { /* tolerate teardown noise */ }
+        useCageStore.setState({ activeSession: null });
+      } catch (e) {
+        console.log('[harness mocks] seedCageSession teardown noise:', e);
+      }
     },
   };
 }
@@ -134,18 +143,25 @@ export async function seedCourseTruth(courseId: string, hole: number, coord: Lat
 /**
  * Stamp an activeCourseId + currentHole into roundStore so handlers
  * that read `useRoundStore.getState()` see the test fixture.
+ * Avoids flipping isRoundActive — that fires global subscribers
+ * (startHoleDetection / movement / off-course / media-session) and
+ * isn't safe to toggle from a synthetic harness.
  */
 export function seedActiveCourse(courseId: string, hole: number): Teardown {
-  const before = useRoundStore.getState();
-  useRoundStore.setState({
-    activeCourseId: courseId,
-    currentHole: hole,
-  });
+  let before: { activeCourseId: string | null; currentHole: number } = { activeCourseId: null, currentHole: 1 };
+  try {
+    const s = useRoundStore.getState();
+    before = { activeCourseId: s.activeCourseId, currentHole: s.currentHole };
+    useRoundStore.setState({ activeCourseId: courseId, currentHole: hole });
+  } catch (e) {
+    console.log('[harness mocks] seedActiveCourse failed:', e);
+  }
   return () => {
-    useRoundStore.setState({
-      activeCourseId: before.activeCourseId,
-      currentHole: before.currentHole,
-    });
+    try {
+      useRoundStore.setState({ activeCourseId: before.activeCourseId, currentHole: before.currentHole });
+    } catch (e) {
+      console.log('[harness mocks] seedActiveCourse teardown noise:', e);
+    }
   };
 }
 
@@ -157,16 +173,19 @@ export function seedLocationType(
   locType: 'tee' | 'fairway' | 'green' | 'unknown',
   teeBox?: { hole: number; lat: number; lng: number },
 ): Teardown {
-  const before = {
-    currentLocationType: useRoundStore.getState().currentLocationType,
-    currentTeeBox: useRoundStore.getState().currentTeeBox,
-  };
-  useRoundStore.setState({
-    currentLocationType: locType,
-    ...(teeBox ? { currentTeeBox: teeBox } : {}),
-  });
+  let before: {
+    currentLocationType: 'tee' | 'fairway' | 'green' | 'unknown';
+    currentTeeBox: { hole: number; lat: number; lng: number } | null;
+  } = { currentLocationType: 'unknown', currentTeeBox: null };
+  try {
+    const s = useRoundStore.getState();
+    before = { currentLocationType: s.currentLocationType, currentTeeBox: s.currentTeeBox };
+    useRoundStore.setState({ currentLocationType: locType, ...(teeBox ? { currentTeeBox: teeBox } : {}) });
+  } catch (e) {
+    console.log('[harness mocks] seedLocationType failed:', e);
+  }
   return () => {
-    useRoundStore.setState(before);
+    try { useRoundStore.setState(before); } catch (e) { console.log('[harness mocks] seedLocationType teardown noise:', e); }
   };
 }
 
@@ -177,19 +196,33 @@ export function seedLocationType(
  * Returns a teardown that restores the previous language.
  */
 export function seedLanguage(lang: 'en' | 'es' | 'zh'): Teardown {
-  const before = useSettingsStore.getState().language;
-  useSettingsStore.getState().setLanguage(lang);
+  let before: 'en' | 'es' | 'zh' = 'en';
+  try {
+    before = useSettingsStore.getState().language;
+    useSettingsStore.getState().setLanguage(lang);
+  } catch (e) {
+    console.log('[harness mocks] seedLanguage failed:', e);
+  }
   return () => {
-    if (before !== lang) useSettingsStore.getState().setLanguage(before);
+    try { if (before !== lang) useSettingsStore.getState().setLanguage(before); } catch (e) {
+      console.log('[harness mocks] seedLanguage teardown noise:', e);
+    }
   };
 }
 
 /** Mark a tutorial as seen. */
 export function seedTutorialSeen(key: string): Teardown {
-  const before = useSettingsStore.getState().tutorialsSeen;
-  useSettingsStore.getState().markTutorialSeen(key);
+  let before: Record<string, boolean> = {};
+  try {
+    before = useSettingsStore.getState().tutorialsSeen;
+    useSettingsStore.getState().markTutorialSeen(key);
+  } catch (e) {
+    console.log('[harness mocks] seedTutorialSeen failed:', e);
+  }
   return () => {
-    useSettingsStore.setState({ tutorialsSeen: before });
+    try { useSettingsStore.setState({ tutorialsSeen: before }); } catch (e) {
+      console.log('[harness mocks] seedTutorialSeen teardown noise:', e);
+    }
   };
 }
 
@@ -208,38 +241,52 @@ export function feedPracticeSwings(count: number, payload: {
   carry_distance?: number;
   face_to_path?: number;
 }): Teardown {
-  const beforeState = usePracticeStore.getState();
-  const beforeSnapshot = {
-    swingCount: beforeState.swingCount,
-    overTheTopCount: beforeState.overTheTopCount,
-    fatShotCount: beforeState.fatShotCount,
-    avgCarryDriver: beforeState.avgCarryDriver,
-    avgCarry3Wood: beforeState.avgCarry3Wood,
-    typicalMiss: beforeState.typicalMiss,
-    lastSessionDate: beforeState.lastSessionDate,
-  };
-  for (let i = 0; i < count; i++) {
-    usePracticeStore.getState().updateFromSwing(payload);
+  let snapshot: Partial<ReturnType<typeof usePracticeStore.getState>> = {};
+  try {
+    const beforeState = usePracticeStore.getState();
+    snapshot = {
+      swingCount: beforeState.swingCount,
+      overTheTopCount: beforeState.overTheTopCount,
+      fatShotCount: beforeState.fatShotCount,
+      avgCarryDriver: beforeState.avgCarryDriver,
+      avgCarry3Wood: beforeState.avgCarry3Wood,
+      typicalMiss: beforeState.typicalMiss,
+      lastSessionDate: beforeState.lastSessionDate,
+    };
+    for (let i = 0; i < count; i++) {
+      usePracticeStore.getState().updateFromSwing(payload);
+    }
+  } catch (e) {
+    console.log('[harness mocks] feedPracticeSwings failed:', e);
   }
   return () => {
-    usePracticeStore.setState(beforeSnapshot);
+    try { usePracticeStore.setState(snapshot); } catch (e) {
+      console.log('[harness mocks] feedPracticeSwings teardown noise:', e);
+    }
   };
 }
 
 /** Reset practiceStore to its initial defaults. */
 export function resetPracticeStats(): Teardown {
-  const before = usePracticeStore.getState();
-  const snapshot = {
-    swingCount: before.swingCount,
-    overTheTopCount: before.overTheTopCount,
-    fatShotCount: before.fatShotCount,
-    avgCarryDriver: before.avgCarryDriver,
-    avgCarry3Wood: before.avgCarry3Wood,
-    typicalMiss: before.typicalMiss,
-    lastSessionDate: before.lastSessionDate,
-  };
-  usePracticeStore.getState().reset();
+  let snapshot: Partial<ReturnType<typeof usePracticeStore.getState>> = {};
+  try {
+    const before = usePracticeStore.getState();
+    snapshot = {
+      swingCount: before.swingCount,
+      overTheTopCount: before.overTheTopCount,
+      fatShotCount: before.fatShotCount,
+      avgCarryDriver: before.avgCarryDriver,
+      avgCarry3Wood: before.avgCarry3Wood,
+      typicalMiss: before.typicalMiss,
+      lastSessionDate: before.lastSessionDate,
+    };
+    usePracticeStore.getState().reset();
+  } catch (e) {
+    console.log('[harness mocks] resetPracticeStats failed:', e);
+  }
   return () => {
-    usePracticeStore.setState(snapshot);
+    try { usePracticeStore.setState(snapshot); } catch (e) {
+      console.log('[harness mocks] resetPracticeStats teardown noise:', e);
+    }
   };
 }

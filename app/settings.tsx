@@ -1179,6 +1179,27 @@ export default function Settings() {
           </View>
         </CollapsibleSection>
 
+        {/* 2026-05-24 — Field Manual + verification checklist. Public
+            (beta testers can walk the checklist and export their notes).
+            Lives outside the Owner Tools section so it's visible to
+            everyone, not just the owner allow-list. */}
+        <CollapsibleSection title="Field Manual">
+          <TouchableOpacity
+            style={styles.resetRow}
+            onPress={() => router.push('/field-manual' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="View field manual and verification checklist"
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Manual + Checklist</Text>
+              <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                Current-state reference + verification checklist with notes + export.
+              </Text>
+            </View>
+            <Ionicons name="book-outline" size={20} color={colors.text_muted} />
+          </TouchableOpacity>
+        </CollapsibleSection>
+
         {/* 2026-05-17 — Owner-only Issue Log. Tim asked for a way to
             voice-capture app feedback during testing ("Kevin, log this:
             ..."). Surface shown only when the active profile email
@@ -1223,23 +1244,6 @@ export default function Settings() {
                       </Text>
                     </View>
                     <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  {/* 2026-05-24 — Field Manual. Comprehensive current-state
-                      reference + verification checklist with notes + export
-                      as markdown. Owner-only. */}
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/field-manual' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel="View field manual and verification checklist"
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Field Manual</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Current-state reference + pre-beta verification checklist with notes + export.
-                      </Text>
-                    </View>
-                    <Ionicons name="book-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
                   {/* 2026-05-24 — Scenario harness. Owner-gated test runner
                       for 17 scenarios covering the shipped-unverified items

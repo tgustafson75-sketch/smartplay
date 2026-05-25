@@ -1,5 +1,5 @@
 /**
- * Field Manual — owner-gated browse + verification checklist + export.
+ * Field Manual — open to all testers (NOT owner-gated).
  *
  * Three panels:
  *   1. View Manual — index of the 7 doc sections (docs/field-manual/*.md).
@@ -8,13 +8,11 @@
  *   2. Verification Checklist — every item from
  *      services/fieldManual/checklistItems.ts, checkable + notes per item.
  *      State persists via store/fieldManualChecklistStore.ts so the
- *      owner can walk the list across sessions.
+ *      tester can walk the list across sessions.
  *   3. Export — exports the checklist state as markdown via Share.
  *
- * Owner-gated — non-owners land on a polite placeholder. Mirrors the
- * pattern used by /owner-logs and /harness.
- *
- * 2026-05-24 — Built per the field-manual sprint.
+ * 2026-05-24 — Built per the field-manual sprint. Owner gate removed
+ * the same day so beta testers can run the verification walk.
  */
 
 import React, { useMemo, useState } from 'react';
@@ -23,7 +21,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
 import { CHECKLIST_SECTIONS, totalCheckCount } from '../services/fieldManual/checklistItems';
 import { useFieldManualChecklistStore, exportAsMarkdown } from '../store/fieldManualChecklistStore';
 
@@ -44,22 +41,7 @@ const MANUAL_SECTIONS: Array<{ file: string; title: string; hint: string }> = [
 
 export default function FieldManualScreen() {
   const router = useRouter();
-  const ownerEmail = usePlayerProfileStore(s => s.email);
-  const isOwner = useMemo(() => isOwnerEmail(ownerEmail), [ownerEmail]);
   const [tab, setTab] = useState<Tab>('manual');
-
-  if (!isOwner) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <Header onBack={() => router.back()} />
-        <View style={styles.lockedBody}>
-          <Text style={styles.lockedText}>
-            The field manual is owner-only. End users see the in-app help surfaces instead.
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

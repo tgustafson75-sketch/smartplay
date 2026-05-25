@@ -207,43 +207,27 @@ const SCEN_7: Scenario = {
 
 const SCEN_8: Scenario = {
   id: 'C8',
-  title: 'ES language thread — distance_to_green',
+  title: 'ES language thread — Tank rule routes through i18n',
   category: 'critical',
   run: () => runWithAsserts('C8', 'ES language thread', async (a) => {
-    // Force-active round so the query_status off-round gate doesn't
-    // short-circuit. No course truth seeded → handler will fall through
-    // to no_green or no_gps; both responses have Spanish variants we
-    // can verify the lang plumbing on.
-    const tCourse = M.seedActiveCourse('harness_es_course', 4);
-    const beforeRoundActive = (M as never as { _x?: never }) && undefined;
-    void beforeRoundActive;
-    const beforeIsActive = useSettingsStore.getState();
-    void beforeIsActive;
-    const { useRoundStore } = await import('../../store/roundStore');
-    const wasActive = useRoundStore.getState().isRoundActive;
-    useRoundStore.setState({ isRoundActive: true });
-
+    // Verify the language thread through a path that does NOT need
+    // an active round. ask_golf_father (Tank rules) reads i18n.t
+    // directly, so flipping language end-to-end exercises the same
+    // translation plumbing distance_to_green would use, without the
+    // global isRoundActive flip the prior version did (that flip
+    // tripped roundStore subscribers in app/_layout.tsx — start
+    // holeDetection / movement / off-course — which on a synthetic
+    // harness state had nothing real to read and risked cascading).
+    const tEs = M.seedLanguage('es');
     const r = await dispatchVoiceIntent({
-      intent_type: 'query_status',
-      parameters: { topic: 'distance_to_green' },
-      raw_text: 'cuántas yardas al green',
+      intent_type: 'ask_golf_father',
+      parameters: { topic: 'rules', subtopic: 'red_vs_yellow', use_context: false },
+      raw_text: 'roja contra amarilla',
       language: 'es',
     });
-    a.expect('Dispatch returned', r !== null && r !== undefined);
-    // Side effect tag must reflect ES routing.
-    const tagged = r.side_effects.some(s => s.includes('lang:es'));
-    a.expect('side_effects contain lang:es', tagged);
-    // Voice response in any of the three Spanish copy paths.
-    const v = r.voice_response ?? '';
-    const isEs =
-      v.includes('green') ||
-      v.includes('ubicación') ||
-      v.includes('GPS') ||
-      v.includes('yardas');
-    a.expect('Response is Spanish-shaped', isEs, `got: "${v.slice(0, 120)}"`);
-
-    useRoundStore.setState({ isRoundActive: wasActive });
-    await tCourse();
+    a.expect('Dispatch succeeded', !!r && r.success);
+    a.expectContains('Spanish copy (Estaca roja) returned', r?.voice_response, 'Estaca roja');
+    await tEs();
   }),
 };
 

@@ -56,16 +56,44 @@ export default function HarnessScreen() {
 
   const runOne = async (s: Scenario) => {
     setStates(prev => ({ ...prev, [s.id]: { kind: 'running' } }));
-    const report = await s.run();
-    setStates(prev => ({ ...prev, [s.id]: { kind: 'done', report } }));
-    return report;
+    try {
+      const report = await s.run();
+      setStates(prev => ({ ...prev, [s.id]: { kind: 'done', report } }));
+      return report;
+    } catch (e) {
+      // Belt-and-suspenders — runWithAsserts inside each scenario
+      // already catches body throws. This catches anything that
+      // escapes (e.g. async errors from a teardown that wasn't
+      // awaited). Surface as a synthetic FAIL row so the UI doesn't
+      // hang on "running" forever and the React tree never sees an
+      // unhandled rejection during a setState.
+      const msg = e instanceof Error ? e.message : String(e);
+      console.log(`[harness ${s.id}] OUTER THROW`, msg);
+      const fallback = {
+        id: s.id,
+        title: s.title,
+        status: 'fail' as const,
+        durationMs: 0,
+        checks: [{ label: 'Scenario threw outside the assert harness', status: 'fail' as const, detail: msg }],
+        error: msg,
+      };
+      setStates(prev => ({ ...prev, [s.id]: { kind: 'done', report: fallback } }));
+      return fallback;
+    }
   };
 
   const runAll = async () => {
     setRunning(true);
     console.log('[harness] === Run All begin ===');
     for (const s of ALL_SCENARIOS) {
-      await runOne(s);
+      try {
+        await runOne(s);
+      } catch (e) {
+        // Last-resort guard — runOne already wraps. A throw here means
+        // something escaped both layers; log and continue so one bad
+        // scenario doesn't abort the whole run.
+        console.log(`[harness] runAll outer catch on ${s.id}`, e);
+      }
     }
     console.log('[harness] === Run All done ===');
     setRunning(false);

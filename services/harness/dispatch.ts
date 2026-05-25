@@ -23,26 +23,43 @@ import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { useCageStore } from '../../store/cageStore';
 
 /** Build an AppContext snapshot from current store state. Matches the
- *  shape voiceCommandRouter callers in the live app construct. */
+ *  shape voiceCommandRouter callers in the live app construct.
+ *  Defensive — every getter is wrapped so a missing field never
+ *  surfaces an exception into the React render path. */
 export function buildAppContext(overrides?: Partial<AppContext>): AppContext {
-  const round = useRoundStore.getState();
-  const settings = useSettingsStore.getState();
-  const trust = useTrustLevelStore.getState();
+  let round: ReturnType<typeof useRoundStore.getState>;
+  let settings: ReturnType<typeof useSettingsStore.getState>;
+  let trustLevel: 1 | 2 | 3 | 4 | 5 = 3;
+  try { round = useRoundStore.getState(); } catch { round = {} as never; }
+  try { settings = useSettingsStore.getState(); } catch { settings = {} as never; }
+  try { trustLevel = useTrustLevelStore.getState().level ?? 3; } catch { /* trust defaults to 3 */ }
+
+  const isActive = !!round?.isRoundActive;
+  let activeRound: AppContext['active_round'] = null;
+  if (isActive) {
+    try {
+      activeRound = {
+        course: round.activeCourse ?? null,
+        mode: round.mode ?? 'free_play',
+        holesPlayed: typeof round.getHolesPlayed === 'function' ? round.getHolesPlayed() : 0,
+        totalScore: typeof round.getTotalScore === 'function' ? round.getTotalScore() : 0,
+        scoreVsPar: typeof round.getScoreVsPar === 'function' ? round.getScoreVsPar() : 0,
+      };
+    } catch {
+      activeRound = { course: null, mode: 'free_play', holesPlayed: 0, totalScore: 0, scoreVsPar: 0 };
+    }
+  }
+
+  let recentShots: AppContext['recent_shots'] = [];
+  try { recentShots = Array.isArray(round?.shots) ? round.shots.slice(-5) : []; } catch { recentShots = []; }
+
   const base: AppContext = {
     active_screen: 'harness',
-    active_round: round.isRoundActive
-      ? {
-          course: round.activeCourse,
-          mode: round.mode,
-          holesPlayed: round.getHolesPlayed?.() ?? 0,
-          totalScore: round.getTotalScore?.() ?? 0,
-          scoreVsPar: round.getScoreVsPar?.() ?? 0,
-        }
-      : null,
-    current_hole: round.currentHole ?? null,
-    recent_shots: round.shots.slice(-5),
-    trust_spectrum_level: trust.level,
-    language: settings.language,
+    active_round: activeRound,
+    current_hole: typeof round?.currentHole === 'number' ? round.currentHole : null,
+    recent_shots: recentShots,
+    trust_spectrum_level: trustLevel,
+    language: settings?.language ?? 'en',
   };
   return { ...base, ...overrides };
 }
