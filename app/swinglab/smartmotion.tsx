@@ -49,6 +49,12 @@ import { evaluateSwingValidity, type SwingValidity } from '../../services/swingV
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { useSettingsStore } from '../../store/settingsStore';
+// 2026-05-24 — Z Fold-open layout: constrain the analysis ScrollView
+// to a centered max-width so the video + insight cards don't stretch
+// edge-to-edge on tablet/fold. Same pattern Play / Dashboard /
+// SwingLab tabs use (commit 538cfb3). Phone portrait + fold-closed
+// keep current full-width layout (isWide is false on those).
+import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 // 2026-05-21 — Fix A: persistent caddie tap-to-talk badge so the user
 // can reach the caddie from SmartMotion the same way they can from the
 // Caddie tab and Cage Mode. Same `listeningSession.toggle()` pipeline.
@@ -113,6 +119,7 @@ export default function SmartMotion() {
   })();
   const profile = usePlayerProfileStore();
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
+  const { isWide } = useDeviceLayout();
   const language = useSettingsStore(s => s.language);
 
   // 2026-05-21 — Fix B: angle is chosen BEFORE recording (in this
@@ -434,7 +441,15 @@ export default function SmartMotion() {
           onLibrary={() => router.push('/swinglab/library' as never)}
         />
       ) : (
-        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 92 }]} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingBottom: 92 },
+            isWide && { alignItems: 'center' },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+         <View style={isWide ? { width: '100%', maxWidth: WIDE_CONTENT_MAX_WIDTH } : undefined}>
           <VisualCard
             clipUri={clipUri ?? null}
             angle={angle}
@@ -465,6 +480,7 @@ export default function SmartMotion() {
             onRetake={() => router.push('/swinglab/quick-record' as never)}
             onPressDrill={(drillKey) => router.push(`/drills/${drillKey}` as never)}
           />
+         </View>
         </ScrollView>
       )}
 

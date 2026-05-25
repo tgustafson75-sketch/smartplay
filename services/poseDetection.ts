@@ -230,12 +230,35 @@ export async function extractKeyFrames(
       });
     } else {
       const durationMs = await probeDurationMs(clipUri);
-      windowStartMs = 0;
-      windowDurationMs = durationMs;
-      V6('STAGE 2 — extractKeyFrames whole-clip', {
-        duration_ms: durationMs,
-        target_fractions: FRAME_TIME_FRACTIONS,
-      });
+      // 2026-05-24 — Long-clip sampling guard. In-app captures (quick
+      // record / cage / smartmotion) are typically ≤4s and the swing
+      // fills the whole clip, so sampling at fractions of the full
+      // duration lands the impact frame correctly. Library-uploaded
+      // videos (e.g. an instructor narrates for 8s then the player
+      // swings in the last 2s) defeat that assumption — the fixed
+      // fractions land 3-4 frames in the talking preroll and Claude
+      // reads the clip as "setup." For clips longer than the typical
+      // capture, bound the sampling window to the last LONG_CLIP_WINDOW_MS
+      // so frames cluster around where the swing actually is.
+      const LONG_CLIP_THRESHOLD_MS = 4_000;
+      const LONG_CLIP_WINDOW_MS = 3_500;
+      if (durationMs > LONG_CLIP_THRESHOLD_MS) {
+        windowStartMs = Math.max(0, durationMs - LONG_CLIP_WINDOW_MS);
+        windowDurationMs = durationMs - windowStartMs;
+        V6('STAGE 2 — extractKeyFrames long-clip back-window', {
+          duration_ms: durationMs,
+          window_start_ms: windowStartMs,
+          window_ms: windowDurationMs,
+          target_fractions: FRAME_TIME_FRACTIONS,
+        });
+      } else {
+        windowStartMs = 0;
+        windowDurationMs = durationMs;
+        V6('STAGE 2 — extractKeyFrames whole-clip', {
+          duration_ms: durationMs,
+          target_fractions: FRAME_TIME_FRACTIONS,
+        });
+      }
     }
     const perFrameOutcomes: Array<{ idx: number; t_ms: number; ok: boolean; raw_uri_tail?: string; raw_size?: number; b64_kb?: number; error?: string }> = [];
     const frames = await Promise.all(
