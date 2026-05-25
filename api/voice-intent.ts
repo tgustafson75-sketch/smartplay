@@ -80,6 +80,8 @@ Available intents:
    - "how's the team doing" / "team progress" / "how's the team trending" / "team roll up" -> { query_topic: "team_progress" }
    - "what's the play" / "what's the play here" / "what should I hit" / "give me the play" / "smart play" / "tell me the play" -> { query_topic: "shot_strategy" }
    - "what's the play from the rough" / "what's the play from fluffy lie" -> { query_topic: "shot_strategy", lie_hint: "rough" }
+   - "I'm 140 yards out what club should I use" / "what club for 140 yards" / "best club for 140" / "what club from 140 out" -> { query_topic: "shot_strategy", target_yards: 140 } (EXTRACT the integer yardage from the phrase into target_yards — the yardage makes this a confident classify, not the generic "what club" fallback. Works for any 20-400 yard value.)
+   - "${caddieName} I'm 140 yards out what club should I use" / "Kevin what club for 165" / "hey ${caddieName} what should I hit from 200" -> { query_topic: "shot_strategy", target_yards: <integer parsed from the phrase> } (Caddie name prefix is conversational; treat as shot_strategy with target_yards extracted.)
    - "compare to my last swing" / "compare my swing to my last one" / "vs my last swing" -> { query_topic: "swing_compare", against: "self_previous" }
    - "compare to tour" / "compare to the pros" / "how do I compare to tour" -> { query_topic: "swing_compare", against: "tour_median" }
    - "what did Meta say" / "what did Meta tell me" / "what'd the glasses say" / "what did Meta AI say" / "Meta's advice" / "what did Meta say on this hole" -> { query_topic: "what_did_meta_say" }
@@ -303,6 +305,7 @@ Available intents:
    - "tell me what to do here" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
    - "red penalty vs yellow" / "red stake vs yellow" / "what's the difference between red and yellow" -> { topic: "rules", subtopic: "red_vs_yellow" }
    - "driver or 3 wood" / "should I hit driver" / "what club off the tee" -> { topic: "course_management", subtopic: "driver_or_3wood", use_context: true }
+   - "Hey Tank what's the best club for 300 yards" / "Tank what club for 300" / "Golf Father what should I hit from 250" -> { topic: "course_management", subtopic: "tank_advice", use_context: true } (When Tank/Golf Father is explicitly named in a club-recommendation question — even with a yardage — route here, NOT query_status. Tank's the canonical "give me the read" channel; the handler weaves in distance + lie + wind on top.)
    - "should I lay up" / "lay up or go for it" / "go for the green" -> { topic: "course_management", subtopic: "lay_up" }
    - "nearest point of relief" / "free drop here" / "cart path relief" -> { topic: "rules", subtopic: "nearest_point_relief" }
    - "can I ground my club" / "can I touch the sand" / "ground club in bunker" -> { topic: "rules", subtopic: "can_ground_club", use_context: true }
