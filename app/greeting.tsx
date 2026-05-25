@@ -363,7 +363,7 @@ export default function GreetingScreen() {
               <Video
                 ref={videoRef}
                 source={getCaddieClip('kevin', 'intro') as number}
-                style={[styles.avatarPhoto, { transform: [{ scale: 1.7 }] }]}
+                style={[styles.avatarPhoto, { transform: [{ scale: 2.0 }] }]}
                 resizeMode={ResizeMode.COVER}
                 shouldPlay
                 isLooping={false}
