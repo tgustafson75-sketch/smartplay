@@ -36,7 +36,7 @@ import {
 } from '../../store/trustLevelStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useRoundStore } from '../../store/roundStore';
-import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerEmail } from '../../store/playerProfileStore';
 import { useToastStore } from '../../store/toastStore';
 import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
 import { recalibrateGps } from '../../services/gpsManager';
@@ -76,6 +76,12 @@ export function GlobalToolsMenu() {
   const endRound = useRoundStore((s) => s.endRound);
   // Feature gate (subscription_status lives in playerProfileStore)
   const subscription_status = usePlayerProfileStore((s) => s.subscription_status);
+  // 2026-05-25 — Beta-blocker fix: Reference Authoring is an internal
+  // instructor tool. Gate the row behind isOwnerEmail so beta testers
+  // don't see "Internal · capture instructor reference assets" in their
+  // tools menu. Owner sees the row as before.
+  const profileEmail = usePlayerProfileStore((s) => s.email);
+  const isOwner = isOwnerEmail(profileEmail);
 
   // ─── Action helpers — all close menu + haptic, optional toast/nav ─
 
@@ -329,13 +335,15 @@ export function GlobalToolsMenu() {
                 NoClipHero (Option D speed). Cage Mode is a separate
                 deeper practice/lesson tool reachable from the SwingLab
                 tab; not duplicated here. */}
-            <Row
-              icon="construct-outline"
-              label="Reference Authoring"
-              sub="Internal · capture instructor reference assets"
-              onPress={() => nav('/author/reference-assets')}
-              colors={colors}
-            />
+            {isOwner && (
+              <Row
+                icon="construct-outline"
+                label="Reference Authoring"
+                sub="Internal · capture instructor reference assets"
+                onPress={() => nav('/author/reference-assets')}
+                colors={colors}
+              />
+            )}
             <Row
               icon="telescope-outline"
               label="SmartVision"

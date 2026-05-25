@@ -40,6 +40,7 @@ import {
   useReferenceAuthoringStore,
   type AuthoredReference,
 } from '../../store/referenceAuthoringStore';
+import { usePlayerProfileStore, isOwnerEmail } from '../../store/playerProfileStore';
 import { safeBack } from '../../services/safeBack';
 
 // Mirror the bundled registry's category order so the author screen
@@ -69,6 +70,12 @@ export default function ReferenceAssetAuthoringScreen() {
   // not used today; suppress unused warning until the link lands.
   void useRouter;
   const insets = useSafeAreaInsets();
+  // 2026-05-25 — Beta-blocker fix: owner-only gate defended at the
+  // route too (Tools menu hides the row, but a deep-link / future
+  // suggested-action could still navigate here). Non-owner renders
+  // null so the route silently no-ops.
+  const profileEmail = usePlayerProfileStore(s => s.email);
+  if (!isOwnerEmail(profileEmail)) return null;
   const byCategory = useReferenceAuthoringStore(s => s.byCategory);
   const setImage = useReferenceAuthoringStore(s => s.setImage);
   const setVideo = useReferenceAuthoringStore(s => s.setVideo);

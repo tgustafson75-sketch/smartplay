@@ -119,16 +119,10 @@ export async function getMetaWearablesStatus(): Promise<{
   streaming: boolean;
   device: string;
 }> {
-  if (!NativeMod) {
-    return { available: false, connected: false, streaming: false, device: '' };
-  }
-  try {
-    const status = await NativeMod.getStatus();
-    return { available: true, ...status };
-  } catch (e) {
-    devLog('[mwdat-bridge] getStatus failed: ' + String(e));
-    return { available: true, connected: false, streaming: false, device: '' };
-  }
+  // 2026-05-25 — Hardcoded available=false to match currentStatus until
+  // the real DAT SDK is wired. See note above currentStatus init.
+  void NativeMod;
+  return { available: false, connected: false, streaming: false, device: '' };
 }
 
 /**
@@ -221,8 +215,17 @@ export interface GlassesStatus {
   effectiveFps: number;
 }
 
+// 2026-05-25 — Beta-blocker fix: Android MetaWearablesFrameModule is
+// currently stubbed (NOT_IMPLEMENTED reject on startStreaming) until
+// the real DAT SDK symbols are confirmed post-beta. The stub registers
+// fine, so `NativeMod !== null` returns true on Android, which lit up
+// the "GLASSES OFF / PAIRED" badge in SmartVision / SmartMotion /
+// PuttingLab even though every glasses operation would reject. Force
+// available=false until real DAT lands; flip back to `NativeMod !==
+// null` (or a richer probe) when MetaWearablesFrameModule.kt is
+// re-implemented against the real SDK.
 let currentStatus: GlassesStatus = {
-  available: NativeMod !== null,
+  available: false,
   connected: false,
   streaming: false,
   device: '',
