@@ -78,6 +78,13 @@ export default function GreetingScreen() {
   const useKevinIntroVideo = caddiePersonality === 'kevin' && hasCaddieClip('kevin', 'intro');
   const videoRef = useRef<Video>(null);
   const videoDoneResolveRef = useRef<(() => void) | null>(null);
+  // 2026-05-25 — Tail-clip defense. Set true when the greeting playback
+  // (video / speak / mp3) resolves naturally. The unmount cleanup gates
+  // its stopSpeaking() on !naturalEndRef.current so a happy-path natural
+  // completion doesn't risk clipping the last syllable on a slow audio
+  // session close. The explicit user-initiated SKIP handler still calls
+  // stopSpeaking unconditionally — different path, deliberate cut.
+  const naturalEndRef = useRef(false);
 
   // Avatar animation refs
   const opacity = useRef(new Animated.Value(0)).current;
@@ -215,6 +222,7 @@ export default function GreetingScreen() {
             Promise.race([videoDone, videoTimeout]),
             minDisplay,
           ]);
+          naturalEndRef.current = true;
           if (!skippedRef.current) startTransition();
           return;
         }
@@ -229,6 +237,7 @@ export default function GreetingScreen() {
             speak(captionForVoice, voiceGender, language as 'en' | 'es' | 'zh', apiUrl, { userInitiated: true }),
             minDisplay,
           ]);
+          naturalEndRef.current = true;
           if (!skippedRef.current) startTransition();
           return;
         }
@@ -253,6 +262,7 @@ export default function GreetingScreen() {
         // isVoiceAllowed silently drops the audio when the persisted
         // trustLevel is 1 (Quiet) — Tim hit this and heard nothing.
         await Promise.all([playLocalFile(asset.localUri, undefined, { userInitiated: true }), minDisplay]);
+        naturalEndRef.current = true;
         if (!skippedRef.current) startTransition();
       } catch (e) {
         console.warn('[greeting] audio playback failed:', e);
@@ -265,7 +275,16 @@ export default function GreetingScreen() {
         clearTimeout(advanceTimerRef.current);
         advanceTimerRef.current = null;
       }
-      void stopSpeaking().catch(() => {});
+      // 2026-05-25 — Tail-clip defense: only call stopSpeaking on
+      // unmount when the playback didn't already end naturally. Happy-
+      // path: speak/video resolved → naturalEndRef true → skip the
+      // stop. Skip handler still calls stopSpeaking explicitly via the
+      // handleSkip path so user-initiated cuts work the same. Edge case
+      // (mid-flight back gesture, system kill, etc.): naturalEndRef
+      // stays false → stopSpeaking fires → silence the orphan audio.
+      if (!naturalEndRef.current) {
+        void stopSpeaking().catch(() => {});
+      }
     };
     // Bug fix — depend ONLY on `greeting`. Including `scheduleAdvance`
     // (or anything that closes over `phase`) caused the effect to re-run
