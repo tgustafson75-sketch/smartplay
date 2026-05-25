@@ -24,7 +24,7 @@ import { useToastStore } from '../../../store/toastStore';
 import { getSwingReference } from '../../../services/swingReferences';
 import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
-import { speak, stopSpeaking, configureAudioForSpeech } from '../../../services/voiceService';
+import { speak, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession } from '../../../services/videoUpload';
 import { uploadLog } from '../../../services/uploadDiagnostic';
 import PrimaryIssueCard from '../../../components/swinglab/PrimaryIssueCard';
@@ -1119,6 +1119,14 @@ function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialN
   const setSessionCoachNote = useCageStore(s => s.setSessionCoachNote);
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(initialNote ?? '');
+  // 2026-05-25 — Voice capture state. The mic button starts a
+  // captureUtterance recording (12s ceiling); a second tap calls
+  // stopCapture which short-circuits the wait inside captureUtterance
+  // so transcription fires immediately. Transcript is APPENDED to the
+  // current draft so a coach can dictate multiple snippets before save.
+  const [recording, setRecording] = React.useState(false);
+  const language = useSettingsStore(s => s.language);
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
 
   // Sync local draft to persisted note if it changes externally (e.g.
   // user navigated away and back, or another surface updated it).
@@ -1136,22 +1144,68 @@ function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialN
     setEditing(false);
   };
 
+  const onMicTap = async () => {
+    if (recording) {
+      // Stop the in-flight capture; the awaiting promise resolves with
+      // whatever transcript the server returns for the partial buffer.
+      void stopCapture();
+      return;
+    }
+    if (!editing) setEditing(true);
+    setRecording(true);
+    try {
+      const transcript = await captureUtterance(12_000, apiUrl, language);
+      if (transcript && transcript.trim().length > 0) {
+        setDraft(prev => {
+          const sep = prev && !prev.endsWith(' ') ? ' ' : '';
+          return prev + sep + transcript.trim();
+        });
+      }
+    } catch (e) {
+      console.log('[coach-note] voice capture failed:', e);
+    } finally {
+      setRecording(false);
+    }
+  };
+
   if (!editing && !initialNote) {
     return (
-      <TouchableOpacity
-        onPress={() => setEditing(true)}
+      <View
         style={[coachNoteStyles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}
-        accessibilityRole="button"
-        accessibilityLabel="Add a coach note to this swing"
       >
         <View style={coachNoteStyles.headerRow}>
           <Ionicons name="create-outline" size={16} color={colors.accent} />
           <Text style={[coachNoteStyles.label, { color: colors.accent }]}>COACH NOTE</Text>
         </View>
         <Text style={[coachNoteStyles.placeholder, { color: colors.text_muted }]}>
-          Tap to add your own observation — &ldquo;hips stalled at impact&rdquo;, &ldquo;came over the top&rdquo;.
+          Type or speak your read — &ldquo;hips stalled at impact&rdquo;, &ldquo;came over the top&rdquo;.
         </Text>
-      </TouchableOpacity>
+        <View style={coachNoteStyles.entryRow}>
+          <TouchableOpacity
+            onPress={() => setEditing(true)}
+            style={[coachNoteStyles.entryBtn, { borderColor: colors.accent }]}
+            accessibilityRole="button"
+            accessibilityLabel="Type a coach note"
+          >
+            <Ionicons name="keypad-outline" size={16} color={colors.accent} />
+            <Text style={[coachNoteStyles.entryBtnText, { color: colors.accent }]}>Type</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => { void onMicTap(); }}
+            style={[
+              coachNoteStyles.entryBtn,
+              { borderColor: recording ? '#ef4444' : colors.accent, backgroundColor: recording ? '#ef444422' : 'transparent' },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={recording ? 'Stop recording' : 'Record a coach note'}
+          >
+            <Ionicons name={recording ? 'stop-circle' : 'mic'} size={16} color={recording ? '#ef4444' : colors.accent} />
+            <Text style={[coachNoteStyles.entryBtnText, { color: recording ? '#ef4444' : colors.accent }]}>
+              {recording ? 'Stop' : 'Speak'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     );
   }
 
@@ -1194,14 +1248,27 @@ function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialN
         <TouchableOpacity onPress={onCancel} accessibilityRole="button" accessibilityLabel="Cancel">
           <Text style={[coachNoteStyles.cancelText, { color: colors.text_muted }]}>Cancel</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          onPress={onSave}
-          style={[coachNoteStyles.saveBtn, { backgroundColor: colors.accent }]}
-          accessibilityRole="button"
-          accessibilityLabel="Save coach note"
-        >
-          <Text style={coachNoteStyles.saveBtnText}>Save</Text>
-        </TouchableOpacity>
+        <View style={coachNoteStyles.actionsRight}>
+          <TouchableOpacity
+            onPress={() => { void onMicTap(); }}
+            style={[
+              coachNoteStyles.micBtn,
+              { borderColor: recording ? '#ef4444' : colors.accent, backgroundColor: recording ? '#ef444422' : 'transparent' },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={recording ? 'Stop recording' : 'Record more'}
+          >
+            <Ionicons name={recording ? 'stop-circle' : 'mic'} size={18} color={recording ? '#ef4444' : colors.accent} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onSave}
+            style={[coachNoteStyles.saveBtn, { backgroundColor: colors.accent }]}
+            accessibilityRole="button"
+            accessibilityLabel="Save coach note"
+          >
+            <Text style={coachNoteStyles.saveBtnText}>Save</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -1229,11 +1296,12 @@ const coachNoteStyles = StyleSheet.create({
   },
   actionsRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
     marginTop: 10,
   },
+  actionsRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   cancelText: { fontSize: 13, fontWeight: '700' },
   saveBtn: {
     paddingVertical: 8,
@@ -1241,6 +1309,29 @@ const coachNoteStyles = StyleSheet.create({
     borderRadius: 10,
   },
   saveBtnText: { color: '#0d1a0d', fontSize: 13, fontWeight: '900', letterSpacing: 0.4 },
+  entryRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  entryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  entryBtnText: { fontSize: 13, fontWeight: '700' },
+  micBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
 
 const styles = StyleSheet.create({
