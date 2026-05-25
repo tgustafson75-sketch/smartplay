@@ -61,20 +61,29 @@ export default function CaddieClipTestScreen() {
         </Text>
       </View>
 
-      <View style={styles.playerFrame}>
-        {currentSource ? (
-          <Video
-            ref={videoRef}
-            source={currentSource}
-            style={StyleSheet.absoluteFill}
-            resizeMode={ResizeMode.CONTAIN}
-            useNativeControls
-          />
-        ) : (
-          <View style={[StyleSheet.absoluteFill, styles.playerPlaceholder]}>
-            <Text style={styles.placeholderText}>Tap a slot below to play</Text>
-          </View>
-        )}
+      {/* 2026-05-25 — Player frame swapped from 16:9 full-width to a
+          centered max-width 9:16 portrait frame. D-ID clips are
+          portrait, and on Z Fold open (~2200px wide) a 16:9 full-width
+          frame made CONTAIN-fit shrink the video to a tiny strip in the
+          middle with huge black bars. The centered portrait frame
+          matches the source aspect ratio and reads correctly on phone,
+          fold-closed, and fold-open. */}
+      <View style={styles.playerOuter}>
+        <View style={styles.playerFrame}>
+          {currentSource ? (
+            <Video
+              ref={videoRef}
+              source={currentSource}
+              style={StyleSheet.absoluteFill}
+              resizeMode={ResizeMode.CONTAIN}
+              useNativeControls
+            />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, styles.playerPlaceholder]}>
+              <Text style={styles.placeholderText}>Tap a slot below to play</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
@@ -119,9 +128,18 @@ const styles = StyleSheet.create({
   header: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#1e3a28' },
   title: { color: '#f8fafc', fontSize: 18, fontWeight: '800' },
   subtitle: { color: '#94a3b8', fontSize: 12, marginTop: 4 },
+  // 2026-05-25 — Centered portrait player. Outer flexes the available
+  // width; inner is the actual video frame capped + centered.
+  playerOuter: {
+    width: '100%',
+    alignItems: 'center',
+    backgroundColor: '#000',
+    paddingVertical: 8,
+  },
   playerFrame: {
     width: '100%',
-    aspectRatio: 16 / 9,
+    maxWidth: 360,            // phone-portrait sweet spot; Z Fold open caps here so video doesn't span the screen
+    aspectRatio: 9 / 16,      // matches D-ID portrait output
     backgroundColor: '#000',
     position: 'relative',
   },

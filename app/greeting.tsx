@@ -28,6 +28,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Asset } from 'expo-asset';
+import { Video, ResizeMode } from 'expo-av';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettingsStore } from '../store/settingsStore';
 import { playLocalFile, speak, stopSpeaking } from '../services/voiceService';
@@ -40,6 +41,12 @@ import {
 } from '../services/kevinGreeting';
 import { getCaddieName } from '../lib/persona';
 import { GREETING_ASSETS } from '../services/kevinGreetingManifest';
+// 2026-05-25 — D-ID Kevin intro video. When persona=kevin AND the
+// bundled clip is available, the greeting plays Kevin's talking-head
+// video (with built-in audio) INSTEAD of the avatar + bundled mp3.
+// Side effect: kills the boot cut-off bug because the video owns its
+// own audio — no separate playLocalFile to race the screen transition.
+import { getCaddieClip, hasCaddieClip } from '../services/getCaddieClip';
 
 type Phase = 'ENTERING' | 'SPEAKING' | 'TRANSITIONING' | 'COMPLETE';
 
@@ -61,6 +68,16 @@ export default function GreetingScreen() {
   const [phase, setPhase] = useState<Phase>('ENTERING');
   const [greeting, setGreeting] = useState<GreetingFilename | null>(null);
   const [reduceMotion, setReduceMotion] = useState(false);
+
+  // 2026-05-25 — D-ID Kevin intro video gate. When Kevin is active and
+  // the bundled video clip is present, render the talking-head video
+  // instead of the static avatar + bundled mp3 fork. The video's
+  // built-in audio plays inline; we wait for didJustFinish before
+  // transitioning. Other personas keep their existing avatar + TTS
+  // caption fork (until their own D-ID clips land).
+  const useKevinIntroVideo = caddiePersonality === 'kevin' && hasCaddieClip('kevin', 'intro');
+  const videoRef = useRef<Video>(null);
+  const videoDoneResolveRef = useRef<(() => void) | null>(null);
 
   // Avatar animation refs
   const opacity = useRef(new Animated.Value(0)).current;
@@ -184,6 +201,24 @@ export default function GreetingScreen() {
       try {
         const minDisplay = new Promise<void>(resolve => setTimeout(resolve, 2000));
 
+        // 2026-05-25 — Kevin D-ID intro video path. Owns its own audio,
+        // so we skip playLocalFile/speak entirely and just wait for the
+        // <Video>'s didJustFinish via videoDoneResolveRef. Cap at 12s in
+        // case didJustFinish never fires (audio focus loss, etc.) so a
+        // stuck video can't trap the user on the greeting screen forever.
+        if (useKevinIntroVideo) {
+          const videoDone = new Promise<void>(resolve => {
+            videoDoneResolveRef.current = resolve;
+          });
+          const videoTimeout = new Promise<void>(resolve => setTimeout(resolve, 12_000));
+          await Promise.all([
+            Promise.race([videoDone, videoTimeout]),
+            minDisplay,
+          ]);
+          if (!skippedRef.current) startTransition();
+          return;
+        }
+
         if (caddiePersonality !== 'kevin') {
           // TTS the caption in the active persona's voice. speak() reads
           // caddiePersonality from the store at request time and threads
@@ -198,7 +233,9 @@ export default function GreetingScreen() {
           return;
         }
 
-        // Kevin: bundled mp3 path.
+        // Kevin: bundled mp3 path (legacy fallback when D-ID intro
+        // clip isn't present — useKevinIntroVideo handled that case
+        // above).
         const assetMod = GREETING_ASSETS[greeting];
         const asset = Asset.fromModule(assetMod);
         await asset.downloadAsync();
@@ -277,28 +314,46 @@ export default function GreetingScreen() {
                 borderColor: colors.accent,
                 opacity,
                 transform: [{ scale }],
+                overflow: 'hidden', // Required for Android to actually clip child to borderRadius circle
               },
             ]}
           >
-            {/* Phase AR follow-up v3 — swapped from
-                smartplay_caddie_badge.png to kevin_portrait.jpg (the
-                actual Kevin face we already use in onboarding). The
-                badge PNG artwork was off-center within its own canvas
-                ("left side of his face in middle of screen"), so even
-                a perfectly-centered container rendered the figure
-                visibly right-of-center. The portrait JPG is centered
-                and is actually Kevin. resizeMode 'cover' fills the
-                circular container edge-to-edge. */}
-            <Image
-              source={
-                caddiePersonality === 'serena' ? require('../assets/avatars/serena_portrait.jpg')
-                : caddiePersonality === 'harry' ? require('../assets/avatars/harry_portrait.png')
-                : caddiePersonality === 'tank'  ? require('../assets/avatars/tank_v2_portrait.png')
-                : require('../assets/avatars/kevin_portrait.jpg')
-              }
-              style={styles.avatarPhoto}
-              resizeMode="cover"
-            />
+            {/* 2026-05-25 — Kevin D-ID intro video. When the bundled
+                clip is present, render the talking-head video filling
+                the circular avatar wrap. resizeMode COVER + overflow
+                hidden on the wrap clip to the circle. The video carries
+                its own audio (D-ID generates speech+video together) so
+                no separate playLocalFile fires for this path. Falls
+                back to the static portrait when the clip isn't available
+                or for non-Kevin personas. */}
+            {useKevinIntroVideo ? (
+              <Video
+                ref={videoRef}
+                source={getCaddieClip('kevin', 'intro') as number}
+                style={styles.avatarPhoto}
+                resizeMode={ResizeMode.COVER}
+                shouldPlay
+                isLooping={false}
+                isMuted={false}
+                onPlaybackStatusUpdate={(status) => {
+                  if ('didJustFinish' in status && status.didJustFinish) {
+                    videoDoneResolveRef.current?.();
+                    videoDoneResolveRef.current = null;
+                  }
+                }}
+              />
+            ) : (
+              <Image
+                source={
+                  caddiePersonality === 'serena' ? require('../assets/avatars/serena_portrait.jpg')
+                  : caddiePersonality === 'harry' ? require('../assets/avatars/harry_portrait.png')
+                  : caddiePersonality === 'tank'  ? require('../assets/avatars/tank_v2_portrait.png')
+                  : require('../assets/avatars/kevin_portrait.jpg')
+                }
+                style={styles.avatarPhoto}
+                resizeMode="cover"
+              />
+            )}
           </Animated.View>
         </View>
         <View style={styles.captionRegion}>
