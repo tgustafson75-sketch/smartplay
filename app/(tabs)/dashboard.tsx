@@ -39,12 +39,17 @@ import { usePointsStore } from '../../store/pointsStore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { detectPatternShift } from '../../services/patternDetection';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
+import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 
 export default function Dashboard() {
   const router = useRouter();
   const { colors } = useTheme();
+  // 2026-05-24 — beta-minimal responsive: centered max-width on wide
+  // surfaces (fold-open, tablet, landscape). Narrow form factors render
+  // unchanged.
+  const { isWide } = useDeviceLayout();
 
   // ─── Round data (useShallow keeps re-renders scoped) ──────────────
   const {
@@ -170,8 +175,9 @@ export default function Dashboard() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, isWide && { alignItems: 'center' }]}
       >
+       <View style={isWide ? { width: '100%', maxWidth: WIDE_CONTENT_MAX_WIDTH } : undefined}>
         {/* ─── 1. BRAND HEADER ──────────────────────────────────────── */}
         <BrandHeaderRow />
 
@@ -524,6 +530,7 @@ export default function Dashboard() {
             </Text>
           </View>
         )}
+       </View>
       </ScrollView>
     </SafeAreaView>
   );

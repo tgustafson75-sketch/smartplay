@@ -28,11 +28,25 @@ export type DeviceLayout = {
   orientation: DeviceOrientation;
   isLandscape: boolean;
   isFoldOpen: boolean;
+  /** 2026-05-24 — beta-minimal responsive flag. True on fold-open,
+   *  tablet portrait, tablet landscape, and phone landscape. False on
+   *  phone portrait and fold-closed (the "narrow" cases). Tabs branch
+   *  on this to constrain content to WIDE_CONTENT_MAX_WIDTH so cards /
+   *  lists don't stretch grotesquely on wide surfaces. */
+  isWide: boolean;
 };
 
 const LANDSCAPE_THRESHOLD = 1.4;
 const NEAR_SQUARE_MIN = 1.0;
 const FOLD_OPEN_WIDTH = 540;
+/** Aspect threshold for the beta-minimal isWide flag. Empirically:
+ *   phone portrait ≈ 0.46, fold closed ≈ 0.43 → narrow (false).
+ *   fold open ≈ 0.76, tablet portrait ≈ 0.75 → wide (true).
+ *   tablet landscape ≈ 1.33+, phone landscape ≈ 1.78 → wide (true). */
+const WIDE_ASPECT_THRESHOLD = 0.6;
+/** Centered max-width for tab content on wide surfaces. ~700pt reads
+ *  comfortably without stretching cards edge-to-edge on tablet. */
+export const WIDE_CONTENT_MAX_WIDTH = 700;
 
 export function useDeviceLayout(): DeviceLayout {
   const { width, height } = useWindowDimensions();
@@ -45,6 +59,7 @@ export function useDeviceLayout(): DeviceLayout {
 
   const isLandscape = orientation === 'landscape';
   const isFoldOpen = width >= FOLD_OPEN_WIDTH && orientation !== 'portrait';
+  const isWide = aspect >= WIDE_ASPECT_THRESHOLD;
 
-  return { width, height, aspect, orientation, isLandscape, isFoldOpen };
+  return { width, height, aspect, orientation, isLandscape, isFoldOpen, isWide };
 }

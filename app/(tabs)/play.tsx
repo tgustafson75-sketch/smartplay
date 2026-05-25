@@ -24,6 +24,7 @@ import {
 import * as Location from 'expo-location';
 // Phase 407 — distance helper for course-locator GPS sort
 import { haversineYards } from '../../utils/geoDistance';
+import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useRoundStore } from '../../store/roundStore';
@@ -173,6 +174,10 @@ type SearchKind = 'courses' | 'range_practice';
 
 export default function PlayTab() {
   const router = useRouter();
+  // 2026-05-24 — beta-minimal responsive: constrain content to a
+  // centered max-width on wide surfaces (fold-open, tablet, landscape).
+  // Phone portrait + fold-closed render unchanged.
+  const { isWide } = useDeviceLayout();
   const recentCourseIds = useRoundStore(s => s.recentCourseIds);
   const activeCourseId = useRoundStore(s => s.activeCourseId);
   const isRoundActive = useRoundStore(s => s.isRoundActive);
@@ -596,7 +601,11 @@ export default function PlayTab() {
           (default behavior across every tab). */}
       <BrandHeaderRow />
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={isWide ? { alignItems: 'center' } : undefined}
+      >
+       <View style={isWide ? { width: '100%', maxWidth: WIDE_CONTENT_MAX_WIDTH } : undefined}>
         {/* Active-round banner — End Round lives here so the user doesn't
             have to dig into the Tools menu. Confirms before tearing down
             the round to avoid an accidental tap during course browsing. */}
@@ -1002,6 +1011,7 @@ export default function PlayTab() {
         )}
 
         <View style={{ height: 30 }} />
+       </View>
       </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -34,6 +34,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
+import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 
 interface LauncherCardSpec {
   key: string;
@@ -120,10 +121,18 @@ const CARDS: LauncherCardSpec[] = [
 export default function SwingLab() {
   const router = useRouter();
   const { colors } = useTheme();
+  // 2026-05-24 — beta-minimal responsive: centered max-width on wide
+  // surfaces (fold-open, tablet, landscape). Narrow form factors render
+  // unchanged.
+  const { isWide } = useDeviceLayout();
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, isWide && { alignItems: 'center' }]}
+        showsVerticalScrollIndicator={false}
+      >
+       <View style={isWide ? { width: '100%', maxWidth: WIDE_CONTENT_MAX_WIDTH } : undefined}>
         {/* BRAND HEADER — shared v3-style row, matches every other tab. */}
         <BrandHeaderRow />
 
@@ -139,6 +148,7 @@ export default function SwingLab() {
             }}
           />
         ))}
+       </View>
       </ScrollView>
       <QuickTutorial
         slug="swinglab_intro"
