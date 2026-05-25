@@ -238,6 +238,25 @@ interface RoundState {
   roundNotes: string;
   goal: string | null;
 
+  // 2026-05-24 — Pre-round yardage snapshot frozen at startRound. Tim:
+  // "Pre-round all SmartVision hole yardages readout are tied to static
+  // images and static because we have the option to save it to be
+  // evaluated post round as planned versus outcome." This is the
+  // PLAN side of the planned-vs-outcome comparison. Snapshot is taken
+  // ONCE at startRound from the bundled courseHoles array (which is
+  // already static — front/middle/back yardages baked in data/courses.ts)
+  // so post-round recap can compare "what the player saw before teeing
+  // off" vs "what their shot end_location actually showed." Null when
+  // no round is active OR when the course has no bundled yardage data.
+  // Cleared by endRound + discardRound alongside the rest of round state.
+  preRoundYardageSnapshot: {
+    hole: number;
+    static_front: number | null;
+    static_middle: number | null;
+    static_back: number | null;
+    par: number;
+  }[] | null;
+
   currentHole: number;
   currentYardage: number | null;
   club: string | null;
@@ -481,6 +500,7 @@ export const useRoundStore = create<RoundState>()(
       isCompetition: false,
       roundNotes: '',
       goal: null,
+      preRoundYardageSnapshot: null,
       currentHole: 1,
       currentYardage: null,
       club: null,
@@ -584,6 +604,19 @@ export const useRoundStore = create<RoundState>()(
               .filter(p => p.course_id === courseId)
               .map(p => ({ ...p, round_id: roundId }))
           : [];
+        // 2026-05-24 — Freeze the bundled F/M/B yardages at round-start
+        // so post-round recap can compare planned (here) vs outcome
+        // (shot.end_location distance) without GPS drift contaminating
+        // the comparison. Pure read; bundled data is already static.
+        const preRoundSnapshot = holes.length > 0
+          ? holes.map(h => ({
+              hole: h.hole,
+              static_front: typeof h.front === 'number' ? h.front : null,
+              static_middle: typeof h.distance === 'number' ? h.distance : null,
+              static_back: typeof h.back === 'number' ? h.back : null,
+              par: h.par,
+            }))
+          : null;
         set({
           isRoundActive: true,
           mode: options.mode ?? 'free_play',
@@ -597,6 +630,7 @@ export const useRoundStore = create<RoundState>()(
           isCompetition: options.isCompetition,
           roundNotes: options.notes,
           goal: options.goal,
+          preRoundYardageSnapshot: preRoundSnapshot,
           // Phase 405 wave 3 — honor explicit tee from options, else keep
           // the prior selection (if user picked one on the Play tab),
           // else 'unspecified' for back-compat with callers predating wave 3.
@@ -802,6 +836,7 @@ export const useRoundStore = create<RoundState>()(
           mode: 'free_play' as RoundMode,
           currentRoundId: null,
           roundStartTime: null,
+          preRoundYardageSnapshot: null,
         });
         try {
           const toast = require('./toastStore');
@@ -953,6 +988,7 @@ export const useRoundStore = create<RoundState>()(
           mode: 'free_play' as RoundMode,
           currentRoundId: null,
           roundStartTime: null,
+          preRoundYardageSnapshot: null,
         }));
         const total = Object.values(s.scores).reduce((a, b) => a + b, 0);
         const holesPlayed = Object.keys(s.scores).length;
