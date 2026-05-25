@@ -23,6 +23,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { QuickTutorial } from '../../components/QuickTutorial';
+import ClubPickerModal, { clubIdToSmashKey, clubIdLabel } from '../../components/cage/ClubPickerModal';
+import type { ClubId } from '../../services/clubRecognition';
 import {
   View,
   Text,
@@ -80,11 +82,28 @@ export default function SmartMotion() {
   // synthesizer emits source:'acoustic' for ball speed with the
   // honest estimate-tier shape per C1 (~ prefix, ±10% range, med
   // confidence). Absent on camera-roll uploads → pose-only fallback.
-  const { clipUri, angle: angleParam, measuredBallSpeedMph: measuredBallSpeedParam } = useLocalSearchParams<{
+  const { clipUri, angle: angleParam, measuredBallSpeedMph: measuredBallSpeedParam, club: clubParam } = useLocalSearchParams<{
     clipUri?: string;
     angle?: string;
     measuredBallSpeedMph?: string;
+    club?: string;
   }>();
+  // 2026-05-24 — Club tag for the captured swing. Drives the metric
+  // synthesizer's smash + carry math. Sourced from (a) URL param when
+  // a caller passes it (e.g. a future cage→smartmotion handoff), or
+  // (b) the user tagging via the bottom-bar Tag Club button which
+  // opens the existing ClubPickerModal (reused). Defaults to null
+  // (honest "untagged") — NEVER silently '7I'. Until the user tags,
+  // the synthesizer receives null → keyed as 'unknown' → low
+  // confidence on smash / ball speed / carry.
+  const [selectedClub, setSelectedClub] = useState<ClubId | null>(() => {
+    if (typeof clubParam !== 'string' || clubParam.length === 0) return null;
+    // Loose normalization for incoming param (e.g. "7i" / "7I" / "7-iron").
+    const upper = clubParam.trim().toUpperCase().replace(/[-_\s]/g, '');
+    const valid: ClubId[] = ['DR', '3W', '5W', '7W', '2H', '3H', '4H', '5H', '3I', '4I', '5I', '6I', '7I', '8I', '9I', 'PW', 'GW', 'AW', 'SW', 'LW', 'PT'];
+    return valid.includes(upper as ClubId) ? (upper as ClubId) : null;
+  });
+  const [clubPickerOpen, setClubPickerOpen] = useState(false);
   // Parse the acoustic ball speed string param to a finite number.
   // Defensive: ignore non-numeric / negative / zero / NaN.
   const measuredBallSpeedMph = (() => {
@@ -432,6 +451,7 @@ export default function SmartMotion() {
             clipDurationMs={videoDurationMs}
             handicap={profile.handicap ?? null}
             measuredBallSpeedMph={measuredBallSpeedMph}
+            clubSmashKey={selectedClub ? clubIdToSmashKey(selectedClub) : null}
           />
           <InsightCard
             colors={colors}
@@ -456,11 +476,24 @@ export default function SmartMotion() {
           <BottomBar
             colors={colors}
             onRecord={() => router.push('/swinglab/quick-record' as never)}
-            onTagClub={() => {/* TODO: club tag sheet */}}
+            onTagClub={() => setClubPickerOpen(true)}
             onCompare={() => router.push('/swinglab/library' as never)}
+            clubLabel={clubIdLabel(selectedClub)}
           />
         </View>
       ) : null}
+      {/* 2026-05-24 — Club picker (reused cage component in standalone
+          mode, no cage-store mutation). Selected club drives the
+          metric synthesizer above. */}
+      <ClubPickerModal
+        open={clubPickerOpen}
+        onClose={() => setClubPickerOpen(false)}
+        selected={selectedClub}
+        onPick={(c) => {
+          setSelectedClub(c);
+          setClubPickerOpen(false);
+        }}
+      />
       <QuickTutorial
         slug="smartmotion_intro"
         title="SmartMotion"
@@ -570,7 +603,7 @@ function PreRecordAnglePill({ label, sub, icon, active, colors, onPress }: {
 function VisualCard({
   clipUri, angle, setAngle, overlays, playbackSpeed, setPlaybackSpeed,
   analysis, analyzing, validity, colors, poseFrames, onVideoDuration,
-  clipDurationMs, handicap, measuredBallSpeedMph,
+  clipDurationMs, handicap, measuredBallSpeedMph, clubSmashKey,
 }: {
   clipUri: string | null;
   angle: Angle;
@@ -597,6 +630,12 @@ function VisualCard({
   // value (no impact, silent clip, network failure). When non-null
   // the synthesizer emits source:'acoustic' for ball speed per C1.
   measuredBallSpeedMph: number | null;
+  // 2026-05-24 — Club hint passed down from SmartMotion's selectedClub
+  // state. Drives the synthesizer's smash + carry math. Null when
+  // the user hasn't tagged a club — the synthesizer maps null to
+  // 'unknown' (smash 1.36) and the source taxonomy labels it as a
+  // low-confidence estimate. Never silently '7I'.
+  clubSmashKey: string | null;
 }) {
   // Phase 418 — render the pose-skeleton and shot-tracer overlays ONLY
   // when the validation gate confirms an analyzable swing AND analysis
@@ -852,7 +891,13 @@ function VisualCard({
           ? synthesizeSwingMetrics({
               poseFrames: poseFrames ?? null,
               clipDurationMs: clipDurationMs ?? null,
-              club: null, // TODO: surface from URL param once SmartMotion's record path tags the club
+              // 2026-05-24 — Real club from user tag (Tag Club button →
+              // ClubPickerModal) or URL param. Null when untagged — the
+              // synthesizer maps null → 'unknown' → low-confidence smash
+              // (1.36 iron average) per the existing typical-smash
+              // fallback, and the source taxonomy labels that estimate
+              // honestly. We never silently default to '7I'.
+              club: clubSmashKey,
               profile: { handicap, clubDistances: null },
               // 2026-05-24 (C2) — Acoustic ball speed from the
               // in-app capture path (quick-record's parallel
@@ -1307,24 +1352,28 @@ function ShotTracerCard({ colors }: {
   );
 }
 
-function BottomBar({ colors, onTagClub, onCompare }: {
+function BottomBar({ colors, onTagClub, onCompare, clubLabel }: {
   colors: ReturnType<typeof useTheme>['colors'];
   onRecord?: () => void; // unused — record now lives in the video card
   onTagClub: () => void;
   onCompare: () => void;
+  clubLabel?: string;
 }) {
   // 2026-05-20 — Record removed from the bottom bar. Tim: "integrated
   // into the video screen element, not all the way down at the bottom."
   // Bottom strip now has Tag Club + Compare only (utility actions, not
   // the primary capture). Background tinted so it reads as a separate
   // utility row when sticky at the bottom.
+  // 2026-05-24 — clubLabel: shows the tagged club ("7I") or "Untagged"
+  // so the user can see which club assumption drives the metrics on
+  // the card. Replaces the prior hardcoded "8i" placeholder.
   return (
     <View style={[styles.bottomBar, { backgroundColor: colors.surface_elevated, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: 6 }]}>
       <TouchableOpacity onPress={onTagClub} style={[styles.bottomBtn, { borderColor: colors.border, borderWidth: 1 }]}>
         <Ionicons name="flag-outline" size={16} color={colors.text_primary} />
         <View>
           <Text style={[styles.bottomBtnText, { color: colors.text_primary }]}>Tag Club</Text>
-          <Text style={[styles.bottomBtnSub, { color: colors.text_muted }]}>8i</Text>
+          <Text style={[styles.bottomBtnSub, { color: colors.text_muted }]}>{clubLabel ?? 'Untagged'}</Text>
         </View>
       </TouchableOpacity>
       <TouchableOpacity onPress={onCompare} style={[styles.bottomBtn, { borderColor: colors.border, borderWidth: 1 }]}>

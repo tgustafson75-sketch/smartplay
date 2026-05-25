@@ -52,7 +52,7 @@ export default function QuickRecord() {
   // when omitted. autoStart=1 (from voice) fires recording on mount
   // so the spoken command "record me face on" both sets the angle
   // and starts the capture in one shot.
-  const { angle: angleParam, autoStart: autoStartParam } = useLocalSearchParams<{ angle?: string; autoStart?: string }>();
+  const { angle: angleParam, autoStart: autoStartParam, club: clubParam } = useLocalSearchParams<{ angle?: string; autoStart?: string; club?: string }>();
   const initialAngle: Angle =
     angleParam === 'face_on' || angleParam === 'face-on' ? 'face_on' : 'down_the_line';
   const [angle, setAngle] = useState<Angle>(initialAngle);
@@ -153,13 +153,22 @@ export default function QuickRecord() {
       try {
         const impact = await stopAndDetectImpact();
         if (impact && impact.audio_uri) {
+          // 2026-05-24 — Club hint: when Quick Record is launched with
+          // a ?club= URL param (e.g. cage→quick-record handoff), pass
+          // it through so the server's club-typical heuristic
+          // calibrates against the right reference. When no param,
+          // pass NOTHING — never silently default to 7I. The user tags
+          // the club via Tag Club on the SmartMotion card after the
+          // route-back; the metric synthesizer then keys off it
+          // honestly. Server-side detectBallSpeed has a 7I fallback
+          // for legacy callers; flagged for a future server-side
+          // unknown-handling pass.
           const speed = await detectBallSpeed({
             audioUri: impact.audio_uri,
             impact_ms: impact.impact_ms,
-            // No club selection on this screen — detectBallSpeed
-            // defaults to '7I' for the club-typical heuristic. SmartMotion's
-            // record path doesn't expose a club picker today; future
-            // wiring can pass `club` once it lands here.
+            ...(typeof clubParam === 'string' && clubParam.trim().length > 0
+              ? { club: clubParam.trim() }
+              : {}),
           });
           if (speed && typeof speed.ball_speed_mph === 'number' && Number.isFinite(speed.ball_speed_mph)) {
             measuredBallSpeedMph = speed.ball_speed_mph;
@@ -189,6 +198,12 @@ export default function QuickRecord() {
           angle,
           ...(measuredBallSpeedMph != null
             ? { measuredBallSpeedMph: String(Math.round(measuredBallSpeedMph)) }
+            : {}),
+          // 2026-05-24 — Forward club hint to SmartMotion so the
+          // metric synthesizer keys off it. Untagged passes nothing
+          // (SmartMotion treats null as 'unknown' — honest, not 7I).
+          ...(typeof clubParam === 'string' && clubParam.trim().length > 0
+            ? { club: clubParam.trim() }
             : {}),
         },
       } as never);

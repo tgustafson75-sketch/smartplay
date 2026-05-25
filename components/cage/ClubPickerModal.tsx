@@ -47,30 +47,60 @@ const CLUB_OPTIONS: ClubOption[] = [
   { label: 'Putter', value: 'PT' },
 ];
 
-export default function ClubPickerModal() {
+/**
+ * 2026-05-24 — Props-overridable refactor. Default (no props) preserves
+ * the cage-store-driven behavior the cage UI relies on. Passing
+ * `open` / `onClose` / `onPick` flips the modal into standalone mode so
+ * other surfaces (SmartMotion, Quick Record) can reuse it without
+ * mutating the active cage session. Cage call site is unchanged
+ * (renders `<ClubPickerModal />` with no props).
+ */
+interface ClubPickerModalProps {
+  /** Override the cage-store-driven visibility. When undefined, falls
+   *  back to cageStore.clubMenuOpen (legacy cage behavior). */
+  open?: boolean;
+  /** Override the cage-store close action. */
+  onClose?: () => void;
+  /** Override the cage-store setActiveClub mutation. When provided,
+   *  the picker calls this instead of writing into cageStore. */
+  onPick?: (club: ClubId) => void;
+  /** Override the "currently selected" highlight. When provided, used
+   *  instead of cageStore.activeSession.currentClub. */
+  selected?: ClubId | null;
+}
+
+export default function ClubPickerModal(props: ClubPickerModalProps = {}) {
   const clubMenuOpen = useCageStore(s => s.clubMenuOpen);
   const setClubMenuOpen = useCageStore(s => s.setClubMenuOpen);
   const setActiveClub = useCageStore(s => s.setActiveClub);
-  const currentClub = useCageStore(s => s.activeSession?.currentClub ?? s.activeSession?.club);
+  const cageCurrentClub = useCageStore(s => s.activeSession?.currentClub ?? s.activeSession?.club);
+
+  const visible = props.open !== undefined ? props.open : clubMenuOpen;
+  const handleClose = props.onClose ?? (() => setClubMenuOpen(false));
+  const currentClub = props.selected ?? cageCurrentClub;
 
   const onPick = (value: ClubId) => {
-    setActiveClub(value, 'manual', 'high');
-    setClubMenuOpen(false);
+    if (props.onPick) {
+      props.onPick(value);
+    } else {
+      setActiveClub(value, 'manual', 'high');
+      setClubMenuOpen(false);
+    }
   };
 
   return (
     <Modal
-      visible={clubMenuOpen}
+      visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={() => setClubMenuOpen(false)}
+      onRequestClose={handleClose}
     >
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
           <View style={styles.header}>
             <Text style={styles.title}>Pick a club</Text>
             <TouchableOpacity
-              onPress={() => setClubMenuOpen(false)}
+              onPress={handleClose}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               accessibilityRole="button"
               accessibilityLabel="Close club picker"
@@ -100,6 +130,49 @@ export default function ClubPickerModal() {
       </View>
     </Modal>
   );
+}
+
+/**
+ * 2026-05-24 — Map ClubId (the UI / picker / sole-recognition canonical
+ * form) to the lowercase key used by services/swingMetricsService.ts's
+ * TYPICAL_SMASH_BY_CLUB table. Honest fallbacks for clubs not in the
+ * smash table ('AW' → 'gw' approximation; 'PT' / hybrids → 'unknown'
+ * since the smash heuristic doesn't model them). Exported so callers
+ * can pass the right key into the synthesizer.
+ */
+export function clubIdToSmashKey(id: ClubId | null | undefined): string {
+  if (!id) return 'unknown';
+  switch (id) {
+    case 'DR': return 'driver';
+    case '3W': return '3w';
+    case '5W': return '5w';
+    case '7W': return '5w';
+    case '2H':
+    case '3H':
+    case '4H':
+    case '5H': return 'hybrid';
+    case '3I': return '4i';
+    case '4I': return '4i';
+    case '5I': return '5i';
+    case '6I': return '6i';
+    case '7I': return '7i';
+    case '8I': return '8i';
+    case '9I': return '9i';
+    case 'PW': return 'pw';
+    case 'GW': return 'gw';
+    case 'AW': return 'gw';
+    case 'SW': return 'sw';
+    case 'LW': return 'lw';
+    case 'PT': return 'unknown';
+    case 'unknown': return 'unknown';
+    default: return 'unknown';
+  }
+}
+
+/** Human-readable club label for surfacing on metric cards. */
+export function clubIdLabel(id: ClubId | null | undefined): string {
+  if (!id || id === 'unknown') return 'Untagged';
+  return CLUB_OPTIONS.find(o => o.value === id)?.label ?? String(id);
 }
 
 const styles = StyleSheet.create({
