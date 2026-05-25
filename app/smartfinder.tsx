@@ -288,15 +288,23 @@ export default function SmartFinder() {
  * approximate the visual zoom factor at each `zoom` value; tuned for
  * Z Fold but should read sensibly on any device.
  */
-const PINCH_SENSITIVITY = 0.4; // 1.0× pinch delta → 0.4 zoom delta
+// 2026-05-24 — Bumped from 0.4 → 1.0 (native camera ratio). User reported
+// "I can't zoom" on Z Fold — at 0.4 sensitivity a 3.5x finger spread was
+// needed to reach max zoom (zoom=1.0), which is well outside ergonomic
+// pinch range. 1.0 means a 2x finger spread covers the full range, same
+// as the stock Android camera app.
+const PINCH_SENSITIVITY = 1.0;
 
 function zoomLabelFor(zoom: number): string {
-  // Approximate the visible zoom factor across the 0..1 range. Anchors:
-  // 0 → 1.0x, 0.12 → 2x, 0.22 → 3x, 0.35 → 4x, 0.45 → 5x, 0.60 → 7x, 0.80 → 10x.
-  // Interpolate linearly between anchors.
+  // Approximate visible zoom factor across the 0..1 range. expo-camera
+  // maps zoom=1 to the device's reported max — Z Fold ≈ 30×, most
+  // flagships 10–20×, base phones 8×. Anchors extend to 30× at the top
+  // so the label tracks Z Fold's actual reach; on lower-max devices the
+  // label still reads sensibly because the device's hardware caps the
+  // visible result regardless of the label.
   const anchors: [number, number][] = [
-    [0.00, 1], [0.12, 2], [0.22, 3], [0.35, 4],
-    [0.45, 5], [0.60, 7], [0.80, 10], [1.00, 15],
+    [0.00,  1], [0.10,  2], [0.20,  3], [0.30,  5],
+    [0.45,  8], [0.60, 12], [0.80, 20], [1.00, 30],
   ];
   for (let i = 0; i < anchors.length - 1; i++) {
     const [z0, x0] = anchors[i];
@@ -307,7 +315,7 @@ function zoomLabelFor(zoom: number): string {
       return `${x.toFixed(1)}x`;
     }
   }
-  return '15.0x';
+  return '30.0x';
 }
 
 function CameraSmartFinder({

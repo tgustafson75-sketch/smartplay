@@ -90,12 +90,26 @@ export default async function handler(
 
         if (elevenRes.ok) {
           const audioBuffer = await elevenRes.arrayBuffer();
-          console.log('[voice] ElevenLabs success');
-          res.setHeader('Content-Type', 'audio/mpeg');
-          return res.status(200).send(Buffer.from(audioBuffer));
+          // 2026-05-24 — User-reported: all personas silent in Spanish.
+          // ElevenLabs sometimes returns 200 with an error JSON payload
+          // (quota issues, invalid model_id × voice combos, voice not
+          // supporting the language) that's <1KB. Client previously
+          // forwarded that as "audio," failed its own >100 byte check,
+          // and played silence. Validate before returning so non-English
+          // requests fall through to OpenAI TTS (which DOES speak ES/ZH)
+          // instead of silently failing the player. Lockstep with
+          // app/api/voice+api.ts.
+          if (audioBuffer.byteLength >= 1000) {
+            console.log('[voice] ElevenLabs success', { bytes: audioBuffer.byteLength, language });
+            res.setHeader('Content-Type', 'audio/mpeg');
+            return res.status(200).send(Buffer.from(audioBuffer));
+          }
+          console.log('[voice] ElevenLabs returned suspiciously small payload — falling back to OpenAI', {
+            bytes: audioBuffer.byteLength, language, persona,
+          });
+        } else {
+          console.log('[voice] ElevenLabs failed:', elevenRes.status, '— falling back to OpenAI');
         }
-
-        console.log('[voice] ElevenLabs failed:', elevenRes.status, '— falling back to OpenAI');
 
       } catch (elevenErr) {
         console.log('[voice] ElevenLabs error:', elevenErr, '— falling back to OpenAI');

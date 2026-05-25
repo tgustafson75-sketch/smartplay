@@ -659,8 +659,19 @@ export const speak = async (
     const arrayBuffer = await response.arrayBuffer();
     if (myId !== currentSpeechId) return;
 
-    if (arrayBuffer.byteLength < 100) {
-      console.log('[voice] speak: empty audio payload');
+    // 2026-05-24 — Raised from 100 → 1000 bytes. The 100-byte threshold
+    // was permissive enough that an ElevenLabs error-blob masquerading
+    // as audio (quota / invalid model_id × voice / unsupported-language
+    // combos for ES/ZH) slipped through as "audio" and played silently.
+    // Server-side now rejects those before they reach us, but keep a
+    // matching client-side guard so any future server regression still
+    // surfaces clearly in the log instead of silent failure.
+    if (arrayBuffer.byteLength < 1000) {
+      console.log('[voice] speak: suspiciously small audio payload — silent', {
+        bytes: arrayBuffer.byteLength,
+        language,
+        text_head: text.slice(0, 40),
+      });
       notifySpeaking(false);
       return;
     }
