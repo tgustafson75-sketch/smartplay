@@ -215,6 +215,19 @@ Available intents:
    - "open SmartFinder and go quiet" -> { steps: [ { intent_type: "open_tool", parameters: { tool_name: "smartfinder" } }, { intent_type: "set_trust_quiet", parameters: {} } ] }
    Order matters. Cap at 3 steps; if more, fall back to unknown with a clarifying question.
 
+18. open_external — User wants to launch an external music / video app (YouTube, YouTube Music, Spotify, Apple Music). Optional search query. Default service when the user says "play music" / "play some X" without naming a service is youtube_music (the user opted into a YouTube-centric default). Music plays without audio-session coordination — Caddie's voice gets drowned out while music plays; user manages that verbally / by tabbing back.
+    parameters: { service: "youtube" | "youtube_music" | "spotify" | "apple_music", query?: string }
+    Examples:
+    - "open YouTube" -> { service: "youtube" }
+    - "play music" / "play some music" -> { service: "youtube_music" }
+    - "play some Sinatra" / "play Sinatra" -> { service: "youtube_music", query: "Sinatra" }
+    - "play Yacht Rock on YouTube" -> { service: "youtube", query: "Yacht Rock" }
+    - "open YouTube Music" / "open YT music" -> { service: "youtube_music" }
+    - "open Spotify" -> { service: "spotify" }
+    - "play that song on Spotify" / "open Drake on Spotify" -> { service: "spotify", query: "Drake" }
+    - "open Apple Music" -> { service: "apple_music" }
+    Capitalize the query as the user said it. Service name comes from the user's words; default to youtube_music when "play music" is said with no service.
+
 17. quick_round — User wants to START a round in one utterance, bypassing the Play-tab setup chips. Carries an optional course hint, optional playing partners (guests), and an optional 9-hole flag. Distinct from change_setting:round_mode (which adjusts mode mid-round). Distinct from declare_hole (which sets the current hole, not start a fresh round).
     parameters: { course_hint?: string, hole_count?: 9 | 18, guest_names?: string[] }
     Course hint is FREE-TEXT — pass the course name as the user said it ("the Lakes", "Maplewood", "Pembroke Pines"). The handler resolves it against local bundled courses first, falling back to the golfcourseapi search. If the user didn't name a course at all, omit course_hint and the handler will ask.
@@ -243,7 +256,7 @@ The language reflects the transcript itself, not the user's preferred app langua
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "ask_golf_father" | "quick_round" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "ask_golf_father" | "quick_round" | "open_external" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null,

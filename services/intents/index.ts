@@ -18,6 +18,7 @@ import { sequenceHandler } from './sequenceHandler';
 import { declareHoleHandler } from './declareHoleHandler';
 import { askGolfFatherHandler } from './askGolfFatherHandler';
 import { quickRoundHandler } from './quickRoundHandler';
+import { openExternalHandler } from './openExternalHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
 
@@ -45,6 +46,7 @@ voiceCommandRouter.registerHandler(sequenceHandler);
 voiceCommandRouter.registerHandler(declareHoleHandler);
 voiceCommandRouter.registerHandler(askGolfFatherHandler);
 voiceCommandRouter.registerHandler(quickRoundHandler);
+voiceCommandRouter.registerHandler(openExternalHandler);
 
 export {
   openToolHandler,
@@ -71,4 +73,5 @@ export {
   declareHoleHandler,
   askGolfFatherHandler,
   quickRoundHandler,
+  openExternalHandler,
 };
