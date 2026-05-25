@@ -23,6 +23,8 @@ import {
   ActivityIndicator,
   TextInput,
   Switch,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -176,7 +178,10 @@ export default function CustomCaddieScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
+      <KeyboardAvoidingView
+        style={[styles.container, { paddingTop: insets.top + 12 }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="chevron-back" size={26} color="#00C896" />
@@ -313,7 +318,7 @@ export default function CustomCaddieScreen() {
             </TouchableOpacity>
           )}
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </>
   );
 }

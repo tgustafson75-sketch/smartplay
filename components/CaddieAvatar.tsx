@@ -936,7 +936,7 @@ export default function CaddieAvatar({
 
         {/* Layer 6 — State label */}
         {(voiceState !== 'idle' || isThinking) && (
-          <View style={styles.stateTag}>
+          <View style={[styles.stateTag, { top: insets.top + 60 }]}>
             <Text style={[styles.stateTagText, { color: ringColor }]}>
               {stateText}
             </Text>
@@ -1044,14 +1044,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stateTag: {
-    // Phase BS-followup Issue 1 — bumped top: 14 → 84 so the
-    // "● Listening" / "◌ Thinking" badge clears the wordmark + topnav +
-    // trial pill band when the avatar is in full-screen cover mode (L4 +
-    // pre-round thinking on Fold-open). Previously sat at the very top
-    // of the screen, overlapping the trial pill at insets.top + 52 and
-    // hiding the wordmark behind the badge background.
+    // Phase BS-followup Issue 1 — clears wordmark + topnav + trial pill
+    // band when the avatar is in full-screen cover mode (L4 + pre-round
+    // thinking on Fold-open). 2026-05-24 — top moved to inline style as
+    // `insets.top + 60` so iPhones with Dynamic Island (~59pt inset)
+    // push the badge down accordingly instead of colliding. Z Fold
+    // (insets.top ≈ 24) still renders at top ≈ 84 — visual no-op on
+    // the reference device.
     position: 'absolute',
-    top: 84,
     left: 0,
     right: 0,
     alignItems: 'center',

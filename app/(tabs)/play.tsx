@@ -19,6 +19,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet,
   Image, ActivityIndicator, Alert, type ImageSourcePropType,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import * as Location from 'expo-location';
 // Phase 407 — distance helper for course-locator GPS sort
@@ -587,6 +588,10 @@ export default function PlayTab() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
       {/* Shared v3 brand row — logo tap opens the listening session
           (default behavior across every tab). */}
       <BrandHeaderRow />
@@ -998,6 +1003,7 @@ export default function PlayTab() {
 
         <View style={{ height: 30 }} />
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

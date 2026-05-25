@@ -13,7 +13,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, FlatList,
+  StyleSheet, FlatList, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -54,6 +54,10 @@ export default function ReferenceScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Text style={styles.back}>‹ Back</Text>
@@ -103,6 +107,7 @@ export default function ReferenceScreen() {
       {tab === 'handicap' && <HandicapPanel />}
 
       {tab === 'glossary' && <GlossaryPanel />}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

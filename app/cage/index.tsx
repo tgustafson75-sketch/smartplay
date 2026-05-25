@@ -6,6 +6,8 @@ import { Modal, TextInput ,
   TouchableOpacity,
   StyleSheet,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -283,6 +285,10 @@ export default function CageIndex() {
         onRequestClose={() => setCalibrationOpen(false)}
       >
         <TouchableOpacity activeOpacity={1} style={calStyles.scrim} onPress={() => setCalibrationOpen(false)}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%', alignItems: 'center' }}
+          >
           <TouchableOpacity activeOpacity={1} style={calStyles.card}>
             <Text style={calStyles.title}>CAGE DISTANCE</Text>
             <Text style={calStyles.body}>
@@ -316,6 +322,7 @@ export default function CageIndex() {
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
+          </KeyboardAvoidingView>
         </TouchableOpacity>
       </Modal>
     </SafeAreaView>

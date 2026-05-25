@@ -15,6 +15,8 @@ import {
   ScrollView,
   useWindowDimensions,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -2633,6 +2635,9 @@ export default function CaddieTab() {
           onPress={() => setShowRoundSetup(false)}
           activeOpacity={1}
         >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
           <View style={styles.sheet}>
             <View style={styles.handle} />
             <Text style={styles.sheetTitle}>Start Round</Text>
@@ -2845,6 +2850,7 @@ export default function CaddieTab() {
             </View>
             </ScrollView>
           </View>
+          </KeyboardAvoidingView>
         </TouchableOpacity>
       </Modal>
 
