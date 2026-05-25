@@ -30,6 +30,11 @@ import { subscribePoorSignal } from '../services/gpsManager';
 // IS the honest "we don't know" tell. Initialized at app root next
 // to the existing toast subscriber.
 import { initGpsConfidenceAsk } from '../services/gpsConfidenceAsk';
+// 2026-05-24 — Caddie reward speech (250+ measured drive, 1-putt). Subscribes
+// to roundStore.shots / roundStore.putts, persona-aware via the existing
+// voiceService.speak path, trust-gated to L2+. Reset on round-start so the
+// previous round's dedupe set doesn't suppress new rewards.
+import { initCaddieRewards, resetCaddieRewardsForRound } from '../services/caddieRewards';
 // Phase 411-hotfix — REMOVED the side-effect import of
 // services/backgroundLocationTask. That module's TaskManager.defineTask
 // at module load was the root cause of a white-screen boot crash on
@@ -469,6 +474,9 @@ function AppNavigator() {
     // question on top with cooldown + trust-level gates. Idempotent
     // — multiple init calls no-op.
     const unsubGpsAsk = initGpsConfidenceAsk();
+    // Caddie reward subscriber — fires on 250+ measured drive or 1-putt.
+    // Idempotent init; safe alongside other roundStore subscribers.
+    const unsubRewards = initCaddieRewards();
     let active = useRoundStore.getState().isRoundActive;
     if (active) {
       startHoleDetection();
@@ -480,11 +488,15 @@ function AppNavigator() {
     }
     const unsubRound = useRoundStore.subscribe((s) => {
       if (s.isRoundActive === active) return;
+      const wasActive = active;
       active = s.isRoundActive;
       if (active) {
         startHoleDetection();
         startOffCourseDetector();
         startMovementModeDetector();
+        // Clear last round's reward dedupe so new tee shots / 1-putts
+        // can fire again. Fires only on inactive→active transition.
+        if (!wasActive) resetCaddieRewardsForRound();
       } else {
         stopHoleDetection();
         stopOffCourseDetector();
@@ -496,6 +508,7 @@ function AppNavigator() {
       unsubRound();
       unsubPoor();
       unsubGpsAsk();
+      unsubRewards();
       stopHoleDetection();
       stopOffCourseDetector();
       stopMovementModeDetector();
