@@ -99,7 +99,11 @@ export default function GreetingScreen() {
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Avatar dims — 40% of the smaller screen edge, scales for Z Fold.
-  const avatarSize = Math.min(W, H) * 0.4;
+  // 2026-05-25 — Bumped from 0.4 → 0.55 of the smaller screen edge so
+  // the intro avatar feels more present on phone + Z Fold. Combined
+  // with the transform scale below, this gives Kevin's face more
+  // pixel area AND crops more of the D-ID side watermarks.
+  const avatarSize = Math.min(W, H) * 0.55;
   // Where the avatar lives at rest (centered) and where it travels to (top-left badge).
   // Final-position math removed with the slide-to-badge transition.
 
@@ -359,7 +363,7 @@ export default function GreetingScreen() {
               <Video
                 ref={videoRef}
                 source={getCaddieClip('kevin', 'intro') as number}
-                style={[styles.avatarPhoto, { transform: [{ scale: 1.4 }] }]}
+                style={[styles.avatarPhoto, { transform: [{ scale: 1.7 }] }]}
                 resizeMode={ResizeMode.COVER}
                 shouldPlay
                 isLooping={false}
