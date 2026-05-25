@@ -57,12 +57,17 @@ export type CaddieSlot =
   | 'chip'
   | 'putt_read'
   | 'putt_line'
-  | 'celebrate';
+  | 'celebrate'
+  // 2026-05-25 — Personal-best moment. Distinct from celebrate (made
+  // a putt) — bestround fires when the user just posted their best
+  // round score ever. Trigger logic lives outside this helper; the
+  // helper just makes the asset available.
+  | 'bestround';
 
 /** All known slots in canonical round-arc order. */
 export const ALL_CADDIE_SLOTS: readonly CaddieSlot[] = [
   'intro', 'tee', 'fairway', 'yardage', 'wind', 'club',
-  'hazard', 'chip', 'putt_read', 'putt_line', 'celebrate',
+  'hazard', 'chip', 'putt_read', 'putt_line', 'celebrate', 'bestround',
 ] as const;
 
 const SLOT_SET: ReadonlySet<string> = new Set(ALL_CADDIE_SLOTS);
@@ -82,11 +87,12 @@ const KEVIN_CLIPS: Record<CaddieSlot, number | null> = {
   yardage:   require('../assets/caddie/kevin/yardage.mp4'),
   wind:      require('../assets/caddie/kevin/wind.mp4'),
   club:      require('../assets/caddie/kevin/club.mp4'),
-  hazard:    null, // TODO — D-ID generation pending
+  hazard:    require('../assets/caddie/kevin/hazard.mp4'),
   chip:      require('../assets/caddie/kevin/chip.mp4'),
   putt_read: require('../assets/caddie/kevin/putt_read.mp4'),
   putt_line: require('../assets/caddie/kevin/putt_line.mp4'),
-  celebrate: null, // TODO — D-ID generation pending
+  celebrate: require('../assets/caddie/kevin/celebrate.mp4'),
+  bestround: require('../assets/caddie/kevin/bestround.mp4'),
 };
 
 const ALL_CLIP_MAPS: Record<Caddie, Record<CaddieSlot, number | null>> = {
