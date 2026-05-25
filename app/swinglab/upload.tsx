@@ -112,14 +112,24 @@ export default function UploadSwing() {
     // on didJustFinish. Long clips (>6s, or duration unknown) keep
     // the current auto-fire behavior; Path C (trim screen) will take
     // over for those in a follow-up commit tonight.
+    // 2026-05-25 — Three-way routing based on clip duration:
+    //   ≤6s  : Path A — auto-fire analysis deferred to detail screen
+    //          where the video auto-plays then triggers it on end
+    //          (?watch=1 param).
+    //   >6s  : Path C — route to trim screen with deferred analysis
+    //          so the user can mark the swing window before sampling.
+    //   ?    : duration probe failed → fall back to current auto-fire
+    //          behavior so the session never strands pending forever.
     const SHORT_CLIP_SEC = 6;
-    const isShortClip = typeof durationSec === 'number' && durationSec > 0 && durationSec <= SHORT_CLIP_SEC;
+    const hasKnownDuration = typeof durationSec === 'number' && durationSec > 0;
+    const isShortClip = hasKnownDuration && durationSec <= SHORT_CLIP_SEC;
+    const isLongClip = hasKnownDuration && durationSec > SHORT_CLIP_SEC;
     const sessionId = ingestVideoFromPick({
       uri, club, notes: notes.trim() || null, swinger: swinger.trim() || 'Me',
       tag: effectiveTag, has_audio: hasAudio, duration_sec: durationSec,
       source_device: sourceDevice,
       perspective,
-      deferAnalysis: isShortClip,
+      deferAnalysis: isShortClip || isLongClip,
     });
     // Phase V — Kevin acknowledges the upload immediately and we navigate
     // straight to the swing detail surface. Feels like submitting work to
@@ -131,8 +141,14 @@ export default function UploadSwing() {
         await speak("Got your video. Let me take a look.", voiceGender, language, apiUrl);
       })();
     }
-    const watchParam = isShortClip ? '?watch=1' : '';
-    router.replace(`/swinglab/swing/${sessionId}${watchParam}` as never);
+    // Routing: long → trim screen; short → detail with watch param;
+    // unknown duration → detail (legacy auto-fire path runs).
+    if (isLongClip) {
+      router.replace(`/swinglab/trim?session_id=${sessionId}` as never);
+    } else {
+      const watchParam = isShortClip ? '?watch=1' : '';
+      router.replace(`/swinglab/swing/${sessionId}${watchParam}` as never);
+    }
   };
 
   return (

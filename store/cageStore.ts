@@ -477,6 +477,12 @@ interface CageState {
   setSessionAnalysisStatus: (sessionId: string, status: AnalysisStatus, error?: string | null) => void;
   /** Phase R — store frame timestamps for issue temporal alignment. */
   setShotIssueTimestamps: (sessionId: string, shotId: string, timestamps_sec: number[]) => void;
+  /** 2026-05-25 — Path C: user-marked trim window for long uploaded
+   *  clips. Writes clipStartSeconds + clipEndSeconds onto the shot so
+   *  analyzeSwing's bounded-window path samples only within the user's
+   *  marked swing window instead of the whole clip. Pass null to clear
+   *  the bounds (reverts to whole-clip / tiered sampling). */
+  setShotClipBoundaries: (sessionId: string, shotId: string, startSec: number | null, endSec: number | null) => void;
   /** Phase R — delete a session from the library. */
   deleteSession: (sessionId: string) => void;
   /** Phase J — set the distance calibration for the current cage. Pass yards.
@@ -957,6 +963,22 @@ export const useCageStore = create<CageState>()(
               ...session,
               shots: session.shots.map(shot =>
                 shot.id !== shotId ? shot : { ...shot, detected_issue_timestamps_sec: timestamps_sec }
+              ),
+            }
+          ),
+        })),
+
+      setShotClipBoundaries: (sessionId, shotId, startSec, endSec) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              shots: session.shots.map(shot =>
+                shot.id !== shotId ? shot : {
+                  ...shot,
+                  clipStartSeconds: startSec ?? undefined,
+                  clipEndSeconds: endSec ?? undefined,
+                }
               ),
             }
           ),
