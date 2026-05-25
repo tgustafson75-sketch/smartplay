@@ -26,3 +26,12 @@ coverage/
 # Editor stuff.
 .vscode/
 .idea/
+
+# 2026-05-25 — Major bloat trim. Previous tarball was 752MB and EPIPE'd
+# on Google Cloud Storage twice in a row. Excluding these brings the
+# upload to ~100MB cleanly. All four are regenerated server-side by
+# `expo prebuild` or `npm install` during the build.
+node_modules/
+ios/
+android/
+.claude/
