@@ -44,6 +44,7 @@ import {
   processMetaGlassesPhoto,
   type MetaGlassesAsset,
 } from '../services/metaGlasses/importService';
+import { uploadMetaVideoForTempoAnalysis } from '../services/metaGlasses/videoAudioService';
 import { getHoleGeometry } from '../services/courseGeometryService';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSmartVision } from '../contexts/SmartVisionContext';
@@ -263,8 +264,13 @@ export default function HoleView() {
       const recent = await getLatestMetaGlassesMedia(5);
       if (cancelled) return;
       const cutoff = Date.now() - NEW_WINDOW_MS;
-      const newPhoto = recent.find((a) => a.mediaType === 'photo' && a.creationTime > cutoff);
-      setPendingMetaMedia(newPhoto ?? null);
+      // 2026-05-24 v1.2.3 — Surface photos AND videos. Type-aware
+      // analyze handler branches below: photo → vision analysis;
+      // video → upload to /api/swing-tempo for ffmpeg-extracted
+      // audio + tempo read (backend returns 501 until pipeline
+      // ships).
+      const newMedia = recent.find((a) => a.creationTime > cutoff);
+      setPendingMetaMedia(newMedia ?? null);
     };
     void check();
     const interval = setInterval(check, POLL_MS);
@@ -273,12 +279,22 @@ export default function HoleView() {
   const handleAnalyzeMetaPhoto = useCallback(async () => {
     if (!pendingMetaMedia) return;
     try {
-      const result = await processMetaGlassesPhoto(pendingMetaMedia.uri);
-      // TODO (next sprint): POST result.processedUri to Tank vision API.
-      // v1.2.1 confirmation only — flagged in the spec.
-      Alert.alert('Tank', result.tankPrompt);
+      if (pendingMetaMedia.mediaType === 'video') {
+        // 2026-05-24 v1.2.3 — Video tempo path. Upload MP4 to the
+        // backend; ffmpeg extracts the audio track and runs tempo
+        // analysis (backswing/downswing ratio + impact pair). The
+        // backend route is a 501 stub today — surfaces "not deployed
+        // yet" honestly via tank_advice.
+        const tempo = await uploadMetaVideoForTempoAnalysis(pendingMetaMedia.uri);
+        Alert.alert('Tank', tempo.tank_advice);
+      } else {
+        const result = await processMetaGlassesPhoto(pendingMetaMedia.uri);
+        // TODO (next sprint): POST result.processedUri to Tank vision API.
+        // v1.2.1 confirmation only — flagged in the spec.
+        Alert.alert('Tank', result.tankPrompt);
+      }
     } catch (e) {
-      console.log('[hole-view] meta photo analyze failed:', e);
+      console.log('[hole-view] meta analyze failed:', e);
     } finally {
       setPendingMetaMedia(null);
     }
@@ -1276,7 +1292,9 @@ export default function HoleView() {
           {pendingMetaMedia && (
             <View style={metaBannerStyles.wrap}>
               <Text style={metaBannerStyles.heading}>
-                {tMeta('labels.meta_glasses_new_photo')}
+                {pendingMetaMedia.mediaType === 'video'
+                  ? tMeta('labels.meta_glasses_new_video')
+                  : tMeta('labels.meta_glasses_new_photo')}
               </Text>
               <Image
                 source={{ uri: pendingMetaMedia.uri }}
@@ -1288,10 +1306,16 @@ export default function HoleView() {
                   style={metaBannerStyles.primaryBtn}
                   onPress={handleAnalyzeMetaPhoto}
                   accessibilityRole="button"
-                  accessibilityLabel={tMeta('labels.meta_glasses_analyze_btn')}
+                  accessibilityLabel={
+                    pendingMetaMedia.mediaType === 'video'
+                      ? tMeta('labels.meta_glasses_analyze_video_btn')
+                      : tMeta('labels.meta_glasses_analyze_btn')
+                  }
                 >
                   <Text style={metaBannerStyles.primaryBtnText}>
-                    {tMeta('labels.meta_glasses_analyze_btn')}
+                    {pendingMetaMedia.mediaType === 'video'
+                      ? tMeta('labels.meta_glasses_analyze_video_btn')
+                      : tMeta('labels.meta_glasses_analyze_btn')}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity

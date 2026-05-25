@@ -31,7 +31,9 @@
     "meta_glasses_setup": "¿Usando Ray-Ban Meta?",
     "meta_glasses_instructions": "1. En Meta View: Ajustes → Guardar en Camera Roll = ON.\n2. Permite a SmartPlay acceder a Fotos.\n3. Di \"Hey Meta, take a photo\" en el campo. Tank lo detectará automáticamente.",
     "meta_glasses_new_photo": "Nueva foto de Ray-Ban Meta detectada",
+    "meta_glasses_new_video": "Nuevo video de swing de Ray-Ban Meta detectado",
     "meta_glasses_analyze_btn": "Pídele a Tank que analice",
+    "meta_glasses_analyze_video_btn": "Pídele a Tank que analice el tempo",
     "meta_glasses_dismiss": "Descartar"
   },
   "voice": {
