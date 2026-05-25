@@ -134,22 +134,71 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
 
       <View style={styles.divider} />
 
-      {/* 2026-05-24 — GolfFix #1 structured render. When the server
-          returned a named primary_fault + cause/fix/drill, render that
-          structured card (CAUSE → FIX → DRILL). When primary_fault is
-          'inconclusive', show the honest "not enough to read yet"
-          callout instead of fabricating cause/fix/drill. Legacy /
-          putt synthesizer paths without primary_fault fall through to
-          the prior mechanical_breakdown + feel_cue layout below. */}
+      {/* 2026-05-24 — GolfFix #1 + S1.1 structured render. Branch order
+          matters:
+          - 'inconclusive' → honest "footage unreadable" callout. No
+            cause/fix/drill (server forces empty).
+          - 'no_dominant_fault' → readable swing but no dominant fault.
+            Render the structured payload (strongest area to refine /
+            genuine strength) WITHOUT alarming severity language.
+          - diagnostic fault with fix + drill → EVIDENCE → CAUSE → FIX →
+            DRILL. Evidence is the S1.1 calibration gate — surface the
+            frame-specific cue so the player sees WHY the call was made.
+          - legacy / putt fallback → original mechanical_breakdown +
+            feel_cue layout (no primary_fault present). */}
       {issue.primary_fault === 'inconclusive' ? (
         <View style={styles.inconclusiveBox}>
           <Text style={styles.sectionLabel}>NOT ENOUGH TO READ YET</Text>
           <Text style={styles.body}>
-            I couldn&apos;t pin a single dominant fault from this recording. Try a clearer angle (down-the-line from behind, or face-on from the front) so I can give you a specific fix.
+            I couldn&apos;t read this recording clearly. Try a clearer angle (down-the-line from behind, or face-on from the front) so I can give you a specific fix.
           </Text>
         </View>
+      ) : issue.primary_fault === 'no_dominant_fault' && issue.fix && issue.drill ? (
+        <>
+          <View style={styles.noDominantBox}>
+            <Text style={styles.sectionLabel}>NO DOMINANT FAULT</Text>
+            <Text style={styles.body}>
+              I read the swing — nothing dominant jumped out. Here&apos;s the strongest area to work on next.
+            </Text>
+          </View>
+
+          {issue.evidence ? (
+            <>
+              <Text style={[styles.sectionLabel, styles.evidenceLabel]}>EVIDENCE</Text>
+              <View style={styles.evidenceBox}>
+                <Text style={styles.evidenceText}>{issue.evidence}</Text>
+              </View>
+            </>
+          ) : null}
+
+          {issue.cause ? (
+            <>
+              <Text style={styles.sectionLabel}>OBSERVED</Text>
+              <Text style={styles.body}>{issue.cause}</Text>
+            </>
+          ) : null}
+
+          <Text style={[styles.sectionLabel, styles.fixLabel]}>WORK ON</Text>
+          <View style={styles.fixBox}>
+            <Text style={styles.fixText}>{issue.fix}</Text>
+          </View>
+
+          <Text style={[styles.sectionLabel, styles.drillLabel]}>DRILL</Text>
+          <View style={styles.drillBox}>
+            <Text style={styles.drillText}>{issue.drill}</Text>
+          </View>
+        </>
       ) : issue.fix && issue.drill ? (
         <>
+          {issue.evidence ? (
+            <>
+              <Text style={[styles.sectionLabel, styles.evidenceLabel]}>EVIDENCE</Text>
+              <View style={styles.evidenceBox}>
+                <Text style={styles.evidenceText}>{issue.evidence}</Text>
+              </View>
+            </>
+          ) : null}
+
           <Text style={styles.sectionLabel}>CAUSE</Text>
           <Text style={styles.body}>{issue.cause || breakdown}</Text>
 
@@ -260,6 +309,30 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 4,
   },
+  noDominantBox: {
+    backgroundColor: 'rgba(125,211,168,0.05)',
+    borderLeftWidth: 3,
+    borderLeftColor: '#7dd3a8',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 4,
+    marginBottom: 8,
+  },
+  // 2026-05-24 S1.1 — Evidence label + box. Subtle grey treatment so it
+  // reads as a citation under the fault headline, not as another
+  // actionable section. "Frame N: <cue>" — the proof the fault wasn't
+  // a default guess.
+  evidenceLabel: { color: '#9ca3af', marginTop: 8 },
+  evidenceBox: {
+    backgroundColor: 'rgba(156,163,175,0.05)',
+    borderLeftWidth: 2,
+    borderLeftColor: '#9ca3af',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 4,
+    marginBottom: 4,
+  },
+  evidenceText: { color: '#d1d5db', fontSize: 12, lineHeight: 17, fontStyle: 'italic' },
   // 2026-05-24 — Progressive-disclosure affordance for the
   // layman_explanation. Inline button beneath the headline; tapping
   // toggles the laymanBox below. No fixed heights — text wraps so

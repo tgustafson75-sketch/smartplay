@@ -68,10 +68,16 @@ export type SwingAnalysis = {
   primary_fault?:
     | 'over_the_top' | 'early_extension' | 'casting' | 'sway'
     | 'reverse_pivot' | 'chicken_wing' | 'plane_too_flat' | 'plane_too_steep'
-    | 'head_movement' | 'spine_angle_loss' | 'inconclusive';
+    | 'head_movement' | 'spine_angle_loss' | 'no_dominant_fault' | 'inconclusive';
   cause?: string;
   fix?: string;
   drill?: string;
+  // 2026-05-24 S1.1 — Frame-specific evidence: "Frame N: <visible cue>".
+  // Populated for every diagnostic primary_fault (including
+  // no_dominant_fault). Empty for inconclusive. Calibration gate
+  // against the prior default-bias where every swing got 'early
+  // extension' — a diagnostic call must now cite the frame.
+  evidence?: string;
   // 2026-05-24 — Owner-tool telemetry. The server echoes the REAL
   // counts of image + text content blocks it sent to Sonnet so the
   // in-app swing-analysis debug screen can prove the whole pipe

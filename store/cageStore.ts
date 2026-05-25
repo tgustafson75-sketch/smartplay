@@ -274,10 +274,15 @@ export interface PrimaryIssue {
   primary_fault?:
     | 'over_the_top' | 'early_extension' | 'casting' | 'sway'
     | 'reverse_pivot' | 'chicken_wing' | 'plane_too_flat' | 'plane_too_steep'
-    | 'head_movement' | 'spine_angle_loss' | 'inconclusive';
+    | 'head_movement' | 'spine_angle_loss' | 'no_dominant_fault' | 'inconclusive';
   cause?: string;
   fix?: string;
   drill?: string;
+  /** 2026-05-24 S1.1 — Frame-specific evidence: "Frame N: <visible cue>".
+   *  Populated for every diagnostic primary_fault (including
+   *  no_dominant_fault). Empty for inconclusive. Surfaced under the
+   *  fault headline on PrimaryIssueCard. */
+  evidence?: string;
 }
 
 export interface DrillRecommendation {

@@ -57,7 +57,14 @@ const PRIMARY_FAULTS = [
   'plane_too_steep',
   'head_movement',     // significant lateral / vertical head shift
   'spine_angle_loss',  // standing up / changing posture during downswing
-  'inconclusive',      // model is not confident or footage doesn't support a confident call
+  // 2026-05-24 S1.1 — "No dominant fault" is a legitimate outcome.
+  // Distinct from 'inconclusive': frames are READABLE but no single
+  // fault dominates — possibly multiple minor tendencies, possibly a
+  // clean swing with a single area to refine, possibly a genuine
+  // strength worth naming. cause/fix/drill in this branch describe
+  // the strongest area to work on OR a strength to keep building on.
+  'no_dominant_fault',
+  'inconclusive',      // unreadable footage / model can't read the frames
 ] as const;
 type PrimaryFault = typeof PRIMARY_FAULTS[number];
 
@@ -69,16 +76,25 @@ type SwingAnalysisResponse = {
   follow_up_question?: string | null;  // when frames were too poor to read
   // 2026-05-24 — GolfFix #1 structured payload. Same single Sonnet call
   // produces ALL fields. primary_fault is the headline; cause/fix/drill
-  // expand it into something actionable. When confidence is low or the
-  // read isn't clean, primary_fault MUST be 'inconclusive' (server
-  // normalises to this when confidence='low' AND no canonical issue
-  // was named, OR when the model's primary_fault doesn't pass the
-  // allowlist check). cause/fix/drill are empty strings when
-  // primary_fault is 'inconclusive'.
+  // expand it into something actionable. evidence cites the specific
+  // frame + visible cue (S1.1 — calibration against the default-bias
+  // problem where every player got 'early_extension'). When the read
+  // isn't clean, primary_fault is 'inconclusive' (footage unreadable)
+  // or 'no_dominant_fault' (frames readable but nothing dominates);
+  // cause/fix/drill stay populated for no_dominant_fault (describe
+  // strongest area to refine OR a genuine strength), empty for
+  // inconclusive.
   primary_fault?: PrimaryFault;
   cause?: string;
   fix?: string;
   drill?: string;
+  // 2026-05-24 S1.1 — Frame-specific evidence string. "Frame N: <what
+  // is visible that supports the fault call>". Empty for inconclusive;
+  // populated for every diagnostic primary_fault including
+  // no_dominant_fault (the latter cites the strongest tendency observed
+  // even when it doesn't rise to a dominant fault). Surfaced under the
+  // fault headline so the player can see WHY the call was made.
+  evidence?: string;
   // Phase 403b — 0-based index into the submitted frames identifying the
   // most diagnostic frame for the detected issue. Used downstream to
   // persist that exact frame as a JPEG so the review UI can show the
@@ -215,12 +231,33 @@ Confidence scale (pick honestly — low-confidence is fine and useful):
 - medium: pattern visible but partially obscured, or visible in only one frame
 - low: tendency is suggested but evidence is thin (still name it; explain in observation)
 
-PRIMARY FAULT — structured GolfFix-style output (CRITICAL).
-In addition to detected_issue (canonical, kept for the existing classifier pipeline), pick ONE primary_fault from this FIXED list of faults that are genuinely visible in 2D phone video. Do NOT pick anything not on this list. Do NOT invent variants.
+PRIMARY FAULT — structured GolfFix-style output, EVIDENCE-GATED (CRITICAL — S1.1 calibration pass).
 
-Allowed primary_fault values:
+Before naming any primary_fault, you MUST follow this procedure. Faults named without following it are a false read.
+
+STEP 1 — PHASE-BY-PHASE OBSERVATION (do this in your reasoning before the JSON).
+For the frames you can see, describe what is OBSERVABLE at each phase. Skip a phase if it isn't captured. Be concrete — what's visible, not what you'd expect:
+- Address: posture / weight distribution / grip if visible
+- Backswing or top of swing: shoulder turn, hip turn, weight shift, shaft position
+- Transition / downswing start: where does the club move FIRST — out, under, or steep?
+- Impact: spine angle vs. address (maintained? lost? extended?), hip position relative to address, lead-arm extension, head position
+- Follow-through / finish: balance, weight transfer, finish position
+This phase pass is your evidence base. The fault you name must be supported by what you observed — NOT by prior expectation of what's common.
+
+STEP 2 — DIFFERENTIAL.
+From the phase observation, identify the TOP 2 faults from the allowlist below that the observed evidence could support. Note WHICH frame each candidate would be visible in. Then pick the one with the STRONGEST frame-specific evidence — the candidate where you can point at a specific frame and say "you can see X happening here."
+
+STEP 3 — EVIDENCE-GATED SELECTION.
+A fault name is EARNED, not defaulted. Every fault — including early_extension — requires concrete, named, frame-specific evidence:
+- early_extension requires visible spine-angle loss (player is more upright at impact than at address) OR visible hip thrust toward the ball at impact. NOT a default. If you cannot point to spine-angle loss or hip thrust in a specific frame, do NOT name early_extension.
+- over_the_top requires the club traveling OUT and OVER on transition — visible in a frame between top and downswing.
+- casting requires the lead wrist hinge releasing early — wrist angle in transition frame vs. impact frame.
+- (Same evidence bar for every other entry below.)
+If no fault has clean frame-specific evidence, return primary_fault = "no_dominant_fault" — see STEP 5.
+
+STEP 4 — ALLOWED PRIMARY_FAULT VALUES.
 - over_the_top: the club moves OUT and OVER the swing plane on transition from the top
-- early_extension: hips/spine push toward the ball during the downswing (loss of posture at impact)
+- early_extension: hips/spine push toward the ball during the downswing (loss of posture at impact) — EVIDENCE REQUIRED, not default
 - casting: lead wrist hinge releases early in the downswing (loss of lag)
 - sway: lateral hip slide AWAY from the target during the backswing (vs. centered rotation)
 - reverse_pivot: weight stays on lead foot at top, shifts to trail foot through impact
@@ -229,14 +266,19 @@ Allowed primary_fault values:
 - plane_too_steep: shaft tracks well above the ideal plane through transition and downswing
 - head_movement: notable lateral or vertical head shift across the sequence
 - spine_angle_loss: posture / spine angle straightens during the downswing
-- inconclusive: footage is unclear OR confidence is low OR no single fault dominates. Use this — never guess.
+- no_dominant_fault: frames are READABLE, but NO single fault has strong frame-specific evidence. Use this when you saw the swing but nothing dominates — possibly a clean swing with one area to refine, possibly multiple minor tendencies none dominant, possibly a genuine strength worth naming. NOT a cop-out — a legitimate outcome.
+- inconclusive: footage genuinely cannot be read (validity_reason already triggered, frames blur/dark/cropped, no person visible at the critical phases).
 
-Then for that primary_fault, return THREE structured fields the player can act on:
-- cause: ONE sentence — WHY this player is doing this fault based on what you see in the frames (e.g. "Your weight is hanging back through impact, so you're flipping the wrists to make contact"). Specific to THIS swing, not a textbook definition.
-- fix: ONE concrete swing-cue change. Imperative. Specific. Avoid jargon ("Feel like your trail hip clears toward the target before your hands release" — NOT "improve your kinematic sequence").
-- drill: ONE specific drill the player can do at the range or in front of a mirror to groove the fix (e.g. "Step-through drill: address the ball, then take a small step toward the target with your lead foot as you start the downswing — feel the weight shift before you swing").
+STEP 5 — STRUCTURED OUTPUT.
+For diagnostic primary_fault values (anything other than 'inconclusive'):
+- cause: ONE sentence — WHY this player is doing this fault based on what you see. Specific to THIS swing, not a textbook definition. For no_dominant_fault, cause names the strongest tendency observed OR a genuine strength to keep building on.
+- fix: ONE concrete swing-cue change. Imperative. Specific. Avoid jargon. For no_dominant_fault, fix names the strongest area to work on next.
+- drill: ONE specific drill the player can do at the range or mirror to groove the fix. For no_dominant_fault, drill names a maintenance / consistency drill OR a drill targeting the named tendency.
+- evidence: REQUIRED — string in the format "Frame N: <what's visible>" citing the specific frame and the visible cue that earned the call. E.g. "Frame 3: spine angle is noticeably more upright than at frame 0; hips have moved toward the ball." For no_dominant_fault, evidence cites the strongest tendency observed even though it didn't rise to a dominant fault.
 
-When primary_fault is 'inconclusive': cause/fix/drill MUST be empty strings "". Do NOT fabricate generic advice. The honest read is "I'm not sure yet — record a clearer angle / another swing and I'll have more to say." That message goes in observation, NOT in fix/drill.
+When primary_fault is 'inconclusive': cause/fix/drill/evidence MUST be empty strings "". The honest read is "I'm not sure yet — record a clearer angle / another swing and I'll have more to say." That message goes in observation, NOT in fix/drill.
+
+EXPLICIT ANTI-DEFAULT GUARDRAIL: early_extension is the most common fault in golf instruction content and tempting as a safe pick. Do NOT name it without explicit evidence of spine-angle loss OR hip thrust toward the ball in a SPECIFIC FRAME. If the only visible evidence is "swing looks like an amateur swing," return no_dominant_fault. The player gets more value from "no dominant fault, work on tempo" than from a fabricated early_extension call.
 
 Output ONLY a JSON object:
 {
@@ -249,10 +291,11 @@ Output ONLY a JSON object:
   "fault_frame_index": <0-based integer index into the submitted frames identifying the single most diagnostic frame for the detected issue, or -1 if no specific frame stood out>,
   "follow_up_question": "<short retake suggestion ONLY when frames are genuinely unreadable; else null>",
   "layman_explanation": "<plain-language translation of the detected_issue per the EXPLAIN rules below — see quality bar. Empty string '' when detected_issue is 'none'.>",
-  "primary_fault": "<one of the PRIMARY_FAULTS values above, OR 'inconclusive' when confidence is low or no single fault dominates>",
-  "cause": "<one sentence: WHY this player is doing this fault, specific to the frames. Empty string '' when primary_fault is 'inconclusive'.>",
-  "fix": "<one concrete imperative swing cue. Empty string '' when primary_fault is 'inconclusive'.>",
-  "drill": "<one specific actionable drill. Empty string '' when primary_fault is 'inconclusive'.>"
+  "primary_fault": "<one of the PRIMARY_FAULTS values; use 'no_dominant_fault' for readable-but-no-dominant; use 'inconclusive' only when footage is genuinely unreadable>",
+  "cause": "<one sentence specific to THIS swing. For no_dominant_fault: strongest tendency observed or a genuine strength. Empty string '' only when primary_fault is 'inconclusive'.>",
+  "fix": "<one concrete imperative swing cue. For no_dominant_fault: strongest area to work on next. Empty string '' only when primary_fault is 'inconclusive'.>",
+  "drill": "<one specific actionable drill. For no_dominant_fault: maintenance/consistency drill or one targeting the named tendency. Empty string '' only when primary_fault is 'inconclusive'.>",
+  "evidence": "<string in the format 'Frame N: <what is visible that earned the call>'. REQUIRED for every diagnostic primary_fault including no_dominant_fault. Empty string '' only when primary_fault is 'inconclusive'.>"
 }
 
 EXPLAIN — layman_explanation quality bar (CRITICAL).
@@ -508,13 +551,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       parsed.layman_explanation = '';
     }
 
-    // 2026-05-24 — GolfFix #1 normalisation. primary_fault must be in the
-    // PRIMARY_FAULTS allowlist; anything else collapses to 'inconclusive'.
-    // cause/fix/drill must be non-empty strings when primary_fault is
-    // diagnostic; force empty when primary_fault is 'inconclusive' OR
-    // the swing is invalid OR confidence is 'low' AND the model didn't
-    // commit to a specific fault. Never let the API return invented
-    // cause/fix/drill when the structured fault didn't pass.
+    // 2026-05-24 — GolfFix #1 + S1.1 normalisation. primary_fault must be
+    // in the PRIMARY_FAULTS allowlist; anything else → 'inconclusive'.
+    // cause/fix/drill/evidence must be non-empty strings for any
+    // diagnostic primary_fault (including no_dominant_fault); force
+    // empty for inconclusive. valid_swing=false → inconclusive
+    // unconditionally. The evidence field is the S1.1 calibration gate
+    // — diagnostic faults must cite a frame-specific cue or the read
+    // collapses to no_dominant_fault (not inconclusive — the frames
+    // were readable, the model just didn't pin a dominant pattern).
     if (typeof parsed.primary_fault !== 'string' || !PRIMARY_FAULTS.includes(parsed.primary_fault as PrimaryFault)) {
       parsed.primary_fault = 'inconclusive';
     }
@@ -526,20 +571,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     parsed.cause = coerceStr(parsed.cause);
     parsed.fix = coerceStr(parsed.fix);
     parsed.drill = coerceStr(parsed.drill);
+    parsed.evidence = coerceStr(parsed.evidence);
     if (parsed.primary_fault === 'inconclusive') {
       parsed.cause = '';
       parsed.fix = '';
       parsed.drill = '';
+      parsed.evidence = '';
     }
-    // Defensive: if model returned a diagnostic primary_fault but left
-    // any of cause/fix/drill blank, collapse to inconclusive rather than
-    // ship a partial card. Honest > partial.
-    if (parsed.primary_fault !== 'inconclusive' &&
+    // Defensive: if model named a diagnostic fault (including
+    // no_dominant_fault) but didn't cite evidence OR didn't fill
+    // cause/fix/drill, downgrade to no_dominant_fault (frames were
+    // readable but the structured payload is incomplete) — preserves
+    // honesty without collapsing all the way to inconclusive. If
+    // cause/fix/drill are also missing, collapse to inconclusive.
+    if (parsed.primary_fault !== 'inconclusive' && parsed.primary_fault !== 'no_dominant_fault') {
+      const missingEvidence = parsed.evidence.length === 0;
+      const missingPayload = parsed.cause.length === 0 || parsed.fix.length === 0 || parsed.drill.length === 0;
+      if (missingEvidence && missingPayload) {
+        parsed.primary_fault = 'inconclusive';
+        parsed.cause = '';
+        parsed.fix = '';
+        parsed.drill = '';
+        parsed.evidence = '';
+      } else if (missingEvidence || missingPayload) {
+        // Demote to no_dominant_fault but keep whatever the model did
+        // produce so the card still surfaces useful information.
+        parsed.primary_fault = 'no_dominant_fault';
+      }
+    }
+    // no_dominant_fault still needs cause/fix/drill — if missing,
+    // collapse to inconclusive (a no-dominant call with no actionable
+    // payload is just inconclusive in disguise).
+    if (parsed.primary_fault === 'no_dominant_fault' &&
         (parsed.cause.length === 0 || parsed.fix.length === 0 || parsed.drill.length === 0)) {
       parsed.primary_fault = 'inconclusive';
       parsed.cause = '';
       parsed.fix = '';
       parsed.drill = '';
+      parsed.evidence = '';
     }
 
     // 2026-05-24 — Owner-tool telemetry echo. The server returns the
