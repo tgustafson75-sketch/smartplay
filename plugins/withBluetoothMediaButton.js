@@ -66,18 +66,38 @@ function withAndroidSourceCopyAndInjection(config) {
   // matching Expo SDK 54+ `.apply { ... }` template. Wrapped in
   // try/catch so a class-load failure logs and continues.
   return withMainApplication(next, (mainAppConfig) => {
-    let contents = mainAppConfig.modResults.contents;
-    const marker = 'BluetoothMediaButtonPackage()';
-    if (contents.includes(marker)) return mainAppConfig;
+    // 2026-05-25 — Hardened against SDK-54 / mod-pipeline surprises.
+    // The earlier version called .includes() / .replace() on
+    // mainAppConfig.modResults.contents WITHOUT checking the shape —
+    // when the mod runner passed a different object or contents was
+    // not a string, prebuild threw and killed the entire APK build at
+    // the 48-second mark (failure in expo prebuild). Wrap the whole
+    // injection body in try/catch so any failure logs + returns the
+    // unmodified config. The BT package will simply not be wired up
+    // at runtime (NativeModules.BluetoothMediaButton stays null and
+    // services/voiceTriggers.ts gracefully no-ops), but the APK
+    // builds and ships.
+    try {
+      const contents = mainAppConfig?.modResults?.contents;
+      if (typeof contents !== 'string' || contents.length === 0) {
+        console.warn(
+          '[withBluetoothMediaButton] WARNING: MainApplication contents not a string (got ' +
+          typeof contents + ') — skipping package injection. BT module will be null at runtime.',
+        );
+        return mainAppConfig;
+      }
+      const marker = 'BluetoothMediaButtonPackage()';
+      if (contents.includes(marker)) return mainAppConfig;
 
-    const applyRegex = /(PackageList\(this\)\.packages\.apply\s*\{)/;
-    const valLineRegex = /(val\s+packages\s*=\s*PackageList\(this\)\.packages)/;
+      const applyRegex = /(PackageList\(this\)\.packages\.apply\s*\{)/;
+      const valLineRegex = /(val\s+packages\s*=\s*PackageList\(this\)\.packages)/;
 
-    if (applyRegex.test(contents)) {
-      contents = contents.replace(
-        applyRegex,
-        (match) =>
-          `${match}
+      let updated = null;
+      if (applyRegex.test(contents)) {
+        updated = contents.replace(
+          applyRegex,
+          (match) =>
+            `${match}
               // Auto-injected by withBluetoothMediaButton.js — try/catch
               // so a class-load failure never crashes MainApplication.
               try {
@@ -85,30 +105,39 @@ function withAndroidSourceCopyAndInjection(config) {
               } catch (t: Throwable) {
                 android.util.Log.e("MainApplication", "BluetoothMediaButtonPackage failed to load — continuing without it", t)
               }`,
-      );
-      mainAppConfig.modResults.contents = contents;
-      console.log('[withBluetoothMediaButton] injected package into MainApplication.kt (apply-block)');
-    } else if (valLineRegex.test(contents)) {
-      contents = contents.replace(
-        valLineRegex,
-        (match) =>
-          `${match}
+        );
+        console.log('[withBluetoothMediaButton] injected package into MainApplication.kt (apply-block)');
+      } else if (valLineRegex.test(contents)) {
+        updated = contents.replace(
+          valLineRegex,
+          (match) =>
+            `${match}
             // Auto-injected by withBluetoothMediaButton.js — try/catch
             try {
               packages.add(com.smartplaycaddie.btmedia.BluetoothMediaButtonPackage())
             } catch (t: Throwable) {
               android.util.Log.e("MainApplication", "BluetoothMediaButtonPackage failed to load — continuing without it", t)
             }`,
-      );
-      mainAppConfig.modResults.contents = contents;
-      console.log('[withBluetoothMediaButton] injected package into MainApplication.kt (val template)');
-    } else {
+        );
+        console.log('[withBluetoothMediaButton] injected package into MainApplication.kt (val template)');
+      } else {
+        console.warn(
+          '[withBluetoothMediaButton] WARNING: MainApplication.kt template did not match either known shape. ' +
+          'NativeModules.BluetoothMediaButton will be null at runtime.',
+        );
+      }
+      if (updated != null) {
+        mainAppConfig.modResults.contents = updated;
+      }
+      return mainAppConfig;
+    } catch (e) {
       console.warn(
-        '[withBluetoothMediaButton] WARNING: MainApplication.kt template did not match either known shape. ' +
-        'NativeModules.BluetoothMediaButton will be null at runtime.',
+        '[withBluetoothMediaButton] ERROR during MainApplication injection: ' +
+        (e && e.message ? e.message : String(e)) +
+        ' — skipping. BT module will be null at runtime, APK build continues.',
       );
+      return mainAppConfig;
     }
-    return mainAppConfig;
   });
 }
 
