@@ -350,6 +350,15 @@ export async function analyzeSwing(
       first_name?: string | null;
     };
     swing_tag?: string | null;
+    // 2026-05-24 — Reanalyze "look for something else" signal. When
+    // the user taps the swing-detail Reanalyze button on a session
+    // that already has a primary_issue, runPhaseKOnSession captures
+    // the prior fault and threads it through here. The server prompt
+    // adds a directive: confirm the prior fault honestly if the
+    // evidence is still there, but ACTIVELY consider non-matching
+    // faults this pass so a recurring call doesn't become a default.
+    // First-analysis path passes null/omits this field → no change.
+    prior_analyzed_fault?: string | null;
     // 2026-05-21 — Fix B: camera angle the player chose BEFORE
     // recording. Routed into the analyst's system prompt so
     // down-the-line vs face-on reads use the correct orientation

@@ -357,6 +357,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (ctx.prior_issues && Array.isArray(ctx.prior_issues) && ctx.prior_issues.length > 0) {
       ctxLines.push(`Prior swings showed: ${(ctx.prior_issues as string[]).join(', ')}`);
     }
+    // 2026-05-24 — Reanalyze "look for something else" directive. Set
+    // by services/videoUpload.ts when the user re-fires analysis on a
+    // clip that already produced a primary_fault. Confirm the prior
+    // call honestly if the evidence is still there, but actively
+    // consider non-matching faults this pass — a recurring call should
+    // not become a default if the evidence is thin or the picture has
+    // more than one story to tell.
+    if (typeof ctx.prior_analyzed_fault === 'string' && ctx.prior_analyzed_fault.length > 0) {
+      ctxLines.push(
+        `REANALYZE PASS — The user re-fired analysis on this same clip. The prior call was: ${ctx.prior_analyzed_fault}. ` +
+        `Confirm it ONLY if the frame-specific evidence is still clearly present this pass. Otherwise actively consider non-${ctx.prior_analyzed_fault} candidates from the allowlist — the player asked for a fresh read, so prioritize broadening the picture over repeating the prior name. Never name ${ctx.prior_analyzed_fault} again without clean evidence.`,
+      );
+    }
     if (typeof ctx.caddie_name === 'string' && ctx.caddie_name.trim().length > 0) {
       ctxLines.push(`Caddie voice: ${ctx.caddie_name.trim()}`);
     }

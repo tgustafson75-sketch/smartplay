@@ -329,6 +329,20 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       // analysis prompt. Tag is set in the upload UI per Tim's Putt/Chip
       // tag chips (PuttWatch v1) shipped earlier.
       const swingTag = session.upload?.tag ?? null;
+      // 2026-05-24 — Reanalyze "look for something else" signal.
+      // When this session ALREADY has a primary_issue.primary_fault
+      // at analyzer entry, it means the user re-fired the analysis on
+      // the same clip (the swing-detail Reanalyze button reuses
+      // runPhaseKOnSession without clearing primary_issue first). Pass
+      // the prior named fault so the server prompt can confirm-or-
+      // diversify instead of converging on the same default a second
+      // time. First-analysis path has no prior fault → field omitted →
+      // no prompt change. Captured outside the per-swing loop so all
+      // shots in a multi-swing reanalyze get the same context.
+      const priorAnalyzedFault: string | null =
+        (session.primary_issue && typeof session.primary_issue.primary_fault === 'string')
+          ? session.primary_issue.primary_fault
+          : null;
       const r = await analyzeSwing(swing.clipUri, {
         club: swing.club,
         swing_number: i + 1,
@@ -336,6 +350,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         caddie_name: caddieName,
         player_context: playerContext,
         swing_tag: swingTag,
+        prior_analyzed_fault: priorAnalyzedFault,
       }, boundaries, {
         faultFrameBaseName: `${sessionId}_${swing.id}_fault`,
       });
