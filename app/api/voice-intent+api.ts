@@ -40,6 +40,7 @@ Available intents:
    - "open Coach Mode" / "coach mode" / "start coaching" / "let's coach" / "watch my student" -> { tool_name: "coach_mode" }
    - "I'm coaching Emma" / "coach Mike" / "let's coach Sarah" / "I'm gonna coach Jenny" -> { tool_name: "coach_mode", player_name: "Emma" } (extract the first name verbatim into player_name; preserves capitalization as spoken)
    - "start cage session" / "start practice" / "open cage mode" / "cage mode" / "let's practice" / "I'm at the range" -> { tool_name: "cage_mode" }
+   - "open library" / "open swing library" / "swing library" / "show me my swings" / "open my swings" / "show my swing library" / "let me see my swings" -> { tool_name: "library" }
 
 2. query_status — User wants information about current state.
    parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare" | "distance_to_green" | "what_did_meta_say", member_name?: string, notes?: string, lie_hint?: string, target_yards?: number, against?: "self_previous" | "tour_median" | "amateur_good" }

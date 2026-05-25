@@ -71,6 +71,13 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // catches the no-space variant the classifier sometimes emits.
   cage_mode: { type: 'navigate', path: '/swinglab/cage-mode' },
   cagemode: { type: 'navigate', path: '/swinglab/cage-mode' },
+  // 2026-05-25 — Swing Library voice route. "Open library", "swing
+  // library", "show me my swings" all land on the library list inside
+  // SwingLab. Distinct from "open SwingLab" (which lands on the hub);
+  // library is the direct list of past swings.
+  library: { type: 'navigate', path: '/swinglab/library' },
+  swing_library: { type: 'navigate', path: '/swinglab/library' },
+  swinglibrary: { type: 'navigate', path: '/swinglab/library' },
 };
 
 const TOOL_LABEL: Record<string, string> = {
@@ -100,6 +107,9 @@ const TOOL_LABEL: Record<string, string> = {
   coachmode: 'Coach Mode',
   cage_mode: 'Cage Mode',
   cagemode: 'Cage Mode',
+  library: 'Swing Library',
+  swing_library: 'Swing Library',
+  swinglibrary: 'Swing Library',
 };
 
 export const openToolHandler: IntentHandler = {

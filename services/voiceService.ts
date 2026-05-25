@@ -582,6 +582,31 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
   }
 });
 
+// ─── TTS HETERONYM PREPROCESS ─────────────
+// 2026-05-25 — ElevenLabs reads "record" as the NOUN (RE-cord, like a
+// vinyl record) instead of the verb (re-CORD), which is wrong in
+// nearly every caddie context ("record a swing", "record your shot").
+// Substitute the verb form to "capture" before TTS — same meaning,
+// unambiguous pronunciation. Only triggers on English (other locales
+// have their own verb form). Word-boundary regex avoids hitting
+// "records" / "recorded" / "recording" — those are typically
+// pronounced correctly because the -ed/-ing/-s endings cue the verb
+// form for the TTS model. If we ever hit a heteronym beyond "record",
+// add it to HETERONYM_FIXES.
+const HETERONYM_FIXES: ReadonlyArray<[RegExp, string]> = [
+  // record (verb) → capture. \b word-boundary, case-insensitive,
+  // skip the inflected forms.
+  [/\brecord\b(?!ed|ing|s)/gi, 'capture'],
+  [/\bRecord\b(?!ed|ing|s)/g, 'Capture'],
+];
+
+function preprocessTtsText(text: string, language: 'en' | 'es' | 'zh'): string {
+  if (language !== 'en') return text;
+  let out = text;
+  for (const [re, sub] of HETERONYM_FIXES) out = out.replace(re, sub);
+  return out;
+}
+
 // ─── SPEAK ────────────────────────────────
 
 export const speak = async (
@@ -642,7 +667,7 @@ export const speak = async (
     const response = await fetch(apiUrl + '/api/voice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, gender, language, persona, model_id: ttsModel }),
+      body: JSON.stringify({ text: preprocessTtsText(text, language), gender, language, persona, model_id: ttsModel }),
       signal: abortController.signal,
     }).finally(() => clearTimeout(voiceTimeout));
 
