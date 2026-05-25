@@ -22,6 +22,51 @@ import React, { useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
+
+// 2026-05-25 — Per-row crash boundary. Without this, ONE bad scenario
+// (e.g. a non-string in detail / oversized error / weird unicode) takes
+// down the entire harness screen via the React render path — which Tim
+// hit as "tap to view report → app crashes." Boundary catches the throw
+// and renders an honest "render error" tile so the rest of the list
+// stays usable. Local to harness.tsx so the rest of the app stays
+// unaware. No nav-side-effects.
+class HarnessRowBoundary extends React.Component<
+  { children: React.ReactNode; scenarioId: string },
+  { error: string | null }
+> {
+  constructor(props: { children: React.ReactNode; scenarioId: string }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(err: Error): { error: string } {
+    return { error: err.message ? String(err.message).slice(0, 200) : 'unknown' };
+  }
+  componentDidCatch(error: Error): void {
+    console.log(`[harness ${this.props.scenarioId}] render boundary caught:`, error);
+  }
+  render(): React.ReactNode {
+    if (this.state.error) {
+      return (
+        <View style={{ padding: 12, backgroundColor: '#2a0d0d', borderRadius: 6, marginTop: 6 }}>
+          <Text style={{ color: '#ef4444', fontWeight: '700', fontSize: 12 }}>
+            Render error — see logs
+          </Text>
+          <Text style={{ color: '#fca5a5', fontSize: 11, marginTop: 4 }}>
+            {this.state.error}
+          </Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+/** Coerce arbitrary value to a bounded string for safe <Text> render. */
+function safeText(v: unknown, maxLen = 500): string {
+  if (v == null) return '';
+  const s = typeof v === 'string' ? v : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+  return s.length > maxLen ? s.slice(0, maxLen) + '…' : s;
+}
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
@@ -256,25 +301,36 @@ function Row({ scenario, state, onRun }: { scenario: Scenario; state: RowState; 
       </TouchableOpacity>
 
       {state.kind === 'done' && (expanded || status === 'fail') && (
-        <View style={styles.detail}>
-          {errored && (
-            <Text style={styles.errorText}>THROW · {errored}</Text>
-          )}
-          {state.report.checks.map((c, i) => (
-            <View key={i} style={styles.checkRow}>
-              <Text style={[styles.checkStatus, { color: STATUS_COLOR[c.status] }]}>
-                {c.status === 'pass' ? '✓' : c.status === 'fail' ? '✗' : '·'}
-              </Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.checkLabel}>{c.label}</Text>
-                {c.detail && <Text style={styles.checkDetail}>↳ {c.detail}</Text>}
-              </View>
-            </View>
-          ))}
-          {failedChecks.length === 0 && state.report.checks.length === 0 && !errored && (
-            <Text style={styles.checkDetail}>No asserts ran.</Text>
-          )}
-        </View>
+        <HarnessRowBoundary scenarioId={scenario.id}>
+          <View style={styles.detail}>
+            {errored && (
+              <Text style={styles.errorText}>THROW · {safeText(errored, 1000)}</Text>
+            )}
+            {state.report.checks.map((c, i) => {
+              // Defensive: cast c.status to known shape; if a scenario
+              // pushed a weird value, render as skip-dot instead of
+              // letting the STATUS_COLOR lookup return undefined and
+              // crash the Text color prop on Android.
+              const statusKey: 'pass' | 'fail' | 'skip' =
+                c.status === 'pass' || c.status === 'fail' || c.status === 'skip' ? c.status : 'skip';
+              const glyph = statusKey === 'pass' ? '✓' : statusKey === 'fail' ? '✗' : '·';
+              return (
+                <View key={i} style={styles.checkRow}>
+                  <Text style={[styles.checkStatus, { color: STATUS_COLOR[statusKey] }]}>
+                    {glyph}
+                  </Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.checkLabel}>{safeText(c.label, 300)}</Text>
+                    {c.detail ? <Text style={styles.checkDetail}>↳ {safeText(c.detail, 500)}</Text> : null}
+                  </View>
+                </View>
+              );
+            })}
+            {failedChecks.length === 0 && state.report.checks.length === 0 && !errored && (
+              <Text style={styles.checkDetail}>No asserts ran.</Text>
+            )}
+          </View>
+        </HarnessRowBoundary>
       )}
     </View>
   );
