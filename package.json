@@ -10,7 +10,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "build": "expo export --platform web",
-    "vercel-build": "rm -rf dist && expo export --platform web",
+    "vercel-build": "test -d dist/server || expo export --platform web",
     "generate:greetings": "node scripts/generate-kevin-greetings.mjs",
     "sim": "tsx scripts/simulations/run-sim.ts",
     "sim:round": "tsx scripts/simulations/synthetic-round.ts",
