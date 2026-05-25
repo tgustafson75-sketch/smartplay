@@ -219,6 +219,27 @@ export async function extractKeyFrames(
     // whole-clip duration probe and sample within [startSec, endSec].
     let windowStartMs: number;
     let windowDurationMs: number;
+    // 2026-05-24 — Tiered sampling by clip length. The default
+    // FRAME_TIME_FRACTIONS = [0.08, 0.40, 0.60, 0.75, 0.88] are
+    // impact-clustered and work for in-app captures (≤4s, swing fills
+    // the clip). Library-uploaded videos vary:
+    //   - 4-10s   : brief preroll then swing — back-window of last 5s
+    //               catches it.
+    //   - 10s+    : instructor demo + the student's swing somewhere in
+    //               the middle or end. Back-window misses mid-clip
+    //               swings entirely. Spread 5 frames evenly across the
+    //               whole clip with a slight back-half tilt; the
+    //               TEMPORAL ANALYSIS prompt block in
+    //               api/swing-analysis.ts already handles "frame N is
+    //               the swing, others are setup/talking" so wide
+    //               spread + the prompt finds the swing wherever it
+    //               lives. Local `frameFractions` so we never mutate
+    //               the module-level const.
+    const LONG_CLIP_THRESHOLD_MS = 10_000;
+    const MEDIUM_CLIP_THRESHOLD_MS = 4_000;
+    const MEDIUM_CLIP_BACK_WINDOW_MS = 5_000;
+    const LONG_CLIP_FRACTIONS = [0.20, 0.40, 0.60, 0.78, 0.92];
+    let frameFractions: readonly number[] = FRAME_TIME_FRACTIONS;
     if (boundaries) {
       windowStartMs = Math.round(boundaries.startSec * 1000);
       windowDurationMs = Math.round((boundaries.endSec - boundaries.startSec) * 1000);
@@ -226,43 +247,39 @@ export async function extractKeyFrames(
         start_sec: boundaries.startSec,
         end_sec: boundaries.endSec,
         window_ms: windowDurationMs,
-        target_fractions: FRAME_TIME_FRACTIONS,
+        target_fractions: frameFractions,
       });
     } else {
       const durationMs = await probeDurationMs(clipUri);
-      // 2026-05-24 — Long-clip sampling guard. In-app captures (quick
-      // record / cage / smartmotion) are typically ≤4s and the swing
-      // fills the whole clip, so sampling at fractions of the full
-      // duration lands the impact frame correctly. Library-uploaded
-      // videos (e.g. an instructor narrates for 8s then the player
-      // swings in the last 2s) defeat that assumption — the fixed
-      // fractions land 3-4 frames in the talking preroll and Claude
-      // reads the clip as "setup." For clips longer than the typical
-      // capture, bound the sampling window to the last LONG_CLIP_WINDOW_MS
-      // so frames cluster around where the swing actually is.
-      const LONG_CLIP_THRESHOLD_MS = 4_000;
-      const LONG_CLIP_WINDOW_MS = 3_500;
       if (durationMs > LONG_CLIP_THRESHOLD_MS) {
-        windowStartMs = Math.max(0, durationMs - LONG_CLIP_WINDOW_MS);
+        windowStartMs = 0;
+        windowDurationMs = durationMs;
+        frameFractions = LONG_CLIP_FRACTIONS;
+        V6('STAGE 2 — extractKeyFrames long-clip wide-spread', {
+          duration_ms: durationMs,
+          target_fractions: frameFractions,
+        });
+      } else if (durationMs > MEDIUM_CLIP_THRESHOLD_MS) {
+        windowStartMs = Math.max(0, durationMs - MEDIUM_CLIP_BACK_WINDOW_MS);
         windowDurationMs = durationMs - windowStartMs;
-        V6('STAGE 2 — extractKeyFrames long-clip back-window', {
+        V6('STAGE 2 — extractKeyFrames medium-clip back-window', {
           duration_ms: durationMs,
           window_start_ms: windowStartMs,
           window_ms: windowDurationMs,
-          target_fractions: FRAME_TIME_FRACTIONS,
+          target_fractions: frameFractions,
         });
       } else {
         windowStartMs = 0;
         windowDurationMs = durationMs;
         V6('STAGE 2 — extractKeyFrames whole-clip', {
           duration_ms: durationMs,
-          target_fractions: FRAME_TIME_FRACTIONS,
+          target_fractions: frameFractions,
         });
       }
     }
     const perFrameOutcomes: Array<{ idx: number; t_ms: number; ok: boolean; raw_uri_tail?: string; raw_size?: number; b64_kb?: number; error?: string }> = [];
     const frames = await Promise.all(
-      FRAME_TIME_FRACTIONS.map(async (t, i) => {
+      frameFractions.map(async (t, i) => {
         const timeMs = windowStartMs + Math.round(windowDurationMs * t);
         try {
           const r = await VT.getThumbnailAsync(clipUri, { time: timeMs, quality: 0.8 });
@@ -295,7 +312,7 @@ export async function extractKeyFrames(
     const valid = frames.filter((f): f is Frame => f !== null);
     V6('STAGE 2 — extractKeyFrames done', {
       successful: valid.length,
-      attempted: FRAME_TIME_FRACTIONS.length,
+      attempted: frameFractions.length,
       bounded: boundaries != null,
       per_frame: perFrameOutcomes,
     });
