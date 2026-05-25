@@ -85,7 +85,14 @@ export default function CustomCaddieScreen() {
         [{ resize: { width: 1024, height: 1024 } }],
         { compress: 0.9, format: ImageManipulator.SaveFormat.PNG },
       );
-      const b64 = await FileSystem.readAsStringAsync(manip.uri, { encoding: 'base64' });
+      // 2026-05-24 — SDK 54 moved readAsStringAsync to the legacy module.
+      // The top-level 'expo-file-system' import no longer exposes it,
+      // which was landing as "undefined is not a function" in the catch
+      // below and surfacing as "Capture failed" to the user. Other files
+      // in the codebase (glassesVisionInput, metaGlassesIngest) use the
+      // same dynamic legacy import pattern.
+      const FS = await import('expo-file-system/legacy');
+      const b64 = await FS.readAsStringAsync(manip.uri, { encoding: FS.EncodingType.Base64 });
       setSelfieB64(b64);
     } catch (e) {
       console.log('[customCaddie] capture error', e);
