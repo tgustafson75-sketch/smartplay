@@ -104,6 +104,15 @@ export default function GreetingScreen() {
   // with the transform scale below, this gives Kevin's face more
   // pixel area AND crops more of the D-ID side watermarks.
   const avatarSize = Math.min(W, H) * 0.55;
+  // 2026-05-25 (fold-open fix) — Static-portrait avatar uses min-edge
+  // sizing (circle works on any aspect). The KEVIN VIDEO needs to be
+  // sized off SCREEN HEIGHT — on Z Fold open (~2200×1768 landscape)
+  // min(W,H)=H so 0.55×H gave a tiny strip floating in the middle of a
+  // huge canvas. Sizing video off H directly + capping width at 90% of
+  // W keeps it fold-safe AND fills the screen on phone-closed.
+  // Reserve ~200px for the caption region below.
+  const videoHeight = Math.min((H - 200) * 0.95, W * 1.7);
+  const videoWidth = videoHeight * 0.50;
   // Where the avatar lives at rest (centered) and where it travels to (top-left badge).
   // Final-position math removed with the slide-to-badge transition.
 
@@ -336,20 +345,23 @@ export default function GreetingScreen() {
               styles.avatarWrap,
               useKevinIntroVideo
                 ? {
-                    // 2026-05-25 — Portrait rectangle "framed photo" treatment
-                    // for the D-ID video. Narrower than the video's 9:16
-                    // aspect, so ResizeMode COVER scales the video to fill
-                    // HEIGHT and CROPS the sides — pushing D-ID's side-panel
-                    // watermarks outside the visible area. Rounded corners
-                    // (radius 18) read as "frame," not a circle. avatarSize
-                    // is the smaller-edge anchor; width = 70% of that to
-                    // produce a comfortable portrait frame on phone + fold.
-                    width: avatarSize * 0.55,
-                    height: avatarSize,
+                    // 2026-05-25 — Big portrait rectangle. Sized off SCREEN
+                    // HEIGHT (videoHeight/videoWidth above) so it actually
+                    // fills the canvas on Z Fold open (where min(W,H)=H made
+                    // the old sizing produce a tiny strip). Aspect 0.50 is
+                    // ~11% narrower than the video's 9:16 native aspect, so
+                    // ResizeMode COVER auto-crops the sides where the D-ID
+                    // watermark panels live; the inner transform scale (1.5)
+                    // adds more crop so even ports that ignore aspect-based
+                    // cropping hide the side watermarks. NOTE: no transform
+                    // on the wrap itself — entry zoom (scale 0.8→1.0) read
+                    // as a "pulse" once the video was already moving its
+                    // own face/mouth; fade-only is cleaner.
+                    width: videoWidth,
+                    height: videoHeight,
                     borderRadius: 18,
                     borderColor: colors.accent,
                     opacity,
-                    transform: [{ scale }],
                     overflow: 'hidden',
                   }
                 : {
@@ -382,7 +394,7 @@ export default function GreetingScreen() {
               <Video
                 ref={videoRef}
                 source={getCaddieClip('kevin', 'intro') as number}
-                style={[styles.avatarPhoto, { transform: [{ scale: 1.3 }] }]}
+                style={[styles.avatarPhoto, { transform: [{ scale: 1.5 }] }]}
                 resizeMode={ResizeMode.COVER}
                 shouldPlay
                 isLooping={false}

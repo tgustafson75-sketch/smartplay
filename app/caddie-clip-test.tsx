@@ -71,11 +71,19 @@ export default function CaddieClipTestScreen() {
       <View style={styles.playerOuter}>
         <View style={styles.playerFrame}>
           {currentSource ? (
+            // 2026-05-25 — D-ID watermark mask (matches greeting.tsx).
+            // Container aspect (~0.5) is narrower than the video's ~0.5625,
+            // so ResizeMode.COVER scales the video to fill HEIGHT and
+            // crops the sides — pushing D-ID's side watermark panels
+            // outside the visible frame. transform: scale 1.3 zooms a
+            // touch more in case the host platform ignores aspect-based
+            // cropping subtlety. overflow:'hidden' on playerFrame
+            // clips the now-overflowing edges.
             <Video
               ref={videoRef}
               source={currentSource}
-              style={StyleSheet.absoluteFill}
-              resizeMode={ResizeMode.CONTAIN}
+              style={[StyleSheet.absoluteFill, { transform: [{ scale: 1.5 }] }]}
+              resizeMode={ResizeMode.COVER}
               useNativeControls
             />
           ) : (
@@ -138,9 +146,11 @@ const styles = StyleSheet.create({
   },
   playerFrame: {
     width: '100%',
-    maxWidth: 360,            // phone-portrait sweet spot; Z Fold open caps here so video doesn't span the screen
-    aspectRatio: 9 / 16,      // matches D-ID portrait output
+    maxWidth: 280,            // phone-portrait sweet spot; narrower than greeting circle
+    aspectRatio: 0.5,         // intentionally NARROWER than D-ID 9:16 so COVER mode crops the side watermark panels
     backgroundColor: '#000',
+    borderRadius: 14,
+    overflow: 'hidden',       // required for Android to actually clip the transform-scaled video to the frame
     position: 'relative',
   },
   playerPlaceholder: { alignItems: 'center', justifyContent: 'center' },

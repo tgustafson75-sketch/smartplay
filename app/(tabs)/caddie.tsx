@@ -58,7 +58,13 @@ import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
-import { speak, configureAudioForSpeech, captureUtterance } from '../../services/voiceService';
+import { speak, configureAudioForSpeech, captureUtterance, playLocalFile } from '../../services/voiceService';
+// 2026-05-25 — Bestround celebration: when the round-end summary
+// detects a new personal best, play Kevin's D-ID bestround clip
+// instead of TTS-ing the text summary. Asset is resolved at fire
+// time via getCaddieClip; falls back to TTS if the asset fails.
+import { getCaddieClip } from '../../services/getCaddieClip';
+import { Asset } from 'expo-asset';
 // Phase Y — shotDetectionService lifecycle moved to app/_layout.tsx so it
 // survives tab focus changes. Only the orchestrator's runtime configure()
 // stays here (apiUrl/voice/language can change at any time).
@@ -1186,7 +1192,8 @@ export default function CaddieTab() {
     let summary = buildContextualSummary();
 
     const best = usePlayerProfileStore.getState().personalBest;
-    if (best && total > 0 && total < best) {
+    const isNewPersonalBest = !!(best && total > 0 && total < best);
+    if (isNewPersonalBest) {
       summary = 'New personal best — ' + total + ". That's what we came for.";
       relState.recordBreakthrough(
         'New personal best: ' + total,
@@ -1198,7 +1205,33 @@ export default function CaddieTab() {
 
     if (voiceEnabled) {
       await configureAudioForSpeech();
-      await speak(summary, voiceGender, language, apiUrl);
+      // 2026-05-25 — On personal best, play the D-ID bestround clip
+      // (Kevin's real voice celebrating) instead of TTS'ing the text
+      // summary. The video itself isn't shown — we're just routing the
+      // celebration audio through the same speak surface so the user
+      // hears Kevin congratulate them in his actual recorded voice.
+      // Defensive: if the clip resolves to a bundled module but the
+      // asset.downloadAsync/localUri pipeline fails (rare), fall back
+      // to the standard TTS speak so the user still hears SOMETHING.
+      let playedBestroundClip = false;
+      if (isNewPersonalBest) {
+        try {
+          const bestroundMod = getCaddieClip('kevin', 'bestround');
+          if (bestroundMod != null) {
+            const asset = Asset.fromModule(bestroundMod);
+            await asset.downloadAsync();
+            if (asset.localUri) {
+              await playLocalFile(asset.localUri, undefined, { userInitiated: true });
+              playedBestroundClip = true;
+            }
+          }
+        } catch (e) {
+          console.log('[caddie] bestround clip play failed (falling back to TTS):', e);
+        }
+      }
+      if (!playedBestroundClip) {
+        await speak(summary, voiceGender, language, apiUrl);
+      }
     }
 
     usePointsStore.getState().addPoints(
