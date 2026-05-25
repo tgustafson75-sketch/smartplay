@@ -11,7 +11,7 @@
  * via the Share sheet (screenshot + text).
  */
 
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Share, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
@@ -22,6 +22,29 @@ import {
   useTournamentStore, isIndividualFormat, type TournamentFormat,
 } from '../store/tournamentStore';
 import { computeLeaderboard, leaderboardAsText } from '../services/tournament/computation';
+// 2026-05-24 — Voice roster: tap the mic on a team card, speak up to 5
+// names ("Bob, Mike, and Sarah"), and the players[] populates.
+import { captureUtterance } from '../services/voiceService';
+import { useSettingsStore } from '../store/settingsStore';
+
+/**
+ * Parse a spoken name list into up to 5 trimmed, title-cased first names.
+ * Handles common phrasings: "Bob, Mike, and Sarah" / "Bob and Mike" /
+ * "Bob Mike Sarah" / "Bob, Mike, Sarah, John, Lisa". Strips common
+ * filler ("um", "and", "the", "with") and caps at 5.
+ */
+function parseRosterNames(transcript: string): string[] {
+  const FILLER = new Set(['and', 'with', 'um', 'uh', 'the', 'plus', 'also']);
+  const raw = transcript
+    .toLowerCase()
+    .replace(/[,\.&]+/g, ' ')
+    .split(/\s+/)
+    .map(w => w.trim())
+    .filter(w => w.length > 1 && !FILLER.has(w));
+  return raw
+    .slice(0, 5)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1));
+}
 
 const FORMAT_LABEL: Record<TournamentFormat, string> = {
   stroke: 'Stroke Play',
@@ -80,6 +103,43 @@ function PhaseBtn({ label, active, onPress }: { label: string; active: boolean; 
 
 function SetupPanel() {
   const state = useTournamentStore();
+  // 2026-05-24 — Per-team voice-roster mic. State tracks which team is
+  // currently capturing so other team mics gray out and the user can
+  // see the indeterminate state. apiUrl + language threaded into
+  // captureUtterance so transcription respects the user's settings.
+  const [recordingTeamId, setRecordingTeamId] = useState<string | null>(null);
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const language = useSettingsStore(s => s.language) ?? 'en';
+  const handleRosterMic = useCallback(async (teamId: string) => {
+    if (recordingTeamId) return;
+    setRecordingTeamId(teamId);
+    try {
+      const transcript = await captureUtterance(8_000, apiUrl, language as 'en' | 'es' | 'zh');
+      if (!transcript) return;
+      const names = parseRosterNames(transcript);
+      if (names.length === 0) {
+        Alert.alert('No names heard', 'Try again — say up to five first names.');
+        return;
+      }
+      // Populate left-to-right. addPlayer when we run out of slots; cap
+      // at 5 (matches store's hard cap). Read fresh state after each
+      // mutation so addPlayer's new slot is visible to the next iteration.
+      for (let i = 0; i < names.length; i++) {
+        const fresh = useTournamentStore.getState().teams.find(x => x.id === teamId);
+        if (!fresh) break;
+        if (i >= fresh.players.length) {
+          if (fresh.players.length >= 5) break;
+          useTournamentStore.getState().addPlayer(teamId);
+        }
+        useTournamentStore.getState().setPlayerName(teamId, i, names[i]);
+      }
+    } catch (e) {
+      console.log('[tournament] roster mic failed (non-fatal):', e);
+      Alert.alert('Voice not available', 'Try again, or type names manually.');
+    } finally {
+      setRecordingTeamId(null);
+    }
+  }, [recordingTeamId, apiUrl, language]);
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
@@ -108,6 +168,25 @@ function SetupPanel() {
           <View key={t.id} style={styles.teamCard}>
             <View style={styles.teamHeaderRow}>
               <TextInput style={styles.teamNameInput} value={t.name} onChangeText={n => state.setTeamName(t.id, n)} placeholder={`Team ${ti + 1}`} placeholderTextColor="#4b5563" />
+              {/* 2026-05-24 — Voice-roster mic. Tap → speak up to 5
+                  first names → parseRosterNames populates players[].
+                  Active state pulses the icon green so the user knows
+                  it's listening; disabled state when another team is
+                  recording so two mics can't race. */}
+              <TouchableOpacity
+                onPress={() => { void handleRosterMic(t.id); }}
+                disabled={recordingTeamId !== null && recordingTeamId !== t.id}
+                style={styles.rosterMicBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Voice-add players to ${t.name}`}
+              >
+                <Ionicons
+                  name={recordingTeamId === t.id ? 'mic' : 'mic-outline'}
+                  size={18}
+                  color={recordingTeamId === t.id ? '#00C896' : (recordingTeamId ? '#374151' : '#9ca3af')}
+                />
+              </TouchableOpacity>
               {state.teams.length > 2 && (
                 <TouchableOpacity onPress={() => state.removeTeam(t.id)} style={styles.removeBtn}>
                   <Ionicons name="trash-outline" size={16} color="#ef4444" />
@@ -342,6 +421,7 @@ const styles = StyleSheet.create({
   teamHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   teamNameInput: { flex: 1, color: '#fff', fontSize: 14, fontWeight: '700', backgroundColor: '#0a1c12', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8 },
   removeBtn: { padding: 8, marginLeft: 8 },
+  rosterMicBtn: { padding: 8, marginLeft: 4 },
   playerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   playerIdx: { color: '#6b7280', fontSize: 12, width: 22 },
   playerNameInput: { flex: 1, color: '#d1d5db', fontSize: 13, backgroundColor: '#0a1c12', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 },

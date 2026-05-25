@@ -30,6 +30,10 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';
+// 2026-05-24 — Quick-launch Tournament Mode from a course card. Sets
+// tournamentStore.courseName before navigating so the user lands on
+// /tournament with the course pre-filled (saves the free-text typing).
+import { useTournamentStore } from '../../store/tournamentStore';
 import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse } from '../../services/golfCourseApi';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
@@ -204,6 +208,16 @@ const LOCAL_COURSES: CourseSummary[] = [
 // also appear in LOCAL_COURSES so they're reachable via the normal
 // course discovery flow; this card is a pinned shortcut + theming.
 const HAYES_OPEN_COURSE_IDS = ['local:maplewood', 'local:pembroke-pines'] as const;
+
+// 2026-05-24 — Course IDs that get a one-tap "Tournament Mode" launcher
+// directly on their card. Tim asked: "type tournament mode directly to
+// the courses that are in the 2026 Hayes Open card. And in the course
+// discovery, Maplewood Golf Club and Pembroke Pines." Same set as
+// HAYES_OPEN_COURSE_IDS for now; can extend per ask.
+const TOURNAMENT_QUICK_LAUNCH_IDS = new Set<string>([
+  'local:maplewood',
+  'local:pembroke-pines',
+]);
 
 type SearchKind = 'courses' | 'range_practice';
 
@@ -582,6 +596,22 @@ export default function PlayTab() {
     router.push(`/course/${c.id}` as never);
   }, [router]);
 
+  // 2026-05-24 — One-tap Tournament Mode launch with course pre-filled.
+  // Sets tournamentStore.courseName BEFORE navigating so /tournament
+  // mounts with the course populated — saves the user typing the same
+  // course they just selected. Idempotent: if a tournament is already
+  // in progress on a different course, the user sees their existing
+  // setup with the courseName updated (they can tap reset on the
+  // tournament screen if they want a fresh slate).
+  const launchTournamentForCourse = useCallback((courseName: string) => {
+    try {
+      useTournamentStore.getState().setCourseName(courseName);
+    } catch (e) {
+      console.log('[play] launchTournamentForCourse setCourseName failed (non-fatal):', e);
+    }
+    router.push('/tournament' as never);
+  }, [router]);
+
   const handleStartRound = () => {
     if (!selected) return;
     // Pre-beta — push the chosen play factors alongside the course id so
@@ -692,6 +722,19 @@ export default function PlayTab() {
                   <Text style={styles.hayesRowTitle} numberOfLines={1}>{c.club_name}</Text>
                   <Text style={styles.hayesRowSub} numberOfLines={1}>{c.location}</Text>
                 </View>
+                {/* 2026-05-24 — One-tap Tournament launch with course
+                    pre-filled. Trophy icon stays inside the row but
+                    intercepts the tap so the outer selectSummary
+                    doesn't also fire. */}
+                <TouchableOpacity
+                  onPress={() => launchTournamentForCourse(c.club_name)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={styles.hayesTrophyBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Start Tournament Mode at ${c.club_name}`}
+                >
+                  <AppIcon name="trophy" size={18} color="#fbbf24" />
+                </TouchableOpacity>
                 <AppIcon name="chevron-forward" size={18} color="#cbd5e1" />
               </TouchableOpacity>
             );
@@ -825,6 +868,17 @@ export default function PlayTab() {
                   </View>
                 )}
                 {isActive && <AppIcon name="checkmark" size={18} color="#00C896" />}
+                {TOURNAMENT_QUICK_LAUNCH_IDS.has(c.id) && (
+                  <TouchableOpacity
+                    onPress={() => launchTournamentForCourse(c.club_name)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    style={styles.infoBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Start Tournament Mode at ${c.club_name}`}
+                  >
+                    <AppIcon name="trophy" size={18} color="#fbbf24" />
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   onPress={() => onTapInfo(c)}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -1154,6 +1208,11 @@ const styles = StyleSheet.create({
   },
   hayesRowTitle: { color: '#f8fafc', fontSize: 13, fontWeight: '700' },
   hayesRowSub:   { color: '#94a3b8', fontSize: 11, marginTop: 2 },
+  hayesTrophyBtn: {
+    paddingHorizontal: 8, paddingVertical: 4,
+    marginRight: 6,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   banner: {
     flexDirection: 'row', alignItems: 'center',
