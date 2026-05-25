@@ -42,7 +42,14 @@ import { useSmartFinderStore } from '../store/smartFinderStore';
 
 // ─── CONSTANTS ────────────────────────────
 
-const AUTO_STOP_MS = 4000;
+// 2026-05-25 — Bumped 4000→12000. The old 4s hard-cap clipped any
+// utterance longer than a single short phrase ("what club"), making
+// open conversation with Kevin ("hey Kevin, I've been thinking about
+// my approach shots") feel like getting timed out mid-sentence.
+// 12s comfortably covers a full thought; users can also tap again to
+// stop early. Pairs with the conversational-default classifier fix so
+// natural chat flows end-to-end without truncation.
+const AUTO_STOP_MS = 12000;
 
 // Phase BM — module-level mic permission cache. Once granted, every tap
 // skips the IPC roundtrip. Stays false on first denial / cold launch.

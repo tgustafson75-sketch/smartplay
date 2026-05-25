@@ -33,7 +33,14 @@ export interface ConversationTurn {
 }
 
 const MAX_TURNS = 6; // 3 user + 3 Kevin
-const DECAY_MS = 60_000;
+// 2026-05-25 — Bumped 60_000 → 180_000 (3 min). Open-conversation
+// scenarios (range chat, between-shot reflection, walking to the cart)
+// have natural 60-90s gaps. 60s decay wiped context just as the user
+// circled back ("and what about the wind?"), forcing Kevin to guess
+// what "that" referred to. 3 minutes keeps the thread intact across
+// realistic between-turn pauses without holding stale context across
+// whole holes.
+const DECAY_MS = 180_000;
 
 let buffer: ConversationTurn[] = [];
 let lastActivityAt = 0;

@@ -198,7 +198,11 @@ async function openSession() {
   console.log('[audit:voice] listening engaged');
   let utterance: string | null = null;
   try {
-    const captureP = captureUtterance(8_000, apiUrl, settings.language);
+    // 2026-05-25 — Bumped 8s→12s. Open-mic users need room to express a
+    // full thought during casual conversation ("hey Kevin, how are you
+    // doing today, I've been working on my driver"). 8s was clipping
+    // mid-sentence on natural-pace speech.
+    const captureP = captureUtterance(12_000, apiUrl, settings.language);
     cancelMic = () => {
       // Phase V.7 — real cancel via stopCapture; the recording stops
       // immediately and captureUtterance resolves with null.
