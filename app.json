@@ -102,7 +102,9 @@
       "./plugins/withMetaWearablesDAT.js",
       "./plugins/withMediaPipePose.js",
       "./plugins/withBluetoothMediaButton.js",
-      "./plugins/withPrebuildSafetyCheck.js"
+      "./plugins/withPrebuildSafetyCheck.js",
+      "expo-asset",
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true,
