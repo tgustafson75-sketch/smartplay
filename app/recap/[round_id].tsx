@@ -31,6 +31,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { useIssueLogStore } from '../../store/issueLogStore';
 import PhotoCollage from '../../components/recap/PhotoCollage';
 import HandicapImpactCard from '../../components/recap/HandicapImpactCard';
+import PlannedVsOutcomeCard from '../../components/recap/PlannedVsOutcomeCard';
 import { track } from '../../services/analytics';
 import { buildShareCardProps } from '../../services/shareCardGenerator';
 import { computeRecapHero } from '../../services/recapHero';
@@ -137,6 +138,12 @@ function AnimatedHoleCard({
           {hc.plan.markers.approach?.club_intent ? ' → ' + hc.plan.markers.approach.club_intent : ''}
           {hc.plan.markers.pin?.club_intent ? ' → ' + hc.plan.markers.pin.club_intent : ''}
         </Text>
+      )}
+      {/* 2026-05-25 — Planned vs Outcome per-shot card. Renders only when
+          the hole has matched shots; the component itself returns null when
+          matched_shots is empty so this guard is belt + suspenders. */}
+      {hc.matched_shots.length > 0 && (
+        <PlannedVsOutcomeCard comparison={hc} />
       )}
       {Boolean(hc.kevin_summary) && (
         <Text style={styles.kevinSummary}>{hc.kevin_summary}</Text>
