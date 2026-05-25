@@ -317,6 +317,20 @@ Available intents:
    - "open SmartFinder and switch to quiet mode" -> { steps: [ { intent_type: "open_tool", parameters: { tool_name: "smartfinder" } }, { intent_type: "set_trust_quiet", parameters: {} } ] }
    Order matters: emit steps in the order they should execute. Keep steps to 2-3 max — more than that, ask for clarification with unknown.
 
+23. quick_round — User wants to START a round in one utterance, bypassing the Play-tab setup chips. Carries an optional course hint, optional playing partners (guests), and an optional 9-hole flag. Distinct from change_setting:round_mode (which adjusts mode mid-round). Distinct from declare_hole (which sets the current hole, not start a fresh round).
+    parameters: { course_hint?: string, hole_count?: 9 | 18, guest_names?: string[] }
+    Course hint is FREE-TEXT — pass the course name as the user said it ("the Lakes", "Maplewood", "Pembroke Pines"). The handler resolves it against local bundled courses first, falling back to the golfcourseapi search. If the user didn't name a course at all, omit course_hint and the handler will ask.
+    Guest names are EXTRACTED first-name(s) from "playing with X" / "with X and Y" patterns. Capitalize as spoken. Don't include the device owner — only the named partners. If no partners are named, omit the field.
+    Examples:
+    - "let's play a quick round at Maplewood" -> { course_hint: "Maplewood" }
+    - "start a round at Crystal Springs" -> { course_hint: "Crystal Springs" }
+    - "quick round at the Lakes" -> { course_hint: "the Lakes" }
+    - "9-hole quick round at Sunnyvale" / "let's play 9 at Sunnyvale" -> { course_hint: "Sunnyvale", hole_count: 9 }
+    - "Tim is playing with Bob and Sarah at Pembroke Pines today" -> { course_hint: "Pembroke Pines", guest_names: ["Bob", "Sarah"] }
+    - "I'm playing with Mike at the Palms" -> { course_hint: "the Palms", guest_names: ["Mike"] }
+    - "start a round" (no course named) -> { } (handler asks which course)
+    - "fast round at Mariners with Jenny" -> { course_hint: "Mariners", guest_names: ["Jenny"] }
+
 7. unknown — Cannot determine intent.
    parameters: {}
    Set follow_up_question to a brief clarifying question ${caddieName} could ask.
@@ -331,7 +345,7 @@ The language reflects the transcript itself, not the user's preferred app langua
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "declare_hole" | "putt_watch" | "ask_golf_father" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "declare_hole" | "putt_watch" | "ask_golf_father" | "quick_round" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null,
