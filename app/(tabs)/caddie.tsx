@@ -783,34 +783,56 @@ export default function CaddieTab() {
 
   // ── Opening prompt ───────────────────────
   // 2026-05-24 — Replaced the six-branch interrogative opener with a
-  // single invitational, brand-led greeting. The prior copy ended each
-  // variant with a question ("What are we working on?") even though
-  // the launch flow does NOT auto-listen, leaving the user staring at
-  // an unanswered prompt. The new copy is brand-led + persona-equal
-  // (no hardcoded "I'm Kevin"), and the closing line tells the user to
-  // tap the mic rather than implying the app is already listening.
+  // single invitational, brand-led greeting.
+  // 2026-05-25 — Tim wanted the second "Welcome to SmartPlay Caddie"
+  // gone (the greeting screen already brand-leads). New copy is a
+  // personalized time-of-day greeting + a direct "practice or play"
+  // choice. After speak() resolves we auto-listen for ~6s and route
+  // on a simple keyword match: "practice" / "swing" / "lab" →
+  // SwingLab tab; "play" / "round" / "course" → Play tab. Silence,
+  // unmatched, or capture failure = stay on Caddie tab (no harm —
+  // user can still tap any tab or the mic manually).
   useEffect(() => {
     const name = firstName || '';
-    const prompt = name
-      ? `Welcome to SmartPlay Caddie, ${name}. Let me know what you wanna work on today.`
-      : 'Welcome to SmartPlay Caddie. Let me know what you wanna work on today.';
+    const hour = new Date().getHours();
+    const tod =
+      hour < 12 ? 'Good morning' :
+      hour < 17 ? 'Good afternoon' :
+      'Good evening';
+    const namePart = name ? `, ${name}` : '';
+    const prompt = `${tod}${namePart}, good to see you. Practice or play?`;
 
     setOpeningPrompt(prompt);
 
-    // Tim 2026-05-15: "Kevin or Caddie has a greeting but does not
-    // speak it." Speak the opener once per process so the user gets
-    // a coherent voice flow from greeting screen → Caddie tab.
-    // Guards: not spoken yet this process, voice enabled, trust level
-    // > 1 (Quiet stays silent by design), no greeting screen audio
-    // overlap (short delay).
     if (!openingPromptSpokenThisProcess && voiceEnabled && trustLevel !== 1 && prompt) {
       openingPromptSpokenThisProcess = true;
       setTimeout(() => {
-        // userInitiated: true so isVoiceAllowed lets it through even
-        // at L1 if the user manually flipped trust back up after the
-        // greeting (same convention greeting.tsx uses).
-        void speak(prompt, voiceGender, language, apiUrl, { userInitiated: true })
-          .catch((e) => console.log('[caddie] opening prompt speak failed', e));
+        void (async () => {
+          try {
+            // Speak the greeting; wait for it to finish before listening.
+            await speak(prompt, voiceGender, language, apiUrl, { userInitiated: true });
+            // Don't auto-listen on Quiet (re-check; trust may have changed mid-speak).
+            const currentTrust = useTrustLevelStore.getState().level;
+            if (currentTrust === 1) return;
+            // Short capture window for a one-word answer. captureUtterance
+            // is non-throwing; bad audio session / no input returns null
+            // and we silently no-op.
+            const reply = await captureUtterance(6_000, apiUrl, language);
+            if (!reply) return;
+            const r = reply.toLowerCase();
+            // Keyword routing. Order matters: check "practice" first
+            // because "play practice" would otherwise route to play.
+            // "Play" itself catches the broad "play golf"/"let's play"
+            // intent. Unmatched stays put.
+            if (/\b(practice|swing\s*lab|swinglab|lab|range)\b/.test(r)) {
+              router.push('/(tabs)/swinglab' as never);
+            } else if (/\b(play|round|course|tee\s*off)\b/.test(r)) {
+              router.push('/(tabs)/play' as never);
+            }
+          } catch (e) {
+            console.log('[caddie] opening prompt + routing failed (non-fatal):', e);
+          }
+        })();
       }, 600);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
