@@ -61,7 +61,14 @@ const STATUS_COPY: Record<AnalysisStatus, string> = {
 export default function SwingDetail() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { swing_id } = useLocalSearchParams<{ swing_id: string }>();
+  const { swing_id, watch } = useLocalSearchParams<{ swing_id: string; watch?: string }>();
+  // 2026-05-25 — Path A: when upload routed here with ?watch=1 (short
+  // clip, analysis deferred), auto-play the video on mount and fire
+  // runPhaseKOnSession on didJustFinish. The watchFiredRef gate stops
+  // a second navigation to this screen from re-firing the analysis on
+  // an already-analyzed session.
+  const shouldAutoplayThenAnalyze = watch === '1';
+  const watchFiredRef = useRef(false);
   const trustLevel = useTrustLevelStore(s => s.level);
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
@@ -249,6 +256,24 @@ export default function SwingDetail() {
     const s = status as AVPlaybackStatusSuccess;
     if (s.positionMillis != null) setPosition(s.positionMillis / 1000);
     if (s.durationMillis != null) setDuration(s.durationMillis / 1000);
+    // 2026-05-25 — Path A: when the user routed here with ?watch=1
+    // (analysis was deferred at upload time for short clips), fire
+    // runPhaseKOnSession the moment the video plays through. Gated
+    // by watchFiredRef so re-mounts can't double-fire, and by
+    // analysisStatus so we don't clobber a result if one's already
+    // present (e.g. user navigated back-and-forth after analysis ran).
+    if (
+      s.didJustFinish &&
+      shouldAutoplayThenAnalyze &&
+      !watchFiredRef.current &&
+      analysisStatus === 'pending' &&
+      swing_id
+    ) {
+      watchFiredRef.current = true;
+      uploadLog('watch-then-analyze-fire', { from_status: analysisStatus }, swing_id);
+      useCageStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
+      void runPhaseKOnSession(swing_id);
+    }
   };
 
   const scrubTo = async (sec: number) => {
@@ -560,8 +585,16 @@ export default function SwingDetail() {
                 style={styles.video}
                 resizeMode={ResizeMode.CONTAIN}
                 useNativeControls
-                shouldPlay={false}
-                isMuted
+                // 2026-05-25 — Auto-play on ?watch=1 (Path A: watch-
+                // then-analyze for short uploads). User sees the swing
+                // play through; runPhaseKOnSession fires when the video
+                // ends via onPlaybackStatusUpdate didJustFinish. Other
+                // entry paths (library tap, re-mount) keep manual play.
+                shouldPlay={shouldAutoplayThenAnalyze && !watchFiredRef.current}
+                // Audio plays for watch-then-analyze (user wants to
+                // hear coach narration on uploaded videos). Other
+                // paths stay muted so library scrubbing doesn't blast.
+                isMuted={!shouldAutoplayThenAnalyze}
                 onPlaybackStatusUpdate={onPlaybackStatusUpdate}
               />
               {hasPose && (showSkeleton || showTrace) && (

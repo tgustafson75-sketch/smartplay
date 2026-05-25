@@ -102,11 +102,24 @@ export default function UploadSwing() {
     // analyzer routes on perspective, not the implicit putt tag).
     const effectiveTag: SwingTag | null =
       sourceDevice === 'meta_glasses' && !tag && perspective === 'pov_self' ? 'putt' : tag;
+    // 2026-05-25 — Path A: watch-then-analyze for short clips.
+    // Clips ≤6s are typically the swing-fills-the-whole-clip case
+    // where auto-firing analysis sampled the right frames. But the
+    // user wants to SEE the video play through before the analyst
+    // touches it ("not watching the whole video" complaint). For
+    // short clips, defer the analysis and pass ?watch=1 — the swing
+    // detail screen auto-plays the video and fires runPhaseKOnSession
+    // on didJustFinish. Long clips (>6s, or duration unknown) keep
+    // the current auto-fire behavior; Path C (trim screen) will take
+    // over for those in a follow-up commit tonight.
+    const SHORT_CLIP_SEC = 6;
+    const isShortClip = typeof durationSec === 'number' && durationSec > 0 && durationSec <= SHORT_CLIP_SEC;
     const sessionId = ingestVideoFromPick({
       uri, club, notes: notes.trim() || null, swinger: swinger.trim() || 'Me',
       tag: effectiveTag, has_audio: hasAudio, duration_sec: durationSec,
       source_device: sourceDevice,
       perspective,
+      deferAnalysis: isShortClip,
     });
     // Phase V — Kevin acknowledges the upload immediately and we navigate
     // straight to the swing detail surface. Feels like submitting work to
@@ -118,7 +131,8 @@ export default function UploadSwing() {
         await speak("Got your video. Let me take a look.", voiceGender, language, apiUrl);
       })();
     }
-    router.replace(`/swinglab/swing/${sessionId}` as never);
+    const watchParam = isShortClip ? '?watch=1' : '';
+    router.replace(`/swinglab/swing/${sessionId}${watchParam}` as never);
   };
 
   return (

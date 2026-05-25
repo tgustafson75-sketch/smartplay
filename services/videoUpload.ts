@@ -642,6 +642,13 @@ export function ingestVideoFromPick(args: {
    *  screen perspective picker) sets this when the user explicitly
    *  picks "You" vs "Someone else." */
   perspective?: 'pov_self' | 'watching_someone' | null;
+  /** 2026-05-25 — Path A "watch then analyze" flag. When true, ingest
+   *  creates the session but does NOT auto-fire runPhaseKOnSession.
+   *  Caller (upload screen for short clips) is responsible for firing
+   *  the analysis later — typically after the user watches the video
+   *  play through on the swing detail screen via ?watch=1 nav param.
+   *  Default false preserves current background-analysis behavior. */
+  deferAnalysis?: boolean;
 }): string {
   // 2026-05-23 — Perspective auto-inference. If the caller didn't pass
   // an explicit perspective, look at familyStore — when a family
@@ -689,12 +696,17 @@ export function ingestVideoFromPick(args: {
   // analysis-trigger / pose-detection / ui-render markers all share a
   // continuous elapsed-total clock from pickVideo through to UI render.
   uploadAdoptSessionKey(sessionId);
-  uploadLog('analysis-trigger', { session_id: sessionId }, sessionId);
-  // Fire-and-forget Phase K. Errors logged, don't block ingest UX.
-  void runPhaseKOnSession(sessionId).catch(e => {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.log('[videoUpload] Phase K error', e);
-    uploadLog('analysis-trigger-throw', { status: 'failed', message: msg }, sessionId);
-  });
+  uploadLog('analysis-trigger', { session_id: sessionId, deferred: !!args.deferAnalysis }, sessionId);
+  // Fire-and-forget Phase K — unless caller deferred. When deferred,
+  // the swing detail screen fires runPhaseKOnSession after the user
+  // watches the clip play through (Path A: watch-then-analyze for
+  // short library uploads, gated by the ?watch=1 nav param).
+  if (!args.deferAnalysis) {
+    void runPhaseKOnSession(sessionId).catch(e => {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.log('[videoUpload] Phase K error', e);
+      uploadLog('analysis-trigger-throw', { status: 'failed', message: msg }, sessionId);
+    });
+  }
   return sessionId;
 }
