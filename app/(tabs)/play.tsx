@@ -606,6 +606,26 @@ export default function PlayTab() {
         contentContainerStyle={isWide ? { alignItems: 'center' } : undefined}
       >
        <View style={isWide ? { width: '100%', maxWidth: WIDE_CONTENT_MAX_WIDTH } : undefined}>
+        {/* 2026-05-24 — Tournament Mode CTA. Standalone group-play
+            scoring tool — independent of the standard round flow.
+            Public surface so the whole group can use it on the host's
+            phone. Pinned to the top of the Play tab so it's the first
+            non-active-round element a user sees when planning a
+            multi-player session. */}
+        <TouchableOpacity
+          style={styles.tournamentCta}
+          onPress={() => router.push('/tournament' as never)}
+          activeOpacity={0.85}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.tournamentCtaTitle}>Tournament Mode</Text>
+            <Text style={styles.tournamentCtaSub}>
+              Scramble · Best Ball · Stableford · Skins · Match Play · Stroke. Up to 5 teams of 5.
+            </Text>
+          </View>
+          <AppIcon name="trophy" size={22} color="#00C896" />
+        </TouchableOpacity>
+
         {/* Active-round banner — End Round lives here so the user doesn't
             have to dig into the Tools menu. Confirms before tearing down
             the round to avoid an accidental tap during course browsing. */}
@@ -1020,6 +1040,17 @@ export default function PlayTab() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#060f09' },
+
+  tournamentCta: {
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: 12, marginTop: 12,
+    paddingHorizontal: 14, paddingVertical: 14,
+    backgroundColor: '#0d2418',
+    borderRadius: 10,
+    borderWidth: 1, borderColor: '#1e3a28',
+  },
+  tournamentCtaTitle: { color: '#00C896', fontSize: 15, fontWeight: '900' },
+  tournamentCtaSub: { color: '#9ca3af', fontSize: 11, marginTop: 4, lineHeight: 16 },
 
   banner: {
     flexDirection: 'row', alignItems: 'center',
