@@ -81,37 +81,32 @@ class MediaPipePoseModule(reactContext: ReactApplicationContext) :
         // Reload only if quality changed.
         landmarker?.close()
         landmarker = null
-        val baseOptions = BaseOptions.builder()
-            .setModelAssetPath(assetForQuality(quality))
-            // Try GPU delegate first — falls back to CPU on devices
-            // that don't support GPU acceleration for tasks-vision.
-            .setDelegate(Delegate.GPU)
-            .build()
-        val options = PoseLandmarker.PoseLandmarkerOptions.builder()
-            .setBaseOptions(baseOptions)
-            .setRunningMode(RunningMode.IMAGE)
-            // Single pose — golf is one-player-per-frame for now. If
-            // we ever wire a "coach + student" mode, bump this.
-            .setNumPoses(1)
-            .setMinPoseDetectionConfidence(0.4f)
-            .setMinPosePresenceConfidence(0.4f)
-            .setMinTrackingConfidence(0.4f)
-            .setOutputSegmentationMasks(false)
-            .build()
-        landmarker = try {
-            PoseLandmarker.createFromOptions(reactApplicationContext, options)
-        } catch (e: Throwable) {
-            // GPU path failed — retry with CPU. Some emulators + older
-            // ARM devices don't have the GPU delegate registered.
-            val cpuOptions = options.toBuilder()
+        // 2026-05-25 — PoseLandmarkerOptions has no .toBuilder() in
+        // current tasks-vision; build GPU and CPU option trees separately
+        // and try GPU first, fall back to CPU on failure.
+        fun buildOptions(delegate: Delegate): PoseLandmarker.PoseLandmarkerOptions =
+            PoseLandmarker.PoseLandmarkerOptions.builder()
                 .setBaseOptions(
                     BaseOptions.builder()
                         .setModelAssetPath(assetForQuality(quality))
-                        .setDelegate(Delegate.CPU)
+                        .setDelegate(delegate)
                         .build(),
                 )
+                .setRunningMode(RunningMode.IMAGE)
+                // Single pose — golf is one-player-per-frame for now. If
+                // we ever wire a "coach + student" mode, bump this.
+                .setNumPoses(1)
+                .setMinPoseDetectionConfidence(0.4f)
+                .setMinPosePresenceConfidence(0.4f)
+                .setMinTrackingConfidence(0.4f)
+                .setOutputSegmentationMasks(false)
                 .build()
-            PoseLandmarker.createFromOptions(reactApplicationContext, cpuOptions)
+        landmarker = try {
+            PoseLandmarker.createFromOptions(reactApplicationContext, buildOptions(Delegate.GPU))
+        } catch (e: Throwable) {
+            // GPU path failed — retry with CPU. Some emulators + older
+            // ARM devices don't have the GPU delegate registered.
+            PoseLandmarker.createFromOptions(reactApplicationContext, buildOptions(Delegate.CPU))
         }
         loadedQuality = quality
     }
