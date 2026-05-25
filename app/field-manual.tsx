@@ -17,27 +17,30 @@
 
 import React, { useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Share, Alert, Linking, KeyboardAvoidingView, Platform,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Share, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { CHECKLIST_SECTIONS, totalCheckCount } from '../services/fieldManual/checklistItems';
 import { useFieldManualChecklistStore, exportAsMarkdown } from '../store/fieldManualChecklistStore';
+import { MANUAL_SECTIONS } from '../services/fieldManual/manualContent';
+import MarkdownView from '../components/fieldManual/MarkdownView';
 
 type Tab = 'manual' | 'checklist';
 
-const GITHUB_REPO_DOC_BASE = 'https://github.com/tgustafson75-sketch/smartplay/blob/main/docs/field-manual';
-
-const MANUAL_SECTIONS: Array<{ file: string; title: string; hint: string }> = [
-  { file: 'README.md', title: 'README — start here', hint: 'How to read this manual.' },
-  { file: '01-product.md', title: '01 — Product', hint: 'Vision, three pillars, persona equality, positioning.' },
-  { file: '02-architecture.md', title: '02 — Architecture', hint: 'Brain, voice, GPS, metrics, capture, Trust Spectrum.' },
-  { file: '03-feature-state.md', title: '03 — Feature state', hint: 'Working / partial / stubbed / deferred per feature.' },
-  { file: '04-conventions.md', title: '04 — Conventions & rules', hint: 'Git, persona-equality, honesty, responsive, branding.' },
-  { file: '05-file-map.md', title: '05 — File map', hint: 'Where the key stores, services, intents, components, APIs live.' },
-  { file: '06-ship-status.md', title: '06 — Ship status', hint: 'Launch spine, beta vs first-release, gap-closer status.' },
-  { file: '07-known-issues-roadmap.md', title: '07 — Known issues & roadmap', hint: 'P2 deferrals, 1.x items, billing, watch IMU, cloud backup.' },
-];
+// Section list hints — surfaced on the index view so the user can pick
+// the right section without opening each. Order matches MANUAL_SECTIONS.
+const SECTION_HINTS: Record<string, string> = {
+  readme: 'How to read this manual.',
+  '01': 'Vision, three pillars, persona equality, positioning.',
+  '02': 'Brain, voice, GPS, metrics, capture, Trust Spectrum.',
+  '03': 'Working / partial / stubbed / deferred per feature.',
+  '04': 'Git, persona-equality, honesty, responsive, branding.',
+  '05': 'Where the key stores, services, intents, components, APIs live.',
+  '06': 'Launch spine, beta vs first-release, gap-closer status.',
+  '07': 'P2 deferrals, 1.x items, billing, watch IMU, cloud backup.',
+};
 
 export default function FieldManualScreen() {
   const router = useRouter();
@@ -76,25 +79,49 @@ function TabBtn({ label, active, onPress }: { label: string; active: boolean; on
 }
 
 function ManualPanel() {
-  const open = (file: string) => {
-    const url = `${GITHUB_REPO_DOC_BASE}/${file}`;
-    Linking.openURL(url).catch(() => Alert.alert('Could not open', url));
-  };
+  // Section index → reader pattern. Tapping a row opens an in-app
+  // markdown view of that section's bundled content (no GitHub linking,
+  // per Tim's note that linking out was the wrong UX).
+  const [openSectionId, setOpenSectionId] = useState<string | null>(null);
+  const openSection = openSectionId ? MANUAL_SECTIONS.find(s => s.id === openSectionId) : null;
+
+  if (openSection) {
+    return (
+      <View style={{ flex: 1 }}>
+        <TouchableOpacity
+          style={styles.readerBackRow}
+          onPress={() => setOpenSectionId(null)}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="chevron-back" size={18} color="#00C896" />
+          <Text style={styles.readerBackText}>All sections</Text>
+        </TouchableOpacity>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 64 }}>
+          <MarkdownView source={openSection.body} />
+        </ScrollView>
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 64 }}>
       <Text style={styles.panelIntro}>
-        Comprehensive current-state reference. Each section is a separate markdown file under
-        docs/field-manual/. Tap to open on GitHub.
+        Comprehensive current-state reference. Tap a section to read it in-app.
       </Text>
       {MANUAL_SECTIONS.map(s => (
-        <TouchableOpacity key={s.file} style={styles.linkRow} onPress={() => open(s.file)} activeOpacity={0.7}>
+        <TouchableOpacity
+          key={s.id}
+          style={styles.linkRow}
+          onPress={() => setOpenSectionId(s.id)}
+          activeOpacity={0.7}
+        >
           <Text style={styles.linkTitle}>{s.title}</Text>
-          <Text style={styles.linkHint}>{s.hint}</Text>
+          <Text style={styles.linkHint}>{SECTION_HINTS[s.id] ?? ''}</Text>
         </TouchableOpacity>
       ))}
       <Text style={[styles.panelIntro, { marginTop: 24, fontSize: 12 }]}>
         Run the verification checklist (tab above) when walking through pre-beta. Notes persist
-        across sessions; export the whole thing as markdown when you’re done.
+        across sessions; export the whole thing as markdown when you&apos;re done.
       </Text>
     </ScrollView>
   );
@@ -294,4 +321,14 @@ const styles = StyleSheet.create({
   },
   lockedBody: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   lockedText: { color: '#9ca3af', fontSize: 14, textAlign: 'center', lineHeight: 22 },
+  readerBackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e3a28',
+    backgroundColor: '#0d2418',
+  },
+  readerBackText: { color: '#00C896', fontSize: 13, fontWeight: '700', marginLeft: 4 },
 });

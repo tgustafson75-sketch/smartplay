@@ -30,6 +30,7 @@ From SHIP-QA-AUDIT + PLATFORM-QA-AUDIT P2 buckets:
 - **BT media-button worktree** — `.claude/worktrees/bt-media-button` native module ready; needs EAS Build to ship.
 - **Coach markup (manual telestration)** — pen + line + circle + caption annotations on swing detail, per-frame. V1 scope: single-frame annotation anchored to `fault_frame_index`. SPRINT-LOG:1557.
 - **Deals/booking concierge** — promo surfacing via caddie voice. Validation step: hand-curated pilot before building aggregator. SPRINT-LOG:1666.
+- **Meta Glasses POV swing analysis — head movement + horizon stability** (2026-05-24 — Tim, originally a v1 idea, now in scope post-launch since glasses ingest is working). Glass POV is NOT useful for full-swing biomechanics (hands aren't visible — you see club blade + ball, not the body). What it IS great for: measuring how much the head moves side-to-side and how the horizon tilts during the swing. Tank flagged this as the real money signal — head-stability variance is a strong predictor of contact quality + a teachable fault. Setup-frame insight could also surface face/feet alignment ("blade aimed left of target" / "feet open"). Pipeline shape: ingest glasses MP4 → extract first frame for alignment + frame-by-frame horizon angle delta → render as a Head-Stability card on the SmartMotion result. Doesn't replace the standard swing-analysis read; complements it with a metric only the glass POV produces.
 
 ## 1.1 — Play tab / multi-player
 

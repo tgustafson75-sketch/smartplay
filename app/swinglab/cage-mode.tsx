@@ -110,16 +110,27 @@ import { CaddieIntroSheet, useCaddieIntro } from '../../components/caddie/Caddie
 // fake a server-side "bullseye detected" approval.
 type Phase =
   | 'SETUP'
+  | 'COUNTDOWN'
   | 'RECORDING'
   | 'UPLOADING'
   | 'RESULT'
   | 'ERROR';
 
-const RECORDING_MAX_SECONDS = 12;
+// 2026-05-24 — Bumped from 12s → 30s. Tim's real-cage feedback:
+// auto-stopping at 12s was tripping solo workflows (tap → walk to
+// ball → swing routinely took 8-10s, leaving only 2-4s of post-impact
+// capture). 30s ceiling + the explicit STOP button means the player
+// controls when capture ends; auto-stop is a safety net, not a cue.
+const RECORDING_MAX_SECONDS = 30;
+// Pre-record countdown — same shape + duration as SmartMotion quick-record
+// so the muscle memory transfers. Gives the solo user time to walk from
+// the phone tripod to the hitting position after tapping Start.
+const PRE_RECORD_COUNTDOWN_SECONDS = 5;
 
 const KEVIN_CAPTION: Partial<Record<Phase, string>> = {
-  SETUP:     'Frame your hitting area — tap when ready.',
-  RECORDING: 'Swing when ready.',
+  SETUP:     "Frame your hitting area. Tap 'I'm Set' when you're ready.",
+  COUNTDOWN: 'Get in position — recording starts in a few seconds.',
+  RECORDING: 'Swing when ready. Tap STOP when done.',
   UPLOADING: 'Lemme take a look at that one…',
   RESULT:    "Here's what I saw.",
   ERROR:     'Something went sideways on my end.',
@@ -149,9 +160,13 @@ export default function CageModeScreen() {
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordCountdownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 2026-05-24 — Pre-record countdown ticker, used by COUNTDOWN phase.
+  const preRecordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [phase, setPhase] = useState<Phase>('SETUP');
   const [recordedSeconds, setRecordedSeconds] = useState(0);
+  // Pre-record countdown remaining seconds (only valid while phase === 'COUNTDOWN').
+  const [preRecordCountdown, setPreRecordCountdown] = useState<number>(PRE_RECORD_COUNTDOWN_SECONDS);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [result, setResult] = useState<CageAnalyzeResponse | null>(null);
   const [coach, setCoach] = useState<CoachReviewResponse | null>(null);
@@ -225,7 +240,11 @@ export default function CageModeScreen() {
     const unsub = subscribeCapture(['swing'], () => {
       if (cancelled) return;
       if (phase === 'SETUP') {
-        void handleStartRecording();
+        // Route through handleConfirmReady so voice "record" gets the
+        // same 5s pre-record countdown the button does — gives the
+        // solo player time to walk into position regardless of how
+        // they triggered the capture.
+        void handleConfirmReady();
       }
     });
     return () => { cancelled = true; unsub(); };
@@ -237,6 +256,7 @@ export default function CageModeScreen() {
     return () => {
       if (recordTimerRef.current) clearInterval(recordTimerRef.current);
       if (recordCountdownRef.current) clearTimeout(recordCountdownRef.current);
+      if (preRecordTimerRef.current) clearInterval(preRecordTimerRef.current);
     };
   }, []);
 
@@ -246,6 +266,53 @@ export default function CageModeScreen() {
   // their target visually using CageOverlay and taps Start Recording.
 
   // ── State transitions ───────────────────────────────────────────────
+
+  // 2026-05-24 — Pre-record countdown handler. SETUP → COUNTDOWN → RECORDING.
+  // The COUNTDOWN phase ticks visibly so the solo player has time to walk
+  // from the phone tripod to the hitting position. Voice "record" and the
+  // SETUP "I'm Set" button both call this. Tapping the countdown card
+  // cancels and returns to SETUP.
+  const cancelPreRecordCountdown = useCallback(() => {
+    if (preRecordTimerRef.current) {
+      clearInterval(preRecordTimerRef.current);
+      preRecordTimerRef.current = null;
+    }
+    setPreRecordCountdown(PRE_RECORD_COUNTDOWN_SECONDS);
+    setPhase('SETUP');
+  }, []);
+
+  const handleConfirmReady = useCallback(async () => {
+    if (!cameraRef.current) return;
+    if (recordingPromiseRef.current) return;
+    if (!micPerm?.granted) {
+      const r = await requestMicPerm();
+      if (!r.granted) {
+        Alert.alert(
+          'Microphone needed',
+          'Cage Drill records audio to detect strikes. Allow microphone access to record.',
+        );
+        return;
+      }
+    }
+    if (PRE_RECORD_COUNTDOWN_SECONDS <= 0) {
+      void handleStartRecording();
+      return;
+    }
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPreRecordCountdown(PRE_RECORD_COUNTDOWN_SECONDS);
+    setPhase('COUNTDOWN');
+    preRecordTimerRef.current = setInterval(() => {
+      setPreRecordCountdown(prev => {
+        if (prev <= 1) {
+          if (preRecordTimerRef.current) { clearInterval(preRecordTimerRef.current); preRecordTimerRef.current = null; }
+          void handleStartRecording();
+          return PRE_RECORD_COUNTDOWN_SECONDS;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [micPerm, requestMicPerm]);
 
   const handleStartRecording = useCallback(async () => {
     if (!cameraRef.current) return;
@@ -617,7 +684,7 @@ export default function CageModeScreen() {
   // toggle was async and could race a recordAsync call immediately after
   // setPhase('RECORDING'). With the CV check gone we never need picture
   // mode, so the race is eliminated by construction.
-  const cameraVisible = phase === 'SETUP' || phase === 'RECORDING' || phase === 'UPLOADING';
+  const cameraVisible = phase === 'SETUP' || phase === 'COUNTDOWN' || phase === 'RECORDING' || phase === 'UPLOADING';
 
   return (
     <View style={styles.container}>
@@ -657,6 +724,23 @@ export default function CageModeScreen() {
         <Text style={styles.caption}>{KEVIN_CAPTION[phase] ?? ''}</Text>
         {isMockMode() && <Text style={styles.mockHint}>MOCK MODE</Text>}
       </Animated.View>
+
+      {/* 2026-05-24 — COUNTDOWN — pre-record window. The user just hit
+          "I'm Set" or said "record"; this gives them PRE_RECORD_COUNTDOWN_SECONDS
+          to walk into position before the camera actually starts capturing.
+          Tap the cancel button to abort and return to SETUP. */}
+      {phase === 'COUNTDOWN' && (
+        <View style={[styles.recordingWrap, { paddingBottom: insets.bottom + 32 }]} pointerEvents="box-none">
+          <View style={[styles.countdownCard, { borderColor: '#fbbf24' }]}>
+            <Text style={[styles.countdownNum, { color: '#fbbf24' }]}>{preRecordCountdown}</Text>
+            <Text style={styles.countdownLabel}>GET IN POSITION</Text>
+          </View>
+          <TouchableOpacity style={styles.stopBtn} onPress={cancelPreRecordCountdown}>
+            <View style={[styles.stopSquare, { backgroundColor: '#fbbf24' }]} />
+            <Text style={styles.stopText}>CANCEL</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* RECORDING — large countdown + stop button. */}
       {phase === 'RECORDING' && (
@@ -732,14 +816,14 @@ export default function CageModeScreen() {
             style={[styles.primaryBtn, styles.recordBtn]}
             onPress={() => {
               useSettingsStore.getState().markTutorialSeen('cage_voice_trigger');
-              void handleStartRecording();
+              void handleConfirmReady();
             }}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel="Start recording your swing — or say record"
+            accessibilityLabel="I'm set — start the 5 second countdown before recording"
           >
             <View style={styles.recordDot} />
-            <Text style={styles.primaryBtnText}>Start Recording</Text>
+            <Text style={styles.primaryBtnText}>I&apos;m Set · Start in 5s</Text>
           </TouchableOpacity>
         </View>
       )}

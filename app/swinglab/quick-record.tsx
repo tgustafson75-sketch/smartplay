@@ -38,7 +38,14 @@ import {
 } from '../../services/acousticImpactDetector';
 import { detectBallSpeed } from '../../services/acousticDetectApi';
 
-const MAX_RECORD_SECONDS = 8;
+// 2026-05-24 — Pre-record countdown gives the solo user time to walk
+// from the phone to the ball after tapping Record. Tim's complaint:
+// "8 seconds wasn't enough to get over the ball and hit it." 5s of
+// countdown + 30s of recording window means the user has up to 35s
+// from tap to finished swing, and a visible "Recording in 5… 4…"
+// signal so they know when the camera actually starts capturing.
+const PRE_RECORD_COUNTDOWN_SECONDS = 5;
+const MAX_RECORD_SECONDS = 30;
 
 type Angle = 'down_the_line' | 'face_on';
 
@@ -78,7 +85,13 @@ export default function QuickRecord() {
   // Cage's UPLOADING phase. Typically <2s; never blocks navigation
   // for more than detectBallSpeed's server response.
   const [processing, setProcessing] = useState(false);
+  // Pre-record countdown ticks down from PRE_RECORD_COUNTDOWN_SECONDS
+  // → 0 BEFORE the camera starts capturing. While > 0 the screen
+  // shows the big countdown number; when it hits 0, recording starts.
+  // null = not counting down; number = seconds remaining.
+  const [countdown, setCountdown] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoStartedRef = useRef(false);
 
   useEffect(() => {
@@ -105,14 +118,14 @@ export default function QuickRecord() {
     };
   }, []);
 
-  const handleRecord = useCallback(async () => {
-    if (recording) {
-      try { cameraRef.current?.stopRecording(); } catch {}
-      return;
-    }
+  // The actual record kickoff — called either immediately (when the
+  // user disables the countdown via long-press → "Start now") or after
+  // the pre-record countdown ticks to zero.
+  const startActualRecording = useCallback(async () => {
     if (!cameraRef.current) return;
     setElapsed(0);
     setRecording(true);
+    setCountdown(null);
     // 2026-05-24 (C2) — Parallel audio recording starts ALONGSIDE the
     // camera so the meter time-series captures the same window as the
     // video. Fire-and-forget per Cage's pattern: if mic permission is
@@ -217,7 +230,50 @@ export default function QuickRecord() {
       setProcessing(false);
       setElapsed(0);
     }
-  }, [recording, router, angle]);
+  }, [router, angle, clubParam]);
+
+  // handleRecord — top-level Record button handler. Branches:
+  //   - if currently RECORDING → stop (manual stop).
+  //   - if currently COUNTING DOWN → cancel countdown.
+  //   - otherwise → kick off the pre-record countdown, then
+  //     startActualRecording when it ticks to 0.
+  const handleRecord = useCallback(() => {
+    if (recording) {
+      try { cameraRef.current?.stopRecording(); } catch {}
+      return;
+    }
+    if (countdown != null) {
+      // User tapped during countdown → cancel.
+      if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+      setCountdown(null);
+      return;
+    }
+    if (!cameraRef.current) return;
+    if (PRE_RECORD_COUNTDOWN_SECONDS <= 0) {
+      void startActualRecording();
+      return;
+    }
+    setCountdown(PRE_RECORD_COUNTDOWN_SECONDS);
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev == null) return null;
+        if (prev <= 1) {
+          if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+          void startActualRecording();
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, [recording, countdown, startActualRecording]);
+
+  // Cleanup the countdown timer on unmount in case the user backs out
+  // mid-countdown — same idempotent shape as the elapsed timer.
+  useEffect(() => {
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, []);
 
   // 2026-05-21 — Fix B: auto-start from voice intent. When the user
   // says "record me down the line" / "face on", openToolHandler
@@ -391,29 +447,46 @@ export default function QuickRecord() {
         </View>
       ) : null}
 
+      {/* 2026-05-24 — Pre-record countdown overlay. Big, center-screen
+          number that ticks down from PRE_RECORD_COUNTDOWN_SECONDS → 1.
+          Visible only during the countdown; gives the solo user a clear
+          "you've got N more seconds to walk to the ball" signal before
+          recording starts. Tap the record button (or any spot — handled
+          by handleRecord) to cancel. */}
+      {countdown != null && (
+        <View style={styles.countdownOverlay} pointerEvents="none">
+          <Text style={styles.countdownNumber}>{countdown}</Text>
+          <Text style={styles.countdownLabel}>get in position</Text>
+        </View>
+      )}
+
       {/* Bottom — big record button */}
       <View style={[styles.bottomArea, { bottom: insets.bottom + 24 }]}>
         <Text style={styles.hint}>
           {recording
-            ? 'Tap to stop'
+            ? `Tap to stop  ·  ${elapsed}s / ${MAX_RECORD_SECONDS}s`
+            : countdown != null
+            ? `Recording in ${countdown}…  ·  tap to cancel`
             : processing
             ? 'Reading impact…'
-            : 'Frame the swing · phone vertical · stable mount'}
+            : `Tap record · ${PRE_RECORD_COUNTDOWN_SECONDS}s countdown, then up to ${MAX_RECORD_SECONDS}s of capture`}
         </Text>
         <TouchableOpacity
           onPress={handleRecord}
           disabled={processing}
           style={[
             styles.recordOuter,
-            { borderColor: recording ? '#ef4444' : '#ffffff', opacity: processing ? 0.5 : 1 },
+            { borderColor: recording ? '#ef4444' : countdown != null ? '#fbbf24' : '#ffffff', opacity: processing ? 0.5 : 1 },
           ]}
           accessibilityRole="button"
-          accessibilityLabel={recording ? 'Stop recording' : 'Start recording'}
+          accessibilityLabel={recording ? 'Stop recording' : countdown != null ? 'Cancel countdown' : 'Start recording'}
         >
           <View style={[
             styles.recordInner,
             recording
               ? { backgroundColor: '#ef4444', borderRadius: 6, width: 32, height: 32 }
+              : countdown != null
+              ? { backgroundColor: '#fbbf24', borderRadius: 28, width: 56, height: 56 }
               : { backgroundColor: '#ef4444', borderRadius: 28, width: 56, height: 56 },
           ]} />
         </TouchableOpacity>
@@ -469,7 +542,33 @@ const styles = StyleSheet.create({
     position: 'absolute', left: 0, right: 0,
     alignItems: 'center', gap: 14,
   },
-  hint: { color: '#cbd5e1', fontSize: 13, fontWeight: '600' },
+  hint: { color: '#cbd5e1', fontSize: 13, fontWeight: '600', textAlign: 'center', paddingHorizontal: 24 },
+  countdownOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  countdownNumber: {
+    color: '#fbbf24',
+    fontSize: 168,
+    fontWeight: '900',
+    lineHeight: 180,
+    textShadowColor: 'rgba(0,0,0,0.75)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 12,
+  },
+  countdownLabel: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginTop: 8,
+    textShadowColor: 'rgba(0,0,0,0.75)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+  },
   recordOuter: {
     width: 78, height: 78, borderRadius: 39,
     borderWidth: 4, alignItems: 'center', justifyContent: 'center',
