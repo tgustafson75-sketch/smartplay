@@ -22,7 +22,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useRoundStore } from '../store/roundStore';
@@ -37,8 +37,23 @@ import {
   useGreenOverride,
   listOverridesForCourse,
 } from '../services/courseGreenOverrides';
+// 2026-05-25 — Fix J: unified screen also handles Tee marks. Tee
+// override imports load lazily to keep the existing Mark Green
+// surface unchanged when mode='green' (the default).
+import {
+  setTeeOverride,
+  clearTeeOverride,
+  useTeeOverride,
+} from '../services/courseTeeOverrides';
 import { useToastStore } from '../store/toastStore';
 import * as Haptics from 'expo-haptics';
+
+// 2026-05-25 — Fix J: unified Mark screen mode. 'green' is the
+// original Mark Green surface (clean, tested); 'tee' uses the same
+// UX flow + GPS capture but writes to the tee override store. URL
+// param `mode=tee` flips it; `/mark-tee` route forwards into this
+// screen with that param.
+type MarkMode = 'green' | 'tee';
 
 function formatAge(ms: number): string {
   if (ms < 1000) return '<1s ago';
@@ -49,7 +64,7 @@ function formatAge(ms: number): string {
   });
 }
 
-export default function MarkGreenScreen() {
+export default function MarkPositionScreen() {
   // 2026-05-17 — Owner+__DEV__ gate. OSM auto-detect now handles
   // most courses; Mark Green is the fallback when OSM is wrong or
   // missing. Kept reachable for owner accounts (Settings → Owner
@@ -73,10 +88,25 @@ export default function MarkGreenScreen() {
   const setCurrentHole = useRoundStore(s => s.setCurrentHole);
   const isRoundActive = useRoundStore(s => s.isRoundActive);
 
+  // 2026-05-25 — Fix J: read URL mode + render a toggle so the user
+  // can switch tee/green within the screen. Initial value comes from
+  // ?mode= so deep-links (voice "mark the tee" → /mark-green?mode=tee)
+  // open straight to the right mode.
+  const { mode: modeParam } = useLocalSearchParams<{ mode?: string }>();
+  const initialMode: MarkMode = modeParam === 'tee' ? 'tee' : 'green';
+  const [mode, setMode] = useState<MarkMode>(initialMode);
+  const isTeeMode = mode === 'tee';
+  const labelTitle = isTeeMode ? 'Mark Tee' : 'Mark Green';
+  const labelTarget = isTeeMode ? 'tee' : 'green';
+
   const [fix, setFix] = useState<GpsFix | null>(null);
   const [marking, setMarking] = useState(false);
   const courseId = activeCourseId ?? null;
-  const override = useGreenOverride(courseId, currentHole);
+  // Both override hooks always run (Rules of Hooks); we just pick which
+  // one's value to render below based on mode.
+  const greenOverride = useGreenOverride(courseId, currentHole);
+  const teeOverride = useTeeOverride(courseId, currentHole);
+  const override = isTeeMode ? teeOverride : greenOverride;
   const [overrideList, setOverrideList] = useState(() => courseId ? listOverridesForCourse(courseId) : []);
 
   useEffect(() => {
@@ -95,7 +125,7 @@ export default function MarkGreenScreen() {
 
   const onMark = useCallback(async () => {
     if (!courseId) {
-      Alert.alert('Start a round first', 'Mark Green needs an active course to know where to file the coordinates.');
+      Alert.alert('Start a round first', `${labelTitle} needs an active course to know where to file the coordinates.`);
       return;
     }
     if (marking) return;
@@ -108,20 +138,28 @@ export default function MarkGreenScreen() {
         Alert.alert('GPS unavailable', 'Step into open sky and try again.');
         return;
       }
-      await setGreenOverride(courseId, currentHole, { lat: fresh.lat, lng: fresh.lng });
+      if (isTeeMode) {
+        await setTeeOverride(courseId, currentHole, { lat: fresh.lat, lng: fresh.lng });
+      } else {
+        await setGreenOverride(courseId, currentHole, { lat: fresh.lat, lng: fresh.lng });
+      }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-      useToastStore.getState().show(`Green marked: hole ${currentHole}`);
+      useToastStore.getState().show(`${isTeeMode ? 'Tee' : 'Green'} marked: hole ${currentHole}`);
     } finally {
       setMarking(false);
     }
-  }, [courseId, currentHole, marking]);
+  }, [courseId, currentHole, marking, isTeeMode, labelTitle]);
 
   const onClear = useCallback(async () => {
     if (!courseId) return;
-    await clearGreenOverride(courseId, currentHole);
+    if (isTeeMode) {
+      await clearTeeOverride(courseId, currentHole);
+    } else {
+      await clearGreenOverride(courseId, currentHole);
+    }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     useToastStore.getState().show(`Cleared: hole ${currentHole}`);
-  }, [courseId, currentHole]);
+  }, [courseId, currentHole, isTeeMode]);
 
   // 2026-05-17 — Gate check AFTER all hooks have been declared so
   // React's hook-count invariant holds across renders even when
@@ -134,19 +172,53 @@ export default function MarkGreenScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Mark Green</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{labelTitle}</Text>
         <View style={{ width: 26 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.body}>
+        {/* 2026-05-25 — Fix J: mode toggle. Two pills (Tee / Green)
+            with the active one filled. Tap to swap the target store;
+            screen contents update through the shared render. */}
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14, justifyContent: 'center' }}>
+          {(['tee', 'green'] as const).map(m => {
+            const active = mode === m;
+            return (
+              <TouchableOpacity
+                key={m}
+                onPress={() => setMode(m)}
+                style={{
+                  paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
+                  borderWidth: 1.5,
+                  borderColor: active ? colors.accent : colors.border,
+                  backgroundColor: active ? colors.accent + '22' : 'transparent',
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Mark ${m === 'tee' ? 'Tee' : 'Green'} mode${active ? ' (active)' : ''}`}
+              >
+                <Text style={{
+                  color: active ? colors.accent : colors.text_muted,
+                  fontWeight: '800',
+                  letterSpacing: 0.8,
+                  fontSize: 12,
+                }}>
+                  {m === 'tee' ? 'TEE' : 'GREEN'}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         <Text style={[styles.hint, { color: colors.text_muted }]}>
-          Walk to the CENTER of the green. Tap "Mark green center". Your GPS position becomes this hole's middle coordinate for all future rounds at this course.
+          {isTeeMode
+            ? `Walk to the TEE BOX. Tap "Mark ${labelTarget}". Your GPS position becomes this hole's tee coordinate for all future rounds at this course.`
+            : `Walk to the CENTER of the green. Tap "Mark ${labelTarget} center". Your GPS position becomes this hole's middle coordinate for all future rounds at this course.`}
         </Text>
 
         {!isRoundActive && (
           <View style={[styles.warningCard, { backgroundColor: colors.surface, borderColor: '#F5A623' }]}>
             <Text style={[styles.warningText, { color: colors.text_primary }]}>
-              No round active. Start a round first so Mark Green knows which course + hole to file.
+              No round active. Start a round first so {labelTitle} knows which course + hole to file.
             </Text>
           </View>
         )}
@@ -204,11 +276,15 @@ export default function MarkGreenScreen() {
             { backgroundColor: colors.accent, opacity: (marking || !courseId || !fix) ? 0.5 : 1 },
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Mark green center at current position"
+          accessibilityLabel={`Mark ${labelTarget} at current position`}
         >
-          <Ionicons name="flag" size={20} color="#000" style={{ marginRight: 8 }} />
+          <Ionicons name={isTeeMode ? 'golf' : 'flag'} size={20} color="#000" style={{ marginRight: 8 }} />
           <Text style={styles.markBtnText}>
-            {marking ? 'Marking…' : `Mark green center for hole ${currentHole}`}
+            {marking
+              ? 'Marking…'
+              : isTeeMode
+                ? `Mark tee for hole ${currentHole}`
+                : `Mark green center for hole ${currentHole}`}
           </Text>
         </TouchableOpacity>
 
