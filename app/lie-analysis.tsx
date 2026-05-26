@@ -17,7 +17,8 @@ import {
   type LieAnalysis,
   type RiskRewardCall,
 } from '../services/lieAnalysisService';
-import { speak, stopSpeaking } from '../services/voiceService';
+import { speak, stopSpeaking, captureUtterance, configureAudioForSpeech } from '../services/voiceService';
+import { getCaddieName } from '../lib/persona';
 import { useSettingsStore } from '../store/settingsStore';
 // Phase 409 — persist the lie analysis onto the pending slot so the
 // next logged shot carries it + the caddie brain can read it for the
@@ -37,13 +38,21 @@ const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
  * Caddie tab; tap "Try again" recaptures.
  */
 
-type Phase = 'camera' | 'analyzing' | 'result' | 'low_quality' | 'no_network' | 'error';
+type Phase = 'opener' | 'opener_listening' | 'camera' | 'analyzing' | 'result' | 'low_quality' | 'no_network' | 'error';
 
 export default function LieAnalysisScreen() {
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ intent?: string }>();
+  const params = useLocalSearchParams<{ intent?: string; smartplay?: string }>();
   const playIntent: PlayIntent = (params.intent === 'aggressive' || params.intent === 'conservative') ? params.intent : null;
+  // 2026-05-26 — Fix W.2: when entered via the SmartPlay voice command
+  // (openToolHandler appends ?smartplay=1), start in the conversational
+  // opener — caddie asks "what do you see?" and captures the player's
+  // verbal context BEFORE the photo. Direct routes to /lie-analysis
+  // (manual nav, intent-only voice triggers) skip the opener and land
+  // straight on the camera as before — no regression for the
+  // legacy/tactical path.
+  const smartplayMode = params.smartplay === '1';
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView | null>(null);
@@ -59,12 +68,16 @@ export default function LieAnalysisScreen() {
     return () => sub.remove();
   }, [requestCameraPermission]);
 
-  const [phase, setPhase] = useState<Phase>('camera');
+  const [phase, setPhase] = useState<Phase>(smartplayMode ? 'opener' : 'camera');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<LieAnalysis | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [followUp, setFollowUp] = useState<string | null>(null);
   const [speaking, setSpeaking] = useState(false);
+  // 2026-05-26 — Fix W.2: captured verbal context from the SmartPlay
+  // opener. Rides in LieAnalysisContext.player_notes to the vision
+  // prompt. null when opener was skipped or capture failed.
+  const [playerNotes, setPlayerNotes] = useState<string | null>(null);
   // 2026-05-22 — include_strategy toggle. When ON, the capture path
   // calls enrichedLieAnalysis (lie vision + acoustic prior +
   // metaCourseIntelligence risk band). When OFF (default), the
@@ -75,6 +88,7 @@ export default function LieAnalysisScreen() {
   const [riskReward, setRiskReward] = useState<RiskRewardCall | null>(null);
 
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const trustLevel = useTrustLevelStore(s => s.level);
 
   const speakAnalysis = useCallback(async (a: LieAnalysis) => {
@@ -106,6 +120,49 @@ export default function LieAnalysisScreen() {
     }
   }, [voiceEnabled, voiceGender, language, trustLevel]);
 
+  // 2026-05-26 — Fix W.2: SmartPlay conversational opener.
+  // Fires ONCE on mount when smartplayMode is on. Caddie asks "What
+  // do you see?" → speak() resolves → captureUtterance for ~10s
+  // (silence-VAD auto-stops) → transcript → playerNotes → advance to
+  // camera phase. Skip pressed (or capture fail) jumps straight to
+  // camera with playerNotes left null — analysis still works, just
+  // without the verbal grounding.
+  const openerFiredRef = useRef(false);
+  const runOpener = useCallback(async () => {
+    if (openerFiredRef.current) return;
+    openerFiredRef.current = true;
+    const caddieName = getCaddieName(caddiePersonality);
+    const prompt = `Hey, it's ${caddieName}. What do you see? Tell me your situation and I'll look at the lie with you.`;
+    try {
+      await configureAudioForSpeech();
+      // userInitiated:true — the player launched SmartPlay via voice,
+      // so this opener IS user-initiated. Without it, isVoiceAllowed
+      // would silently drop on L1. [[voice-userinitiated-rule]]
+      await speak(prompt, voiceGender, language, apiUrl, { userInitiated: true });
+      setPhase('opener_listening');
+      const heard = await captureUtterance(10_000, apiUrl, language);
+      if (heard && heard.trim().length > 0) {
+        setPlayerNotes(heard.trim());
+      }
+    } catch (e) {
+      console.log('[lie-analysis] opener failed (non-fatal):', e);
+    } finally {
+      setPhase('camera');
+    }
+  }, [caddiePersonality, voiceGender, language]);
+
+  useEffect(() => {
+    if (smartplayMode && phase === 'opener') {
+      void runOpener();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [smartplayMode]);
+
+  const handleSkipOpener = useCallback(() => {
+    void stopSpeaking().catch(() => {});
+    setPhase('camera');
+  }, []);
+
   const runAnalysis = useCallback(async (uri: string) => {
     setPhase('analyzing');
     setRiskReward(null);
@@ -128,12 +185,16 @@ export default function LieAnalysisScreen() {
       // metaCourseIntelligence risk band). The enriched result still
       // contains the tactical LieAnalysis so we hand the same shape
       // to AnalysisResult, just with an additional riskReward overlay.
+      // 2026-05-26 — Fix W.2: enriched path also threads playerNotes
+      // through (still applies when smartplay opener captured context
+      // AND user toggled strategy on for this shot).
       if (includeStrategy) {
         const enriched = await enrichedLieAnalysis({
           imageBase64: b64,
           imageMediaType: 'image/jpeg',
           voiceGender,
           include_strategy: true,
+          player_notes: playerNotes,
         });
         setAnalysis(enriched.base);
         setRiskReward(enriched.risk_reward);
@@ -142,7 +203,7 @@ export default function LieAnalysisScreen() {
         return;
       }
 
-      const ctx = await bundleLieAnalysisContext(playIntent);
+      const ctx = await bundleLieAnalysisContext(playIntent, playerNotes);
       const result: LieAnalysisResult = await analyzeLie(b64, ctx, 'image/jpeg', voiceGender);
 
       if (result.kind === 'ok') {
@@ -168,7 +229,7 @@ export default function LieAnalysisScreen() {
       setErrorMessage(e instanceof Error ? e.message : 'Unknown error');
       setPhase('error');
     }
-  }, [playIntent, speakAnalysis, voiceEnabled, voiceGender, language, includeStrategy]);
+  }, [playIntent, speakAnalysis, voiceEnabled, voiceGender, language, includeStrategy, playerNotes]);
 
   const handleCapture = useCallback(async () => {
     if (!cameraRef.current) return;
@@ -349,6 +410,43 @@ export default function LieAnalysisScreen() {
     );
   }
 
+  // 2026-05-26 — Fix W.2: SmartPlay opener — caddie speaks "what do
+  // you see?" then listens, captures verbal context, then advances
+  // to camera. Hold pressed (Skip) leaves notes empty and goes
+  // straight to camera. Same back affordance + cancel-safe.
+  if (phase === 'opener' || phase === 'opener_listening') {
+    const isListening = phase === 'opener_listening';
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn}>
+            <Text style={styles.headerBtnText}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>SmartPlay</Text>
+          <TouchableOpacity onPress={handleSkipOpener} style={styles.headerBtn}>
+            <Text style={styles.headerBtnText}>Skip</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.openerBody}>
+          <View style={[styles.openerOrb, isListening && styles.openerOrbListening]}>
+            <Text style={styles.openerOrbGlyph}>{isListening ? '◉' : '◔'}</Text>
+          </View>
+          <Text style={styles.openerHeadline}>
+            {isListening ? 'Listening…' : 'Setting up…'}
+          </Text>
+          <Text style={styles.openerSub}>
+            {isListening
+              ? `Tell ${getCaddieName(caddiePersonality)} what you're looking at — distance, the pin, what's between you and it.`
+              : `${getCaddieName(caddiePersonality)} is greeting you.`}
+          </Text>
+          <TouchableOpacity onPress={handleSkipOpener} style={styles.openerSkipBtn}>
+            <Text style={styles.openerSkipText}>Skip to camera</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   // phase === 'camera' | 'analyzing'
   return (
     <View style={styles.container}>
@@ -362,6 +460,21 @@ export default function LieAnalysisScreen() {
         <Text style={styles.cameraTitle}>LIE ANALYSIS</Text>
         <View style={styles.iconBtn} />
       </View>
+
+      {/* 2026-05-26 — Fix W.2: surface the captured verbal context on
+          the camera screen so the player can see what they said
+          before the photo. Tap to clear. */}
+      {phase === 'camera' && playerNotes && (
+        <View style={[styles.playerNotesChip, { top: insets.top + 60 }]}>
+          <Text style={styles.playerNotesLabel}>YOU SAID</Text>
+          <Text style={styles.playerNotesText} numberOfLines={2}>
+            &ldquo;{playerNotes}&rdquo;
+          </Text>
+          <TouchableOpacity onPress={() => setPlayerNotes(null)} hitSlop={8}>
+            <Text style={styles.playerNotesClear}>clear</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* First-use instruction */}
       {phase === 'camera' && (
@@ -437,6 +550,48 @@ const styles = StyleSheet.create({
   iconBtnText: { color: '#ffffff', fontSize: 22, fontWeight: '700' },
   cameraTitle: { color: '#ffffff', fontSize: 14, fontWeight: '800', letterSpacing: 1.5 },
 
+  // 2026-05-26 — Fix W.2 opener phase styles.
+  openerBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 60,
+  },
+  openerOrb: {
+    width: 120, height: 120, borderRadius: 60,
+    borderWidth: 3, borderColor: 'rgba(0, 200, 150, 0.55)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 24,
+  },
+  openerOrbListening: {
+    borderColor: '#00C896',
+    backgroundColor: 'rgba(0, 200, 150, 0.18)',
+  },
+  openerOrbGlyph: { color: '#00C896', fontSize: 48, fontWeight: '700' },
+  openerHeadline: {
+    color: '#ffffff', fontSize: 22, fontWeight: '800', marginBottom: 8,
+    letterSpacing: 0.3,
+  },
+  openerSub: {
+    color: 'rgba(255,255,255,0.75)', fontSize: 14, lineHeight: 21,
+    textAlign: 'center', maxWidth: 320,
+  },
+  openerSkipBtn: { marginTop: 32, paddingVertical: 10, paddingHorizontal: 18 },
+  openerSkipText: { color: '#00C896', fontSize: 14, fontWeight: '700' },
+  // Captured-verbal-context chip on the camera screen.
+  playerNotesChip: {
+    position: 'absolute', left: 16, right: 16,
+    backgroundColor: 'rgba(6, 15, 9, 0.85)',
+    borderColor: 'rgba(0, 200, 150, 0.4)', borderWidth: 1,
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
+  playerNotesLabel: {
+    color: '#00C896', fontSize: 9, fontWeight: '900', letterSpacing: 1,
+  },
+  playerNotesText: { color: '#ffffff', fontSize: 12, flex: 1, fontStyle: 'italic' },
+  playerNotesClear: { color: '#00C896', fontSize: 11, fontWeight: '700' },
   instructionBox: {
     position: 'absolute',
     top: '40%',

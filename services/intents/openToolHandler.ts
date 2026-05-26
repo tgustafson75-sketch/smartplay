@@ -139,12 +139,14 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   library: { type: 'navigate', path: '/swinglab/library' },
   swing_library: { type: 'navigate', path: '/swinglab/library' },
   swinglibrary: { type: 'navigate', path: '/swinglab/library' },
-  // 2026-05-25 — Fix W.1: SmartPlay alias. Routes to the existing
-  // lie-analysis camera surface; Phase 2 (separate work) will wire a
-  // conversational opener that prompts the player for context before
-  // the photo. For now this unblocks the voice command.
-  smartplay: { type: 'navigate', path: '/lie-analysis' },
-  smart_play: { type: 'navigate', path: '/lie-analysis' },
+  // 2026-05-25 — Fix W.1: SmartPlay alias routes to the lie-analysis
+  // camera surface.
+  // 2026-05-26 — Fix W.2: pass smartplay=1 so the lie-analysis screen
+  // opens with the conversational opener (caddie asks "what do you
+  // see?" + captures voice context BEFORE the photo). Direct routes
+  // to /lie-analysis without the param keep the camera-first behavior.
+  smartplay: { type: 'navigate', path: '/lie-analysis?smartplay=1' },
+  smart_play: { type: 'navigate', path: '/lie-analysis?smartplay=1' },
 };
 
 const TOOL_LABEL: Record<string, string> = {

@@ -212,6 +212,10 @@ export interface EnrichLieInput {
    *  a risk/reward call. Optional — caller decides whether the user
    *  wants strategic depth or just the tactical lie read. */
   include_strategy?: boolean;
+  /** 2026-05-26 — Fix W.2: verbal context the player spoke before the
+   *  capture (SmartPlay opener). Rides in LieAnalysisContext.player_notes
+   *  to the vision prompt. */
+  player_notes?: string | null;
 }
 
 /**
@@ -223,7 +227,7 @@ export interface EnrichLieInput {
 export async function enrichedLieAnalysis(input: EnrichLieInput): Promise<EnrichedLieAnalysis> {
   // 1. Base vision call — bundled context.
   const ctxMod = await import('./lieAnalysisContext');
-  const context = await ctxMod.bundleLieAnalysisContext(null);
+  const context = await ctxMod.bundleLieAnalysisContext(null, input.player_notes ?? null);
   const baseResult = await analyzeLie(
     input.imageBase64,
     context,

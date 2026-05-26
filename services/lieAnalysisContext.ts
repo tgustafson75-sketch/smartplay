@@ -42,9 +42,20 @@ export type LieAnalysisContext = {
   current_total_strokes: number | null;
   holes_played: number | null;
   trust_level: TrustLevel;
+  // 2026-05-26 — Fix W.2: SmartPlay conversational opener. When the
+  // player lands on TightLie via the SmartPlay voice command, the
+  // screen captures a verbal description ("ball's in the rough behind
+  // a tree, about 140 to the green") BEFORE the photo. That transcript
+  // rides in here so the vision prompt can ground its read in what
+  // the player actually said vs blindly guessing from pixels alone.
+  // Null when not used (manual camera tap, no voice context captured).
+  player_notes: string | null;
 };
 
-export async function bundleLieAnalysisContext(playIntent: PlayIntent = null): Promise<LieAnalysisContext> {
+export async function bundleLieAnalysisContext(
+  playIntent: PlayIntent = null,
+  playerNotes: string | null = null,
+): Promise<LieAnalysisContext> {
   const round = useRoundStore.getState();
   const currentHole = round.isRoundActive ? round.currentHole : null;
   const par = round.isRoundActive ? (round.getCurrentPar() ?? null) : null;
@@ -105,5 +116,6 @@ export async function bundleLieAnalysisContext(playIntent: PlayIntent = null): P
     current_total_strokes,
     holes_played,
     trust_level: getTrustLevel(),
+    player_notes: playerNotes,
   };
 }
