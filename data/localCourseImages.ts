@@ -173,16 +173,27 @@ export const MARINERS_POINT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
 // via sips: 820,300 → 640x1500. Removes status bar, ad strip, left
 // stats column, "Get Pro!" bar, and bottom Holes/Preview/Track nav so
 // only the hole map remains (Lakes/Palms aesthetic).
+// 2026-05-26 — Fix BH: Maplewood Golf Club is an 18-hole course in
+// Bethlehem, NH (also known locally as "Settlers Crossing Golf Course"
+// per Tim's brother DJ). Course has a unique hole 16 par 6. Holes
+// 6-18 sourced from 18Birdies screenshots (1768x2208 portrait, ~2MB
+// each) for beta validation — IP-clean replacement required before
+// public release. Holes 1-5 pending; missing entries fall through
+// to the Mapbox aerial fallback automatically.
 export const MAPLEWOOD_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/maplewood/hole-01.jpg'),
-  2: require('../assets/courses/maplewood/hole-02.jpg'),
-  3: require('../assets/courses/maplewood/hole-03.jpg'),
-  4: require('../assets/courses/maplewood/hole-04.jpg'),
-  5: require('../assets/courses/maplewood/hole-05.jpg'),
-  6: require('../assets/courses/maplewood/hole-06.jpg'),
-  7: require('../assets/courses/maplewood/hole-07.jpg'),
-  8: require('../assets/courses/maplewood/hole-08.jpg'),
-  9: require('../assets/courses/maplewood/hole-09.jpg'),
+  6:  require('../assets/courses/maplewood/hole-06.jpg'),
+  7:  require('../assets/courses/maplewood/hole-07.jpg'),
+  8:  require('../assets/courses/maplewood/hole-08.jpg'),
+  9:  require('../assets/courses/maplewood/hole-09.jpg'),
+  10: require('../assets/courses/maplewood/hole-10.jpg'),
+  11: require('../assets/courses/maplewood/hole-11.jpg'),
+  12: require('../assets/courses/maplewood/hole-12.jpg'),
+  13: require('../assets/courses/maplewood/hole-13.jpg'),
+  14: require('../assets/courses/maplewood/hole-14.jpg'),
+  15: require('../assets/courses/maplewood/hole-15.jpg'),
+  16: require('../assets/courses/maplewood/hole-16.jpg'),
+  17: require('../assets/courses/maplewood/hole-17.jpg'),
+  18: require('../assets/courses/maplewood/hole-18.jpg'),
 };
 
 // 2026-05-24 — Pembroke Pines Country Club, Pembroke NH (18 holes).
@@ -279,7 +290,12 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   if (c.includes('san jose')) return 'san-jose-muni';
   if (c.includes('sunnyvale')) return 'sunnyvale';
   if (c.includes('pembroke')) return 'pembroke-pines';
+  // 2026-05-26 — Fix BH: "Settlers Crossing Golf Course" is the
+  // local-vernacular name (per Tim's brother DJ) for the same
+  // Maplewood Golf Club in Bethlehem NH. Both names route to the
+  // same bundled images.
   if (c.includes('maplewood')) return 'maplewood';
+  if (c.includes('settlers crossing') || c.includes("settler's crossing")) return 'maplewood';
   return null;
 }
 
@@ -311,6 +327,10 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   if (c.includes('sunnyvale')) return SUNNYVALE_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('pembroke')) return PEMBROKE_PINES_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('maplewood')) return MAPLEWOOD_HOLE_IMAGES[holeNumber] ?? null;
+  // 2026-05-26 — Fix BH: "Settlers Crossing" alias for Maplewood.
+  if (c.includes('settlers crossing') || c.includes("settler's crossing")) {
+    return MAPLEWOOD_HOLE_IMAGES[holeNumber] ?? null;
+  }
   return null;
 }
 
