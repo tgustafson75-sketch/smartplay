@@ -32,6 +32,7 @@ import {
 import Svg, { Line, Circle, Text as SvgText } from 'react-native-svg';
 import { resolveHoleImage, type HoleImageResolution } from '../../services/holeImageMapper';
 import { haversineYards } from '../../utils/geoDistance';
+import WindageBadge from './WindageBadge';
 
 interface LatLng { lat: number; lng: number }
 
@@ -223,6 +224,15 @@ export default function GolfshotHoleView({
           <Text style={styles.noImageHint}>Drag Y and P to set your own targets.</Text>
         </View>
       )}
+
+      {/* 2026-05-26 — Fix BL: SmartPlay live-wind badge. Two birds one
+          stone: covers the noisy 18Birdies floating bubbles cluster
+          (top-center) AND surfaces actual live wind data the player
+          can use for shot choice. Renders only when round is active +
+          weather available; gracefully shrinks to nothing otherwise. */}
+      {imageSource ? (
+        <WindageBadge containerWidth={width} containerHeight={height} />
+      ) : null}
 
       {/* Green disk overlay + distance line + labels (one SVG layer). */}
       <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
