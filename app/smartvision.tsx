@@ -1157,15 +1157,28 @@ export default function SmartVisionScreen() {
             them visually. Renders only when a fix + projection are
             both available. */}
         {playerCanvas ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.playerCart,
-              { left: playerCanvas.x - 12, top: playerCanvas.y - 12 },
-            ]}
-          >
-            <Ionicons name="navigate" size={14} color="#0d1a0d" />
-          </View>
+          <>
+            {/* 2026-05-25 — Fix Q: brand-green halo + larger cart so
+                the live position dot is unmissable. Both layers
+                update on every GPS tick via markBumpTick → playerCanvas
+                memo recompute. */}
+            <View
+              pointerEvents="none"
+              style={[
+                styles.playerCartHalo,
+                { left: playerCanvas.x - 28, top: playerCanvas.y - 28 },
+              ]}
+            />
+            <View
+              pointerEvents="none"
+              style={[
+                styles.playerCart,
+                { left: playerCanvas.x - 18, top: playerCanvas.y - 18 },
+              ]}
+            >
+              <Ionicons name="navigate" size={18} color="#0d1a0d" />
+            </View>
+          </>
         ) : null}
 
         {/* Measure label — floats above-right of yellow marker. */}
@@ -1311,17 +1324,31 @@ const styles = StyleSheet.create({
   },
   markerText: { fontWeight: '900', letterSpacing: 0.5 },
   // 2026-05-19 — Player-position cart marker. Distinct visual from
-  // the T/Y/P planning markers (smaller, no letter, ringed in white).
+  // the T/Y/P planning markers.
+  // 2026-05-25 — Fix Q: bumped 24→36px + brand-green ring + outer
+  // halo so the live moving cart icon is unmissable on Palms (Tim
+  // wanted the harness-style "GPS is moving" visual feedback on the
+  // real hole view). Re-renders on every GPS fix via the existing
+  // markBumpTick subscription, so it tracks the cart's motion.
   playerCart: {
     position: 'absolute',
-    width: 24, height: 24,
-    borderRadius: 12,
-    backgroundColor: '#F5A623',
-    borderWidth: 2, borderColor: '#ffffff',
+    width: 36, height: 36,
+    borderRadius: 18,
+    backgroundColor: '#00C896',
+    borderWidth: 3, borderColor: '#ffffff',
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.6, shadowRadius: 3, elevation: 8,
+    shadowColor: '#00C896', shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.85, shadowRadius: 8, elevation: 10,
     zIndex: 25,
+  },
+  playerCartHalo: {
+    position: 'absolute',
+    width: 56, height: 56,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: '#00C896',
+    opacity: 0.35,
+    zIndex: 24,
   },
   measureLabel: {
     position: 'absolute',

@@ -54,14 +54,53 @@ export const TRUST_LEVEL_SLIDER_ORDER: readonly TrustLevel[] = [1, 5, 2, 3, 4];
 
 interface TrustLevelState {
   level: TrustLevel;
+  /** 2026-05-25 — Fix AQ: persona we should restore when leaving L5
+   *  Cockpit. Captured at the moment of entering L5 so the user
+   *  doesn't lose their preferred persona when they cycle into and
+   *  back out of Cockpit. Null when not in Cockpit. */
+  preCockpitPersona: string | null;
   setLevel: (level: TrustLevel) => void;
 }
 
 export const useTrustLevelStore = create<TrustLevelState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       level: 2,
-      setLevel: (level) => set({ level }),
+      preCockpitPersona: null,
+      setLevel: (level) => {
+        const prev = get().level;
+        const wasCockpit = prev === 5;
+        const willBeCockpit = level === 5;
+
+        // 2026-05-25 — Fix AQ: Cockpit IS Harry (per SPRINT-LOG
+        // 2026-05-25). Entering L5 → save current persona, swap to
+        // Harry. Leaving L5 → restore the saved persona so the user
+        // gets back Kevin/Tank/Serena. Dynamic require to avoid a
+        // circular import between settingsStore and trustLevelStore.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const settingsMod = require('./settingsStore') as typeof import('./settingsStore');
+          const currentPersona = settingsMod.useSettingsStore.getState().caddiePersonality;
+          if (willBeCockpit && !wasCockpit) {
+            set({ level, preCockpitPersona: currentPersona ?? null });
+            if (currentPersona !== 'harry') {
+              settingsMod.useSettingsStore.getState().setCaddiePersonality?.('harry');
+            }
+            return;
+          }
+          if (wasCockpit && !willBeCockpit) {
+            const restore = get().preCockpitPersona;
+            set({ level, preCockpitPersona: null });
+            if (restore && restore !== currentPersona) {
+              settingsMod.useSettingsStore.getState().setCaddiePersonality?.(restore as 'kevin' | 'tank' | 'serena' | 'harry');
+            }
+            return;
+          }
+        } catch (e) {
+          console.log('[trustLevel] cockpit persona binding skipped:', e);
+        }
+        set({ level });
+      },
     }),
     {
       name: 'trust-level-store-v1',

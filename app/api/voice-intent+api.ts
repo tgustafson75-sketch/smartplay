@@ -123,6 +123,12 @@ Available intents:
    - "GPS is wrong" / "GPS is off" / "GPS is stale" -> { intent_type: "refresh_gps", parameters: {} }
    - "fix my location" / "get a fresh fix" / "reset GPS" / "lock my GPS" / "recalibrate GPS" -> { intent_type: "refresh_gps", parameters: {} }
 
+3.45 position_declaration — User declares WHERE they are physically (soft GPS validation, no write).
+   parameters: { spot: "tee" | "green" }
+   - "I'm on the tee" / "I'm at the tee box" -> { intent_type: "position_declaration", parameters: { spot: "tee" } }
+   - "I'm on the green" / "I'm at the pin" / "I'm at the flag" -> { intent_type: "position_declaration", parameters: { spot: "green" } }
+   Distinct from mark_tee/mark_green (those WRITE the override).
+
 3.5 state_yardage — User STATES a yardage to set as the working number for the current shot (Tier 3 of the GPS resolver). The user is feeding the system a number from another source (their own eyeball estimate, Golfshot reading, rangefinder reading, etc.) so the caddie uses THAT number instead of computing from soft GPS.
    parameters: { yards: number (10-400), source?: "golfshot" | "rangefinder" | "user" | "other" }
    Examples:
@@ -300,7 +306,7 @@ The language reflects the transcript itself, not the user's preferred app langua
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "coach_refine" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "coach_refine" | "position_declaration" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null,

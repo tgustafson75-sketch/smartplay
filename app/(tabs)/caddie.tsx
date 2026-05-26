@@ -2108,7 +2108,11 @@ export default function CaddieTab() {
         // falls through to the layers below.
         pointerEvents="box-none"
       >
-        <BrandHeaderRow hideToolsPill />
+        {/* 2026-05-25 — Fix AK follow-up: the Caddie tab has its OWN
+            dedicated mic in the L4 actions row. Hide the brand badge's
+            built-in mic chip on this tab so the user doesn't see two
+            mic icons. Trust chip stays visible. */}
+        <BrandHeaderRow hideToolsPill hideLogoMicIcon />
       </View>
 
       {/* TOP NAV — sits below the SmartPlay banner.
@@ -2124,10 +2128,17 @@ export default function CaddieTab() {
            edge of the bar — Tool stays pinned at insets.top+38, pills
            extend downward without crossing into the avatar zone. */}
       <View style={[styles.topNav, { top: insets.top + 38 }]}>
+        {/* 2026-05-25 — Fix AK follow-up: the chevron-back is a
+            shortcut to scorecard; its 12px top hitSlop was extending
+            UP into the brand row above (insets.top to insets.top+38)
+            and intercepting CaddieMicBadge taps — that's why tapping
+            the logo went to scorecard. Zeroed the top hitSlop so the
+            badge's own tap zone wins for any contact in the brand
+            row area. */}
         <TouchableOpacity
           style={styles.navBtn}
           onPress={() => router.replace('/(tabs)/scorecard' as never)}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          hitSlop={{ top: 0, bottom: 12, left: 12, right: 12 }}
         >
           <Ionicons name="chevron-back" size={24} color="#6b7d72" />
         </TouchableOpacity>

@@ -41,15 +41,19 @@ export interface BrandHeaderRowProps {
    *  Tools button (e.g. the Caddie tab's anchored top-right ••• with
    *  Caddie-specific actions). */
   hideToolsPill?: boolean;
+  /** 2026-05-25 — Fix AK follow-up: hide the badge's built-in mic
+   *  chip on tabs that have their own dedicated mic button (Caddie
+   *  tab's L4 actions row). Trust-cycle chip stays visible. */
+  hideLogoMicIcon?: boolean;
 }
 
-export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress, hideToolsPill = false }: BrandHeaderRowProps) {
+export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress, hideToolsPill = false, hideLogoMicIcon = false }: BrandHeaderRowProps) {
   const { colors } = useTheme();
   const openTools = useToolsMenuStore((s) => s.open);
 
   return (
     <View style={styles.wrap}>
-      <CaddieMicBadge size={BRAND_BADGE_SIZE} onPress={onLogoPress ?? undefined} />
+      <CaddieMicBadge size={BRAND_BADGE_SIZE} onPress={onLogoPress ?? undefined} hideMicIcon={hideLogoMicIcon} />
       <View style={styles.titleBlock}>
         <View style={styles.wordmarkRow}>
           <Text style={[styles.name1, { color: colors.accent }]}>SMARTPLAY</Text>
