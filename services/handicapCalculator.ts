@@ -194,6 +194,33 @@ export interface RoundHandicapResult {
   estimated_index_impact: string;
 }
 
+/**
+ * 2026-05-26 — Fix BD: rebuild differentials from a list of historical
+ * round records. Used by the "Recalculate Handicap From Round History"
+ * button in Settings so a user who has populated their roundHistory via
+ * Import Past Round (Batch 28) OR completed in-app rounds can derive
+ * their WHS-equivalent Index from scratch without having to enter it
+ * manually.
+ *
+ * Approach: for each round, compute a score differential against the
+ * neutral USGA baseline (course rating 72.0, slope 113) using the
+ * totalScore. Per-hole AGS capping is skipped because imported rounds
+ * don't carry per-hole pars; the trend remains meaningful even without
+ * per-hole adjustment. Result: differentials in chronological order
+ * (oldest first), trimmed to last 20 (the WHS look-back window).
+ */
+export function rebuildDifferentialsFromHistory(rounds: {
+  startedAt: number;
+  totalScore: number;
+  holesPlayed: number;
+}[]): number[] {
+  return rounds
+    .filter(r => r.holesPlayed >= 9 && r.totalScore > 0)
+    .sort((a, b) => a.startedAt - b.startedAt)
+    .map(r => computeScoreDifferential(r.totalScore, 72.0, 113))
+    .slice(-20);
+}
+
 export function computeRoundHandicap(input: {
   handicapIndex: number;
   courseRating: number;

@@ -864,6 +864,39 @@ export const useRoundStore = create<RoundState>()(
           shots: [],
         };
         set(s => ({ roundHistory: [...s.roundHistory, record] }));
+
+        // 2026-05-26 — Fix BD: feed imported rounds into the handicap
+        // pipeline just like endRound does. Mirrors the same neutral-
+        // baseline approximation (course rating 72.0, slope 113) used
+        // by endRound for local courses without confirmed rating data
+        // — keeps the differential honest enough to trend toward an
+        // estimated index without pretending to be exactly USGA-correct.
+        // Requires 9+ holes (matches endRound's gate) to count for
+        // handicap purposes.
+        if (input.holesPlayed >= 9) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const profileMod = require('./playerProfileStore');
+            const profile = profileMod.usePlayerProfileStore.getState();
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const calcMod = require('../services/handicapCalculator');
+            // Differential from total score against the neutral course
+            // baseline. Skip per-hole AGS cap since imported rounds
+            // don't carry per-hole pars (just totals).
+            const diff = calcMod.computeScoreDifferential(input.totalScore, 72.0, 113);
+            profile.pushDifferential(diff);
+            if (profile.handicap_index != null) {
+              const after = calcMod.estimateNewIndex([...profile.recent_differentials, diff]);
+              if (after?.newIndex != null && Number.isFinite(after.newIndex)) {
+                profile.setHandicapIndex(after.newIndex);
+              }
+            }
+            console.log(`[handicap] imported-round differential=${diff.toFixed(1)}`);
+          } catch (e) {
+            console.log('[handicap] imported-round update failed (non-fatal):', e);
+          }
+        }
+
         console.log(
           `[roundStore] addImportedRound id=${id} course=${input.courseName ?? 'unknown'} ` +
           `score=${input.totalScore} vsPar=${input.scoreVsPar} holes=${input.holesPlayed}`,

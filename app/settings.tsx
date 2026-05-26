@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -175,6 +175,52 @@ export default function Settings() {
   const ghinNumber = usePlayerProfileStore(s => s.ghin_number);
   const setGhinNumber = usePlayerProfileStore(s => s.setGhinNumber);
   const [editGhin, setEditGhin] = useState(ghinNumber ?? '');
+
+  // 2026-05-26 — Fix BD: WHS handicap recompute from roundHistory.
+  // Walks every round (live + Batch-28 imports) ≥ 9 holes, rebuilds
+  // the recent_differentials list, and computes a fresh Index via
+  // best-8-of-20. Replaces the existing differentials list outright
+  // so a stale/wrong index gets corrected. Toast + console log on
+  // success so the user can see the new value land.
+  const onRecalculateHandicap = useCallback(() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const roundMod = require('../store/roundStore') as typeof import('../store/roundStore');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const calcMod = require('../services/handicapCalculator') as typeof import('../services/handicapCalculator');
+      const rounds = roundMod.useRoundStore.getState().roundHistory;
+      const eligible = rounds.filter(r => r.holesPlayed >= 9 && r.totalScore > 0);
+      if (eligible.length < 3) {
+        Alert.alert(
+          'Need more rounds',
+          `Recalculation needs at least 3 rounds of 9+ holes. You have ${eligible.length}. Play more rounds or import past rounds (Settings → Help → Import Past Round).`,
+        );
+        return;
+      }
+      const differentials = calcMod.rebuildDifferentialsFromHistory(eligible);
+      // Reset the rolling window to the recomputed list. Done by
+      // clearing + re-pushing because there's no setRecentDifferentials.
+      const profileMod = usePlayerProfileStore.getState();
+      // Clear by setting handicap_index null → that's a noop on the
+      // differentials. Use the partial-state setter pattern instead:
+      // direct set via the store API.
+      usePlayerProfileStore.setState({ recent_differentials: differentials });
+      const result = calcMod.estimateNewIndex(differentials);
+      if (result.newIndex != null) {
+        profileMod.setHandicapIndex(result.newIndex);
+        setEditIndex(String(result.newIndex));
+        Alert.alert(
+          'Handicap Updated',
+          `New Index: ${result.newIndex.toFixed(1)}\n\n${result.estimateNote}`,
+        );
+      } else {
+        Alert.alert('Could not compute', result.estimateNote);
+      }
+    } catch (e) {
+      console.log('[settings] recalculate handicap threw:', e);
+      Alert.alert('Recalculation failed', e instanceof Error ? e.message : String(e));
+    }
+  }, []);
   const [editLimitation, setEditLimitation] = useState(physicalLimitation ?? '');
   const [editBest, setEditBest] = useState(personalBest ? String(personalBest) : '');
 
@@ -472,6 +518,25 @@ export default function Settings() {
             placeholder="e.g. 18.0"
             placeholderTextColor="#374151"
           />
+          {/* 2026-05-26 — Fix BD: WHS-equivalent index recalculator.
+              Rebuilds recent_differentials from the entire roundHistory
+              (live rounds + imported screenshots from Batch 28) and
+              writes the WHS best-8-of-20 average back to handicap_index.
+              Useful for users who have populated their history but
+              their index is stale OR was never set. Lives directly
+              under the manual index field so the relationship is
+              obvious. */}
+          <TouchableOpacity
+            style={[styles.recalcBtn, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}
+            onPress={onRecalculateHandicap}
+          >
+            <Text style={[styles.recalcBtnText, { color: colors.accent }]}>
+              Recalculate from Round History
+            </Text>
+          </TouchableOpacity>
+          <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -4, marginBottom: 8 }]}>
+            Uses the WHS best-8-of-20 average across your last 20 rounds (live + imported). Treats every course as 72.0 rating / 113 slope — close to GHIN but not exact.
+          </Text>
 
           {/* 2026-05-26 — Fix AB Phase 1: GHIN # capture. We store the
               number now so once USGA business-API credentials land we
@@ -1828,6 +1893,21 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontStyle: 'italic',
     paddingHorizontal: 4,
+  },
+  // 2026-05-26 — Fix BD: handicap recalculate button style.
+  recalcBtn: {
+    marginTop: 8,
+    marginBottom: 4,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  recalcBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   // Phase 105 — caddie team intro + reset link.
   sectionIntro: {
