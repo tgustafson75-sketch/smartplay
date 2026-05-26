@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Linking, AppState } from 'react-native';
+// 2026-05-26 — Fix CE: theme the StyleSheet so light mode renders correctly.
+import { useTheme } from '../contexts/ThemeContext';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -42,6 +44,9 @@ type Phase = 'opener' | 'opener_listening' | 'camera' | 'analyzing' | 'result' |
 
 export default function LieAnalysisScreen() {
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
+  // 2026-05-26 — Fix CE: theme-aware styles (was hardcoded dark palette).
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ intent?: string; smartplay?: string }>();
   const playIntent: PlayIntent = (params.intent === 'aggressive' || params.intent === 'conservative') ? params.intent : null;
@@ -526,12 +531,15 @@ export default function LieAnalysisScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+// 2026-05-26 — Fix CE: themed StyleSheet via makeStyles(colors). Hex codes
+// that matched dark-theme tokens are pulled from `c` so light mode renders.
+function makeStyles(c: ReturnType<typeof useTheme>['colors']) {
+return StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 8,
-    backgroundColor: '#060f09',
+    backgroundColor: c.background,
   },
   headerBtn: { minWidth: 80 },
   headerBtnText: { color: '#00C896', fontSize: 14, fontWeight: '700' },
@@ -674,24 +682,25 @@ const styles = StyleSheet.create({
   },
   analyzingText: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
 
-  permBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, backgroundColor: '#060f09' },
+  permBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, backgroundColor: c.background },
   permTitle: { color: '#ffffff', fontSize: 20, fontWeight: '800', marginBottom: 12 },
   permText: { color: '#9ca3af', fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 24 },
   permBtn: { backgroundColor: '#00C896', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 32 },
-  permBtnText: { color: '#060f09', fontSize: 16, fontWeight: '800' },
+  permBtnText: { color: c.background, fontSize: 16, fontWeight: '800' },
   permLink: { marginTop: 16 },
   permLinkText: { color: '#9ca3af', fontSize: 14 },
 
-  errorBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, backgroundColor: '#060f09' },
+  errorBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, backgroundColor: c.background },
   errorTitle: { color: '#ffffff', fontSize: 20, fontWeight: '800', marginBottom: 12 },
   errorBody: { color: '#cbd5e1', fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 22 },
   errorActions: { flexDirection: 'row', gap: 10 },
   actionBtn: {
     paddingVertical: 12, paddingHorizontal: 18,
-    borderWidth: 1, borderColor: '#1e3a28', borderRadius: 10,
+    borderWidth: 1, borderColor: c.border, borderRadius: 10,
     backgroundColor: '#0a1e12',
   },
   actionBtnPrimary: { borderColor: '#00C896', backgroundColor: '#003d20' },
   actionBtnText: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
   actionBtnTextPrimary: { color: '#00C896' },
 });
+}
