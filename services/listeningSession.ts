@@ -61,14 +61,64 @@ let state: SessionState = 'idle';
 let cancelMic: (() => void) | null = null;
 let unsubEarbud: (() => void) | null = null;
 
+// 2026-05-26 — Fix AP Phase 1: defensive time-gated dormancy. Safety
+// net that guarantees the listening session can't get stuck in any
+// non-idle state for more than DORMANCY_MAX_MS. Protects against:
+//   - Network hangs that leave 'thinking' stuck
+//   - Audio session that didn't close cleanly on a response
+//   - captureUtterance throws that bypass the normal idle transition
+//   - The user walking away mid-session and the phone never closing
+//
+// Approach is conservative: a single watchdog timer that rearms on
+// every state change. As long as the session keeps moving (idle →
+// opening → listening → thinking → responding → idle), each transition
+// resets the clock. If state stays stuck for the full window without
+// transitioning, the watchdog fires closeSession() with a logged
+// reason so post-mortem is honest.
+//
+// 90s window chosen to accommodate the longest legitimate path:
+// listening (up to 12s) + classifier (~3s) + brain (up to 30s) +
+// TTS playback (long replies can hit 40-50s for Tank/Serena multi-
+// sentence answers). 90s comfortably covers that with headroom.
+const DORMANCY_MAX_MS = 90_000;
+let dormancyTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearDormancyTimer(): void {
+  if (dormancyTimer) {
+    clearTimeout(dormancyTimer);
+    dormancyTimer = null;
+  }
+}
+
+function armDormancyTimer(forState: SessionState): void {
+  clearDormancyTimer();
+  if (forState === 'idle') return;
+  dormancyTimer = setTimeout(() => {
+    // Re-check current state at firing — if a state change crossed
+    // with the timer (race), don't slam idle on a session that just
+    // finished and re-armed.
+    if (state === 'idle') return;
+    console.warn(
+      `[listeningSession] dormancy timeout in state='${state}' after ${DORMANCY_MAX_MS}ms — force-closing`,
+    );
+    try { closeSessionInternal('dormancy_timeout'); } catch (e) {
+      console.log('[listeningSession] dormancy force-close threw', e);
+    }
+  }, DORMANCY_MAX_MS);
+}
+
 /**
  * Helper: every internal state change goes through this so the
  * listeningSessionStore (subscribed by BrandHeaderRow + other UI
  * surfaces) sees every transition. Without this mirror the badge halo
  * stays dark even when listening is active.
+ *
+ * 2026-05-26 — also arms/clears the dormancy watchdog so the session
+ * can't get stuck in non-idle longer than DORMANCY_MAX_MS.
  */
 function setSessionStateMirror(next: SessionState): void {
   state = next;
+  armDormancyTimer(next);
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useListeningSessionStore } = require('../store/listeningSessionStore');
@@ -584,7 +634,18 @@ async function openSession() {
 }
 
 function closeSession() {
-  console.log('[path4:voice] close');
+  closeSessionInternal('user_close');
+}
+
+/**
+ * 2026-05-26 — Fix AP Phase 1: internal close with reason tag so the
+ * dormancy watchdog can call this without spoofing a user tap, and
+ * the close log carries WHY it happened (debugging stuck-session
+ * reports later: 'dormancy_timeout' vs 'user_close' is the line you
+ * want in logcat).
+ */
+function closeSessionInternal(reason: 'user_close' | 'dormancy_timeout') {
+  console.log(`[path4:voice] close (reason=${reason})`);
   // Phase BM — always stopSpeaking (drops the isSpeaking() guard). The guard
   // missed the gap between speechId++ and Sound.createAsync returning where
   // currentSound is still null but a TTS fetch is in-flight; a session-close
