@@ -503,6 +503,17 @@ export const useVoiceCaddie = ({
           currentHole,
           currentPar,
           currentYardage,
+          // 2026-05-25 — Fix I: yardageInsight carries source + confidence
+          // so Kevin's prompt can hedge honestly ("Reading 168 from the
+          // static card — GPS is soft right now") instead of asserting
+          // a soft GPS number as truth. See services/yardageResolver.ts.
+          yardageInsight: (() => {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const { buildYardageInsight } = require('../services/yardageResolver') as typeof import('../services/yardageResolver');
+              return buildYardageInsight();
+            } catch { return null; }
+          })(),
           activeCourse,
           activeCourseId,
           courseContext,

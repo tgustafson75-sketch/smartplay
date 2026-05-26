@@ -466,7 +466,27 @@ export default function CaddieTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yardageMode, isRoundActive, currentHole, markTick]);
 
-  const displayYardage = liveYardage ?? currentYardage;
+  // 2026-05-25 — Fix L: route the displayed yardage through the unified
+  // resolver so userStatedYardage (Tier 3 voice anchor) AND static-card
+  // fallback (Tier 2 when GPS is soft) both surface to the UI. The
+  // resolver returns { value, source, confidence, reason } — we still
+  // collapse to a number for the existing display contract, but the
+  // source/confidence are available for honest labeling in a follow-up
+  // (e.g. "STATIC CARD" badge below the number when is_fallback).
+  // markTick + userStatedYardage in deps so the memo re-runs on mark
+  // captures and voice-stated number changes.
+  const userStatedYardage = useRoundStore(s => s.userStatedYardage);
+  const resolvedYardage = useMemo(() => {
+    if (!isRoundActive) return null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { resolveYardage } = require('../../services/yardageResolver') as typeof import('../../services/yardageResolver');
+      return resolveYardage(currentHole);
+    } catch { return null; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRoundActive, currentHole, markTick, userStatedYardage]);
+
+  const displayYardage = resolvedYardage?.value ?? liveYardage ?? currentYardage;
 
   // L1 Quiet's new SmartFinder hero needs the F/M/B triplet, not just
   // the middle. Pulled the same way liveYardage is (sync read + markTick
