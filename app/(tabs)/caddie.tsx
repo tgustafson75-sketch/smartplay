@@ -2561,6 +2561,36 @@ export default function CaddieTab() {
                 <Ionicons name="camera" size={22} color="#00C896" />
               </TouchableOpacity>
 
+              {/* 2026-05-26 — Trust-level cycle pill, lives in the green
+                  chevron's expanded tools row (last item so it sits
+                  closest to the chevron). Was buried in the More menu
+                  before; Tim wanted a one-tap cycle reachable from the
+                  same expandable surface as the other in-round tools.
+                  Same cycle order + haptic + toast as the More entry
+                  (caddie.tsx:3280). */}
+              <TouchableOpacity
+                onPress={() => {
+                  const cur  = TRUST_LEVEL_SLIDER_ORDER.indexOf(trustLevel);
+                  const next = TRUST_LEVEL_SLIDER_ORDER[(cur + 1) % TRUST_LEVEL_SLIDER_ORDER.length];
+                  setTrustLevel(next);
+                  void Haptics.selectionAsync().catch(() => undefined);
+                  useToastStore.getState().show(`Now in ${TRUST_LEVEL_META[next].label}`);
+                }}
+                style={{
+                  width: 48, height: 48, borderRadius: 24,
+                  backgroundColor: 'rgba(13, 36, 24, 0.92)',
+                  borderWidth: 1.5, borderColor: '#00C896',
+                  alignItems: 'center', justifyContent: 'center',
+                  shadowColor: '#00C896', shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.55, shadowRadius: 8, elevation: 6,
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Cycle trust level (now ${TRUST_LEVEL_META[trustLevel].label})`}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="sync" size={22} color="#00C896" />
+              </TouchableOpacity>
+
               {/* Phase AU — Tools (•••) removed from inside the dropdown.
                   The upper-right corner pill is the canonical Tools
                   anchor; duplicating it here was the "duplicated tools
