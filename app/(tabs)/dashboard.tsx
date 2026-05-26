@@ -34,6 +34,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useRoundStore } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
+import ShotTimeline from '../../components/caddie/ShotTimeline';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { usePointsStore } from '../../store/pointsStore';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -347,29 +348,19 @@ export default function Dashboard() {
           />
         </View>
 
-        {/* ─── 7. RECENT SHOTS ───────────────────────────────────────── */}
+        {/* ─── 7. RECENT SHOTS ─────────────────────────────────────────
+            2026-05-25 — Fix X: swapped the plain text list for the new
+            ShotTimeline component (icons + outcome chips + distance).
+            Same data, richer rendering. Caddie-tab placement comes
+            next iteration; for now Dashboard gets the upgrade plus a
+            full-round Shot Log entry in the ••• Tools menu. */}
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>RECENT SHOTS</Text>
         {recentShots.length === 0 ? (
           <Text style={[styles.emptyLine, { color: colors.text_muted }]}>
             No shots logged yet — log a shot from the Caddie tab.
           </Text>
         ) : (
-          <View style={[styles.recentList, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-            {recentShots.map((shot, idx) => (
-              <View
-                key={shot.id ?? `${shot.timestamp}-${idx}`}
-                style={[styles.recentItem, idx > 0 && { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth }]}
-              >
-                <Text style={[styles.recentLeft, { color: colors.text_primary }]}>
-                  Hole {shot.hole}{shot.club ? ` · ${shot.club}` : ''}
-                </Text>
-                <Text style={[styles.recentRight, { color: colors.text_muted }]}>
-                  {shot.distance_yards != null ? `${shot.distance_yards}y` : ''}
-                  {shot.outcome_text ? ` · ${shot.outcome_text}` : ''}
-                </Text>
-              </View>
-            ))}
-          </View>
+          <ShotTimeline maxRows={5} />
         )}
 
         {/* ─── 8. QUICK ACTIONS — 3 icon buttons ────────────────────── */}

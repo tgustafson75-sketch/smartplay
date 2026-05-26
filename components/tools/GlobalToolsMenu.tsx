@@ -358,6 +358,17 @@ export function GlobalToolsMenu() {
               onPress={() => navOrPaywall('smartfinder', '/smartfinder')}
               colors={colors}
             />
+            {/* 2026-05-25 — Fix X: Shot Log route. Renders the full
+                round's shots via the new ShotTimeline component (icons,
+                outcome chips, distances). Tim's "v1 had icons + numbers
+                shot-by-shot" ask. */}
+            <Row
+              icon="list-outline"
+              label="Shot Log"
+              sub="Every shot this round — newest first"
+              onPress={() => nav('/shot-log')}
+              colors={colors}
+            />
 
             {/* ─── HELP ────────────────────────────────────────── */}
             <SectionHeader colors={colors}>HELP</SectionHeader>
