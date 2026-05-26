@@ -176,11 +176,24 @@ export const MARINERS_POINT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
 // 2026-05-26 — Fix BH: Maplewood Golf Club is an 18-hole course in
 // Bethlehem, NH (also known locally as "Settlers Crossing Golf Course"
 // per Tim's brother DJ). Course has a unique hole 16 par 6. Holes
-// 6-18 sourced from 18Birdies screenshots (1768x2208 portrait, ~2MB
-// each) for beta validation — IP-clean replacement required before
-// public release. Holes 1-5 pending; missing entries fall through
-// to the Mapbox aerial fallback automatically.
+// 1-4 + 6-18 sourced from 18Birdies screenshots (1768x2208 portrait,
+// ~2MB each) for beta validation — IP-clean replacement required
+// before public release. Hole 5 pending; missing entries fall
+// through to Mapbox aerial fallback automatically.
+//
+// NOTE: 18B screenshots carry baked-in UI chrome (top stats bar,
+// bottom Hole/Enter Score pill, floating yardage bubbles, "Green
+// Maps" icon) that should be cropped/masked before public release.
+// The white tee→green line baked into each image is intentionally
+// kept — it's a perfect visual reference for where SmartVision's
+// interactive measuring tool (yellow target dot + F/M/B yardage)
+// should sit on each hole.
 export const MAPLEWOOD_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1:  require('../assets/courses/maplewood/hole-01.jpg'),
+  2:  require('../assets/courses/maplewood/hole-02.jpg'),
+  3:  require('../assets/courses/maplewood/hole-03.jpg'),
+  4:  require('../assets/courses/maplewood/hole-04.jpg'),
+  // hole 5 pending — falls through to Mapbox
   6:  require('../assets/courses/maplewood/hole-06.jpg'),
   7:  require('../assets/courses/maplewood/hole-07.jpg'),
   8:  require('../assets/courses/maplewood/hole-08.jpg'),
