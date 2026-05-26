@@ -6,7 +6,7 @@
  * confirmation and can browse the new entry in My Swing Library.
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator, Alert,
@@ -20,7 +20,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 import { pickVideo, probeVideo, ingestVideoFromPick, MAX_FILE_SIZE_MB } from '../../services/videoUpload';
 import { uploadLog } from '../../services/uploadDiagnostic';
-import type { SwingTag } from '../../store/cageStore';
+import { useCageStore, type SwingTag } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
@@ -55,7 +55,50 @@ export default function UploadSwing() {
   const activeMember = useFamilyStore(s =>
     s.active_member_id ? s.members.find(m => m.id === s.active_member_id) : null,
   );
+  const familyMembers = useFamilyStore(s => s.members);
+  const sessionHistory = useCageStore(s => s.sessionHistory);
   const [swinger, setSwinger] = useState(activeMember?.firstName ?? 'Me');
+
+  // 2026-05-25 — Fix AS: swinger autocomplete chips. Tim's ask was
+  // "before, when I did one video of my daughter, Lily, it knew all
+  // the videos of my daughter, Lily" — so surface every name the user
+  // has previously typed (or a family member they've registered) as
+  // a quick-tap chip above the text input. Tap fills the field; the
+  // user can still type free-text to override.
+  //   - Always "Me" first (account holder)
+  //   - Active family member next (when applicable, dedup vs "Me")
+  //   - Other non-archived family members (by added_at)
+  //   - Recently-used swinger names from sessionHistory.upload.swinger
+  //     (newest first, dedup, skip empties / "Me" / family names)
+  // 2026-05-25 — Bumped recent-name pool to 25 latest sessions (large
+  // libraries shouldn't drown the chip row but we want long-tail
+  // coverage of "the cousin who only showed up twice").
+  const swingerSuggestions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const push = (name: string | null | undefined) => {
+      if (!name) return;
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const key = trimmed.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(trimmed);
+    };
+    push('Me');
+    if (activeMember) push(activeMember.firstName);
+    familyMembers
+      .filter(m => !m.archived)
+      .sort((a, b) => a.added_at - b.added_at)
+      .forEach(m => push(m.firstName));
+    // Newest sessions first so "the person I most recently filmed"
+    // sits closest to the front of the chip row.
+    const recent = [...sessionHistory]
+      .sort((a, b) => b.date - a.date)
+      .slice(0, 25);
+    recent.forEach(s => push(s.upload?.swinger));
+    return out;
+  }, [activeMember, familyMembers, sessionHistory]);
   const [tag, setTag] = useState<SwingTag | null>(null);
   // 2026-05-22 — Meta Ray-Ban glasses tag. POV downward video of hands/
   // putter/ball can't be read by the full-body swing-pose model. When
@@ -235,6 +278,40 @@ export default function UploadSwing() {
 
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text style={[styles.label, { color: colors.text_muted }]}>WHO&apos;S SWINGING?</Text>
+              {/* 2026-05-26 — Fix AS: quick-tap chip row of known
+                  swingers (account holder + family roster + prior
+                  upload names). Tap to fill; free-text still works. */}
+              {swingerSuggestions.length > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ marginTop: 8 }}
+                  contentContainerStyle={{ paddingRight: 8 }}
+                >
+                  {swingerSuggestions.map(name => {
+                    const selected = swinger.trim().toLowerCase() === name.toLowerCase();
+                    return (
+                      <TouchableOpacity
+                        key={name}
+                        style={[
+                          styles.pill,
+                          { borderColor: colors.border, backgroundColor: colors.surface_elevated },
+                          selected && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
+                        ]}
+                        onPress={() => setSwinger(name)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Set swinger to ${name}`}
+                      >
+                        <Text style={[
+                          styles.pillText,
+                          { color: colors.text_muted },
+                          selected && { color: colors.accent, fontWeight: '700' },
+                        ]}>{name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
               <TextInput
                 style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text_primary }]}
                 value={swinger}

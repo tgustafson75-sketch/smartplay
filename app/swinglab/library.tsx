@@ -61,6 +61,10 @@ export default function SwingLibrary() {
   const [filter, setFilter] = useState<LibraryFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [clubFilter, setClubFilter] = useState<string>('all');
+  // 2026-05-26 — Fix AS: swinger filter ("show me only Lily's swings").
+  // Lives in the primary chip strip — Tim's mental model is "find that
+  // person's videos" first, then narrow by date/club. Default 'all'.
+  const [swingerFilter, setSwingerFilter] = useState<string>('all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Reading via getLibrary so the helper is the single source of sort/filter logic
@@ -80,6 +84,28 @@ export default function SwingLibrary() {
     setClubFilter('all');
   }
 
+  // 2026-05-26 — Available swingers, case-insensitive dedup. Cage
+  // sessions without an explicit swinger fall under "Me" (matches the
+  // upload screen default). Sort alphabetically with "Me" pinned first.
+  const availableSwingers = useMemo(() => {
+    const map = new Map<string, string>(); // lowercase → display
+    sourceFilteredEntries.forEach(e => {
+      const raw = (e.session.upload?.swinger ?? 'Me').trim() || 'Me';
+      const key = raw.toLowerCase();
+      if (!map.has(key)) map.set(key, raw);
+    });
+    const names = Array.from(map.values()).sort((a, b) => {
+      if (a.toLowerCase() === 'me') return -1;
+      if (b.toLowerCase() === 'me') return 1;
+      return a.localeCompare(b);
+    });
+    return ['all', ...names];
+  }, [sourceFilteredEntries]);
+
+  if (swingerFilter !== 'all' && !availableSwingers.some(n => n.toLowerCase() === swingerFilter.toLowerCase())) {
+    setSwingerFilter('all');
+  }
+
   const entries = useMemo(() => {
     const now = Date.now();
     const cutoff =
@@ -89,12 +115,16 @@ export default function SwingLibrary() {
     return sourceFilteredEntries.filter(e => {
       if (e.date_ms < cutoff) return false;
       if (clubFilter !== 'all' && e.session.club !== clubFilter) return false;
+      if (swingerFilter !== 'all') {
+        const sw = (e.session.upload?.swinger ?? 'Me').trim() || 'Me';
+        if (sw.toLowerCase() !== swingerFilter.toLowerCase()) return false;
+      }
       return true;
     });
-  }, [sourceFilteredEntries, dateFilter, clubFilter]);
+  }, [sourceFilteredEntries, dateFilter, clubFilter, swingerFilter]);
 
   const advancedFiltersActive = dateFilter !== 'all' || clubFilter !== 'all';
-  const filtersActive = filter !== 'all' || advancedFiltersActive;
+  const filtersActive = filter !== 'all' || advancedFiltersActive || swingerFilter !== 'all';
 
   // 2026-05-23 — Library Compare action. When the user taps Compare on
   // a row, we open the same CompareReferencePickerSheet used in the
@@ -177,6 +207,7 @@ export default function SwingLibrary() {
     setFilter('all');
     setDateFilter('all');
     setClubFilter('all');
+    setSwingerFilter('all');
   };
 
   return (
@@ -276,6 +307,50 @@ export default function SwingLibrary() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* 2026-05-26 — Fix AS: per-swinger filter strip. Only renders
+          when the library has 2+ distinct swingers (otherwise it's
+          visual noise — solo users see no extra chrome). Lives in the
+          primary band, not behind the Filters toggle, because
+          "show me Lily's swings" is the canonical multi-user query. */}
+      {availableSwingers.length > 2 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterStripContent}
+          style={styles.filterStrip}
+        >
+          {availableSwingers.map(name => {
+            const selected = swingerFilter.toLowerCase() === name.toLowerCase();
+            const label = name === 'all' ? 'Everyone' : name;
+            return (
+              <TouchableOpacity
+                key={`swinger-${name}`}
+                onPress={() => setSwingerFilter(name)}
+                style={[
+                  styles.chip,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  selected && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Filter by swinger: ${label}`}
+              >
+                <Ionicons
+                  name={name === 'all' ? 'people-outline' : 'person-outline'}
+                  size={13}
+                  color={selected ? colors.accent : colors.text_muted}
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[
+                  styles.chipText,
+                  { color: colors.text_muted },
+                  selected && { color: colors.accent, fontWeight: '800' },
+                ]}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
 
       {/* ADVANCED FILTERS — date + club, only when toggled. */}
       {showAdvancedFilters && (
