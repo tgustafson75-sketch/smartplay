@@ -60,6 +60,7 @@ import { fetchHoleImagery, computeFitView, getCenteredImageryUrl } from '../serv
 import YardageBookPanel from '../components/smartvision/YardageBookPanel';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS, getLocalCourseSlug } from '../data/localCourseImages';
+import { pointAlongHoleLine } from '../data/holeLineCalibration';
 import { getBundledHoles } from '../data/courses';
 
 // ─── Geo helpers ──────────────────────────────────────────────────
@@ -635,6 +636,33 @@ export default function SmartVisionScreen() {
   // pre-Phase-108 behaviour exactly for the no-projection path.
   // Phase 108-followup — user override (drag) wins over projection wins
   // over static fallback.
+  // 2026-05-26 — Fix BM: local-image hole-line calibration consumer.
+  // When the screen is rendering a bundled hole image (Maplewood,
+  // Palms — and any future course with bundled assets), the projection
+  // fallback (last clause of the useMemos below) puts tee at
+  // (50%, 85%) and pin at (50%, 15%) — a centered vertical axis that
+  // ignores the actual hole layout. The Batch 46 scaffold gives us
+  // per-hole calibrated pixel coords on the cropped 1768×1450 image;
+  // when calibration exists, use it as the static fallback instead
+  // of the dumb centered axis. User drag still wins via teeOverride /
+  // pinOverride; geo projection still wins when both teeCoord and
+  // projection are present (Mapbox-rendered courses).
+  const SOURCE_IMG_W = 1768;
+  const SOURCE_IMG_H = 1450;
+  const calibrationSlug = useMemo(() => getLocalCourseSlug(courseName), [courseName]);
+  const calibratedTeeCanvas = useMemo(() => {
+    if (!calibrationSlug) return null;
+    const pt = pointAlongHoleLine(calibrationSlug, holeIndex, 0);
+    if (!pt) return null;
+    return { x: pt.x * (imageW / SOURCE_IMG_W), y: pt.y * (imageH / SOURCE_IMG_H) };
+  }, [calibrationSlug, holeIndex, imageW, imageH]);
+  const calibratedPinCanvas = useMemo(() => {
+    if (!calibrationSlug) return null;
+    const pt = pointAlongHoleLine(calibrationSlug, holeIndex, 1);
+    if (!pt) return null;
+    return { x: pt.x * (imageW / SOURCE_IMG_W), y: pt.y * (imageH / SOURCE_IMG_H) };
+  }, [calibrationSlug, holeIndex, imageW, imageH]);
+
   const teeOverride = teeByHole[holeIndex];
   const teeCanvas = useMemo(() => {
     if (teeOverride) return teeOverride;
@@ -642,15 +670,17 @@ export default function SmartVisionScreen() {
       const off = projectToPixels(teeCoord, projection.center, projection.zoom, projection.bearing);
       return { x: imageW / 2 + off.x, y: imageH / 2 - off.y };
     }
+    if (calibratedTeeCanvas) return calibratedTeeCanvas;
     return { x: imageW / 2, y: imageH * 0.85 };
-  }, [teeOverride, teeCoord, projection, imageW, imageH]);
+  }, [teeOverride, teeCoord, projection, imageW, imageH, calibratedTeeCanvas]);
   const pinDefaultCanvas = useMemo(() => {
     if (greenCoord && projection) {
       const off = projectToPixels(greenCoord, projection.center, projection.zoom, projection.bearing);
       return { x: imageW / 2 + off.x, y: imageH / 2 - off.y };
     }
+    if (calibratedPinCanvas) return calibratedPinCanvas;
     return { x: imageW / 2, y: imageH * 0.15 };
-  }, [greenCoord, projection, imageW, imageH]);
+  }, [greenCoord, projection, imageW, imageH, calibratedPinCanvas]);
 
   // Pin override (user-dragged) — stored in canvas coords.
   const pinOverride = pinByHole[holeIndex];
