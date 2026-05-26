@@ -251,6 +251,20 @@ export const openToolHandler: IntentHandler = {
         angleRaw === 'down_the_line' || angleRaw === 'down-the-line' || angleRaw === 'dtl' ? 'down_the_line' :
         null;
       const autoStart = intent.parameters.auto_start === true;
+      // 2026-05-25 — Fix AJ Phase 1: surface voice-captured metadata.
+      // shotType ("chip" / "putt" / "swing") — from "chip cam" / "putt
+      // cam" phrasing. subject (capitalized first name) — from
+      // "watching Chris's swing". Forwarded as URL params so the
+      // quick-record screen pre-fills tag + activeMember properly.
+      const shotTypeRaw = String(intent.parameters.shot_type ?? '').toLowerCase();
+      const shotType =
+        shotTypeRaw === 'chip' || shotTypeRaw === 'putt' || shotTypeRaw === 'swing'
+          ? shotTypeRaw
+          : null;
+      const subjectRaw = typeof intent.parameters.subject === 'string'
+        ? intent.parameters.subject.trim()
+        : '';
+      const subject = subjectRaw.length > 0 ? subjectRaw : null;
 
       // 2026-05-23 (Fix #9) — Coach Mode player-name resolution.
       // Voice "I'm coaching Emma" / "coach Mike" pre-sets the active
@@ -323,10 +337,16 @@ export const openToolHandler: IntentHandler = {
             ? `${action.path}?intent=${playIntent}`
             : action.path;
           router.push(path as never);
-        } else if ((toolName === 'smartmotion' || toolName === 'smart_motion') && (angle || autoStart)) {
+        } else if ((toolName === 'smartmotion' || toolName === 'smart_motion') && (angle || autoStart || shotType || subject)) {
           const params: string[] = [];
           if (angle) params.push(`angle=${angle}`);
           if (autoStart) params.push('autoStart=1');
+          // 2026-05-25 — Fix AJ Phase 1: shotType ("chip"/"putt"/"swing")
+          // and subject (whose swing) get forwarded as URL params so
+          // quick-record can pre-fill the tag + family-member context
+          // without requiring the user to tap through the picker.
+          if (shotType) params.push(`shotType=${encodeURIComponent(shotType)}`);
+          if (subject) params.push(`subject=${encodeURIComponent(subject)}`);
           router.push(`${action.path}?${params.join('&')}` as never);
         } else {
           router.push(action.path as never);

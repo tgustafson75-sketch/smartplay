@@ -2099,7 +2099,14 @@ export default function CaddieTab() {
           right: 0,
           zIndex: 18,
         }}
-        pointerEvents="none"
+        // 2026-05-25 — Fix AK: was pointerEvents="none" which made ALL
+        // taps on the brand row (including the logo mic badge) pass
+        // through to whatever was rendered below — Tim hit a scorecard
+        // chip beneath and the badge tap routed there instead of
+        // toggling listening. "box-none" lets children (CaddieMicBadge,
+        // wordmark) receive their own taps while empty space still
+        // falls through to the layers below.
+        pointerEvents="box-none"
       >
         <BrandHeaderRow hideToolsPill />
       </View>

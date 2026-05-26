@@ -32,6 +32,10 @@ Available intents:
    - "open settings" -> { tool_name: "settings" }
    - "go to settings" -> { tool_name: "settings" }
    - "open SmartMotion" -> { tool_name: "smartmotion" }
+   - "chip cam" / "chip camera" / "capture this chip" -> { tool_name: "smartmotion", shot_type: "chip", auto_start: true }
+   - "putt cam" / "putt camera" / "capture this putt" -> { tool_name: "smartmotion", shot_type: "putt", auto_start: true }
+   - "watching Chris swing" / "Chris is hitting" -> { tool_name: "smartmotion", subject: "Chris", auto_start: true } (extract capitalized first name into subject)
+   - "watching Chris from down the line" -> { tool_name: "smartmotion", subject: "Chris", angle: "down_the_line", auto_start: true }
    - "open TightLie" / "check my lie" / "what's the play" / "analyze my lie" -> { tool_name: "tightlie" }
    - "open acoustic test" / "acoustic test bench" / "test bench" / "test the mic" -> { tool_name: "acoustic" }
    - "open GPS test" / "GPS test bench" / "test the GPS" -> { tool_name: "gps_test" }

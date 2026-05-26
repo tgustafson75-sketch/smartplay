@@ -41,6 +41,11 @@ Available intents:
    - "record me face on" / "record face on" / "face-on swing" / "front view swing" -> { tool_name: "smartmotion", angle: "face_on", auto_start: true }
    - "record my swing down the line" -> { tool_name: "smartmotion", angle: "down_the_line", auto_start: true }
    - "record my face on swing" -> { tool_name: "smartmotion", angle: "face_on", auto_start: true }
+   - "chip cam" / "chip camera" / "capture this chip" / "record a chip" -> { tool_name: "smartmotion", shot_type: "chip", auto_start: true }
+   - "putt cam" / "putt camera" / "capture this putt" / "record a putt" -> { tool_name: "smartmotion", shot_type: "putt", auto_start: true }
+   - "watching Chris swing" / "I'm watching Chris" / "Chris is hitting" -> { tool_name: "smartmotion", subject: "Chris", auto_start: true } (EXTRACT the capitalized first name verbatim into subject; bounded to one word so "I'm watching now" doesn't extract "now")
+   - "watching Chris from down the line" / "Chris's swing face on" -> { tool_name: "smartmotion", subject: "Chris", angle: "down_the_line", auto_start: true } (extract BOTH subject AND angle when both are present)
+   - "watching my student Mike from behind" -> { tool_name: "smartmotion", subject: "Mike", angle: "down_the_line", auto_start: true } ("from behind" maps to down_the_line)
    - "mark the tee" / "mark tee" / "mark the tee box" / "I'm at the tee" / "this is the tee" / "this is the tee box" / "mark this tee" / "open Mark Tee" -> { tool_name: "mark_tee" }
    - "mark the green" / "mark green" / "mark the pin" / "mark the flag" / "mark this as the pin" / "this is the pin" / "I'm on the green" / "I'm at the pin" / "mark this spot" / "drop a pin here" / "open Mark Green" -> { tool_name: "mark_green" }
    (refresh_gps moved to its own intent_type below)

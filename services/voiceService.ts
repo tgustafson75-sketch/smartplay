@@ -639,6 +639,13 @@ const HETERONYM_FIXES: ReadonlyArray<[RegExp, string]> = [
   // skip the inflected forms.
   [/\brecord\b(?!ed|ing|s)/gi, 'capture'],
   [/\bRecord\b(?!ed|ing|s)/g, 'Capture'],
+  // 2026-05-25 — Fix AL: "par 3s" / "par 4s" / "par 5s" → "par
+  // threes" / "par fours" / "par fives". ElevenLabs reads "3s" as
+  // "three S" (saying the letter S). Substitute the spelled-out
+  // plural so the caddie sounds natural.
+  [/\bpar\s*3s\b/gi, 'par threes'],
+  [/\bpar\s*4s\b/gi, 'par fours'],
+  [/\bpar\s*5s\b/gi, 'par fives'],
 ];
 
 function preprocessTtsText(text: string, language: 'en' | 'es' | 'zh'): string {

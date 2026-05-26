@@ -59,9 +59,32 @@ export default function QuickRecord() {
   // when omitted. autoStart=1 (from voice) fires recording on mount
   // so the spoken command "record me face on" both sets the angle
   // and starts the capture in one shot.
-  const { angle: angleParam, autoStart: autoStartParam, club: clubParam } = useLocalSearchParams<{ angle?: string; autoStart?: string; club?: string }>();
+  // 2026-05-25 — Fix AJ Phase 1: extra metadata params from voice
+  // commands like "chip cam" / "putt cam" / "watching Chris's swing
+  // from down the line". subject = whose swing (capitalized first
+  // name); shotType = chip|putt|swing (used as the swing tag);
+  // perspective = down_the_line|face_on (alias for angle, kept
+  // separate for clarity in the param surface).
+  const {
+    angle: angleParam,
+    autoStart: autoStartParam,
+    club: clubParam,
+    subject: subjectParam,
+    shotType: shotTypeParam,
+    perspective: perspectiveParam,
+  } = useLocalSearchParams<{
+    angle?: string;
+    autoStart?: string;
+    club?: string;
+    subject?: string;
+    shotType?: string;
+    perspective?: string;
+  }>();
+  // Perspective is an alternate name for angle; if perspective is
+  // present and angle isn't, treat perspective as the angle.
+  const effectiveAngleParam = angleParam ?? perspectiveParam;
   const initialAngle: Angle =
-    angleParam === 'face_on' || angleParam === 'face-on' ? 'face_on' : 'down_the_line';
+    effectiveAngleParam === 'face_on' || effectiveAngleParam === 'face-on' ? 'face_on' : 'down_the_line';
   const [angle, setAngle] = useState<Angle>(initialAngle);
   const [camPerm, requestCamPerm] = useCameraPermissions();
   const [micPerm, requestMicPerm] = useMicrophonePermissions();
@@ -218,6 +241,17 @@ export default function QuickRecord() {
           ...(typeof clubParam === 'string' && clubParam.trim().length > 0
             ? { club: clubParam.trim() }
             : {}),
+          // 2026-05-25 — Fix AJ: forward voice-captured metadata
+          // (subject = whose swing; shotType = chip/putt/swing tag)
+          // so SmartMotion's analyzer + library row carry the right
+          // context. "chip cam" → shotType=chip; "watching Chris"
+          // → subject=Chris.
+          ...(typeof subjectParam === 'string' && subjectParam.trim().length > 0
+            ? { subject: subjectParam.trim() }
+            : {}),
+          ...(typeof shotTypeParam === 'string' && shotTypeParam.trim().length > 0
+            ? { shotType: shotTypeParam.trim().toLowerCase() }
+            : {}),
         },
       } as never);
     } catch (e) {
@@ -230,7 +264,7 @@ export default function QuickRecord() {
       setProcessing(false);
       setElapsed(0);
     }
-  }, [router, angle, clubParam]);
+  }, [router, angle, clubParam, subjectParam, shotTypeParam]);
 
   // handleRecord — top-level Record button handler. Branches:
   //   - if currently RECORDING → stop (manual stop).
