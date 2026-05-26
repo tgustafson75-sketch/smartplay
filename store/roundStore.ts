@@ -399,6 +399,28 @@ interface RoundState {
    */
   enrichLastRoundWithHealth: (health: NonNullable<RoundRecord['health']>) => void;
   /**
+   * 2026-05-26 — Fix AA: append an externally-imported round (parsed
+   * from a scorecard screenshot via /api/round-import). Bypasses
+   * startRound/endRound — this is a historical record being grafted
+   * onto roundHistory after the fact, not an in-app round. The id is
+   * generated; roundNumber slots in at +1 after the latest existing
+   * record so analytics ordering stays sane.
+   *
+   * The record's shots[] / plans[] arrive empty (a scorecard photo
+   * doesn't carry per-shot detail); per-shot analytics that depend
+   * on shots[] just skip imported rounds naturally.
+   *
+   * Returns the id of the newly appended record so the caller can
+   * route the user into recap / scorecard for that import.
+   */
+  addImportedRound: (
+    input: Pick<
+      RoundRecord,
+      'courseName' | 'startedAt' | 'endedAt' | 'holesPlayed'
+        | 'totalScore' | 'scoreVsPar' | 'nineHoleMode' | 'scores' | 'putts'
+    > & { mode?: RoundMode; courseId?: string | null },
+  ) => string;
+  /**
    * 2026-05-17 — Discard the active round WITHOUT saving. Resets all
    * in-round state the same way endRound() does, but does NOT append
    * to roundHistory, does NOT push a score differential, does NOT
@@ -817,6 +839,38 @@ export const useRoundStore = create<RoundState>()(
       // append, no differential push, no recap generation, no toast.
       // Tim's "End and Delete Round" path — for accidental starts or
       // practice sessions that shouldn't count toward his record.
+      addImportedRound: (input) => {
+        const id = `imported_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+        const state = get();
+        const nextRoundNumber = state.roundHistory.length > 0
+          ? Math.max(...state.roundHistory.map(r => r.roundNumber)) + 1
+          : 1;
+        const record: RoundRecord = {
+          id,
+          roundNumber: nextRoundNumber,
+          courseName: input.courseName,
+          courseId: input.courseId ?? null,
+          startedAt: input.startedAt,
+          endedAt: input.endedAt,
+          holesPlayed: input.holesPlayed,
+          totalScore: input.totalScore,
+          scoreVsPar: input.scoreVsPar,
+          isCompetition: false,
+          nineHoleMode: input.nineHoleMode,
+          mode: input.mode ?? 'free_play',
+          scores: { ...input.scores },
+          putts: { ...input.putts },
+          plans: [],
+          shots: [],
+        };
+        set(s => ({ roundHistory: [...s.roundHistory, record] }));
+        console.log(
+          `[roundStore] addImportedRound id=${id} course=${input.courseName ?? 'unknown'} ` +
+          `score=${input.totalScore} vsPar=${input.scoreVsPar} holes=${input.holesPlayed}`,
+        );
+        return id;
+      },
+
       enrichLastRoundWithHealth: (health) => {
         if (!health.hasWatchData) return;
         const s = get();

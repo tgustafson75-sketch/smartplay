@@ -1036,6 +1036,20 @@ export default function Settings() {
               How to use the app →
             </Text>
           </TouchableOpacity>
+          {/* 2026-05-26 — Fix AA: round screenshot import. Lives in
+              Help so testers with existing Golfshot / 18Birdies / GHIN
+              history can bring those rounds into SmartPlay's stats. */}
+          <TouchableOpacity
+            style={styles.aboutRow}
+            onPress={() => router.push('/import-round' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Import a past round from a screenshot"
+          >
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Import Past Round</Text>
+            <Text style={[styles.aboutValue, { color: colors.accent }]}>
+              From a scorecard screenshot →
+            </Text>
+          </TouchableOpacity>
           {/* 2026-05-22 — Family Coaching roster + library link. Single
               entry into the Family mode (kids, partner, friends). Voice
               flow already works ("record Emma's swing"); this surfaces
