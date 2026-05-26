@@ -18,6 +18,8 @@ import {
   PanResponder,
   Alert,
 } from 'react-native';
+// 2026-05-26 — Fix CH: theme the StyleSheet so light mode renders correctly.
+import { useTheme } from '../contexts/ThemeContext';
 import KevinBadge from '../components/KevinBadge';
 import { useKevinPresence } from '../contexts/KevinPresenceContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -136,6 +138,9 @@ const mppForZoom = (zoom: number): number => {
 
 export default function HoleView() {
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
+  // 2026-05-26 — Fix CH: theme-aware styles (was hardcoded dark palette).
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { width: W, height: H } = useWindowDimensions();
   const isLandscape = W > H;
@@ -1491,8 +1496,10 @@ export default function HoleView() {
 
 // ─── STYLES ───────────────────────────────
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#060f09' },
+// 2026-05-26 — Fix CH: themed StyleSheet via makeStyles(colors).
+function makeStyles(c: ReturnType<typeof useTheme>['colors']) {
+return StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.background },
   scroll: { paddingBottom: 32 },
   landscapeRow: { flex: 1, flexDirection: 'row' },
   landscapeLeft: { overflow: 'hidden' },
@@ -1518,7 +1525,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0a0a',
   },
   holeImage: { width: '100%', height: '100%' },
-  noImage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0d2418' },
+  noImage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface_elevated },
   noImageText: { color: '#ffffff', fontSize: 32, fontWeight: '900' },
   noImageSub: { color: '#6b7280', fontSize: 14, marginTop: 4 },
   // Bundled markers
@@ -1531,7 +1538,7 @@ const styles = StyleSheet.create({
   markerTee: { backgroundColor: '#1DA1F2', borderWidth: 2, borderColor: '#ffffff' },
   markerTarget: { backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#00C896' },
   markerPin: { backgroundColor: '#F5A623', borderWidth: 2, borderColor: '#ffffff' },
-  markerLabel: { color: '#060f09', fontSize: 11, fontWeight: '900' },
+  markerLabel: { color: c.background, fontSize: 11, fontWeight: '900' },
   // Distance panel
   distPanel: {
     position: 'absolute', bottom: 10, left: 12, right: 12,
@@ -1544,7 +1551,7 @@ const styles = StyleSheet.create({
   distLabel: { color: '#6b7280', fontSize: 9, fontWeight: '700', letterSpacing: 1.2 },
   distValue: { color: '#ffffff', fontSize: 26, fontWeight: '900', lineHeight: 30 },
   distUnit: { color: '#6b7280', fontSize: 10 },
-  distDivider: { width: 1, height: 36, backgroundColor: '#1e3a28', marginHorizontal: 8 },
+  distDivider: { width: 1, height: 36, backgroundColor: c.border, marginHorizontal: 8 },
   // Drag hint
   dragHint: {
     position: 'absolute', top: 10, left: 0, right: 0,
@@ -1559,7 +1566,7 @@ const styles = StyleSheet.create({
   btnRow: { flexDirection: 'row', marginHorizontal: 12, marginBottom: 6, gap: 8 },
   btn: {
     flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center',
-    borderWidth: 1, borderColor: '#1e3a28', backgroundColor: '#060f09',
+    borderWidth: 1, borderColor: c.border, backgroundColor: c.background,
   },
   btnActive: { borderColor: '#00C896', backgroundColor: '#003d20' },
   btnText: { color: '#9ca3af', fontSize: 13, fontWeight: '600' },
@@ -1573,7 +1580,7 @@ const styles = StyleSheet.create({
   measureResultText: { color: '#F5A623', fontSize: 14, fontWeight: '700' },
   svBtn: {
     marginHorizontal: 12, marginBottom: 8,
-    backgroundColor: '#0d2418', borderWidth: 1.5, borderColor: '#00C896',
+    backgroundColor: c.surface_elevated, borderWidth: 1.5, borderColor: '#00C896',
     borderRadius: 12, paddingVertical: 14,
     alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8,
   },
@@ -1581,7 +1588,7 @@ const styles = StyleSheet.create({
   svBtnText: { color: '#00C896', fontSize: 14, fontWeight: '700' },
   analysisCard: {
     marginHorizontal: 12, marginBottom: 8,
-    backgroundColor: '#0d2418', borderLeftWidth: 3, borderLeftColor: '#00C896',
+    backgroundColor: c.surface_elevated, borderLeftWidth: 3, borderLeftColor: '#00C896',
     borderRadius: 8, padding: 12,
   },
   analysisLabel: {
@@ -1592,9 +1599,9 @@ const styles = StyleSheet.create({
   // Yardage row
   yardRow: { flexDirection: 'row', marginHorizontal: 12, gap: 6 },
   yardCard: {
-    flex: 1, backgroundColor: '#0d2418', borderRadius: 10,
+    flex: 1, backgroundColor: c.surface_elevated, borderRadius: 10,
     paddingVertical: 10, alignItems: 'center',
-    borderWidth: 1, borderColor: '#1e3a28',
+    borderWidth: 1, borderColor: c.border,
   },
   yardCardCenter: { flex: 1.3, borderWidth: 2, borderColor: '#00C896' },
   yardLabel: { color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 1.2, marginBottom: 4 },
@@ -1623,8 +1630,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', marginHorizontal: 12, marginBottom: 6, gap: 6,
   },
   clubSlot: {
-    flex: 1, backgroundColor: '#0d2418', borderRadius: 10,
-    borderWidth: 1, borderColor: '#1e3a28',
+    flex: 1, backgroundColor: c.surface_elevated, borderRadius: 10,
+    borderWidth: 1, borderColor: c.border,
     paddingVertical: 8, alignItems: 'center',
   },
   clubSlotLabel: { color: '#6b7280', fontSize: 9, fontWeight: '700', letterSpacing: 1.2, marginBottom: 2 },
@@ -1635,7 +1642,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   clubModalSheet: {
-    backgroundColor: '#0d2418', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    backgroundColor: c.surface_elevated, borderTopLeftRadius: 20, borderTopRightRadius: 20,
     paddingHorizontal: 16, paddingTop: 20, paddingBottom: 40,
   },
   clubModalTitle: {
@@ -1647,14 +1654,15 @@ const styles = StyleSheet.create({
   },
   clubChip: {
     paddingVertical: 8, paddingHorizontal: 14,
-    borderRadius: 20, borderWidth: 1, borderColor: '#1e3a28',
-    backgroundColor: '#060f09',
+    borderRadius: 20, borderWidth: 1, borderColor: c.border,
+    backgroundColor: c.background,
   },
   clubChipActive: { borderColor: '#00C896', backgroundColor: '#003d20' },
   clubChipClear: { borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)' },
   clubChipText: { color: '#9ca3af', fontSize: 13, fontWeight: '600' },
   clubChipTextActive: { color: '#00C896' },
 });
+}
 
 // 2026-05-24 v1.2.1 — Meta glasses auto-detect banner styles. Kept
 // separate from the main styles so the new banner block is easy to
