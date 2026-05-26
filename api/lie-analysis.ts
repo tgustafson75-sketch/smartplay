@@ -1,9 +1,22 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
 
-// 2026-05-23 — maxRetries 1 → 3 to absorb Anthropic 529 overloaded_error spikes.
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 3 });
+// 2026-05-26 — Fix BS: lie-analysis Gemini-first resilience chain.
+// Was Anthropic-only — single-provider outage blocked all lie reads.
+// Now mirrors /api/swing-analysis pattern: Gemini 2.5 Flash (speed
+// + cheapest) → OpenAI gpt-4o (mid) → Anthropic Sonnet 4.6 (deepest
+// reasoning, last resort). Same defensive normalization in each path.
+// Anthropic timeout tightened to 22s + maxRetries dropped from 3 → 1
+// because we now have OpenAI as the primary fallback — burning 75s
+// on retries before falling through was the wrong trade-off.
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 22_000, maxRetries: 1 });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 1 });
+const gemini = process.env.GOOGLE_API_KEY
+  ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
+  : null;
 
 /**
  * Phase H — Lie Analysis Tool (vision endpoint).
@@ -158,54 +171,168 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? `Context:\n${contextLines.join('\n')}\n\nWhat do you see, and what should they do?`
       : 'What do you see, and what should they do?';
 
-    // Audit 101 / W10 — tuned tokens + temperature down. Lie-analysis
-    // outputs converge in <400 tokens at temperature 0.3; the prior
-    // 800/0.5 was over-generating descriptive prose for a vision Sonnet
-    // call (the slowest, most-expensive endpoint). Lowered to cut both
-    // latency and output cost without sacrificing read quality.
-    const completion = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 400,
-      temperature: 0.3,
-      system: buildSystemPrompt(personaInput),
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: image_media_type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: image_b64 } },
-            { type: 'text', text: userText },
+    const systemPrompt = buildSystemPrompt(personaInput);
+
+    // 2026-05-26 — Fix BS: three-tier resilience chain. Each provider
+    // attempt runs the same normalizer. We return the FIRST successful
+    // parse — there's no scoring rubric here because lie-analysis is
+    // narrower than swing-analysis (single image, single confidence
+    // dimension); any provider that successfully reads the photo is
+    // good enough to ship to the player.
+    let parsed: AnalysisResponse | null = null;
+    let providerUsed: 'gemini' | 'openai' | 'anthropic' | null = null;
+    const errors: Record<string, string | null> = {
+      gemini: null,
+      openai: null,
+      anthropic: null,
+    };
+
+    // ── Stage 1: Gemini 2.5 Flash (speed path) ───────────────────
+    if (gemini) {
+      try {
+        const gem = await gemini.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [{
+            role: 'user',
+            parts: [
+              { text: systemPrompt + '\n\n' + userText },
+              { inlineData: { mimeType: image_media_type, data: image_b64 } },
+            ],
+          }],
+          config: {
+            temperature: 0.3,
+            maxOutputTokens: 500,
+            responseMimeType: 'application/json',
+          },
+        });
+        const rawText = (gem.text ?? '').trim();
+        parsed = normalizeLieAnalysis(rawText);
+        if (parsed) {
+          providerUsed = 'gemini';
+        } else {
+          errors.gemini = rawText ? 'non_json_response' : 'empty_response';
+        }
+      } catch (e) {
+        errors.gemini = e instanceof Error ? e.message : 'unknown';
+        console.warn('[lie-analysis] gemini primary failed:', errors.gemini);
+      }
+    } else {
+      errors.gemini = 'GOOGLE_API_KEY not configured';
+    }
+
+    // ── Stage 2: OpenAI gpt-4o (mid fallback) ────────────────────
+    if (!parsed && process.env.OPENAI_API_KEY) {
+      try {
+        const oai = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          max_tokens: 500,
+          temperature: 0.3,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            {
+              role: 'user',
+              content: [
+                { type: 'image_url', image_url: { url: `data:${image_media_type};base64,${image_b64}`, detail: 'high' } },
+                { type: 'text', text: userText },
+              ],
+            },
           ],
-        },
-      ],
+        });
+        const rawText = (oai.choices[0]?.message?.content ?? '').trim();
+        parsed = normalizeLieAnalysis(rawText);
+        if (parsed) {
+          providerUsed = 'openai';
+          console.log('[lie-analysis] openai fallback succeeded after gemini:', errors.gemini);
+        } else {
+          errors.openai = rawText ? 'non_json_response' : 'empty_response';
+        }
+      } catch (e) {
+        errors.openai = e instanceof Error ? e.message : 'unknown';
+        console.warn('[lie-analysis] openai fallback failed:', errors.openai);
+      }
+    }
+
+    // ── Stage 3: Anthropic Sonnet 4.6 (deepest reasoning, last) ──
+    if (!parsed && process.env.ANTHROPIC_API_KEY) {
+      try {
+        const completion = await anthropic.messages.create({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 500,
+          temperature: 0.3,
+          system: systemPrompt,
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: image_media_type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+                  data: image_b64,
+                },
+              },
+              { type: 'text', text: userText },
+            ],
+          }],
+        });
+        const block = completion.content.find(c => c.type === 'text');
+        const rawText = block && block.type === 'text' ? block.text.trim() : '';
+        parsed = normalizeLieAnalysis(rawText);
+        if (parsed) {
+          providerUsed = 'anthropic';
+          console.log('[lie-analysis] anthropic last-resort succeeded:',
+            { gemini: errors.gemini, openai: errors.openai });
+        } else {
+          errors.anthropic = rawText ? 'non_json_response' : 'empty_response';
+        }
+      } catch (e) {
+        errors.anthropic = e instanceof Error ? e.message : 'unknown';
+        console.error('[lie-analysis] anthropic last-resort failed:', errors.anthropic);
+      }
+    }
+
+    if (!parsed || !providerUsed) {
+      console.error('[lie-analysis] all providers failed', errors);
+      return res.status(502).json({
+        error: 'All providers failed',
+        gemini_error: errors.gemini,
+        openai_error: errors.openai,
+        anthropic_error: errors.anthropic,
+      });
+    }
+
+    return res.status(200).json({
+      ...parsed,
+      _debug: { provider: providerUsed, errors },
     });
-
-    const block = completion.content.find(c => c.type === 'text');
-    const text = block && block.type === 'text' ? block.text.trim() : '';
-    if (!text) {
-      return res.status(502).json({ error: 'Empty model response' });
-    }
-
-    let parsed: AnalysisResponse;
-    try {
-      const cleaned = text.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
-      parsed = JSON.parse(cleaned) as AnalysisResponse;
-    } catch {
-      console.error('[lie-analysis] JSON parse failed:', text.slice(0, 300));
-      return res.status(502).json({ error: 'Model returned non-JSON', raw: text.slice(0, 300) });
-    }
-
-    // Defensive normalization
-    if (typeof parsed.situation_description !== 'string') parsed.situation_description = '';
-    if (typeof parsed.tactical_advice !== 'string') parsed.tactical_advice = '';
-    if (parsed.recommended_club != null && typeof parsed.recommended_club !== 'string') parsed.recommended_club = null;
-    if (parsed.alternative_play != null && typeof parsed.alternative_play !== 'string') parsed.alternative_play = null;
-    if (!['high', 'medium', 'low'].includes(parsed.confidence_level)) parsed.confidence_level = 'medium';
-    parsed.conservative_call = Boolean(parsed.conservative_call);
-
-    return res.status(200).json(parsed);
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Unknown error';
     console.error('[lie-analysis] exception:', msg);
     return res.status(500).json({ error: msg });
   }
+}
+
+/**
+ * 2026-05-26 — Fix BS: shared normalizer for all three providers.
+ * Returns parsed + sanitized AnalysisResponse, or null on parse fail
+ * / empty input. Caller treats null as "this provider failed, try
+ * the next one in the chain."
+ */
+function normalizeLieAnalysis(rawText: string): AnalysisResponse | null {
+  if (!rawText) return null;
+  let parsed: AnalysisResponse;
+  try {
+    const cleaned = rawText.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
+    parsed = JSON.parse(cleaned) as AnalysisResponse;
+  } catch {
+    return null;
+  }
+  if (typeof parsed.situation_description !== 'string') parsed.situation_description = '';
+  if (typeof parsed.tactical_advice !== 'string') parsed.tactical_advice = '';
+  if (parsed.recommended_club != null && typeof parsed.recommended_club !== 'string') parsed.recommended_club = null;
+  if (parsed.alternative_play != null && typeof parsed.alternative_play !== 'string') parsed.alternative_play = null;
+  if (!['high', 'medium', 'low'].includes(parsed.confidence_level)) parsed.confidence_level = 'medium';
+  parsed.conservative_call = Boolean(parsed.conservative_call);
+  return parsed;
 }
