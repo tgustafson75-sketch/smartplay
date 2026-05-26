@@ -120,11 +120,26 @@ export default function VideoAnnotationOverlay() {
   const undo = () => setShapes(prev => prev.slice(0, -1));
   const clearAll = () => { setShapes([]); setPendingTwoPoint(null); setPendingPath(''); pendingPathRef.current = ''; };
 
+  // Track `enabled` in a ref so the stable PanResponder closure sees
+  // current state without rebuilding the responder on every toggle.
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
+
   const panResponder = useRef(
     PanResponder.create({
       // Only intercept gestures when annotation mode is enabled.
-      onStartShouldSetPanResponder: () => enabled,
-      onMoveShouldSetPanResponder: () => enabled,
+      // 2026-05-25 — Fix AH follow-up: use CAPTURE-phase variants so
+      // the overlay grabs the gesture BEFORE parent ScrollViews (the
+      // swing detail screen's outer scroll) consume it. Tim flagged
+      // drawing didn't register because the parent scroll was
+      // capturing the touch. Capture variants run during the capture
+      // phase of the touch-routing tree (root → leaf), giving the
+      // leaf precedence over upstream scrollables.
+      onStartShouldSetPanResponderCapture: () => enabledRef.current,
+      onMoveShouldSetPanResponderCapture: () => enabledRef.current,
+      onStartShouldSetPanResponder: () => enabledRef.current,
+      onMoveShouldSetPanResponder: () => enabledRef.current,
+      onPanResponderTerminationRequest: () => !enabledRef.current,
       onPanResponderGrant: (e: GestureResponderEvent) => {
         if (!enabled) return;
         const { locationX, locationY } = e.nativeEvent;
@@ -235,7 +250,12 @@ export default function VideoAnnotationOverlay() {
         {...panResponder.panHandlers}
       >
         {visible && size.w > 0 && (
-          <Svg width={size.w} height={size.h} style={StyleSheet.absoluteFill}>
+          // 2026-05-25 — Fix AH follow-up: pointerEvents='none' on the
+          // Svg so it NEVER intercepts taps even when the wrapper is
+          // 'auto'. Shapes are render-only — no onPress anywhere.
+          // Without this, the Svg root defaulted to 'auto' and the
+          // play/pause/seek video controls underneath stopped working.
+          <Svg width={size.w} height={size.h} style={StyleSheet.absoluteFill} pointerEvents="none">
             {shapes.map(s => {
               if (s.type === 'freehand' && s.d) {
                 return <Path key={s.id} d={s.d} stroke={s.color} strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round" />;

@@ -145,7 +145,11 @@ export default function UploadSwing() {
     if (voiceEnabled) {
       void (async () => {
         await configureAudioForSpeech();
-        await speak("Got your video. Let me take a look.", voiceGender, language, apiUrl);
+        // 2026-05-25 — userInitiated:true so this speaks even when
+        // trust=1 (Quiet). The user JUST tapped Upload — this is the
+        // moment that most warrants the audible "got your video"
+        // ack. Without the flag, isVoiceAllowed silenced it at L1.
+        await speak("Got your video. Let me take a look.", voiceGender, language, apiUrl, { userInitiated: true });
       })();
     }
     // Routing: long → trim screen; short → detail with watch param;

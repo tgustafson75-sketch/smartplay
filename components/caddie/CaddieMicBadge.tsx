@@ -36,14 +36,17 @@ export interface CaddieMicBadgeProps {
   size?: number;
   /** Override tap handler. Defaults to `listeningSession.toggle()`. Pass null to disable. */
   onPress?: (() => void) | null;
-  /** Hide the small mic-icon overlay (e.g. for a purely decorative use). */
+  /** 2026-05-25 — Default true per Tim's feedback: the badge's pulse +
+   *  ring color already signal listening state intuitively; an icon
+   *  chip just adds clutter. Caller can pass false if a specific
+   *  surface still wants the mic chip overlay. */
   hideMicIcon?: boolean;
   /** Accessibility label override. */
   accessibilityLabel?: string;
-  /** 2026-05-25 — Fix AN: hide the trust-level quick-cycle chip
-   *  (bottom-left of the badge). Default false — chip is visible on
-   *  the brand row + every other consumer. Pass true for purely-
-   *  decorative uses (intro splash, etc.). */
+  /** 2026-05-25 — Fix AN follow-up: the trust-level chip on the badge
+   *  added visual noise. Default true (hidden); trust cycling moves
+   *  to the ••• Tools menu + Settings. Caller can opt in by passing
+   *  false on a surface that explicitly wants quick-cycle on the badge. */
   hideTrustChip?: boolean;
 }
 
@@ -68,9 +71,9 @@ function nextTrustLevel(current: TrustLevel): TrustLevel {
 export function CaddieMicBadge({
   size = 56,
   onPress,
-  hideMicIcon = false,
+  hideMicIcon = true,
   accessibilityLabel,
-  hideTrustChip = false,
+  hideTrustChip = true,
 }: CaddieMicBadgeProps) {
   const { colors } = useTheme();
   const listeningState = useListeningSessionStore((s) => s.state);
