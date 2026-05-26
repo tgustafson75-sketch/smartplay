@@ -315,7 +315,20 @@ export const useVoiceCaddie = ({
   } = usePlayerProfileStore(
     useShallow((s) => ({
       name: s.name,
-      firstName: s.firstName,
+      // 2026-05-25 — firstName gets layered through inviteePreferences
+      // map so Tim's pre-set salutations ("Uncle Mike" for m.hayes@snet.net)
+      // override the default sign-in firstName. Applied here so EVERY
+      // brain call receives the right name without changing the store
+      // shape. Falls back to s.firstName when no override exists.
+      firstName: (() => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const { resolveCaddieSalutation } = require('../data/inviteePreferences') as typeof import('../data/inviteePreferences');
+          return resolveCaddieSalutation(s.email, s.firstName);
+        } catch {
+          return s.firstName;
+        }
+      })(),
       handicap: s.handicap,
       dominantMiss: s.dominantMiss,
       physicalLimitation: s.physicalLimitation,
