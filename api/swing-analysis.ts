@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 
 // 2026-05-23 — maxRetries 1 → 3 to absorb Anthropic 529 overloaded_error spikes.
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 3 });
@@ -8,6 +9,14 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout
 // than Anthropic — by the time we fall back, the user has already been
 // waiting; we'd rather degrade to honest-failure than burn another 25s.
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 1 });
+// 2026-05-26 — Fix AT: Gemini 2.5 Flash as a third resilience layer.
+// Bryson DeChambeau's ad used Gemini for swing analysis Q&A — adding
+// it here means we match (and exceed) that capability with our own
+// structured pipeline. Constructed lazily inside the handler so the
+// process boots even when GOOGLE_API_KEY isn't configured.
+const gemini = process.env.GOOGLE_API_KEY
+  ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
+  : null;
 
 /**
  * Phase K — Swing analysis endpoint.
@@ -501,7 +510,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // normalizer + safety gates below so the response contract is
     // identical regardless of which model produced it.
     let text = '';
-    let providerUsed: 'anthropic' | 'openai' = 'anthropic';
+    let providerUsed: 'anthropic' | 'openai' | 'gemini' = 'anthropic';
     let anthropicError: string | null = null;
     try {
       const completion = await anthropic.messages.create({
@@ -524,6 +533,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // OpenAI fallback when Anthropic threw OR returned empty. Only
     // attempted when OPENAI_API_KEY is configured — otherwise the
     // upstream failure surfaces as a real 502 like before.
+    let openaiError: string | null = null;
     if (!text && process.env.OPENAI_API_KEY) {
       try {
         const openaiContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
@@ -557,22 +567,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         providerUsed = 'openai';
         console.log('[swing-analysis] openai fallback succeeded after anthropic:', anthropicError);
       } catch (oaiErr) {
-        const oaiMsg = oaiErr instanceof Error ? oaiErr.message : 'unknown';
-        console.error('[swing-analysis] openai fallback also failed:', oaiMsg);
-        return res.status(502).json({
-          error: 'Both providers failed',
-          anthropic_error: anthropicError,
-          openai_error: oaiMsg,
+        openaiError = oaiErr instanceof Error ? oaiErr.message : 'unknown';
+        console.warn('[swing-analysis] openai fallback failed:', openaiError);
+      }
+    }
+
+    // 2026-05-26 — Fix AT: Gemini 2.5 Flash as third resilience layer.
+    // Tried when both Anthropic AND OpenAI returned empty / threw, but
+    // only when GOOGLE_API_KEY is configured. The Bryson-DeChambeau-ad
+    // model — having it in the chain means the pipeline survives
+    // simultaneous OpenAI + Anthropic incidents (real risk: both
+    // share underlying GPU capacity at peak).
+    let geminiError: string | null = null;
+    if (!text && gemini) {
+      try {
+        const geminiContent = [
+          { text: systemPrompt + '\n\n' + userText },
+          ...frames.map(f => ({
+            inlineData: {
+              mimeType: f.media_type ?? 'image/jpeg',
+              data: f.b64,
+            },
+          })),
+        ];
+        const gem = await gemini.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [{ role: 'user', parts: geminiContent }],
+          config: {
+            temperature: 0.2,
+            maxOutputTokens: 600,
+            responseMimeType: 'application/json',
+          },
         });
+        text = (gem.text ?? '').trim();
+        providerUsed = 'gemini';
+        console.log('[swing-analysis] gemini fallback succeeded after anthropic+openai:',
+          { anthropic: anthropicError, openai: openaiError });
+      } catch (gemErr) {
+        geminiError = gemErr instanceof Error ? gemErr.message : 'unknown';
+        console.error('[swing-analysis] gemini fallback also failed:', geminiError);
       }
     }
 
     if (!text) {
-      // Anthropic failed/empty AND OpenAI key not configured. Surface
-      // the real Anthropic reason so the client toast is honest.
+      // All configured providers failed. Surface every reason so the
+      // client toast and ops can see exactly what happened.
       return res.status(502).json({
-        error: anthropicError ?? 'Empty model response',
-        provider: 'anthropic',
+        error: 'All providers failed',
+        anthropic_error: anthropicError,
+        openai_error: openaiError,
+        gemini_error: geminiError,
       });
     }
 

@@ -28,6 +28,7 @@ import { speak, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCap
 import { runPhaseKOnSession } from '../../../services/videoUpload';
 import { uploadLog } from '../../../services/uploadDiagnostic';
 import PrimaryIssueCard from '../../../components/swinglab/PrimaryIssueCard';
+import AskYourSwingCard from '../../../components/swinglab/AskYourSwingCard';
 import ZoomableView from '../../../components/swinglab/ZoomableView';
 import VideoAnnotationOverlay from '../../../components/swinglab/VideoAnnotationOverlay';
 import DrillCard from '../../../components/swinglab/DrillCard';
@@ -884,6 +885,14 @@ export default function SwingDetail() {
                   totalShots={session.shots.length}
                 />
               )}
+              {/* 2026-05-26 — Fix AT: Ask Your Swing card. Lives
+                  directly under PrimaryIssue so the player can ask a
+                  follow-up while the diagnosis is fresh. Renders only
+                  when the session has a captured fault frame; gates
+                  itself internally (no UI noise on un-analyzed
+                  swings). Gemini-first Q&A — Bryson-DeChambeau-ad
+                  parity with our caddie voice on top. */}
+              <AskYourSwingCard session={session} />
               {/* 2026-05-23 (Fix #5) — DrillCard gated on
                   drill_recommendation being non-null for putting
                   sessions so no empty drill placeholder appears
