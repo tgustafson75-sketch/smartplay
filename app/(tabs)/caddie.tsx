@@ -2757,9 +2757,15 @@ export default function CaddieTab() {
                 icon={voiceEnabled ? 'mic' : 'mic-off'}
                 label={voiceEnabled ? 'Mute caddie voice' : 'Unmute caddie voice'}
                 onPress={() => {
-                  setVoiceEnabled(!voiceEnabled);
+                  // 2026-05-26 — Fix CI: compute the new value once and
+                  // use it for BOTH setState and the toast. The prior
+                  // version read voiceEnabled in the toast expression,
+                  // which captured the stale closure value — a rapid
+                  // double-tap would show the same toast twice.
+                  const next = !voiceEnabled;
+                  setVoiceEnabled(next);
                   void Haptics.selectionAsync().catch(() => undefined);
-                  useToastStore.getState().show(voiceEnabled ? 'Caddie voice off' : 'Caddie voice on');
+                  useToastStore.getState().show(next ? 'Caddie voice on' : 'Caddie voice off');
                 }}
               />
               <ToolFabIconCycler
