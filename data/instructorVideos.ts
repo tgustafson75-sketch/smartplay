@@ -44,6 +44,11 @@ export interface InstructorVideoLink {
   url: string;
   approxRuntimeSec: number;
   verified: boolean;
+  // 2026-05-26 — Optional placeholder thumbnail for slots whose video
+  // isn't recorded yet (notably tank_caddie). When set, the drill-card
+  // UI should render this asset instead of trying to derive a YouTube
+  // thumbnail from the (empty) url. require()-style ImageSourcePropType.
+  placeholderThumbnail?: number;
 }
 
 interface CategoryVideos {
@@ -167,8 +172,13 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
   },
   // 2026-05-26 — 8th slot reserved for Tank-narrated SmartPlay-branded
   // drill content. URL empty until Tank recording lands; consumers
-  // should detect url === '' and render the SmartPlay logo + Tank
-  // portrait instead of a YouTube thumbnail.
+  // detect url === '' and render placeholderThumbnail instead of a
+  // YouTube thumbnail. Placeholder asset = SmartPlay-hoodie + brand
+  // photo Tim provided.
+  // TODO 2026-05-26: once Tim saves the placeholder image to
+  // assets/drills/tank-caddie.png, uncomment the placeholderThumbnail
+  // line below. Required as a require() at module-eval, NOT a string —
+  // Metro resolves the asset at bundle time.
   tank_caddie: {
     primary: {
       title: "Tank's Take — SmartPlay caddie drill",
@@ -176,6 +186,7 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
       url: '', // TODO: Tank recording + SmartPlay branding overlay
       approxRuntimeSec: 180,
       verified: false,
+      // placeholderThumbnail: require('../assets/drills/tank-caddie.png'),
     },
   },
 };
