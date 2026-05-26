@@ -123,6 +123,27 @@ export default function OwnerLogsScreen() {
     }
   };
 
+  // 2026-05-25 — Fix AI: per-entry export helper. Mailto with just
+  // one entry's text + context; same recipient + subject pattern as
+  // the bulk export for consistency.
+  const onExportSingle = async (entryId: string) => {
+    const entry = entries.find(e => e.id === entryId);
+    if (!entry) return;
+    const ctx = entry.context;
+    const ctxLine = `[${formatTimestamp(entry.timestamp)} · ${ctx.persona ?? '—'} · ${ctx.isRoundActive ? `hole ${ctx.currentHole ?? '?'} @ ${ctx.courseId ?? '?'}` : 'no round'}]`;
+    const reporter = ownerEmail || 'beta tester';
+    const subject = `SmartPlay Caddie issue — ${reporter}`;
+    const body = `Reporter: ${reporter}\nDevice: ${Platform.OS}\n\n${entry.text}\n${ctxLine}\n\n— Sent from SmartPlay Caddie Issue Log`;
+    const mailto = `mailto:support@smartplaycaddie.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    try {
+      const can = await Linking.canOpenURL(mailto).catch(() => false);
+      if (can) { await Linking.openURL(mailto); return; }
+      await Share.share({ message: `support@smartplaycaddie.com\n\n${body}`, title: subject });
+    } catch (e) {
+      console.log('[owner-logs] single export failed', e);
+    }
+  };
+
   const onExport = async () => {
     if (entries.length === 0) return;
     const text = entries
@@ -215,31 +236,49 @@ export default function OwnerLogsScreen() {
                 key={entry.id}
                 style={[styles.entry, { borderColor: colors.border, backgroundColor: colors.surface }]}
               >
-                <TouchableOpacity
-                  onLongPress={() => {
-                    Alert.alert(
-                      'Delete entry?',
-                      'This removes it from the log.',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        { text: 'Delete', style: 'destructive', onPress: () => remove(entry.id) },
-                      ],
-                    );
-                  }}
-                  delayLongPress={500}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Issue: ${entry.text}. Long-press to delete.`}
-                >
-                  <Text style={[styles.entryText, { color: colors.text_primary }]}>{entry.text}</Text>
-                  <Text style={[styles.entryMeta, { color: colors.text_muted }]}>
-                    {formatTimestamp(entry.timestamp)}
-                    {entry.context.persona ? ` · ${entry.context.persona}` : ''}
-                    {entry.context.isRoundActive
-                      ? ` · hole ${entry.context.currentHole ?? '?'}`
-                      : ''}
-                    {entry.context.courseId ? ` · ${entry.context.courseId}` : ''}
-                  </Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                  <TouchableOpacity
+                    style={{ flex: 1 }}
+                    onLongPress={() => {
+                      Alert.alert(
+                        'Delete entry?',
+                        'This removes it from the log.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Delete', style: 'destructive', onPress: () => remove(entry.id) },
+                        ],
+                      );
+                    }}
+                    delayLongPress={500}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Issue: ${entry.text}. Long-press to delete.`}
+                  >
+                    <Text style={[styles.entryText, { color: colors.text_primary }]}>{entry.text}</Text>
+                    <Text style={[styles.entryMeta, { color: colors.text_muted }]}>
+                      {formatTimestamp(entry.timestamp)}
+                      {entry.context.persona ? ` · ${entry.context.persona}` : ''}
+                      {entry.context.isRoundActive
+                        ? ` · hole ${entry.context.currentHole ?? '?'}`
+                        : ''}
+                      {entry.context.courseId ? ` · ${entry.context.courseId}` : ''}
+                    </Text>
+                  </TouchableOpacity>
+                  {/* 2026-05-25 — Fix AI: per-entry email export. Tap
+                      opens a mailto: pre-filled with this single entry
+                      addressed to support@smartplaycaddie.com — pairs
+                      with the screen-level export-all button so users
+                      can send a SINGLE issue (the one that just happened)
+                      without batching the whole log. */}
+                  <TouchableOpacity
+                    onPress={() => { void onExportSingle(entry.id); }}
+                    style={{ paddingLeft: 8, paddingTop: 2 }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Email this entry to support"
+                  >
+                    <Ionicons name="mail-outline" size={18} color={colors.accent} />
+                  </TouchableOpacity>
+                </View>
 
                 {/* 2026-05-22 — Path 1 (Owner Triage). Button posts the
                     entry + context to /api/owner-triage; Claude returns

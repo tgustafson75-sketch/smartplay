@@ -1220,6 +1220,25 @@ export default function Settings() {
             </View>
             <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
           </TouchableOpacity>
+
+          {/* 2026-05-25 — Fix AI: Coach Knowledge entry. Same Beta
+              Feedback section so coaches (Marc/Tank) can find their
+              "remember this" captures and export them to Tim. */}
+          <TouchableOpacity
+            style={styles.resetRow}
+            onPress={() => router.push('/coach-knowledge' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Open Coach Knowledge"
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Coach Knowledge</Text>
+              <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                Coach refinements saved via &quot;remember this&quot; voice trigger.
+                Per-entry + bulk export to support@smartplaycaddie.com.
+              </Text>
+            </View>
+            <Ionicons name="bulb-outline" size={20} color={colors.text_muted} />
+          </TouchableOpacity>
         </CollapsibleSection>
 
         {/* 2026-05-17 — Owner-only tools (Claude triage etc). The Issue
