@@ -96,7 +96,12 @@ export default function MarkPositionScreen() {
   const initialMode: MarkMode = modeParam === 'tee' ? 'tee' : 'green';
   const [mode, setMode] = useState<MarkMode>(initialMode);
   const isTeeMode = mode === 'tee';
-  const labelTitle = isTeeMode ? 'Mark Tee' : 'Mark Green';
+  // 2026-05-26 — Screen header always reads "Mark Location" (the
+  // canonical entry name Tim sees in Owner Tools + the global Tools
+  // menu). The TEE/GREEN toggle below disambiguates which target the
+  // current capture writes to. labelTarget still drives the body copy
+  // ("Walk to the green center…") so the instructions stay precise.
+  const labelTitle = 'Mark Location';
   const labelTarget = isTeeMode ? 'tee' : 'green';
 
   const [fix, setFix] = useState<GpsFix | null>(null);

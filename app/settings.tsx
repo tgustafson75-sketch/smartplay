@@ -1558,15 +1558,15 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/mark-green' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="Open Mark Green tool"
+                    accessibilityLabel="Open Mark Location tool"
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Mark Green</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Mark Location</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Walk to a green center, capture its real GPS coords. Fixes yardages for any course that ships with placeholder data (Sunnyvale, SJ Muni).
+                        Walk to a tee box OR green center and capture its real GPS coords. Toggle inside picks which one. Fixes yardages for any hole shipping with placeholder data.
                       </Text>
                     </View>
-                    <Ionicons name="flag" size={20} color={colors.text_muted} />
+                    <Ionicons name="location" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
                 </CollapsibleSection>
               </>

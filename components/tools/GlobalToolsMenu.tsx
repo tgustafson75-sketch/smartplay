@@ -288,13 +288,13 @@ export function GlobalToolsMenu() {
                   colors={colors}
                 />
                 <Row
-                  icon="flag-outline"
-                  label="Mark Green"
-                  sub="Walk to the green center, capture real coords for this hole"
+                  icon="location-outline"
+                  label="Mark Location"
+                  sub="Walk to a tee box or green center and capture real GPS coords for this hole"
                   onPress={() => {
                     useToolsMenuStore.getState().close();
                     try { router.push('/mark-green' as never); }
-                    catch (e) { console.log('[tools] mark-green nav failed', e); }
+                    catch (e) { console.log('[tools] mark-location nav failed', e); }
                   }}
                   colors={colors}
                 />
