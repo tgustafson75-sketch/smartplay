@@ -872,7 +872,18 @@ export default function CaddieTab() {
     // generic when no course is nearby).
     setOpeningPrompt(`${greeting} Practice or play?`);
 
-    if (!openingPromptSpokenThisProcess && voiceEnabled && trustLevel !== 1) {
+    // 2026-05-26 — Fix BY: dropped the trustLevel !== 1 check from
+    // the outer gate. Both speaks below pass { userInitiated: true }
+    // so isVoiceAllowed lets them through L1 Quiet (same gating Tim
+    // wants on app launch — user just opened the app, the opener is
+    // initiated by that action). Previously this gate blocked the
+    // ENTIRE IIFE at L1 — silent app launch, no greeting, no GPS
+    // course detection, no follow-up. The cycle pill we just shipped
+    // makes L1 reachable in one tap, so hitting L1 by accident silenced
+    // the opener on the next launch. voiceEnabled (settings-level mute)
+    // is still respected — that's the canonical "I want total silence"
+    // toggle.
+    if (!openingPromptSpokenThisProcess && voiceEnabled) {
       openingPromptSpokenThisProcess = true;
       // 2026-05-26 — Fix BB: 600ms → 3000ms. Tim wanted natural
       // breathing room between the splash-screen greeting ending and
