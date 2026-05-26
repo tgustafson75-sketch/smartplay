@@ -168,6 +168,10 @@ export default function Settings() {
   const handicapIndex = usePlayerProfileStore(s => s.handicap_index);
   const setHandicapIndex = usePlayerProfileStore(s => s.setHandicapIndex);
   const [editIndex, setEditIndex] = useState(handicapIndex != null ? String(handicapIndex) : '');
+  // 2026-05-26 — Fix AB Phase 1: GHIN # local edit mirror.
+  const ghinNumber = usePlayerProfileStore(s => s.ghin_number);
+  const setGhinNumber = usePlayerProfileStore(s => s.setGhinNumber);
+  const [editGhin, setEditGhin] = useState(ghinNumber ?? '');
   const [editLimitation, setEditLimitation] = useState(physicalLimitation ?? '');
   const [editBest, setEditBest] = useState(personalBest ? String(personalBest) : '');
 
@@ -465,6 +469,27 @@ export default function Settings() {
             placeholder="e.g. 18.0"
             placeholderTextColor="#374151"
           />
+
+          {/* 2026-05-26 — Fix AB Phase 1: GHIN # capture. We store the
+              number now so once USGA business-API credentials land we
+              can auto-pull official handicap + posted-scores history.
+              Until then it's informational (brain prompt + tournament
+              hints). */}
+          <Text style={inputLblStyle}>GHIN Number</Text>
+          <TextInput
+            style={inputFldStyle}
+            value={editGhin}
+            onChangeText={(v) => {
+              setEditGhin(v);
+              setGhinNumber(v);
+            }}
+            keyboardType="numbers-and-punctuation"
+            placeholder="e.g. 1234567"
+            placeholderTextColor="#374151"
+          />
+          <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>
+            Optional. We&apos;ll pull your official handicap + score history once GHIN integration ships.
+          </Text>
 
           <Text style={inputLblStyle}>Goal</Text>
           <TextInput
@@ -1770,6 +1795,13 @@ function FeelCaptureRow({ colors }: { colors: ThemeColors }) {
 // ─── STYLES ───────────────────────────────
 
 const styles = StyleSheet.create({
+  // 2026-05-26 — Fix AB Phase 1: GHIN field helper-text style.
+  helperText: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontStyle: 'italic',
+    paddingHorizontal: 4,
+  },
   // Phase 105 — caddie team intro + reset link.
   sectionIntro: {
     fontSize: 13,

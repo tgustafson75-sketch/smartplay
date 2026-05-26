@@ -99,6 +99,23 @@ interface PlayerProfileState {
   // onboarding (close mid-form) retains the acceptance state on resume.
   termsAcceptedAt: number | null;
 
+  // 2026-05-26 — Fix AB Phase 1: GHIN number scaffold.
+  //
+  // We CAPTURE the player's GHIN # now so it's already on file once
+  // we obtain GHIN API credentials (USGA business agreement) and can
+  // pull their official handicap + posted scores automatically.
+  //
+  // Until then this field is informational only — it shows up in the
+  // brain prompt as "Player's GHIN: <number>" so Kevin can reference
+  // it when the user asks "what's my GHIN?" or talks about USGA score
+  // posting, AND it surfaces in player-context for tournament-mode
+  // hints. No live API call.
+  //
+  // Stored as a string (GHIN #s are 7-digit but the API treats them
+  // as strings to preserve leading zeros and to allow USGA international
+  // variants like 'XXXX-XXXX'). null = not captured.
+  ghin_number: string | null;
+
   // ─── ACTIONS ────────────────────────────
 
   setName: (name: string) => void;
@@ -134,6 +151,8 @@ interface PlayerProfileState {
   // 2026-05-22 — Launch-prep T&C acceptance.
   acceptTerms: () => void;
   clearTermsAcceptance: () => void;
+  // 2026-05-26 — Fix AB Phase 1: GHIN # capture.
+  setGhinNumber: (ghin: string | null) => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -178,6 +197,8 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       useCustomCaddie: false,
       // 2026-05-22 — Launch-prep T&C acceptance default.
       termsAcceptedAt: null,
+      // 2026-05-26 — Fix AB Phase 1: GHIN # default null until captured.
+      ghin_number: null,
 
       setName: (name) =>
         set({ name, firstName: name.split(' ')[0] ?? name }),
@@ -242,6 +263,18 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       // surface where the user can revoke ("delete my account" flow).
       acceptTerms: () => set({ termsAcceptedAt: Date.now() }),
       clearTermsAcceptance: () => set({ termsAcceptedAt: null }),
+      // 2026-05-26 — Fix AB Phase 1: GHIN # capture. Normalizes
+      // common typed-in formats — strips spaces / dashes for the
+      // 7-digit case, preserves international XXXX-XXXX format
+      // intact. Empty / whitespace-only clears.
+      setGhinNumber: (ghin) => {
+        const cleaned = typeof ghin === 'string' ? ghin.trim() : '';
+        if (!cleaned) return set({ ghin_number: null });
+        // For pure-digit input, drop separators; otherwise keep as-is.
+        const compact = cleaned.replace(/[\s-]/g, '');
+        const normalized = /^\d+$/.test(compact) ? compact : cleaned;
+        set({ ghin_number: normalized });
+      },
     }),
     {
       name: 'player-profile-v2',

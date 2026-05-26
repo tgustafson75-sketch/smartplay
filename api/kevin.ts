@@ -327,6 +327,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // verbatim into system prompt so every reply has user-specific
       // grounding without per-call latency. Each is a 1-3 paragraph note.
       kevinContext = null,
+      // 2026-05-26 — Fix AB Phase 1: GHIN # surfaced as background so
+      // Kevin can answer "what's my GHIN?" and use it as context for
+      // tournament / posted-score conversations. Phase 2 will wire
+      // the live GHIN API; for now it's informational only.
+      ghinNumber = null,
       // 2026-05-22 — Brain prompt builder integration.
       // golfer_model_snippet: derived tendency snapshot from
       //   services/golferModel.buildGolferModel().prompt_snippet
@@ -401,6 +406,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const characterSpec = getCharacterSpec(personaInput);
 
     const _kevinContext: string | null = typeof kevinContext === 'string' && kevinContext.trim() ? kevinContext.trim() : null;
+    const _ghinNumber: string | null = typeof ghinNumber === 'string' && ghinNumber.trim() ? ghinNumber.trim() : null;
     const _golferModel: string | null = typeof golfer_model_snippet === 'string' && golfer_model_snippet.trim() ? golfer_model_snippet.trim() : null;
     const _recentAnalyses: string | null = typeof recent_analyses_snippet === 'string' && recent_analyses_snippet.trim() ? recent_analyses_snippet.trim() : null;
     // 2026-05-23 — Persona Knowledge Layer. When persona='tank' AND the
@@ -626,6 +632,7 @@ ${physicalLimitation ? `PHYSICAL NOTE: ${physicalLimitation} — never suggest m
 ${todBlock}
 
 ${_kevinContext ? `ABOUT THIS GOLFER (private; never read aloud — use as background):\n${_kevinContext}` : ''}
+${_ghinNumber ? `PLAYER'S GHIN: ${_ghinNumber}. When the user asks "what's my GHIN?" or wants to know their handicap-system number, say it conversationally. Reference it in tournament / posted-score context. We don't have live GHIN data yet — if asked about official handicap, say honestly we'll pull live posted scores once GHIN integration ships.` : ''}
 ${_golferModel ? `\nDERIVED TENDENCIES (private; use to be SPECIFIC instead of generic — never recite these literally):\n${_golferModel}` : ''}
 ${_recentAnalyses ? `\nWHAT YOU JUST TOLD THEM (last few exchanges in this session — don't repeat verbatim, but stay coherent):\n${_recentAnalyses}` : ''}
 ${_personaKBBlock ? `\n${_personaKBBlock}` : ''}

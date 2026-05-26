@@ -602,6 +602,12 @@ export const useVoiceCaddie = ({
           // in the next reply without app restart.
           kevinContext: usePlayerProfileStore.getState().kevinContext,
           persistentPatterns: usePlayerProfileStore.getState().persistentPatterns,
+          // 2026-05-26 — Fix AB Phase 1: surface GHIN # so Kevin can
+          // answer "what's my GHIN?" and reference it in tournament /
+          // posted-score context without forcing the user to re-state
+          // it every time. Phase 2 (live GHIN API) will use this as
+          // the lookup key.
+          ghinNumber: usePlayerProfileStore.getState().ghin_number,
           // 2026-05-19 — pipe the player's learned vocabulary into the
           // brain so phrases they've used before inform replies. Tim's
           // "I saw Kevin learned 22 phrases — can he use them?" The
