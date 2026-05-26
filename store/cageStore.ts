@@ -85,6 +85,16 @@ export interface CageShot {
   // No user surface — only owner debug at /cage-debug surfaces it.
   // Empty / absent on every production user (transcription gated off).
   feel_narration_transcript?: string;
+  // 2026-05-25 — Fix AJ Phase 2: spoken commentary captured during
+  // the video recording (e.g. "this is Chris's third swing, he's
+  // been pulling it left" / "putt cam, downhill left to right").
+  // Distinct from feel_narration_transcript which is owner-only
+  // calibration data — commentary lives on EVERY beta swing so the
+  // narration is searchable + brain-accessible. Whisper-transcribed
+  // from the same mp4 the video uses; transcription is best-effort
+  // (silent clips leave this empty / unset). Updated via
+  // setShotCommentaryTranscript.
+  commentary_transcript?: string;
 }
 
 // Phase BL — how the active club was identified for a given segment.
@@ -430,6 +440,12 @@ interface CageState {
    *  reviewable in the owner debug surface. No-op when sessionId or
    *  shotId not found. */
   setShotFeelTranscript: (sessionId: string, shotId: string, transcript: string) => void;
+  /** 2026-05-25 — Fix AJ Phase 2: persist the spoken-commentary
+   *  Whisper transcript for a shot. Same lifecycle pattern as the
+   *  feel-narration setter — searches activeSession AND
+   *  sessionHistory because transcription can finish either before
+   *  or after the session is finalized. */
+  setShotCommentaryTranscript: (sessionId: string, shotId: string, transcript: string) => void;
   /** 2026-05-23 — Save a coach note onto a session. Coach Mode flow:
    *  pro watches the swing, AI analysis lands, pro types their own
    *  read ("hips stalled at impact") and saves. Independent of the
@@ -797,6 +813,25 @@ export const useCageStore = create<CageState>()(
           if (!trim) return s;
           const updateShots = (shots: CageShot[]): CageShot[] =>
             shots.map(shot => shot.id !== shotId ? shot : { ...shot, feel_narration_transcript: trim });
+          return {
+            ...s,
+            activeSession:
+              s.activeSession && s.activeSession.id === sessionId
+                ? { ...s.activeSession, shots: updateShots(s.activeSession.shots) }
+                : s.activeSession,
+            sessionHistory: s.sessionHistory.map(session =>
+              session.id !== sessionId ? session : { ...session, shots: updateShots(session.shots) },
+            ),
+          };
+        }),
+
+      // 2026-05-25 — Fix AJ Phase 2: same lifecycle as feel transcript.
+      setShotCommentaryTranscript: (sessionId, shotId, transcript) =>
+        set(s => {
+          const trim = (transcript ?? '').trim();
+          if (!trim) return s;
+          const updateShots = (shots: CageShot[]): CageShot[] =>
+            shots.map(shot => shot.id !== shotId ? shot : { ...shot, commentary_transcript: trim });
           return {
             ...s,
             activeSession:

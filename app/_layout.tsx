@@ -14,6 +14,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
 import i18n from '../i18n';
 import { initFeelCapture } from '../services/feelCaptureService';
+import { startSwingCommentarySubscription } from '../services/swingCommentaryService';
 import { initListeningSession } from '../services/listeningSession';
 import { hydrateCourseTruthCache } from '../services/courseTruth';
 import { initVoiceTriggers } from '../services/voiceTriggers';
@@ -289,6 +290,15 @@ function AppNavigator() {
   useEffect(() => {
     const teardown = initFeelCapture();
     return () => { teardown(); };
+  }, []);
+
+  // 2026-05-25 — Fix AJ Phase 2: Whisper-transcribe spoken commentary
+  // from every captured/uploaded swing clip's audio track. Persists to
+  // shot.commentary_transcript so the brain has spoken context when
+  // the user asks about a specific swing ("what was that putt I just
+  // hit"). Default-on for beta; subscribe-once, fire-and-forget.
+  useEffect(() => {
+    startSwingCommentarySubscription();
   }, []);
 
   // 2026-05-24 v1.2.1 — Glasses Mode boot-time audio config. When

@@ -896,6 +896,28 @@ export default function SwingDetail() {
                 initialNote={session.coach_note ?? null}
               />
 
+              {/* 2026-05-25 — Fix AJ Phase 2: spoken commentary card.
+                  Whisper transcript of the recorded mp4's audio so the
+                  user can see what they narrated ("this is Chris's
+                  third swing, he's been pulling it left"). Brain picks
+                  up the same transcript when the user asks about the
+                  swing. Hides cleanly when no commentary captured
+                  (silent clip, transcription pending, or transcribe
+                  call failed). */}
+              {(() => {
+                const transcript = (shot.commentary_transcript ?? '').trim();
+                if (!transcript) return null;
+                return (
+                  <View style={[commentaryStyles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                    <View style={commentaryStyles.headerRow}>
+                      <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.accent} />
+                      <Text style={[commentaryStyles.label, { color: colors.accent }]}>YOUR COMMENTARY</Text>
+                    </View>
+                    <Text style={[commentaryStyles.body, { color: colors.text_primary }]}>{transcript}</Text>
+                  </View>
+                );
+              })()}
+
               {/* Pose-derived biomechanics — only renders when the
                   pose API was configured AND returned at least one
                   usable frame, AND this is NOT a putting session
@@ -1308,6 +1330,16 @@ function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialN
     </View>
   );
 }
+
+// 2026-05-25 — Fix AJ Phase 2: styles for the commentary card.
+// Mirrors coachNote sizing but distinct color so the two read as
+// separate signals (coach note = authored, commentary = transcribed).
+const commentaryStyles = StyleSheet.create({
+  card: { margin: 12, padding: 14, borderRadius: 12, borderWidth: 1 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  label: { fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
+  body: { fontSize: 14, lineHeight: 21, fontStyle: 'italic' },
+});
 
 const coachNoteStyles = StyleSheet.create({
   card: {

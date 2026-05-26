@@ -451,6 +451,14 @@ export const useVoiceCaddie = ({
           dominantMiss: s.dominantMiss,
           rootCause: s.rootCause,
           summary: s.summary,
+          // 2026-05-25 — Fix AJ Phase 2: surface the spoken commentary
+          // for the most-recent shot in this session so Kevin / Tank /
+          // etc. can answer "what did I just say about that swing".
+          // Trimmed to the freshest entry to keep the brain payload
+          // tight (full transcripts via the swing detail screen).
+          last_shot_commentary: s.shots.length > 0
+            ? (s.shots[s.shots.length - 1].commentary_transcript ?? null)
+            : null,
           date: new Date(s.date).toLocaleDateString('en-US', {
             weekday: 'short', month: 'short', day: 'numeric',
           }),
