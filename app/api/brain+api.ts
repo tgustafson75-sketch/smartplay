@@ -1,3 +1,18 @@
+/**
+ * ════════════════════════════════════════════════════════════════════════
+ *  ⚠️  DEPRECATED — DEV-SERVER TWIN OF api/brain.ts (Batch 61, 2026-05-26)
+ * ════════════════════════════════════════════════════════════════════════
+ *
+ * This is the Expo Router dev-server twin of /api/brain.ts which is itself
+ * deprecated in favor of /api/kevin.ts. See api/brain.ts header for the
+ * full rationale.
+ *
+ * No live caller in the app. Removal coordinated with api/brain.ts in a
+ * follow-up batch — keep deployed but cold for one beta cycle to surface
+ * any hidden caller in logs.
+ * ════════════════════════════════════════════════════════════════════════
+ */
+
 import OpenAI from 'openai';
 import { getCaddieName, type VoiceGender } from '../../lib/persona';
 

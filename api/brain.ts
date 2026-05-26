@@ -1,3 +1,31 @@
+/**
+ * ════════════════════════════════════════════════════════════════════════
+ *  ⚠️  DEPRECATED — SUPERSEDED BY api/kevin.ts (Batch 61, 2026-05-26)
+ * ════════════════════════════════════════════════════════════════════════
+ *
+ * This route is no longer called by the live app:
+ *   - The keep-warm ping in app/(tabs)/caddie.tsx now targets /api/kevin
+ *   - All conversational + tool-use paths go through /api/kevin
+ *   - /api/kevin has features brain.ts lacks: Anthropic+OpenAI fallback
+ *     chain (Fix BT), tier classifier (TACTICAL vs CONVERSATIONAL),
+ *     prompt caching, vision/image content blocks, tool_use loop,
+ *     persona-aware TTS, telemetry _debug (Fix BW), in-round-diagnostic
+ *     register, and the Anthropic 529 overload graceful fallback.
+ *
+ * brain.ts is OpenAI-only, text-only, no tools, no vision, no fallback.
+ * If anything starts calling it again, route them to /api/kevin instead.
+ *
+ * Removal plan: leave deployed but cold (zero traffic) for one beta
+ * cycle so any external integration or third-party tester hitting this
+ * URL surfaces in Vercel logs; THEN delete the file + the app/api/brain+api.ts
+ * twin in a follow-up batch.
+ *
+ * Docs reference: services/fieldManual/manualContent.ts mentions both
+ * /api/brain and /api/kevin under "Conversational + tool-use" — that's
+ * historical context; treat /api/kevin as the canonical entry point.
+ * ════════════════════════════════════════════════════════════════════════
+ */
+
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import { getCaddieName, getCharacterSpec } from '../lib/persona';

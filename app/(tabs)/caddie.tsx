@@ -823,10 +823,16 @@ export default function CaddieTab() {
   const vadEnabled = autoListenEnabled && isRoundActive && appActive && voiceState === 'idle';
 
   // ── Keep Vercel warm ────────────────────
+  // 2026-05-26 — Batch 61: ping /api/kevin instead of /api/brain. Both
+  // accept the __ping__ sentinel with the same { text: 'ok' } shape,
+  // and brain.ts is being deprecated (canonical brain logic is now in
+  // kevin.ts — Anthropic+OpenAI fallback chain, tier classifier,
+  // vision support, etc.). The 4-minute cadence keeps the function
+  // warm so cold-start latency doesn't slap the first real call.
   useEffect(() => {
     const keepWarm = async () => {
       try {
-        await fetch(apiUrl + '/api/brain', {
+        await fetch(apiUrl + '/api/kevin', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: '__ping__', language: 'en' }),
