@@ -46,6 +46,7 @@ import { getCourseList, getCourse } from '../../data/courses';
 import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
 import StartRoundCourseCard from '../../components/course/StartRoundCourseCard';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
+import { detectNearestLocalCourse } from '../../services/nearestCourseDetector';
 import { openYouTubeChannel } from '../../services/youtubeLinks';
 import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types/patterns';
 import { getCourse as getApiCourse, courseToHoles } from '../../services/golfCourseApi';
@@ -865,30 +866,69 @@ export default function CaddieTab() {
       hour < 17 ? 'Good afternoon' :
       'Good evening';
     const namePart = name ? `, ${name}` : '';
-    const prompt = `${tod}${namePart}, good to see you. Practice or play?`;
+    const greeting = `${tod}${namePart}, good to see you.`;
+    // Initial on-screen text uses the generic fallback ask; the GPS
+    // branch updates it below once the course resolves (or stays
+    // generic when no course is nearby).
+    setOpeningPrompt(`${greeting} Practice or play?`);
 
-    setOpeningPrompt(prompt);
-
-    if (!openingPromptSpokenThisProcess && voiceEnabled && trustLevel !== 1 && prompt) {
+    if (!openingPromptSpokenThisProcess && voiceEnabled && trustLevel !== 1) {
       openingPromptSpokenThisProcess = true;
       setTimeout(() => {
         void (async () => {
           try {
-            // Speak the greeting; wait for it to finish before listening.
-            await speak(prompt, voiceGender, language, apiUrl, { userInitiated: true });
-            // Don't auto-listen on Quiet (re-check; trust may have changed mid-speak).
+            // 2026-05-26 — Fix AV: GPS-aware second intro. Kick off the
+            // nearest-course detection in parallel with the greeting
+            // so we don't add latency to the audible "good morning."
+            // When GPS resolves a course within 800m, the follow-up
+            // becomes "I see you're at <Palms>. Want to start a round?"
+            // — both a personalized opener AND a GPS verification
+            // point. When GPS doesn't resolve, we fall through to
+            // the generic "Practice or play?" prompt (Play tab's own
+            // GPS-nearest auto-pick is the backup verification path).
+            const coursePromise = detectNearestLocalCourse().catch(() => null);
+
+            await speak(greeting, voiceGender, language, apiUrl, { userInitiated: true });
+
+            // Cap the GPS wait at 3s past greeting completion so a
+            // stuck location read can't trap the opener.
+            const course = await Promise.race([
+              coursePromise,
+              new Promise<null>(resolve => setTimeout(() => resolve(null), 3000)),
+            ]);
+
             const currentTrust = useTrustLevelStore.getState().level;
             if (currentTrust === 1) return;
-            // Short capture window for a one-word answer. captureUtterance
-            // is non-throwing; bad audio session / no input returns null
-            // and we silently no-op.
+
+            const followUp = course
+              ? `I see you're at ${course.spokenName}. Want to start a round?`
+              : 'Practice or play?';
+            if (course) setOpeningPrompt(`${greeting} I see you're at ${course.spokenName}. Want to start a round?`);
+
+            await speak(followUp, voiceGender, language, apiUrl, { userInitiated: true });
+
             const reply = await captureUtterance(6_000, apiUrl, language);
             if (!reply) return;
             const r = reply.toLowerCase();
-            // Keyword routing. Order matters: check "practice" first
-            // because "play practice" would otherwise route to play.
-            // "Play" itself catches the broad "play golf"/"let's play"
-            // intent. Unmatched stays put.
+
+            // GPS-aware branch: a confirming reply routes straight to
+            // Play (which auto-picks the GPS-nearest course — same
+            // course we detected). Negative reply falls through to
+            // the keyword router so "swing lab" / "practice" still
+            // wins from here.
+            if (course && /\b(yes|yeah|yep|sure|let'?s\s*go|start|go|ok|okay|sounds\s*good|absolutely)\b/.test(r)) {
+              router.push('/(tabs)/play' as never);
+              return;
+            }
+            if (course && /\b(no|nope|not\s*now|later|skip|nah)\b/.test(r)) {
+              // Explicit "no" — stay on Caddie tab. User can pick a
+              // tab manually or speak a different intent.
+              return;
+            }
+
+            // Keyword routing (generic ask path). Order matters:
+            // check "practice" first because "play practice" would
+            // otherwise route to play.
             if (/\b(practice|swing\s*lab|swinglab|lab|range)\b/.test(r)) {
               router.push('/(tabs)/swinglab' as never);
             } else if (/\b(play|round|course|tee\s*off)\b/.test(r)) {
