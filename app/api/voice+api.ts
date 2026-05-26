@@ -88,8 +88,14 @@ export async function POST(request: Request) {
         // detected utterance language) over the language-based
         // fallback. Older clients that omit model_id still resolve to
         // the same monolingual/multilingual pair.
+        // 2026-05-26 — Fix AY: default English to eleven_multilingual_v2
+        // (was eleven_monolingual_v1). Multilingual reliably renders
+        // every voice ID in our persona catalog (Kevin/Serena/Harry/Tank);
+        // monolingual_v1 was the original Eleven model and isn't
+        // guaranteed for newer voice IDs. Client-provided model_id
+        // still wins so callers can override.
         const model = model_id ?? (language === 'en'
-          ? 'eleven_monolingual_v1'
+          ? 'eleven_multilingual_v2'
           : 'eleven_multilingual_v2');
         // Phase 408 — per-persona voice settings.
         const personaKey = typeof persona === 'string' ? persona.toLowerCase() : '';
@@ -122,14 +128,18 @@ export async function POST(request: Request) {
           // and played silence. Validate before returning so non-English
           // requests fall through to OpenAI TTS (which DOES speak ES/ZH)
           // instead of silently failing the player.
-          if (audioBuffer.byteLength >= 1000) {
-            console.log('[voice] ElevenLabs success', { bytes: audioBuffer.byteLength, language });
+          // 2026-05-26 — Fix AY: 1000 → 5000 bytes. Lockstep with
+          // api/voice.ts — see comment there for rationale (real intro
+          // mp3 is 40-80KB so 5KB is conservative; ElevenLabs verbose
+          // error blobs occasionally exceed 1KB and slip past as silence).
+          if (audioBuffer.byteLength >= 5000) {
+            console.log('[voice] ElevenLabs success', { bytes: audioBuffer.byteLength, language, persona, model });
             return new Response(audioBuffer, {
               headers: { 'Content-Type': 'audio/mpeg' },
             });
           }
           console.log('[voice] ElevenLabs returned suspiciously small payload — falling back to OpenAI', {
-            bytes: audioBuffer.byteLength, language, persona,
+            bytes: audioBuffer.byteLength, language, persona, model,
           });
         } else {
           console.log('[voice] ElevenLabs failed:', elevenRes.status, '— falling back to OpenAI');

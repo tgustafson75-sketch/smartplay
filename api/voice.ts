@@ -32,7 +32,7 @@ export default async function handler(
   }
 
   try {
-    const { text, gender = 'male', language = 'en', persona = null } = req.body;
+    const { text, gender = 'male', language = 'en', persona = null, model_id: clientModelId = null } = req.body;
 
     // Audit 101 / B3 — validate text before passing to TTS providers. Without
     // this, a 10MB string burns ElevenLabs quota; non-strings throw inside
@@ -56,7 +56,17 @@ export default async function handler(
           ELEVEN_VOICES_BY_PERSONA[personaKey] ??
           ELEVEN_VOICES_BY_GENDER[gender + '_' + language] ??
           KEVIN_VOICE_ID;
-        const model = language === 'en' ? 'eleven_turbo_v2' : 'eleven_multilingual_v2';
+        // 2026-05-26 — Fix AY: prefer client-provided model_id when sent,
+        // and DEFAULT to eleven_multilingual_v2 for English (was
+        // eleven_turbo_v2). Turbo is ~25% faster but doesn't reliably
+        // render every voice in the persona catalog — Tank/Serena/Harry
+        // showed up degraded or silent on splash for some users. The
+        // multilingual model handles every voice ID we have, costs us a
+        // small latency hit, and removes a class of "non-Kevin intro
+        // silently fails" reports.
+        const model = (typeof clientModelId === 'string' && clientModelId.length > 0)
+          ? clientModelId
+          : 'eleven_multilingual_v2';
         // Phase 408 — per-persona voice settings. See
         // ELEVEN_SETTINGS_BY_PERSONA above for the tuning rationale.
         const voiceSettings =
@@ -99,13 +109,19 @@ export default async function handler(
           // requests fall through to OpenAI TTS (which DOES speak ES/ZH)
           // instead of silently failing the player. Lockstep with
           // app/api/voice+api.ts.
-          if (audioBuffer.byteLength >= 1000) {
-            console.log('[voice] ElevenLabs success', { bytes: audioBuffer.byteLength, language });
+          // 2026-05-26 — Fix AY: bumped suspicious-payload threshold
+          // 1000 → 5000 bytes. A real intro mp3 (~5s) is 40-80KB, so 5KB
+          // is conservative. ElevenLabs error JSON blobs (quota / model
+          // × voice mismatch / unsupported language) sometimes exceed
+          // 1KB when the error message is verbose, slipping past the
+          // old gate as "audio" and playing as silence on the client.
+          if (audioBuffer.byteLength >= 5000) {
+            console.log('[voice] ElevenLabs success', { bytes: audioBuffer.byteLength, language, persona, model });
             res.setHeader('Content-Type', 'audio/mpeg');
             return res.status(200).send(Buffer.from(audioBuffer));
           }
           console.log('[voice] ElevenLabs returned suspiciously small payload — falling back to OpenAI', {
-            bytes: audioBuffer.byteLength, language, persona,
+            bytes: audioBuffer.byteLength, language, persona, model,
           });
         } else {
           console.log('[voice] ElevenLabs failed:', elevenRes.status, '— falling back to OpenAI');
