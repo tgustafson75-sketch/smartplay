@@ -21,6 +21,7 @@ import { quickRoundHandler } from './quickRoundHandler';
 import { openExternalHandler } from './openExternalHandler';
 import { stateYardageHandler } from './stateYardageHandler';
 import { refreshGpsHandler } from './refreshGpsHandler';
+import { coachRefineHandler } from './coachRefineHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
 
@@ -51,6 +52,7 @@ voiceCommandRouter.registerHandler(quickRoundHandler);
 voiceCommandRouter.registerHandler(openExternalHandler);
 voiceCommandRouter.registerHandler(stateYardageHandler);
 voiceCommandRouter.registerHandler(refreshGpsHandler);
+voiceCommandRouter.registerHandler(coachRefineHandler);
 
 export {
   openToolHandler,

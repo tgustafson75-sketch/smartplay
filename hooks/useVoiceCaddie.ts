@@ -536,6 +536,16 @@ export const useVoiceCaddie = ({
           ghostContext,
           smartFinderContext,
           penaltyContext,
+          // 2026-05-25 — Fix AF: pull matching coach refinements for the
+          // current user message and ship as a context string the brain
+          // prompt embeds verbatim. Empty when no entries match.
+          coachKnowledgeContext: (() => {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const { getCoachKnowledgeForMessage } = require('../store/coachKnowledgeStore') as typeof import('../store/coachKnowledgeStore');
+              return getCoachKnowledgeForMessage(message);
+            } catch { return ''; }
+          })(),
           isRoundActive,
           isCompetition,
           mentalState: currentMentalState,

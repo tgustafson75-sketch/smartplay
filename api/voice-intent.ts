@@ -134,6 +134,17 @@ Available intents:
    - "switch to Harry" / "let me hear Harry" -> { setting_name: "caddie_persona", new_value: "harry" }
    - "switch back to Kevin" / "give me Kevin" -> { setting_name: "caddie_persona", new_value: "kevin" }
 
+3.3 coach_refine — Authorized coach wants to refine the caddie's most recent answer in their own words. Triggered AFTER the caddie has just answered a topic question (definition, mechanics, swing concept). The next utterance the user speaks will be captured as the refinement and ingested into the coach knowledge store; future answers on that topic will lead with the coach's framing.
+   parameters: {}
+   Examples:
+   - "remember this" -> { intent_type: "coach_refine", parameters: {} }
+   - "add to brain" / "add this to the brain" -> { intent_type: "coach_refine" }
+   - "here's how I'd say it" / "let me say it differently" -> { intent_type: "coach_refine" }
+   - "let me refine that" / "I want to refine that" -> { intent_type: "coach_refine" }
+   - "save my interpretation" / "save my take" / "remember my take" -> { intent_type: "coach_refine" }
+   - "add my version" / "save this for the brain" -> { intent_type: "coach_refine" }
+   IMPORTANT: only matches when these phrases stand alone right after a caddie reply. NOT for "remember I'm 142" (that's state_yardage) or "save this issue" (that's log_issue). Handler gates on coach authorization; non-coach users get a polite "coach tool" reply, no harm.
+
 3.4 refresh_gps — User wants the caddie to force-refresh the GPS subscription (drop + restart the location watch). Use when the player says GPS is wrong, stale, or they want a fresh fix.
    parameters: {}
    Examples:
@@ -391,7 +402,7 @@ The language reflects the transcript itself, not the user's preferred app langua
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "declare_hole" | "putt_watch" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "declare_hole" | "putt_watch" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "coach_refine" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null,

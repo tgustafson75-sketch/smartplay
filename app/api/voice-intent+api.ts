@@ -105,6 +105,13 @@ Available intents:
    - "stop recording" / "end family recording" / "back to me" -> { setting_name: "family_recording", new_value: "stop" }
    The new_value string is the family member's name (or 'stop'). Resolver does the roster lookup.
 
+3.3 coach_refine — Authorized coach wants to refine the caddie's most recent answer in their own words. Triggers an auto-mic capture of the next utterance which is then ingested into the coach knowledge store.
+   parameters: {}
+   Examples:
+   - "remember this" -> { intent_type: "coach_refine" }
+   - "add to brain" / "here's how I'd say it" / "let me refine that" / "save my interpretation" -> { intent_type: "coach_refine" }
+   IMPORTANT: only matches as a standalone phrase right after a caddie reply. NOT for state_yardage or log_issue.
+
 3.4 refresh_gps — User wants the caddie to force-refresh the GPS subscription.
    parameters: {}
    Examples:
@@ -289,7 +296,7 @@ The language reflects the transcript itself, not the user's preferred app langua
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "coach_refine" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null,

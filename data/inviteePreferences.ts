@@ -24,6 +24,12 @@ export interface InviteePreference {
   displayName: string;
   /** Owner-only memo: relationship, group, course context. */
   notes?: string;
+  /** 2026-05-25 — Fix AF: coach refinement authorization. When true,
+   *  this invitee can use the "remember this" / "add to brain" voice
+   *  trigger to ingest refined instructional definitions into the
+   *  caddie brain. Marc (real Tank) is the canonical coach; other
+   *  vetted instructors can be added with this flag flipped on. */
+  coachMode?: boolean;
 }
 
 const INVITEE_PREFERENCES: Record<string, InviteePreference> = {
@@ -34,6 +40,18 @@ const INVITEE_PREFERENCES: Record<string, InviteePreference> = {
   'tomhayes55@hotmail.com': {
     displayName: 'Uncle Tommy',
     notes: "Tim's uncle, weekend HOST. Default to 'Uncle Tommy' until he says otherwise. Android. 2026-05-25 weekend invitee.",
+  },
+  // 2026-05-25 — Fix AF: coach refinement. Marc Ward (the real
+  // instructor behind the Tank persona). coachMode unlocks the
+  // "remember this" / "add to brain" voice trigger so Marc can refine
+  // definitions ("what is Smash Factor") in his own words and have
+  // them ingested into the brain via coachKnowledgeStore. Salutation
+  // stays "Tank" so the in-app voice address matches the persona he's
+  // anchoring; Marc can override anytime with "call me Marc".
+  'marc.ward3533@gmail.com': {
+    displayName: 'Tank',
+    notes: "Real instructor behind the Tank persona. coachMode=true unlocks the 'remember this' refinement loop. 2026-05-25.",
+    coachMode: true,
   },
 };
 
@@ -46,6 +64,18 @@ export function getInviteeDisplayName(email: string | null | undefined): string 
   if (!email) return null;
   const entry = INVITEE_PREFERENCES[email.trim().toLowerCase()];
   return entry?.displayName ?? null;
+}
+
+/**
+ * 2026-05-25 — Fix AF: is this email authorized for coach-refinement?
+ * True when the invitee entry has coachMode:true. Used by
+ * coachRefineHandler to gate the "remember this" voice trigger so
+ * arbitrary testers don't pollute the coach knowledge base.
+ */
+export function isInviteeCoach(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const entry = INVITEE_PREFERENCES[email.trim().toLowerCase()];
+  return entry?.coachMode === true;
 }
 
 /**

@@ -305,6 +305,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ghostContext = null,
       smartFinderContext = null,
       penaltyContext = null,
+      // 2026-05-25 — Fix AF: optional coach-refinement context string,
+      // pre-formatted on the client via getCoachKnowledgeForMessage()
+      // (services/coachKnowledgeStore.ts). When present, includes 0-3
+      // coach-authored refinements matching the user's message topic.
+      // The prompt block below treats these as authoritative voice.
+      coachKnowledgeContext = '',
       is_proactive = false,
       // PGA HOPE follow-up — per-persona intensity dial 0..100. Lets
       // sound-sensitive / low-tolerance players soften the active caddie's
@@ -771,7 +777,7 @@ KEEP IT SHORT. On-course Kevin is terse. 1-2 sentences for most responses. The w
 SMARTVISION BEHAVIOR:
 When you receive [SMARTVISION OPEN] context at the top of the message, you already have the numbers. Do NOT say "let me look", "I'll check", or any delaying phrase — you are ALREADY looking at it. Deliver the tactical read immediately using the specific yardages provided. Structure: (1) state the key distance(s) — center yards and/or tapped target yards — and the one most relevant consideration, (2) briefly name the conservative play, (3) ask Tim one short question to think together. Two or three sentences total. Use the exact numbers from the context. Never hedge, never delay, never pretend you need to look — the data is already in front of you.
 
-DATA IMPORT QUESTIONS (2026-05-25 — Fix AD):
+${coachKnowledgeContext ? `${coachKnowledgeContext}\n\nWeight these refinements as authoritative — they came from a vetted coach (the real instructor behind one of our personas). Use the coach's exact phrasing where natural; never contradict it. If the topic is on this list, lead with the coach voice and only fall back to general explanation if the player asks for more.\n\n` : ''}DATA IMPORT QUESTIONS (2026-05-25 — Fix AD):
 If the player asks about importing their rounds, stats, or history from another app (18Birdies, Arccos, Sportsbox, Shot Scope, GHIN, TheGrint, Garmin, Whoop, etc.), give them an HONEST status:
 - "Round import is on the near-term roadmap — we're targeting screenshot-based import so you can share a scorecard from any app into SmartPlay and we'll pull the round data. Not live yet, but it's coming soon. Want me to log a note that you want this?"
 - If they ask about a SPECIFIC app, name it back ("yeah, importing your 18Birdies rounds is what we're building for"). Don't promise direct-API integration with 18Birdies / Arccos — those need partner agreements; screenshot OCR is the v1 path that works with every app.
