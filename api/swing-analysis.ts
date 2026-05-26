@@ -1,8 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 // 2026-05-23 — maxRetries 1 → 3 to absorb Anthropic 529 overloaded_error spikes.
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 3 });
+// 2026-05-26 — Fix AR Phase 2: OpenAI gpt-4o fallback. Lower timeout
+// than Anthropic — by the time we fall back, the user has already been
+// waiting; we'd rather degrade to honest-failure than burn another 25s.
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 1 });
 
 /**
  * Phase K — Swing analysis endpoint.
@@ -480,22 +485,95 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       '· mode ->', mode,
       '· short_game ->', isShortGame);
 
-    const completion = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 400,
-      temperature: 0.2,
-      system: mode === 'tentative'
-        ? TENTATIVE_PROMPT
-        : isShortGame
-          ? PUTT_SYSTEM_PROMPT
-          : SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userContent }],
-    });
+    const systemPrompt = mode === 'tentative'
+      ? TENTATIVE_PROMPT
+      : isShortGame
+        ? PUTT_SYSTEM_PROMPT
+        : SYSTEM_PROMPT;
 
-    const block = completion.content.find(c => c.type === 'text');
-    const text = block && block.type === 'text' ? block.text.trim() : '';
+    // 2026-05-26 — Fix AR Phase 2: Anthropic primary, OpenAI gpt-4o
+    // fallback. Tim's complaint: "we have Anthropic and OpenAI behind
+    // it — no reason it should one, not work, and number two, take
+    // this long." The 60s Vercel timeout (Phase 1, Batch 21) was the
+    // headline relief; this is the resilience layer that keeps the
+    // analysis answering on Anthropic 5xx / overloaded / network /
+    // empty / non-JSON. Both providers route through the SAME
+    // normalizer + safety gates below so the response contract is
+    // identical regardless of which model produced it.
+    let text = '';
+    let providerUsed: 'anthropic' | 'openai' = 'anthropic';
+    let anthropicError: string | null = null;
+    try {
+      const completion = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 400,
+        temperature: 0.2,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userContent }],
+      });
+      const block = completion.content.find(c => c.type === 'text');
+      text = block && block.type === 'text' ? block.text.trim() : '';
+      if (!text) {
+        anthropicError = 'empty_response';
+      }
+    } catch (e) {
+      anthropicError = e instanceof Error ? e.message : 'unknown';
+      console.warn('[swing-analysis] anthropic primary failed:', anthropicError);
+    }
+
+    // OpenAI fallback when Anthropic threw OR returned empty. Only
+    // attempted when OPENAI_API_KEY is configured — otherwise the
+    // upstream failure surfaces as a real 502 like before.
+    if (!text && process.env.OPENAI_API_KEY) {
+      try {
+        const openaiContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
+          ...frames.map(f => ({
+            type: 'image_url' as const,
+            image_url: {
+              url: `data:${f.media_type ?? 'image/jpeg'};base64,${f.b64}`,
+              // 2026-05-26 — `high` detail is closer to Anthropic
+              // Sonnet's default fidelity for body / club reads. The
+              // marginal cost is worth it; we only hit this path when
+              // the primary already failed.
+              detail: 'high' as const,
+            },
+          })),
+          { type: 'text' as const, text: userText },
+        ];
+        const oai = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          max_tokens: 600,
+          temperature: 0.2,
+          // gpt-4o honors response_format json_object when "json" is
+          // present in the system prompt — our SYSTEM/PUTT/TENTATIVE
+          // prompts all explicitly say "Output ONLY valid JSON".
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: openaiContent },
+          ],
+        });
+        text = (oai.choices[0]?.message?.content ?? '').trim();
+        providerUsed = 'openai';
+        console.log('[swing-analysis] openai fallback succeeded after anthropic:', anthropicError);
+      } catch (oaiErr) {
+        const oaiMsg = oaiErr instanceof Error ? oaiErr.message : 'unknown';
+        console.error('[swing-analysis] openai fallback also failed:', oaiMsg);
+        return res.status(502).json({
+          error: 'Both providers failed',
+          anthropic_error: anthropicError,
+          openai_error: oaiMsg,
+        });
+      }
+    }
+
     if (!text) {
-      return res.status(502).json({ error: 'Empty model response' });
+      // Anthropic failed/empty AND OpenAI key not configured. Surface
+      // the real Anthropic reason so the client toast is honest.
+      return res.status(502).json({
+        error: anthropicError ?? 'Empty model response',
+        provider: 'anthropic',
+      });
     }
 
     let parsed: SwingAnalysisResponse;
@@ -503,7 +581,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const cleaned = text.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
       parsed = JSON.parse(cleaned) as SwingAnalysisResponse;
     } catch {
-      return res.status(502).json({ error: 'Model returned non-JSON', raw: text.slice(0, 300) });
+      return res.status(502).json({
+        error: 'Model returned non-JSON',
+        provider: providerUsed,
+        raw: text.slice(0, 300),
+      });
     }
 
     if (!CANONICAL_ISSUES.includes(parsed.detected_issue)) {
@@ -638,6 +720,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         textBlocks,
         mode,
         shortGame: isShortGame,
+        // 2026-05-26 — Fix AR Phase 2 telemetry. Surface which model
+        // produced the answer + the Anthropic failure reason when we
+        // fell back, so the in-app debug screen can show resilience
+        // events in the wild without server-log access.
+        provider: providerUsed,
+        fallback_reason: providerUsed === 'openai' ? anthropicError : null,
       },
     });
   } catch (e) {
