@@ -1,9 +1,37 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 import * as fs from 'fs';
 import * as os from 'os';
+import * as path from 'path';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 });
+// 2026-05-26 — Fix BU: Gemini fallback transcriber. Whisper has been
+// the only path; an OpenAI outage previously meant total voice-input
+// blackout. Gemini 2.5 Flash handles audio natively (Anthropic does
+// not), so it's the right secondary. Lazy-construct only if the key
+// is configured so deployments without GOOGLE_API_KEY still work
+// (just without the fallback).
+const gemini = process.env.GOOGLE_API_KEY
+  ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
+  : null;
+
+const AUDIO_MIME_BY_EXT: Record<string, string> = {
+  '.m4a':  'audio/mp4',
+  '.mp4':  'audio/mp4',
+  '.mp3':  'audio/mpeg',
+  '.wav':  'audio/wav',
+  '.webm': 'audio/webm',
+  '.ogg':  'audio/ogg',
+  '.aac':  'audio/aac',
+  '.flac': 'audio/flac',
+};
+
+const GEMINI_TRANSCRIBE_PROMPT: Record<string, string> = {
+  en: 'Transcribe this audio verbatim in English. Output only the spoken words, no commentary, no punctuation beyond what reflects natural pauses. Context: a golfer talking to their voice caddie about SmartPlay, SmartMotion, SmartVision, SmartFinder, TightLie, SwingLab, caddie names (Kevin, Tank, Serena, Harry), and standard golf vocabulary.',
+  es: 'Transcribe este audio textualmente en español. Solo las palabras habladas. Contexto: golfista hablando con su caddie.',
+  zh: '请逐字转录这段中文音频。仅输出说话内容。背景:高尔夫球员在与语音球童交谈。',
+};
 
 export const config = {
   api: {
@@ -76,12 +104,49 @@ export default async function handler(
       es: 'Transcripción en español. Términos de golf: hierro, madera, putter, green, tee, bunker, fairway, swing.',
       zh: '中文转录。高尔夫术语:铁杆,木杆,推杆,果岭,发球台,沙坑,球道,挥杆。',
     };
-    const transcription = await openai.audio.transcriptions.create({
-      file: fs.createReadStream(filePath),
-      model: 'whisper-1',
-      language: language,
-      prompt: PRIMING_PROMPT[language] ?? undefined,
-    });
+    // 2026-05-26 — Fix BU: Whisper-then-Gemini chain. If OpenAI fails
+    // (outage, rate limit, regional drop), fall back to Gemini 2.5
+    // Flash with the audio inlined as base64. Either path produces
+    // `rawText` + a `providerUsed` tag for _debug observability.
+    let rawText = '';
+    let providerUsed: 'whisper' | 'gemini-fallback' = 'whisper';
+    let whisperError: string | null = null;
+    try {
+      const transcription = await openai.audio.transcriptions.create({
+        file: fs.createReadStream(filePath),
+        model: 'whisper-1',
+        language: language,
+        prompt: PRIMING_PROMPT[language] ?? undefined,
+      });
+      rawText = transcription.text;
+    } catch (e) {
+      whisperError = e instanceof Error ? e.message : String(e);
+      console.warn('[transcribe] whisper failed:', whisperError, '— attempting Gemini fallback');
+      if (!gemini) {
+        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+        throw new Error(`Whisper failed and Gemini fallback unavailable: ${whisperError}`);
+      }
+      const audioBytes = fs.readFileSync(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      const mimeType = AUDIO_MIME_BY_EXT[ext] ?? 'audio/mp4';
+      const gem = await gemini.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{
+          role: 'user',
+          parts: [
+            { text: GEMINI_TRANSCRIBE_PROMPT[language] ?? GEMINI_TRANSCRIBE_PROMPT.en },
+            { inlineData: { mimeType, data: audioBytes.toString('base64') } },
+          ],
+        }],
+      });
+      rawText = (gem.text ?? '').trim();
+      providerUsed = 'gemini-fallback';
+      if (!rawText) {
+        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+        throw new Error(`Both Whisper and Gemini failed (whisper: ${whisperError}; gemini: empty response)`);
+      }
+      console.log('[transcribe] Gemini fallback success');
+    }
 
     try { fs.unlinkSync(filePath); } catch { /* ignore cleanup errors */ }
 
@@ -100,12 +165,17 @@ export default async function handler(
       [/\bwhole views?\b/gi, 'hole view'],
       [/\btight light\b/gi, 'TightLie'],
     ];
-    let cleanedText = transcription.text;
+    let cleanedText = rawText;
     for (const [re, sub] of SUBSTITUTIONS) cleanedText = cleanedText.replace(re, sub);
 
-    console.log('[transcribe] result:', cleanedText, cleanedText !== transcription.text ? '(post-substitution)' : '');
+    console.log('[transcribe] result:', cleanedText,
+      cleanedText !== rawText ? '(post-substitution)' : '',
+      `(provider=${providerUsed})`);
 
-    return res.status(200).json({ text: cleanedText });
+    return res.status(200).json({
+      text: cleanedText,
+      _debug: { provider: providerUsed, whisper_error: whisperError },
+    });
 
   } catch (err: unknown) {
     // Audit fix: was returning HTTP 200 with `{error,text:''}` which made
