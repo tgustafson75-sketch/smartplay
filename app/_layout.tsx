@@ -326,8 +326,16 @@ function AppNavigator() {
   // + TTS. i18n imported above for the side-effect of initialization.
   useEffect(() => {
     void i18n;
+    // 2026-05-26 — Fix BC: include 'zh' in the target map. Was 'es'
+    // or 'en' only — Chinese setting silently mapped to English even
+    // though zh resources are now loaded. Lockstep with the zh.json
+    // addition + the multilingual TTS default fix in /api/voice and
+    // /api/kevin.
     const apply = (lng: 'en' | 'es' | 'zh') => {
-      const target = lng === 'es' ? 'es' : 'en';
+      const target: 'en' | 'es' | 'zh' =
+        lng === 'es' ? 'es' :
+        lng === 'zh' ? 'zh' :
+        'en';
       if (i18n.language !== target) {
         void i18n.changeLanguage(target);
       }

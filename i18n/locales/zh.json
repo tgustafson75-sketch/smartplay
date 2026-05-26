@@ -1,0 +1,62 @@
+{
+  "tank": {
+    "driver_or_3wood": "你在练习时挥杆过顶。感觉向右场。用3号木。",
+    "driver_or_3wood_clean": "今天用1号木没问题。相信你的挥杆。",
+    "red_vs_yellow": "红桩:横向抛球,在2杆长度内,不可更靠近球洞。黄桩:仅可沿原线后方抛球。",
+    "yellow_vs_red": "黄桩:仅可沿原线后方抛球。红桩允许横向救济。",
+    "par3_wind": "顶风。多用一号杆,挥杆平稳。",
+    "layup": "打到你最喜欢的劈起杆距离。避开短距离的麻烦。",
+    "nearest_point_relief": "找到最近的救济点,不更靠近球洞,从手推车道或洒水器获得完全救济。在1杆长度内抛球。无罚杆。",
+    "can_ground_club_yes": "可以。球道或长草区,可以触地。",
+    "can_ground_club_no": "不可以。罚杆区或沙坑——不要触地。2杆罚杆。",
+    "flag_or_center_safe": "瞄准果岭中心。每次都是。你还没有追旗的技术。",
+    "flag_or_center_attack": "进攻。手中拿劈起杆,直奔目标。",
+    "flag_or_center_balanced": "瞄准中心。30英尺的推杆比短边沙坑要好。",
+    "analyze_hole_photo": "我看到球洞照片了——让我读读布局,给你一条线。",
+    "analyze_swing_video": "检测到挥杆视频。后端连接好后,我会给出完整分析。"
+  },
+  "buttons": {
+    "start_cage": "开始训练场",
+    "watch_swing": "观看我的挥杆",
+    "share_swing": "分享到Instagram",
+    "what_would_tank_do": "Tank会怎么做?",
+    "analyze_swing": "分析挥杆",
+    "your_caddie": "你的AI球童"
+  },
+  "labels": {
+    "analyzing": "正在分析你的挥杆...",
+    "cage_session": "训练场会话",
+    "driver": "1号木",
+    "wood3": "3号木",
+    "meta_glasses_setup": "使用Ray-Ban Meta?",
+    "meta_glasses_instructions": "1. 在Meta View中:设置 → 保存到相机胶卷 = 开启。\n2. 授予SmartPlay访问照片权限。\n3. 在球场上说\"嘿Meta,拍照\"。Tank会自动检测。",
+    "meta_glasses_new_photo": "检测到Ray-Ban Meta的新照片",
+    "meta_glasses_new_video": "检测到Ray-Ban Meta的新挥杆视频",
+    "meta_glasses_analyze_btn": "让Tank分析",
+    "meta_glasses_analyze_video_btn": "让Tank分析节奏",
+    "meta_glasses_dismiss": "忽略"
+  },
+  "voice": {
+    "analyzing_swing": "现在分析你的挥杆",
+    "over_the_top_detected": "检测到挥杆过顶。这是修正方法。"
+  },
+  "brand": {
+    "app_name": "SmartPlay Caddie",
+    "tagline": "实时球场智能",
+    "built_by": "Built by SmartPlay AI"
+  },
+  "settings": {
+    "glasses_mode": "眼镜模式",
+    "glasses_mode_desc": "使用Ray-Ban Meta免提Tank",
+    "glasses_mode_active": "活动 — 音频路由到眼镜",
+    "glasses_tutorial_title": "眼镜模式已启用",
+    "glasses_tutorial_body": "快速设置:\n\n1. 在iPhone蓝牙中配对Ray-Ban Meta\n2. iPhone设置 → 辅助功能 → 触摸 → 通话音频路由 → 蓝牙耳机\n3. 保持SmartPlay在后台打开\n4. 说\"嘿Meta\"然后问Tank\n\nTank会在你的眼镜中回应。",
+    "glasses_how_to_title": "如何在球场上使用:",
+    "glasses_how_to_body": "1. 手机在口袋里,SmartPlay打开\n2. 对眼镜说\"嘿Meta\"\n3. 问:\"Tank,1号木还是3号木?\"\n4. 在你的眼镜中听到答案",
+    "test_microphone": "测试麦克风",
+    "mic_ready": "麦克风就绪",
+    "mic_not_enabled": "麦克风未启用",
+    "mic_required_title": "需要麦克风",
+    "mic_required_body": "SmartPlay需要麦克风权限才能通过眼镜听到你。在设置中启用。"
+  }
+}

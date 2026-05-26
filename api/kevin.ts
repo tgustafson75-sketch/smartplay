@@ -1101,7 +1101,14 @@ ${onCourseContextBlock}${baseMessage}`
         // (Spanish text came back) but TTS rendered it through the
         // English model. Voice IDs are language-agnostic — only the
         // model_id needs to flip.
-        const ttsModel = language === 'en' ? 'eleven_turbo_v2' : 'eleven_multilingual_v2';
+        // 2026-05-26 — Fix BC: default to eleven_multilingual_v2 for ALL
+        // languages (was English-only turbo_v2). Lockstep with /api/voice
+        // fix from Batch 33 — turbo doesn't reliably render every voice
+        // in the persona catalog (Tank/Serena/Harry showed up degraded
+        // or silent for some users in English). Multilingual handles
+        // every voice ID reliably, costs a small latency hit, removes a
+        // class of silent-failure reports.
+        const ttsModel = 'eleven_multilingual_v2';
         // 2026-05-22 — Same latency optimization as /api/voice.
         // optimize_streaming_latency=2 cuts synthesis time ~25%; safe
         // degradation if ElevenLabs ignores the param (no behavior change).

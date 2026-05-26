@@ -658,6 +658,18 @@ export default function Settings() {
             value={language}
             onSelect={(v) => setLanguage(v as 'en' | 'es' | 'zh')}
           />
+          {/* 2026-05-26 — Fix BC: honest scope disclosure under the
+              Language picker. Voice + caddie responses are fully
+              translated through ElevenLabs multilingual TTS + brain
+              prompt enforcement. In-app text translation covers Tank
+              rules, button labels, brand strings, and core settings
+              today; the full screen-by-screen UI translation pass
+              is queued post-beta. Without this note, ES/ZH users see
+              partially-English UI and assume the setting isn't
+              working at all. */}
+          <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -4, marginBottom: 8 }]}>
+            Voice + caddie responses are fully translated. Some in-app text labels are still being translated; we&apos;ll catch up the rest after beta.
+          </Text>
 
           <PillRow
             label="Response Style"
