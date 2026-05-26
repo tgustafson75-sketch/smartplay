@@ -251,6 +251,37 @@ async function classifyQuestion(userMessage: string): Promise<'TACTICAL' | 'CONV
   }
 }
 
+/**
+ * 2026-05-26 — Fix BT: OpenAI text-only emergency fallback.
+ *
+ * Fires when Anthropic's agentic loop throws (overload, network, 5xx)
+ * AND we have no accumulated text or toolAction to fall back on.
+ * Trades tool actions (open_smartvision etc.) for graceful degradation:
+ * the user gets a real spoken answer instead of "I'm having trouble
+ * connecting." Tools require restructuring the loop for OpenAI's
+ * function-call shape; text-only is the 80/20 path because the
+ * conversational register is what callers most often need rescued.
+ *
+ * Vision is skipped here too — gpt-4o supports image_url but the
+ * fallback prioritizes reliability over multimodal fidelity. If
+ * Anthropic is down hard, the user accepts a text-only answer.
+ */
+async function openaiTextFallback(args: {
+  systemPrompt: string;
+  userMessage: string;
+  maxTokens: number;
+}): Promise<string> {
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    max_tokens: args.maxTokens,
+    messages: [
+      { role: 'system', content: args.systemPrompt },
+      { role: 'user', content: args.userMessage },
+    ],
+  });
+  return (completion.choices[0]?.message?.content ?? '').trim();
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -981,8 +1012,14 @@ ${onCourseContextBlock}${baseMessage}`
     const messages: Anthropic.MessageParam[] = [{ role: 'user', content: initialUserContent }];
     let text = '';
     let toolAction: Record<string, unknown> | null = null;
+    // 2026-05-26 — Fix BT: track which provider produced the final text
+    // so /api/kevin _debug carries it for ops triage (and so Batch 59
+    // brain telemetry can surface fallbacks the user never sees).
+    let providerUsed: 'anthropic' | 'openai-fallback' = 'anthropic';
+    let anthropicError: string | null = null;
     const MAX_TOOL_ROUNDS = 3;
 
+    try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       // Audit 101 / W4 — opt the system prompt into Anthropic ephemeral
       // prompt caching. Same identical prompt within the 5-minute TTL hits
@@ -1072,6 +1109,36 @@ ${onCourseContextBlock}${baseMessage}`
       messages.push({ role: 'assistant', content: aiResponse.content });
       messages.push({ role: 'user', content: toolResultBlocks });
       console.log(`[kevin] tool round ${round + 1} complete, continuing with ${toolResultBlocks.length} result(s)`);
+    }
+    } catch (loopErr: unknown) {
+      // 2026-05-26 — Fix BT: Anthropic call(s) failed. If we already
+      // got partial text or a toolAction from an earlier round, keep
+      // it — partial > nothing. Otherwise, attempt OpenAI text-only
+      // fallback so the user still hears a real answer.
+      anthropicError = loopErr instanceof Error ? loopErr.message : String(loopErr);
+      console.error('[kevin] anthropic loop failed:', anthropicError);
+      if (!text.trim() && !toolAction) {
+        try {
+          console.log('[kevin] attempting OpenAI text-only fallback');
+          const fallbackText = await openaiTextFallback({
+            systemPrompt,
+            userMessage,
+            maxTokens: tier === 'TACTICAL' ? 200 : 400,
+          });
+          if (fallbackText) {
+            text = fallbackText;
+            providerUsed = 'openai-fallback';
+            console.log('[kevin] OpenAI fallback success');
+          } else {
+            throw new Error('OpenAI fallback returned empty');
+          }
+        } catch (fallbackErr) {
+          console.error('[kevin] OpenAI fallback failed:', fallbackErr);
+          // Re-throw original anthropic error so the outer catch
+          // surfaces the localized "having trouble" message.
+          throw loopErr;
+        }
+      }
     }
 
     text = text.trim();
@@ -1175,7 +1242,15 @@ ${onCourseContextBlock}${baseMessage}`
       audioBase64 = Buffer.from(arrayBuffer).toString('base64');
     }
 
-    return res.status(200).json({ text, audioBase64, toolAction });
+    // 2026-05-26 — Fix BT: _debug surfaces which provider answered.
+    // Lets Tim (and Batch 59 telemetry) see fallback fires from prod
+    // without needing log access. Clients ignore unknown fields.
+    return res.status(200).json({
+      text,
+      audioBase64,
+      toolAction,
+      _debug: { provider: providerUsed, anthropic_error: anthropicError },
+    });
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
