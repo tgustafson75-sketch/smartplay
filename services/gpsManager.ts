@@ -468,6 +468,44 @@ export function subscribePoorSignal(cb: PoorSignalListener): () => void {
 }
 
 /** Called by round-start. No-op if already running. */
+/**
+ * 2026-05-25 — Fix R: forced subscription refresh. User says "refresh
+ * GPS" / "GPS is wrong" → handler calls this → existing watch is torn
+ * down, mode reset to 'active' (1 Hz), and a fresh watch starts. The
+ * next emitted fix is guaranteed-fresh (not pre-sleep cached) and the
+ * `active` mode forces aggressive polling for ~30s until the natural
+ * motion-based downgrade kicks back in. Resolves with the FIRST fresh
+ * fix (or null after a 12s timeout) so the caller can speak ack with
+ * the new yardage.
+ */
+export async function forceRefreshGps(): Promise<GpsFix | null> {
+  if (subscription) {
+    try { subscription.remove(); } catch {}
+    subscription = null;
+  }
+  mode = 'active';
+  lastMotionAt = Date.now();
+  lastTickAt = 0;
+  await startWatchInternal();
+  breadcrumb('manager_force_refresh');
+
+  // Wait for the FIRST fresh fix (timestamp newer than now) or 12s
+  // timeout. The subscription will populate lastFix on first callback.
+  const startedAt = Date.now();
+  return new Promise<GpsFix | null>((resolve) => {
+    const timer = setInterval(() => {
+      const fx = getLastFix();
+      if (fx && fx.timestamp >= startedAt) {
+        clearInterval(timer);
+        resolve(fx);
+      } else if (Date.now() - startedAt > 12_000) {
+        clearInterval(timer);
+        resolve(null);
+      }
+    }, 200);
+  });
+}
+
 export async function startGpsManager(): Promise<void> {
   if (subscription) return;
   mode = 'walking';

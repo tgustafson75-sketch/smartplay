@@ -1,6 +1,67 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import type { ToolAction } from '../../app/api/kevin+api';
 
+// 2026-05-25 — Fix E/O: voice-direct in-place mark for tee/green.
+// Returns IntentResult when the mark was captured (so the caller skips
+// navigation). Returns null when GPS isn't ready (caller falls through
+// to navigate so the user can mark manually on-screen).
+async function tryVoiceDirectMark(
+  toolName: string,
+): Promise<IntentResult | null> {
+  // Dynamic requires avoid module-load cycles since these stores import
+  // from openToolHandler's caller graph.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useRoundStore } = require('../../store/roundStore') as typeof import('../../store/roundStore');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const gps = require('../gpsManager') as typeof import('../gpsManager');
+
+  const round = useRoundStore.getState();
+  if (!round.isRoundActive || round.activeCourseId == null) return null;
+
+  const fix = gps.getLastFix();
+  if (!fix || fix.lat == null || fix.lng == null) return null;
+
+  // GPS quality gate: if accuracy is bad (>20m) or fix is stale (>15s),
+  // don't trust this position for an override. Fall through to navigate
+  // so the user can move and tap manually.
+  const ageMs = Date.now() - fix.timestamp;
+  if (fix.accuracy_m != null && fix.accuracy_m > 20) return null;
+  if (ageMs > 15_000) return null;
+
+  const isTee = toolName === 'mark_tee' || toolName === 'marktee' || toolName === 'mark_tee_box';
+  const hole = round.currentHole;
+  const label = isTee ? 'Tee' : 'Pin';
+
+  try {
+    if (isTee) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const m = require('../courseTeeOverrides') as typeof import('../courseTeeOverrides');
+      await m.setTeeOverride(round.activeCourseId, hole, { lat: fix.lat, lng: fix.lng });
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const m = require('../courseGreenOverrides') as typeof import('../courseGreenOverrides');
+      await m.setGreenOverride(round.activeCourseId, hole, { lat: fix.lat, lng: fix.lng });
+    }
+  } catch (e) {
+    console.log('[openToolHandler] override persist failed:', e);
+    return null; // navigate fallback
+  }
+
+  // For green marks, recompute and speak the new yardage from the
+  // player's current position (which is the marked spot — so 0y is
+  // expected). More useful: when marking the TEE, the player is at the
+  // tee and yardage to green is unchanged from courseHoles, so speak
+  // confirmation only. When marking the GREEN, the player is AT the
+  // green so yardage is ~0; just confirm.
+  const reply = `${label} marked on ${hole}.`;
+  return {
+    success: true,
+    voice_response: reply,
+    side_effects: [isTee ? 'mark_tee:voice_direct' : 'mark_green:voice_direct'],
+    follow_up_needed: false,
+  };
+}
+
 const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path: string }> = {
   smartvision: { type: 'open_smartvision' },
   smartfinder: { type: 'open_smartfinder' },
@@ -78,6 +139,12 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   library: { type: 'navigate', path: '/swinglab/library' },
   swing_library: { type: 'navigate', path: '/swinglab/library' },
   swinglibrary: { type: 'navigate', path: '/swinglab/library' },
+  // 2026-05-25 — Fix W.1: SmartPlay alias. Routes to the existing
+  // lie-analysis camera surface; Phase 2 (separate work) will wire a
+  // conversational opener that prompts the player for context before
+  // the photo. For now this unblocks the voice command.
+  smartplay: { type: 'navigate', path: '/lie-analysis' },
+  smart_play: { type: 'navigate', path: '/lie-analysis' },
 };
 
 const TOOL_LABEL: Record<string, string> = {
@@ -110,6 +177,8 @@ const TOOL_LABEL: Record<string, string> = {
   library: 'Swing Library',
   swing_library: 'Swing Library',
   swinglibrary: 'Swing Library',
+  smartplay: 'SmartPlay',
+  smart_play: 'SmartPlay',
 };
 
 export const openToolHandler: IntentHandler = {
@@ -141,6 +210,25 @@ export const openToolHandler: IntentHandler = {
 
   async execute(intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
     const toolName = String(intent.parameters.tool_name ?? '').toLowerCase();
+
+    // 2026-05-25 — Fix E/O: voice-direct mark for tee and green. If the
+    // user says "mark the tee" / "mark the pin" and GPS has a usable
+    // fix, capture the current GPS in place and write the override
+    // immediately — NO navigation to the mark-screen. Speak an audible
+    // ack with the new yardage if computable. Only falls through to
+    // navigation when GPS is missing or accuracy is too soft to trust.
+    if (toolName === 'mark_tee' || toolName === 'marktee' || toolName === 'mark_tee_box' ||
+        toolName === 'mark_green' || toolName === 'markgreen') {
+      try {
+        const directResult = await tryVoiceDirectMark(toolName);
+        if (directResult) return directResult;
+        // null means GPS wasn't ready — fall through to navigation so
+        // user can manually mark on-screen.
+      } catch (e) {
+        console.log('[openToolHandler] voice-direct mark failed (falling back to navigate):', e);
+      }
+    }
+
     const action = TOOL_NAME_TO_ACTION[toolName];
 
     if (!action) {

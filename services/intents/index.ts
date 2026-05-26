@@ -19,6 +19,8 @@ import { declareHoleHandler } from './declareHoleHandler';
 import { askGolfFatherHandler } from './askGolfFatherHandler';
 import { quickRoundHandler } from './quickRoundHandler';
 import { openExternalHandler } from './openExternalHandler';
+import { stateYardageHandler } from './stateYardageHandler';
+import { refreshGpsHandler } from './refreshGpsHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
 
@@ -47,6 +49,8 @@ voiceCommandRouter.registerHandler(declareHoleHandler);
 voiceCommandRouter.registerHandler(askGolfFatherHandler);
 voiceCommandRouter.registerHandler(quickRoundHandler);
 voiceCommandRouter.registerHandler(openExternalHandler);
+voiceCommandRouter.registerHandler(stateYardageHandler);
+voiceCommandRouter.registerHandler(refreshGpsHandler);
 
 export {
   openToolHandler,

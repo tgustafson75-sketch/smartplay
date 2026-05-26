@@ -93,11 +93,15 @@ export const logIssueHandler: IntentHandler = {
     // no clue whether the transcription got the actual issue or some
     // mangled fragment. Now if the echo is wrong, the user can correct
     // immediately ("no, I said X").
-    const words = rawNote.split(/\s+/).filter(Boolean);
-    const echo = words.slice(0, 8).join(' ') + (words.length > 8 ? '…' : '');
+    // 2026-05-25 — Fix K: echo back the FULL note instead of the first
+    // 8 words. The truncation made readbacks like "Saved. I'll remember:
+    // we need to make sure cockpit mode gives..." that cut off mid-
+    // thought; user couldn't hear if the whole issue actually landed.
+    // Speak playback timeout in voiceService already scales with text
+    // length, so long notes play correctly without artificial cap.
     const reply = isOwner
-      ? `Saved. I'll remember: ${echo}`
-      : `Saved a note: ${echo}. Owner mode isn't active — set your email in Settings to file it in the Issue Log.`;
+      ? `Saved. I'll remember: ${rawNote}`
+      : `Saved a note: ${rawNote}. Owner mode isn't active — set your email in Settings to file it in the Issue Log.`;
 
     return {
       success: true,

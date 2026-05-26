@@ -259,6 +259,18 @@ interface RoundState {
 
   currentHole: number;
   currentYardage: number | null;
+  // 2026-05-25 — Tier 3 of the yardage resolver: user-stated number
+  // ("I'm 142", "Golfshot says 156", "rangefinder reads 178"). Lives
+  // here until next shot logged OR next hole declared OR user states a
+  // new yardage. When set, takes precedence over GPS-derived yardage
+  // for the active shot — addresses Tim's Palms round where he fed
+  // Kevin the Golfshot number and the system had nowhere to put it.
+  userStatedYardage: {
+    value: number;
+    source: 'user' | 'rangefinder' | 'golfshot' | 'other';
+    asOf: number;
+    holeAtCapture: number;
+  } | null;
   club: string | null;
   mentalState: string;
   riskMode: 'safe' | 'normal' | 'aggressive';
@@ -445,6 +457,16 @@ interface RoundState {
    *  services/holeDetection.ts. */
   reconcileHole: () => import('../services/holeReconciliation').ReconcileResult;
   setCurrentYardage: (yards: number | null) => void;
+  /**
+   * 2026-05-25 — Tier 3 setter. Voice "I'm 142", "Golfshot says 156",
+   * "rangefinder reads 178" routes here. Caller sets value + source;
+   * holeAtCapture is bound to currentHole so the value invalidates
+   * cleanly when the user advances holes.
+   */
+  setUserStatedYardage: (value: number, source: 'user' | 'rangefinder' | 'golfshot' | 'other') => void;
+  /** Clear the stated yardage. Called automatically on next shot logged
+   *  or next hole advance; exposed for manual reset too. */
+  clearUserStatedYardage: () => void;
   setClub: (club: string) => void;
   setMentalState: (state: string) => void;
   setRiskMode: (mode: 'safe' | 'normal' | 'aggressive') => void;
@@ -503,6 +525,7 @@ export const useRoundStore = create<RoundState>()(
       preRoundYardageSnapshot: null,
       currentHole: 1,
       currentYardage: null,
+      userStatedYardage: null,
       club: null,
       mentalState: 'neutral',
       riskMode: 'normal',
@@ -816,6 +839,7 @@ export const useRoundStore = create<RoundState>()(
           isRoundActive: false,
           currentHole: 1,
           currentYardage: null,
+          userStatedYardage: null,
           activeCourse: null,
           activeCourseId: null,
           courseHoles: [],
@@ -968,6 +992,7 @@ export const useRoundStore = create<RoundState>()(
           roundHistory: [...state.roundHistory, record],
           currentHole: 1,
           currentYardage: null,
+          userStatedYardage: null,
           activeCourse: null,
           activeCourseId: null,
           courseHoles: [],
@@ -1271,7 +1296,10 @@ export const useRoundStore = create<RoundState>()(
           if (green) get().closeHoleEndLocation(prevHole, green);
         }
         const holeData = state.courseHoles.find(h => h.hole === clamped);
-        set({ currentHole: clamped, currentYardage: holeData?.distance ?? null });
+        // 2026-05-25 — Clear userStatedYardage when advancing holes;
+        // a number you spoke on hole 5 is meaningless on hole 6.
+        const clearStated = prevHole !== clamped ? { userStatedYardage: null } : {};
+        set({ currentHole: clamped, currentYardage: holeData?.distance ?? null, ...clearStated });
         if (prevHole !== clamped) {
           console.log(`[path2:round] hole transition prev=${prevHole} next=${clamped}`);
           console.log(`[audit:round-active] hole-transition prev=${prevHole} next=${clamped} yardage=${holeData?.distance ?? 'null'}`);
@@ -1332,6 +1360,21 @@ export const useRoundStore = create<RoundState>()(
       reconcileHole: () => forceHoleReconciliation(),
 
       setCurrentYardage: (yards) => set({ currentYardage: yards }),
+
+      setUserStatedYardage: (value, source) => {
+        const hole = get().currentHole;
+        set({
+          userStatedYardage: {
+            value,
+            source,
+            asOf: Date.now(),
+            holeAtCapture: hole,
+          },
+        });
+        console.log('[roundStore] userStatedYardage set', { value, source, hole });
+      },
+
+      clearUserStatedYardage: () => set({ userStatedYardage: null }),
       setClub: (club) => set({ club }),
       setMentalState: (state) => set({ mentalState: state }),
       setRiskMode: (mode) => set({ riskMode: mode }),

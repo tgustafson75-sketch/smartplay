@@ -38,7 +38,7 @@ Available intents:
    - "mark the green" / "mark green" / "I'm at the green" / "open Mark Green" -> { tool_name: "mark_green" }
    - "mark the tee" / "mark tee" / "mark the tee box" / "I'm at the tee" / "this is the tee" / "this is the tee box" / "mark this tee" / "open Mark Tee" -> { tool_name: "mark_tee" }
    - "mark the green" / "mark green" / "mark the pin" / "mark the flag" / "mark this as the pin" / "this is the pin" / "I'm on the green" / "I'm at the pin" / "mark this spot" / "drop a pin here" / "open Mark Green" -> { tool_name: "mark_green" }
-   - "refresh GPS" / "GPS is wrong" / "fix my location" / "get a fresh fix" / "reset GPS" / "GPS is off" / "lock my GPS" -> { tool_name: "refresh_gps" }
+   (refresh_gps moved to its own intent_type below)
    - "open smartplay" / "show me smartplay" / "smart play" / "give me the smart play" / "what's the smart play here" / "smartplay here" -> { tool_name: "smartplay" }
    - "open Coach Mode" / "coach mode" / "start coaching" / "let's coach" / "watch my student" -> { tool_name: "coach_mode" }
    - "I'm coaching Emma" / "coach Mike" / "let's coach Sarah" / "I'm gonna coach Jenny" -> { tool_name: "coach_mode", player_name: "Emma" } (extract the first name verbatim into player_name; preserves capitalization as spoken)
@@ -104,6 +104,24 @@ Available intents:
    - "record Buddy's swing" / "start junior swing recording" -> { setting_name: "family_recording", new_value: "Buddy" }
    - "stop recording" / "end family recording" / "back to me" -> { setting_name: "family_recording", new_value: "stop" }
    The new_value string is the family member's name (or 'stop'). Resolver does the roster lookup.
+
+3.4 refresh_gps — User wants the caddie to force-refresh the GPS subscription.
+   parameters: {}
+   Examples:
+   - "refresh GPS" -> { intent_type: "refresh_gps", parameters: {} }
+   - "GPS is wrong" / "GPS is off" / "GPS is stale" -> { intent_type: "refresh_gps", parameters: {} }
+   - "fix my location" / "get a fresh fix" / "reset GPS" / "lock my GPS" / "recalibrate GPS" -> { intent_type: "refresh_gps", parameters: {} }
+
+3.5 state_yardage — User STATES a yardage to set as the working number for the current shot (Tier 3 of the GPS resolver). The user is feeding the system a number from another source (their own eyeball estimate, Golfshot reading, rangefinder reading, etc.) so the caddie uses THAT number instead of computing from soft GPS.
+   parameters: { yards: number (10-400), source?: "golfshot" | "rangefinder" | "user" | "other" }
+   Examples:
+   - "I'm 142" -> { intent_type: "state_yardage", parameters: { yards: 142, source: "user" } }
+   - "I'm 142 out" / "I'm 156 to the pin" -> { yards: 142, source: "user" }
+   - "Golfshot says 156" / "Golfshot reads 165" -> { yards: 156, source: "golfshot" }
+   - "rangefinder reads 178" / "Bushnell shows 178" / "Garmin says 190" -> { yards: 178, source: "rangefinder" }
+   - "call it 165" / "let's call it 145" / "make it 138" -> { yards: 165, source: "user" }
+   - "the number is 162" / "playing 180" / "it's 142" -> { yards: 162, source: "user" }
+   IMPORTANT: only use this intent when the user is stating a NUMBER they want the caddie to USE. NOT for "what's my yardage" (that's query_status). NOT for "log this shot at 142" (that's log_shot).
 
 4. navigate — User wants navigation: back, forward, home, close, next/previous hole.
    parameters: { direction: "back" | "home" | "close" | "next_hole" | "previous_hole" | "main_menu" }
@@ -271,7 +289,7 @@ The language reflects the transcript itself, not the user's preferred app langua
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "ask_golf_father" | "quick_round" | "open_external" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null,
