@@ -32,6 +32,7 @@
 
 import { useCageStore, type CageShot } from '../store/cageStore';
 import { track } from './analytics';
+import { detectCue } from './metaGlassesCueRouter';
 
 const inflight = new Set<string>();
 const done = new Set<string>();
@@ -82,6 +83,47 @@ async function transcribeShotCommentary(sessionId: string, shot: CageShot): Prom
     done.add(shot.id);
     track('swing_commentary_transcribe_ok', { chars: text.length });
     console.log(`[swingCommentary] ok shot=${shot.id} chars=${text.length}`);
+
+    // 2026-05-26 — Fix AZ: Meta Glasses verbal-cue auto-routing.
+    // After the transcript lands, see if the user verbally tagged
+    // the clip ("Putt Cam" / "Chip Cam" / "full swing") so the
+    // analyzer can route it correctly even though they never
+    // tapped the upload screen's pickers. Strict gates:
+    //   - Session must have an upload record (no live_cage)
+    //   - source_device must be 'meta_glasses' (the async-review
+    //     case where verbal cues are most valuable)
+    //   - We never override a user-explicit tag/perspective
+    //   - Only the FIRST recognized cue per transcript wins
+    try {
+      const cue = detectCue(text);
+      if (cue) {
+        const session = (() => {
+          const cage = useCageStore.getState();
+          if (cage.activeSession?.id === sessionId) return cage.activeSession;
+          return cage.sessionHistory.find(x => x.id === sessionId) ?? null;
+        })();
+        const upload = session?.upload;
+        if (upload && upload.source_device === 'meta_glasses') {
+          const patch: Record<string, unknown> = {};
+          if (upload.tag == null && cue.tag != null) patch.tag = cue.tag;
+          if (upload.perspective == null) patch.perspective = cue.perspective;
+          if (Object.keys(patch).length > 0) {
+            useCageStore.getState().patchSessionUpload(sessionId, patch);
+            console.log(
+              `[metaGlassesCue] matched="${cue.matched_phrase}" → session=${sessionId} `
+              + `tag=${patch.tag ?? '(unchanged)'} perspective=${patch.perspective ?? '(unchanged)'}`,
+            );
+            track('meta_glasses_cue_routed', {
+              phrase: cue.matched_phrase,
+              tag: String(patch.tag ?? 'unchanged'),
+              perspective: String(patch.perspective ?? 'unchanged'),
+            });
+          }
+        }
+      }
+    } catch (cueErr) {
+      console.log('[metaGlassesCue] non-fatal:', cueErr);
+    }
   } catch (e) {
     console.log('[swingCommentary] exception:', e);
     track('swing_commentary_transcribe_exception');

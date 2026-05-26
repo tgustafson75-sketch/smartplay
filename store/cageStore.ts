@@ -446,6 +446,15 @@ interface CageState {
    *  sessionHistory because transcription can finish either before
    *  or after the session is finalized. */
   setShotCommentaryTranscript: (sessionId: string, shotId: string, transcript: string) => void;
+  /**
+   * 2026-05-26 — Fix AZ: patch a session's upload metadata in place.
+   * Used by the Meta Glasses verbal-cue router to set tag/perspective
+   * AFTER initial ingest, once Whisper transcript reveals what the
+   * user verbally tagged the clip as ("Putt Cam" / "Chip Cam" /
+   * "full swing"). Caller is responsible for the gates (only override
+   * when upload.tag/perspective are null + source is meta_glasses).
+   */
+  patchSessionUpload: (sessionId: string, patch: Partial<UploadMetadata>) => void;
   /** 2026-05-23 — Save a coach note onto a session. Coach Mode flow:
    *  pro watches the swing, AI analysis lands, pro types their own
    *  read ("hips stalled at impact") and saves. Independent of the
@@ -841,6 +850,28 @@ export const useCageStore = create<CageState>()(
             sessionHistory: s.sessionHistory.map(session =>
               session.id !== sessionId ? session : { ...session, shots: updateShots(session.shots) },
             ),
+          };
+        }),
+
+      // 2026-05-26 — Fix AZ: in-place patch of a session's upload
+      // metadata. Used by metaGlassesCueRouter to retroactively set
+      // tag/perspective once Whisper transcript reveals the user's
+      // verbal cue ("Putt Cam" → tag=putt + perspective=pov_self).
+      // Defensive: only mutates an EXISTING upload object — never
+      // synthesizes one from null (the session would be a live_cage
+      // capture, not a glasses ingest, and we shouldn't fabricate
+      // upload metadata for those).
+      patchSessionUpload: (sessionId, patch) =>
+        set(s => {
+          const apply = (session: CageSession): CageSession => {
+            if (session.id !== sessionId) return session;
+            if (!session.upload) return session;
+            return { ...session, upload: { ...session.upload, ...patch } };
+          };
+          return {
+            ...s,
+            activeSession: s.activeSession ? apply(s.activeSession) : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
           };
         }),
 
