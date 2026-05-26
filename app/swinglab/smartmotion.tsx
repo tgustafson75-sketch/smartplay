@@ -24,6 +24,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { QuickTutorial } from '../../components/QuickTutorial';
 import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOverlay';
+import PriorSwingStrip from '../../components/swinglab/PriorSwingStrip';
 import ClubPickerModal, { clubIdToSmashKey, clubIdLabel } from '../../components/cage/ClubPickerModal';
 import type { ClubId } from '../../services/clubRecognition';
 import {
@@ -465,6 +466,13 @@ export default function SmartMotion() {
             measuredBallSpeedMph={measuredBallSpeedMph}
             clubSmashKey={selectedClub ? clubIdToSmashKey(selectedClub) : null}
           />
+          {/* 2026-05-26 — Fix AU: prior-swing strip + cross-analyze.
+              Renders the last 2 SmartMotion swings (other than the
+              one on screen) as small thumbnail rows with play / info /
+              compare actions. Compare hits /api/swing-compare for a
+              Gemini-led diff in the caddie's voice. Hides itself when
+              there's no prior swing — zero chrome on first capture. */}
+          <PriorSwingStrip currentClipUri={clipUri ?? null} />
           <InsightCard
             colors={colors}
             analyzing={analyzing}
