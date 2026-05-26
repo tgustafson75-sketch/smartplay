@@ -93,15 +93,14 @@ export const logIssueHandler: IntentHandler = {
     // no clue whether the transcription got the actual issue or some
     // mangled fragment. Now if the echo is wrong, the user can correct
     // immediately ("no, I said X").
-    // 2026-05-25 — Fix K: echo back the FULL note instead of the first
-    // 8 words. The truncation made readbacks like "Saved. I'll remember:
-    // we need to make sure cockpit mode gives..." that cut off mid-
-    // thought; user couldn't hear if the whole issue actually landed.
-    // Speak playback timeout in voiceService already scales with text
-    // length, so long notes play correctly without artificial cap.
+    // 2026-05-25 — Fix K + Fix AE: echo back the FULL note (no
+    // truncation) AND give beta testers a clean path to export. The
+    // entry always lands in the local Issue Log (Beta Feedback section
+    // in Settings); the user can review + email the whole log to
+    // support@smartplaycaddie.com from there.
     const reply = isOwner
       ? `Saved. I'll remember: ${rawNote}`
-      : `Saved a note: ${rawNote}. Owner mode isn't active — set your email in Settings to file it in the Issue Log.`;
+      : `Got it: ${rawNote}. Saved to your Issue Log — export it to support from Settings when you're done.`;
 
     return {
       success: true,

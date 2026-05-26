@@ -27,11 +27,14 @@ import { useRoundStore } from '../store/roundStore';
 import { getLastFix } from './smartFinderService';
 import { haversineYards } from '../utils/geoDistance';
 
-// Off-course threshold: 200 yards beyond any hole reference point.
-// Picked conservatively — the typical golf hole is ~150y wide
-// (tee to mid-fairway to green), so 200y from EVERY reference means
-// the player is genuinely off the property, not just in the rough.
-const OFF_COURSE_THRESHOLD_YD = 200;
+// Off-course threshold: 400 yards beyond any hole reference point.
+// 2026-05-25 — Fix U: relaxed from 200y → 400y. Tim's Palms round
+// flipped off-course mid-play because parallel-hole layouts plus cart
+// paths between holes regularly put the player 200-300y from the
+// CURRENT hole's nearest reference even when they're firmly on the
+// property. 400y still catches "I'm in the parking lot / driving
+// range / wrong course" cases, paired with the 20s SUSTAINED gate.
+const OFF_COURSE_THRESHOLD_YD = 400;
 // Sustained-off-course window. Must be >15s so retrieving a wayward
 // ball doesn't bounce the indicator. Less than the hole-transition
 // 30s so the user sees the badge before false transitions could fire.

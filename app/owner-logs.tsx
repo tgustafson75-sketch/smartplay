@@ -14,7 +14,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Share, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Share, ActivityIndicator, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -132,33 +132,44 @@ export default function OwnerLogsScreen() {
         return `• ${e.text}\n${ctxLine}`;
       })
       .join('\n\n');
+
+    // 2026-05-25 — Fix AE: pre-fill email to support@smartplaycaddie.com
+    // via mailto: link. Opens the user's default mail client with the
+    // full log body and a sensible subject. Falls back to the native
+    // Share sheet if mailto isn't supported (rare on phones, common on
+    // tablets without a mail app configured).
+    const reporter = ownerEmail || 'beta tester';
+    const subject = `SmartPlay Caddie issue log — ${reporter}`;
+    const body =
+      `Reporter: ${reporter}\nEntries: ${entries.length}\nDevice: ${Platform.OS}\n\n${text}\n\n— Sent from SmartPlay Caddie Issue Log`;
+    const mailto = `mailto:support@smartplaycaddie.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     try {
-      await Share.share({ message: text, title: 'SmartPlay Caddie issue log' });
+      const can = await Linking.canOpenURL(mailto).catch(() => false);
+      if (can) {
+        await Linking.openURL(mailto);
+        return;
+      }
+      // Fallback — native share sheet (user can pick mail / messages /
+      // copy / etc.). Tester can paste the body into an email to
+      // support@smartplaycaddie.com manually.
+      await Share.share({
+        message: `support@smartplaycaddie.com\n\n${body}`,
+        title: subject,
+      });
     } catch (e) {
-      console.log('[owner-logs] share failed', e);
+      console.log('[owner-logs] export failed', e);
+      Alert.alert(
+        'Export failed',
+        `Email support@smartplaycaddie.com directly with the log below:\n\n${text}`,
+      );
     }
   };
 
-  if (!isOwner) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="chevron-back" size={26} color={colors.accent} />
-          </TouchableOpacity>
-          <Text style={[styles.title, { color: colors.text_primary }]}>Issue Log</Text>
-          <View style={{ width: 26 }} />
-        </View>
-        <View style={styles.placeholderWrap}>
-          <Ionicons name="lock-closed-outline" size={40} color={colors.text_muted} />
-          <Text style={[styles.placeholderTitle, { color: colors.text_primary }]}>Owner-only surface</Text>
-          <Text style={[styles.placeholderBody, { color: colors.text_muted }]}>
-            This is a developer feedback log restricted to the app owner&apos;s account.
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  // 2026-05-25 — Fix AE: Issue Log is now visible to ALL beta testers
+  // so they can capture issues with voice ("log this: ...") and export
+  // the list to Tim. Only the "Triage with Claude" button stays owner-
+  // only (that hits /api/owner-triage and burns API credit). Removing
+  // the wholesale owner-gate that used to lock the screen.
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -233,44 +244,50 @@ export default function OwnerLogsScreen() {
                 {/* 2026-05-22 — Path 1 (Owner Triage). Button posts the
                     entry + context to /api/owner-triage; Claude returns
                     a hypothesis (root cause, where to look, severity).
-                    Read-only — no code changes ship from this surface. */}
-                <View style={styles.triageRow}>
-                  <TouchableOpacity
-                    style={[styles.triageBtn, { borderColor: colors.accent }]}
-                    onPress={() => requestTriage(entry.id)}
-                    disabled={triageLoadingId === entry.id}
-                    accessibilityRole="button"
-                    accessibilityLabel="Triage this entry with Claude"
-                  >
-                    {triageLoadingId === entry.id ? (
-                      <ActivityIndicator size="small" color={colors.accent} />
-                    ) : (
-                      <>
-                        <Ionicons name="sparkles-outline" size={14} color={colors.accent} style={{ marginRight: 4 }} />
-                        <Text style={[styles.triageBtnText, { color: colors.accent }]}>
-                          {triageById[entry.id] ? 'Re-run triage' : 'Triage with Claude'}
-                        </Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                  {triageById[entry.id] ? (
+                    Read-only — no code changes ship from this surface.
+                    2026-05-25 — Fix AE: gated to owner only. Beta
+                    testers see only the entry + the screen-level Export
+                    button; they DON'T see the Claude triage button (that
+                    burns API credit + isn't useful to them). */}
+                {isOwner && (
+                  <View style={styles.triageRow}>
                     <TouchableOpacity
-                      onPress={() => {
-                        void Share.share({
-                          message: `Issue: ${entry.text}\n\n${triageById[entry.id]}`,
-                          title: 'SmartPlay triage',
-                        }).catch(() => {});
-                      }}
+                      style={[styles.triageBtn, { borderColor: colors.accent }]}
+                      onPress={() => requestTriage(entry.id)}
+                      disabled={triageLoadingId === entry.id}
                       accessibilityRole="button"
-                      accessibilityLabel="Share triage"
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityLabel="Triage this entry with Claude"
                     >
-                      <Ionicons name="share-outline" size={16} color={colors.text_muted} />
+                      {triageLoadingId === entry.id ? (
+                        <ActivityIndicator size="small" color={colors.accent} />
+                      ) : (
+                        <>
+                          <Ionicons name="sparkles-outline" size={14} color={colors.accent} style={{ marginRight: 4 }} />
+                          <Text style={[styles.triageBtnText, { color: colors.accent }]}>
+                            {triageById[entry.id] ? 'Re-run triage' : 'Triage with Claude'}
+                          </Text>
+                        </>
+                      )}
                     </TouchableOpacity>
-                  ) : null}
-                </View>
+                    {triageById[entry.id] ? (
+                      <TouchableOpacity
+                        onPress={() => {
+                          void Share.share({
+                            message: `Issue: ${entry.text}\n\n${triageById[entry.id]}`,
+                            title: 'SmartPlay triage',
+                          }).catch(() => {});
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Share triage"
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="share-outline" size={16} color={colors.text_muted} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                )}
 
-                {triageById[entry.id] ? (
+                {isOwner && triageById[entry.id] ? (
                   <View style={[styles.triageResult, { borderColor: colors.border, backgroundColor: colors.background }]}>
                     <Text style={[styles.triageResultText, { color: colors.text_primary }]}>
                       {triageById[entry.id]}

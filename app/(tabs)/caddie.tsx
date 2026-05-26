@@ -379,6 +379,45 @@ export default function CaddieTab() {
     return () => clearInterval(id);
   }, [isRoundActive]);
 
+  // 2026-05-25 — Fix G + Fix AC: keep screen awake during active round.
+  // Z Fold sleeps quickly (default ~30s) which kills GPS subscription
+  // continuity and creates the "GPS warming up" gap Tim hit at Palms.
+  // Battery-aware policy (Fix AC per Marc/Rohit feedback): activate
+  // only when round is active AND we believe the user has power (cart
+  // mode active, OR battery charging). Otherwise the user can opt in
+  // via Settings — but we DON'T silently drain a non-charging phone.
+  // expo-keep-awake auto-releases on unmount; tag = caddie tab.
+  useEffect(() => {
+    if (!isRoundActive) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const KeepAwake = require('expo-keep-awake') as typeof import('expo-keep-awake');
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const Battery = require('expo-battery') as typeof import('expo-battery');
+        const state = await Battery.getBatteryStateAsync().catch(() => null);
+        if (cancelled) return;
+        // BatteryState 2 = CHARGING, 3 = FULL. Treat both as "powered."
+        // When unknown / discharging, don't hijack the screen.
+        const charging = state === 2 || state === 3;
+        if (charging) {
+          await KeepAwake.activateKeepAwakeAsync('caddie-active-round').catch(() => {});
+        }
+      } catch (e) {
+        console.log('[caddie] keep-awake gate failed (non-fatal):', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const KeepAwake = require('expo-keep-awake') as typeof import('expo-keep-awake');
+        KeepAwake.deactivateKeepAwake('caddie-active-round');
+      } catch { /* non-fatal */ }
+    };
+  }, [isRoundActive]);
+
   // 2026-05-22 — Auto-reconcile on GPS accuracy improvement.
   // When the player goes from a weak fix (>30m, the threshold the
   // reconciliation service refuses to act on) to a strong fix (<15m,

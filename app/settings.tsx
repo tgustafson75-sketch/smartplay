@@ -1200,11 +1200,31 @@ export default function Settings() {
           </TouchableOpacity>
         </CollapsibleSection>
 
-        {/* 2026-05-17 — Owner-only Issue Log. Tim asked for a way to
-            voice-capture app feedback during testing ("Kevin, log this:
-            ..."). Surface shown only when the active profile email
-            matches the owner allow-list (isOwnerEmail). Tappable row
-            opens the log viewer at /owner-logs. */}
+        {/* 2026-05-25 — Fix AE: Beta Feedback section visible to ALL
+            users. Issue Log captures voice ("log this: ...") + Export
+            mails the list to support@smartplaycaddie.com. Owner gets
+            the additional Claude triage button inside the log itself. */}
+        <CollapsibleSection title="Beta Feedback">
+          <TouchableOpacity
+            style={styles.resetRow}
+            onPress={() => router.push('/owner-logs' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Open Issue Log"
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Issue Log</Text>
+              <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                Say &quot;{caddieName}, log this: ...&quot; to capture an issue.
+                Tap to review + export the log to support@smartplaycaddie.com.
+              </Text>
+            </View>
+            <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
+          </TouchableOpacity>
+        </CollapsibleSection>
+
+        {/* 2026-05-17 — Owner-only tools (Claude triage etc). The Issue
+            Log entry was extracted to the public Beta Feedback section
+            above so testers can use it too. */}
         {(() => {
           try {
             const profile = usePlayerProfileStore.getState();
@@ -1230,21 +1250,9 @@ export default function Settings() {
                       production users. Review tuples at /cage-debug. */}
                   <FeelCaptureRow colors={colors} />
 
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/owner-logs' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel="View owner issue log"
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Issue Log</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Say &quot;{caddieName}, log this: ...&quot; or &quot;report a bug: ...&quot; to capture feedback.
-                        Tap to review the running log.
-                      </Text>
-                    </View>
-                    <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
+                  {/* 2026-05-25 — Issue Log row moved to public Beta
+                      Feedback section above. Owner gets Claude triage
+                      buttons inside the log itself. */}
                   {/* 2026-05-24 — Scenario harness. Owner-gated test runner
                       for 17 scenarios covering the shipped-unverified items
                       from BUILD-STATE-AUDIT §B. */}

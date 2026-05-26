@@ -113,14 +113,21 @@ export default function UploadSwing() {
     // the current auto-fire behavior; Path C (trim screen) will take
     // over for those in a follow-up commit tonight.
     // 2026-05-25 — Three-way routing based on clip duration:
-    //   ≤6s  : Path A — auto-fire analysis deferred to detail screen
+    //   ≤60s : Path A — auto-fire analysis deferred to detail screen
     //          where the video auto-plays then triggers it on end
-    //          (?watch=1 param).
-    //   >6s  : Path C — route to trim screen with deferred analysis
+    //          (?watch=1 param). Covers in-app Quick Record (≤30s)
+    //          AND user-uploaded short snippets up to a full minute.
+    //   >60s : Path C — route to trim screen with deferred analysis
     //          so the user can mark the swing window before sampling.
+    //          This is the instructor-video / multi-swing case where
+    //          the player needs to isolate ONE swing from a longer clip.
     //   ?    : duration probe failed → fall back to current auto-fire
     //          behavior so the session never strands pending forever.
-    const SHORT_CLIP_SEC = 6;
+    // 2026-05-25 — Fix D: bumped from 6s → 60s. Tonight's complaint:
+    // a 17s upload triggered the trim screen ("only had start and
+    // stop for longer videos that were long like I had two and three
+    // minute ones"). Trim screen is for genuinely long content.
+    const SHORT_CLIP_SEC = 60;
     const hasKnownDuration = typeof durationSec === 'number' && durationSec > 0;
     const isShortClip = hasKnownDuration && durationSec <= SHORT_CLIP_SEC;
     const isLongClip = hasKnownDuration && durationSec > SHORT_CLIP_SEC;

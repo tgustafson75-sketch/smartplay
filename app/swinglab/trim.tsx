@@ -26,7 +26,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -131,7 +131,17 @@ export default function TrimScreen() {
         <View style={{ width: 60 }} />
       </View>
 
-      <View style={isWide ? { width: '100%', maxWidth: WIDE_CONTENT_MAX_WIDTH, alignSelf: 'center' } : undefined}>
+      {/* 2026-05-25 — Fix C: wrap body in ScrollView so the action
+          buttons remain reachable below the video frame on phone-
+          portrait + Z Fold closed. Previously a fixed View blocked
+          scroll and the Analyze / Skip buttons were off-screen. */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[
+          { paddingBottom: 32 },
+          isWide ? { width: '100%', maxWidth: WIDE_CONTENT_MAX_WIDTH, alignSelf: 'center' } : undefined,
+        ]}
+      >
         <View style={styles.videoFrame}>
           <Video
             ref={videoRef}
@@ -206,7 +216,7 @@ export default function TrimScreen() {
             Skip — Analyze Whole Clip
           </Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

@@ -219,7 +219,14 @@ export default function GreetingScreen() {
     // Without this, the next speak() in caddie.tsx can overlap the tail.
     void (async () => {
       try {
-        const minDisplay = new Promise<void>(resolve => setTimeout(resolve, 2000));
+        // 2026-05-25 — Two-tier minDisplay. Kevin VIDEO path doesn't
+        // need the long floor because the video itself is 6-10s. Non-
+        // video paths (Kevin mp3 fallback, Tank/Serena/Harry TTS) MUST
+        // hold longer so the user can read the caption — bumped 2s →
+        // 4s after Tim caught Tank's splash flashing past too quickly
+        // when /api/voice resolved fast for some persona-voice combos.
+        const VIDEO_MIN_DISPLAY_MS = 2000;
+        const NONVIDEO_MIN_DISPLAY_MS = 4000;
 
         // 2026-05-25 — Kevin D-ID intro video path. Owns its own audio,
         // so we skip playLocalFile/speak entirely and just wait for the
@@ -227,6 +234,7 @@ export default function GreetingScreen() {
         // case didJustFinish never fires (audio focus loss, etc.) so a
         // stuck video can't trap the user on the greeting screen forever.
         if (useKevinIntroVideo) {
+          const minDisplay = new Promise<void>(resolve => setTimeout(resolve, VIDEO_MIN_DISPLAY_MS));
           const videoDone = new Promise<void>(resolve => {
             videoDoneResolveRef.current = resolve;
           });
@@ -246,10 +254,22 @@ export default function GreetingScreen() {
           // it as `persona` in the /api/voice body — server picks the
           // persona-keyed ElevenLabs voice ID.
           const captionForVoice = getGreetingCaption(greeting, getCaddieName(caddiePersonality));
+          const speakStartedAt = Date.now();
+          const minDisplay = new Promise<void>(resolve => setTimeout(resolve, NONVIDEO_MIN_DISPLAY_MS));
           await Promise.all([
             speak(captionForVoice, voiceGender, language as 'en' | 'es' | 'zh', apiUrl, { userInitiated: true }),
             minDisplay,
           ]);
+          // 2026-05-25 — If speak() resolved suspiciously fast (<800ms),
+          // the audio likely silently failed (voice config issue, network
+          // hiccup) — add a "read floor" so the user has time to read the
+          // caption text-only. 4500ms after speak resolved is enough to
+          // scan a 2-3 line greeting. Doesn't fire on normal audio
+          // (typical greeting is 3-5s of audio so speak() takes that long).
+          const speakDurMs = Date.now() - speakStartedAt;
+          if (speakDurMs < 800) {
+            await new Promise<void>(resolve => setTimeout(resolve, 4500 - speakDurMs));
+          }
           naturalEndRef.current = true;
           if (!skippedRef.current) startTransition();
           return;
@@ -268,13 +288,14 @@ export default function GreetingScreen() {
         }
         // playLocalFile blocks until the clip finishes (or its duration-derived
         // timeout fires). It also no-ops silently when voice is disabled, so
-        // race against a 2s minimum to guarantee the caption stays readable
+        // race against a 4s minimum to guarantee the caption stays readable
         // even on a silent greeting path.
         // userInitiated: true — the user JUST opened the app, so the
         // greeting is user-initiated by definition. Without this flag,
         // isVoiceAllowed silently drops the audio when the persisted
         // trustLevel is 1 (Quiet) — Tim hit this and heard nothing.
-        await Promise.all([playLocalFile(asset.localUri, undefined, { userInitiated: true }), minDisplay]);
+        const kevinMp3MinDisplay = new Promise<void>(resolve => setTimeout(resolve, NONVIDEO_MIN_DISPLAY_MS));
+        await Promise.all([playLocalFile(asset.localUri, undefined, { userInitiated: true }), kevinMp3MinDisplay]);
         naturalEndRef.current = true;
         if (!skippedRef.current) startTransition();
       } catch (e) {
