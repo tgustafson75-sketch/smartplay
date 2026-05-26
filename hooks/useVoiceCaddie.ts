@@ -937,8 +937,20 @@ export const useVoiceCaddie = ({
           if (result.tool_action) onToolAction?.(result.tool_action);
           if (result.voice_response) {
             onResponseReceived(result.voice_response);
+            recordKevinTurn(result.voice_response);
             wrappedOnVoiceStateChange('speaking');
             await speakResponse(result.voice_response);
+          }
+          // 2026-05-25 — Fix Z: when an intent-handler's voice_response
+          // is a follow-up question (ends with '?'), auto-open the mic
+          // so the user doesn't have to tap again. Mirrors Fix B which
+          // does the same for brain-path replies. Closes the gap where
+          // log_shot says "Got the shot — which club?" then went idle
+          // and left the user stranded — "Hole 6 / Hole 6 / Hole 6"
+          // entries with no enrichment.
+          const replyEndsWithQuestion = (result.voice_response ?? '').trim().endsWith('?');
+          if (replyEndsWithQuestion && voiceEnabled && !discreteMode) {
+            await runFollowUpListenLoop();
           }
           wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;

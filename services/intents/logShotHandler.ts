@@ -110,9 +110,16 @@ export const logShotHandler: IntentHandler = {
     const parsedClub = parseSpokenClub(clubPhrase);
     if (!parsedClub) {
       track('log_shot_ambiguous_club', { phrase: clubPhrase.slice(0, 60) });
+      // 2026-05-25 — Fix Z: phrase the clarifier so the auto-listen
+      // loop (Fix Z extension in useVoiceCaddie) fires naturally on
+      // the trailing '?'. User's next utterance is taken as the
+      // club name and feeds back through the brain (which can re-
+      // classify as log_shot with the club). The shot itself isn't
+      // logged here yet — done in the answer turn — so we avoid
+      // creating an empty "Hole N" row with no club to enrich.
       return {
         success: false,
-        voice_response: "Got the shot — which club?",
+        voice_response: "Got that — what'd you hit?",
         side_effects: ['logShot:ambiguous_club'],
         follow_up_needed: true,
       };
