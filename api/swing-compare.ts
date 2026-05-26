@@ -26,7 +26,9 @@ const gemini = process.env.GOOGLE_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
   : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 1 });
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+// 2026-05-26 — Fix AW: tightened to 18s. Same reasoning as
+// swing-question.ts — last in the chain, user has already waited.
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 18_000, maxRetries: 1 });
 
 interface FrameInput { b64: string; media_type?: string }
 

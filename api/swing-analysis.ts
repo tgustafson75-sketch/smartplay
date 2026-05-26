@@ -4,7 +4,11 @@ import OpenAI from 'openai';
 import { GoogleGenAI } from '@google/genai';
 
 // 2026-05-23 — maxRetries 1 → 3 to absorb Anthropic 529 overloaded_error spikes.
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 3 });
+// 2026-05-26 — Fix AW: cut back to maxRetries: 1 now that we have
+// OpenAI + Gemini fallbacks. 25s × 3 = 75s blew Vercel's 60s budget
+// before the fallback chain could fire. 22s × 1 + OpenAI 20s + Gemini
+// ~10s fits comfortably under 60s with grace.
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 22_000, maxRetries: 1 });
 // 2026-05-26 — Fix AR Phase 2: OpenAI gpt-4o fallback. Lower timeout
 // than Anthropic — by the time we fall back, the user has already been
 // waiting; we'd rather degrade to honest-failure than burn another 25s.
@@ -515,7 +519,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const completion = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 400,
+        // 2026-05-26 — Fix AW: 400 → 800. The structured GolfFix
+        // payload (valid_swing + primary_fault + cause + fix + drill
+        // + evidence + layman_explanation + observation + the
+        // canonical-issue fields) was getting truncated at 400, the
+        // truncated JSON failed to parse, and the old short-circuit
+        // returned 502 BEFORE the OpenAI/Gemini fallback could fire.
+        // 800 fits a full structured payload with headroom.
+        max_tokens: 800,
         temperature: 0.2,
         system: systemPrompt,
         messages: [{ role: 'user', content: userContent }],
@@ -524,6 +535,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       text = block && block.type === 'text' ? block.text.trim() : '';
       if (!text) {
         anthropicError = 'empty_response';
+      } else {
+        // 2026-05-26 — Fix AW: validate JSON parseability BEFORE
+        // accepting Anthropic's response. If the response looks like
+        // truncated/non-JSON, clear `text` so the fallback chain
+        // fires instead of returning 502 on a flawed primary read.
+        const cleaned = text.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
+        try {
+          JSON.parse(cleaned);
+        } catch {
+          anthropicError = 'non_json_response';
+          console.warn('[swing-analysis] anthropic returned non-JSON — falling through to OpenAI');
+          text = '';
+        }
       }
     } catch (e) {
       anthropicError = e instanceof Error ? e.message : 'unknown';

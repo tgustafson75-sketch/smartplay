@@ -34,7 +34,11 @@ const gemini = process.env.GOOGLE_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
   : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 1 });
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+// 2026-05-26 — Fix AW: tightened to 18s. Last in the Gemini → OpenAI
+// → Anthropic chain, so by the time we hit this the user has waited
+// ≥40s; we'd rather degrade to "providers failed" than burn another
+// 25s on a slow primary that already timed out twice upstream.
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 18_000, maxRetries: 1 });
 
 function buildSystemPrompt(ctx: Record<string, unknown>): string {
   const caddieName = typeof ctx.caddie_name === 'string' && ctx.caddie_name.trim().length > 0

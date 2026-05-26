@@ -1435,7 +1435,23 @@ const styles = StyleSheet.create({
   // 2026-05-17 — bumped from maxHeight 460 to 640 so the video reads as
   // the hero of the screen instead of a postage stamp. Tim's "video takes
   // half the screen in Pro vs V3 full screen" feedback.
-  videoWrap: { width: '100%', aspectRatio: 9 / 16, maxHeight: 640, backgroundColor: '#000' },
+  // 2026-05-26 — Fix AW: Z Fold open showed the video left-aligned in
+  // a narrow ~360px column with the right ⅔ of the screen empty. With
+  // width 100% + aspect 9/16 + maxHeight 640, the maxHeight clamp
+  // forced effective width to ~360px on landscape — but no maxWidth +
+  // no alignSelf left it sitting flush-left in a 2200px container.
+  // Adding maxWidth: 360 (9/16 of maxHeight) + alignSelf: 'center'
+  // makes the video CENTER itself on wide form factors instead of
+  // pinning to the left. Phone-portrait is unchanged (width 100% +
+  // 9/16 aspect produces a frame narrower than 360 anyway).
+  videoWrap: {
+    width: '100%',
+    aspectRatio: 9 / 16,
+    maxHeight: 640,
+    maxWidth: 360,
+    alignSelf: 'center',
+    backgroundColor: '#000',
+  },
   video: { width: '100%', height: '100%' },
   toggleRow: {
     flexDirection: 'row', marginHorizontal: 16, marginTop: 12, padding: 4,

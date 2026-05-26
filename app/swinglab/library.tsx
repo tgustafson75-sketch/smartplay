@@ -273,11 +273,14 @@ export default function SwingLibrary() {
             accessibilityRole="button"
             accessibilityLabel={`Filter: ${f.label}`}
           >
-            <Text style={[
-              styles.chipText,
-              { color: colors.text_muted },
-              filter === f.id && { color: colors.accent, fontWeight: '800' },
-            ]}>{f.label}</Text>
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.chipText,
+                { color: colors.text_muted },
+                filter === f.id && { color: colors.accent, fontWeight: '800' },
+              ]}
+            >{f.label}</Text>
           </TouchableOpacity>
         ))}
         {/* Divider */}
@@ -298,11 +301,14 @@ export default function SwingLibrary() {
             color={(showAdvancedFilters || advancedFiltersActive) ? colors.accent : colors.text_muted}
             style={{ marginRight: 4 }}
           />
-          <Text style={[
-            styles.chipText,
-            { color: colors.text_muted },
-            (showAdvancedFilters || advancedFiltersActive) && { color: colors.accent, fontWeight: '800' },
-          ]}>
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.chipText,
+              { color: colors.text_muted },
+              (showAdvancedFilters || advancedFiltersActive) && { color: colors.accent, fontWeight: '800' },
+            ]}
+          >
             Filters{advancedFiltersActive ? ' •' : ''}
           </Text>
         </TouchableOpacity>
@@ -341,11 +347,14 @@ export default function SwingLibrary() {
                   color={selected ? colors.accent : colors.text_muted}
                   style={{ marginRight: 4 }}
                 />
-                <Text style={[
-                  styles.chipText,
-                  { color: colors.text_muted },
-                  selected && { color: colors.accent, fontWeight: '800' },
-                ]}>{label}</Text>
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.chipText,
+                    { color: colors.text_muted },
+                    selected && { color: colors.accent, fontWeight: '800' },
+                  ]}
+                >{label}</Text>
               </TouchableOpacity>
             );
           })}
@@ -583,8 +592,16 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.2,
   },
+  // 2026-05-26 — Fix AW: filter strip layout. Removed maxHeight: 50
+  // that was vertically clipping the chips on Z Fold open (taller line-
+  // height on the wider DPI pushed total chip height past 50px,
+  // chopping off the top/bottom of label text — Tim's "smushed" repro).
+  // No fixed height; chips own their own vertical sizing and the
+  // ScrollView wraps content naturally. flexShrink: 0 on each chip
+  // guarantees the horizontal ScrollView never compresses them on
+  // wide viewports.
   filterStrip: {
-    maxHeight: 50,
+    flexGrow: 0,
   },
   filterStripContent: {
     paddingHorizontal: 12,
@@ -599,6 +616,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 999,
     borderWidth: 1,
+    flexShrink: 0,
   },
   chipText: { fontSize: 13, fontWeight: '600' },
   chipDivider: { width: 1, height: 20, marginHorizontal: 4 },
@@ -607,6 +625,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     borderRadius: 999,
     borderWidth: 1,
+    flexShrink: 0,
   },
   chipSmallText: { fontSize: 12, fontWeight: '600' },
   advancedFilters: {

@@ -126,7 +126,15 @@ export type SwingAnalysisResult =
 // no_frames / error, so users no longer wait the full timeout before
 // seeing some output. 15s is still generous for a 5-frame Anthropic
 // vision call (typical: 4-9s on stable network).
-const REQUEST_TIMEOUT_MS = 15_000;
+// 2026-05-26 — Fix AW: bumped 15s → 55s. Tim's repro: 14s clip
+// returned "Lost connection to the analyzer" even though the server-
+// side fallback chain (Anthropic → OpenAI → Gemini, Batches 23-24)
+// can take up to 50s when the primary is slow. The client was
+// aborting at 15s, BEFORE the fallback chain could complete —
+// making the resilience layer unreachable from the client. 55s
+// budgets the full chain inside Vercel's 60s maxDuration with a
+// small grace window for the response round-trip.
+const REQUEST_TIMEOUT_MS = 55_000;
 const TENTATIVE_TIMEOUT_MS = 15_000;
 
 /**
