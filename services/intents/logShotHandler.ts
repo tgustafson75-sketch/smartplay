@@ -160,6 +160,19 @@ export const logShotHandler: IntentHandler = {
       had_gps: location != null,
     });
 
+    // 2026-05-25 — Fix N: toast confirmation in addition to voice
+    // response. In L5 Cockpit the voice ack can be missed (background
+    // noise, brief utterance, audio routed to earpiece) and Tim flagged
+    // tonight that he couldn't tell when shot-log captured. Toast is
+    // a deterministic visual confirmation that fires for every success.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const t = require('../../store/toastStore') as typeof import('../../store/toastStore');
+      const directionTag = direction ? ` · ${direction}` : '';
+      const distTag = distance != null ? ` · ${distance}y` : '';
+      t.useToastStore.getState().show(`${clubLabel(parsedClub.club_id)}${distTag}${directionTag}`);
+    } catch (e) { console.log('[logShot] toast failed (non-fatal):', e); }
+
     const distancePart = distance != null ? `${distance}` : null;
     const outcomePart = outcome === 'ob' ? 'OB'
                        : outcome === 'water' ? 'water'

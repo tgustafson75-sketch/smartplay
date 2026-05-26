@@ -132,27 +132,31 @@ export default function Dashboard() {
     : String(scoreVsPar);
 
   // Aggregate Shot Stats from ALL historical shots.
-  // Pro's ShotResult doesn't have an explicit 'fairway' outcome — the closest
-  // proxy is `outcome === 'clean'` (i.e. not a penalty). Until Pro adds
-  // explicit fairway tracking, "Fairway %" displays the clean-shot rate.
-  // distance_yards comes from the conversational logging path; older shots
-  // without it are skipped from the average.
+  // 2026-05-25 — Fix Y: scope FAIRWAY % and AVG YDS to TEE SHOTS only
+  // (shot_in_hole_index === 1). Previously the calc counted every shot
+  // including wedges/putts/recovery, producing nonsense like "100%
+  // fairway, 240 avg yds" across a round of varied shots. Tee-shot
+  // scoping is the most honest beta read without a per-hole par lookup
+  // (the par-3 caveat means a few iron tee shots count as "fairway
+  // tries" — acceptable until we add par-aware filtering).
   const shotStats = useMemo(() => {
     const allHistoricalShots = roundHistory.flatMap((r) => r.shots);
     const fullPool = [...allHistoricalShots, ...allShots];
     const shotsLogged = fullPool.length;
     if (shotsLogged === 0) {
-      return { shotsLogged: 0, fairwayPct: 0, avgYds: 0 };
+      return { shotsLogged: 0, fairwayPct: 0, avgYds: 0, teeShots: 0 };
     }
-    const cleanCount = fullPool.filter((s) => s.outcome === 'clean' || s.outcome == null).length;
-    const fairwayPct = Math.round((cleanCount / shotsLogged) * 100);
-    const withYds = fullPool.filter((s): s is typeof s & { distance_yards: number } =>
+    const teeShots = fullPool.filter(s => s.shot_in_hole_index === 1);
+    const teeShotCount = teeShots.length;
+    const cleanTeeCount = teeShots.filter(s => s.outcome === 'clean' || s.outcome == null).length;
+    const fairwayPct = teeShotCount === 0 ? 0 : Math.round((cleanTeeCount / teeShotCount) * 100);
+    const teeWithYds = teeShots.filter((s): s is typeof s & { distance_yards: number } =>
       typeof s.distance_yards === 'number' && s.distance_yards > 0,
     );
-    const avgYds = withYds.length === 0
+    const avgYds = teeWithYds.length === 0
       ? 0
-      : Math.round(withYds.reduce((sum, s) => sum + s.distance_yards, 0) / withYds.length);
-    return { shotsLogged, fairwayPct, avgYds };
+      : Math.round(teeWithYds.reduce((sum, s) => sum + s.distance_yards, 0) / teeWithYds.length);
+    return { shotsLogged, fairwayPct, avgYds, teeShots: teeShotCount };
   }, [roundHistory, allShots]);
 
   // Recent shots — last 5, newest first. Drawn from the active round
@@ -321,12 +325,26 @@ export default function Dashboard() {
           </View>
         )}
 
-        {/* ─── 6. SHOT STATS — 3 tiles ──────────────────────────────── */}
+        {/* ─── 6. SHOT STATS — 3 tiles ────────────────────────────────
+            2026-05-25 — Fix Y: re-scoped to TEE SHOTS only. Labels
+            updated to match: FAIRWAY % is now FAIRWAY HIT %
+            (cleanTeeCount/teeShotCount), AVG YDS is now TEE AVG (avg
+            distance of tee shots). Tee-shot count surfaces too so a
+            single-shot round doesn't look like "100% fairway" with
+            no context. When teeShots=0, show dashes instead of 0/0%. */}
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>SHOT STATS</Text>
         <View style={styles.statsRow}>
           <StatTile colors={colors} value={String(shotStats.shotsLogged)} label="SHOTS LOGGED" />
-          <StatTile colors={colors} value={`${shotStats.fairwayPct}%`} label="FAIRWAY %" />
-          <StatTile colors={colors} value={String(shotStats.avgYds)} label="AVG YDS" />
+          <StatTile
+            colors={colors}
+            value={shotStats.teeShots === 0 ? '—' : `${shotStats.fairwayPct}%`}
+            label="FAIRWAY HIT %"
+          />
+          <StatTile
+            colors={colors}
+            value={shotStats.teeShots === 0 || shotStats.avgYds === 0 ? '—' : String(shotStats.avgYds)}
+            label="TEE AVG"
+          />
         </View>
 
         {/* ─── 7. RECENT SHOTS ───────────────────────────────────────── */}
