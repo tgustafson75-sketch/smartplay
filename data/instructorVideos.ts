@@ -25,11 +25,18 @@ export type IssueCategory =
   | 'grip'
   | 'posture'
   // 2026-05-26 — Short-game category added so Randy Chang's "Chang chip"
-  // content has a natural slot. URLs pending verification from Tim's
-  // direct contact with Randy (head pro at Journey @ Pechanga, Temecula).
+  // content has a natural slot. URL verified by Tim direct from Randy.
   // Randy's YouTube content is well-known under-3-minute instructional
   // format — exact match for SmartPlay's video length target.
-  | 'chipping';
+  | 'chipping'
+  // 2026-05-26 — Reserved slot for Tank-narrated content under the
+  // SmartPlayCaddie branding + logo overlay. Tim's drill cards render
+  // in pairs (2-up grid) on his phone; six prior categories + chipping
+  // = seven, leaving the second column of row 4 empty. This 8th slot
+  // fills the pair so the grid reads clean. URL empty until Tank
+  // recording lands. Consumers should render the SmartPlay logo when
+  // url === '' (vs the youtube thumbnail other categories use).
+  | 'tank_caddie';
 
 export interface InstructorVideoLink {
   title: string;
@@ -154,6 +161,19 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
       instructor: 'Randy Chang · PGA · Journey at Pechanga',
       // 2026-05-26 — Verified URL provided by Tim direct from Randy.
       url: 'https://www.youtube.com/watch?v=_iWzD-gSoa8',
+      approxRuntimeSec: 180,
+      verified: false,
+    },
+  },
+  // 2026-05-26 — 8th slot reserved for Tank-narrated SmartPlay-branded
+  // drill content. URL empty until Tank recording lands; consumers
+  // should detect url === '' and render the SmartPlay logo + Tank
+  // portrait instead of a YouTube thumbnail.
+  tank_caddie: {
+    primary: {
+      title: "Tank's Take — SmartPlay caddie drill",
+      instructor: 'Tank · SmartPlay Caddie',
+      url: '', // TODO: Tank recording + SmartPlay branding overlay
       approxRuntimeSec: 180,
       verified: false,
     },
