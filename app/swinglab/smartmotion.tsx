@@ -23,6 +23,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { QuickTutorial } from '../../components/QuickTutorial';
+import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOverlay';
 import ClubPickerModal, { clubIdToSmashKey, clubIdLabel } from '../../components/cage/ClubPickerModal';
 import type { ClubId } from '../../services/clubRecognition';
 import {
@@ -868,6 +869,11 @@ function VisualCard({
           <Text style={styles.speedPillText}>{playbackSpeed}x</Text>
         </TouchableOpacity>
 
+        {/* 2026-05-25 — Fix AH: coach annotation overlay. Lives ABOVE
+            the pose/grid/trace overlays so freehand strokes draw over
+            everything. DRAW toggle in the overlay's own toolbar; off
+            by default so existing taps + scrub still work. */}
+        {clipUri && <VideoAnnotationOverlay />}
       </View>
 
       {/* 2026-05-20 — Record button integrated INTO the video card

@@ -29,6 +29,7 @@ import { runPhaseKOnSession } from '../../../services/videoUpload';
 import { uploadLog } from '../../../services/uploadDiagnostic';
 import PrimaryIssueCard from '../../../components/swinglab/PrimaryIssueCard';
 import ZoomableView from '../../../components/swinglab/ZoomableView';
+import VideoAnnotationOverlay from '../../../components/swinglab/VideoAnnotationOverlay';
 import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
@@ -302,10 +303,15 @@ export default function SwingDetail() {
       if (watchFiredRef.current) return;
       if (useCageStore.getState().sessionHistory.find(s => s.id === swing_id)?.analysis_status !== 'pending') return;
       watchFiredRef.current = true;
-      uploadLog('watch-then-analyze-watchdog-fire', { reason: 'pending_25s' }, swing_id);
+      // 2026-05-25 — bumped 25s → 60s per Tim's request. Longer clips
+      // (uploaded coach lessons, multi-swing demos) need more time
+      // for natural play-through completion before we override with
+      // the watchdog. 60s still bounds the worst-case "stuck on
+      // Kevin is reviewing forever" UX.
+      uploadLog('watch-then-analyze-watchdog-fire', { reason: 'pending_60s' }, swing_id);
       useCageStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
       void runPhaseKOnSession(swing_id);
-    }, 25_000);
+    }, 60_000);
     return () => clearTimeout(timer);
   }, [swing_id, shouldAutoplayThenAnalyze, analysisStatus]);
 
@@ -632,6 +638,12 @@ export default function SwingDetail() {
                 onPlaybackStatusUpdate={onPlaybackStatusUpdate}
               />
               </ZoomableView>
+              {/* 2026-05-25 — Fix AH: coach annotation overlay. DRAW
+                  toggle is OFF by default so pinch-zoom + native
+                  video controls work; coach taps DRAW to enter
+                  freehand/circle/line/text mode. Per-shot session;
+                  strokes don't persist across mount in v1. */}
+              <VideoAnnotationOverlay />
               {hasPose && (showSkeleton || showTrace) && (
                 <SwingBodyOverlay
                   frames={poseFrames}
