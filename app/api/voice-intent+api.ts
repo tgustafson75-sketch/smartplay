@@ -139,6 +139,17 @@ Available intents:
    - "call it 165" / "let's call it 145" / "make it 138" -> { yards: 165, source: "user" }
    - "the number is 162" / "playing 180" / "it's 142" -> { yards: 162, source: "user" }
    IMPORTANT: only use this intent when the user is stating a NUMBER they want the caddie to USE. NOT for "what's my yardage" (that's query_status). NOT for "log this shot at 142" (that's log_shot).
+   IMPORTANT: if the utterance combines a distance AND an EXPLICIT HOLE NUMBER ("I'm 140 out from hole 2", "Palms hole 5, 150 to pin"), prefer confirm_position (3.55 below), NOT state_yardage. state_yardage is for distance-only utterances on the current hole.
+
+3.55 confirm_position — User states their position as a (distance, hole) pair so the system can GROUND it against GPS and confirm or fix the location. Triggered by utterances that combine a distance with an EXPLICIT hole or course reference — the user is reconciling, not just feeding a number for one shot.
+   parameters: { distance_to_pin: number (10-600), hole?: number 1-18, course_name?: string }
+   Examples:
+   - "I'm 140 out from hole 2 on Palms" -> { intent_type: "confirm_position", parameters: { distance_to_pin: 140, hole: 2, course_name: "Palms" } }
+   - "I'm 140 from the pin on hole 5" -> { distance_to_pin: 140, hole: 5 }
+   - "Palms hole 2, 140 to the pin" -> { distance_to_pin: 140, hole: 2, course_name: "Palms" }
+   - "I'm 200 out, hole 12" -> { distance_to_pin: 200, hole: 12 }
+   - "150 from the flag on the third" -> { distance_to_pin: 150, hole: 3 }
+   IMPORTANT: requires BOTH a distance AND an explicit hole/course token. Distance-only ("I'm 140") routes to state_yardage. Position-only ("I'm on the green") routes to position_declaration.
 
 4. navigate — User wants navigation: back, forward, home, close, next/previous hole.
    parameters: { direction: "back" | "home" | "close" | "next_hole" | "previous_hole" | "main_menu" }
@@ -306,7 +317,7 @@ The language reflects the transcript itself, not the user's preferred app langua
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "coach_refine" | "position_declaration" | "unknown",
+  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "coach_refine" | "position_declaration" | "confirm_position" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null,

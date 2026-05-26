@@ -24,6 +24,7 @@ import { refreshGpsHandler } from './refreshGpsHandler';
 import { coachRefineHandler } from './coachRefineHandler';
 import { positionDeclareHandler } from './positionDeclareHandler';
 import { inRoundDiagnosticHandler } from './inRoundDiagnosticHandler';
+import { confirmPositionHandler } from './confirmPositionHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
 
@@ -57,6 +58,7 @@ voiceCommandRouter.registerHandler(refreshGpsHandler);
 voiceCommandRouter.registerHandler(coachRefineHandler);
 voiceCommandRouter.registerHandler(positionDeclareHandler);
 voiceCommandRouter.registerHandler(inRoundDiagnosticHandler);
+voiceCommandRouter.registerHandler(confirmPositionHandler);
 
 export {
   openToolHandler,
@@ -85,4 +87,5 @@ export {
   quickRoundHandler,
   openExternalHandler,
   inRoundDiagnosticHandler,
+  confirmPositionHandler,
 };
