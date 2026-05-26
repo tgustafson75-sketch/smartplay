@@ -2747,6 +2747,31 @@ export default function CaddieTab() {
         >
           {toolsExpanded ? (
             <>
+              {/* 2026-05-26 — Tim's pre-round FAB additions:
+                  (a) mic = toggle voice on/off (voiceEnabled setting);
+                  (b) trust cycle = head silhouette with cycle hint, cycles
+                      through TRUST_LEVEL_SLIDER_ORDER. Stays inside this
+                      collapsed-by-default row so the home screen isn't
+                      cluttered when chevron is closed. */}
+              <ToolFabIcon
+                icon={voiceEnabled ? 'mic' : 'mic-off'}
+                label={voiceEnabled ? 'Mute caddie voice' : 'Unmute caddie voice'}
+                onPress={() => {
+                  setVoiceEnabled(!voiceEnabled);
+                  void Haptics.selectionAsync().catch(() => undefined);
+                  useToastStore.getState().show(voiceEnabled ? 'Caddie voice off' : 'Caddie voice on');
+                }}
+              />
+              <ToolFabIconCycler
+                label={`Cycle trust level (now ${TRUST_LEVEL_META[trustLevel].label})`}
+                onPress={() => {
+                  const cur  = TRUST_LEVEL_SLIDER_ORDER.indexOf(trustLevel);
+                  const next = TRUST_LEVEL_SLIDER_ORDER[(cur + 1) % TRUST_LEVEL_SLIDER_ORDER.length];
+                  setTrustLevel(next);
+                  void Haptics.selectionAsync().catch(() => undefined);
+                  useToastStore.getState().show(`Now in ${TRUST_LEVEL_META[next].label}`);
+                }}
+              />
               <ToolFabIcon
                 icon="camera-outline"
                 label="SmartMotion"
@@ -3530,6 +3555,56 @@ function ToolFabIcon({
       }}
     >
       <Ionicons name={icon} size={20} color="#00C896" />
+    </TouchableOpacity>
+  );
+}
+
+/**
+ * 2026-05-26 — Trust-cycle FAB: head silhouette inside the standard
+ * green pill, with a tiny sync badge in the top-right corner so the
+ * icon reads as "tap to cycle through who's listening." Mirrors Tim's
+ * verbal spec — "head silhouette with recycle circle around it" —
+ * without needing a custom SVG.
+ */
+function ToolFabIconCycler({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={{
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(0, 200, 150, 0.18)',
+        borderWidth: 1.5,
+        borderColor: '#00C896',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Ionicons name="person-circle-outline" size={22} color="#00C896" />
+      <View style={{
+        position: 'absolute',
+        right: -2,
+        top: -2,
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: '#060f09',
+        borderWidth: 1,
+        borderColor: '#00C896',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <Ionicons name="sync" size={10} color="#00C896" />
+      </View>
     </TouchableOpacity>
   );
 }

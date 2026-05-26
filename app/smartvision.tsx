@@ -44,6 +44,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import GlassesStatusBadge from '../components/GlassesStatusBadge';
 import SmartVisionLiveStrategy from '../components/SmartVisionLiveStrategy';
+// 2026-05-26 — Fix CD: theme the image-canvas fallback bg so light
+// mode doesn't show a dark rectangle while the hole image loads.
+import { useTheme } from '../contexts/ThemeContext';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import Svg, { Line as SvgLine, Polygon as SvgPolygon, Text as SvgText, G as SvgG } from 'react-native-svg';
@@ -235,6 +238,8 @@ export default function SmartVisionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: W, height: H } = useWindowDimensions();
+  // 2026-05-26 — Fix CD: theme tokens for the canvas fallback color.
+  const { colors: themeColors } = useTheme();
 
   const activeCourseId = useRoundStore(s => s.activeCourseId);
   const activeCourseName = useRoundStore(s => s.activeCourse);
@@ -983,7 +988,7 @@ export default function SmartVisionScreen() {
           unchanged. */}
       <View style={{ flexDirection: isSplit ? 'row' : 'column', flex: 1 }}>
       {/* Image canvas + markers */}
-      <View style={{ width: imageW, height: imageH, backgroundColor: '#0d2418' }}>
+      <View style={{ width: imageW, height: imageH, backgroundColor: themeColors.surface_elevated }}>
         {/* Premium course data badge — visible only when Golfbert
             mapping returned data for this hole. Tells the user the map
             is using paid premium geometry (greens / bunkers / water)
