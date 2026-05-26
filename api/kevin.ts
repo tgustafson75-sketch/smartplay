@@ -1017,10 +1017,21 @@ ${onCourseContextBlock}${baseMessage}`
     // brain telemetry can surface fallbacks the user never sees).
     let providerUsed: 'anthropic' | 'openai-fallback' = 'anthropic';
     let anthropicError: string | null = null;
+    // 2026-05-26 — Fix BW: telemetry counters surfaced via _debug.
+    // toolRounds = how many tool-use loop iterations actually ran
+    //   (1 = single Anthropic call, 2-3 = agentic loop fired);
+    // dataToolCalls = lookup_course / lookup_hole invocations
+    //   (proxy for course-data fetch volume);
+    // Both let Tim eyeball brain cost-per-turn in prod without
+    // needing OTEL or per-request log access.
+    let toolRounds = 0;
+    let dataToolCalls = 0;
+    const startedAt = Date.now();
     const MAX_TOOL_ROUNDS = 3;
 
     try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      toolRounds = round + 1;
       // Audit 101 / W4 — opt the system prompt into Anthropic ephemeral
       // prompt caching. Same identical prompt within the 5-minute TTL hits
       // the cache; cache misses cost the same as before. The system prompt
@@ -1049,6 +1060,7 @@ ${onCourseContextBlock}${baseMessage}`
           if (block.name === 'lookup_course') {
             // Data tool — fetch and continue loop
             hasDataTools = true;
+            dataToolCalls += 1;
             console.log(`[kevin] calling lookup_course query="${input.query}"`);
             const result = await executeLookupCourse(input);
             toolResultBlocks.push({ type: 'tool_result', tool_use_id: block.id, content: result });
@@ -1056,6 +1068,7 @@ ${onCourseContextBlock}${baseMessage}`
           } else if (block.name === 'lookup_hole') {
             // Data tool — fetch and continue loop
             hasDataTools = true;
+            dataToolCalls += 1;
             console.log(`[kevin] calling lookup_hole course_id="${input.course_id}" hole=${input.hole_number}`);
             const result = await executeLookupHole(input);
             toolResultBlocks.push({ type: 'tool_result', tool_use_id: block.id, content: result });
@@ -1242,14 +1255,26 @@ ${onCourseContextBlock}${baseMessage}`
       audioBase64 = Buffer.from(arrayBuffer).toString('base64');
     }
 
-    // 2026-05-26 — Fix BT: _debug surfaces which provider answered.
-    // Lets Tim (and Batch 59 telemetry) see fallback fires from prod
-    // without needing log access. Clients ignore unknown fields.
+    // 2026-05-26 — Fix BT/BW: _debug surfaces provider + telemetry.
+    // Lets Tim see fallback fires, tier routing, tool-round depth, and
+    // wall-clock latency from prod responses without needing log
+    // access. Clients ignore unknown fields. Keep field names stable
+    // so future dashboards can chart them.
+    const latencyMs = Date.now() - startedAt;
+    console.log(`[kevin] done provider=${providerUsed} tier=${tier} rounds=${toolRounds} data=${dataToolCalls} ms=${latencyMs}`);
     return res.status(200).json({
       text,
       audioBase64,
       toolAction,
-      _debug: { provider: providerUsed, anthropic_error: anthropicError },
+      _debug: {
+        provider: providerUsed,
+        tier,
+        vision: visionBase64 ? true : false,
+        tool_rounds: toolRounds,
+        data_tool_calls: dataToolCalls,
+        latency_ms: latencyMs,
+        anthropic_error: anthropicError,
+      },
     });
 
   } catch (err: unknown) {
