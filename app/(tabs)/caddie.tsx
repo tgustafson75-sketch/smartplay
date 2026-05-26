@@ -884,6 +884,7 @@ export default function CaddieTab() {
       setTimeout(() => {
         void (async () => {
           try {
+            console.log('[caddie] opener IIFE start; trustLevel=', useTrustLevelStore.getState().level);
             // 2026-05-26 — Fix AV: GPS-aware second intro. Kick off the
             // nearest-course detection in parallel with the greeting
             // so we don't add latency to the audible "good morning."
@@ -895,7 +896,9 @@ export default function CaddieTab() {
             // GPS-nearest auto-pick is the backup verification path).
             const coursePromise = detectNearestLocalCourse().catch(() => null);
 
+            console.log('[caddie] opener: speak#1 (greeting) start');
             await speak(greeting, voiceGender, language, apiUrl, { userInitiated: true });
+            console.log('[caddie] opener: speak#1 (greeting) resolved');
 
             // Cap the GPS wait at 3s past greeting completion so a
             // stuck location read can't trap the opener.
@@ -903,16 +906,26 @@ export default function CaddieTab() {
               coursePromise,
               new Promise<null>(resolve => setTimeout(() => resolve(null), 3000)),
             ]);
+            console.log('[caddie] opener: GPS race resolved; course=', course?.spokenName ?? 'null');
 
-            const currentTrust = useTrustLevelStore.getState().level;
-            if (currentTrust === 1) return;
+            // 2026-05-26 — Fix BX: dropped the prior early-return on
+            // trustLevel===1. The speak() below already passes
+            // { userInitiated: true } so isVoiceAllowed lets it through
+            // even at L1 Quiet (same gating the speak#1 above uses).
+            // The hard-coded bail was inconsistent: speak#1 played but
+            // speak#2 was silenced when both should follow the same
+            // userInitiated-bypass rule. Tim's "still not firing" report
+            // traced to this gate when his stored trustLevel resolved
+            // to 1 mid-launch — first opener spoke, second never did.
 
             const followUp = course
               ? `I see you're at ${course.spokenName}. Want to start a round?`
               : 'Practice or play?';
             if (course) setOpeningPrompt(`${greeting} I see you're at ${course.spokenName}. Want to start a round?`);
 
+            console.log('[caddie] opener: speak#2 (followUp) start; text=', followUp);
             await speak(followUp, voiceGender, language, apiUrl, { userInitiated: true });
+            console.log('[caddie] opener: speak#2 (followUp) resolved');
 
             const reply = await captureUtterance(6_000, apiUrl, language);
             if (!reply) return;
