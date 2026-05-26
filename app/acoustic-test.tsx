@@ -35,7 +35,13 @@ import { configureAudioForSpeech } from '../services/voiceService';
  * here in Pro.
  */
 
-const MAX_SECONDS = 15;
+// 2026-05-26 — Fix BN: bumped 15s → 30s so a multi-swing batch
+// session (Tim's intent: 5-10 swings at ~3s each) fits in a single
+// recording. Reframes the bench from a single-impact test to a
+// session capture — detectStrikes already returns multiple strikes
+// per recording, so the screen renders all of them on the waveform
+// + the numbered list below.
+const MAX_SECONDS = 30;
 
 export default function AcousticTestScreen() {
   const router = useRouter();
@@ -218,7 +224,7 @@ export default function AcousticTestScreen() {
             color={theme.colors.background}
           />
           <Text style={[styles.ctaText, { color: theme.colors.background }]}>
-            {recording ? 'STOP' : 'RECORD (max 15s)'}
+            {recording ? 'STOP' : `RECORD (max ${MAX_SECONDS}s)`}
           </Text>
         </Pressable>
 
@@ -285,6 +291,36 @@ export default function AcousticTestScreen() {
                     {Math.round(s.attackMs)}ms attack · {s.confidence}
                   </Text>
                 ))}
+              </View>
+            ) : null}
+
+            {/* 2026-05-26 — Fix BN: session summary stats. When the user
+                runs a multi-swing batch (Tim's use case: 5-10 swings in
+                one recording), the per-strike list above gets long.
+                These three rolled-up stats give the at-a-glance read:
+                consistency of peak dB (tighter = more repeatable
+                contact), avg attack (cleaner = better strike), avg
+                inter-strike gap (faster cadence = drill flow). */}
+            {strikes.length >= 2 ? (
+              <View style={styles.summaryCard}>
+                <Text style={styles.summaryHeader}>SESSION SUMMARY</Text>
+                {(() => {
+                  const avgPeakDb = strikes.reduce((a, s) => a + s.peakDb, 0) / strikes.length;
+                  const avgAttack = strikes.reduce((a, s) => a + s.attackMs, 0) / strikes.length;
+                  const gaps: number[] = [];
+                  for (let i = 1; i < strikes.length; i++) {
+                    gaps.push((strikes[i].timeMs - strikes[i - 1].timeMs) / 1000);
+                  }
+                  const avgGap = gaps.reduce((a, g) => a + g, 0) / gaps.length;
+                  const peakRange = Math.max(...strikes.map(s => s.peakDb)) - Math.min(...strikes.map(s => s.peakDb));
+                  return (
+                    <>
+                      <Text style={styles.summaryRow}>Avg peak: {Math.round(avgPeakDb)} dB (range {Math.round(peakRange)} dB)</Text>
+                      <Text style={styles.summaryRow}>Avg attack: {Math.round(avgAttack)} ms</Text>
+                      <Text style={styles.summaryRow}>Avg gap: {avgGap.toFixed(1)}s between swings</Text>
+                    </>
+                  );
+                })()}
               </View>
             ) : null}
           </View>
@@ -422,6 +458,28 @@ function useStyles() {
         },
         strikeList: { gap: 2, marginTop: 4 },
         strikeRow: { color: theme.colors.text_muted, fontSize: 11, fontFamily: 'Courier' },
+        summaryCard: {
+          marginTop: 12,
+          paddingVertical: 10,
+          paddingHorizontal: 12,
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: theme.colors.accent,
+          backgroundColor: theme.colors.accent_muted,
+          gap: 3,
+        },
+        summaryHeader: {
+          color: theme.colors.accent,
+          fontSize: 10,
+          fontWeight: '900',
+          letterSpacing: 1,
+          marginBottom: 4,
+        },
+        summaryRow: {
+          color: theme.colors.text_primary,
+          fontSize: 12,
+          fontWeight: '600',
+        },
         diagCard: {
           backgroundColor: theme.colors.surface_elevated,
           borderColor: theme.colors.border,
