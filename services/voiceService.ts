@@ -42,6 +42,10 @@ export const configureAudioForRecording =
   };
 
 const CAPTURE_RECORDING_OPTIONS: Audio.RecordingOptions = {
+  // 2026-05-25 — Fix A: enable metering so captureUtterance can detect
+  // silence and auto-stop. Required at root level for the status
+  // callback to receive `metering` (dB) values.
+  isMeteringEnabled: true,
   android: {
     extension: '.m4a',
     outputFormat: Audio.AndroidOutputFormat.MPEG_4,
@@ -63,6 +67,17 @@ const CAPTURE_RECORDING_OPTIONS: Audio.RecordingOptions = {
   },
   web: { mimeType: 'audio/webm', bitsPerSecond: 32000 },
 };
+
+// 2026-05-25 — Fix A: silence-VAD thresholds.
+// metering returns dB level; quieter = more negative. Typical room
+// ambient is ~ -55 dB, normal speech ~ -25 to -10 dB. A threshold of
+// -40 dB cleanly separates "user talking" from "user silent." If three
+// continuous seconds of below-threshold readings come in AND the user
+// has spoken at least once (so we don't auto-stop on dead silence
+// before they start), end the recording early.
+const SILENCE_DB_THRESHOLD = -40;
+const SILENCE_TIMEOUT_MS = 3000;
+const SPEECH_DETECT_DB = -30; // higher bar to confirm "they spoke at least once"
 
 /**
  * Record audio for up to {timeoutMs}, transcribe, and return the text.
@@ -93,14 +108,40 @@ export const captureUtterance = async (
     const { granted } = await Audio.requestPermissionsAsync();
     if (!granted) return null;
     await configureAudioForRecording();
-    const r = await Audio.Recording.createAsync(CAPTURE_RECORDING_OPTIONS);
+
+    // 2026-05-25 — Fix A: track silence + speech-onset via metering.
+    // hasSpoken flips true once a metering reading exceeds
+    // SPEECH_DETECT_DB. lastLoudAt tracks the most recent above-threshold
+    // sample. The wait loop below breaks early when (hasSpoken AND
+    // silence sustained ≥ SILENCE_TIMEOUT_MS).
+    let hasSpoken = false;
+    let lastLoudAt = Date.now();
+
+    const r = await Audio.Recording.createAsync(
+      CAPTURE_RECORDING_OPTIONS,
+      (status) => {
+        if (!status.isRecording) return;
+        const metering = (status as { metering?: number }).metering;
+        if (typeof metering !== 'number') return;
+        if (metering > SPEECH_DETECT_DB) hasSpoken = true;
+        if (metering > SILENCE_DB_THRESHOLD) lastLoudAt = Date.now();
+      },
+      100, // 100ms update interval — cheap and responsive
+    );
     recording = r.recording;
     currentRecording = recording;
 
-    // Wait up to timeoutMs OR until stopCapture flips the flag.
+    // Wait up to timeoutMs OR until stopCapture flips the flag OR
+    // silence-VAD trips early (Fix A).
     const start = Date.now();
     while (Date.now() - start < timeoutMs && !captureCancelled) {
       await new Promise(resolve => setTimeout(resolve, 100));
+      // Silence-VAD early stop: only after user has actually spoken
+      // (avoid auto-stop on dead silence before they start) AND
+      // sustained quiet for ≥ SILENCE_TIMEOUT_MS.
+      if (hasSpoken && Date.now() - lastLoudAt >= SILENCE_TIMEOUT_MS) {
+        break;
+      }
     }
 
     if (captureCancelled) {

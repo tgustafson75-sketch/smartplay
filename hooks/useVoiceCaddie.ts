@@ -689,6 +689,71 @@ export const useVoiceCaddie = ({
     await speak(text, voiceGender, language, apiUrl, { userInitiated: true });
   };
 
+  // ── FOLLOW-UP LISTEN LOOP (Fix B) ──────────
+  //
+  // After Kevin's reply ends with a question, this opens the mic for ~6s
+  // automatically. If the user answers, the transcript is sent straight
+  // to the brain (we know it's an answer, not a fresh command — skip the
+  // intent classifier per the existing isAwaitingFollowUp bypass at line
+  // 760). If silence, a gentle nudge plays and the mic opens once more.
+  // If silence again, we quietly idle.
+  const runFollowUpListenLoop = useCallback(async (): Promise<void> => {
+    const FOLLOW_UP_CAPTURE_MS = 6000;
+    const processFollowUp = async (transcript: string): Promise<void> => {
+      const trimmed = transcript.trim();
+      if (!trimmed) return;
+      // Match the manual-tap pattern: record the user turn, send to
+      // brain, speak, then check if Kevin asked ANOTHER question —
+      // recurse via this same loop so a multi-turn back-and-forth
+      // works ("you good?" → "actually one more thing" → ...).
+      recordUserTurn(trimmed);
+      wrappedOnVoiceStateChange('thinking');
+      const reply = await sendToBrain(trimmed);
+      const checked = { ...reply, ...checkContent(reply.text, reply.audioBase64) };
+      if (checked.toolAction) onToolAction?.(checked.toolAction);
+      onResponseReceived(checked.text);
+      recordKevinTurn(checked.text);
+      wrappedOnVoiceStateChange('speaking');
+      await stopSpeaking();
+      if (checked.audioBase64 && voiceEnabled && !discreteMode) {
+        await speakFromBase64(checked.audioBase64, { userInitiated: true });
+      } else {
+        await speakResponse(checked.text);
+      }
+      // Recurse one level if Kevin asked yet another question.
+      if ((checked.text ?? '').trim().endsWith('?')) {
+        await runFollowUpListenLoop();
+      }
+    };
+
+    try {
+      // Round 1
+      wrappedOnVoiceStateChange('listening');
+      const round1 = await captureUtterance(FOLLOW_UP_CAPTURE_MS, apiUrl, language);
+      if (round1 && round1.trim()) {
+        await processFollowUp(round1);
+        return;
+      }
+      // Round 2 — gentle nudge then one more listen.
+      const nudge = "Did you need some guidance, or are you good?";
+      onResponseReceived(nudge);
+      recordKevinTurn(nudge);
+      wrappedOnVoiceStateChange('speaking');
+      await speakResponse(nudge);
+      wrappedOnVoiceStateChange('listening');
+      const round2 = await captureUtterance(FOLLOW_UP_CAPTURE_MS, apiUrl, language);
+      if (round2 && round2.trim()) {
+        await processFollowUp(round2);
+        return;
+      }
+      // Silent twice — quietly end. No final "okay, talk later" line;
+      // user has clearly disengaged.
+    } catch (e) {
+      console.log('[voice] follow-up listen loop failed (non-fatal):', e);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceEnabled, discreteMode, voiceGender, language, apiUrl]);
+
   // ── PROCESS AUDIO URI (shared by manual + VAD) ────
 
   const processAudioUri = useCallback(async (uri: string, opts?: { source?: 'manual' | 'vad' }): Promise<void> => {
@@ -897,6 +962,20 @@ export const useVoiceCaddie = ({
       } else {
         await speakResponse(kevinResponse.text);
       }
+
+      // 2026-05-25 — Fix B: auto-listen after Kevin asks a follow-up.
+      // When Kevin's reply ends with a question, open the mic for
+      // ~6s automatically. If user replies → process via the brain
+      // (skipping intent classifier — Kevin's question framed the
+      // response). If silence → gentle nudge → 6s more. If silence
+      // again → quietly idle. Eliminates the "Kevin asks but isn't
+      // listening" gap Tim flagged tonight.
+      const kevinText = (kevinResponse.text ?? '').trim();
+      const endsWithQuestion = kevinText.endsWith('?');
+      if (endsWithQuestion && voiceEnabled && !discreteMode) {
+        await runFollowUpListenLoop();
+      }
+
       wrappedOnVoiceStateChange('idle');
 
     } catch (err) {
