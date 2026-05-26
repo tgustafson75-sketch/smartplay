@@ -41,7 +41,10 @@ Available intents:
    - "record me face on" / "record face on" / "face-on swing" / "front view swing" -> { tool_name: "smartmotion", angle: "face_on", auto_start: true }
    - "record my swing down the line" -> { tool_name: "smartmotion", angle: "down_the_line", auto_start: true }
    - "record my face on swing" -> { tool_name: "smartmotion", angle: "face_on", auto_start: true }
-   - "mark the tee" / "mark tee" / "mark the tee box" / "I'm at the tee" / "open Mark Tee" -> { tool_name: "mark_tee" }
+   - "mark the tee" / "mark tee" / "mark the tee box" / "I'm at the tee" / "this is the tee" / "this is the tee box" / "mark this tee" / "open Mark Tee" -> { tool_name: "mark_tee" }
+   - "mark the green" / "mark green" / "mark the pin" / "mark the flag" / "mark this as the pin" / "this is the pin" / "I'm on the green" / "I'm at the pin" / "mark this spot" / "drop a pin here" / "open Mark Green" -> { tool_name: "mark_green" }
+   - "refresh GPS" / "GPS is wrong" / "fix my location" / "get a fresh fix" / "reset GPS" / "GPS is off" / "lock my GPS" -> { tool_name: "refresh_gps" }
+   - "open smartplay" / "show me smartplay" / "smart play" / "give me the smart play" / "what's the smart play here" / "smartplay here" -> { tool_name: "smartplay" }
    - "open Coach Mode" / "coach mode" / "start coaching" / "let's coach" / "watch my student" -> { tool_name: "coach_mode" }
    - "I'm coaching Emma" / "coach Mike" / "let's coach Sarah" / "I'm gonna coach Jenny" / "watch my student Mike" -> { tool_name: "coach_mode", player_name: "Emma" } (extract the FIRST NAME verbatim into player_name; preserves capitalization as spoken)
    - "start cage session" / "start practice" / "open cage mode" / "cage mode" / "let's practice" / "I'm at the range" -> { tool_name: "cage_mode" }

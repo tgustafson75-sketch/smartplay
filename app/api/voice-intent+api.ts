@@ -36,7 +36,10 @@ Available intents:
    - "open acoustic test" / "acoustic test bench" / "test bench" / "test the mic" -> { tool_name: "acoustic" }
    - "open GPS test" / "GPS test bench" / "test the GPS" -> { tool_name: "gps_test" }
    - "mark the green" / "mark green" / "I'm at the green" / "open Mark Green" -> { tool_name: "mark_green" }
-   - "mark the tee" / "mark tee" / "mark the tee box" / "I'm at the tee" / "open Mark Tee" -> { tool_name: "mark_tee" }
+   - "mark the tee" / "mark tee" / "mark the tee box" / "I'm at the tee" / "this is the tee" / "this is the tee box" / "mark this tee" / "open Mark Tee" -> { tool_name: "mark_tee" }
+   - "mark the green" / "mark green" / "mark the pin" / "mark the flag" / "mark this as the pin" / "this is the pin" / "I'm on the green" / "I'm at the pin" / "mark this spot" / "drop a pin here" / "open Mark Green" -> { tool_name: "mark_green" }
+   - "refresh GPS" / "GPS is wrong" / "fix my location" / "get a fresh fix" / "reset GPS" / "GPS is off" / "lock my GPS" -> { tool_name: "refresh_gps" }
+   - "open smartplay" / "show me smartplay" / "smart play" / "give me the smart play" / "what's the smart play here" / "smartplay here" -> { tool_name: "smartplay" }
    - "open Coach Mode" / "coach mode" / "start coaching" / "let's coach" / "watch my student" -> { tool_name: "coach_mode" }
    - "I'm coaching Emma" / "coach Mike" / "let's coach Sarah" / "I'm gonna coach Jenny" -> { tool_name: "coach_mode", player_name: "Emma" } (extract the first name verbatim into player_name; preserves capitalization as spoken)
    - "start cage session" / "start practice" / "open cage mode" / "cage mode" / "let's practice" / "I'm at the range" -> { tool_name: "cage_mode" }

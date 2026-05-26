@@ -63,7 +63,16 @@ export default async function handler(
     // toward that language. Per-language priming below; English path
     // omits the prompt so accent-thick English speakers still transcribe
     // cleanly.
+    // 2026-05-25 — Fix S: bias Whisper toward the SmartPlay domain
+    // vocabulary so wind/cart-noise mistranscriptions stop ("smartmotion"
+    // → "spark motion", "hole views" → "hull views", caddie names
+    // misheard, golf vocab mangled). The English path used to omit the
+    // prompt; now it primes with our product names + golf vocab so the
+    // recurring mis-hears flagged in tonight's round stop polluting the
+    // issue log + voice-intent classifier.
+    const EN_PRIMING = 'SmartPlay Caddie. SmartMotion, SmartVision, SmartFinder, TightLie, SwingLab, Cage Mode, Coach Mode, Quick Record. Caddies: Kevin, Tank, Serena, Harry. Hole views, hole view, mark the tee, mark the pin, mark the green. Golf: fairway, green, tee, pin, flag, par, bogey, birdie, eagle, slice, hook, draw, fade, yardage, approach, layup, wedge, driver, putter, iron, sand, bunker, rough.';
     const PRIMING_PROMPT: Record<string, string> = {
+      en: EN_PRIMING,
       es: 'Transcripción en español. Términos de golf: hierro, madera, putter, green, tee, bunker, fairway, swing.',
       zh: '中文转录。高尔夫术语:铁杆,木杆,推杆,果岭,发球台,沙坑,球道,挥杆。',
     };
@@ -76,9 +85,27 @@ export default async function handler(
 
     try { fs.unlinkSync(filePath); } catch { /* ignore cleanup errors */ }
 
-    console.log('[transcribe] result:', transcription.text);
+    // 2026-05-25 — Fix S.2: post-Whisper substitution safety net. Even
+    // with the priming prompt, the recurring long-tail mis-hears slip
+    // through occasionally (especially with wind / cart noise). Keep
+    // this table SMALL and additive — only known recurring patterns
+    // from real on-course logs. Case-insensitive, word-boundary.
+    const SUBSTITUTIONS: ReadonlyArray<[RegExp, string]> = [
+      [/\bspark motion\b/gi, 'SmartMotion'],
+      [/\bsmart bishop\b/gi, 'SmartVision'],
+      [/\bsmart fission\b/gi, 'SmartVision'],
+      [/\bsmart finger\b/gi, 'SmartFinder'],
+      [/\bspark finder\b/gi, 'SmartFinder'],
+      [/\bhull views?\b/gi, 'hole view'],
+      [/\bwhole views?\b/gi, 'hole view'],
+      [/\btight light\b/gi, 'TightLie'],
+    ];
+    let cleanedText = transcription.text;
+    for (const [re, sub] of SUBSTITUTIONS) cleanedText = cleanedText.replace(re, sub);
 
-    return res.status(200).json({ text: transcription.text });
+    console.log('[transcribe] result:', cleanedText, cleanedText !== transcription.text ? '(post-substitution)' : '');
+
+    return res.status(200).json({ text: cleanedText });
 
   } catch (err: unknown) {
     // Audit fix: was returning HTTP 200 with `{error,text:''}` which made
