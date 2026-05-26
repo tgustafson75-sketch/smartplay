@@ -76,8 +76,17 @@ const FIX_STALENESS_MS = 30_000;
 // a beat"). Clears after WARMUP_FRESH_FIXES_REQUIRED consecutive
 // good-quality (≤15m accuracy) fixes.
 const WARMUP_FRESH_FIXES_REQUIRED = 3;
+// 2026-05-26 — Fix CL: hard ceiling on warmup. If the user resumes from
+// background indoors (or anywhere GPS won't deliver), no good fixes
+// arrive, warmupConsecutiveGood never advances, and isWarmingUp stays
+// true forever — yardages stay flagged as "GPS just woke up, give it a
+// beat" indefinitely until the next outdoor walk. Force-clear after this
+// long even without good fixes so downstream consumers stop hedging
+// once the warm-up is statistically over (whether or not GPS cooperated).
+const WARMUP_HARD_TIMEOUT_MS = 30_000;
 let isWarmingUp = false;
 let warmupConsecutiveGood = 0;
+let warmupStartedAt = 0;
 
 // Phase 405 wave 2 — "GPS signal weak" callout. When accuracy stays at
 // weak (>15m) or none for this long during an active round, fire the
@@ -197,7 +206,15 @@ function processFix(raw: GpsFix): boolean {
   // One bad fix resets the counter so the flag holds through any
   // transient bad-fix run mid-warmup.
   if (isWarmingUp) {
-    if (fix.accuracy_m != null && fix.accuracy_m <= 15) {
+    // 2026-05-26 — Fix CL: hard timeout. If we've been warming up for
+    // WARMUP_HARD_TIMEOUT_MS without the good-streak threshold landing
+    // (e.g. user resumed indoors), clear the flag anyway so downstream
+    // consumers stop hedging forever.
+    if (warmupStartedAt > 0 && Date.now() - warmupStartedAt >= WARMUP_HARD_TIMEOUT_MS) {
+      isWarmingUp = false;
+      warmupConsecutiveGood = 0;
+      breadcrumb('warmup_cleared_timeout', { ms_elapsed: Date.now() - warmupStartedAt });
+    } else if (fix.accuracy_m != null && fix.accuracy_m <= 15) {
       warmupConsecutiveGood++;
       if (warmupConsecutiveGood >= WARMUP_FRESH_FIXES_REQUIRED) {
         isWarmingUp = false;
@@ -436,6 +453,7 @@ async function handleAppStateChange(next: AppStateStatus): Promise<void> {
   // WARMUP_FRESH_FIXES_REQUIRED consecutive good fixes have landed.
   isWarmingUp = true;
   warmupConsecutiveGood = 0;
+  warmupStartedAt = Date.now();
   await restartWatch();
   // Force a one-shot read so consumers don't sit on a stale fix while
   // the new watch warms up.
@@ -524,6 +542,7 @@ export async function forceRefreshGps(): Promise<GpsFix | null> {
   // first few fixes after a forced restart can be cached/low-quality.
   isWarmingUp = true;
   warmupConsecutiveGood = 0;
+  warmupStartedAt = Date.now();
   await startWatchInternal();
   breadcrumb('manager_force_refresh');
 
