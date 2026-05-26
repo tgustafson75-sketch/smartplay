@@ -120,10 +120,23 @@ export default function VideoAnnotationOverlay() {
   const undo = () => setShapes(prev => prev.slice(0, -1));
   const clearAll = () => { setShapes([]); setPendingTwoPoint(null); setPendingPath(''); pendingPathRef.current = ''; };
 
-  // Track `enabled` in a ref so the stable PanResponder closure sees
-  // current state without rebuilding the responder on every toggle.
+  // 2026-05-26 — Fix CK: the stable PanResponder closure was reading
+  // `enabled`, `tool`, and `color` from the INITIAL render's closure
+  // (all captured at module-eval). After the user tapped DRAW, the
+  // capture-phase callbacks let the gesture in via enabledRef (correct),
+  // but every handler body immediately returned because the closure
+  // still saw enabled === false. Same staleness for tool ('freehand'
+  // initial) and color ('#ffffff' initial). Result: Tim tapped DRAW,
+  // picked a color, dragged on the video, and saw NOTHING — no stroke,
+  // no error, just silent failure (his exact report).
+  //
+  // Fix: ALL handler-body reads go through refs, not closure variables.
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
+  const toolRef = useRef(tool);
+  toolRef.current = tool;
+  const colorRef = useRef(color);
+  colorRef.current = color;
 
   const panResponder = useRef(
     PanResponder.create({
@@ -141,33 +154,34 @@ export default function VideoAnnotationOverlay() {
       onMoveShouldSetPanResponder: () => enabledRef.current,
       onPanResponderTerminationRequest: () => !enabledRef.current,
       onPanResponderGrant: (e: GestureResponderEvent) => {
-        if (!enabled) return;
+        if (!enabledRef.current) return;
         const { locationX, locationY } = e.nativeEvent;
-        if (tool === 'freehand') {
+        const t = toolRef.current;
+        if (t === 'freehand') {
           const p = `M ${locationX.toFixed(1)} ${locationY.toFixed(1)}`;
           setPendingPath(p);
           pendingPathRef.current = p;
-        } else if (tool === 'text') {
+        } else if (t === 'text') {
           setTextInputModal({ x: locationX, y: locationY });
         } else {
           onTapTwoPoint(locationX, locationY);
         }
       },
       onPanResponderMove: (e: GestureResponderEvent) => {
-        if (!enabled || tool !== 'freehand') return;
+        if (!enabledRef.current || toolRef.current !== 'freehand') return;
         const { locationX, locationY } = e.nativeEvent;
         const next = `${pendingPathRef.current} L ${locationX.toFixed(1)} ${locationY.toFixed(1)}`;
         pendingPathRef.current = next;
         setPendingPath(next);
       },
       onPanResponderRelease: () => {
-        if (!enabled || tool !== 'freehand') return;
+        if (!enabledRef.current || toolRef.current !== 'freehand') return;
         const d = pendingPathRef.current;
         if (d && d.length > 0) {
           addShape({
             id: `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
             type: 'freehand',
-            color,
+            color: colorRef.current,
             d,
           });
         }
@@ -200,9 +214,17 @@ export default function VideoAnnotationOverlay() {
       {/* Top toolbar — toggle DRAW mode + per-tool selection */}
       <View style={styles.toolbar} pointerEvents="box-none">
         <View style={styles.toolbarPills} pointerEvents="auto">
+          {/* 2026-05-26 — Tim wanted the annotation toolkit rebranded
+              as 'SmartCapture' so it reads as an intentional, named
+              feature rather than a generic draw toggle. Sits inside
+              the Smart* family (SmartMotion / SmartVision / SmartFinder /
+              SmartPlay) and reinforces that this is the official mark-
+              up + screenshot-save channel. Full screenshot-export flow
+              is a follow-up batch; rename + the Fix CK stroke fix ship
+              together so the rebrand also works the first time. */}
           <ToolPill
             icon={enabled ? 'create' : 'create-outline'}
-            label={enabled ? 'DRAWING' : 'DRAW'}
+            label={enabled ? 'SMARTCAPTURE ON' : 'SmartCapture'}
             active={enabled}
             onPress={() => setEnabled(v => !v)}
             wide
