@@ -25,6 +25,10 @@ import * as Location from 'expo-location';
 // Phase 407 — distance helper for course-locator GPS sort
 import { haversineYards } from '../../utils/geoDistance';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
+// 2026-05-26 — Fix CA: Play tab was hardcoded dark palette while the
+// rest of the app respected useTheme/light mode. Importing here so
+// the StyleSheet can be themed via makeStyles(colors) at the bottom.
+import { useTheme } from '../../contexts/ThemeContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useRoundStore } from '../../store/roundStore';
@@ -225,6 +229,12 @@ type SearchKind = 'courses' | 'range_practice';
 
 export default function PlayTab() {
   const router = useRouter();
+  // 2026-05-26 — Fix CA: theme-aware styles. Without this the Play
+  // tab stayed dark even when the app was in light mode (every other
+  // tab respected useTheme). makeStyles() is defined at the bottom
+  // of the file and re-runs on theme change.
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   // 2026-05-24 — beta-minimal responsive: constrain content to a
   // centered max-width on wide surfaces (fold-open, tablet, landscape).
   // Phone portrait + fold-closed render unchanged.
@@ -1167,19 +1177,25 @@ export default function PlayTab() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#060f09' },
+// 2026-05-26 — Fix CA: themed StyleSheet. Hex codes that matched the
+// dark-theme tokens are pulled from `c` so light mode renders correctly
+// throughout. Semantic colors (Hayes red/blue stripe, error red, warning
+// yellow, brand teal accent) are left as literals because they shouldn't
+// flip with theme.
+function makeStyles(c: ReturnType<typeof useTheme>['colors']) {
+return StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.background },
 
   tournamentCta: {
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: 12, marginTop: 12,
     paddingHorizontal: 14, paddingVertical: 14,
-    backgroundColor: '#0d2418',
+    backgroundColor: c.surface_elevated,
     borderRadius: 10,
-    borderWidth: 1, borderColor: '#1e3a28',
+    borderWidth: 1, borderColor: c.border,
   },
-  tournamentCtaTitle: { color: '#00C896', fontSize: 15, fontWeight: '900' },
-  tournamentCtaSub: { color: '#9ca3af', fontSize: 11, marginTop: 4, lineHeight: 16 },
+  tournamentCtaTitle: { color: c.accent, fontSize: 15, fontWeight: '900' },
+  tournamentCtaSub: { color: c.text_muted, fontSize: 11, marginTop: 4, lineHeight: 16 },
 
   // 2026-05-24 — Hayes Open card (Memorial Day weekend skin). Subtle
   // red/blue stripe motif (USA flag colors) without going overboard;
@@ -1219,26 +1235,26 @@ const styles = StyleSheet.create({
   banner: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: '#0a0f0c', borderBottomWidth: 1, borderBottomColor: '#1e3a28',
+    backgroundColor: c.background, borderBottomWidth: 1, borderBottomColor: c.border,
   },
   bannerLogoWrap: {
     width: 48, height: 48, borderRadius: 24,
-    borderWidth: 2, borderColor: '#00C896',
+    borderWidth: 2, borderColor: c.accent,
     alignItems: 'center', justifyContent: 'center', marginRight: 10,
     overflow: 'hidden',
   },
   bannerLogo: { width: '100%', height: '100%' },
   bannerTitle: { fontSize: 18, fontWeight: '900' },
-  bannerSub: { color: '#6b7d72', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginTop: 2 },
+  bannerSub: { color: c.text_muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, marginTop: 2 },
 
   activeRoundBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     marginHorizontal: 12, marginTop: 12,
     paddingHorizontal: 14, paddingVertical: 12,
     backgroundColor: 'rgba(0, 200, 150, 0.10)',
-    borderRadius: 12, borderWidth: 1, borderColor: '#00C896',
+    borderRadius: 12, borderWidth: 1, borderColor: c.accent,
   },
-  activeRoundLabel: { color: '#00C896', fontSize: 10, fontWeight: '800', letterSpacing: 1.4 },
+  activeRoundLabel: { color: c.accent, fontSize: 10, fontWeight: '800', letterSpacing: 1.4 },
   activeRoundCourse: { color: '#e8f5e9', fontSize: 14, fontWeight: '700', marginTop: 2 },
   endRoundBtn: {
     paddingHorizontal: 14, paddingVertical: 8,
@@ -1248,17 +1264,17 @@ const styles = StyleSheet.create({
   endRoundBtnText: { color: '#ef4444', fontSize: 13, fontWeight: '800' },
 
   headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-  h1: { color: '#fff', fontSize: 22, fontWeight: '900' },
-  h1Sub: { color: '#6b7d72', fontSize: 12, marginTop: 2 },
+  h1: { color: c.text_primary, fontSize: 22, fontWeight: '900' },
+  h1Sub: { color: c.text_muted, fontSize: 12, marginTop: 2 },
   scopeBtn: {
     width: 40, height: 40, borderRadius: 8,
-    borderWidth: 1.5, borderColor: '#00C896',
+    borderWidth: 1.5, borderColor: c.accent,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(0,200,150,0.10)',
   },
 
   sectionLabel: {
-    color: '#6b7d72', fontSize: 11, fontWeight: '700',
+    color: c.text_muted, fontSize: 11, fontWeight: '700',
     letterSpacing: 1.6, paddingHorizontal: 16, marginTop: 16, marginBottom: 8,
   },
   factorGrid: {
@@ -1266,28 +1282,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   factorCard: {
-    width: '48%', backgroundColor: '#0d1a0d',
-    borderRadius: 12, borderWidth: 1, borderColor: '#1e3a28',
+    width: '48%', backgroundColor: c.surface,
+    borderRadius: 12, borderWidth: 1, borderColor: c.border,
     padding: 12, gap: 4,
   },
-  factorCardActive: { borderColor: '#00C896', backgroundColor: '#0d2418' },
-  factorTitle: { color: '#fff', fontSize: 13, fontWeight: '800' },
-  factorTitleActive: { color: '#00C896' },
-  factorSub: { color: '#6b7d72', fontSize: 11, lineHeight: 15 },
+  factorCardActive: { borderColor: c.accent, backgroundColor: c.surface_elevated },
+  factorTitle: { color: c.text_primary, fontSize: 13, fontWeight: '800' },
+  factorTitleActive: { color: c.accent },
+  factorSub: { color: c.text_muted, fontSize: 11, lineHeight: 15 },
   factorRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, flexWrap: 'wrap' },
   chip: {
     paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 20, borderWidth: 1, borderColor: '#1e3a28',
-    backgroundColor: '#0d1a0d',
+    borderRadius: 20, borderWidth: 1, borderColor: c.border,
+    backgroundColor: c.surface,
   },
-  chipActive: { borderColor: '#00C896', backgroundColor: '#0d2418' },
-  chipText: { color: '#9ca3af', fontSize: 12, fontWeight: '700' },
-  chipTextActive: { color: '#00C896' },
+  chipActive: { borderColor: c.accent, backgroundColor: c.surface_elevated },
+  chipText: { color: c.text_muted, fontSize: 12, fontWeight: '700' },
+  chipTextActive: { color: c.accent },
   notesInput: {
     marginHorizontal: 16, marginTop: 4,
-    backgroundColor: '#0d1a0d', borderColor: '#1e3a28', borderWidth: 1,
+    backgroundColor: c.surface, borderColor: c.border, borderWidth: 1,
     borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
-    color: '#fff', fontSize: 13, minHeight: 56, textAlignVertical: 'top',
+    color: c.text_primary, fontSize: 13, minHeight: 56, textAlignVertical: 'top',
   },
   notesRow: {
     flexDirection: 'row',
@@ -1310,14 +1326,14 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#1e3a28',
-    backgroundColor: '#0d1a0d',
+    borderColor: c.border,
+    backgroundColor: c.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   notesActionBtnActive: {
-    backgroundColor: '#00C896',
-    borderColor: '#00C896',
+    backgroundColor: c.accent,
+    borderColor: c.accent,
   },
   startBigBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
@@ -1327,16 +1343,16 @@ const styles = StyleSheet.create({
   localList: { paddingHorizontal: 16, gap: 6 },
   localRow: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#0d1a0d', borderRadius: 12,
-    borderWidth: 1, borderColor: '#1e3a28',
+    backgroundColor: c.surface, borderRadius: 12,
+    borderWidth: 1, borderColor: c.border,
     padding: 8, gap: 10,
   },
-  localRowActive: { borderColor: '#00C896' },
-  localThumb: { width: 56, height: 56, borderRadius: 8, overflow: 'hidden', backgroundColor: '#060f09' },
+  localRowActive: { borderColor: c.accent },
+  localThumb: { width: 56, height: 56, borderRadius: 8, overflow: 'hidden', backgroundColor: c.background },
   localThumbImg: { width: '100%', height: '100%' },
   thumbPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  localName: { color: '#fff', fontSize: 15, fontWeight: '800' },
-  localMeta: { color: '#6b7d72', fontSize: 12, marginTop: 2 },
+  localName: { color: c.text_primary, fontSize: 15, fontWeight: '800' },
+  localMeta: { color: c.text_muted, fontSize: 12, marginTop: 2 },
   infoBtn: { padding: 6 },
   // Phase 407 — distance-from-player pill on each course row. Sits
   // between the meta text and the active-state checkmark. Subtle teal
@@ -1351,7 +1367,7 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   distancePillText: {
-    color: '#00C896',
+    color: c.accent,
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 0.5,
@@ -1380,60 +1396,61 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   atCourseBannerStrong: {
-    color: '#00C896',
+    color: c.accent,
     fontWeight: '800',
   },
 
   kindRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginBottom: 8 },
   kindBtn: {
     flex: 1, paddingVertical: 12, borderRadius: 10,
-    borderWidth: 1, borderColor: '#1e3a28',
-    backgroundColor: '#0d1a0d', alignItems: 'center',
+    borderWidth: 1, borderColor: c.border,
+    backgroundColor: c.surface, alignItems: 'center',
   },
-  kindBtnActive: { borderColor: '#00C896', backgroundColor: 'rgba(0,200,150,0.08)' },
-  kindText: { color: '#9ca3af', fontSize: 14, fontWeight: '700' },
-  kindTextActive: { color: '#00C896' },
+  kindBtnActive: { borderColor: c.accent, backgroundColor: 'rgba(0,200,150,0.08)' },
+  kindText: { color: c.text_muted, fontSize: 14, fontWeight: '700' },
+  kindTextActive: { color: c.accent },
 
   searchRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, alignItems: 'center' },
   searchInput: {
-    flex: 1, backgroundColor: '#0d1a0d', borderColor: '#1e3a28',
+    flex: 1, backgroundColor: c.surface, borderColor: c.border,
     borderWidth: 1, borderRadius: 10,
     paddingHorizontal: 14, paddingVertical: 12,
-    color: '#fff', fontSize: 14,
+    color: c.text_primary, fontSize: 14,
   },
   searchBtn: {
-    backgroundColor: '#00C896', paddingHorizontal: 18, paddingVertical: 12,
+    backgroundColor: c.accent, paddingHorizontal: 18, paddingVertical: 12,
     borderRadius: 10,
   },
-  searchBtnText: { color: '#0d1a0d', fontWeight: '900', fontSize: 14 },
+  searchBtnText: { color: c.surface, fontWeight: '900', fontSize: 14 },
 
-  statusText: { color: '#6b7d72', fontSize: 12, paddingHorizontal: 16, paddingTop: 10 },
+  statusText: { color: c.text_muted, fontSize: 12, paddingHorizontal: 16, paddingTop: 10 },
   statusErr: { color: '#fbbf24', fontSize: 12, paddingHorizontal: 16, paddingTop: 10 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 10 },
 
   selectedCard: {
     marginHorizontal: 16, padding: 12,
-    backgroundColor: '#0d1a0d', borderRadius: 14,
-    borderWidth: 1, borderColor: '#1e3a28',
+    backgroundColor: c.surface, borderRadius: 14,
+    borderWidth: 1, borderColor: c.border,
   },
   selectedHeader: { flexDirection: 'row', gap: 12, alignItems: 'center', marginBottom: 12 },
-  selectedThumb: { width: 64, height: 64, borderRadius: 10, overflow: 'hidden', backgroundColor: '#060f09' },
+  selectedThumb: { width: 64, height: 64, borderRadius: 10, overflow: 'hidden', backgroundColor: c.background },
   selectedThumbImg: { width: '100%', height: '100%' },
-  selectedTitle: { color: '#fff', fontSize: 17, fontWeight: '900' },
-  selectedSub: { color: '#9ca3af', fontSize: 12, marginTop: 2 },
-  selectedStats: { color: '#6b7d72', fontSize: 12, marginTop: 4 },
+  selectedTitle: { color: c.text_primary, fontSize: 17, fontWeight: '900' },
+  selectedSub: { color: c.text_muted, fontSize: 12, marginTop: 2 },
+  selectedStats: { color: c.text_muted, fontSize: 12, marginTop: 4 },
 
   // Single-line three-button row — short labels (Start / View / Log) keep
   // the row tight even on Fold-closed (~344px) without wrapping.
   actionRow: { flexDirection: 'row', gap: 6, flexWrap: 'nowrap' },
   actionBtn: {
     flex: 1, flexDirection: 'row', gap: 4,
-    backgroundColor: 'transparent', borderColor: '#00C896', borderWidth: 1,
+    backgroundColor: 'transparent', borderColor: c.accent, borderWidth: 1,
     paddingVertical: 10, paddingHorizontal: 4, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center',
     minWidth: 0,
   },
-  actionBtnPrimary: { backgroundColor: '#00C896', borderColor: '#00C896' },
-  actionBtnText: { color: '#00C896', fontSize: 12, fontWeight: '800' },
-  actionBtnPrimaryText: { color: '#0d1a0d', fontSize: 12, fontWeight: '900' },
+  actionBtnPrimary: { backgroundColor: c.accent, borderColor: c.accent },
+  actionBtnText: { color: c.accent, fontSize: 12, fontWeight: '800' },
+  actionBtnPrimaryText: { color: c.surface, fontSize: 12, fontWeight: '900' },
 });
+}
