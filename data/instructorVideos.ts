@@ -173,8 +173,10 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
   // 2026-05-26 — 8th slot reserved for Tank-narrated SmartPlay-branded
   // drill content. URL empty until Tank recording lands; consumers
   // detect url === '' and render placeholderThumbnail instead of a
-  // YouTube thumbnail. Placeholder asset = SmartPlay-hoodie + brand
-  // photo Tim provided.
+  // YouTube thumbnail.
+  // Placeholder asset = SmartPlay-hoodie photo Tim provided:
+  // visible face is Tim (the SmartFounder), hooded face is Tank
+  // (kept hidden per persona — Tank's face stays unseen in marketing).
   // TODO 2026-05-26: once Tim saves the placeholder image to
   // assets/drills/tank-caddie.png, uncomment the placeholderThumbnail
   // line below. Required as a require() at module-eval, NOT a string —
