@@ -176,18 +176,20 @@ const LOCAL_COURSES: CourseSummary[] = [
   },
   // 2026-05-24 — Hayes Open courses (Memorial Day weekend trip).
   // Maplewood: Fri+Sat day-to-day GPS validation. Pembroke Pines: Sun.
-  // Centroids approximate; refine on-site from OSM Overpass like the
-  // other 4 corrected courses did 2026-05-17.
+  // 2026-05-26 — Tim playing next weekend in Bethlehem NH. Location +
+  // centroid now match Maplewood Golf Club's actual address
+  // (lat/lng = lockstep with data/localCourseImages.ts Fix BG centroid;
+  // play.tsx hadn't been synced when that file was corrected).
   {
     id: 'local:maplewood',
     club_name: 'Maplewood Golf Club',
-    location: 'Lunenburg, MA',
+    location: 'Bethlehem, NH',
     rating: null,
     slope: null,
     isLocal: true,
     thumbnail: (MAPLEWOOD_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
-    lat: 42.5965,
-    lng: -71.7253,
+    lat: 44.282,
+    lng: -71.683,
   },
   {
     id: 'local:pembroke-pines',
