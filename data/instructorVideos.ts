@@ -23,7 +23,13 @@ export type IssueCategory =
   | 'tempo'
   | 'ball_position'
   | 'grip'
-  | 'posture';
+  | 'posture'
+  // 2026-05-26 — Short-game category added so Randy Chang's "Chang chip"
+  // content has a natural slot. URLs pending verification from Tim's
+  // direct contact with Randy (head pro at Journey @ Pechanga, Temecula).
+  // Randy's YouTube content is well-known under-3-minute instructional
+  // format — exact match for SmartPlay's video length target.
+  | 'chipping';
 
 export interface InstructorVideoLink {
   title: string;
@@ -132,6 +138,22 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
       instructor: 'Mike Malaska · Malaska Golf',
       url: 'https://www.youtube.com/watch?v=l6E-uyQDfqU',
       approxRuntimeSec: 360,
+      verified: false,
+    },
+  },
+  // 2026-05-26 — Randy Chang slot. Head pro at Journey @ Pechanga
+  // (Temecula CA), former PGA pro, prolific YouTube instructor with
+  // under-3-minute videos that inspired SmartPlay's video-length target.
+  // URLs empty until Tim provides the verified "Chang chip" link +
+  // any companion short-game videos. Until then, getInstructorVideo
+  // for this category returns the placeholder shape — the consuming UI
+  // should treat empty `url` as "no video yet, show title only."
+  chipping: {
+    primary: {
+      title: 'Chang Chip — Randy Chang short-game technique',
+      instructor: 'Randy Chang · PGA · Journey at Pechanga',
+      url: '', // TODO 2026-05-26: drop in the verified Chang Chip YouTube URL
+      approxRuntimeSec: 180,
       verified: false,
     },
   },
