@@ -88,13 +88,9 @@ const CARDS: LauncherCardSpec[] = [
     sub: 'Watch + analyze someone else\'s swing · player roster · coach notes',
     route: '/swinglab/coach-mode',
   },
-  {
-    key: 'range',
-    icon: 'videocam-outline',
-    title: 'Range Mode',
-    sub: 'Multi-shot session: range, studio, or backyard cage',
-    route: '/swinglab/range',
-  },
+  // 2026-05-25 — Range Mode retired. Cage Mode handles multi-shot
+  // sessions; SmartMotion handles single-swing capture. Range was the
+  // redundant middle option.
   {
     key: 'drills',
     icon: 'library-outline',

@@ -2622,11 +2622,8 @@ export default function CaddieTab() {
                 label="SmartMotion"
                 onPress={() => { setToolsExpanded(false); router.push('/swinglab/smartmotion' as never); }}
               />
-              <ToolFabIcon
-                icon="videocam-outline"
-                label="Range"
-                onPress={() => { setToolsExpanded(false); router.push('/swinglab/range' as never); }}
-              />
+              {/* 2026-05-25 — Range Mode retired. Cage Mode + SmartMotion
+                  cover the use cases. */}
               <ToolFabIcon
                 icon="library-outline"
                 label="Drills"

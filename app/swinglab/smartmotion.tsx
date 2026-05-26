@@ -387,12 +387,8 @@ export default function SmartMotion() {
             <PoseSourceBadge />
           </View>
         </View>
-        <TouchableOpacity
-          onPress={() => router.push('/swinglab/range' as never)}
-          style={[styles.modeChip, { borderColor: colors.border }]}
-        >
-          <Text style={[styles.modeChipText, { color: colors.text_primary }]}>RANGE MODE</Text>
-        </TouchableOpacity>
+        {/* 2026-05-25 — Range Mode retired (Cage Mode + SmartMotion
+            cover its use cases; Range was a redundant middle option). */}
       </View>
 
       {/* 2026-05-20 — Single-view overlay toggle row (not tabs). Tim:
