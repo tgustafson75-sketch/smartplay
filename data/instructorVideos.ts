@@ -152,7 +152,8 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
     primary: {
       title: 'Chang Chip — Randy Chang short-game technique',
       instructor: 'Randy Chang · PGA · Journey at Pechanga',
-      url: '', // TODO 2026-05-26: drop in the verified Chang Chip YouTube URL
+      // 2026-05-26 — Verified URL provided by Tim direct from Randy.
+      url: 'https://www.youtube.com/watch?v=_iWzD-gSoa8',
       approxRuntimeSec: 180,
       verified: false,
     },
