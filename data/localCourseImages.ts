@@ -254,7 +254,12 @@ export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng:
   // 2026-05-24 — Hayes Open courses. Approximate centroids from
   // public records; refine on-site via OSM Overpass once Tim has
   // walked the property (same correction the other 4 courses got).
-  'maplewood':        { lat: 42.5965,    lng: -71.7253 },
+  // 2026-05-26 — Fix BG: Maplewood Golf Club is in Bethlehem, NH
+  // (NOT Maplewood, MA — Tim's correction). Centroid bumped from
+  // (42.5965, -71.7253) to Bethlehem-area (~44.282, -71.683). Will
+  // refine to true property centroid via OSM Overpass when verified
+  // on-site.
+  'maplewood':        { lat: 44.282,     lng: -71.683 },
   'pembroke-pines':   { lat: 43.1417,    lng: -71.4544 },
 };
 
