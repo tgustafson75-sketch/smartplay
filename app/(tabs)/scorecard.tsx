@@ -105,6 +105,56 @@ export default function Scorecard() {
   const scoreVsPar = totalScore - totalPar;
   const holesPlayed = Object.keys(viewScores).length;
 
+  // 2026-05-25 — Fix AM: scorecard breakdown stats. Putts, fairways
+  // hit %, greens in regulation %. Uses viewShots (per-shot detail)
+  // + viewCourseHoles (par lookup) + viewScores + viewPutts.
+  //
+  // Definitions:
+  //   - Total putts: sum of viewPutts
+  //   - Avg putts/hole: totalPutts / holesPlayed
+  //   - Fairway hits: tee shots (shot_in_hole_index === 1) on par
+  //     4/5 with outcome 'clean' or null. Par 3 tee shots aren't
+  //     counted toward fairway tries (no fairway to hit). Same
+  //     scoping as the dashboard Fix Y stat.
+  //   - GIR proxy: (hole score - hole putts) ≤ (par - 2). When the
+  //     player reached the green in regulation, the remaining strokes
+  //     should be ≤ 2 putts. Honest proxy without an explicit
+  //     "on green" capture — labels as "GIR%" since that's what the
+  //     scorecard convention is.
+  const stats = useMemo(() => {
+    let totalPutts = 0;
+    for (const v of Object.values(viewPutts)) totalPutts += (v as number) ?? 0;
+
+    let teeShotCount = 0;
+    let fairwayHits = 0;
+    for (const s of viewShots) {
+      if (s.shot_in_hole_index !== 1) continue;
+      const holeData = viewCourseHoles.find(h => h.hole === s.hole);
+      if (!holeData || holeData.par < 4) continue;
+      teeShotCount++;
+      if (s.outcome === 'clean' || s.outcome == null) fairwayHits++;
+    }
+    const fairwayPct = teeShotCount === 0 ? null : Math.round((fairwayHits / teeShotCount) * 100);
+
+    let girHoles = 0;
+    let girEligible = 0;
+    for (const [holeStr, score] of Object.entries(viewScores)) {
+      const hole = parseInt(holeStr, 10);
+      const holeData = viewCourseHoles.find(h => h.hole === hole);
+      if (!holeData) continue;
+      const putts = (viewPutts as Record<number, number>)[hole];
+      if (putts == null) continue; // can't compute GIR without putts
+      girEligible++;
+      const strokesToGreen = (score as number) - putts;
+      if (strokesToGreen <= holeData.par - 2) girHoles++;
+    }
+    const girPct = girEligible === 0 ? null : Math.round((girHoles / girEligible) * 100);
+
+    const avgPutts = holesPlayed === 0 ? null : (totalPutts / holesPlayed);
+
+    return { totalPutts, avgPutts, fairwayPct, girPct };
+  }, [viewShots, viewPutts, viewScores, viewCourseHoles, holesPlayed]);
+
   const sumNine = (start: number, end: number): number => {
     let total = 0;
     for (let i = start; i <= end; i++) total += (viewScores as Record<number, number>)[i] ?? 0;
@@ -453,6 +503,44 @@ export default function Scorecard() {
                 </View>
               </>
             )}
+          </View>
+        )}
+
+        {/* 2026-05-25 — Fix AM: second summary row with the breakdown
+            stats Tim flagged tonight (putts, fairways hit %, GIR%).
+            Rendered only when at least one hole is played so the empty
+            state above the round doesn't show a row of '—' tiles.
+            Honest fallbacks: stat is '—' when the input data isn't
+            present (e.g. fairwayPct=null when no tee shots logged). */}
+        {holesPlayed > 0 && (
+          <View style={[styles.summary, { backgroundColor: c.surface, borderColor: c.border, paddingVertical: summaryPadV, marginTop: 8 }]}>
+            <View style={styles.summaryItem}>
+              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>PUTTS</Text>
+              <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
+                {stats.totalPutts > 0 ? stats.totalPutts : '—'}
+              </Text>
+            </View>
+            <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
+            <View style={styles.summaryItem}>
+              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>AVG PUTTS</Text>
+              <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
+                {stats.avgPutts != null ? stats.avgPutts.toFixed(1) : '—'}
+              </Text>
+            </View>
+            <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
+            <View style={styles.summaryItem}>
+              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>FAIRWAY %</Text>
+              <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
+                {stats.fairwayPct != null ? `${stats.fairwayPct}%` : '—'}
+              </Text>
+            </View>
+            <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
+            <View style={styles.summaryItem}>
+              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>GIR %</Text>
+              <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
+                {stats.girPct != null ? `${stats.girPct}%` : '—'}
+              </Text>
+            </View>
           </View>
         )}
 

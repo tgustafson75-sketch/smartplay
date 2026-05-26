@@ -25,6 +25,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useListeningSessionStore } from '../../store/listeningSessionStore';
 import { toggle as toggleListening } from '../../services/listeningSession';
+import {
+  useTrustLevelStore,
+  TRUST_LEVEL_SLIDER_ORDER,
+  type TrustLevel,
+} from '../../store/trustLevelStore';
 
 export interface CaddieMicBadgeProps {
   /** Outer circle size in px. Default 56 matches the brand badge. */
@@ -35,6 +40,29 @@ export interface CaddieMicBadgeProps {
   hideMicIcon?: boolean;
   /** Accessibility label override. */
   accessibilityLabel?: string;
+  /** 2026-05-25 — Fix AN: hide the trust-level quick-cycle chip
+   *  (bottom-left of the badge). Default false — chip is visible on
+   *  the brand row + every other consumer. Pass true for purely-
+   *  decorative uses (intro splash, etc.). */
+  hideTrustChip?: boolean;
+}
+
+// 2026-05-25 — Fix AN: trust-level → icon + short label map for the
+// quick-cycle chip. Each tap on the chip advances to the next level in
+// TRUST_LEVEL_SLIDER_ORDER ([1,5,2,3,4]) so the visual order matches
+// the Settings slider order (Quiet ↔ Cockpit adjacent, both minimal).
+const TRUST_CHIP: Record<TrustLevel, { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
+  1: { icon: 'volume-mute-outline', label: 'Q' },
+  2: { icon: 'person-outline', label: 'C' },
+  3: { icon: 'ear-outline', label: 'A' },
+  4: { icon: 'megaphone-outline', label: 'F' },
+  5: { icon: 'speedometer-outline', label: 'CP' },
+};
+
+function nextTrustLevel(current: TrustLevel): TrustLevel {
+  const idx = TRUST_LEVEL_SLIDER_ORDER.indexOf(current);
+  if (idx === -1) return TRUST_LEVEL_SLIDER_ORDER[0];
+  return TRUST_LEVEL_SLIDER_ORDER[(idx + 1) % TRUST_LEVEL_SLIDER_ORDER.length];
 }
 
 export function CaddieMicBadge({
@@ -42,9 +70,12 @@ export function CaddieMicBadge({
   onPress,
   hideMicIcon = false,
   accessibilityLabel,
+  hideTrustChip = false,
 }: CaddieMicBadgeProps) {
   const { colors } = useTheme();
   const listeningState = useListeningSessionStore((s) => s.state);
+  const trustLevel = useTrustLevelStore((s) => s.level) as TrustLevel;
+  const setTrustLevel = useTrustLevelStore((s) => s.setLevel);
 
   const isListening = listeningState === 'listening';
   const isThinking = listeningState === 'thinking' || listeningState === 'responding';
@@ -89,18 +120,68 @@ export function CaddieMicBadge({
     </View>
   );
 
-  if (handlePress === null) return content;
-  return (
+  // 2026-05-25 — Fix AN: trust-level quick-cycle chip. Sits at the
+  // bottom-left of the badge (opposite the mic chip). Renders as a
+  // sibling of the Pressable so its own onPress doesn't bubble to the
+  // badge tap (and vice versa). Cycles trustLevel via
+  // TRUST_LEVEL_SLIDER_ORDER on each tap. Owner-aware label so the
+  // user sees what level they're flipping to.
+  const trustChipSize = Math.max(18, Math.round(size * 0.34));
+  const trustMeta = TRUST_CHIP[trustLevel] ?? TRUST_CHIP[3];
+  const trustChip = !hideTrustChip ? (
     <Pressable
-      onPress={handlePress}
-      hitSlop={8}
+      onPress={() => setTrustLevel(nextTrustLevel(trustLevel))}
+      hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? (isListening ? 'Stop talking to caddie' : 'Tap to talk to caddie')}
-      accessibilityHint="Starts recording. Tap again to stop."
-      style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+      accessibilityLabel={`Trust level ${trustMeta.label}. Tap to cycle.`}
+      style={({ pressed }) => ([{
+        position: 'absolute',
+        bottom: -2,
+        left: -2,
+        width: trustChipSize,
+        height: trustChipSize,
+        borderRadius: trustChipSize / 2,
+        backgroundColor: 'rgba(13, 36, 24, 0.92)',
+        borderWidth: 1.5,
+        borderColor: colors.accent,
+        alignItems: 'center',
+        justifyContent: 'center',
+        opacity: pressed ? 0.6 : 1,
+        zIndex: 5,
+      }])}
     >
-      {content}
+      <Ionicons
+        name={trustMeta.icon}
+        size={Math.round(trustChipSize * 0.58)}
+        color={colors.accent}
+      />
     </Pressable>
+  ) : null;
+
+  if (handlePress === null) {
+    // No badge press handler — wrap in a positioning View so the chip
+    // can absolutely-position relative to the badge.
+    return (
+      <View style={{ width: ringSize, height: ringSize }}>
+        {content}
+        {trustChip}
+      </View>
+    );
+  }
+  return (
+    <View style={{ width: ringSize, height: ringSize }}>
+      <Pressable
+        onPress={handlePress}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? (isListening ? 'Stop talking to caddie' : 'Tap to talk to caddie')}
+        accessibilityHint="Starts recording. Tap again to stop."
+        style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+      >
+        {content}
+      </Pressable>
+      {trustChip}
+    </View>
   );
 }
 
