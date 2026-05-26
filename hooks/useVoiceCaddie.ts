@@ -763,6 +763,20 @@ export const useVoiceCaddie = ({
   // intent classifier per the existing isAwaitingFollowUp bypass at line
   // 760). If silence, a gentle nudge plays and the mic opens once more.
   // If silence again, we quietly idle.
+  // 2026-05-26 — Fix AP Phase 2: continuous-conversation safety rails.
+  // These ride alongside the existing isCloseIntent gate. They only
+  // activate when settings.continuousConversationMode === true (opt-in).
+  // Module-level (per hook instance) refs so recursive calls share the
+  // accumulator without prop-drilling.
+  const CONTINUOUS_MAX_TURNS = 6;
+  const CONTINUOUS_MAX_SESSION_MS = 120_000;
+  const continuousTurnCountRef = useRef(0);
+  const continuousSessionStartedAtRef = useRef<number>(0);
+  const resetContinuousSession = useCallback(() => {
+    continuousTurnCountRef.current = 0;
+    continuousSessionStartedAtRef.current = Date.now();
+  }, []);
+
   const runFollowUpListenLoop = useCallback(async (): Promise<void> => {
     const FOLLOW_UP_CAPTURE_MS = 6000;
     const processFollowUp = async (transcript: string): Promise<void> => {
@@ -806,12 +820,45 @@ export const useVoiceCaddie = ({
         await speakResponse(checked.text);
       }
       // Recurse one level if Kevin asked yet another question.
-      if ((checked.text ?? '').trim().endsWith('?')) {
+      // 2026-05-26 — Fix AP Phase 2: when continuousConversationMode
+      // is ON, ALSO recurse when the reply doesn't end with `?` — but
+      // honor the safety rails (turn cap + session-time cap). Recursion
+      // still terminates naturally on close-intent (handled above)
+      // or on silence-twice (handled in the calling loop body).
+      const kevinAskedFollowUp = (checked.text ?? '').trim().endsWith('?');
+      const continuous = useSettingsStore.getState().continuousConversationMode;
+      let shouldRecurse = kevinAskedFollowUp;
+      if (continuous && !kevinAskedFollowUp) {
+        const turnsSoFar = continuousTurnCountRef.current;
+        const elapsedMs = continuousSessionStartedAtRef.current === 0
+          ? 0
+          : Date.now() - continuousSessionStartedAtRef.current;
+        if (turnsSoFar >= CONTINUOUS_MAX_TURNS) {
+          console.log('[voice] continuous-mode turn cap reached — ending loop', { turnsSoFar });
+        } else if (elapsedMs >= CONTINUOUS_MAX_SESSION_MS) {
+          console.log('[voice] continuous-mode session-time cap reached — ending loop', { elapsedMs });
+        } else {
+          continuousTurnCountRef.current = turnsSoFar + 1;
+          shouldRecurse = true;
+        }
+      }
+      if (shouldRecurse) {
         await runFollowUpListenLoop();
       }
     };
 
     try {
+      // 2026-05-26 — Fix AP Phase 2: seed the continuous-mode
+      // accumulators only on the OUTER call (start of session). The
+      // recursive inner calls re-enter runFollowUpListenLoop but
+      // shouldn't reset the per-session clock — we only reset when
+      // the session is genuinely starting (turn count is still 0
+      // OR the previous session timed out).
+      if (continuousSessionStartedAtRef.current === 0
+          || Date.now() - continuousSessionStartedAtRef.current >= CONTINUOUS_MAX_SESSION_MS) {
+        resetContinuousSession();
+      }
+
       // Round 1
       wrappedOnVoiceStateChange('listening');
       const round1 = await captureUtterance(FOLLOW_UP_CAPTURE_MS, apiUrl, language);

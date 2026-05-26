@@ -42,6 +42,26 @@ interface SettingsState {
    * kid-mode to anyone else.
    */
   cecilyMode: boolean;
+  /**
+   * 2026-05-26 — Fix AP Phase 2: Continuous Conversation Mode.
+   *
+   * Default OFF. When ON, the follow-up listen loop keeps the mic
+   * open for additional turns even when the caddie's reply doesn't
+   * end with a question mark. Lets the user have a sustained
+   * back-and-forth ("teach me about lag", "how about wrist hinge",
+   * "and what about tempo") without re-tapping the mic.
+   *
+   * Safety rails inside hooks/useVoiceCaddie.runFollowUpListenLoop:
+   *   - Max 6 turns per session (cap on any single chain)
+   *   - Max 120s wall-clock per session (cap on total open time)
+   *   - Close-intent gate (isCloseIntent) ends the chain immediately
+   *   - Silence twice in a row also ends the chain
+   *
+   * These ensure a hot-mic scenario (TV on in background, kid
+   * babbling, etc.) can't loop indefinitely. Opt-in toggle so a
+   * tester who hasn't asked for it sees zero behavior change.
+   */
+  continuousConversationMode: boolean;
   discreteMode: boolean;
   responseMode: 'short' | 'neutral' | 'detailed';
   // Phase 105 — single caddiePersonality is preserved as the "current
@@ -206,6 +226,7 @@ interface SettingsState {
 
   setVoiceEnabled: (v: boolean) => void;
   setCecilyMode: (v: boolean) => void;
+  setContinuousConversationMode: (v: boolean) => void;
   setVoiceGender: (g: 'male' | 'female') => void;
   setLanguage: (l: 'en' | 'es' | 'zh') => void;
   setDiscreteMode: (v: boolean) => void;
@@ -266,6 +287,10 @@ export const useSettingsStore = create<SettingsState>()(
       voiceEnabled: true,
       // 2026-05-26 — Fix BE: default OFF. Opt-in only.
       cecilyMode: false,
+      // 2026-05-26 — Fix AP Phase 2: default OFF. Opt-in only — safety
+      // rails inside the loop handle bounded sessions, but a hot-mic
+      // mode shouldn't surprise testers who didn't request it.
+      continuousConversationMode: false,
       voiceGender: 'male',
       language: 'en',
       discreteMode: false,
@@ -337,6 +362,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
       setCecilyMode: (v) => set({ cecilyMode: v }),
+      setContinuousConversationMode: (v) => set({ continuousConversationMode: v }),
       setVoiceGender: (g) => set({ voiceGender: g }),
       setLanguage: (l) => {
         const prev = get().language;
@@ -586,6 +612,7 @@ export const useSettingsStore = create<SettingsState>()(
       partialize: (s) => ({
         voiceEnabled: s.voiceEnabled,
         cecilyMode: s.cecilyMode,
+        continuousConversationMode: s.continuousConversationMode,
         voiceGender: s.voiceGender,
         language: s.language,
         discreteMode: s.discreteMode,

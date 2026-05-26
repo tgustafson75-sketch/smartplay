@@ -50,6 +50,9 @@ export default function Settings() {
     // 2026-05-26 — Fix BE: Cecily Mode toggle state + setter.
     cecilyMode,
     setCecilyMode,
+    // 2026-05-26 — Fix AP Phase 2: Continuous Conversation toggle.
+    continuousConversationMode,
+    setContinuousConversationMode,
     language,
     discreteMode,
     responseMode,
@@ -872,6 +875,17 @@ export default function Settings() {
             sub={`Kid-friendly free-topic chat for Cecily Rose. ${caddieName} answers any question in warm, simple language. Honors the active language setting.`}
             value={cecilyMode}
             onValueChange={confirmToggle('Cecily Mode', setCecilyMode)}
+          />
+          {/* 2026-05-26 — Fix AP Phase 2: continuous-conversation
+              opt-in toggle. Default off. Safety rails inside the
+              loop: 6-turn cap + 120s wall-clock cap + close-intent
+              gate + silence-twice cap. Useful for sustained chats
+              ("teach me about lag") without re-tapping the mic. */}
+          <ToggleRow
+            label="Continuous Conversation"
+            sub={`${caddieName} keeps the mic open between turns so you can talk back without re-tapping. Caps at 6 turns or 2 minutes per session. Say "I'm good" any time to end.`}
+            value={continuousConversationMode}
+            onValueChange={confirmToggle('Continuous Conversation', setContinuousConversationMode)}
           />
           {/* 2026-05-19 — the "Earbud Tap-to-Talk · Coming soon" row
               moved to the Connected Hardware section below where all
