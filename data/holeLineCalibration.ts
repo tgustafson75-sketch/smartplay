@@ -49,13 +49,31 @@ export interface HoleLineEndpoints {
  */
 export const HOLE_LINE_CALIBRATION: Partial<Record<LocalCourseSlug, Record<number, HoleLineEndpoints>>> = {
   // Maplewood / Settlers Crossing (Bethlehem NH) — 18B screenshots,
-  // 1768×1450 cropped. Example entry seeded from hole 8 (verified
-  // visually: tee near bottom-center, green slightly above center).
-  // Remaining 17 holes pending — populate via manual tagging pass.
+  // 1768×1450 cropped. Coords below are MANUAL VISUAL ESTIMATES
+  // (±50-100px accuracy) from inspecting each cropped image. Holes
+  // not listed fall through to the static (50%, 85%) / (50%, 15%)
+  // default in app/smartvision.tsx — which is fine for holes whose
+  // line is roughly center-vertical (most of them).
+  //
+  // Listed here only when the line is noticeably OFF the centered
+  // axis OR when the green/tee endpoint sits well outside the
+  // default y bands (very short par 3s, doglegs, hazard wraps).
+  //
+  // Future: replace estimates with OpenCV-detected endpoints (the
+  // 18B line is uniform ~#FFFFFF + ~3px wide — Hough transform
+  // finds both endpoints reliably).
   maplewood: {
-    8: { tee: { x: 884, y: 1180 }, green: { x: 950, y: 240 } },
+    // Hole 8: par 3, tee bottom-center, green near top-center (slight
+    // right bias). Reference seed; refined from initial scaffold entry.
+    8: { tee: { x: 884, y: 1190 }, green: { x: 884, y: 188 } },
   },
-  // Palms — empty until tagged.
+  palms: {
+    // Hole 9: par 5, 503Yds. Line bends right around the water hazard;
+    // tee at bottom-right, green near top-center. Big calibration win
+    // vs the centered-axis static fallback which would land the yellow
+    // dot in the middle of the water.
+    9: { tee: { x: 1025, y: 1247 }, green: { x: 920, y: 73 } },
+  },
 };
 
 /**
