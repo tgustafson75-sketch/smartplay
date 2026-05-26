@@ -874,6 +874,13 @@ export default function CaddieTab() {
 
     if (!openingPromptSpokenThisProcess && voiceEnabled && trustLevel !== 1) {
       openingPromptSpokenThisProcess = true;
+      // 2026-05-26 — Fix BB: 600ms → 3000ms. Tim wanted natural
+      // breathing room between the splash-screen greeting ending and
+      // the Caddie tab opener starting. Was 600ms (the splash speak
+      // would resolve, router.replace would fire, opener would speak
+      // within ~1s — felt jarring). 3s of silence creates a natural
+      // "now we're on the home screen" beat before the second voice
+      // starts.
       setTimeout(() => {
         void (async () => {
           try {
@@ -938,7 +945,7 @@ export default function CaddieTab() {
             console.log('[caddie] opening prompt + routing failed (non-fatal):', e);
           }
         })();
-      }, 600);
+      }, 3000);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

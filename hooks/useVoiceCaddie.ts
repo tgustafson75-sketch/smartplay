@@ -51,6 +51,42 @@ import { useSmartFinderStore } from '../store/smartFinderStore';
 // natural chat flows end-to-end without truncation.
 const AUTO_STOP_MS = 12000;
 
+// 2026-05-26 — Fix BA: client-side close-intent matcher for the
+// follow-up listen loop. The brain handles most "no thanks" well, but
+// utterances that combine a negation with a close intent ("no, I'm
+// good") got parsed as a negative response and sometimes elicited
+// another follow-up question ("OK, what wasn't right?"). This gate
+// catches the explicit close phrases here and bails the loop BEFORE
+// the brain call.
+//
+// All patterns require the close phrase to be essentially the WHOLE
+// utterance — anchored at start, optional trailing punctuation only.
+// A real follow-up like "no, stop slicing for me" wouldn't match
+// because the close fragment isn't the whole transcript.
+const CLOSE_INTENT_PATTERNS: RegExp[] = [
+  /^(no[,\s]*)?(i'?m|i\s+am|we'?re|we\s+are)\s+(good|done|fine|cool|all\s*set|all\s*done)\.?$/i,
+  /^(no\s*)?(thanks?|thank\s*you)\s*(though)?\.?$/i,
+  /^nope[,\s]*i'?m\s+good\.?$/i,
+  /^cancel\.?$/i,
+  /^never\s*mind\.?$/i,
+  /^nvm\.?$/i,
+  /^stop\s*talking\.?$/i,
+  /^shut\s*up\.?$/i,
+  /^i\s*hit\s*it\s*(on|by)\s*accident\.?$/i,
+  /^accidental(\s*tap)?\.?$/i,
+  /^that('?s|\s+is)?\s+all\.?$/i,
+  /^(that('?s|\s+is)?\s+)?all\s*good\.?$/i,
+  /^(no[,\s]*)?(that'?s|that\s+is)\s+all\.?$/i,
+  /^bye\.?$/i,
+  /^later\.?$/i,
+  /^talk\s*to\s*you\s*later\.?$/i,
+];
+function isCloseIntent(transcript: string): boolean {
+  const cleaned = transcript.trim().toLowerCase();
+  if (!cleaned) return false;
+  return CLOSE_INTENT_PATTERNS.some(p => p.test(cleaned));
+}
+
 // Phase BM — module-level mic permission cache. Once granted, every tap
 // skips the IPC roundtrip. Stays false on first denial / cold launch.
 //
@@ -726,6 +762,25 @@ export const useVoiceCaddie = ({
     const processFollowUp = async (transcript: string): Promise<void> => {
       const trimmed = transcript.trim();
       if (!trimmed) return;
+
+      // 2026-05-26 — Fix BA: client-side close-intent gate. The brain
+      // is smart enough to NOT ask follow-up questions when the user
+      // says "I'm good", but "no, I'm good" gets parsed as a negation
+      // + content, often eliciting "OK, what wasn't right?" That's a
+      // bad loop. Catch the explicit close phrases here and bail
+      // BEFORE the brain call so the conversation actually ends.
+      //
+      // Phrasing is conservative — only matches utterances that ARE
+      // a close intent on their own (the entire transcript). A real
+      // question like "no idea, stop slicing for me?" wouldn't match
+      // any of these because they require the close phrase to be
+      // essentially the whole utterance.
+      if (isCloseIntent(trimmed)) {
+        console.log('[voice] follow-up close intent matched — ending loop', { transcript: trimmed });
+        recordUserTurn(trimmed);
+        return;
+      }
+
       // Match the manual-tap pattern: record the user turn, send to
       // brain, speak, then check if Kevin asked ANOTHER question —
       // recurse via this same loop so a multi-turn back-and-forth
