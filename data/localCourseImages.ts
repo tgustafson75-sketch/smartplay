@@ -15,6 +15,14 @@
 
 import type { ImageSourcePropType } from 'react-native';
 
+// 2026-05-26 — Fix BJ: all 18 holes refreshed with 18Birdies versions
+// (replacing prior Golfshot screenshots). Same caveats as Maplewood —
+// baked-in 18B chrome (top stats bar, bottom Hole pill, floating
+// yardage bubbles, "Green Maps" icon) needs cropping/masking before
+// public release; the white tee→green line is intentionally kept
+// as a yellow-dot calibration reference. File registration
+// (hole-01.jpg through hole-18.jpg) is unchanged — same paths,
+// same keys; the JPGs themselves were swapped at the bytes level.
 export const PALMS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   1:  require('../assets/courses/palms/hole-01.jpg'),
   2:  require('../assets/courses/palms/hole-02.jpg'),
@@ -193,7 +201,7 @@ export const MAPLEWOOD_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   2:  require('../assets/courses/maplewood/hole-02.jpg'),
   3:  require('../assets/courses/maplewood/hole-03.jpg'),
   4:  require('../assets/courses/maplewood/hole-04.jpg'),
-  // hole 5 pending — falls through to Mapbox
+  5:  require('../assets/courses/maplewood/hole-05.jpg'),
   6:  require('../assets/courses/maplewood/hole-06.jpg'),
   7:  require('../assets/courses/maplewood/hole-07.jpg'),
   8:  require('../assets/courses/maplewood/hole-08.jpg'),
