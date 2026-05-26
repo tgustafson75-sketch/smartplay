@@ -1,7 +1,52 @@
+/**
+ * ════════════════════════════════════════════════════════════════════════
+ *  ⚠️  DEPRECATED TWIN — api/kevin.ts IS CANONICAL
+ * ════════════════════════════════════════════════════════════════════════
+ *
+ * 2026-05-26 — Fix BV: this file is the Expo Router dev-server twin of
+ * /api/kevin.ts (the Vercel serverless function). It runs ONLY in dev
+ * when EXPO_PUBLIC_API_URL is unset (clients fall through to
+ * http://localhost:8081/api/kevin).
+ *
+ *   In prod, the mobile app always hits the Vercel function directly.
+ *   This file's behavior is irrelevant in prod.
+ *
+ * KNOWN DRIFT vs canonical (api/kevin.ts) as of 2026-05-26:
+ *   • Missing tools: lookup_course, lookup_hole (data-tool agentic loop)
+ *   • ToolAction includes open_url here (not in canonical)
+ *   • No vision (image content block) support
+ *   • No tier classifier (TACTICAL/CONVERSATIONAL routing)
+ *   • No prompt caching (system block cache_control)
+ *   • No OpenAI text-only fallback (Batch 56)
+ *   • No persona-aware TTS (Batch 30+ landed canonical-side first)
+ *
+ * RULES for working with this file:
+ *   1. Prefer the canonical file (api/kevin.ts) when adding features —
+ *      this twin lags intentionally; only add what dev workflows need.
+ *   2. If you must edit BOTH, document the equivalent change in a
+ *      comment so future drift audits can see they were intentional.
+ *   3. To validate against prod behavior in dev, set
+ *      EXPO_PUBLIC_API_URL to a Vercel preview deployment URL — then
+ *      this file is bypassed entirely and the canonical handler runs.
+ *
+ * If you need to delete or unify this file, see Batch 61 plan in the
+ * project audit notes — the unblocker is whether the open_url action
+ * type can be migrated into canonical (most likely yes; it's used by
+ * Phase R generic in-app navigation handlers).
+ * ════════════════════════════════════════════════════════════════════════
+ */
+
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { getCaddieName, type VoiceGender } from '../../lib/persona';
 import type { LieAnalysis } from '../../services/lieAnalysisService';
+
+// 2026-05-26 — Fix BV: log a one-shot warning on cold start so devs
+// notice when this twin is being hit (i.e. EXPO_PUBLIC_API_URL is
+// unset and they're getting the lagging dev implementation, not the
+// canonical Vercel handler). Keeps the warning out of the per-request
+// log spam by gating on a module-level flag.
+let _twinWarningLogged = false;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 });
@@ -105,6 +150,10 @@ export type ToolAction =
 // ── POST handler ──────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
+  if (!_twinWarningLogged) {
+    _twinWarningLogged = true;
+    console.warn('[kevin+api TWIN] dev-server kevin handler hit — this twin lags api/kevin.ts. Set EXPO_PUBLIC_API_URL to a Vercel URL to hit canonical.');
+  }
   try {
     const body = await request.json() as Record<string, unknown>;
 
