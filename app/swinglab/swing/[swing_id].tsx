@@ -28,6 +28,7 @@ import { speak, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCap
 import { runPhaseKOnSession } from '../../../services/videoUpload';
 import { uploadLog } from '../../../services/uploadDiagnostic';
 import PrimaryIssueCard from '../../../components/swinglab/PrimaryIssueCard';
+import ZoomableView from '../../../components/swinglab/ZoomableView';
 import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
@@ -579,6 +580,12 @@ export default function SwingDetail() {
         {!isComparing && (
           <>
             <View style={styles.videoWrap}>
+              {/* 2026-05-25 — Fix AG: pinch-zoom + pan on the SmartMotion
+                  video so a coach can zoom in on hands at top, hips at
+                  impact, etc. Double-tap to reset. The Video stays
+                  unchanged inside — native controls work when at 1×;
+                  when zoomed, the pan gesture takes over. */}
+              <ZoomableView style={StyleSheet.absoluteFill}>
               <Video
                 ref={videoRef}
                 source={{ uri: shot.clipUri }}
@@ -597,6 +604,7 @@ export default function SwingDetail() {
                 isMuted={!shouldAutoplayThenAnalyze}
                 onPlaybackStatusUpdate={onPlaybackStatusUpdate}
               />
+              </ZoomableView>
               {hasPose && (showSkeleton || showTrace) && (
                 <SwingBodyOverlay
                   frames={poseFrames}
