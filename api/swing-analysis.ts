@@ -345,6 +345,197 @@ Rules:
 - Personalization: when player_context is provided, tailor the read. Higher handicap (≥20) — favor plain language, biggest single fault; do NOT pile on. Lower handicap (≤10) — get technical, name secondary tendencies. When dominant_miss is named (e.g. "slice"), bias your priority toward the fault most consistent with that miss pattern. When experience signals beginner, skip jargon. Default (no player_context) = neutral technical.
 - Output ONLY valid JSON. No code fences, no preamble.`;
 
+/**
+ * 2026-05-26 — Fix AX: Gemini-first speed-with-escalation orchestration.
+ *
+ * Architecture: speed is the default, accuracy is the safety net.
+ *
+ *   1. Call Gemini 2.5 Flash first (typical p50 ~3-6s vs 8-15s on Sonnet)
+ *   2. Parse + normalize through the same safety gates as before
+ *   3. If the result MEETS the confidence bar — return immediately.
+ *      This is the speed path. Most reads (clean clip, person in frame,
+ *      common faults) land here.
+ *   4. If the result DOESN'T meet the bar — escalate to OpenAI gpt-4o
+ *      for a second opinion. Pick whichever provider produced the
+ *      higher-confidence diagnostic read.
+ *   5. If OpenAI also doesn't pass the bar — escalate to Anthropic
+ *      Sonnet 4.6 (slowest, deepest reasoning). Sonnet's temporal
+ *      analysis is the strongest backstop when the faster models
+ *      can't pin a dominant fault.
+ *   6. Among providers that ran, return the BEST result. Best = highest
+ *      confidence + diagnostic primary_fault + non-empty evidence.
+ *
+ * Tradeoff: cost goes UP on hard reads (we may run 2-3 providers vs 1)
+ * but DOWN on easy ones (Gemini is cheapest AND we stop after the first
+ * good answer). p50 latency cut roughly in half on the common case.
+ */
+
+interface AttemptResult {
+  provider: 'gemini' | 'openai' | 'anthropic';
+  parsed: SwingAnalysisResponse | null;
+  rawText: string;
+  error: string | null;
+  /** Wall-clock ms spent on this provider call. */
+  elapsedMs: number;
+}
+
+/**
+ * Parse raw model text into a normalized SwingAnalysisResponse,
+ * applying every safety gate (validity, primary_fault allowlist,
+ * cause/fix/drill/evidence requirements, tentative-mode forced
+ * normalization, etc.). Returns null when the text isn't valid
+ * JSON or doesn't have the required shape.
+ *
+ * Single contract: every provider's output flows through this
+ * function so the response shape is identical regardless of which
+ * model produced it.
+ */
+function normalizeAnalysis(
+  rawText: string,
+  framesLength: number,
+  mode: 'analysis' | 'tentative',
+): SwingAnalysisResponse | null {
+  if (!rawText) return null;
+  let parsed: SwingAnalysisResponse;
+  try {
+    const cleaned = rawText.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
+    parsed = JSON.parse(cleaned) as SwingAnalysisResponse;
+  } catch {
+    return null;
+  }
+
+  if (!CANONICAL_ISSUES.includes(parsed.detected_issue)) {
+    parsed.detected_issue = 'none';
+  }
+  if (!['minor', 'moderate', 'significant', 'none'].includes(parsed.severity)) {
+    parsed.severity = 'none';
+  }
+  if (!['high', 'medium', 'low'].includes(parsed.confidence)) {
+    parsed.confidence = 'low';
+  }
+  if (typeof parsed.observation !== 'string') parsed.observation = '';
+  if (typeof parsed.valid_swing !== 'boolean') {
+    parsed.valid_swing = true;
+  }
+  if (parsed.valid_swing === false) {
+    parsed.detected_issue = 'none';
+    parsed.severity = 'none';
+    parsed.fault_frame_index = -1;
+    if (typeof parsed.validity_reason !== 'string' || parsed.validity_reason.length === 0) {
+      parsed.validity_reason = 'No analyzable swing detected in the frames.';
+    }
+  } else {
+    parsed.validity_reason = null;
+  }
+  if (typeof parsed.fault_frame_index !== 'number' || !Number.isInteger(parsed.fault_frame_index)) {
+    parsed.fault_frame_index = -1;
+  } else if (parsed.fault_frame_index < -1 || parsed.fault_frame_index >= framesLength) {
+    parsed.fault_frame_index = -1;
+  }
+  if (mode === 'tentative') {
+    parsed.detected_issue = 'none';
+    parsed.severity = 'none';
+    parsed.confidence = 'low';
+    parsed.fault_frame_index = -1;
+  }
+  if (typeof parsed.layman_explanation !== 'string') {
+    parsed.layman_explanation = '';
+  }
+  if (parsed.detected_issue === 'none' || parsed.valid_swing === false) {
+    parsed.layman_explanation = '';
+  }
+  if (typeof parsed.primary_fault !== 'string' || !PRIMARY_FAULTS.includes(parsed.primary_fault as PrimaryFault)) {
+    parsed.primary_fault = 'inconclusive';
+  }
+  if (parsed.valid_swing === false) {
+    parsed.primary_fault = 'inconclusive';
+  }
+  const coerceStr = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+  parsed.cause = coerceStr(parsed.cause);
+  parsed.fix = coerceStr(parsed.fix);
+  parsed.drill = coerceStr(parsed.drill);
+  parsed.evidence = coerceStr(parsed.evidence);
+  if (parsed.primary_fault === 'inconclusive') {
+    parsed.cause = '';
+    parsed.fix = '';
+    parsed.drill = '';
+    parsed.evidence = '';
+  }
+  if (parsed.primary_fault !== 'inconclusive' && parsed.primary_fault !== 'no_dominant_fault') {
+    const missingEvidence = parsed.evidence.length === 0;
+    const missingPayload = parsed.cause.length === 0 || parsed.fix.length === 0 || parsed.drill.length === 0;
+    if (missingEvidence && missingPayload) {
+      parsed.primary_fault = 'inconclusive';
+      parsed.cause = '';
+      parsed.fix = '';
+      parsed.drill = '';
+      parsed.evidence = '';
+    } else if (missingEvidence || missingPayload) {
+      parsed.primary_fault = 'no_dominant_fault';
+    }
+  }
+  if (parsed.primary_fault === 'no_dominant_fault' &&
+      (parsed.cause.length === 0 || parsed.fix.length === 0 || parsed.drill.length === 0)) {
+    parsed.primary_fault = 'inconclusive';
+    parsed.cause = '';
+    parsed.fix = '';
+    parsed.drill = '';
+    parsed.evidence = '';
+  }
+  return parsed;
+}
+
+/**
+ * Score how trustworthy a parsed read is. Higher = more trustworthy.
+ * Used to pick the winner when multiple providers ran.
+ *
+ *   high-confidence diagnostic with evidence:        100
+ *   high-confidence valid no_dominant_fault:          80
+ *   medium-confidence diagnostic with evidence:       70
+ *   medium-confidence no_dominant_fault:              55
+ *   low-confidence diagnostic with evidence:          40
+ *   low-confidence no_dominant_fault:                 30
+ *   valid_swing=false (camera at floor, etc.):        25
+ *   inconclusive (frames unreadable):                  5
+ *   parse fail / null:                                 0
+ */
+function scoreAttempt(parsed: SwingAnalysisResponse | null): number {
+  if (!parsed) return 0;
+  if (parsed.primary_fault === 'inconclusive') return 5;
+  if (parsed.valid_swing === false) return 25;
+  const c = parsed.confidence;
+  const hasEvidence = typeof parsed.evidence === 'string' && parsed.evidence.length > 0;
+  const isDiagnostic = parsed.primary_fault !== 'no_dominant_fault';
+  if (c === 'high') return isDiagnostic && hasEvidence ? 100 : 80;
+  if (c === 'medium') return isDiagnostic && hasEvidence ? 70 : 55;
+  return isDiagnostic && hasEvidence ? 40 : 30;
+}
+
+/**
+ * Does this read meet the SPEED-PATH confidence bar? When true, we
+ * can return early without escalating to a second opinion.
+ *
+ * Bar:
+ *   - valid_swing === true (or false WITH validity_reason — that's
+ *     a definitive "no analyzable swing" call worth shipping)
+ *   - confidence === 'high'
+ *   - primary_fault !== 'inconclusive'
+ *   - evidence string non-empty (frame-specific citation present)
+ *
+ * Anything below that — we escalate. The bar is intentionally
+ * conservative; we'd rather burn a second provider call than ship
+ * a wobbly diagnosis to the player.
+ */
+function meetsSpeedBar(parsed: SwingAnalysisResponse | null): boolean {
+  if (!parsed) return false;
+  // valid_swing=false is a definitive "no swing" call — ship it as-is.
+  if (parsed.valid_swing === false) return true;
+  if (parsed.confidence !== 'high') return false;
+  if (parsed.primary_fault === 'inconclusive') return false;
+  if (typeof parsed.evidence !== 'string' || parsed.evidence.length === 0) return false;
+  return true;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -504,106 +695,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? PUTT_SYSTEM_PROMPT
         : SYSTEM_PROMPT;
 
-    // 2026-05-26 — Fix AR Phase 2: Anthropic primary, OpenAI gpt-4o
-    // fallback. Tim's complaint: "we have Anthropic and OpenAI behind
-    // it — no reason it should one, not work, and number two, take
-    // this long." The 60s Vercel timeout (Phase 1, Batch 21) was the
-    // headline relief; this is the resilience layer that keeps the
-    // analysis answering on Anthropic 5xx / overloaded / network /
-    // empty / non-JSON. Both providers route through the SAME
-    // normalizer + safety gates below so the response contract is
-    // identical regardless of which model produced it.
-    let text = '';
-    let providerUsed: 'anthropic' | 'openai' | 'gemini' = 'anthropic';
-    let anthropicError: string | null = null;
-    try {
-      const completion = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        // 2026-05-26 — Fix AW: 400 → 800. The structured GolfFix
-        // payload (valid_swing + primary_fault + cause + fix + drill
-        // + evidence + layman_explanation + observation + the
-        // canonical-issue fields) was getting truncated at 400, the
-        // truncated JSON failed to parse, and the old short-circuit
-        // returned 502 BEFORE the OpenAI/Gemini fallback could fire.
-        // 800 fits a full structured payload with headroom.
-        max_tokens: 800,
-        temperature: 0.2,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userContent }],
-      });
-      const block = completion.content.find(c => c.type === 'text');
-      text = block && block.type === 'text' ? block.text.trim() : '';
-      if (!text) {
-        anthropicError = 'empty_response';
-      } else {
-        // 2026-05-26 — Fix AW: validate JSON parseability BEFORE
-        // accepting Anthropic's response. If the response looks like
-        // truncated/non-JSON, clear `text` so the fallback chain
-        // fires instead of returning 502 on a flawed primary read.
-        const cleaned = text.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
-        try {
-          JSON.parse(cleaned);
-        } catch {
-          anthropicError = 'non_json_response';
-          console.warn('[swing-analysis] anthropic returned non-JSON — falling through to OpenAI');
-          text = '';
-        }
-      }
-    } catch (e) {
-      anthropicError = e instanceof Error ? e.message : 'unknown';
-      console.warn('[swing-analysis] anthropic primary failed:', anthropicError);
-    }
+    // 2026-05-26 — Fix AX: Gemini-first speed-with-escalation chain.
+    // See doc-comment on `meetsSpeedBar` + `scoreAttempt` helpers above
+    // for the architecture. Order: Gemini (fast) → OpenAI (mid) →
+    // Anthropic (deepest); each provider's output runs through the
+    // shared normalizer; early-exit when the speed bar is met.
 
-    // OpenAI fallback when Anthropic threw OR returned empty. Only
-    // attempted when OPENAI_API_KEY is configured — otherwise the
-    // upstream failure surfaces as a real 502 like before.
-    let openaiError: string | null = null;
-    if (!text && process.env.OPENAI_API_KEY) {
-      try {
-        const openaiContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
-          ...frames.map(f => ({
-            type: 'image_url' as const,
-            image_url: {
-              url: `data:${f.media_type ?? 'image/jpeg'};base64,${f.b64}`,
-              // 2026-05-26 — `high` detail is closer to Anthropic
-              // Sonnet's default fidelity for body / club reads. The
-              // marginal cost is worth it; we only hit this path when
-              // the primary already failed.
-              detail: 'high' as const,
-            },
-          })),
-          { type: 'text' as const, text: userText },
-        ];
-        const oai = await openai.chat.completions.create({
-          model: 'gpt-4o',
-          max_tokens: 600,
-          temperature: 0.2,
-          // gpt-4o honors response_format json_object when "json" is
-          // present in the system prompt — our SYSTEM/PUTT/TENTATIVE
-          // prompts all explicitly say "Output ONLY valid JSON".
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: openaiContent },
-          ],
-        });
-        text = (oai.choices[0]?.message?.content ?? '').trim();
-        providerUsed = 'openai';
-        console.log('[swing-analysis] openai fallback succeeded after anthropic:', anthropicError);
-      } catch (oaiErr) {
-        openaiError = oaiErr instanceof Error ? oaiErr.message : 'unknown';
-        console.warn('[swing-analysis] openai fallback failed:', openaiError);
-      }
-    }
+    const attempts: AttemptResult[] = [];
 
-    // 2026-05-26 — Fix AT: Gemini 2.5 Flash as third resilience layer.
-    // Tried when both Anthropic AND OpenAI returned empty / threw, but
-    // only when GOOGLE_API_KEY is configured. The Bryson-DeChambeau-ad
-    // model — having it in the chain means the pipeline survives
-    // simultaneous OpenAI + Anthropic incidents (real risk: both
-    // share underlying GPU capacity at peak).
-    let geminiError: string | null = null;
-    if (!text && gemini) {
+    // ── PROVIDER HELPERS — each returns raw text + error string, no
+    //                       state mutation, no normalization. The
+    //                       outer orchestrator runs the bar check.
+
+    const tryGemini = async (): Promise<AttemptResult> => {
+      const t0 = Date.now();
+      if (!gemini) {
+        return { provider: 'gemini', parsed: null, rawText: '', error: 'GOOGLE_API_KEY not configured', elapsedMs: 0 };
+      }
       try {
         const geminiContent = [
           { text: systemPrompt + '\n\n' + userText },
@@ -619,181 +727,196 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           contents: [{ role: 'user', parts: geminiContent }],
           config: {
             temperature: 0.2,
-            maxOutputTokens: 600,
+            maxOutputTokens: 800,
             responseMimeType: 'application/json',
           },
         });
-        text = (gem.text ?? '').trim();
-        providerUsed = 'gemini';
-        console.log('[swing-analysis] gemini fallback succeeded after anthropic+openai:',
-          { anthropic: anthropicError, openai: openaiError });
-      } catch (gemErr) {
-        geminiError = gemErr instanceof Error ? gemErr.message : 'unknown';
-        console.error('[swing-analysis] gemini fallback also failed:', geminiError);
+        const rawText = (gem.text ?? '').trim();
+        const parsed = normalizeAnalysis(rawText, frames.length, mode);
+        return {
+          provider: 'gemini',
+          parsed,
+          rawText,
+          error: parsed ? null : (rawText ? 'non_json_response' : 'empty_response'),
+          elapsedMs: Date.now() - t0,
+        };
+      } catch (e) {
+        return {
+          provider: 'gemini',
+          parsed: null,
+          rawText: '',
+          error: e instanceof Error ? e.message : 'unknown',
+          elapsedMs: Date.now() - t0,
+        };
+      }
+    };
+
+    const tryOpenAI = async (): Promise<AttemptResult> => {
+      const t0 = Date.now();
+      if (!process.env.OPENAI_API_KEY) {
+        return { provider: 'openai', parsed: null, rawText: '', error: 'OPENAI_API_KEY not configured', elapsedMs: 0 };
+      }
+      try {
+        const openaiContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
+          ...frames.map(f => ({
+            type: 'image_url' as const,
+            image_url: {
+              url: `data:${f.media_type ?? 'image/jpeg'};base64,${f.b64}`,
+              detail: 'high' as const,
+            },
+          })),
+          { type: 'text' as const, text: userText },
+        ];
+        const oai = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          max_tokens: 800,
+          temperature: 0.2,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: openaiContent },
+          ],
+        });
+        const rawText = (oai.choices[0]?.message?.content ?? '').trim();
+        const parsed = normalizeAnalysis(rawText, frames.length, mode);
+        return {
+          provider: 'openai',
+          parsed,
+          rawText,
+          error: parsed ? null : (rawText ? 'non_json_response' : 'empty_response'),
+          elapsedMs: Date.now() - t0,
+        };
+      } catch (e) {
+        return {
+          provider: 'openai',
+          parsed: null,
+          rawText: '',
+          error: e instanceof Error ? e.message : 'unknown',
+          elapsedMs: Date.now() - t0,
+        };
+      }
+    };
+
+    const tryAnthropic = async (): Promise<AttemptResult> => {
+      const t0 = Date.now();
+      try {
+        const completion = await anthropic.messages.create({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 800,
+          temperature: 0.2,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userContent }],
+        });
+        const block = completion.content.find(c => c.type === 'text');
+        const rawText = block && block.type === 'text' ? block.text.trim() : '';
+        const parsed = normalizeAnalysis(rawText, frames.length, mode);
+        return {
+          provider: 'anthropic',
+          parsed,
+          rawText,
+          error: parsed ? null : (rawText ? 'non_json_response' : 'empty_response'),
+          elapsedMs: Date.now() - t0,
+        };
+      } catch (e) {
+        return {
+          provider: 'anthropic',
+          parsed: null,
+          rawText: '',
+          error: e instanceof Error ? e.message : 'unknown',
+          elapsedMs: Date.now() - t0,
+        };
+      }
+    };
+
+    // ── ORCHESTRATION ────────────────────────────────────────────
+
+    // Stage 1 — Gemini (speed path)
+    const geminiAttempt = await tryGemini();
+    attempts.push(geminiAttempt);
+
+    let winner: AttemptResult = geminiAttempt;
+    let escalationReason: string | null = null;
+
+    if (meetsSpeedBar(geminiAttempt.parsed)) {
+      console.log('[swing-analysis] gemini speed-path hit', {
+        elapsedMs: geminiAttempt.elapsedMs,
+        confidence: geminiAttempt.parsed?.confidence,
+        primary_fault: geminiAttempt.parsed?.primary_fault,
+      });
+    } else {
+      // Decide WHY we're escalating — informs the telemetry the
+      // owner-tool debug screen surfaces. Affects nothing in the
+      // user-facing payload.
+      if (!geminiAttempt.parsed) {
+        escalationReason = `gemini_${geminiAttempt.error ?? 'unknown_failure'}`;
+      } else if (geminiAttempt.parsed.primary_fault === 'inconclusive') {
+        escalationReason = 'gemini_inconclusive';
+      } else if (geminiAttempt.parsed.confidence !== 'high') {
+        escalationReason = `gemini_low_confidence:${geminiAttempt.parsed.confidence}`;
+      } else {
+        escalationReason = 'gemini_missing_evidence';
+      }
+      console.log('[swing-analysis] gemini did not meet speed bar — escalating to OpenAI:', escalationReason);
+
+      // Stage 2 — OpenAI (validation / second opinion)
+      const openaiAttempt = await tryOpenAI();
+      attempts.push(openaiAttempt);
+      // Pick the better of the two by score.
+      if (scoreAttempt(openaiAttempt.parsed) > scoreAttempt(winner.parsed)) {
+        winner = openaiAttempt;
+      }
+
+      // If we STILL don't have a high-confidence diagnostic from
+      // either, escalate to Anthropic for the deepest read.
+      if (!meetsSpeedBar(winner.parsed)) {
+        console.log('[swing-analysis] openai also did not pass bar — escalating to Anthropic');
+        const anthropicAttempt = await tryAnthropic();
+        attempts.push(anthropicAttempt);
+        if (scoreAttempt(anthropicAttempt.parsed) > scoreAttempt(winner.parsed)) {
+          winner = anthropicAttempt;
+        }
       }
     }
 
-    if (!text) {
-      // All configured providers failed. Surface every reason so the
-      // client toast and ops can see exactly what happened.
+    // No provider produced parseable output → 502 with full diagnostics
+    if (!winner.parsed) {
+      const errs: Record<string, string | null> = {};
+      for (const a of attempts) errs[`${a.provider}_error`] = a.error;
+      console.error('[swing-analysis] all attempted providers failed', errs);
       return res.status(502).json({
         error: 'All providers failed',
-        anthropic_error: anthropicError,
-        openai_error: openaiError,
-        gemini_error: geminiError,
+        ...errs,
       });
     }
 
-    let parsed: SwingAnalysisResponse;
-    try {
-      const cleaned = text.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
-      parsed = JSON.parse(cleaned) as SwingAnalysisResponse;
-    } catch {
-      return res.status(502).json({
-        error: 'Model returned non-JSON',
-        provider: providerUsed,
-        raw: text.slice(0, 300),
-      });
-    }
+    // 2026-05-26 — Telemetry: provider used + escalation reason +
+    // every provider attempted with elapsed ms. Owner debug screen
+    // can render this to spot patterns (e.g. "Gemini's hitting
+    // inconclusive on POV clips 3x more than face-on").
+    console.log('[swing-analysis] returning result', {
+      provider: winner.provider,
+      attempts: attempts.map(a => ({ p: a.provider, ms: a.elapsedMs, ok: !!a.parsed, err: a.error })),
+      escalation: escalationReason,
+      confidence: winner.parsed.confidence,
+      primary_fault: winner.parsed.primary_fault,
+    });
 
-    if (!CANONICAL_ISSUES.includes(parsed.detected_issue)) {
-      parsed.detected_issue = 'none';
-    }
-    if (!['minor', 'moderate', 'significant', 'none'].includes(parsed.severity)) {
-      parsed.severity = 'none';
-    }
-    if (!['high', 'medium', 'low'].includes(parsed.confidence)) {
-      parsed.confidence = 'low';
-    }
-    if (typeof parsed.observation !== 'string') parsed.observation = '';
-    // Phase 418 — validity gate normalisation. Default to true (legacy
-    // responses without the field assume valid). When valid_swing is
-    // false, force detected_issue/severity/fault_frame so downstream
-    // consumers can't accidentally render a fault diagnosis on
-    // no-swing footage.
-    if (typeof parsed.valid_swing !== 'boolean') {
-      parsed.valid_swing = true;
-    }
-    if (parsed.valid_swing === false) {
-      parsed.detected_issue = 'none';
-      parsed.severity = 'none';
-      parsed.fault_frame_index = -1;
-      if (typeof parsed.validity_reason !== 'string' || parsed.validity_reason.length === 0) {
-        parsed.validity_reason = 'No analyzable swing detected in the frames.';
-      }
-    } else {
-      parsed.validity_reason = null;
-    }
-    // Phase 403b — normalise fault_frame_index. Must be an integer in
-    // [0, frames.length-1] or -1 (no specific frame stood out). Any
-    // out-of-range value falls back to -1.
-    if (typeof parsed.fault_frame_index !== 'number' || !Number.isInteger(parsed.fault_frame_index)) {
-      parsed.fault_frame_index = -1;
-    } else if (parsed.fault_frame_index < -1 || parsed.fault_frame_index >= frames.length) {
-      parsed.fault_frame_index = -1;
-    }
-
-    // Phase BL/U1 — tentative mode forcibly normalises detected_issue and
-    // severity so a creative model response can't accidentally produce a
-    // canonical-fault claim from the relaxed prompt.
-    if (mode === 'tentative') {
-      parsed.detected_issue = 'none';
-      parsed.severity = 'none';
-      parsed.confidence = 'low';
-      parsed.fault_frame_index = -1;
-    }
-
-    // 2026-05-24 — Layman explanation normalisation. Coerce missing /
-    // non-string to empty string so the client-side "hide affordance
-    // when absent" rule has a single contract to check. Force empty
-    // when there's no fault to translate.
-    if (typeof parsed.layman_explanation !== 'string') {
-      parsed.layman_explanation = '';
-    }
-    if (parsed.detected_issue === 'none' || parsed.valid_swing === false) {
-      parsed.layman_explanation = '';
-    }
-
-    // 2026-05-24 — GolfFix #1 + S1.1 normalisation. primary_fault must be
-    // in the PRIMARY_FAULTS allowlist; anything else → 'inconclusive'.
-    // cause/fix/drill/evidence must be non-empty strings for any
-    // diagnostic primary_fault (including no_dominant_fault); force
-    // empty for inconclusive. valid_swing=false → inconclusive
-    // unconditionally. The evidence field is the S1.1 calibration gate
-    // — diagnostic faults must cite a frame-specific cue or the read
-    // collapses to no_dominant_fault (not inconclusive — the frames
-    // were readable, the model just didn't pin a dominant pattern).
-    if (typeof parsed.primary_fault !== 'string' || !PRIMARY_FAULTS.includes(parsed.primary_fault as PrimaryFault)) {
-      parsed.primary_fault = 'inconclusive';
-    }
-    if (parsed.valid_swing === false) {
-      parsed.primary_fault = 'inconclusive';
-    }
-    // Coerce strings; trim and bail on accidental whitespace-only.
-    const coerceStr = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
-    parsed.cause = coerceStr(parsed.cause);
-    parsed.fix = coerceStr(parsed.fix);
-    parsed.drill = coerceStr(parsed.drill);
-    parsed.evidence = coerceStr(parsed.evidence);
-    if (parsed.primary_fault === 'inconclusive') {
-      parsed.cause = '';
-      parsed.fix = '';
-      parsed.drill = '';
-      parsed.evidence = '';
-    }
-    // Defensive: if model named a diagnostic fault (including
-    // no_dominant_fault) but didn't cite evidence OR didn't fill
-    // cause/fix/drill, downgrade to no_dominant_fault (frames were
-    // readable but the structured payload is incomplete) — preserves
-    // honesty without collapsing all the way to inconclusive. If
-    // cause/fix/drill are also missing, collapse to inconclusive.
-    if (parsed.primary_fault !== 'inconclusive' && parsed.primary_fault !== 'no_dominant_fault') {
-      const missingEvidence = parsed.evidence.length === 0;
-      const missingPayload = parsed.cause.length === 0 || parsed.fix.length === 0 || parsed.drill.length === 0;
-      if (missingEvidence && missingPayload) {
-        parsed.primary_fault = 'inconclusive';
-        parsed.cause = '';
-        parsed.fix = '';
-        parsed.drill = '';
-        parsed.evidence = '';
-      } else if (missingEvidence || missingPayload) {
-        // Demote to no_dominant_fault but keep whatever the model did
-        // produce so the card still surfaces useful information.
-        parsed.primary_fault = 'no_dominant_fault';
-      }
-    }
-    // no_dominant_fault still needs cause/fix/drill — if missing,
-    // collapse to inconclusive (a no-dominant call with no actionable
-    // payload is just inconclusive in disguise).
-    if (parsed.primary_fault === 'no_dominant_fault' &&
-        (parsed.cause.length === 0 || parsed.fix.length === 0 || parsed.drill.length === 0)) {
-      parsed.primary_fault = 'inconclusive';
-      parsed.cause = '';
-      parsed.fix = '';
-      parsed.drill = '';
-      parsed.evidence = '';
-    }
-
-    // 2026-05-24 — Owner-tool telemetry echo. The server returns the
-    // REAL count of image / text blocks it just sent to Sonnet so the
-    // in-app debug screen can prove the whole pipe end-to-end
-    // (frames sent client-side === blocks server saw). Same values
-    // already logged at the messages.create call above. Existing
-    // consumers ignore unknown fields; no schema change to the
-    // analysis itself.
     return res.status(200).json({
-      ...parsed,
+      ...winner.parsed,
       _debug: {
         imageBlocks,
         textBlocks,
         mode,
         shortGame: isShortGame,
-        // 2026-05-26 — Fix AR Phase 2 telemetry. Surface which model
-        // produced the answer + the Anthropic failure reason when we
-        // fell back, so the in-app debug screen can show resilience
-        // events in the wild without server-log access.
-        provider: providerUsed,
-        fallback_reason: providerUsed === 'openai' ? anthropicError : null,
+        provider: winner.provider,
+        escalation_reason: escalationReason,
+        attempts: attempts.map(a => ({
+          provider: a.provider,
+          elapsed_ms: a.elapsedMs,
+          ok: a.parsed != null,
+          error: a.error,
+          score: scoreAttempt(a.parsed),
+        })),
       },
     });
   } catch (e) {
