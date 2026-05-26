@@ -745,6 +745,13 @@ function AppNavigator() {
             most recent /api/swing-analysis call. PASS/CHECK badge
             proves the multi-frame pipe without dashboards. */}
         <Stack.Screen name="swing-analysis-debug" options={{ headerShown: false }} />
+        {/* 2026-05-26 — Owner-only Kevin clip playback test surface.
+            Route file existed (app/caddie-clip-test.tsx) and was
+            reachable from Settings → Owner Tools → "Caddie Clip Test
+            (Kevin)" but missing here meant Expo Router silently
+            dropped the navigation. Tim opened Settings, tapped the
+            row, and saw nothing happen. */}
+        <Stack.Screen name="caddie-clip-test" options={{ headerShown: false }} />
         <Stack.Screen
           name="hole-view"
           options={{ animation: 'slide_from_bottom' }}
