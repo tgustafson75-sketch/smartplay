@@ -1,23 +1,18 @@
+# =============================================================================
+# STATUS: v1.5 GROUNDWORK — NOT WIRED IN.
+# Nothing in the live pipeline imports this yet. It is inert until a pose
+# producer feeds it a per-frame lead-wrist Y signal (server MoveNet Stage 8
+# or client BlazePose — decision pending). Safe to ship; zero runtime impact.
+# =============================================================================
 """
 swing_segmentation.py
 Swing-phase segmentation from a lead-wrist vertical trajectory.
-Pure numpy/scipy — no pose model, no new dependencies. Consumes a per-frame
-wrist-Y signal from whatever pose source feeds it and returns the timestamps
-of the canonical swing phases.
+Pure numpy/scipy — no pose model, no new dependencies.
 
 Impact is the most reliable event in the cage pipeline and already comes from
 the audio stage. When an audio impact timestamp is supplied it is the
-ground-truth anchor and the other phases are located relative to it; pose-only
-impact detection is the fallback. This fuses the audio and pose lanes.
-
-INTEGRATION NOTE (2026-05-26):
-    Pose is currently deferred (see services/cage-analysis/README.md — "Out of
-    scope: Pose estimation (v1.5)"). No producer in the current pipeline emits
-    wrist_y per-frame, so this module is standalone groundwork. When pose
-    lands, the caller MUST window wrist_y around each detected strike from
-    audio.detect_strikes (which returns N timestamps per session — one per
-    ball). Passing the entire session's wrist_y + a single impact_ts will
-    produce garbage on swings 2..N.
+ground-truth anchor and other phases are located relative to it; pose-only
+impact is the fallback. This fuses the audio and pose lanes.
 """
 from __future__ import annotations
 from dataclasses import dataclass, asdict
@@ -31,7 +26,7 @@ class SwingPhases:
     address_s: Optional[float]
     takeaway_s: Optional[float]
     top_s: Optional[float]
-    downswing_s: Optional[float]
+    downswing_s: Optional[float]   # stub: equals top_s (downswing is a period, top->impact)
     impact_s: Optional[float]
     follow_through_s: Optional[float]
     impact_source: str   # "audio_anchor" | "pose_estimate" | "none"
@@ -46,12 +41,19 @@ def segment_swing_phases(
     min_frames: int = 12,
 ) -> dict:
     """
+    Segments ONE swing's worth of wrist_y.
+
+    IMPORTANT: detect_strikes returns N impact timestamps per session. The
+    caller MUST window wrist_y/timestamps_s around each strike and call this
+    once per strike. Do NOT pass a whole multi-swing session with a single
+    impact_ts (e.g. strikes[0]) — phases 2..N will be garbage.
+
     wrist_y      : per-frame lead-wrist vertical position, IMAGE coords
                    (y increases downward), any consistent unit.
     timestamps_s : per-frame timestamps (s), same length as wrist_y.
     impact_ts_s  : known impact time from the audio stage, if available.
-    Returns asdict(SwingPhases). On bad/short input returns all-None with
-    confidence "low" instead of raising — caller appends a warning.
+    Returns asdict(SwingPhases). On bad/short input returns all-None core
+    fields with confidence "low" instead of raising — caller appends a warning.
     """
     wrist_y = np.asarray(wrist_y, dtype=float)
     t = np.asarray(timestamps_s, dtype=float)
@@ -61,17 +63,16 @@ def segment_swing_phases(
             None, None, None, None, impact_ts_s, None,
             "audio_anchor" if impact_ts_s is not None else "none", "low"))
 
-    # 1. Smooth to kill landmark jitter before differentiating.
     y = gaussian_filter1d(wrist_y, sigma=smoothing_sigma, mode="nearest")
-    # 2. Signed vertical velocity.
     v = np.gradient(y, t)
 
-    # 3. TOP of backswing = hands apex = min y (search first 80% so a high
-    #    follow-through finish can't masquerade as the top).
+    # TOP of backswing = hands apex = min y (search first 80% so a high
+    # follow-through finish can't masquerade as the top).
     search_end = max(min_frames, int(0.8 * y.size))
     top_idx = int(np.argmin(y[:search_end]))
 
-    # 4. ADDRESS = motion onset: last sub-threshold-speed frame before the top.
+    # ADDRESS = motion onset: last sub-threshold-speed frame before the top.
+    # (Acceptable v1 limitation: can fire mid-takeaway if no flat address visible.)
     back_peak_speed = np.max(np.abs(v[: top_idx + 1])) if top_idx > 0 else 0.0
     onset_thresh = 0.15 * back_peak_speed
     address_idx = 0
@@ -81,7 +82,7 @@ def segment_swing_phases(
             break
     takeaway_idx = min(address_idx + 1, top_idx)
 
-    # 5. IMPACT — audio anchor preferred.
+    # IMPACT — audio anchor preferred.
     if impact_ts_s is not None:
         impact_idx = int(np.argmin(np.abs(t - impact_ts_s)))
         impact_source = "audio_anchor"
@@ -90,14 +91,13 @@ def segment_swing_phases(
                       if top_idx < y.size - 1 else y.size - 1)
         impact_source = "pose_estimate"
 
-    # 6. FOLLOW-THROUGH = first frame after impact where hands stop descending.
+    # FOLLOW-THROUGH = first frame after impact where hands stop descending.
     follow_idx = y.size - 1
     for i in range(impact_idx + 1, y.size):
         if v[i] <= 0:
             follow_idx = i
             break
 
-    # 7. Confidence.
     ordered = address_idx <= top_idx <= impact_idx <= follow_idx
     if impact_source == "audio_anchor" and ordered:
         confidence = "high"
