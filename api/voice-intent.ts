@@ -228,22 +228,30 @@ Available intents:
    - "note this: Sunnyvale hole 7 yardage looks wrong" -> { note: "Sunnyvale hole 7 yardage looks wrong" }
    Trigger phrases: "log this", "log an issue", "log a bug", "report a bug", "I have feedback", "note this", "save this note", "make a note". Always followed by the description.
 
-12. in_round_diagnostic — User is mid-round and asking ${caddieName} to REASON about a multi-shot pattern. Distinct from a tactical question ("what club here?") because it asks WHY something is happening across multiple shots / clubs / patterns.
+12. in_round_diagnostic — User is mid-round and asking ${caddieName} to REASON about a shot pattern OR ASK FOR A FIX for one. The handler routes to /api/kevin with register='coach' for a multi-sentence coaching reply, which works for both diagnostic ("why") and remediation ("what do I do") questions.
    parameters: { pattern_text: string, wants_card?: boolean }
    Trigger requires BOTH:
-   (a) Reference to a pattern: multiple shot types, multiple clubs, "irons vs driver", "long clubs vs short clubs", "every drive", "all my approaches", "today", a comparison, etc.
-   (b) Explicit reasoning verb: "why", "what's wrong", "what's likely", "what's going on", "what's the (likely) reason", "what's happening", "what could be causing".
-   Examples:
+   (a) Reference to a pattern OR single named miss: multiple shot types, multiple clubs, "irons vs driver", "every drive", "all my approaches", "today", a comparison, OR a single concrete miss ("pulling left", "fat", "slicing my driver").
+   (b) Explicit reasoning OR remediation verb:
+        - Reasoning: "why", "what's wrong", "what's likely", "what's going on", "what's the (likely) reason", "what's happening", "what could be causing".
+        - Remediation: "what should I do", "what do I do", "how do I fix", "how do I stop", "help me", "fix it", "what now".
+   Examples (diagnostic / reasoning):
    - "irons are flushing but driver is going right hard, what's wrong?" -> { pattern_text: "irons flushing, driver going right hard", wants_card: false }
    - "I keep slicing my long clubs but my wedges are fine, why?" -> { pattern_text: "slicing long clubs, wedges fine", wants_card: false }
    - "my contact is solid but I'm pulling everything left, what's likely?" -> { pattern_text: "solid contact, pulling left", wants_card: false }
    - "what's going on with my swing today?" -> { pattern_text: "swing today", wants_card: false }
    - "irons going flush, baby fade, but driver is going left to right hard, what is the most likely reason?" -> { pattern_text: "irons flushing baby fade, driver hard left-to-right", wants_card: false }
+   Examples (remediation / fix-seeking — added 2026-05-26 after a voice miss on "I'm pulling left, what should I do"):
+   - "I'm pulling left, what should I do?" -> { pattern_text: "pulling left", wants_card: false }
+   - "I keep coming over the top, how do I fix it?" -> { pattern_text: "coming over the top", wants_card: false }
+   - "I'm hitting it fat, help me" -> { pattern_text: "hitting it fat", wants_card: false }
+   - "how do I stop slicing my driver?" -> { pattern_text: "slicing driver", wants_card: false }
+   Examples (card-request):
    - "show me what's wrong with my driver and irons today" -> { pattern_text: "driver and irons today", wants_card: true }
    - "card me on this — irons solid, driver leaking right" -> { pattern_text: "irons solid, driver leaking right", wants_card: true }
    pattern_text: brief verbatim summary of the pattern the user described.
    wants_card: true ONLY if user said "show me", "card", "card me", "visually", "on screen", or similar visual-display request. Default false (voice response).
-   DO NOT match a tactical single-club question. "What club here?" / "What's the wind?" / "How far?" are NOT in_round_diagnostic — they have no pattern AND no reasoning verb.
+   DO NOT match a tactical single-club QUESTION with no miss named. "What club here?" / "What's the wind?" / "How far?" are NOT in_round_diagnostic — they have no pattern AND no reasoning/remediation verb.
 
 13. club_change — User is in a cage practice session and is announcing a club switch.
    parameters: { club_phrase: string }
