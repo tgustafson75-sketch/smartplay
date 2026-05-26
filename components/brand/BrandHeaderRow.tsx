@@ -27,6 +27,40 @@ import { useToolsMenuStore } from '../../store/toolsMenuStore';
 import { CaddieMicBadge } from '../caddie/CaddieMicBadge';
 
 export const BRAND_BADGE_SIZE = 56;
+
+// 2026-05-26 — Fix BF: determine theme polarity from the background
+// color so the wordmark contrast is correct regardless of which
+// palette is active (dark, light, dark-high-contrast, light-high-
+// contrast). Parses any #RRGGBB / #RGB / rgb(...) and computes
+// perceived luminance. <0.5 luminance → dark theme.
+function isDarkBackground(bg: string): boolean {
+  try {
+    let r = 0, g = 0, b = 0;
+    if (bg.startsWith('#')) {
+      const hex = bg.slice(1);
+      const expanded = hex.length === 3
+        ? hex.split('').map(c => c + c).join('')
+        : hex.slice(0, 6);
+      r = parseInt(expanded.slice(0, 2), 16);
+      g = parseInt(expanded.slice(2, 4), 16);
+      b = parseInt(expanded.slice(4, 6), 16);
+    } else {
+      const m = bg.match(/rgb[a]?\(([^)]+)\)/i);
+      if (m) {
+        const parts = m[1].split(',').map(s => parseFloat(s.trim()));
+        r = parts[0] ?? 0;
+        g = parts[1] ?? 0;
+        b = parts[2] ?? 0;
+      }
+    }
+    // ITU-R BT.601 perceived luminance.
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance < 0.5;
+  } catch {
+    // Safest default if parsing fails — assume dark and use white text.
+    return true;
+  }
+}
 export const BRAND_TAGLINE = 'REAL-TIME CADDIE INTELLIGENCE';
 
 export interface BrandHeaderRowProps {
@@ -57,7 +91,19 @@ export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress, hideTools
       <View style={styles.titleBlock}>
         <View style={styles.wordmarkRow}>
           <Text style={[styles.name1, { color: colors.accent }]}>SMARTPLAY</Text>
-          <Text style={[styles.name2, { color: colors.text_primary }]}> CADDIE</Text>
+          {/* 2026-05-26 — Fix BF: pure-white in dark / pure-black in
+              light for "CADDIE". Was colors.text_primary which is
+              technically pure white in the default dark palette but
+              rendered grey/washed-out at the wordmark's letter-spacing
+              + weight on Tim's Z Fold ("on the play tab in the header
+              bar, smartplay caddy, caddy is pretty gray, and you
+              can't see it"). Detect dark via background darkness and
+              force the extreme — guarantees max contrast on every
+              theme + high-contrast combo. */}
+          <Text style={[
+            styles.name2,
+            { color: isDarkBackground(colors.background) ? '#FFFFFF' : '#000000' },
+          ]}> CADDIE</Text>
         </View>
         <Text style={[styles.tagline, { color: colors.text_muted }]} numberOfLines={1}>
           {tagline}
