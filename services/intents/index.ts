@@ -23,6 +23,7 @@ import { stateYardageHandler } from './stateYardageHandler';
 import { refreshGpsHandler } from './refreshGpsHandler';
 import { coachRefineHandler } from './coachRefineHandler';
 import { positionDeclareHandler } from './positionDeclareHandler';
+import { inRoundDiagnosticHandler } from './inRoundDiagnosticHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
 
@@ -55,6 +56,7 @@ voiceCommandRouter.registerHandler(stateYardageHandler);
 voiceCommandRouter.registerHandler(refreshGpsHandler);
 voiceCommandRouter.registerHandler(coachRefineHandler);
 voiceCommandRouter.registerHandler(positionDeclareHandler);
+voiceCommandRouter.registerHandler(inRoundDiagnosticHandler);
 
 export {
   openToolHandler,
@@ -82,4 +84,5 @@ export {
   askGolfFatherHandler,
   quickRoundHandler,
   openExternalHandler,
+  inRoundDiagnosticHandler,
 };

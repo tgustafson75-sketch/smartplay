@@ -1,5 +1,19 @@
 import OpenAI from 'openai';
 import { KEVIN_TTS_INSTRUCTIONS } from '../../api/_kevinVoice';
+// 2026-05-26 — Fix BQ: centralized voice tuning. Was duplicated by
+// hand in this file vs api/_voiceTuning.ts → silent drift risk if
+// one was updated and the other forgotten (Tank intro plays Kevin's
+// voice on the local Expo Router path). Now both /api/voice.ts
+// (Vercel) and this Expo Router twin import from a single source
+// of truth. Change voice IDs / settings in _voiceTuning.ts, both
+// endpoints get the update.
+import {
+  ELEVEN_VOICES_BY_PERSONA,
+  ELEVEN_VOICES_BY_GENDER,
+  ELEVEN_SETTINGS_BY_PERSONA,
+  ELEVEN_SETTINGS_DEFAULT,
+  KEVIN_VOICE_ID,
+} from '../../api/_voiceTuning';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -8,49 +22,6 @@ const openai = new OpenAI({
 });
 
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY;
-
-// Persona-keyed ElevenLabs voice IDs.
-const KEVIN_VOICE_ID  = '1fz2mW1imKTf5Ryjk5su';
-const SERENA_VOICE_ID = 'RGb96Dcl0k5eVje8EBch';
-const HARRY_VOICE_ID  = '5Jfxy1x2Df4No3LQBZXE';
-const TANK_VOICE_ID   = 'gQOVuaEi4cxS2vkZAK3A';
-
-const ELEVEN_VOICES_BY_PERSONA: Record<string, string> = {
-  kevin:  KEVIN_VOICE_ID,
-  serena: SERENA_VOICE_ID,
-  harry:  HARRY_VOICE_ID,
-  tank:   TANK_VOICE_ID,
-};
-
-// Phase 408 — per-caddie voice tuning. Mirrors api/voice.ts. Each
-// caddie has tuned ElevenLabs voice_settings that target their
-// character (Kevin warm-upbeat / Serena confident-energetic / Tank
-// intense-commanding / Harry measured-wisdom). See api/voice.ts for
-// the rationale comments — kept in lockstep so both Vercel routes
-// and the Expo Router api+ route produce identical audio.
-type ElevenSettings = {
-  stability: number;
-  similarity_boost: number;
-  style: number;
-  use_speaker_boost: boolean;
-};
-const ELEVEN_SETTINGS_BY_PERSONA: Record<string, ElevenSettings> = {
-  kevin:  { stability: 0.45, similarity_boost: 0.75, style: 0.55, use_speaker_boost: true },
-  serena: { stability: 0.50, similarity_boost: 0.75, style: 0.50, use_speaker_boost: true },
-  tank:   { stability: 0.35, similarity_boost: 0.70, style: 0.70, use_speaker_boost: true },
-  harry:  { stability: 0.65, similarity_boost: 0.80, style: 0.30, use_speaker_boost: true },
-};
-const ELEVEN_SETTINGS_DEFAULT: ElevenSettings = ELEVEN_SETTINGS_BY_PERSONA.kevin;
-
-// Legacy gender_lang fallback for callers that haven't been updated to pass `persona`.
-const ELEVEN_VOICES_BY_GENDER: Record<string, string> = {
-  male_en:   KEVIN_VOICE_ID,
-  female_en: SERENA_VOICE_ID,
-  male_es:   KEVIN_VOICE_ID,
-  female_es: SERENA_VOICE_ID,
-  male_zh:   KEVIN_VOICE_ID,
-  female_zh: SERENA_VOICE_ID,
-};
 
 const OPENAI_VOICES = {
   male:   'onyx'  as const,
