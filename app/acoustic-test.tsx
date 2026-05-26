@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView, AppState, StyleSheet } from 'react-native';
-import Svg, { Polyline, Line, Circle } from 'react-native-svg';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, Pressable, ScrollView, AppState, StyleSheet, PanResponder } from 'react-native';
+import Svg, { Polyline, Line } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../contexts/ThemeContext';
@@ -15,6 +15,7 @@ import {
   type MeterSample,
 } from '../services/swing/strikeDetector';
 import { configureAudioForSpeech } from '../services/voiceService';
+import { useAcousticCalibrationStore } from '../store/acousticCalibrationStore';
 
 /**
  * Phase BO.1 — Acoustic Test Bench, ported from V3.
@@ -58,6 +59,19 @@ export default function AcousticTestScreen() {
   const [floorDb, setFloorDb] = useState<number | null>(null);
   const [status, setStatus] = useState<'idle' | 'ok' | 'too-short' | 'noisy-environment' | 'audio-failed'>('idle');
   const [error, setError] = useState<string | null>(null);
+
+  // 2026-05-26 — Fix BO: corrected-strikes editor + persist.
+  // correctedStrikes starts as a copy of auto-detected strikes
+  // (so unedited sessions save the detector's read as ground truth)
+  // and tracks user adjustments: drag-to-correct timestamps, manual
+  // adds, deletes. Saved as a CalibrationSession when the user taps
+  // Save — these become the labeled dataset for tuning the detector.
+  const [correctedStrikes, setCorrectedStrikes] = useState<DetectedStrike[]>([]);
+  const [waveformWidthPx, setWaveformWidthPx] = useState(0);
+  const [savedFlash, setSavedFlash] = useState(false);
+  const saveSession = useAcousticCalibrationStore(s => s.saveSession);
+  const savedSessions = useAcousticCalibrationStore(s => s.sessions);
+  const deleteSavedSession = useAcousticCalibrationStore(s => s.deleteSession);
 
   // Tick elapsed time during recording.
   useEffect(() => {
@@ -104,6 +118,7 @@ export default function AcousticTestScreen() {
     setError(null);
     setSamples([]);
     setStrikes([]);
+    setCorrectedStrikes([]);
     setFloorDb(null);
     setStatus('idle');
     try {
@@ -140,9 +155,13 @@ export default function AcousticTestScreen() {
       setFloorDb(detection.floorDb);
       if (detection.kind === 'ok') {
         setStrikes(detection.strikes);
+        // 2026-05-26 — Fix BO: seed corrected with auto so an unedited
+        // save preserves the detector's read as the labeled outcome.
+        setCorrectedStrikes(detection.strikes.map(s => ({ ...s })));
         setStatus('ok');
       } else {
         setStrikes([]);
+        setCorrectedStrikes([]);
         setStatus(detection.kind);
       }
     } finally {
@@ -150,6 +169,77 @@ export default function AcousticTestScreen() {
       await configureAudioForSpeech().catch(() => undefined);
     }
   };
+
+  // 2026-05-26 — Fix BO: helpers for the slide-to-correct UI.
+  const recordingDurationMs = useMemo(() => {
+    if (samples.length < 2) return 0;
+    return samples[samples.length - 1].timeMs - samples[0].timeMs;
+  }, [samples]);
+
+  /** Map a strike's timeMs to a pixel x-position on the waveform. */
+  const strikeTimeToX = useCallback(
+    (timeMs: number): number => {
+      if (waveformWidthPx === 0 || recordingDurationMs === 0) return 0;
+      const minT = samples[0]?.timeMs ?? 0;
+      return ((timeMs - minT) / recordingDurationMs) * waveformWidthPx;
+    },
+    [waveformWidthPx, recordingDurationMs, samples],
+  );
+
+  /** Reverse: pixel x → timeMs. Clamped to recording bounds. */
+  const xToStrikeTime = useCallback(
+    (x: number): number => {
+      if (waveformWidthPx === 0 || recordingDurationMs === 0) return 0;
+      const minT = samples[0]?.timeMs ?? 0;
+      const clampedX = Math.max(0, Math.min(waveformWidthPx, x));
+      return minT + (clampedX / waveformWidthPx) * recordingDurationMs;
+    },
+    [waveformWidthPx, recordingDurationMs, samples],
+  );
+
+  const updateStrikeTime = useCallback((index: number, newTimeMs: number) => {
+    setCorrectedStrikes(prev => {
+      const next = [...prev];
+      if (index >= 0 && index < next.length) {
+        next[index] = { ...next[index], timeMs: newTimeMs };
+      }
+      return next;
+    });
+  }, []);
+
+  const addManualStrike = useCallback(() => {
+    if (recordingDurationMs === 0) return;
+    const minT = samples[0]?.timeMs ?? 0;
+    // Drop the new manual strike at the midpoint of the recording —
+    // user drags it to the actual impact moment.
+    const midTime = minT + recordingDurationMs / 2;
+    const manualStrike: DetectedStrike = {
+      timeMs: midTime,
+      peakDb: floorDb != null ? floorDb + 20 : -20,
+      attackMs: 0,
+      confidence: 'low',
+    };
+    setCorrectedStrikes(prev =>
+      [...prev, manualStrike].sort((a, b) => a.timeMs - b.timeMs),
+    );
+  }, [recordingDurationMs, samples, floorDb]);
+
+  const deleteCorrectedStrike = useCallback((index: number) => {
+    setCorrectedStrikes(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const onSaveCalibration = useCallback(() => {
+    if (samples.length < 2) return;
+    saveSession({
+      durationMs: recordingDurationMs,
+      floorDb: floorDb ?? -160,
+      autoDetected: strikes.map(s => ({ ...s })),
+      corrected: correctedStrikes.map(s => ({ ...s })),
+      sampleCount: samples.length,
+    });
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1800);
+  }, [samples, recordingDurationMs, floorDb, strikes, correctedStrikes, saveSession]);
 
   // Build the waveform polyline from samples.
   const waveform = (() => {
@@ -248,9 +338,17 @@ export default function AcousticTestScreen() {
               </Text>
             ) : null}
 
-            {/* Waveform */}
+            {/* Waveform with draggable strike markers (Fix BO).
+                The Svg renders the waveform + auto-detected static
+                strike circles for reference. The corrected (editable)
+                strikes overlay as absolute-positioned Views with
+                pan-responder for drag-to-correct + long-press to
+                delete. */}
             {samples.length >= 2 ? (
-              <View style={styles.waveformWrap}>
+              <View
+                style={styles.waveformWrap}
+                onLayout={(e) => setWaveformWidthPx(e.nativeEvent.layout.width)}
+              >
                 <Svg width="100%" height={80} viewBox="0 0 320 80" preserveAspectRatio="none">
                   {/* Floor reference line */}
                   {floorDb != null ? (
@@ -270,22 +368,82 @@ export default function AcousticTestScreen() {
                     stroke={theme.colors.accent}
                     strokeWidth={1.2}
                   />
-                  {/* Strike markers */}
-                  {strikes.map((s, i) => {
-                    const minT = samples[0]!.timeMs;
-                    const maxT = samples[samples.length - 1]!.timeMs;
-                    const total = Math.max(1, maxT - minT);
-                    const x = ((s.timeMs) / total) * 320;
-                    return <Circle key={i} cx={x} cy={4} r={3} fill={theme.colors.error} />;
-                  })}
                 </Svg>
+                {/* Auto-detect ghost markers — show where the detector
+                    originally landed so the user can see how far they
+                    dragged. Behind the corrected markers. */}
+                {strikes.map((s, i) => {
+                  const x = strikeTimeToX(s.timeMs);
+                  return (
+                    <View
+                      key={`auto-${i}`}
+                      pointerEvents="none"
+                      style={[
+                        styles.autoStrikeStripe,
+                        { left: x - 1, backgroundColor: theme.colors.text_muted },
+                      ]}
+                    />
+                  );
+                })}
+                {/* Corrected markers — draggable, deletable. */}
+                {correctedStrikes.map((s, i) => (
+                  <DraggableStrike
+                    key={`corr-${i}`}
+                    x={strikeTimeToX(s.timeMs)}
+                    color={theme.colors.error}
+                    label={String(i + 1)}
+                    onDrag={(dx) => updateStrikeTime(i, xToStrikeTime(strikeTimeToX(s.timeMs) + dx))}
+                    onDelete={() => deleteCorrectedStrike(i)}
+                  />
+                ))}
               </View>
             ) : null}
 
-            {/* Strike list */}
-            {strikes.length > 0 ? (
+            {/* Calibration action row — add manual / save corrected.
+                Renders alongside the waveform when there's a session
+                worth saving (≥ 2 samples). */}
+            {samples.length >= 2 ? (
+              <View style={styles.calibActionRow}>
+                <Pressable
+                  onPress={addManualStrike}
+                  style={({ pressed }) => [
+                    styles.calibBtn,
+                    { borderColor: theme.colors.accent, opacity: pressed ? 0.6 : 1 },
+                  ]}
+                >
+                  <AppIcon name="add" size={16} color={theme.colors.accent} />
+                  <Text style={[styles.calibBtnText, { color: theme.colors.accent }]}>Add strike</Text>
+                </Pressable>
+                <Pressable
+                  onPress={onSaveCalibration}
+                  style={({ pressed }) => [
+                    styles.calibBtn,
+                    {
+                      borderColor: theme.colors.accent,
+                      backgroundColor: savedFlash ? theme.colors.accent : 'transparent',
+                      opacity: pressed ? 0.6 : 1,
+                    },
+                  ]}
+                >
+                  <AppIcon
+                    name={savedFlash ? 'checkmark' : 'save-outline'}
+                    size={16}
+                    color={savedFlash ? theme.colors.background : theme.colors.accent}
+                  />
+                  <Text style={[
+                    styles.calibBtnText,
+                    { color: savedFlash ? theme.colors.background : theme.colors.accent },
+                  ]}>
+                    {savedFlash ? 'Saved' : 'Save calibration'}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {/* Strike list — reflects user corrections (Fix BO). */}
+            {correctedStrikes.length > 0 ? (
               <View style={styles.strikeList}>
-                {strikes.map((s, i) => (
+                {correctedStrikes.map((s, i) => (
                   <Text key={i} style={styles.strikeRow}>
                     {i + 1}. {(s.timeMs / 1000).toFixed(2)}s · {Math.round(s.peakDb)} dB ·
                     {Math.round(s.attackMs)}ms attack · {s.confidence}
@@ -301,18 +459,18 @@ export default function AcousticTestScreen() {
                 consistency of peak dB (tighter = more repeatable
                 contact), avg attack (cleaner = better strike), avg
                 inter-strike gap (faster cadence = drill flow). */}
-            {strikes.length >= 2 ? (
+            {correctedStrikes.length >= 2 ? (
               <View style={styles.summaryCard}>
                 <Text style={styles.summaryHeader}>SESSION SUMMARY</Text>
                 {(() => {
-                  const avgPeakDb = strikes.reduce((a, s) => a + s.peakDb, 0) / strikes.length;
-                  const avgAttack = strikes.reduce((a, s) => a + s.attackMs, 0) / strikes.length;
+                  const avgPeakDb = correctedStrikes.reduce((a, s) => a + s.peakDb, 0) / correctedStrikes.length;
+                  const avgAttack = correctedStrikes.reduce((a, s) => a + s.attackMs, 0) / correctedStrikes.length;
                   const gaps: number[] = [];
-                  for (let i = 1; i < strikes.length; i++) {
-                    gaps.push((strikes[i].timeMs - strikes[i - 1].timeMs) / 1000);
+                  for (let i = 1; i < correctedStrikes.length; i++) {
+                    gaps.push((correctedStrikes[i].timeMs - correctedStrikes[i - 1].timeMs) / 1000);
                   }
                   const avgGap = gaps.reduce((a, g) => a + g, 0) / gaps.length;
-                  const peakRange = Math.max(...strikes.map(s => s.peakDb)) - Math.min(...strikes.map(s => s.peakDb));
+                  const peakRange = Math.max(...correctedStrikes.map(s => s.peakDb)) - Math.min(...correctedStrikes.map(s => s.peakDb));
                   return (
                     <>
                       <Text style={styles.summaryRow}>Avg peak: {Math.round(avgPeakDb)} dB (range {Math.round(peakRange)} dB)</Text>
@@ -337,8 +495,109 @@ export default function AcousticTestScreen() {
           <DiagRow ok={status === 'ok'} text="strikeDetector returns ok (samples >= 2s, valid floor)" />
           <DiagRow ok={strikes.length > 0} text="Detector finds at least 1 strike from your taps" />
         </View>
+
+        {/* 2026-05-26 — Fix BO: saved calibration sessions list.
+            Renders below the diag card. Each saved session shows
+            counts (auto vs corrected) + a tap-to-delete. Persists
+            across app restarts. */}
+        {savedSessions.length > 0 ? (
+          <>
+            <Text style={styles.section}>SAVED CALIBRATIONS</Text>
+            <View style={styles.savedListCard}>
+              {[...savedSessions].reverse().slice(0, 10).map((session) => {
+                const dt = new Date(session.capturedAt);
+                const diff = session.corrected.length - session.autoDetected.length;
+                return (
+                  <View key={session.id} style={styles.savedRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.savedRowTitle}>
+                        {dt.toLocaleDateString()} {dt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                      </Text>
+                      <Text style={styles.savedRowMeta}>
+                        Auto {session.autoDetected.length} → Corrected {session.corrected.length}
+                        {diff !== 0 ? ` (${diff > 0 ? '+' : ''}${diff})` : ''} ·
+                        {' '}{(session.durationMs / 1000).toFixed(1)}s
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() => deleteSavedSession(session.id)}
+                      hitSlop={10}
+                      style={({ pressed }) => [styles.savedDeleteBtn, { opacity: pressed ? 0.5 : 1 }]}
+                    >
+                      <AppIcon name="trash-outline" size={16} color={theme.colors.text_muted} />
+                    </Pressable>
+                  </View>
+                );
+              })}
+              {savedSessions.length > 10 ? (
+                <Text style={styles.savedFooter}>
+                  + {savedSessions.length - 10} older (auto-trimmed at 50)
+                </Text>
+              ) : null}
+            </View>
+          </>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/**
+ * 2026-05-26 — Fix BO: draggable strike marker overlay for the
+ * acoustic test bench waveform. Sits absolutely over the SVG
+ * waveform; PanResponder converts horizontal drag into a timestamp
+ * adjustment via the parent's onDrag(dx) callback. Long-press
+ * deletes (via onDelete). Number label inside so the user can
+ * cross-reference with the per-strike list below.
+ */
+function DraggableStrike({
+  x, color, label, onDrag, onDelete,
+}: {
+  x: number;
+  color: string;
+  label: string;
+  onDrag: (dx: number) => void;
+  onDelete: () => void;
+}) {
+  const startXRef = useRef(0);
+  const styles = useStyles();
+  const panResponder = useMemo(
+    () => PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        startXRef.current = 0;
+      },
+      onPanResponderMove: (_, g) => {
+        const incremental = g.dx - startXRef.current;
+        startXRef.current = g.dx;
+        onDrag(incremental);
+      },
+      onPanResponderRelease: () => {
+        startXRef.current = 0;
+      },
+    }),
+    [onDrag],
+  );
+
+  return (
+    <View
+      {...panResponder.panHandlers}
+      onTouchEnd={undefined}
+      style={[
+        styles.draggableStripe,
+        { left: x - 9, backgroundColor: color },
+      ]}
+    >
+      <Pressable
+        onLongPress={onDelete}
+        delayLongPress={400}
+        hitSlop={6}
+        style={styles.draggableHandle}
+      >
+        <Text style={styles.draggableLabel}>{label}</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -479,6 +738,100 @@ function useStyles() {
           color: theme.colors.text_primary,
           fontSize: 12,
           fontWeight: '600',
+        },
+        // 2026-05-26 — Fix BO: drag-to-correct + saved-sessions UI.
+        autoStrikeStripe: {
+          position: 'absolute',
+          top: 0,
+          width: 2,
+          height: 80,
+          opacity: 0.45,
+        },
+        draggableStripe: {
+          position: 'absolute',
+          top: -4,
+          width: 18,
+          height: 88,
+          borderRadius: 4,
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          paddingTop: 1,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.4,
+          shadowRadius: 2,
+          elevation: 3,
+        },
+        draggableHandle: {
+          width: 16,
+          height: 16,
+          borderRadius: 8,
+          backgroundColor: 'rgba(0,0,0,0.55)',
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        draggableLabel: {
+          color: '#ffffff',
+          fontSize: 10,
+          fontWeight: '900',
+        },
+        calibActionRow: {
+          flexDirection: 'row',
+          gap: 8,
+          marginTop: 10,
+        },
+        calibBtn: {
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+          paddingVertical: 8,
+          paddingHorizontal: 10,
+          borderRadius: 8,
+          borderWidth: 1,
+        },
+        calibBtnText: {
+          fontSize: 12,
+          fontWeight: '800',
+          letterSpacing: 0.3,
+        },
+        savedListCard: {
+          marginTop: 8,
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.surface,
+          paddingVertical: 4,
+        },
+        savedRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: theme.colors.border,
+          gap: 8,
+        },
+        savedRowTitle: {
+          color: theme.colors.text_primary,
+          fontSize: 13,
+          fontWeight: '700',
+        },
+        savedRowMeta: {
+          color: theme.colors.text_muted,
+          fontSize: 11,
+          marginTop: 1,
+        },
+        savedDeleteBtn: {
+          padding: 4,
+        },
+        savedFooter: {
+          color: theme.colors.text_muted,
+          fontSize: 10,
+          fontStyle: 'italic',
+          paddingHorizontal: 12,
+          paddingVertical: 6,
         },
         diagCard: {
           backgroundColor: theme.colors.surface_elevated,
