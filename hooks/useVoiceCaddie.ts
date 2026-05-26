@@ -644,6 +644,12 @@ export const useVoiceCaddie = ({
           // it every time. Phase 2 (live GHIN API) will use this as
           // the lookup key.
           ghinNumber: usePlayerProfileStore.getState().ghin_number,
+          // 2026-05-26 — Fix BE: Cecily Mode flag. Tim's granddaughter
+          // uses the caddie to chat (and helped test ES/EN switching).
+          // When true, brain unlocks general-topic free-conversation
+          // mode with warm/playful/age-appropriate tone. Default off;
+          // adults are unaffected.
+          cecilyMode: useSettingsStore.getState().cecilyMode,
           // 2026-05-19 — pipe the player's learned vocabulary into the
           // brain so phrases they've used before inform replies. Tim's
           // "I saw Kevin learned 22 phrases — can he use them?" The

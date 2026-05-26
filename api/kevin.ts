@@ -332,6 +332,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // tournament / posted-score conversations. Phase 2 will wire
       // the live GHIN API; for now it's informational only.
       ghinNumber = null,
+      // 2026-05-26 — Fix BE: Cecily Mode. When true the caddie
+      // becomes a warm, playful, age-appropriate companion that
+      // answers ANY question (not just golf). Tim's granddaughter
+      // Cecily Rose (also Ceci) uses this; default false so adults
+      // are unaffected.
+      cecilyMode = false,
       // 2026-05-22 — Brain prompt builder integration.
       // golfer_model_snippet: derived tendency snapshot from
       //   services/golferModel.buildGolferModel().prompt_snippet
@@ -407,6 +413,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const _kevinContext: string | null = typeof kevinContext === 'string' && kevinContext.trim() ? kevinContext.trim() : null;
     const _ghinNumber: string | null = typeof ghinNumber === 'string' && ghinNumber.trim() ? ghinNumber.trim() : null;
+    const _cecilyMode: boolean = cecilyMode === true;
     const _golferModel: string | null = typeof golfer_model_snippet === 'string' && golfer_model_snippet.trim() ? golfer_model_snippet.trim() : null;
     const _recentAnalyses: string | null = typeof recent_analyses_snippet === 'string' && recent_analyses_snippet.trim() ? recent_analyses_snippet.trim() : null;
     // 2026-05-23 — Persona Knowledge Layer. When persona='tank' AND the
@@ -633,6 +640,21 @@ ${todBlock}
 
 ${_kevinContext ? `ABOUT THIS GOLFER (private; never read aloud — use as background):\n${_kevinContext}` : ''}
 ${_ghinNumber ? `PLAYER'S GHIN: ${_ghinNumber}. When the user asks "what's my GHIN?" or wants to know their handicap-system number, say it conversationally. Reference it in tournament / posted-score context. We don't have live GHIN data yet — if asked about official handicap, say honestly we'll pull live posted scores once GHIN integration ships.` : ''}
+${_cecilyMode ? `CECILY MODE — IMPORTANT (overrides default golf-only scope for THIS user):
+You're talking with Cecily Rose, a young child who likes to chat (also "Ceci"). She is the user's granddaughter. She's bilingual (English/Spanish) — follow the active language setting.
+
+When Cecily Mode is on, you become a warm, playful, age-appropriate companion. Behave like this:
+- You can answer ANY question — favorite color, animals, why is the sky blue, what's your favorite food, etc. Golf is no longer required.
+- Keep replies SHORT (1-2 sentences). Kids tune out long answers.
+- Use simple words. Avoid jargon, slang, anything edgy. No sarcasm.
+- Warm + encouraging tone always. ("Oooh, great question, Ceci!" / "That's a fun one!")
+- If she says something silly, play along. Don't correct her grammar.
+- If she asks about golf, keep it kid-simple ("A par is how many hits the grown-ups try to take. If you hit fewer, that's even better!").
+- Never refuse to answer just because it's off-topic. The whole point of Cecily Mode is open conversation.
+- NEVER discuss anything inappropriate for a child — if she asks something concerning (violence, scary topics, adult content), gently redirect to something fun ("Let's talk about something happy! What's your favorite animal?").
+- Honor the language setting absolutely — if Spanish is active, respond in Spanish ("¡Qué pregunta tan buena, Ceci!" instead of English).
+
+This mode is gated by an explicit user toggle in Settings. When OFF, normal golf-only behavior resumes.` : ''}
 ${_golferModel ? `\nDERIVED TENDENCIES (private; use to be SPECIFIC instead of generic — never recite these literally):\n${_golferModel}` : ''}
 ${_recentAnalyses ? `\nWHAT YOU JUST TOLD THEM (last few exchanges in this session — don't repeat verbatim, but stay coherent):\n${_recentAnalyses}` : ''}
 ${_personaKBBlock ? `\n${_personaKBBlock}` : ''}

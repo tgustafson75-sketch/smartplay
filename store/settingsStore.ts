@@ -24,6 +24,24 @@ interface SettingsState {
   voiceEnabled: boolean;
   voiceGender: 'male' | 'female';
   language: 'en' | 'es' | 'zh';
+  /**
+   * 2026-05-26 — Fix BE: Cecily Mode.
+   *
+   * Tim's granddaughter Cecily Rose (also Ceci / Cecily) likes to
+   * talk to the caddy and has been helping test ES/EN switching.
+   * When ON, the caddie:
+   *   - Lets her ask about ANY topic (not just golf — favorite color,
+   *     animals, why is the sky blue, etc.)
+   *   - Responds warmly + briefly in age-appropriate language
+   *   - Encourages her questions ("Great question, Cecily — ...")
+   *   - Honors the active language setting (she's bilingual)
+   *
+   * Opt-in toggle, default false. Family adults (Bea / Lily /
+   * Daniella) use the app normally — Cecily Mode is gated on the
+   * explicit toggle so name-detection can't accidentally apply
+   * kid-mode to anyone else.
+   */
+  cecilyMode: boolean;
   discreteMode: boolean;
   responseMode: 'short' | 'neutral' | 'detailed';
   // Phase 105 — single caddiePersonality is preserved as the "current
@@ -187,6 +205,7 @@ interface SettingsState {
   // ─── ACTIONS ────────────────────────────
 
   setVoiceEnabled: (v: boolean) => void;
+  setCecilyMode: (v: boolean) => void;
   setVoiceGender: (g: 'male' | 'female') => void;
   setLanguage: (l: 'en' | 'es' | 'zh') => void;
   setDiscreteMode: (v: boolean) => void;
@@ -245,6 +264,8 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
       voiceEnabled: true,
+      // 2026-05-26 — Fix BE: default OFF. Opt-in only.
+      cecilyMode: false,
       voiceGender: 'male',
       language: 'en',
       discreteMode: false,
@@ -315,6 +336,7 @@ export const useSettingsStore = create<SettingsState>()(
       ghostAutoActivate: true,
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
+      setCecilyMode: (v) => set({ cecilyMode: v }),
       setVoiceGender: (g) => set({ voiceGender: g }),
       setLanguage: (l) => {
         const prev = get().language;
@@ -563,6 +585,7 @@ export const useSettingsStore = create<SettingsState>()(
       },
       partialize: (s) => ({
         voiceEnabled: s.voiceEnabled,
+        cecilyMode: s.cecilyMode,
         voiceGender: s.voiceGender,
         language: s.language,
         discreteMode: s.discreteMode,

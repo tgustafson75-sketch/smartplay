@@ -47,6 +47,9 @@ export default function Settings() {
 
   const {
     voiceEnabled,
+    // 2026-05-26 — Fix BE: Cecily Mode toggle state + setter.
+    cecilyMode,
+    setCecilyMode,
     language,
     discreteMode,
     responseMode,
@@ -792,6 +795,18 @@ export default function Settings() {
             sub={`${caddieName} listens automatically during rounds. Just talk. Tap the pill on the Caddie tab to mute, or say "${caddieName}, turn off active listening".`}
             value={autoListenEnabled}
             onValueChange={confirmToggle('Active Listening', setAutoListenEnabled)}
+          />
+          {/* 2026-05-26 — Fix BE: Cecily Mode toggle. When on, the
+              caddie answers ANY topic in age-appropriate kid-friendly
+              language (Cecily is Tim's granddaughter, bilingual EN/ES).
+              Opt-in only; adults using the app are unaffected when off.
+              Explicit toggle (not name-detection) so the other family
+              members (Bea, Lily, Daniella) don't trip it. */}
+          <ToggleRow
+            label="Cecily Mode"
+            sub={`Kid-friendly free-topic chat for Cecily Rose. ${caddieName} answers any question in warm, simple language. Honors the active language setting.`}
+            value={cecilyMode}
+            onValueChange={confirmToggle('Cecily Mode', setCecilyMode)}
           />
           {/* 2026-05-19 — the "Earbud Tap-to-Talk · Coming soon" row
               moved to the Connected Hardware section below where all
