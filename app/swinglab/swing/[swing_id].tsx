@@ -282,6 +282,33 @@ export default function SwingDetail() {
     await videoRef.current?.playAsync();
   };
 
+  // 2026-05-25 — Safety-net auto-fire for stuck-on-pending analysis.
+  // For uploaded clips that landed with ?watch=1, analysis ONLY fires
+  // when the video plays through (didJustFinish). If the user pauses
+  // mid-play, never starts playback, or the video errors silently,
+  // analysisStatus sits at 'pending' forever. Tonight Tim reported a
+  // 3-minute "Kevin is reviewing" hang on a real upload — this watchdog
+  // fixes that: when ?watch=1 AND status is 'pending' AND we haven't
+  // fired yet, schedule an auto-fire after 25s. By then the video has
+  // either auto-played through (fired naturally) OR not — in which case
+  // we kick off analysis anyway so the user isn't stranded. Cleaned up
+  // on unmount + on status change.
+  useEffect(() => {
+    if (!swing_id) return;
+    if (!shouldAutoplayThenAnalyze) return;
+    if (analysisStatus !== 'pending') return;
+    if (watchFiredRef.current) return;
+    const timer = setTimeout(() => {
+      if (watchFiredRef.current) return;
+      if (useCageStore.getState().sessionHistory.find(s => s.id === swing_id)?.analysis_status !== 'pending') return;
+      watchFiredRef.current = true;
+      uploadLog('watch-then-analyze-watchdog-fire', { reason: 'pending_25s' }, swing_id);
+      useCageStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
+      void runPhaseKOnSession(swing_id);
+    }, 25_000);
+    return () => clearTimeout(timer);
+  }, [swing_id, shouldAutoplayThenAnalyze, analysisStatus]);
+
   // Phase BZ-v1 — when in compare-picker mode, tapping a row picks the
   // right-pane swing instead of scrubbing the main video. Otherwise
   // scrubs as before.
