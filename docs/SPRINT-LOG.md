@@ -1667,5 +1667,17 @@ This is the **coach-manual half** of the [visual swing annotation roadmap](#road
 
 **Status:** logged 2026-05-24, post-launch. Sequenced AFTER the social-share flywheel because acquisition compounds and monetization lags acquisition — share-driven user growth makes the eventual deals layer more valuable per booking when it ships.
 
+---
+
+### Cockpit mode IS Harry (architectural decision, logged 2026-05-25)
+
+COCKPIT MODE = HARRY. Cockpit isn't just a layout — it's Harry's mode. Harry is the older-guy, analog, no-frills caddie: the stripped-down data-forward cockpit interface (hole nav, data strip, scoring, minimal visual flash) IS his personality expressed as a UI.
+
+**Implications:**
+- Harry does NOT need the ~30 emotional-state avatar/face image set the other characters (Kevin/Serena/Tank) have. His "face" is the cockpit. The no-pictures analog presentation is INTENTIONAL character design, not a gap.
+- Harry only needs visual assets for: (1) HANDOFF moments (a single badge/image when handing off to or offering Harry), (2) PROMOTIONAL/marketing materials (showcase, app store, representing all four characters).
+- Saves the avatar-generation pipeline work for Harry — and it's on-brand: the "just give me the numbers" older caddie naturally lives in a clean data interface, not a photoreal avatar.
+- When Harry is the active persona, the experience IS cockpit mode.
+
 
 
