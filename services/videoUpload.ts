@@ -300,13 +300,30 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         ? session.primary_issue.primary_fault
         : null;
 
-    for (const [i, swing] of swings.entries()) {
-      if (!swing.clipUri) continue;
-      // Phase BW — when this shot is part of a multi-swing master video,
-      // pass clipBoundaries so frame extraction samples within the
-      // swing's window only, not the whole master. Legacy single-clip
-      // shots have no boundaries; analyzeSwing falls back to whole-clip
-      // sampling automatically.
+    // 2026-05-26 — Fix DQ (commit 2/3): parallelize per-shot analysis
+    // in batches of USE_PARALLEL_BATCH_SIZE. Sequential 10-shot
+    // session = ~150s (10 × ~15s) and routinely hit the client's 55s
+    // abort. Batched concurrency 3 brings it to ~50s (3-4 batches ×
+    // ~15s). All side effects (uploadLog/cageLog/V6/store writes)
+    // stay per-swing inside the closure; results land in indexed
+    // slots so output order matches input order regardless of when
+    // each batch member completes.
+    //
+    // Safety: USE_PARALLEL_PER_SHOT flag can be flipped false for a
+    // one-line revert to pre-commit-2 sequential behavior. Cage and
+    // SmartMotion are the WOW path; regression here is unacceptable.
+    const USE_PARALLEL_PER_SHOT = true;
+    const USE_PARALLEL_BATCH_SIZE = 3;
+
+    // Build the per-swing work item once so both sequential and
+    // parallel paths share the same closure (zero behavior drift).
+    type SwingWork = { swing: typeof swings[number]; index: number };
+    const work: SwingWork[] = swings
+      .map((swing, index) => ({ swing, index }))
+      .filter(w => !!w.swing.clipUri);
+
+    const runOne = async ({ swing, index: i }: SwingWork): Promise<void> => {
+      // Phase BW — clipBoundaries for multi-swing master videos.
       const boundaries = (
         typeof swing.clipStartSeconds === 'number' &&
         typeof swing.clipEndSeconds === 'number'
@@ -331,10 +348,15 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         boundary_start_sec: boundaries?.startSec ?? null,
         boundary_end_sec: boundaries?.endSec ?? null,
       });
-      const r = await analyzeSwing(swing.clipUri, {
+      // Snapshot prior_issues at THIS swing's start. In parallel mode,
+      // all swings in a batch see the same snapshot (the prior batch's
+      // results) — acceptable since prior_issues is loose informational
+      // context for the prompt, not a hard dependency.
+      const priorIssuesSnapshot = results.slice(-3).map(x => x.analysis.detected_issue);
+      const r = await analyzeSwing(swing.clipUri!, {
         club: swing.club,
         swing_number: i + 1,
-        prior_issues: results.slice(-3).map(x => x.analysis.detected_issue),
+        prior_issues: priorIssuesSnapshot,
         caddie_name: caddieName,
         player_context: playerContext,
         swing_tag: swingTag,
@@ -376,11 +398,6 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       if (r.kind === 'ok') {
         results.push({ swing_id: swing.id, analysis: r.analysis });
         useCageStore.getState().setShotIssueTimestamps(sessionId, swing.id, r.frame_timestamps_sec);
-        // Phase BW — persist per-shot analysis so the review UI can render
-        // a per-swing card for multi-swing live cage sessions.
-        // Phase 403b — additionally persist the fault frame URI and the
-        // 0-based fault_frame_index so the review UI can show the user
-        // the moment of the fault.
         useCageStore.getState().setShotAnalysis(sessionId, swing.id, {
           detected_issue: r.analysis.detected_issue,
           severity: r.analysis.severity,
@@ -390,12 +407,10 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
           visual_reference_path: r.fault_frame_uri ?? null,
         });
         // 2026-05-24 — Promote the display-quality fault frame to the
-        // session level so the visual-annotation feature and the
-        // social-share flywheel have a stable, crisp source to draw
-        // on / export. Last successful analysis with a non-null
-        // display URI wins for multi-shot sessions (most recent
-        // diagnostic frame). Wire-quality `visual_reference_path`
-        // above is kept for the per-shot review card.
+        // session level. In parallel mode the "last successful with
+        // display URI wins" semantics still hold — the LAST batch to
+        // complete writes its display URI (effectively the latest
+        // diagnostic frame in completion order, vs swing order).
         if (r.fault_frame_display_uri || r.analysis.fault_frame_index != null) {
           useCageStore.getState().setSessionFaultFrame(sessionId, {
             uri: r.fault_frame_display_uri ?? null,
@@ -403,6 +418,27 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
             fraction: r.fault_frame_fraction ?? null,
           });
         }
+      }
+    };
+
+    if (USE_PARALLEL_PER_SHOT && work.length > 1) {
+      // Batched parallel path. Each batch awaits Promise.allSettled
+      // so a single failing swing doesn't abort the others — failures
+      // are captured per-swing inside runOne via the r.kind branches.
+      for (let batchStart = 0; batchStart < work.length; batchStart += USE_PARALLEL_BATCH_SIZE) {
+        const batch = work.slice(batchStart, batchStart + USE_PARALLEL_BATCH_SIZE);
+        V6('STAGE 2-3 — parallel batch start', {
+          batch_start: batchStart,
+          batch_size: batch.length,
+          total_work: work.length,
+        });
+        await Promise.allSettled(batch.map(runOne));
+      }
+    } else {
+      // Sequential path — preserved for the feature-flag-off case
+      // and for single-swing sessions (no concurrency to gain).
+      for (const item of work) {
+        await runOne(item);
       }
     }
 
