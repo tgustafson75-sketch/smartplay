@@ -64,3 +64,10 @@ credentials.json
 *.p12
 *.mobileprovision
 *.p8
+
+# 2026-05-27 — marketing voiceover fallback output dir. Generator
+# (scripts/generate-vo.mjs) writes mp3s to ~/Desktop by default; falls
+# back to ./vo-output/ if Desktop isn't writable. Either way, never
+# commit the generated audio.
+vo-output/
+SmartPlay_VO_*.mp3
