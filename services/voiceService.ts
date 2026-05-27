@@ -189,7 +189,20 @@ let currentAudioMode: 'speech' | 'record' | null = null;
 
 export const configureAudioForSpeech =
   async (): Promise<void> => {
-    if (currentAudioMode === 'speech') return;
+    // 2026-05-26 — Fix DO: REMOVED the `if (currentAudioMode === 'speech')
+    // return` short-circuit. This was the opener silence root cause:
+    // audioLifecycle.goCold (idle 90s / backgrounded / trust=Quiet) calls
+    // Audio.setAudioModeAsync({ playsInSilentModeIOS: false,
+    // staysActiveInBackground: false, ... }) to put the OS audio session
+    // into a permissive default. But voiceService's currentAudioMode flag
+    // is a SEPARATE module-level state that stayed at 'speech' from a
+    // previous configure. Next speak() short-circuited the reconfig,
+    // OS session was still in goCold's default state, Sound.createAsync
+    // played silently. UI showed 'Kevin is speaking' (speaking-state
+    // flag was set) but no audio. Tim's exact symptom.
+    //
+    // Cost of always configuring: ~10ms per speak (setAudioModeAsync is
+    // fast). Worth eliminating the race entirely.
     try {
       await setAudioModeSerial({
         allowsRecordingIOS: false,
@@ -197,24 +210,11 @@ export const configureAudioForSpeech =
         staysActiveInBackground: true,
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
-        // Audit follow-up (2026-05-13) — DuckOthers while speaking so
-        // Spotify / podcasts / nav voices drop in volume during Kevin's
-        // reply and restore automatically when the speak queue drains.
-        // Required for clean coexistence on iOS; matches shouldDuckAndroid
-        // semantics on the Android side.
         interruptionModeIOS: InterruptionModeIOS.DuckOthers,
         interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
       });
-      // 2026-05-26 — Fix CZ: only mark mode='speech' if the OS call
-      // actually succeeded. Prior code set the flag inside the try
-      // even after a thrown setAudioModeSerial — so currentAudioMode
-      // could falsely report 'speech' while the iOS/Android session
-      // was still in 'record' (or unset). Next speak() would
-      // short-circuit on line 192 thinking it was already configured.
       currentAudioMode = 'speech';
     } catch (err) {
-      // Audio mode flag intentionally NOT set on error so the next
-      // speak() retries the configuration instead of trusting a lie.
       console.log('[voice] configure speech error — leaving mode flag stale for retry:', err);
     }
   };
