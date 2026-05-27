@@ -27,20 +27,20 @@ const OPENAI_VOICES = {
 // USE_ELEVENLABS=false, all male personas were sharing onyx (Kevin's
 // default) so Tank + Harry sounded identical to Kevin. Pick voices
 // that match each persona's character description.
-// 2026-05-26 — Fix DT: harry → echo (was sage). Tim reported sage
-// sounded too close to Serena's nova. echo is a smooth/mellow male
-// voice — clearly distinct from Kevin's deep onyx AND Serena's
-// nova, while still fitting Harry's calm partnership-counsel tone.
-//   - kevin: onyx (deep, warm — 'friend in the cart')
+// 2026-05-26 — Fix DT/DU: per-persona OpenAI TTS voice mapping. Each
+// voice picked to match the persona's character + age:
+//   - kevin: onyx (deep, warm — middle-aged 'friend in the cart')
 //   - serena: nova (clear, composed — professional female caddie)
 //   - tank: ash (confident, expressive — high-intensity drill-sergeant)
-//   - harry: echo (smooth, mellow male — calm grounding counsel)
+//   - harry: fable (British male storyteller — natural older-mentor
+//     gravitas; Tim reminded that Harry is an OLD guy, so the
+//     grandfather/wise-counsel tone matters more than just 'calm').
 // Falls through to gender-based default for any unknown persona.
 const OPENAI_VOICES_BY_PERSONA: Record<string, 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer' | 'verse'> = {
   kevin:  'onyx',
   serena: 'nova',
   tank:   'ash',
-  harry:  'echo',
+  harry:  'fable',
 };
 
 export default async function handler(
