@@ -738,7 +738,33 @@ export const speak = async (
     if (profile?.useCustomCaddie) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const clipLookup = require('./customCaddieClips') as typeof import('./customCaddieClips');
-      customClipUri = clipLookup.lookupClipUri(text, profile.customCaddieClips ?? null);
+      const maybeUri = clipLookup.lookupClipUri(text, profile.customCaddieClips ?? null);
+      // 2026-05-27 — Fix EC: verify the file ACTUALLY exists before
+      // committing to the override. Without this probe, a stale URI
+      // (file deleted by OS / orphaned by a partial record / sandbox
+      // path moved on rebuild) would still take over the speech turn,
+      // Sound.createAsync would throw inside playLocalFile, the catch
+      // below would return, and the user would hear NOTHING for that
+      // line. Tim's report 2026-05-27: "I see his messages but cannot
+      // hear him talk." Probing now lets us fall through to TTS
+      // cleanly when the recording is gone. Cheap (~1ms) and only
+      // runs when useCustomCaddie is ON.
+      if (maybeUri && maybeUri.startsWith('file://')) {
+        try {
+          const FS = await import('expo-file-system/legacy');
+          const info = await FS.getInfoAsync(maybeUri);
+          if (info.exists) {
+            customClipUri = maybeUri;
+          } else {
+            console.log('[voice] custom-caddie clip URI present but file missing — falling through to TTS:', maybeUri);
+          }
+        } catch (e) {
+          console.log('[voice] custom-caddie clip existence probe failed — falling through to TTS:', e);
+        }
+      } else if (maybeUri) {
+        // Non-file:// URIs we can't probe locally; trust them.
+        customClipUri = maybeUri;
+      }
     }
   } catch (e) {
     console.log('[voice] custom-caddie lookup failed (non-fatal):', e);
@@ -753,12 +779,11 @@ export const speak = async (
     try {
       await playLocalFile(customClipUri, undefined, opts);
     } catch (e) {
-      // Stale URI / decode failure. Falling through to TTS here would
-      // need to re-claim currentSpeechId (which playLocalFile already
-      // bumped) — racy. Safer: log + return so this turn ends quietly.
-      // Recovery is "re-record the phrase" in the personal-caddie UI;
-      // the next caddie line will work normally because nothing in
-      // global state is wedged.
+      // File existed at probe but playback still threw — unusual but
+      // possible (corrupt header / format mismatch). Log + return; the
+      // recovery is re-record. We do NOT fall through to TTS here
+      // because playLocalFile already bumped currentSpeechId and
+      // reclaiming would race the next speak() call.
       console.log('[voice] custom-caddie clip playback failed (turn ends; re-record to fix):', e);
     }
     return;
