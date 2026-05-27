@@ -397,8 +397,22 @@ function normalizeAnalysis(
 ): SwingAnalysisResponse | null {
   if (!rawText) return null;
   let parsed: SwingAnalysisResponse;
+  // 2026-05-26 — Fix DC: robust JSON extraction. OpenAI's
+  // response_format:json_object guarantees clean JSON, but Anthropic
+  // (prompt-instructed only) sometimes prepends prose ("Looking at
+  // this swing, I see...") before the JSON. The prior approach only
+  // stripped ``` code fences, so prose-prefixed valid JSON was
+  // silently dropped → forced unnecessary re-escalation. Try the
+  // greedy match for the outermost {...} block first; fall back to
+  // fence-strip if no braces found.
   try {
-    const cleaned = rawText.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
+    let cleaned = rawText.trim();
+    const braceMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (braceMatch) {
+      cleaned = braceMatch[0];
+    } else {
+      cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
+    }
     parsed = JSON.parse(cleaned) as SwingAnalysisResponse;
   } catch {
     return null;

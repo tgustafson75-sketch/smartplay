@@ -746,7 +746,16 @@ export const speak = async (
     }).finally(() => clearTimeout(voiceTimeout));
 
     // Bail if a newer speak() or stopSpeaking() fired while we were fetching.
-    if (myId !== currentSpeechId) return;
+    // 2026-05-26 — Fix DD: log the bail. Without this, opener silence
+    // (caused by ANY hook firing stopSpeaking during the 3s setTimeout
+    // window) leaves no breadcrumb. Now every preempted speak prints
+    // exactly which generation got bumped — diagnosable in one log line.
+    if (myId !== currentSpeechId) {
+      console.log('[voice] speak preempted after fetch — myId=', myId, 'currentSpeechId=', currentSpeechId, 'text=', text.slice(0, 60));
+      notifyCaption(null);
+      notifySpeaking(false);
+      return;
+    }
     currentAbortController = null;
 
     if (!response.ok) {
@@ -762,7 +771,12 @@ export const speak = async (
     }
 
     const arrayBuffer = await response.arrayBuffer();
-    if (myId !== currentSpeechId) return;
+    if (myId !== currentSpeechId) {
+      console.log('[voice] speak preempted after arrayBuffer — myId=', myId, 'currentSpeechId=', currentSpeechId);
+      notifyCaption(null);
+      notifySpeaking(false);
+      return;
+    }
 
     // 2026-05-24 — Raised from 100 → 1000 bytes. The 100-byte threshold
     // was permissive enough that an ElevenLabs error-blob masquerading
@@ -789,7 +803,12 @@ export const speak = async (
     audioFile.write(uint8);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-    if (myId !== currentSpeechId) return;
+    if (myId !== currentSpeechId) {
+      console.log('[voice] speak preempted after file-write — myId=', myId, 'currentSpeechId=', currentSpeechId);
+      notifyCaption(null);
+      notifySpeaking(false);
+      return;
+    }
 
     const { sound } = await Audio.Sound.createAsync(
       { uri: audioFile.uri },
@@ -798,7 +817,10 @@ export const speak = async (
 
     // Bail if ownership was taken during createAsync.
     if (myId !== currentSpeechId) {
+      console.log('[voice] speak preempted after Sound.createAsync — myId=', myId, 'currentSpeechId=', currentSpeechId);
       await sound.unloadAsync().catch(() => {});
+      notifyCaption(null);
+      notifySpeaking(false);
       return;
     }
 
