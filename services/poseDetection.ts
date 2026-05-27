@@ -135,7 +135,13 @@ export type SwingAnalysisResult =
 // budgets the full chain inside Vercel's 60s maxDuration with a
 // small grace window for the response round-trip.
 const REQUEST_TIMEOUT_MS = 55_000;
-const TENTATIVE_TIMEOUT_MS = 15_000;
+// 2026-05-26 — Fix CO: tentative bumped 15s → 30s. Tim's swing
+// library upload was timing out the FALLBACK path too (primary 55s
+// + tentative 15s = 70s total; server vision chain under load can
+// chew 50s on the primary then the tentative aborts before its
+// reduced-frame retry completes). 30s gives the tentative real
+// breathing room while staying inside the user's patience budget.
+const TENTATIVE_TIMEOUT_MS = 30_000;
 
 /**
  * Sample 5 key frames from a swing clip via expo-video-thumbnails. Each

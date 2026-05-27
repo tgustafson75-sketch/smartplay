@@ -612,13 +612,21 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 7,
+    // 2026-05-26 — Fix CP: Tim's screenshot shows the filter pills
+    // rendering with clipped/smushed text on light theme + Samsung
+    // One UI. Tighter padding (7v) + no explicit lineHeight let the
+    // font render with no vertical breathing room, then theme bg
+    // contrast amplified the impression of "smashed buttons". Bumped
+    // vertical padding 7→10 and gave chipText an explicit lineHeight.
+    // minHeight guards against future rounding edge-cases too.
+    paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 999,
     borderWidth: 1,
     flexShrink: 0,
+    minHeight: 36,
   },
-  chipText: { fontSize: 13, fontWeight: '600' },
+  chipText: { fontSize: 13, fontWeight: '600', lineHeight: 18, includeFontPadding: false },
   chipDivider: { width: 1, height: 20, marginHorizontal: 4 },
   chipSmall: {
     paddingVertical: 5,

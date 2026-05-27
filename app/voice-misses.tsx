@@ -131,23 +131,26 @@ export default function VoiceMissesScreen() {
             {entries.map((entry: VoiceMissEntry) => {
               const badgeColor = missTypeColor(entry.missType, colors.accent);
               return (
-                <TouchableOpacity
+                <View
                   key={entry.id}
-                  style={[styles.entry, { borderColor: colors.border, backgroundColor: colors.surface }]}
-                  onLongPress={() => {
-                    Alert.alert(
-                      'Delete miss?',
-                      'This removes it from the log.',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        { text: 'Delete', style: 'destructive', onPress: () => remove(entry.id) },
-                      ],
-                    );
-                  }}
-                  delayLongPress={500}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Miss: ${entry.transcript}. Long-press to delete.`}
+                  style={[styles.entry, { borderColor: colors.border, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'flex-start', gap: 8 }]}
                 >
+                  <TouchableOpacity
+                    style={{ flex: 1 }}
+                    onLongPress={() => {
+                      Alert.alert(
+                        'Delete miss?',
+                        'This removes it from the log.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Delete', style: 'destructive', onPress: () => remove(entry.id) },
+                        ],
+                      );
+                    }}
+                    delayLongPress={500}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Miss: ${entry.transcript}. Long-press or tap trash to delete.`}
+                  >
                   <Text style={[styles.entryText, { color: colors.text_primary }]} numberOfLines={3}>
                     &ldquo;{entry.transcript}&rdquo;
                   </Text>
@@ -180,7 +183,28 @@ export default function VoiceMissesScreen() {
                       {entry.error_message}
                     </Text>
                   ) : null}
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                  {/* 2026-05-26 — Fix CR: visible per-row trash icon
+                      so delete is one tap, not a hidden long-press. */}
+                  <TouchableOpacity
+                    onPress={() => {
+                      Alert.alert(
+                        'Delete miss?',
+                        'This removes it from the log.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Delete', style: 'destructive', onPress: () => remove(entry.id) },
+                        ],
+                      );
+                    }}
+                    style={{ paddingTop: 2 }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete this miss"
+                  >
+                    <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
               );
             })}
             <View style={{ height: 80 }} />

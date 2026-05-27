@@ -278,6 +278,28 @@ export default function OwnerLogsScreen() {
                   >
                     <Ionicons name="mail-outline" size={18} color={colors.accent} />
                   </TouchableOpacity>
+                  {/* 2026-05-26 — Fix CR: visible per-row trash icon
+                      so delete is discoverable. Long-press still works
+                      for power users; this is the obvious tap path
+                      Tim was asking for. */}
+                  <TouchableOpacity
+                    onPress={() => {
+                      Alert.alert(
+                        'Delete entry?',
+                        'This removes it from the log.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Delete', style: 'destructive', onPress: () => remove(entry.id) },
+                        ],
+                      );
+                    }}
+                    style={{ paddingLeft: 8, paddingTop: 2 }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete this entry"
+                  >
+                    <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                  </TouchableOpacity>
                 </View>
 
                 {/* 2026-05-22 — Path 1 (Owner Triage). Button posts the
