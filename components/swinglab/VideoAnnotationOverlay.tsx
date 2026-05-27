@@ -38,19 +38,29 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Modal,
   PanResponder, type LayoutChangeEvent, type GestureResponderEvent,
 } from 'react-native';
-import Svg, { Path, Circle, Line, Text as SvgText } from 'react-native-svg';
+import Svg, { Path, Circle, Line, Text as SvgText, Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 
-type Tool = 'freehand' | 'circle' | 'line' | 'text';
+// 2026-05-26 — Fix DX: two new coach tools.
+//  - 'straight' = swing-plane / spine / shaft alignment guide.
+//    Two-tap defines an angle, but the rendered line EXTENDS to the
+//    overlay edges so the coach sees a full alignment plane (which
+//    is what they actually draw on whiteboard swing analysis).
+//  - 'roi' = region-of-interest marker. Two-tap circle but rendered
+//    with a dashed border + semi-transparent fill so it visually
+//    reads as "focus area" (e.g., impact zone, hip position) instead
+//    of the existing solid-outline circle (which reads as "this
+//    specific shape"). Distinct tools so the coach picks intent.
+type Tool = 'freehand' | 'circle' | 'line' | 'straight' | 'roi' | 'text';
 type ShapeColor = '#ffffff' | '#00C896' | '#ef4444' | '#f59e0b';
 
 interface Shape {
   id: string;
   type: Tool;
   color: ShapeColor;
-  /** freehand: SVG path d-string. circle: cx/cy/r. line: x1/y1/x2/y2.
-   *  text: x/y + text. Each shape uses its own subset; the others
-   *  stay undefined. */
+  /** freehand: SVG path d-string. circle/roi: cx/cy/r. line/straight:
+   *  x1/y1/x2/y2. text: x/y + text. Each shape uses its own subset;
+   *  the others stay undefined. */
   d?: string;
   cx?: number; cy?: number; r?: number;
   x1?: number; y1?: number; x2?: number; y2?: number;
@@ -58,7 +68,7 @@ interface Shape {
 }
 
 interface PendingTwoPoint {
-  type: 'circle' | 'line';
+  type: 'circle' | 'line' | 'straight' | 'roi';
   x1: number; y1: number;
 }
 
@@ -75,6 +85,13 @@ export default function VideoAnnotationOverlay() {
   const [textInputModal, setTextInputModal] = useState<{ x: number; y: number } | null>(null);
   const [textDraft, setTextDraft] = useState('');
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  // 2026-05-26 — Fix DX: live drag endpoint for the new straight + roi
+  // tools. These use a drag-to-size flow (CT-scanner style — Tim's
+  // 25-year medical-imaging muscle memory) rather than the existing
+  // tap-tap flow used by line + circle. Ref mirrors state so the
+  // PanResponder's stable closure reads fresh coords.
+  const [dragEnd, setDragEnd] = useState<{ x: number; y: number } | null>(null);
+  const dragEndRef = useRef<{ x: number; y: number } | null>(null);
 
   // Track the latest pendingPath in a ref so PanResponder's stable
   // closure can read the current value when onPanResponderRelease
@@ -118,7 +135,49 @@ export default function VideoAnnotationOverlay() {
 
   const addShape = (s: Shape) => setShapes(prev => [...prev, s]);
   const undo = () => setShapes(prev => prev.slice(0, -1));
-  const clearAll = () => { setShapes([]); setPendingTwoPoint(null); setPendingPath(''); pendingPathRef.current = ''; };
+  const clearAll = () => {
+    setShapes([]); setPendingTwoPoint(null);
+    setPendingPath(''); pendingPathRef.current = '';
+    setDragEnd(null); dragEndRef.current = null;
+  };
+
+  // 2026-05-26 — Fix DX: extend a two-point line to the overlay edges.
+  // Used by the 'straight' tool so a drawn segment renders as a full
+  // alignment plane (swing plane / spine / shaft / target-line). The
+  // math is parametric: P(t) = P1 + t·(P2-P1); find t at each rect-edge
+  // intersection, keep the min and max that land inside the rect.
+  const extendToBounds = (x1: number, y1: number, x2: number, y2: number, w: number, h: number) => {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    if (dx === 0 && dy === 0) return { ex1: x1, ey1: y1, ex2: x2, ey2: y2 };
+    const ts: number[] = [];
+    if (dx !== 0) { ts.push(-x1 / dx); ts.push((w - x1) / dx); }
+    if (dy !== 0) { ts.push(-y1 / dy); ts.push((h - y1) / dy); }
+    const inside = ts.filter(t => {
+      const x = x1 + t * dx;
+      const y = y1 + t * dy;
+      return x >= -0.5 && x <= w + 0.5 && y >= -0.5 && y <= h + 0.5;
+    });
+    if (inside.length < 2) return { ex1: x1, ey1: y1, ex2: x2, ey2: y2 };
+    const tMin = Math.min(...inside);
+    const tMax = Math.max(...inside);
+    return {
+      ex1: x1 + tMin * dx, ey1: y1 + tMin * dy,
+      ex2: x1 + tMax * dx, ey2: y1 + tMax * dy,
+    };
+  };
+
+  // Angle from horizontal, folded to -90..+90 so a line is direction-
+  // agnostic ("a 45° line" reads the same drawn either way). Screen
+  // Y points down so we flip the sign — positive = "rising left-to-
+  // right" which matches a coach's whiteboard intuition.
+  const angleFromHorizontal = (x1: number, y1: number, x2: number, y2: number) => {
+    const rad = Math.atan2(y2 - y1, x2 - x1);
+    let deg = rad * 180 / Math.PI;
+    if (deg > 90) deg -= 180;
+    if (deg < -90) deg += 180;
+    return Math.round(-deg);
+  };
 
   // 2026-05-26 — Fix CK: the stable PanResponder closure was reading
   // `enabled`, `tool`, and `color` from the INITIAL render's closure
@@ -163,30 +222,79 @@ export default function VideoAnnotationOverlay() {
           pendingPathRef.current = p;
         } else if (t === 'text') {
           setTextInputModal({ x: locationX, y: locationY });
+        } else if (t === 'straight' || t === 'roi') {
+          // 2026-05-26 — Fix DX: drag-to-size for the CT-scanner-style
+          // tools. Touch-down anchors the start point; Move updates
+          // the live endpoint preview; Release commits the shape.
+          setPendingTwoPoint({ type: t, x1: locationX, y1: locationY });
+          const end = { x: locationX, y: locationY };
+          dragEndRef.current = end;
+          setDragEnd(end);
         } else {
           onTapTwoPoint(locationX, locationY);
         }
       },
       onPanResponderMove: (e: GestureResponderEvent) => {
-        if (!enabledRef.current || toolRef.current !== 'freehand') return;
+        if (!enabledRef.current) return;
+        const t = toolRef.current;
         const { locationX, locationY } = e.nativeEvent;
-        const next = `${pendingPathRef.current} L ${locationX.toFixed(1)} ${locationY.toFixed(1)}`;
-        pendingPathRef.current = next;
-        setPendingPath(next);
+        if (t === 'freehand') {
+          const next = `${pendingPathRef.current} L ${locationX.toFixed(1)} ${locationY.toFixed(1)}`;
+          pendingPathRef.current = next;
+          setPendingPath(next);
+        } else if (t === 'straight' || t === 'roi') {
+          const end = { x: locationX, y: locationY };
+          dragEndRef.current = end;
+          setDragEnd(end);
+        }
       },
       onPanResponderRelease: () => {
-        if (!enabledRef.current || toolRef.current !== 'freehand') return;
-        const d = pendingPathRef.current;
-        if (d && d.length > 0) {
-          addShape({
-            id: `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-            type: 'freehand',
-            color: colorRef.current,
-            d,
-          });
+        if (!enabledRef.current) return;
+        const t = toolRef.current;
+        if (t === 'freehand') {
+          const d = pendingPathRef.current;
+          if (d && d.length > 0) {
+            addShape({
+              id: `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+              type: 'freehand',
+              color: colorRef.current,
+              d,
+            });
+          }
+          pendingPathRef.current = '';
+          setPendingPath('');
+        } else if (t === 'straight' || t === 'roi') {
+          const start = pendingTwoPoint;
+          const end = dragEndRef.current;
+          if (start && end) {
+            const dx = end.x - start.x1;
+            const dy = end.y - start.y1;
+            const distSq = dx * dx + dy * dy;
+            // Minimum 8px drag — a stationary tap on these tools is a
+            // miss-tap (typically the user picked the tool then tapped
+            // to confirm); we don't want to commit a zero-size shape.
+            if (distSq >= 64) {
+              if (t === 'straight') {
+                addShape({
+                  id: `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                  type: 'straight',
+                  color: colorRef.current,
+                  x1: start.x1, y1: start.y1, x2: end.x, y2: end.y,
+                });
+              } else {
+                addShape({
+                  id: `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                  type: 'roi',
+                  color: colorRef.current,
+                  cx: start.x1, cy: start.y1, r: Math.hypot(dx, dy),
+                });
+              }
+            }
+          }
+          setPendingTwoPoint(null);
+          setDragEnd(null);
+          dragEndRef.current = null;
         }
-        pendingPathRef.current = '';
-        setPendingPath('');
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -231,10 +339,18 @@ export default function VideoAnnotationOverlay() {
           />
           {enabled && (
             <>
-              <ToolPill icon="brush" active={tool === 'freehand'} onPress={() => setTool('freehand')} />
-              <ToolPill icon="ellipse-outline" active={tool === 'circle'} onPress={() => setTool('circle')} />
-              <ToolPill icon="remove-outline" active={tool === 'line'} onPress={() => setTool('line')} />
-              <ToolPill icon="text-outline" active={tool === 'text'} onPress={() => setTool('text')} />
+              <ToolPill icon="brush" active={tool === 'freehand'} onPress={() => setTool('freehand')} accessibilityLabel="Freehand" />
+              <ToolPill icon="ellipse-outline" active={tool === 'circle'} onPress={() => setTool('circle')} accessibilityLabel="Circle" />
+              <ToolPill icon="remove-outline" active={tool === 'line'} onPress={() => setTool('line')} accessibilityLabel="Line segment" />
+              {/* 2026-05-26 — Fix DX: 'straight' = swing-plane / spine /
+                  shaft alignment guide. Drag to define angle; rendered
+                  line extends edge-to-edge with an angle-from-horizontal
+                  readout. Pairs with 'roi' below for CT-scanner-style
+                  measurement workflow Tim's 25-year medical imaging
+                  muscle memory expects. */}
+              <ToolPill icon="git-network-outline" active={tool === 'straight'} onPress={() => setTool('straight')} accessibilityLabel="Straight alignment line" />
+              <ToolPill icon="aperture-outline" active={tool === 'roi'} onPress={() => setTool('roi')} accessibilityLabel="ROI region" />
+              <ToolPill icon="text-outline" active={tool === 'text'} onPress={() => setTool('text')} accessibilityLabel="Text label" />
             </>
           )}
         </View>
@@ -288,6 +404,49 @@ export default function VideoAnnotationOverlay() {
               if (s.type === 'line' && s.x2 != null) {
                 return <Line key={s.id} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke={s.color} strokeWidth={3} strokeLinecap="round" />;
               }
+              // 2026-05-26 — Fix DX: straight alignment line. Extends to
+              // overlay edges + shows angle-from-horizontal label
+              // (positive = rising left-to-right, matching whiteboard).
+              if (s.type === 'straight' && s.x1 != null && s.y1 != null && s.x2 != null && s.y2 != null) {
+                const { ex1, ey1, ex2, ey2 } = extendToBounds(s.x1, s.y1, s.x2, s.y2, size.w, size.h);
+                const deg = angleFromHorizontal(s.x1, s.y1, s.x2, s.y2);
+                const mx = (ex1 + ex2) / 2;
+                const my = (ey1 + ey2) / 2;
+                const label = `${deg >= 0 ? '+' : ''}${deg}°`;
+                return (
+                  <React.Fragment key={s.id}>
+                    <Line x1={ex1} y1={ey1} x2={ex2} y2={ey2} stroke={s.color} strokeWidth={2} strokeOpacity={0.9} />
+                    {/* Small endpoint markers so the original tap points
+                        stay visible — the coach can see where they
+                        actually anchored within the extended plane. */}
+                    <Circle cx={s.x1} cy={s.y1} r={3} fill={s.color} />
+                    <Circle cx={s.x2} cy={s.y2} r={3} fill={s.color} />
+                    <Rect x={mx - 22} y={my - 10} width={44} height={18} rx={4} fill="rgba(0,0,0,0.55)" />
+                    <SvgText x={mx} y={my + 4} fill={s.color} fontSize="11" fontWeight="800" textAnchor="middle">{label}</SvgText>
+                  </React.Fragment>
+                );
+              }
+              // 2026-05-26 — Fix DX: ROI = region of interest. Dashed
+              // border + 14%-opacity fill differentiates from the solid
+              // outline circle (which reads as "this specific shape").
+              // Diameter readout is in % of overlay height — relative,
+              // not absolute, since pixels don't translate to a real
+              // measurement without per-frame scale calibration.
+              if (s.type === 'roi' && s.r != null && s.cx != null && s.cy != null) {
+                const diaPct = size.h > 0 ? Math.round((2 * s.r / size.h) * 100) : 0;
+                const labelY = s.cy - s.r - 8;
+                return (
+                  <React.Fragment key={s.id}>
+                    <Circle cx={s.cx} cy={s.cy} r={s.r} stroke={s.color} strokeWidth={2} strokeDasharray="6,4" fill={s.color} fillOpacity={0.14} />
+                    {/* Crosshair at center — CT-tool convention so the
+                        coach sees the anchor point even with semi-fill. */}
+                    <Line x1={s.cx - 5} y1={s.cy} x2={s.cx + 5} y2={s.cy} stroke={s.color} strokeWidth={1.5} />
+                    <Line x1={s.cx} y1={s.cy - 5} x2={s.cx} y2={s.cy + 5} stroke={s.color} strokeWidth={1.5} />
+                    <Rect x={s.cx - 26} y={labelY - 10} width={52} height={16} rx={4} fill="rgba(0,0,0,0.55)" />
+                    <SvgText x={s.cx} y={labelY + 2} fill={s.color} fontSize="10" fontWeight="800" textAnchor="middle">{`Ø ${diaPct}%`}</SvgText>
+                  </React.Fragment>
+                );
+              }
               if (s.type === 'text' && s.text) {
                 return <SvgText key={s.id} x={s.x} y={s.y} fill={s.color} fontSize="16" fontWeight="700">{s.text}</SvgText>;
               }
@@ -296,7 +455,44 @@ export default function VideoAnnotationOverlay() {
             {pendingPath ? (
               <Path d={pendingPath} stroke={color} strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round" />
             ) : null}
-            {pendingTwoPoint ? (
+            {/* 2026-05-26 — Fix DX: live drag preview for straight + roi.
+                Coach sees the line / circle update as they drag, with
+                the live angle / diameter readout — same workflow as a
+                CT scanner's pre-commit preview. */}
+            {pendingTwoPoint && dragEnd && pendingTwoPoint.type === 'straight' ? (() => {
+              const { x1, y1 } = pendingTwoPoint;
+              const { x: x2, y: y2 } = dragEnd;
+              const { ex1, ey1, ex2, ey2 } = extendToBounds(x1, y1, x2, y2, size.w, size.h);
+              const deg = angleFromHorizontal(x1, y1, x2, y2);
+              const mx = (ex1 + ex2) / 2;
+              const my = (ey1 + ey2) / 2;
+              return (
+                <React.Fragment>
+                  <Line x1={ex1} y1={ey1} x2={ex2} y2={ey2} stroke={color} strokeWidth={2} strokeOpacity={0.55} strokeDasharray="4,4" />
+                  <Circle cx={x1} cy={y1} r={4} fill={color} opacity={0.8} />
+                  <Circle cx={x2} cy={y2} r={4} fill={color} opacity={0.8} />
+                  <Rect x={mx - 22} y={my - 10} width={44} height={18} rx={4} fill="rgba(0,0,0,0.55)" />
+                  <SvgText x={mx} y={my + 4} fill={color} fontSize="11" fontWeight="800" textAnchor="middle">{`${deg >= 0 ? '+' : ''}${deg}°`}</SvgText>
+                </React.Fragment>
+              );
+            })() : null}
+            {pendingTwoPoint && dragEnd && pendingTwoPoint.type === 'roi' ? (() => {
+              const { x1, y1 } = pendingTwoPoint;
+              const { x: x2, y: y2 } = dragEnd;
+              const r = Math.hypot(x2 - x1, y2 - y1);
+              const diaPct = size.h > 0 ? Math.round((2 * r / size.h) * 100) : 0;
+              const labelY = y1 - r - 8;
+              return (
+                <React.Fragment>
+                  <Circle cx={x1} cy={y1} r={r} stroke={color} strokeWidth={2} strokeDasharray="6,4" fill={color} fillOpacity={0.10} />
+                  <Line x1={x1 - 5} y1={y1} x2={x1 + 5} y2={y1} stroke={color} strokeWidth={1.5} />
+                  <Line x1={x1} y1={y1 - 5} x2={x1} y2={y1 + 5} stroke={color} strokeWidth={1.5} />
+                  <Rect x={x1 - 26} y={labelY - 10} width={52} height={16} rx={4} fill="rgba(0,0,0,0.55)" />
+                  <SvgText x={x1} y={labelY + 2} fill={color} fontSize="10" fontWeight="800" textAnchor="middle">{`Ø ${diaPct}%`}</SvgText>
+                </React.Fragment>
+              );
+            })() : null}
+            {pendingTwoPoint && !dragEnd && (pendingTwoPoint.type === 'circle' || pendingTwoPoint.type === 'line') ? (
               <Circle cx={pendingTwoPoint.x1} cy={pendingTwoPoint.y1} r={6} fill={color} opacity={0.6} />
             ) : null}
           </Svg>
