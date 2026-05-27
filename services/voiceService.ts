@@ -723,6 +723,47 @@ export const speak = async (
   await configureAudioForSpeech();
   console.log('[voice] speak past configureAudioForSpeech — myId=', myId);
 
+  // 2026-05-26 — Fix DY: Personal-caddie user-recorded clip override.
+  // BEFORE we hit /api/voice for TTS, check if the user has a clip
+  // recorded for this exact phrase (catalog match — see
+  // services/customCaddieClips.ts). When useCustomCaddie is ON and a
+  // clip exists, play it as the caddie voice for this line and bail
+  // out of the TTS path entirely. Anything outside the catalog (most
+  // lines, all conversational responses) falls through to /api/voice
+  // unchanged — additive, no regression to the default path.
+  let customClipUri: string | null = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const profile = require('../store/playerProfileStore').usePlayerProfileStore.getState();
+    if (profile?.useCustomCaddie) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const clipLookup = require('./customCaddieClips') as typeof import('./customCaddieClips');
+      customClipUri = clipLookup.lookupClipUri(text, profile.customCaddieClips ?? null);
+    }
+  } catch (e) {
+    console.log('[voice] custom-caddie lookup failed (non-fatal):', e);
+  }
+  if (customClipUri) {
+    console.log('[voice] custom-caddie clip override — playing local file for:', text.slice(0, 40));
+    // Release the speaking/caption state we claimed; playLocalFile
+    // bumps its own speech id and sets its own caption/speaking. Drop
+    // ours so the transition is clean (no double-notify).
+    notifyCaption(null);
+    notifySpeaking(false);
+    try {
+      await playLocalFile(customClipUri, undefined, opts);
+    } catch (e) {
+      // Stale URI / decode failure. Falling through to TTS here would
+      // need to re-claim currentSpeechId (which playLocalFile already
+      // bumped) — racy. Safer: log + return so this turn ends quietly.
+      // Recovery is "re-record the phrase" in the personal-caddie UI;
+      // the next caddie line will work normally because nothing in
+      // global state is wedged.
+      console.log('[voice] custom-caddie clip playback failed (turn ends; re-record to fix):', e);
+    }
+    return;
+  }
+
   try {
     const abortController = new AbortController();
     currentAbortController = abortController;

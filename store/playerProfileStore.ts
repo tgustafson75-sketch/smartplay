@@ -90,6 +90,15 @@ interface PlayerProfileState {
   customCaddiePortraitB64: string | null;
   useCustomCaddie: boolean;
 
+  // 2026-05-26 — Fix DY: Personal-caddie user-recorded voice clips.
+  // Keyed by phrase id from services/customCaddieClips.ts (NOT by the
+  // text — text can be re-worded later without orphaning recordings).
+  // Value is a FileSystem URI to the local m4a/mp3. When useCustomCaddie
+  // is true AND a clip exists for the text being spoken, voiceService
+  // plays the local file instead of fetching /api/voice. Missing keys
+  // (most phrases for most users) fall through to TTS — no regression.
+  customCaddieClips: Record<string, string>;
+
   // 2026-05-22 — Launch-prep Terms & Conditions acceptance. Captured
   // during onboarding (welcome.tsx) before the user can tap "Get
   // started". Stored as a timestamp so we can prove WHEN the user
@@ -148,6 +157,9 @@ interface PlayerProfileState {
   setSelfieB64: (b: string | null) => void;
   setCustomCaddiePortraitB64: (b: string | null) => void;
   setUseCustomCaddie: (on: boolean) => void;
+  // 2026-05-26 — Fix DY: clip CRUD. Pass uri=null to clear a phrase.
+  setCustomCaddieClip: (phraseId: string, uri: string | null) => void;
+  clearAllCustomCaddieClips: () => void;
   // 2026-05-22 — Launch-prep T&C acceptance.
   acceptTerms: () => void;
   clearTermsAcceptance: () => void;
@@ -195,6 +207,8 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       selfieB64: null,
       customCaddiePortraitB64: null,
       useCustomCaddie: false,
+      // 2026-05-26 — Fix DY default: empty map (no clips recorded yet).
+      customCaddieClips: {},
       // 2026-05-22 — Launch-prep T&C acceptance default.
       termsAcceptedAt: null,
       // 2026-05-26 — Fix AB Phase 1: GHIN # default null until captured.
@@ -256,6 +270,17 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setSelfieB64: (b) => set({ selfieB64: b }),
       setCustomCaddiePortraitB64: (b) => set({ customCaddiePortraitB64: b }),
       setUseCustomCaddie: (on) => set({ useCustomCaddie: on }),
+      // 2026-05-26 — Fix DY: clip URI CRUD. uri=null deletes the key
+      // entirely so a phrase reverts to "un-recorded" instead of
+      // pointing at a stale file path. File deletion is the caller's
+      // job (UI re-records / clears the file before this fires).
+      setCustomCaddieClip: (phraseId, uri) => set(s => {
+        const next = { ...s.customCaddieClips };
+        if (uri == null) delete next[phraseId];
+        else next[phraseId] = uri;
+        return { customCaddieClips: next };
+      }),
+      clearAllCustomCaddieClips: () => set({ customCaddieClips: {} }),
       // 2026-05-22 — Launch-prep T&C acceptance actions.
       // acceptTerms stamps the timestamp; the welcome screen disables
       // its "Get started" CTA until termsAcceptedAt is non-null.

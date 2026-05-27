@@ -11,7 +11,7 @@
  * canonical Kevin without re-cutting TTS.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -33,9 +33,15 @@ import * as FileSystem from 'expo-file-system';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
+import { Audio } from 'expo-av';
 import { router, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
+// 2026-05-26 — Fix DY: in-screen voice recorder for personal caddie.
+// Same UI as the AI portrait flow per Tim's directive — no separate
+// screen — so the user records their own greetings right where they
+// took the selfie + generated the caddie image.
+import { CUSTOM_CADDIE_PHRASES, phrasesByCategory, type CustomCaddiePhrase } from '../../services/customCaddieClips';
 
 const DEFAULT_PROMPT =
   "Stylize this person as a confident golf caddie. Keep their face recognizable. Place them on a sunny PGA-style fairway, wearing a clean caddie polo and visor, holding a golf club. Photorealistic, soft warm lighting, 9:16 portrait composition with the head and shoulders centered.";
@@ -51,11 +57,39 @@ export default function CustomCaddieScreen() {
     setSelfieB64,
     setCustomCaddiePortraitB64,
     setUseCustomCaddie,
+    // 2026-05-26 — Fix DY: recorded-greeting clips.
+    customCaddieClips,
+    setCustomCaddieClip,
+    clearAllCustomCaddieClips,
   } = usePlayerProfileStore();
 
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [busy, setBusy] = useState<'capture' | 'generate' | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // 2026-05-26 — Fix DY: per-phrase recording state.
+  // `recordingPhraseId` = id of the phrase currently being recorded
+  // (null when idle). `previewingPhraseId` = phrase whose clip is
+  // playing back. Mutually exclusive at the UI level — the row in
+  // recording mode disables its own play button.
+  const [recordingPhraseId, setRecordingPhraseId] = useState<string | null>(null);
+  const [previewingPhraseId, setPreviewingPhraseId] = useState<string | null>(null);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const previewSoundRef = useRef<Audio.Sound | null>(null);
+
+  // Tear down any in-flight recording / preview when the screen
+  // unmounts so we don't leak file handles or hold the audio session.
+  useEffect(() => {
+    return () => {
+      try {
+        recordingRef.current?.stopAndUnloadAsync().catch(() => undefined);
+      } catch { /* ignore */ }
+      try {
+        previewSoundRef.current?.stopAsync().catch(() => undefined);
+        previewSoundRef.current?.unloadAsync().catch(() => undefined);
+      } catch { /* ignore */ }
+    };
+  }, []);
 
   const captureSelfie = async () => {
     setError(null);
@@ -181,6 +215,198 @@ export default function CustomCaddieScreen() {
   };
 
   const dataUri = (b64: string) => `data:image/png;base64,${b64}`;
+
+  // 2026-05-26 — Fix DY: voice clip handlers.
+  //
+  // Storage: clips live in <documentDirectory>/customCaddieClips/. We
+  // use documentDirectory (NOT cache) so the OS doesn't evict the
+  // user's recordings under storage pressure. One file per phrase id;
+  // re-recording a phrase overwrites the prior file via a unique name
+  // and we delete the stale one.
+  //
+  // SDK 54: documentDirectory + getInfoAsync + makeDirectoryAsync +
+  // moveAsync + deleteAsync all live in expo-file-system/legacy. The
+  // new top-level File/Paths API doesn't cover the directory probe +
+  // move flow we need yet. Pattern matches the legacy dynamic import
+  // already used elsewhere in this screen (captureSelfie above).
+  const getLegacyFS = async () => await import('expo-file-system/legacy');
+
+  const clipsDirFor = (FS: { documentDirectory: string | null }) =>
+    (FS.documentDirectory ?? '') + 'customCaddieClips/';
+
+  const ensureClipsDir = async (): Promise<string | null> => {
+    try {
+      const FS = await getLegacyFS();
+      const dir = clipsDirFor(FS);
+      const info = await FS.getInfoAsync(dir);
+      if (!info.exists) {
+        await FS.makeDirectoryAsync(dir, { intermediates: true });
+      }
+      return dir;
+    } catch (e) {
+      console.log('[customCaddie] ensureClipsDir failed', e);
+      return null;
+    }
+  };
+
+  const startRecording = async (phraseId: string) => {
+    try {
+      // Stop any prior preview so the mic isn't fighting playback.
+      if (previewSoundRef.current) {
+        try { await previewSoundRef.current.stopAsync(); } catch { /* ignore */ }
+        try { await previewSoundRef.current.unloadAsync(); } catch { /* ignore */ }
+        previewSoundRef.current = null;
+        setPreviewingPhraseId(null);
+      }
+      const perm = await Audio.requestPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Microphone access needed', 'Allow microphone access to record your voice.');
+        return;
+      }
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      // Playback-quality recording (not the low-bitrate Whisper preset).
+      // These clips are HEARD by the user, not transcribed — full
+      // quality preset gives a noticeably cleaner result.
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY,
+      );
+      recordingRef.current = recording;
+      setRecordingPhraseId(phraseId);
+    } catch (e) {
+      console.log('[customCaddie] startRecording failed', e);
+      Alert.alert('Recording failed', 'Try again in a moment.');
+      setRecordingPhraseId(null);
+    }
+  };
+
+  const stopRecording = async (phraseId: string) => {
+    const rec = recordingRef.current;
+    if (!rec) {
+      setRecordingPhraseId(null);
+      return;
+    }
+    try {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await rec.stopAndUnloadAsync();
+      const tempUri = rec.getURI();
+      recordingRef.current = null;
+      if (!tempUri) {
+        setRecordingPhraseId(null);
+        return;
+      }
+      // Move to a stable per-phrase path so re-records overwrite cleanly
+      // and we know what to delete when the user clears one.
+      const dir = await ensureClipsDir();
+      if (!dir) {
+        Alert.alert('Save failed', "Couldn't access storage. Try again.");
+        return;
+      }
+      const FS = await getLegacyFS();
+      const finalUri = dir + phraseId + '-' + Date.now() + '.m4a';
+      // Delete the previous file for this phrase (if any) before
+      // moving, so we don't accumulate stale recordings.
+      const prevUri = customCaddieClips[phraseId];
+      if (prevUri) {
+        try { await FS.deleteAsync(prevUri, { idempotent: true }); } catch { /* ignore */ }
+      }
+      await FS.moveAsync({ from: tempUri, to: finalUri });
+      setCustomCaddieClip(phraseId, finalUri);
+    } catch (e) {
+      console.log('[customCaddie] stopRecording failed', e);
+      Alert.alert('Save failed', "Recording didn't save. Try again.");
+    } finally {
+      setRecordingPhraseId(null);
+      // Restore playback-mode audio session so the preview / app voice
+      // playback works after we recorded.
+      try {
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+      } catch { /* ignore */ }
+    }
+  };
+
+  const previewClip = async (phraseId: string) => {
+    const uri = customCaddieClips[phraseId];
+    if (!uri) return;
+    try {
+      // Stop any prior preview before starting a new one.
+      if (previewSoundRef.current) {
+        try { await previewSoundRef.current.stopAsync(); } catch { /* ignore */ }
+        try { await previewSoundRef.current.unloadAsync(); } catch { /* ignore */ }
+        previewSoundRef.current = null;
+      }
+      const { sound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
+      previewSoundRef.current = sound;
+      setPreviewingPhraseId(phraseId);
+      sound.setOnPlaybackStatusUpdate((s) => {
+        if (!s.isLoaded || s.didJustFinish) {
+          sound.unloadAsync().catch(() => undefined);
+          if (previewSoundRef.current === sound) previewSoundRef.current = null;
+          setPreviewingPhraseId(prev => prev === phraseId ? null : prev);
+        }
+      });
+    } catch (e) {
+      console.log('[customCaddie] previewClip failed', e);
+      Alert.alert('Playback failed', 'Try re-recording this phrase.');
+      setPreviewingPhraseId(null);
+    }
+  };
+
+  const deleteClip = (phraseId: string) => {
+    const uri = customCaddieClips[phraseId];
+    if (!uri) return;
+    Alert.alert(
+      'Delete recording?',
+      'The caddie will use the AI voice for this phrase until you record it again.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const FS = await getLegacyFS();
+              await FS.deleteAsync(uri, { idempotent: true });
+            } catch { /* ignore */ }
+            setCustomCaddieClip(phraseId, null);
+          },
+        },
+      ],
+    );
+  };
+
+  const clearAllRecordings = () => {
+    const ids = Object.keys(customCaddieClips);
+    if (ids.length === 0) return;
+    Alert.alert(
+      'Clear all recordings?',
+      `Delete all ${ids.length} recorded ${ids.length === 1 ? 'phrase' : 'phrases'}.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear all',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const FS = await getLegacyFS();
+              for (const id of ids) {
+                const uri = customCaddieClips[id];
+                if (uri) {
+                  try { await FS.deleteAsync(uri, { idempotent: true }); } catch { /* ignore */ }
+                }
+              }
+            } catch { /* ignore */ }
+            clearAllCustomCaddieClips();
+          },
+        },
+      ],
+    );
+  };
+
+  const recordedCount = Object.keys(customCaddieClips).length;
 
   return (
     <>
@@ -319,6 +545,105 @@ export default function CustomCaddieScreen() {
             />
           </View>
 
+          {/* 2026-05-26 — Fix DY: Step 4 — record YOUR voice for the
+              fixed catalog of caddie phrases. When useCustomCaddie is
+              ON, the voice service plays your recording instead of the
+              AI voice for any phrase you've recorded. Anything outside
+              the catalog (live conversational responses) still uses
+              the AI voice — recording is purely additive. Lives in
+              the SAME screen as the AI portrait (Tim's directive). */}
+          <Text style={[styles.sectionLabel, { marginTop: 18 }]}>Step 4 — Record Your Voice (optional)</Text>
+          <View style={styles.recorderHelpRow}>
+            <Ionicons name="information-circle-outline" size={14} color="#9ca3af" />
+            <Text style={styles.recorderHelp}>
+              Record short phrases in your own voice. The caddie uses
+              your recording for any phrase you record and the AI voice
+              for everything else. {recordedCount > 0 ? `${recordedCount} recorded.` : 'None recorded yet.'}
+            </Text>
+          </View>
+
+          {(['greeting', 'reaction', 'encouragement', 'closing'] as const).map(cat => {
+            const phrases = phrasesByCategory()[cat];
+            const catLabel =
+              cat === 'greeting' ? 'GREETINGS' :
+              cat === 'reaction' ? 'REACTIONS' :
+              cat === 'encouragement' ? 'ENCOURAGEMENT' : 'CLOSING';
+            return (
+              <View key={cat} style={{ marginBottom: 10 }}>
+                <Text style={styles.recorderCatLabel}>{catLabel}</Text>
+                {phrases.map((p: CustomCaddiePhrase) => {
+                  const hasClip = !!customCaddieClips[p.id];
+                  const isRecording = recordingPhraseId === p.id;
+                  const isPreviewing = previewingPhraseId === p.id;
+                  const anyRecording = recordingPhraseId !== null;
+                  return (
+                    <View key={p.id} style={styles.recorderRow}>
+                      <View style={{ flex: 1, paddingRight: 8 }}>
+                        <Text style={styles.recorderText}>&ldquo;{p.text}&rdquo;</Text>
+                        <Text style={styles.recorderHint}>{p.hint}</Text>
+                      </View>
+                      {/* Mic / stop button */}
+                      <TouchableOpacity
+                        onPress={() => isRecording ? stopRecording(p.id) : startRecording(p.id)}
+                        disabled={anyRecording && !isRecording}
+                        style={[
+                          styles.recorderBtn,
+                          isRecording && { backgroundColor: '#ef4444', borderColor: '#ef4444' },
+                          (anyRecording && !isRecording) && { opacity: 0.35 },
+                        ]}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={isRecording ? 'Stop recording' : 'Record phrase'}
+                      >
+                        <Ionicons
+                          name={isRecording ? 'stop' : 'mic-outline'}
+                          size={16}
+                          color={isRecording ? '#f4f4f4' : '#00C896'}
+                        />
+                      </TouchableOpacity>
+                      {/* Preview button — visible only when a clip exists */}
+                      {hasClip && (
+                        <TouchableOpacity
+                          onPress={() => previewClip(p.id)}
+                          disabled={isRecording}
+                          style={[
+                            styles.recorderBtn,
+                            isPreviewing && { borderColor: '#f59e0b' },
+                            isRecording && { opacity: 0.35 },
+                          ]}
+                          hitSlop={6}
+                          accessibilityRole="button"
+                          accessibilityLabel="Preview recording"
+                        >
+                          <Ionicons name={isPreviewing ? 'volume-high' : 'play-outline'} size={16} color={isPreviewing ? '#f59e0b' : '#00C896'} />
+                        </TouchableOpacity>
+                      )}
+                      {/* Delete — visible only when a clip exists */}
+                      {hasClip && (
+                        <TouchableOpacity
+                          onPress={() => deleteClip(p.id)}
+                          disabled={isRecording}
+                          style={[styles.recorderBtn, { borderColor: '#7f1d1d' }, isRecording && { opacity: 0.35 }]}
+                          hitSlop={6}
+                          accessibilityRole="button"
+                          accessibilityLabel="Delete recording"
+                        >
+                          <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            );
+          })}
+
+          {recordedCount > 0 && (
+            <TouchableOpacity onPress={clearAllRecordings} style={styles.clearBtn} activeOpacity={0.7}>
+              <Text style={styles.clearBtnText}>Clear all recordings</Text>
+            </TouchableOpacity>
+          )}
+
           {(selfieB64 || customCaddiePortraitB64) && (
             <TouchableOpacity onPress={clearAll} style={styles.clearBtn} activeOpacity={0.7}>
               <Text style={styles.clearBtnText}>Clear selfie & caddie</Text>
@@ -419,4 +744,42 @@ const styles = StyleSheet.create({
   },
   clearBtn: { alignItems: 'center', padding: 14, marginTop: 8 },
   clearBtnText: { color: '#ef4444', fontSize: 13, fontWeight: '600' },
+  // 2026-05-26 — Fix DY: recorder UI styles. Tighter row layout than
+  // the existing image-row pattern because each row only has text +
+  // 1-3 tiny icon buttons. Reuses brand-green border / dark bg from
+  // the rest of the screen.
+  recorderHelpRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: '#0d2418',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    padding: 10,
+    marginBottom: 12,
+  },
+  recorderHelp: { flex: 1, color: '#9ca3af', fontSize: 12, lineHeight: 17 },
+  recorderCatLabel: { color: '#00C896', fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginTop: 4, marginBottom: 6 },
+  recorderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#0d2418',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    marginBottom: 6,
+  },
+  recorderText: { color: '#f4f4f4', fontSize: 13, fontWeight: '700' },
+  recorderHint: { color: '#6b7280', fontSize: 11, marginTop: 1 },
+  recorderBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#00C896',
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#04140c',
+  },
 });
