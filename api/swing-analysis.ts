@@ -933,8 +933,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       primary_fault: winner.parsed.primary_fault,
     });
 
+    // 2026-05-26 — Fix CW: BETA policy — "medium IS high until we get
+    // past beta." Tim's call: during beta, treat medium-confidence reads
+    // as if they were high so the client UI renders without the
+    // "you might be..." hedging, no ~ tilde on metrics, no tentative
+    // badge. The fallback chain still picked the BEST score across
+    // attempts; this is just the surface-level relabel. Flip
+    // BETA_MEDIUM_IS_HIGH to false post-beta to restore strict labels.
+    const BETA_MEDIUM_IS_HIGH = true;
+    const finalConfidence =
+      BETA_MEDIUM_IS_HIGH && winner.parsed.confidence === 'medium'
+        ? 'high'
+        : winner.parsed.confidence;
     return res.status(200).json({
       ...winner.parsed,
+      confidence: finalConfidence,
       _debug: {
         imageBlocks,
         textBlocks,
@@ -942,6 +955,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         shortGame: isShortGame,
         provider: winner.provider,
         escalation_reason: escalationReason,
+        beta_medium_coerced: BETA_MEDIUM_IS_HIGH && winner.parsed.confidence === 'medium',
+        original_confidence: winner.parsed.confidence,
         attempts: attempts.map(a => ({
           provider: a.provider,
           elapsed_ms: a.elapsedMs,
