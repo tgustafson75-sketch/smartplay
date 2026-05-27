@@ -545,16 +545,24 @@ function meetsSpeedBar(parsed: SwingAnalysisResponse | null): boolean {
   // valid_swing=false is a definitive "no swing" call — ship it as-is.
   if (parsed.valid_swing === false) return true;
   // 2026-05-26 — Fix CV: accept HIGH or MEDIUM confidence as passing.
-  // Tim's correct insight: real swing footage (lighting, angle, blur)
-  // rarely produces high-confidence reads on the first provider, so the
-  // gate was rejecting valid Gemini output and forcing escalation through
-  // OpenAI + Anthropic — which exhausted budget and surfaced as 'Lost
-  // connection.' Medium-confidence reads are STILL useful (Kevin says
-  // 'it looks like you may be ...') and ship in <10s. Low-confidence
-  // still escalates because that's genuinely 'I cannot tell.'
   if (parsed.confidence !== 'high' && parsed.confidence !== 'medium') return false;
+  // 'inconclusive' = unreadable footage, escalate to deeper provider.
   if (parsed.primary_fault === 'inconclusive') return false;
-  if (typeof parsed.evidence !== 'string' || parsed.evidence.length === 0) return false;
+  // 2026-05-26 — Fix DK: evidence required ONLY when a NAMED fault is
+  // returned. 'no_dominant_fault' (balanced swing with no clear single
+  // tendency) is a valid, useful read that doesn't need frame-specific
+  // evidence — the prompt explicitly produces it when no fault stands
+  // out. Prior code rejected it for empty evidence → forced escalation
+  // to OpenAI + Anthropic on ~20% of clean swings (per audit). Now
+  // those return immediately as a passing read with the honest "no
+  // dominant fault" verdict instead of timing out into tentative.
+  const namedFault =
+    parsed.primary_fault &&
+    parsed.primary_fault !== 'no_dominant_fault' &&
+    parsed.primary_fault !== 'none';
+  if (namedFault && (typeof parsed.evidence !== 'string' || parsed.evidence.length === 0)) {
+    return false;
+  }
   return true;
 }
 
