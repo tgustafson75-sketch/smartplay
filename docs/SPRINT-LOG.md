@@ -1722,7 +1722,19 @@ Server-side bundle: Tier 1 cage-aware detection prompt added to `SYSTEM_PROMPT` 
 
 **Not the fix but worth noting:** an **app-specific password** (appleid.apple.com → Sign-In and Security → App-Specific Passwords) is the lesser version — works for Transporter and some CI flows but EAS prefers the API key, and the password approach still pulls 2FA on some auth paths. API key is the durable path; the app-specific password is the fallback if API-key generation is blocked for any reason.
 
-**Status:** documented, not executed (the .p8 generation requires Tim logged into App Store Connect on a browser — can't be automated from this side). Once the key exists, wiring it into eas.json is one short edit + commit.
+**Status:** **scheduled for week of 2026-06-01** (logged 2026-05-27 per Tim). The .p8 generation requires Tim logged into App Store Connect on a browser — can't be automated. Once Tim has the .p8 + Key ID + Issuer ID in hand, wiring it into eas.json is one short edit + commit (preview + production submit blocks both already have appleId/ascAppId/appleTeamId — only the ASC API key trio is missing).
+
+**Acceptance:** `eas submit --profile production --platform ios` runs end-to-end without an Apple ID password prompt. Same for `--profile preview`. Verified by a successful TestFlight push that didn't loop on auth.
+
+---
+
+## Planned — Week of 2026-06-01
+
+Tasks Tim has explicitly scheduled for the coming week. Move out of this section when shipped (into the matching Day N entry) or when re-deferred.
+
+### Apple-password exit — generate App Store Connect API key
+
+Carries forward from Day 7's "Apple-password exit plan" entry above. Tim's action: generate the `.p8` at <https://appstoreconnect.apple.com/access/integrations/api> + capture Key ID + Issuer ID. Then either run `eas credentials` interactive flow OR hand the three values to me for the 6-line eas.json wiring. Done state: next `eas submit -p ios` runs straight through, no password prompt.
 
 ---
 
