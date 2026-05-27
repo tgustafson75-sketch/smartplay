@@ -714,7 +714,14 @@ export const speak = async (
   // of the utterance. Cleared on natural completion or stopSpeaking.
   notifyCaption(text);
   noteAudioActivity('tts');
+  // 2026-05-26 — Fix DS: full-trace logging on the speak() critical
+  // path. Tim's opener silence has been chased through 5 fixes
+  // without a definitive log line proving where it fails. Now every
+  // step prints with the text head + speech id so the NEXT silent
+  // run shows the exact step that failed silently.
+  console.log('[voice] speak body entered — text=', text.slice(0, 50), 'myId=', myId);
   await configureAudioForSpeech();
+  console.log('[voice] speak past configureAudioForSpeech — myId=', myId);
 
   try {
     const abortController = new AbortController();
@@ -810,10 +817,19 @@ export const speak = async (
       return;
     }
 
-    const { sound } = await Audio.Sound.createAsync(
+    console.log('[voice] speak about to createAsync — myId=', myId, 'bytes=', arrayBuffer.byteLength);
+    const { sound, status } = await Audio.Sound.createAsync(
       { uri: audioFile.uri },
       { shouldPlay: true, volume: currentPlaybackVolume() },
     );
+    // 2026-05-26 — Fix DS: verify the audio actually loaded with a
+    // playable duration. If durationMillis is 0 / undefined, the file
+    // is corrupt or the OS audio session is denying playback — log
+    // it instead of falling through to silent didJustFinish.
+    console.log('[voice] speak Sound.createAsync ok — myId=', myId,
+      'isLoaded=', (status as { isLoaded?: boolean }).isLoaded,
+      'durationMillis=', (status as { isLoaded?: boolean; durationMillis?: number }).durationMillis,
+      'volume=', currentPlaybackVolume());
 
     // Bail if ownership was taken during createAsync.
     if (myId !== currentSpeechId) {
