@@ -1635,6 +1635,97 @@ This is the **coach-manual half** of the [visual swing annotation roadmap](#road
 
 ---
 
+## Day 7 — 2026-05-26 — Cockpit escape hatch, voice-export, SmartCapture measurement tools, personal-caddie voice clips
+
+### Fix DV (`889752f`) — cockpit "Tools" pill (escape Vision/Motion/Play/Settings dead-end)
+
+Cockpit mode rendered only four pills (Vision / Motion / Play / Settings) with no chevron or path to the global tools menu. L5 users couldn't reach Drills, Library, Mark Location, Caddie Clip Test, etc. without dropping back to classic Caddie — a discoverability dead-end. Added an optional `onAllTools` prop to [SmartToolsRow](../components/caddie/cockpit/SmartToolsRow.tsx) that renders a 5th "Tools" pill (apps-outline / green) when supplied; [CockpitCaddieScreen](../components/caddie/CockpitCaddieScreen.tsx) wires it to `useToolsMenuStore.open()` with the standard selection haptic. Non-cockpit callers keep working unchanged because the prop is optional. Shipped OTA to both preview + production channels per the default-to-both rule.
+
+### Fix DW (`9d9d242`) — "send issue log" voice phrase auto-fires the email export
+
+Beta testers couldn't easily report issues by voice. Two new shapes land at `/owner-logs`:
+- "open issue log" / "show issue log" / "show issues" — just opens the screen so the tester can review entries + tap the per-row mail icon or the header share button manually.
+- "send issue log" / "email issue log" / "share issue log" / "export issue log" — classifier emits `send_log:true` → handler routes to `/owner-logs?send=1` → screen auto-fires the same mailto export the share-button uses (full log → support@smartplaycaddie.com with a pre-filled subject/body). One utterance, one tap-to-send.
+
+Mechanics:
+- [api/voice-intent.ts](../api/voice-intent.ts) tool_name union gains `library` + `issue_log`; new `send_log` param documented; example block covers show/send.
+- [services/intents/openToolHandler.ts](../services/intents/openToolHandler.ts) — 6 aliases (`issue_log` / `issuelog` / `issues_log` / `bug_log` / `buglog` / `owner_logs`) all route to `/owner-logs`. Detects send intent from `parameters.send_log` OR raw_text `/send|email|share|export/` regex (covers older bundles before the classifier prompt rolls out). When detected, appends `?send=1`.
+- [app/owner-logs.tsx](../app/owner-logs.tsx) — `useLocalSearchParams` reads `send=1` and an effect (guarded by `useRef`) fires `onExport()` once after entries hydrate. Empty log silently no-ops to match the disabled share button.
+
+Shipped OTA both channels.
+
+### Fix DX (`43e4309`) — SmartCapture: straight alignment line + ROI region tools
+
+Two new coach tools modeled on Tim's 25-year CT-scanner muscle memory (adjustable ROI + measuring line). The existing freehand / circle / line / text stay for free-form callouts; the new tools add **measurement-aware** analogues that fit golf swing analysis.
+
+- **`straight`** — swing-plane / spine / shaft alignment guide. Drag to define angle. Rendered line **extends edge-to-edge** through the overlay (which is how a coach actually uses a swing-plane line — a full guide across the frame, not a segment between two points). Shows an angle-from-horizontal readout at the midpoint (+45° = rising L→R, matches whiteboard convention). Endpoint dots stay visible so the coach can see where they anchored within the extended plane.
+- **`roi`** — region-of-interest marker. Drag to size from the center. Dashed border + 14%-opacity fill + center crosshair, visually distinct from the solid outline circle. Shows diameter as % of overlay height (relative measurement; pixels don't translate to a real-world unit without per-frame scale, but % is meaningful for comparing positions across frames — e.g., hips at top vs at impact).
+
+Both tools use drag-to-size (CT-scanner pre-commit preview pattern) rather than the existing tap-tap pattern. The live preview shows the extended line / sized circle WITH the current measurement label so the coach can dial in the angle / diameter before release.
+
+Math: `extendToBounds()` parametric line-rect intersection in [VideoAnnotationOverlay.tsx](../components/swinglab/VideoAnnotationOverlay.tsx). `angleFromHorizontal()` folds to ±90° so a line is direction-agnostic (a 45° line reads the same either way). PanResponder handler updated to route freehand / straight / roi through Move + Release; line / circle keep their two-tap path. `clearAll()` also resets the drag preview state. Shipped OTA both channels.
+
+### Fix DY (`1fb86ec`) — Personal Caddie: record YOUR voice for fixed greetings + reactions
+
+Tim's directive: let the user record short fixed phrases in their own voice, played by the caddie when those exact lines come up. Anything outside the catalog (live conversational responses) still uses the AI voice — recording is purely additive. UI lives **IN THE SAME SCREEN** as the AI portrait flow (no separate route — per Tim).
+
+Architecture (single safe commit, additive everywhere):
+
+- [services/customCaddieClips.ts](../services/customCaddieClips.ts) (new):
+  - Fixed catalog of **16 phrases** across 4 categories — greeting (4) / reaction (5) / encouragement (5) / closing (2). Stable phrase ids so renaming the text doesn't orphan a recording.
+  - `normalizeForMatch()` — lowercase + trim + strip trailing punct + collapse whitespace. **Exact normalized match only**; intentionally NOT fuzzy so we never misfire a recording on the wrong line.
+  - `lookupClipUri(text, clips)` — O(1) memoized index lookup.
+
+- [store/playerProfileStore.ts](../store/playerProfileStore.ts):
+  - New `customCaddieClips: Record<phraseId, fileUri>` map. Default `{}`.
+  - `setCustomCaddieClip(id, uri|null)` + `clearAllCustomCaddieClips()`.
+
+- [services/voiceService.ts](../services/voiceService.ts) `speak()` override:
+  - BEFORE the `/api/voice` fetch, if `useCustomCaddie` is ON AND a clip exists for the normalized text, play the local file via the existing `playLocalFile()` pipeline and return. Anything else falls through to the unchanged TTS path. Lookup failure is non-fatal; playback failure ends the turn (re-record is the recovery — safer than reclaiming speech-id mid-flight, which is racy).
+
+- [app/profile/custom-caddie.tsx](../app/profile/custom-caddie.tsx) (Step 4 — Record Your Voice):
+  - New section under the existing Selfie + Generate flow, **same screen** per Tim's directive.
+  - Per-phrase row: text + hint + mic/stop button + (when recorded) preview + delete. Only one phrase records at a time.
+  - Recording: expo-av HIGH_QUALITY preset → m4a, moved to `<documentDirectory>/customCaddieClips/<id>-<ts>.m4a`. Document dir (not cache) so OS can't evict user recordings.
+  - **SDK 54:** documentDirectory + getInfoAsync + makeDirectoryAsync + moveAsync + deleteAsync routed through `expo-file-system/legacy` dynamic import (matches the captureSelfie pattern already in this file).
+  - Unmount tear-down stops in-flight recording + preview sound so we don't leak file handles or hold the audio session.
+  - "Clear all recordings" button mirrors the existing Clear flow.
+
+Catalog phrases matched against text the caddie says verbatim in code: "Welcome back. Let's play some golf.", "Squeezing in a late round?", "Good morning. Ready to play?", "Good evening. Good to see you.", "Good shot.", "Nice contact.", "Solid putt.", "Good drive.", "Tough break.", "Stay with it.", "Let's reset.", "You got this.", "Nice and easy.", "Take your time.", "Let's go.", "Nice round." Shipped OTA both channels.
+
+### Server bundles (`3b29d42`, `fd0264f`) — Tier 1 cage prompt + Harry voice fable
+
+Server-side bundle: Tier 1 cage-aware detection prompt added to `SYSTEM_PROMPT` in [api/swing-analysis.ts](../api/swing-analysis.ts) (model down-weights ball-flight, up-weights contact-quality when cage detected). Harry voice fixed in [api/voice.ts](../api/voice.ts): sage → echo → **fable** (British storyteller — older-mentor gravitas; Tim reminded Harry is OLD so grandfather/wise-counsel tone matters more than just "calm"). Per-persona OpenAI TTS mapping: Kevin=onyx, Serena=nova, Tank=ash, Harry=fable.
+
+### Apple-password exit plan — App Store Connect API key (logged 2026-05-26)
+
+**Problem.** Every `eas submit -p ios` (and any TestFlight push from the CLI) currently prompts for Apple ID + password and lands in "Invalid username and password combination" loops, even though the password is correct and Tim uses it daily on the Mac via keychain. The friction has eaten hours across multiple submission attempts and forced compromises (e.g., shipping OTA only because the build path stalls on auth).
+
+**Root cause.** Apple ID password auth for non-interactive tools is a dead path. Apple wants the **App Store Connect API key** (a JWT cert) for any tool that isn't Xcode/Transporter logged in via the GUI. Apple ID + 2FA for CLI auth fails silently or loops on devices without an iPhone for the second factor — which is exactly Tim's setup.
+
+**The fix.** One-time setup, then EAS never asks for the Apple ID password again:
+
+1. **Generate the key in App Store Connect:**
+   - Go to <https://appstoreconnect.apple.com/access/integrations/api>
+   - Click **+** under Keys.
+   - Name: `SmartPlay EAS Submit`. Access: **App Manager** (minimum needed for `eas submit` and TestFlight uploads).
+   - Download the `.p8` file. **You only get to download it ONCE** — store it somewhere safe immediately (Tim's keychain folder or `~/.appstoreconnect/AuthKey_XXXXXXXX.p8`).
+   - Record the **Key ID** (10-char code shown next to the key) and the **Issuer ID** (UUID shown at the top of the same page).
+
+2. **Hand it to EAS once:**
+   - `eas credentials` → iOS → "Add another ASC API key for your project" → upload the `.p8`, paste the Key ID + Issuer ID. EAS stores the credential against the project on their side; future submits use it automatically.
+   - Or — local mode — populate the submit block in [eas.json](../eas.json) with `ascApiKeyPath` / `ascApiKeyId` / `ascApiKeyIssuerId` pointing at the local `.p8`. Keep the `.p8` out of git (already covered by .gitignore patterns for `*.p8`).
+
+3. **Result.** `eas submit --profile production --platform ios` runs end-to-end without ever asking for an Apple ID password. Same for `eas submit --profile preview`. TestFlight pushes happen on the next submit invocation without the loop.
+
+**Existing eas.json submit block** already has appleId / ascAppId / appleTeamId for both preview + production iOS — only the ASC API key fields are missing. Adding them is a 6-line diff once the .p8 exists.
+
+**Not the fix but worth noting:** an **app-specific password** (appleid.apple.com → Sign-In and Security → App-Specific Passwords) is the lesser version — works for Transporter and some CI flows but EAS prefers the API key, and the password approach still pulls 2FA on some auth paths. API key is the durable path; the app-specific password is the fallback if API-key generation is blocked for any reason.
+
+**Status:** documented, not executed (the .p8 generation requires Tim logged into App Store Connect on a browser — can't be automated from this side). Once the key exists, wiring it into eas.json is one short edit + commit.
+
+---
+
 ## Post-launch / Roadmap
 
 ### Social-share flywheel (prioritize BEFORE booking)
@@ -1678,6 +1769,42 @@ COCKPIT MODE = HARRY. Cockpit isn't just a layout — it's Harry's mode. Harry i
 - Harry only needs visual assets for: (1) HANDOFF moments (a single badge/image when handing off to or offering Harry), (2) PROMOTIONAL/marketing materials (showcase, app store, representing all four characters).
 - Saves the avatar-generation pipeline work for Harry — and it's on-brand: the "just give me the numbers" older caddie naturally lives in a clean data interface, not a photoreal avatar.
 - When Harry is the active persona, the experience IS cockpit mode.
+
+---
+
+### Parked items — future state (logged 2026-05-26)
+
+Items Tim explicitly deferred this session. NOT regressions, NOT pending — these are decisions to **wait** on, captured so they don't get lost.
+
+#### 1. Library missing-MP4s / stale file:// URI defensive fix
+
+**Symptom Tim reported:** "when I go to look at those mp4s that we loaded to look at the cabin videos, I can't see them. They're not showing." Investigation traced the most-likely cause to persisted `file://` URIs in [cageStore.sessionHistory](../store/cageStore.ts) outliving the file behind them — OS-level cache eviction, sandbox path moves on rebuild, or document-dir cleanup. Library rows still render the row metadata (date / club / swinger / primary issue) but the thumbnail is a blank tile and tapping in lands on an unplayable video.
+
+**Planned fix (drafted, reverted on Tim's call):** on library mount, one-time `getInfoAsync` probe per row's first-shot `clipUri` + `thumbnail_uri`. Cache result in a `Map<sessionId, {video, thumb}>`. Render an inline "video unavailable" badge on missing rows (don't hide — metadata still useful), swap broken `<Image>` to icon, log a diagnostic line per missing file so the issue log surfaces it for triage. Spec was complete; insertion-ready in [app/swinglab/library.tsx](../app/swinglab/library.tsx) around the `entries` useMemo block.
+
+**Why deferred:** Tim said "dont worry about the mp4s right now. thats future state" — current priority is the WOW features (Cage, SmartMotion, cockpit on-course flow); library hygiene can wait until after launch.
+
+**Related:** the [[cloud-backup-roadmap]] memory tracks the bigger picture — library + videos are device-local only until V1, so "videos disappeared after rebuild" is exactly the gap that cloud backup is meant to close. The defensive existence-check is the bandage; cloud backup is the cure.
+
+#### 2. Skeletal-overlay auto pose (per-swing AI annotation)
+
+**The ask:** Tim asked whether the AI doing async swing-library analysis could apply a skeletal / pose overlay to the video frame the same way SmartCapture's manual lines do.
+
+**Why it's not a one-line fix:** the current async swing analyzer ([api/swing-analysis.ts](../api/swing-analysis.ts)) is gpt-4o vision returning **text** ("early extension, hips drift toward target"). It does not return joint coordinates needed to render a pose skeleton. A real auto-overlay needs pose-estimation keypoints (MediaPipe Pose / TF MoveNet on-device, OR a server-side pose API like Replicate / RunwayML at ~$0.005/swing). On-device is a native dep — requires EAS Build, not OTA (per [[ota-first-policy]]); server-side is OTA-safe but adds per-swing cost.
+
+**Recommended path:** queue it for a native-build batch when we're already paying for an APK rev (e.g., adding glasses SDK, MediaPipe install, or a manifest change). Keep SmartCapture's manual lines (Fix DX shipped today) as the trustworthy "confirm or override" layer so the auto-overlay never silently misfires — coach gets to verify the AI's skeleton against their own draw before sharing.
+
+**Why deferred:** Tim's response: "I don't wanna do a funky overlay that doesn't work. I want something that's meaningful so I think like that manual way and maybe a confirmation if auto doesn't work is the way to go. We'll do auto when we wanna add the other tools that we need."
+
+#### 3. Auto voice-match (gpt-4o audio → pick OpenAI TTS voice)
+
+**The ask:** if Tim adds himself as a personal caddie, can we listen to his voice and auto-pick the OpenAI TTS voice that most resembles him?
+
+**Why it's doable but parked:** `gpt-4o-audio-preview` accepts raw audio input. The flow is: capture ~10s of the user speaking during persona creation → POST to a new `/api/voice-match` endpoint that prompts gpt-4o with the 10 OpenAI TTS voice descriptions + the audio clip → returns the closest match → save on the persona → present a quick "this is what your caddie sounds like — pick this one or override" preview screen so the user has the final say.
+
+**Why deferred:** Tim's response: "We'll do auto when we wanna add the other tools that we need." User-recorded greetings (Fix DY shipped today) already cover the **most personal** caddie-voice use cases — the user's actual voice, on their actual greetings, played at the moments that matter most. Auto-match becomes a polish item for the long tail of TTS-only utterances.
+
+**Status:** all three parked items are documented for revisit. No code work pending. Will surface as "should we tackle X yet?" prompts in future sessions when adjacent work creates a natural opening.
 
 
 
