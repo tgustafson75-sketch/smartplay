@@ -262,6 +262,44 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
 
     store.setSessionAnalysisStatus(sessionId, 'analyzing_pose');
     uploadLog('pose-detection-start', { swings_to_analyze: swings.length }, sessionId);
+
+    // 2026-05-26 — Fix DP (commit 1/3): hoist session-level context
+    // ABOVE the per-swing loop. caddieName/playerContext/swingTag/
+    // priorAnalyzedFault are identical for every swing in the session;
+    // resolving them once instead of per-iteration drops ~50ms ×
+    // swings.length of redundant store reads/dynamic imports and sets
+    // up commit 2 (parallel batches) so closures don't re-resolve in
+    // every concurrent task.
+    let caddieName: string | undefined;
+    try {
+      const { getActiveCaddie } = await import('./caddieResolver');
+      const { getCaddieName } = await import('../lib/persona');
+      caddieName = getCaddieName(getActiveCaddie());
+    } catch { /* persona resolver optional */ }
+    let playerContext: {
+      handicap?: number | null;
+      dominant_miss?: string | null;
+      experience?: string | null;
+      first_name?: string | null;
+    } | undefined;
+    try {
+      const profileMod = await import('../store/playerProfileStore');
+      const p = profileMod.usePlayerProfileStore.getState();
+      playerContext = {
+        handicap: typeof p.handicap_index === 'number' ? p.handicap_index : (typeof p.handicap === 'number' ? p.handicap : null),
+        dominant_miss: p.dominantMiss ?? null,
+        experience: p.experienceContext ?? null,
+        first_name: p.firstName ?? p.name ?? null,
+      };
+    } catch { /* profile lookup optional */ }
+    const swingTag = session.upload?.tag ?? null;
+    // Phase 502 — Reanalyze "look for something else" signal (see
+    // longer comment below in commit-2 batch closure).
+    const priorAnalyzedFault: string | null =
+      (session.primary_issue && typeof session.primary_issue.primary_fault === 'string')
+        ? session.primary_issue.primary_fault
+        : null;
+
     for (const [i, swing] of swings.entries()) {
       if (!swing.clipUri) continue;
       // Phase BW — when this shot is part of a multi-swing master video,
@@ -293,56 +331,6 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         boundary_start_sec: boundaries?.startSec ?? null,
         boundary_end_sec: boundaries?.endSec ?? null,
       });
-      // Phase 403b — pass active caddie name so the analyst writes the
-      // observation in that caddie's cadence (Tank: clipped imperative,
-      // Kevin: neutral technical, Serena: precise, Harry: warm). And
-      // pass faultFrameBaseName so a successful analysis persists the
-      // diagnostic frame as a JPEG under documentDirectory/smartmotion/
-      // keyed by shot id — that file is then referenced from
-      // perShotAnalysis.visual_reference_path for the review UI.
-      let caddieName: string | undefined;
-      try {
-        const { getActiveCaddie } = await import('./caddieResolver');
-        const { getCaddieName } = await import('../lib/persona');
-        caddieName = getCaddieName(getActiveCaddie());
-      } catch { /* persona resolver optional */ }
-      // Phase 502 — pull player profile so the analyst tailors the read
-      // (handicap level, known miss, beginner skip-jargon, first name)
-      // instead of every golfer getting the same canned full-swing read.
-      let playerContext: {
-        handicap?: number | null;
-        dominant_miss?: string | null;
-        experience?: string | null;
-        first_name?: string | null;
-      } | undefined;
-      try {
-        const profileMod = await import('../store/playerProfileStore');
-        const p = profileMod.usePlayerProfileStore.getState();
-        playerContext = {
-          handicap: typeof p.handicap_index === 'number' ? p.handicap_index : (typeof p.handicap === 'number' ? p.handicap : null),
-          dominant_miss: p.dominantMiss ?? null,
-          experience: p.experienceContext ?? null,
-          first_name: p.firstName ?? p.name ?? null,
-        };
-      } catch { /* profile lookup optional */ }
-      // Phase 502 — swing_tag routes putt/chip uploads to the short-game
-      // analysis prompt. Tag is set in the upload UI per Tim's Putt/Chip
-      // tag chips (PuttWatch v1) shipped earlier.
-      const swingTag = session.upload?.tag ?? null;
-      // 2026-05-24 — Reanalyze "look for something else" signal.
-      // When this session ALREADY has a primary_issue.primary_fault
-      // at analyzer entry, it means the user re-fired the analysis on
-      // the same clip (the swing-detail Reanalyze button reuses
-      // runPhaseKOnSession without clearing primary_issue first). Pass
-      // the prior named fault so the server prompt can confirm-or-
-      // diversify instead of converging on the same default a second
-      // time. First-analysis path has no prior fault → field omitted →
-      // no prompt change. Captured outside the per-swing loop so all
-      // shots in a multi-swing reanalyze get the same context.
-      const priorAnalyzedFault: string | null =
-        (session.primary_issue && typeof session.primary_issue.primary_fault === 'string')
-          ? session.primary_issue.primary_fault
-          : null;
       const r = await analyzeSwing(swing.clipUri, {
         club: swing.club,
         swing_number: i + 1,
