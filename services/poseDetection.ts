@@ -302,10 +302,17 @@ export async function extractKeyFrames(
             const info = await import('expo-file-system/legacy').then(m => m.getInfoAsync(r.uri));
             if (info.exists) rawSize = (info as { size?: number }).size ?? undefined;
           } catch { /* size probe is informational */ }
+          // 2026-05-26 — Fix CS: reduce upload payload to survive flakier
+          // mobile networks. 1024px → 800px + compress 0.75 → 0.65 cuts
+          // the per-frame base64 from ~110-200KB to ~50-90KB. Five-frame
+          // payload drops from ~700KB-1MB to ~300-450KB → much higher
+          // success rate on weak range/cart-path signal. Vision analysis
+          // still works fine at 800px (Sonnet/OpenAI/Gemini all handle
+          // sub-1024 frames cleanly for swing-pose reads).
           const m = await ImageManipulator.manipulateAsync(
             r.uri,
-            [{ resize: { width: 1024 } }],
-            { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+            [{ resize: { width: 800 } }],
+            { compress: 0.65, format: ImageManipulator.SaveFormat.JPEG, base64: true },
           );
           if (!m.base64) {
             perFrameOutcomes.push({ idx: i, t_ms: timeMs, ok: false, raw_uri_tail: r.uri.slice(-30), raw_size: rawSize, error: 'manipulator returned no base64' });
@@ -615,10 +622,12 @@ export async function analyzeSwingTentative(
     const timeMs = Math.round(durationMs * t);
     try {
       const r = await VT.getThumbnailAsync(clipUri, { time: timeMs, quality: 0.8 });
+      // 2026-05-26 — Fix CS (tentative path mirror): 1024px/0.75 →
+      // 800px/0.65 so the fallback retry also cuts payload ~55%.
       const m = await ImageManipulator.manipulateAsync(
         r.uri,
-        [{ resize: { width: 1024 } }],
-        { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+        [{ resize: { width: 800 } }],
+        { compress: 0.65, format: ImageManipulator.SaveFormat.JPEG, base64: true },
       );
       if (m.base64) {
         frame = { b64: m.base64, media_type: 'image/jpeg', time_sec: timeMs / 1000 };

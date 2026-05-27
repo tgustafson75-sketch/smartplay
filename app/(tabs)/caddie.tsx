@@ -2775,14 +2775,27 @@ export default function CaddieTab() {
                 label={voiceEnabled ? 'Mute caddie voice' : 'Unmute caddie voice'}
                 onPress={() => {
                   // 2026-05-26 — Fix CI: compute the new value once and
-                  // use it for BOTH setState and the toast. The prior
-                  // version read voiceEnabled in the toast expression,
-                  // which captured the stale closure value — a rapid
-                  // double-tap would show the same toast twice.
+                  // use it for BOTH setState and the toast.
+                  // 2026-05-26 — Fix CT: when voice transitions OFF → ON,
+                  // immediately speak an audible "Voice on" confirmation
+                  // so the user (a) knows the toggle took and (b) has
+                  // proof the audio pipeline is alive. userInitiated:true
+                  // because the user just tapped this exact pill — it's
+                  // unambiguously user-initiated. The setVoiceEnabled
+                  // happens BEFORE the speak so isVoiceAllowed sees the
+                  // new true value.
                   const next = !voiceEnabled;
                   setVoiceEnabled(next);
                   void Haptics.selectionAsync().catch(() => undefined);
                   useToastStore.getState().show(next ? 'Caddie voice on' : 'Caddie voice off');
+                  if (next) {
+                    // Slight delay so React commits the new voiceEnabled
+                    // value before isVoiceAllowed reads it in speak().
+                    setTimeout(() => {
+                      void speak('Voice on', voiceGender, language, apiUrl, { userInitiated: true })
+                        .catch((e) => console.log('[caddie] voice-on confirm failed:', e));
+                    }, 50);
+                  }
                 }}
               />
               <ToolFabIconCycler
