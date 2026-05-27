@@ -47,8 +47,16 @@ export default async function handler(
 
     console.log('[voice] generating:', text.slice(0, 50), persona ?? gender);
 
+    // 2026-05-26 — Fix CY: BYPASS ElevenLabs. Tim's account hit a
+    // persistent 401 that wasted ~50ms per call before the fallback
+    // kicked in, and the persona-distinct voices weren't worth the
+    // tax during the auth issue. Flip USE_ELEVENLABS back to true
+    // once the key situation is resolved — all four personas will
+    // get their distinct ElevenLabs voices again on the next call.
+    const USE_ELEVENLABS = false;
+
     // Try ElevenLabs first
-    if (ELEVENLABS_KEY) {
+    if (USE_ELEVENLABS && ELEVENLABS_KEY) {
       try {
         // Persona-keyed lookup wins; fall back to gender_lang for legacy callers.
         const personaKey = typeof persona === 'string' ? persona.toLowerCase() : '';

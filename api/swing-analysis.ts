@@ -854,60 +854,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ORCHESTRATION_TOTAL_MS = 42_000;
     const budgetRemaining = () => ORCHESTRATION_TOTAL_MS - (Date.now() - orchestrationStart);
 
-    // Stage 1 — Gemini (speed path)
-    const geminiAttempt = await tryGemini();
-    attempts.push(geminiAttempt);
+    // 2026-05-26 — Fix CY: BYPASS Gemini. Tim's project hit 429
+    // "prepayment credits depleted" → every Gemini call wasted ~200ms
+    // before falling through, AND when Gemini WAS up it sometimes
+    // returned medium-confidence reads that forced unnecessary
+    // escalation. Until billing is restored, start straight at
+    // OpenAI (which is fast + reliable per /api/health). Flip
+    // USE_GEMINI back to true once Google billing is paid.
+    const USE_GEMINI = false;
 
-    let winner: AttemptResult = geminiAttempt;
+    let winner: AttemptResult = { provider: 'gemini', parsed: null, rawText: '', error: 'bypassed', elapsedMs: 0 };
     let escalationReason: string | null = null;
 
-    if (meetsSpeedBar(geminiAttempt.parsed)) {
-      console.log('[swing-analysis] gemini speed-path hit', {
-        elapsedMs: geminiAttempt.elapsedMs,
-        confidence: geminiAttempt.parsed?.confidence,
-        primary_fault: geminiAttempt.parsed?.primary_fault,
-      });
+    if (USE_GEMINI) {
+      // Stage 1 — Gemini (speed path)
+      const geminiAttempt = await tryGemini();
+      attempts.push(geminiAttempt);
+      winner = geminiAttempt;
+
+      if (meetsSpeedBar(geminiAttempt.parsed)) {
+        console.log('[swing-analysis] gemini speed-path hit', {
+          elapsedMs: geminiAttempt.elapsedMs,
+          confidence: geminiAttempt.parsed?.confidence,
+          primary_fault: geminiAttempt.parsed?.primary_fault,
+        });
+      } else {
+        if (!geminiAttempt.parsed) {
+          escalationReason = `gemini_${geminiAttempt.error ?? 'unknown_failure'}`;
+        } else if (geminiAttempt.parsed.primary_fault === 'inconclusive') {
+          escalationReason = 'gemini_inconclusive';
+        } else if (geminiAttempt.parsed.confidence !== 'high') {
+          escalationReason = `gemini_low_confidence:${geminiAttempt.parsed.confidence}`;
+        } else {
+          escalationReason = 'gemini_missing_evidence';
+        }
+      }
     } else {
-      // Decide WHY we're escalating — informs the telemetry the
-      // owner-tool debug screen surfaces. Affects nothing in the
-      // user-facing payload.
-      if (!geminiAttempt.parsed) {
-        escalationReason = `gemini_${geminiAttempt.error ?? 'unknown_failure'}`;
-      } else if (geminiAttempt.parsed.primary_fault === 'inconclusive') {
-        escalationReason = 'gemini_inconclusive';
-      } else if (geminiAttempt.parsed.confidence !== 'high') {
-        escalationReason = `gemini_low_confidence:${geminiAttempt.parsed.confidence}`;
-      } else {
-        escalationReason = 'gemini_missing_evidence';
+      escalationReason = 'gemini_bypassed_via_feature_flag';
+    }
+
+    // Stage 2 — OpenAI (primary path when Gemini is bypassed)
+    if (!meetsSpeedBar(winner.parsed) && budgetRemaining() >= 22_000) {
+      console.log('[swing-analysis] running OpenAI primary; budget_ms:', budgetRemaining());
+      const openaiAttempt = await tryOpenAI();
+      attempts.push(openaiAttempt);
+      if (scoreAttempt(openaiAttempt.parsed) > scoreAttempt(winner.parsed)) {
+        winner = openaiAttempt;
       }
 
-      // 2026-05-26 — Fix CU: only escalate if we have budget for it.
-      // OpenAI client timeout = 20s; budget for tryOpenAI = 22s with
-      // overhead. If budget < 22s, skip to keep within total cap.
-      if (budgetRemaining() >= 22_000) {
-        console.log('[swing-analysis] gemini did not meet bar — escalating to OpenAI:', escalationReason, 'budget_ms:', budgetRemaining());
-        const openaiAttempt = await tryOpenAI();
-        attempts.push(openaiAttempt);
-        if (scoreAttempt(openaiAttempt.parsed) > scoreAttempt(winner.parsed)) {
-          winner = openaiAttempt;
+      // Stage 3 — Anthropic only if STILL no pass AND budget left.
+      if (!meetsSpeedBar(winner.parsed) && budgetRemaining() >= 18_000) {
+        console.log('[swing-analysis] OpenAI did not pass bar — escalating to Anthropic; budget_ms:', budgetRemaining());
+        const anthropicAttempt = await tryAnthropic();
+        attempts.push(anthropicAttempt);
+        if (scoreAttempt(anthropicAttempt.parsed) > scoreAttempt(winner.parsed)) {
+          winner = anthropicAttempt;
         }
-
-        // Anthropic only if we STILL haven't passed AND still have budget.
-        if (!meetsSpeedBar(winner.parsed) && budgetRemaining() >= 18_000) {
-          console.log('[swing-analysis] openai also did not pass bar — escalating to Anthropic; budget_ms:', budgetRemaining());
-          const anthropicAttempt = await tryAnthropic();
-          attempts.push(anthropicAttempt);
-          if (scoreAttempt(anthropicAttempt.parsed) > scoreAttempt(winner.parsed)) {
-            winner = anthropicAttempt;
-          }
-        } else if (!meetsSpeedBar(winner.parsed)) {
-          escalationReason = (escalationReason ?? '') + '_anthropic_skipped_budget';
-          console.log('[swing-analysis] anthropic skipped — out of budget; returning best-so-far');
-        }
-      } else {
-        escalationReason = (escalationReason ?? '') + '_escalation_skipped_budget';
-        console.log('[swing-analysis] escalation skipped — out of budget after gemini; returning gemini result');
+      } else if (!meetsSpeedBar(winner.parsed)) {
+        escalationReason = (escalationReason ?? '') + '_anthropic_skipped_budget';
       }
+    } else if (!meetsSpeedBar(winner.parsed)) {
+      escalationReason = (escalationReason ?? '') + '_openai_skipped_budget';
     }
 
     // No provider produced parseable output → 502 with full diagnostics
