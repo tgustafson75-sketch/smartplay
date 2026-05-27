@@ -12,6 +12,10 @@ import { usePlayerProfileStore, isOwnerEmail, OWNER_EMAILS } from '../store/play
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
+// 2026-05-27 — Fix EA: screenshot mode flag drives the global StatusBar
+// hidden prop so the user can capture clean shots without the phone's
+// top chrome (time / battery / wifi).
+import { useScreenshotModeStore } from '../store/screenshotModeStore';
 import i18n from '../i18n';
 import { initFeelCapture } from '../services/feelCaptureService';
 import { startSwingCommentarySubscription } from '../services/swingCommentaryService';
@@ -139,6 +143,10 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
 
 function AppNavigator() {
   const { colors } = useTheme();
+  // 2026-05-27 — Fix EA: read screenshot-mode flag once at the root so
+  // the StatusBar hidden binding is single-source. Selector keeps the
+  // re-render scope to the boolean.
+  const screenshotMode = useScreenshotModeStore(s => s.enabled);
 
   // 2026-05-20 — Day 1 / Fix 3: central gate for *-debug + dev test
   // routes. Watches pathname; any non-owner (and not __DEV__) hitting
@@ -648,7 +656,12 @@ function AppNavigator() {
 
   return (
     <>
-      <StatusBar style="auto" />
+      {/* 2026-05-27 — Fix EA: when screenshot mode is on, hide the
+          top status bar app-wide so promo / App Store screenshots
+          come out clean. `hidden` covers iOS fully and the top bar on
+          Android; the Android bottom nav bar needs expo-navigation-bar
+          (native dep) and ships in the next EAS Build. */}
+      <StatusBar style="auto" hidden={screenshotMode} />
       <BatteryPrompt />
       {/* Auto-update banner — slides in from the top safe area when EAS
           Update has a newer JS bundle fetched and ready. Tap "Update" to

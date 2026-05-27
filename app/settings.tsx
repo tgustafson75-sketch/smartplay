@@ -20,6 +20,10 @@ import { useSettingsStore } from '../store/settingsStore';
 // reads from the dedicated watchStore so all three call sites
 // (cage-mode, cage/summary, settings) share one source of truth.
 import { useWatchStore } from '../store/watchStore';
+// 2026-05-27 — Fix EA: screenshot mode toggle (hides system chrome
+// for clean promo / store screenshots). Sourced from its own store
+// so app-wide consumers (the root StatusBar binding) read the same flag.
+import { useScreenshotModeStore } from '../store/screenshotModeStore';
 import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
 import { useToastStore } from '../store/toastStore';
 import { useTrustLevelStore, TRUST_LEVEL_META, TRUST_LEVEL_SLIDER_ORDER } from '../store/trustLevelStore';
@@ -974,6 +978,23 @@ export default function Settings() {
             sub="Pure black/white backgrounds + stronger borders for sunlight readability"
             value={highContrast}
             onValueChange={setHighContrast}
+          />
+          {/* 2026-05-27 — Fix EA: Screenshot mode. Hides the top
+              status bar (time / battery / wifi) app-wide so promo,
+              App Store, and social screenshots are clean. Not
+              persisted — turns OFF on app restart so users don't
+              get stuck wondering where the status bar went. Android
+              bottom nav bar still shows until next APK build (needs
+              expo-navigation-bar native dep, not OTA-able). */}
+          <ToggleRow
+            label="Screenshot mode (hide top bar)"
+            sub={
+              Platform.OS === 'android'
+                ? 'Hides the top status bar for clean screenshots. The bottom nav bar still shows in this build — crop or wait for the next app update.'
+                : 'Hides the top status bar (time, battery, wifi) for clean screenshots. Turns off automatically when you close the app.'
+            }
+            value={useScreenshotModeStore(s => s.enabled)}
+            onValueChange={useScreenshotModeStore(s => s.setEnabled)}
           />
           {/* PGA HOPE follow-up (A1) — large-text upgrade for low-vision
               participants. Bumps caption + briefing font sizes. */}
