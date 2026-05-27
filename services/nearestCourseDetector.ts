@@ -36,6 +36,7 @@ const SLUG_DISPLAY_NAMES: Record<LocalCourseSlug, string> = {
   'sunnyvale':        'Sunnyvale Golf Course',
   'maplewood':        'Maplewood Golf Club',
   'pembroke-pines':   'Pembroke Pines Country Club',
+  'journey-at-pechanga': 'Journey at Pechanga',
 };
 
 /** Friendly spoken short-name — strips parent-course parens for TTS. */
@@ -49,6 +50,7 @@ const SLUG_SPOKEN_NAMES: Record<LocalCourseSlug, string> = {
   'sunnyvale':        'Sunnyvale',
   'maplewood':        'Maplewood',
   'pembroke-pines':   'Pembroke Pines',
+  'journey-at-pechanga': 'Journey at Pechanga',
 };
 
 export interface NearestCourseResult {

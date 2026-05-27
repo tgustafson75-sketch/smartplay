@@ -242,9 +242,18 @@ export const PEMBROKE_PINES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   18: require('../assets/courses/pembroke-pines/hole-18.jpg'),
 };
 
-export type LocalCourseSlug = 'palms' | 'lakes' | 'rancho-california' | 'crystal-springs' | 'mariners-point' | 'san-jose-muni' | 'sunnyvale' | 'maplewood' | 'pembroke-pines';
+export type LocalCourseSlug =
+  | 'palms' | 'lakes' | 'rancho-california' | 'crystal-springs'
+  | 'mariners-point' | 'san-jose-muni' | 'sunnyvale' | 'maplewood'
+  | 'pembroke-pines'
+  // 2026-05-26 — Journey at Pechanga (Temecula CA). Randy Chang's home
+  // course; testing opportunity if Tim or Randy plays it. Hole geometry
+  // is available via golfcourseapi + Mapbox satellite imagery so we
+  // skip bundled hole-* images for now (the Partial<Record<>> on
+  // LOCAL_COURSE_IMAGES lets a slug exist as a centroid-only entry).
+  | 'journey-at-pechanga';
 
-export const LOCAL_COURSE_IMAGES: Record<LocalCourseSlug, Record<number, ImageSourcePropType>> = {
+export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number, ImageSourcePropType>>> = {
   'palms': PALMS_HOLE_IMAGES,
   'lakes': LAKES_HOLE_IMAGES,
   'rancho-california': RANCHO_CALIFORNIA_HOLE_IMAGES,
@@ -254,6 +263,10 @@ export const LOCAL_COURSE_IMAGES: Record<LocalCourseSlug, Record<number, ImageSo
   'sunnyvale': SUNNYVALE_HOLE_IMAGES,
   'maplewood': MAPLEWOOD_HOLE_IMAGES,
   'pembroke-pines': PEMBROKE_PINES_HOLE_IMAGES,
+  // 'journey-at-pechanga' intentionally omitted — hole imagery comes
+  // from Mapbox satellite live; getLocalHoleImage() returns null which
+  // the SmartVision render path already handles (falls through to the
+  // dynamic Mapbox tile).
 };
 
 /**
@@ -293,6 +306,12 @@ export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng:
   // on-site.
   'maplewood':        { lat: 44.282,     lng: -71.683 },
   'pembroke-pines':   { lat: 43.1417,    lng: -71.4544 },
+  // 2026-05-26 — Journey at Pechanga Resort, Temecula CA.
+  // Approximate centroid from Pechanga Resort & Casino landmark
+  // (45100 Pechanga Pkwy). Refine on-site via Mark Location once
+  // Tim or Randy visits — the 800m detect radius is generous enough
+  // to catch a parking-lot arrival even with this rough lat/lng.
+  'journey-at-pechanga': { lat: 33.4691, lng: -117.0744 },
 };
 
 /**
@@ -317,6 +336,10 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   // same bundled images.
   if (c.includes('maplewood')) return 'maplewood';
   if (c.includes('settlers crossing') || c.includes("settler's crossing")) return 'maplewood';
+  // 2026-05-26 — Journey at Pechanga matches "pechanga", "journey",
+  // or "journey at pechanga" so voice ("I'm at Pechanga", "open
+  // Journey") and golfcourseapi search results both resolve.
+  if (c.includes('pechanga') || (c.includes('journey') && c.includes('pechanga'))) return 'journey-at-pechanga';
   return null;
 }
 
