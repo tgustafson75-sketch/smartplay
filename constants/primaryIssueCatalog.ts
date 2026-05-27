@@ -98,6 +98,14 @@ export const PRIMARY_ISSUE_CATALOG: readonly PrimaryIssueEntry[] = [
     Illustration: PostureIllustration,
     image: require('../assets/illustrations/faults/posture.png'),
     relatedDrillId: null,
-    matchesDetectedIssues: ['posture_rounded', 'posture_upright', 'posture'] as const,
+    // 2026-05-27 — Fix EE: Tank's first video covers Early Extension,
+    // and early extension is mechanically a loss-of-posture pattern
+    // (hips thrust toward the ball through impact, lower-body posture
+    // breaks down). Routing the classifier's early_extension /
+    // early-extension / hips_thrust strings here so the Posture card
+    // surfaces when the AI flags it, putting Tank's drill content in
+    // the right place. If we later want a dedicated Early Extension
+    // card, split this entry — but for v1 posture is the right home.
+    matchesDetectedIssues: ['posture_rounded', 'posture_upright', 'posture', 'early_extension', 'early-extension', 'hips_thrust', 'loss_of_posture'] as const,
   },
 ] as const;

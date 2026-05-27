@@ -171,24 +171,19 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
     },
   },
   // 2026-05-26 — 8th slot reserved for Tank-narrated SmartPlay-branded
-  // drill content. URL empty until Tank recording lands; consumers
-  // detect url === '' and render placeholderThumbnail instead of a
-  // YouTube thumbnail.
-  // Placeholder asset = SmartPlay-hoodie photo Tim provided:
-  // visible face is Tim (the SmartFounder), hooded face is Tank
-  // (kept hidden per persona — Tank's face stays unseen in marketing).
-  // TODO 2026-05-26: once Tim saves the placeholder image to
-  // assets/drills/tank-caddie.png, uncomment the placeholderThumbnail
-  // line below. Required as a require() at module-eval, NOT a string —
-  // Metro resolves the asset at bundle time.
+  // drill content.
+  // 2026-05-27 — Tim provided the FIRST Tank video: "Tank's Take on
+  // Early Extension." This unlocks the tank_caddie slot — Tank's
+  // card on the Drills surface now opens the real video instead of
+  // showing a placeholder thumbnail. Verified=false pending Tim's
+  // playback check on the Galaxy Z Fold per the standing verify rule.
   tank_caddie: {
     primary: {
-      title: "Tank's Take — SmartPlay caddie drill",
+      title: "Tank's Take on Early Extension",
       instructor: 'Tank · SmartPlay Caddie',
-      url: '', // TODO: Tank recording + SmartPlay branding overlay
+      url: 'https://www.youtube.com/watch?v=c_ePVepaAp4',
       approxRuntimeSec: 180,
       verified: false,
-      // placeholderThumbnail: require('../assets/drills/tank-caddie.png'),
     },
   },
 };
