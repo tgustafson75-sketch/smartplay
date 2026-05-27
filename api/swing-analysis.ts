@@ -530,7 +530,15 @@ function meetsSpeedBar(parsed: SwingAnalysisResponse | null): boolean {
   if (!parsed) return false;
   // valid_swing=false is a definitive "no swing" call — ship it as-is.
   if (parsed.valid_swing === false) return true;
-  if (parsed.confidence !== 'high') return false;
+  // 2026-05-26 — Fix CV: accept HIGH or MEDIUM confidence as passing.
+  // Tim's correct insight: real swing footage (lighting, angle, blur)
+  // rarely produces high-confidence reads on the first provider, so the
+  // gate was rejecting valid Gemini output and forcing escalation through
+  // OpenAI + Anthropic — which exhausted budget and surfaced as 'Lost
+  // connection.' Medium-confidence reads are STILL useful (Kevin says
+  // 'it looks like you may be ...') and ship in <10s. Low-confidence
+  // still escalates because that's genuinely 'I cannot tell.'
+  if (parsed.confidence !== 'high' && parsed.confidence !== 'medium') return false;
   if (parsed.primary_fault === 'inconclusive') return false;
   if (typeof parsed.evidence !== 'string' || parsed.evidence.length === 0) return false;
   return true;
@@ -830,6 +838,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── ORCHESTRATION ────────────────────────────────────────────
 
+    // ── ORCHESTRATION TOTAL DEADLINE ─────────────────────────────
+    // 2026-05-26 — Fix CU: hard cap on total orchestration time.
+    // Vercel function maxDuration = 60s; client AbortSignal = 55s.
+    // If sequential providers (Gemini 30s + OpenAI 20s + Anthropic
+    // 22s) overflow either, the server response never arrives →
+    // client sees 'Lost connection' even though earlier providers
+    // produced valid output. Tim's repro: 14s 8i clip, 3 attempts,
+    // all fail. Cap total at 42s so we always have time to return
+    // SOMETHING before client/Vercel timeouts. Also: if Gemini
+    // returns ANY parsed result (even low-confidence), use it as
+    // the fallback — better than "Couldn't analyze." Escalation
+    // only happens when there's budget left.
+    const orchestrationStart = Date.now();
+    const ORCHESTRATION_TOTAL_MS = 42_000;
+    const budgetRemaining = () => ORCHESTRATION_TOTAL_MS - (Date.now() - orchestrationStart);
+
     // Stage 1 — Gemini (speed path)
     const geminiAttempt = await tryGemini();
     attempts.push(geminiAttempt);
@@ -856,25 +880,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else {
         escalationReason = 'gemini_missing_evidence';
       }
-      console.log('[swing-analysis] gemini did not meet speed bar — escalating to OpenAI:', escalationReason);
 
-      // Stage 2 — OpenAI (validation / second opinion)
-      const openaiAttempt = await tryOpenAI();
-      attempts.push(openaiAttempt);
-      // Pick the better of the two by score.
-      if (scoreAttempt(openaiAttempt.parsed) > scoreAttempt(winner.parsed)) {
-        winner = openaiAttempt;
-      }
-
-      // If we STILL don't have a high-confidence diagnostic from
-      // either, escalate to Anthropic for the deepest read.
-      if (!meetsSpeedBar(winner.parsed)) {
-        console.log('[swing-analysis] openai also did not pass bar — escalating to Anthropic');
-        const anthropicAttempt = await tryAnthropic();
-        attempts.push(anthropicAttempt);
-        if (scoreAttempt(anthropicAttempt.parsed) > scoreAttempt(winner.parsed)) {
-          winner = anthropicAttempt;
+      // 2026-05-26 — Fix CU: only escalate if we have budget for it.
+      // OpenAI client timeout = 20s; budget for tryOpenAI = 22s with
+      // overhead. If budget < 22s, skip to keep within total cap.
+      if (budgetRemaining() >= 22_000) {
+        console.log('[swing-analysis] gemini did not meet bar — escalating to OpenAI:', escalationReason, 'budget_ms:', budgetRemaining());
+        const openaiAttempt = await tryOpenAI();
+        attempts.push(openaiAttempt);
+        if (scoreAttempt(openaiAttempt.parsed) > scoreAttempt(winner.parsed)) {
+          winner = openaiAttempt;
         }
+
+        // Anthropic only if we STILL haven't passed AND still have budget.
+        if (!meetsSpeedBar(winner.parsed) && budgetRemaining() >= 18_000) {
+          console.log('[swing-analysis] openai also did not pass bar — escalating to Anthropic; budget_ms:', budgetRemaining());
+          const anthropicAttempt = await tryAnthropic();
+          attempts.push(anthropicAttempt);
+          if (scoreAttempt(anthropicAttempt.parsed) > scoreAttempt(winner.parsed)) {
+            winner = anthropicAttempt;
+          }
+        } else if (!meetsSpeedBar(winner.parsed)) {
+          escalationReason = (escalationReason ?? '') + '_anthropic_skipped_budget';
+          console.log('[swing-analysis] anthropic skipped — out of budget; returning best-so-far');
+        }
+      } else {
+        escalationReason = (escalationReason ?? '') + '_escalation_skipped_budget';
+        console.log('[swing-analysis] escalation skipped — out of budget after gemini; returning gemini result');
       }
     }
 
