@@ -53,6 +53,13 @@ export type DrillEntry = {
   drills: readonly Drill[];
   videoCategory: IssueCategory;
   cardImage?: ImageSourcePropType;
+  // 2026-05-27 — Fix EF: optional "Tank's Tips" infographic. Full-page
+  // dense visual reference card (PGA-vs-Golf-Father comparison format).
+  // When set, the drill detail screen renders a dedicated tap-to-zoom
+  // section in addition to the standard cardImage + video. Currently
+  // only Tank's drill has one (early extension); future drill entries
+  // can add their own tipsImage to surface similar deep-reference cards.
+  tipsImage?: ImageSourcePropType;
 };
 
 // Each fundamentals card maps to one of the visual teaching diagrams
@@ -287,6 +294,11 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
     // Replaces the generic SmartPlay logo fallback (Fix DE) so the
     // Drills grid shows Tank's actual face on his card.
     cardImage: require('../assets/avatars/tank_v2_lets_go_marine.png'),
+    // 2026-05-27 — Fix EF: Tank's Tips card for early extension.
+    // Full-page PGA-vs-Golf-Father infographic Tim authored. Rendered
+    // as a dedicated tap-to-zoom section on the drill detail screen
+    // (text is dense — the modal is the right place to read it).
+    tipsImage: require('../assets/tank-tips/early-extension.png'),
   },
 ];
 

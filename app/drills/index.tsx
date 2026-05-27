@@ -12,13 +12,22 @@
  * step 1 moved into a dedicated sub-route).
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, Image, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { DRILL_CATALOG, type DrillEntry } from '../../data/drillCatalog';
+
+// 2026-05-27 — Fix EF: pin Tank's drill first, Randy's drill second.
+// Tank's first video covers early extension (the most common diagnosis
+// in the AI swing analyzer's output today), so it's the logical lead
+// drill. Randy's chip card follows for the short-game lane. Rest of
+// the catalog renders in its existing order behind them. Keeping the
+// pin set as a local constant — easy to expand if more featured drills
+// land later.
+const PINNED_DRILL_ORDER: readonly string[] = ['tank_caddie_practice', 'chipping_inconsistent'];
 
 export default function DrillsIndex() {
   const router = useRouter();
@@ -29,6 +38,19 @@ export default function DrillsIndex() {
   // system UI. New chipping + tank_caddie cards (rows 5-6) hit this
   // hardest. Add insets.bottom + 32 so the floor scales with device.
   const insets = useSafeAreaInsets();
+
+  // 2026-05-27 — Fix EF: render pinned drills first (Tank → Randy →
+  // rest in catalog order). Memoized so the sort only runs on catalog
+  // changes (effectively module-load) — the catalog is `readonly` so
+  // the reference is stable in practice.
+  const orderedEntries = useMemo(() => {
+    const pinnedSet = new Set(PINNED_DRILL_ORDER);
+    const pinned = PINNED_DRILL_ORDER
+      .map(id => DRILL_CATALOG.find(e => e.id === id))
+      .filter((e): e is DrillEntry => !!e);
+    const rest = DRILL_CATALOG.filter(e => !pinnedSet.has(e.id));
+    return [...pinned, ...rest];
+  }, []);
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
@@ -62,9 +84,10 @@ export default function DrillsIndex() {
           video links. Tap to dive in.
         </Text>
 
-        {/* 2-COL GRID — render rows of 2 cards from DRILL_CATALOG. */}
+        {/* 2-COL GRID — render rows of 2 cards. Order is Tank → Randy
+            → rest of catalog (see PINNED_DRILL_ORDER above). */}
         <View style={styles.grid}>
-          {DRILL_CATALOG.map((entry) => (
+          {orderedEntries.map((entry) => (
             <DrillCard
               key={entry.id}
               entry={entry}

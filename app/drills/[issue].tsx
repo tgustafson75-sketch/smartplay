@@ -45,6 +45,10 @@ export default function DrillDetail() {
   const { colors } = useTheme();
   const { issue } = useLocalSearchParams<{ issue?: string }>();
   const [zoomOpen, setZoomOpen] = useState(false);
+  // 2026-05-27 — Fix EF: separate zoom state for the optional Tank's
+  // Tips infographic so each Modal targets the right image. The two
+  // modals share the same zoom UI shell but render distinct sources.
+  const [tipsZoomOpen, setTipsZoomOpen] = useState(false);
 
   const entry = typeof issue === 'string' ? getDrillEntry(issue) : undefined;
 
@@ -145,6 +149,31 @@ export default function DrillDetail() {
           ))}
         </View>
 
+        {/* 2026-05-27 — Fix EF: TANK'S TIPS — optional dense
+            infographic for drills that have one. Rendered between
+            the DRILLS list and WATCH card so the reading flow is:
+            problem → drills → deep reference → video. Same tap-to-
+            zoom pattern as the top illustration but with a distinct
+            "TANK'S TIPS" eyebrow so it reads as Tank's voice, not a
+            second generic illustration. */}
+        {entry.tipsImage && (
+          <>
+            <Text style={[styles.sectionLabel, { color: '#F0C030' }]}>TANK&apos;S TIPS</Text>
+            <Pressable
+              onPress={() => setTipsZoomOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Tank's Tips infographic. Tap to zoom."
+              style={styles.illustrationWrap}
+            >
+              <Image source={entry.tipsImage} style={styles.illustration} resizeMode="contain" />
+              <View style={[styles.zoomBadge, { backgroundColor: 'rgba(240,192,48,0.18)', borderColor: '#F0C030' }]}>
+                <Ionicons name="search" size={14} color="#F0C030" />
+                <Text style={[styles.zoomBadgeText, { color: '#F0C030' }]}>Tap to zoom</Text>
+              </View>
+            </Pressable>
+          </>
+        )}
+
         {/* WATCH — instructor video card */}
         <Text style={[styles.sectionLabel, { color: colors.accent }]}>WATCH</Text>
         <TouchableOpacity
@@ -191,6 +220,33 @@ export default function DrillDetail() {
           </View>
           {entry.cardImage && (
             <Image source={entry.cardImage} style={styles.zoomImage} resizeMode="contain" />
+          )}
+        </View>
+      </Modal>
+
+      {/* 2026-05-27 — Fix EF: separate zoom modal for Tank's Tips.
+          Reuses the same backdrop / close-button shell as the
+          illustration zoom above; just renders entry.tipsImage. */}
+      <Modal
+        visible={tipsZoomOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setTipsZoomOpen(false)}
+      >
+        <View style={styles.zoomBackdrop}>
+          <View style={styles.zoomHeader}>
+            <TouchableOpacity
+              onPress={() => setTipsZoomOpen(false)}
+              hitSlop={14}
+              accessibilityRole="button"
+              accessibilityLabel="Close Tank's Tips"
+              style={styles.zoomCloseBtn}
+            >
+              <Ionicons name="close" size={28} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
+          {entry.tipsImage && (
+            <Image source={entry.tipsImage} style={styles.zoomImage} resizeMode="contain" />
           )}
         </View>
       </Modal>
