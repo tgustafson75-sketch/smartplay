@@ -61,7 +61,8 @@ console.log(`[generate-vo] using OPENAI_API_KEY tail ****${apiKey.slice(-4)}`);
 const STYLE_INSTRUCTIONS =
   'Confident, warm, premium sports-brand narrator. Measured pace, a slight beat between sentences, like a polished ad. Not hyper, not salesy.';
 
-const NARRATION = `Every golfer has had that thought standing on the tee — I wish I had a caddie. Someone who knows the yardage, calls the club, and has your back all eighteen.
+// Long form — the 60-second narration used for the main social cut.
+const NARRATION_LONG = `Every golfer has had that thought standing on the tee — I wish I had a caddie. Someone who knows the yardage, calls the club, and has your back all eighteen.
 
 That's SmartPlay Caddie. An AI caddie that lives in your pocket. Real-time, on-course intelligence — from the first tee to the last putt.
 
@@ -74,6 +75,20 @@ Out at the range? It reads your swing — gives you the one thing to fix, and a 
 Playing with the crew? It runs the whole tournament — scoring, skins, closest-to-pin — so you just play.
 
 Not just GPS. Not just a swing app. A caddie that talks back. SmartPlay Caddie — built by SmartPlay AI.`;
+
+// Short form — the 30-second vertical cut for Shorts / Reels / TikTok.
+const NARRATION_SHORT = `I wish I had a caddie. Every golfer's had that thought.
+
+That's SmartPlay Caddie — an AI caddie in your pocket. Real-time, on-course intelligence.
+
+Get every distance, front to back. Just talk to it — ask the club, ask the line. It reads your swing at the range, and runs your whole tournament when you play with the crew.
+
+Not just GPS. A caddie that talks back. SmartPlay Caddie — built by SmartPlay AI.`;
+
+// CLI: --short selects the 30s vertical cut. Default is the 60s long.
+const useShort = process.argv.includes('--short');
+const NARRATION = useShort ? NARRATION_SHORT : NARRATION_LONG;
+const FILENAME_TAG = useShort ? 'short_' : '';
 
 // gpt-4o-mini-tts supported voices: alloy, ash, ballad, coral, echo,
 // fable, nova, onyx, sage, shimmer, verse. All three requested voices
@@ -110,7 +125,7 @@ console.log(`[generate-vo] narration: ${NARRATION.length} chars`);
 
 const results = [];
 for (const voice of VOICES) {
-  const filename = `SmartPlay_VO_${voice}.mp3`;
+  const filename = `SmartPlay_VO_${FILENAME_TAG}${voice}.mp3`;
   const fullPath = path.join(outDir, filename);
   console.log(`\n[generate-vo] → ${voice} …`);
   const t0 = Date.now();
