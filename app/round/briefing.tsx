@@ -15,7 +15,6 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore, getEffectiveSimpleBriefing } from '../../store/settingsStore';
-import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { speak, stopSpeaking, configureAudioForSpeech } from '../../services/voiceService';
 import { generateBriefing } from '../../services/briefingGenerator';
 import { speakHonestFailure } from '../../services/listeningSession';
@@ -49,7 +48,11 @@ export default function BriefingScreen() {
     return getEffectiveSimpleBriefing(roundsTogether);
   })();
   const largeText = useSettingsStore(s => s.largeText);
-  const trustLevel = useTrustLevelStore(s => s.level);
+  // 2026-05-27 — Fix EB: trustLevel no longer gates this screen. The
+  // briefing speak() is user-initiated (round-start tap) and passes
+  // { userInitiated: true } so Quiet (L1) doesn't suppress it. Keeping
+  // the subscription removed avoids the misleading "trustLevel is read"
+  // signal a future reader would see.
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
 
   const [phase, setPhase] = useState<Phase>('thinking');
@@ -165,17 +168,25 @@ export default function BriefingScreen() {
         setPhase('speaking');
         Animated.timing(textFade, { toValue: 1, duration: 400, useNativeDriver: true }).start();
 
-        // Sim-report G6 — auto-speak honors the Quiet contract. At L1 the
-        // user gets to read the briefing on screen (text already rendered
-        // above) and tap-skip; Kevin doesn't speak unsolicited.
-        if (voiceEnabled && trustLevel !== 1) {
+        // 2026-05-27 — Fix EB: the briefing speak() is USER-INITIATED
+        // (user just tapped "Start Round"), so per [[voice-userinitiated-rule]]
+        // it must pass { userInitiated: true } and must NOT be silenced
+        // by trustLevel===1. The old `trustLevel !== 1` gate conflated
+        // "auto-fired by app lifecycle" with "user just tapped this
+        // button" — the latter is solicited and Quiet mode shouldn't
+        // suppress it. Symptom this caused: at L1, the briefing text
+        // rendered but the voice never spoke ("Kevin did not read the
+        // course intro to me" — Tim, 2026-05-27). voiceEnabled stays
+        // as the hard kill switch — Quiet is "be brief / be smart"
+        // not "be silent on the lines I just asked for."
+        if (voiceEnabled) {
           await configureAudioForSpeech();
-          await speak(text, voiceGender, language, apiUrl);
+          await speak(text, voiceGender, language, apiUrl, { userInitiated: true });
           // Phase A.4: first-tee hint for first-round users — appended once
           // after the briefing voice finishes, never on subsequent rounds.
           const hint = getFirstTeeHint();
           if (hint && !cancelled) {
-            await speak(hint, voiceGender, language, apiUrl);
+            await speak(hint, voiceGender, language, apiUrl, { userInitiated: true });
           }
         }
 
@@ -194,7 +205,11 @@ export default function BriefingScreen() {
         // also fails, we still navigate so the user isn't stuck on the
         // briefing screen forever.
         console.log('[briefing] generation failed; speaking honest fallback:', e);
-        if (!cancelled && voiceEnabled && trustLevel !== 1) {
+        // 2026-05-27 — Fix EB: honest-fail also fires regardless of
+        // trust. speakHonestFailure passes userInitiated:true
+        // internally so L1 doesn't suppress the "couldn't reach me"
+        // confirmation — same rationale as the briefing speak above.
+        if (!cancelled && voiceEnabled) {
           try { await speakHonestFailure(language as 'en'|'es'|'zh', voiceGender, apiUrl); } catch {}
         }
         if (!cancelled) goToCaddie();
