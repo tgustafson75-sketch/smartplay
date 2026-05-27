@@ -239,6 +239,16 @@ export async function fetchCourseGeometry(courseId: string): Promise<CourseGeome
   if (persisted) {
     memCache.set(courseId, persisted);
     if (Date.now() - persisted.fetched_at < REFRESH_AFTER_MS) return persisted;
+    // 2026-05-26 — Fix DI: stale-while-revalidate. When a persisted
+    // entry exists but is older than REFRESH_AFTER_MS (1 week), return
+    // it IMMEDIATELY so the UI renders instantly with cached geometry,
+    // then fire the upstream re-fetch in the background to refresh the
+    // cache for the NEXT visit. Prior behavior blocked on the fresh
+    // fetch even when a stale entry was available, causing 2-5s splash
+    // on weekly cached courses. The promise below is intentionally
+    // detached (void) — we don't await it; persisted is returned now.
+    void refreshGeometryInBackground(courseId).catch(() => undefined);
+    return persisted;
   }
 
   // Resolve "local:<slug>" → real upstream golfcourseapi ID, if we have
@@ -310,6 +320,56 @@ export async function fetchCourseGeometry(courseId: string): Promise<CourseGeome
   } catch (e) {
     console.warn('[courseGeometry] fetch exception:', e);
     return persisted ?? null;
+  }
+}
+
+/**
+ * 2026-05-26 — Fix DI: background refresh helper for stale-while-revalidate.
+ * Called from fetchCourseGeometry when a persisted entry is stale (>1 week
+ * old). Fires a fresh fetch and writes back to the cache, but doesn't block
+ * the caller. The fresh result lands silently for the NEXT visit.
+ *
+ * Mirrors the inline fetch in fetchCourseGeometry but skips the cache
+ * check (which the caller already did). On failure, the stale cache stays
+ * — no eviction. Never throws; logs and returns.
+ */
+async function refreshGeometryInBackground(courseId: string): Promise<void> {
+  try {
+    let upstreamId = courseId;
+    let centroid: { lat: number; lng: number } | null = null;
+    let holeCount: number | null = null;
+    if (courseId.startsWith('local:')) {
+      const slug = courseId.slice('local:'.length);
+      centroid = LOCAL_COURSE_CENTROIDS[slug as LocalCourseSlug] ?? null;
+      holeCount = LOCAL_COURSE_HOLE_COUNT[slug] ?? null;
+      const real = await resolveLocalCourseId(slug);
+      if (real) upstreamId = real;
+      else if (!centroid) return;
+      else upstreamId = '__osm_only__';
+    }
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+    const params = new URLSearchParams({ courseId: upstreamId });
+    if (centroid) {
+      params.set('lat', String(centroid.lat));
+      params.set('lng', String(centroid.lng));
+    }
+    if (holeCount != null) params.set('holeCount', String(holeCount));
+    if (upstreamId === '__osm_only__') params.set('osmOnly', '1');
+    if (courseId.startsWith('local:')) params.set('withPolygons', '1');
+    const url = `${apiUrl}/api/course-geometry?${params.toString()}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
+    if (!res.ok) {
+      console.warn('[courseGeometry] background refresh failed:', res.status, courseId);
+      return;
+    }
+    const geo = (await res.json()) as CourseGeometry;
+    geo.fetched_at = Date.now();
+    geo.course_id = courseId;
+    memCache.set(courseId, geo);
+    await writePersistedCache(geo);
+    console.log('[courseGeometry] background refresh ok:', courseId);
+  } catch (e) {
+    console.warn('[courseGeometry] background refresh exception:', e instanceof Error ? e.message : String(e), courseId);
   }
 }
 

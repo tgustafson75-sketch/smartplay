@@ -200,13 +200,38 @@ async function probeDurationMs(clipUri: string): Promise<number> {
     V6('STAGE 1 — Audio.Sound failed', { error: e instanceof Error ? e.message : String(e) });
   }
 
-  for (const ms of [30_000, 15_000, 8_000, 4_000, 2_000]) {
-    try {
-      await VT.getThumbnailAsync(clipUri, { time: ms, quality: 0.3 });
-      V6('STAGE 1 — duration via VT lower bound', { at_least_ms: ms });
-      return ms;
-    } catch {
-      // Frame extract at that timestamp failed → video is shorter.
+  // 2026-05-26 — Fix DH: start the duration probe at 8s (typical
+  // upload length) instead of 30s. Prior code probed 30s first, which
+  // FAILED on every clip under 30s (~98% of uploads), wasting ~400ms
+  // per upload on the VT.getThumbnailAsync timeout before falling
+  // through to 15s, then 8s. New order tries 8s first (succeeds on
+  // most clips), then bumps UP to 15s/30s if 8s passed (i.e., clip is
+  // longer than 8s — keep probing for tighter lower bound), and only
+  // FALLS DOWN to 4s/2s if 8s itself failed (i.e., short clip).
+  try {
+    await VT.getThumbnailAsync(clipUri, { time: 8_000, quality: 0.3 });
+    // 8s succeeded — clip is at least 8s. Try longer for tighter bound.
+    for (const ms of [15_000, 30_000]) {
+      try {
+        await VT.getThumbnailAsync(clipUri, { time: ms, quality: 0.3 });
+        V6('STAGE 1 — duration via VT lower bound', { at_least_ms: ms });
+        return ms;
+      } catch {
+        V6('STAGE 1 — duration via VT lower bound', { at_least_ms: 8_000 });
+        return 8_000;
+      }
+    }
+    return 8_000;
+  } catch {
+    // 8s failed — clip is short. Probe down.
+    for (const ms of [4_000, 2_000]) {
+      try {
+        await VT.getThumbnailAsync(clipUri, { time: ms, quality: 0.3 });
+        V6('STAGE 1 — duration via VT lower bound (short clip)', { at_least_ms: ms });
+        return ms;
+      } catch {
+        // Even shorter.
+      }
     }
   }
   V6('STAGE 1 — duration unknown, fallback', { fallback_ms: FALLBACK_DURATION_MS });
