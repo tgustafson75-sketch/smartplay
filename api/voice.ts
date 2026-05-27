@@ -23,6 +23,22 @@ const OPENAI_VOICES = {
   female: 'nova' as const,
 };
 
+// 2026-05-26 — Fix DB: per-persona OpenAI TTS voice mapping. While
+// USE_ELEVENLABS=false, all male personas were sharing onyx (Kevin's
+// default) so Tank + Harry sounded identical to Kevin. Pick voices
+// that match each persona's character description:
+//   - kevin: onyx (deep, warm — 'friend in the cart')
+//   - serena: nova (clear, composed — professional female caddie)
+//   - tank: ash (confident, expressive — high-intensity drill-sergeant)
+//   - harry: sage (calm, reflective — grounding partnership counsel)
+// Falls through to gender-based default for any unknown persona.
+const OPENAI_VOICES_BY_PERSONA: Record<string, 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer' | 'verse'> = {
+  kevin:  'onyx',
+  serena: 'nova',
+  tank:   'ash',
+  harry:  'sage',
+};
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse,
@@ -141,14 +157,12 @@ export default async function handler(
     }
 
     // OpenAI TTS fallback — use gpt-4o-mini-tts with caddie tone for consistent voice.
-    // Persona maps to gender for the OpenAI fallback (Kevin/Harry/Tank → male,
-    // Serena → female). Until OpenAI exposes more distinct male voices, all
-    // three male personas share onyx — only ElevenLabs differentiates them.
-    const effectiveGender =
-      persona === 'serena' ? 'female'
-      : persona === 'kevin' || persona === 'harry' || persona === 'tank' ? 'male'
-      : gender;
-    const voice = effectiveGender === 'female' ? OPENAI_VOICES.female : OPENAI_VOICES.male;
+    // 2026-05-26 — Fix DB: per-persona voice mapping (was: shared onyx).
+    // Falls back to gender-based default for unrecognized personas.
+    const personaKeyTts = typeof persona === 'string' ? persona.toLowerCase() : '';
+    const personaVoice = OPENAI_VOICES_BY_PERSONA[personaKeyTts];
+    const voice = personaVoice
+      ?? (gender === 'female' ? OPENAI_VOICES.female : OPENAI_VOICES.male);
 
     const mp3 = await openai.audio.speech.create({
       model: 'gpt-4o-mini-tts',
