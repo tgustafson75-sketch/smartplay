@@ -42,6 +42,15 @@ export interface SwingAnalysisDebugEntry {
    *  this swing to /api/swing-analysis (vs /api/putting-analysis).
    *  Null when the caller didn't supply one. */
   perspective: string | null;
+  // 2026-05-26 — Fix DN: full orchestration trace from the server's
+  // _debug.attempts array. Each entry: which provider ran, how long
+  // it took, whether it parsed, what error (if any), and its score.
+  // Lets the owner debug screen show 'Gemini bypassed → OpenAI 8s ok
+  // → Anthropic skipped (budget)' at a glance — diagnosing slow runs
+  // or repeated escalations without diving into Vercel logs.
+  provider?: string | null;
+  escalation_reason?: string | null;
+  attempts?: Array<{ provider: string; elapsed_ms: number; ok: boolean; error: string | null; score: number }> | null;
 }
 
 interface SwingAnalysisDebugState {

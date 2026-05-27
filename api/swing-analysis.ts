@@ -876,7 +876,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // the fallback — better than "Couldn't analyze." Escalation
     // only happens when there's budget left.
     const orchestrationStart = Date.now();
-    const ORCHESTRATION_TOTAL_MS = 42_000;
+    // 2026-05-26 — Fix DM: 42_000 → 48_000 now that Gemini is bypassed.
+    // The 42s budget was sized for the 3-provider chain (Gemini 6s +
+    // OpenAI 20s + Anthropic 22s = ~48s worst case, capped at 42s
+    // for safety). With Gemini bypassed (Fix CY), the chain is now
+    // OpenAI (~12s) + Anthropic (~18s) = ~30s typical — we have room
+    // to extend budget to 48s. Still 7s under client's 55s abort
+    // (Fix CO) and 12s under Vercel's 60s function maxDuration. The
+    // extra budget makes Anthropic less likely to be skipped on slow-
+    // OpenAI runs, raising successful-completion rate.
+    const ORCHESTRATION_TOTAL_MS = 48_000;
     const budgetRemaining = () => ORCHESTRATION_TOTAL_MS - (Date.now() - orchestrationStart);
 
     // 2026-05-26 — Fix CY: BYPASS Gemini. Tim's project hit 429

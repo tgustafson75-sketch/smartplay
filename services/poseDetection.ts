@@ -356,11 +356,26 @@ export async function extractKeyFrames(
       }),
     );
     const valid = frames.filter((f): f is Frame => f !== null);
+    // 2026-05-26 — Fix DL: payload-size summary on top of the
+    // per-frame detail. Audit flagged that the per_frame array is
+    // hard to scan; a single avg/min/max line catches regressions
+    // (e.g. if someone bumps resize back to 1024px). Reuse b64_kb
+    // already computed — zero extra cost.
+    const kbValues = perFrameOutcomes
+      .filter((o): o is typeof o & { b64_kb: number } => o.ok === true && typeof o.b64_kb === 'number')
+      .map(o => o.b64_kb);
+    const sumKb = kbValues.reduce((a, b) => a + b, 0);
     V6('STAGE 2 — extractKeyFrames done', {
       successful: valid.length,
       attempted: frameFractions.length,
       bounded: boundaries != null,
       per_frame: perFrameOutcomes,
+      payload_summary: kbValues.length > 0 ? {
+        total_kb: sumKb,
+        avg_kb: Math.round(sumKb / kbValues.length),
+        min_kb: Math.min(...kbValues),
+        max_kb: Math.max(...kbValues),
+      } : null,
     });
     return valid;
   } catch (e) {
@@ -508,6 +523,11 @@ export async function analyzeSwing(
       // starts forwarding it. Defensive read via unknown cast.
       const ctxRecord = context as unknown as Record<string, unknown>;
       const perspective = typeof ctxRecord.perspective === 'string' ? ctxRecord.perspective : null;
+      // 2026-05-26 — Fix DN: also stash provider, escalation_reason,
+      // and the full attempts array. Owner debug screen can render
+      // the orchestration decision tree at a glance.
+      const debugAny = data._debug as Record<string, unknown> | undefined;
+      const attemptsArr = Array.isArray(debugAny?.attempts) ? debugAny.attempts as Array<{ provider: string; elapsed_ms: number; ok: boolean; error: string | null; score: number }> : null;
       dbg.useSwingAnalysisDebugStore.getState().record({
         at: Date.now(),
         framesSent: wireFrames.length,
@@ -516,6 +536,9 @@ export async function analyzeSwing(
         mode: data._debug?.mode ?? null,
         shortGame: data._debug?.shortGame ?? null,
         perspective,
+        provider: typeof debugAny?.provider === 'string' ? debugAny.provider as string : null,
+        escalation_reason: typeof debugAny?.escalation_reason === 'string' ? debugAny.escalation_reason as string : null,
+        attempts: attemptsArr,
       });
     } catch (e) {
       console.log('[poseDetection] swing-analysis debug stash failed (non-fatal):', e);
