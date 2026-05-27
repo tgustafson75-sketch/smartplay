@@ -476,6 +476,37 @@ export default function Settings() {
           </View>
         ) : (
         <View style={cardStyle}>
+          {/* 2026-05-26 — Fix DG: minimize button at top of expanded
+              profile form. The form takes 2 scrolls of screen real
+              estate; previously the only way to collapse was scrolling
+              all the way to the bottom Save/Cancel pair. Top chevron
+              gives a one-tap collapse without scrolling. Only renders
+              when a name is already on file (otherwise the user MUST
+              fill out the form first — collapse would lose data). */}
+          {name?.trim() ? (
+            <TouchableOpacity
+              onPress={() => setProfileExpanded(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Minimize profile"
+              hitSlop={10}
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 8,
+                zIndex: 1,
+                width: 32,
+                height: 32,
+                borderRadius: 16,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: colors.surface_elevated,
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
+            >
+              <Ionicons name="chevron-up" size={16} color={colors.accent} />
+            </TouchableOpacity>
+          ) : null}
 
           <Text style={inputLblStyle}>Name</Text>
           <TextInput

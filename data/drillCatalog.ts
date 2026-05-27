@@ -257,6 +257,11 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
       { name: '3-distance ladder',steps: 'Pick three landing spots (5 / 10 / 15 yards). Hit five chips to each, same club. Train carry distance through length-of-swing, not effort.' },
     ],
     videoCategory: 'chipping',
+    // 2026-05-26 — Fix DF: thumbnail pulled from the Chang Chip video's
+    // YouTube poster frame. Remote URI works in ImageSourcePropType
+    // without bundling an asset; renders the actual instructor frame
+    // so testers recognize Randy on the Drills grid.
+    cardImage: { uri: 'https://img.youtube.com/vi/_iWzD-gSoa8/maxresdefault.jpg' },
   },
   // 2026-05-26 — Reserved 8th slot for Tank-narrated SmartPlay-branded
   // content. Drill entry exists so the slot appears on the Drills
@@ -277,6 +282,11 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
       { name: 'Worst-shot warm-up',     steps: 'Start each session with the shot you LEAST want to hit. Three solid reps before moving on. Removes avoidance from your range pattern.' },
     ],
     videoCategory: 'tank_caddie',
+    // 2026-05-26 — Fix DF: Tank's existing 'Let's go, Marine' avatar
+    // — matches the drill's Marine drill-sergeant push energy.
+    // Replaces the generic SmartPlay logo fallback (Fix DE) so the
+    // Drills grid shows Tank's actual face on his card.
+    cardImage: require('../assets/avatars/tank_v2_lets_go_marine.png'),
   },
 ];
 

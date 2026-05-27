@@ -14,7 +14,7 @@
 
 import React from 'react';
 import { View, Text, Image, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -23,6 +23,12 @@ import { DRILL_CATALOG, type DrillEntry } from '../../data/drillCatalog';
 export default function DrillsIndex() {
   const router = useRouter();
   const { colors } = useTheme();
+  // 2026-05-26 — Fix DE: ScrollView paddingBottom was a hardcoded
+  // 32px, didn't account for safe-area / gesture bar (~30+px on
+  // modern phones), so the LAST row of drill cards clipped behind
+  // system UI. New chipping + tank_caddie cards (rows 5-6) hit this
+  // hardest. Add insets.bottom + 32 so the floor scales with device.
+  const insets = useSafeAreaInsets();
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
@@ -45,7 +51,10 @@ export default function DrillsIndex() {
         />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={[styles.eyebrow, { color: colors.accent }]}>DRILLS</Text>
         <Text style={[styles.title, { color: colors.text_primary }]}>Common Faults</Text>
         <Text style={[styles.subtitle, { color: colors.text_muted }]}>
@@ -90,11 +99,22 @@ function DrillCard({ entry, colors, onPress }: DrillCardProps) {
         },
       ]}
     >
-      {entry.cardImage && (
-        <View style={styles.cardImageWrap}>
+      {/* 2026-05-26 — Fix DE: render the image area UNCONDITIONALLY so
+          all cards in the grid have uniform height. Cards without a
+          bundled cardImage (chipping_inconsistent, tank_caddie) get
+          the SmartPlay logo as a fallback rather than collapsing the
+          header — keeps rows visually even. */}
+      <View style={[styles.cardImageWrap, !entry.cardImage && { backgroundColor: colors.surface_elevated }]}>
+        {entry.cardImage ? (
           <Image source={entry.cardImage} style={styles.cardImage} resizeMode="contain" />
-        </View>
-      )}
+        ) : (
+          <Image
+            source={require('../../assets/avatars/smartplay_caddie_badge.png')}
+            style={[styles.cardImage, { width: '60%', height: '60%' }]}
+            resizeMode="contain"
+          />
+        )}
+      </View>
       <View style={styles.cardBody}>
         <Text style={[styles.cardTitle, { color: colors.text_primary }]} numberOfLines={1}>
           {entry.title}
