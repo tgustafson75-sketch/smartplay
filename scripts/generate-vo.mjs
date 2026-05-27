@@ -62,6 +62,8 @@ const STYLE_INSTRUCTIONS =
   'Confident, warm, premium sports-brand narrator. Measured pace, a slight beat between sentences, like a polished ad. Not hyper, not salesy.';
 
 // Long form — the 60-second narration used for the main social cut.
+// 2026-05-27 — corrected: SmartMotion called out by name in the swing
+// line so the feature gets product-name recognition in the voiceover.
 const NARRATION_LONG = `Every golfer has had that thought standing on the tee — I wish I had a caddie. Someone who knows the yardage, calls the club, and has your back all eighteen.
 
 That's SmartPlay Caddie. An AI caddie that lives in your pocket. Real-time, on-course intelligence — from the first tee to the last putt.
@@ -70,11 +72,11 @@ Step onto any hole and you get the real numbers: front, middle, and back of the 
 
 And you don't tap through menus. You just talk. Ask how far. Ask what club. Ask who won the Masters in '86. Your caddie answers out loud, in real time, between every shot — and you pick from four, so you find the one that fits your game.
 
-Out at the range? It reads your swing — gives you the one thing to fix, and a drill to groove it.
+Out at the range? SmartMotion reads your swing — the one thing to fix, and a drill to groove it.
 
 Playing with the crew? It runs the whole tournament — scoring, skins, closest-to-pin — so you just play.
 
-Not just GPS. Not just a swing app. A caddie that talks back. SmartPlay Caddie — built by SmartPlay AI.`;
+Not just GPS. Not just a swing app. A caddie that talks back. This is SmartPlay Caddie, built by SmartPlay AI.`;
 
 // Short form — the 30-second vertical cut for Shorts / Reels / TikTok.
 const NARRATION_SHORT = `I wish I had a caddie. Every golfer's had that thought.
@@ -91,9 +93,18 @@ const NARRATION = useShort ? NARRATION_SHORT : NARRATION_LONG;
 const FILENAME_TAG = useShort ? 'short_' : '';
 
 // gpt-4o-mini-tts supported voices: alloy, ash, ballad, coral, echo,
-// fable, nova, onyx, sage, shimmer, verse. All three requested voices
+// fable, nova, onyx, sage, shimmer, verse. All three default voices
 // are supported; no substitution needed.
-const VOICES = ['onyx', 'ash', 'sage'];
+//
+// CLI: --voice=<name> regenerates a single voice (e.g.
+// `node scripts/generate-vo.mjs --voice=onyx --short`). Useful when
+// one voice from a prior batch needs a re-cut without burning quota
+// on the others. Defaults to all three.
+const ALL_VOICES = ['onyx', 'ash', 'sage'];
+const voiceArg = process.argv.find(a => a.startsWith('--voice='));
+const VOICES = voiceArg
+  ? [voiceArg.slice('--voice='.length).trim().toLowerCase()].filter(Boolean)
+  : ALL_VOICES;
 
 // ─── Output location ─────────────────────────────────────────────────
 async function pickOutputDir() {
