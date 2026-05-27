@@ -22,7 +22,7 @@ const buildSystemPrompt = (g: Persona | VoiceGender) => {
 Available intents:
 
 1. open_tool — User wants to launch a tool or screen.
-   parameters: { tool_name: "smartvision" | "smartfinder" | "swinglab" | "scorecard" | "dashboard" | "settings" | "lie_analysis" | "smartmotion" | "coach_mode" | "cage_mode", play_intent?: "aggressive" | "conservative", angle?: "down_the_line" | "face_on", auto_start?: boolean, player_name?: string }
+   parameters: { tool_name: "smartvision" | "smartfinder" | "swinglab" | "scorecard" | "dashboard" | "settings" | "lie_analysis" | "smartmotion" | "coach_mode" | "cage_mode" | "library" | "issue_log", play_intent?: "aggressive" | "conservative", angle?: "down_the_line" | "face_on", auto_start?: boolean, player_name?: string, send_log?: boolean }
    Examples:
    - "open SmartVision" -> { tool_name: "smartvision" }
    - "show me the smart finder" -> { tool_name: "smartfinder" }
@@ -54,6 +54,8 @@ Available intents:
    - "I'm coaching Emma" / "coach Mike" / "let's coach Sarah" / "I'm gonna coach Jenny" / "watch my student Mike" -> { tool_name: "coach_mode", player_name: "Emma" } (extract the FIRST NAME verbatim into player_name; preserves capitalization as spoken)
    - "start cage session" / "start practice" / "open cage mode" / "cage mode" / "let's practice" / "I'm at the range" -> { tool_name: "cage_mode" }
    - "open library" / "open swing library" / "swing library" / "show me my swings" / "open my swings" / "show my swing library" / "let me see my swings" -> { tool_name: "library" }
+   - "open issue log" / "show issue log" / "show issues" / "open the issues" / "open bug log" / "show bug log" / "open the issue log" / "let me see the issues" -> { tool_name: "issue_log" }
+   - "send issue log" / "email issue log" / "send the issues" / "email the bug log" / "share issue log" / "export issue log" -> { tool_name: "issue_log", send_log: true } (when the verb implies dispatch — send / email / share / export — set send_log:true so the app auto-fires the email export. "show" / "open" / "see" stay as bare open_tool.)
    IMPORTANT: "smartmotion" is the COURSE-MODE simplified swing capture (no setup, acoustic auto-stop). "swinglab" is the full practice/analysis hub. Default casual "record a swing" to "smartmotion" since it's the quicker path; only emit "swinglab" if the user explicitly says SwingLab / practice / drills. When the user names the angle ("down the line" / "DTL" / "face on" / "face-on" / "front view"), emit BOTH the angle parameter AND auto_start:true so the camera fires immediately on the right orientation.
 
 2. query_status — User wants information about current state.

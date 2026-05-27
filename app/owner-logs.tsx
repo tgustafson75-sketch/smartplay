@@ -16,7 +16,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Share, ActivityIndicator, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useIssueLogStore } from '../store/issueLogStore';
@@ -37,6 +37,7 @@ function formatTimestamp(ms: number): string {
 
 export default function OwnerLogsScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ send?: string }>();
   const { colors } = useTheme();
   const entries = useIssueLogStore(s => s.entries);
   const clearAll = useIssueLogStore(s => s.clearAll);
@@ -191,6 +192,23 @@ export default function OwnerLogsScreen() {
   // the list to Tim. Only the "Triage with Claude" button stays owner-
   // only (that hits /api/owner-triage and burns API credit). Removing
   // the wholesale owner-gate that used to lock the screen.
+
+  // 2026-05-26 — Fix DW: voice "send / email issue log" navigates here
+  // with ?send=1 and we auto-fire the mailto export once. Guarded so
+  // re-renders or back-nav into the same route don't re-fire. Empty
+  // log: silently no-op (matches the disabled state of the share btn).
+  const autoSentRef = React.useRef(false);
+  // onExport intentionally omitted from deps — it isn't memoized and
+  // adding it would re-fire on every render. The ref guard above
+  // already prevents double-firing.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
+    if (autoSentRef.current) return;
+    if (params.send !== '1') return;
+    if (entries.length === 0) return;
+    autoSentRef.current = true;
+    void onExport();
+  }, [params.send, entries.length]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>

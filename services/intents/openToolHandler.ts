@@ -147,6 +147,18 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // to /lie-analysis without the param keep the camera-first behavior.
   smartplay: { type: 'navigate', path: '/lie-analysis?smartplay=1' },
   smart_play: { type: 'navigate', path: '/lie-analysis?smartplay=1' },
+  // 2026-05-26 — Fix DW: voice "open / send / email / show issue log"
+  // routes to /owner-logs. Issue Log is visible to ALL beta testers
+  // (Fix AE). The execute() path below reads parameters.send_log to
+  // decide whether to append ?send=1 (which auto-fires the mailto
+  // export on mount) so "send issue log" is one utterance instead of
+  // open-screen + tap-share.
+  issue_log: { type: 'navigate', path: '/owner-logs' },
+  issuelog: { type: 'navigate', path: '/owner-logs' },
+  issues_log: { type: 'navigate', path: '/owner-logs' },
+  bug_log: { type: 'navigate', path: '/owner-logs' },
+  buglog: { type: 'navigate', path: '/owner-logs' },
+  owner_logs: { type: 'navigate', path: '/owner-logs' },
 };
 
 const TOOL_LABEL: Record<string, string> = {
@@ -181,6 +193,12 @@ const TOOL_LABEL: Record<string, string> = {
   swinglibrary: 'Swing Library',
   smartplay: 'SmartPlay',
   smart_play: 'SmartPlay',
+  issue_log: 'Issue Log',
+  issuelog: 'Issue Log',
+  issues_log: 'Issue Log',
+  bug_log: 'Issue Log',
+  buglog: 'Issue Log',
+  owner_logs: 'Issue Log',
 };
 
 export const openToolHandler: IntentHandler = {
@@ -208,10 +226,32 @@ export const openToolHandler: IntentHandler = {
     "I'm coaching Emma",
     'coach Mike',
     'watch my student',
+    // 2026-05-26 — Fix DW: Issue Log voice phrasings (show vs send).
+    'open issue log',
+    'show issue log',
+    'send issue log',
+    'email issue log',
   ],
 
   async execute(intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
     const toolName = String(intent.parameters.tool_name ?? '').toLowerCase();
+
+    // 2026-05-26 — Fix DW: detect the "send / email" verbiage before
+    // navigation so "send the issue log" auto-fires the mailto export
+    // (vs "show / open issue log" which just lands on the screen).
+    // Classifier passes send_log:true when the verb implies dispatch;
+    // we also catch it on raw_text as a fallback so older bundles work.
+    const isIssueLog =
+      toolName === 'issue_log' || toolName === 'issuelog' ||
+      toolName === 'issues_log' || toolName === 'bug_log' ||
+      toolName === 'buglog' || toolName === 'owner_logs';
+    const sendLogFromParam = intent.parameters.send_log === true;
+    const sendLogFromText = (() => {
+      if (!isIssueLog) return false;
+      const t = (intent.raw_text ?? '').toLowerCase();
+      return /\b(send|email|share|export)\b/.test(t);
+    })();
+    const wantsSend = isIssueLog && (sendLogFromParam || sendLogFromText);
 
     // 2026-05-25 — Fix E/O: voice-direct mark for tee and green. If the
     // user says "mark the tee" / "mark the pin" and GPS has a usable
@@ -339,6 +379,10 @@ export const openToolHandler: IntentHandler = {
             ? `${action.path}?intent=${playIntent}`
             : action.path;
           router.push(path as never);
+        } else if (isIssueLog && wantsSend) {
+          // 2026-05-26 — Fix DW: ?send=1 tells owner-logs.tsx to fire
+          // the mailto export on mount. One utterance, one tap-to-send.
+          router.push(`${action.path}?send=1` as never);
         } else if ((toolName === 'smartmotion' || toolName === 'smart_motion') && (angle || autoStart || shotType || subject)) {
           const params: string[] = [];
           if (angle) params.push(`angle=${angle}`);
@@ -372,6 +416,8 @@ export const openToolHandler: IntentHandler = {
         // 2026-05-24 — Hands-free Cage Mode opener — phrasing per spec
         // signals the user that auto-swing-capture is about to engage.
         voiceResponse = "Cage mode starting. I'll capture every swing.";
+      } else if (isIssueLog) {
+        voiceResponse = wantsSend ? 'Opening Issue Log to send.' : 'Opening Issue Log.';
       } else {
         voiceResponse = 'Opening ' + TOOL_LABEL[toolName] + '.';
       }
