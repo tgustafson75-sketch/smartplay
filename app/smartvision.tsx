@@ -1161,30 +1161,40 @@ export default function SmartVisionScreen() {
             the user to live with a misplaced marker. Letting them
             re-anchor it on the fly is the right call — fat-finger
             risk is minimal (T isn't a high-tap-frequency element). */}
-        <Marker
-          kind="T"
-          x={teeCanvas.x}
-          y={teeCanvas.y}
-          draggable
-          onDrag={onTeeDrag}
-          onDragEnd={() => { teeDragStartRef.current = null; }}
-        />
-        <Marker
-          kind="P"
-          x={pinCanvas.x}
-          y={pinCanvas.y}
-          draggable
-          onDrag={onPinDrag}
-          onDragEnd={() => { pinDragStartRef.current = null; }}
-        />
-        <Marker
-          kind="Y"
-          x={targetCanvas.x}
-          y={targetCanvas.y}
-          draggable
-          onDrag={onTargetDrag}
-          onDragEnd={() => { targetDragStartRef.current = null; }}
-        />
+        {/* 2026-05-26 — Fix DJ: gate marker render on !loading so the
+            T/P/Y markers don't render at default positions (center-top,
+            center-bottom, center) before the geometry resolves — only
+            to SNAP into real positions a moment later. The brief
+            flicker was visible on every hole switch. Now markers appear
+            at their final positions once the image + geometry load. */}
+        {!loading && (
+          <>
+            <Marker
+              kind="T"
+              x={teeCanvas.x}
+              y={teeCanvas.y}
+              draggable
+              onDrag={onTeeDrag}
+              onDragEnd={() => { teeDragStartRef.current = null; }}
+            />
+            <Marker
+              kind="P"
+              x={pinCanvas.x}
+              y={pinCanvas.y}
+              draggable
+              onDrag={onPinDrag}
+              onDragEnd={() => { pinDragStartRef.current = null; }}
+            />
+            <Marker
+              kind="Y"
+              x={targetCanvas.x}
+              y={targetCanvas.y}
+              draggable
+              onDrag={onTargetDrag}
+              onDragEnd={() => { targetDragStartRef.current = null; }}
+            />
+          </>
+        )}
 
         {/* 2026-05-19 — Live player-position marker. Distinct from the
             T/Y/P set: filled orange disc with a white ring + tiny cart
