@@ -19,9 +19,15 @@ export interface SmartToolsRowProps {
   onMotion: () => void;
   onPlay: () => void;
   onSettings: () => void;
+  // 2026-05-26 — Fix DV: cockpit had no way to reach the full tools
+  // menu (Drills, Library, Mark Location, Caddie Clip Test, etc.) —
+  // user was stuck with just Vision/Motion/Play/Settings. Optional
+  // prop so non-cockpit callers keep working unchanged; cockpit
+  // passes a handler that opens the global tools menu.
+  onAllTools?: () => void;
 }
 
-export function SmartToolsRow({ onVision, onMotion, onPlay, onSettings }: SmartToolsRowProps) {
+export function SmartToolsRow({ onVision, onMotion, onPlay, onSettings, onAllTools }: SmartToolsRowProps) {
   return (
     <View style={styles.row}>
       <Pill
@@ -52,6 +58,15 @@ export function SmartToolsRow({ onVision, onMotion, onPlay, onSettings }: SmartT
         bg="rgba(240,192,48,0.08)"
         onPress={onSettings}
       />
+      {onAllTools ? (
+        <Pill
+          icon="apps-outline"
+          label="Tools"
+          color="#00C896"
+          bg="rgba(0,200,150,0.08)"
+          onPress={onAllTools}
+        />
+      ) : null}
     </View>
   );
 }

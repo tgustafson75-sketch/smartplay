@@ -34,6 +34,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRoundStore, type ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useToastStore } from '../../store/toastStore';
+// 2026-05-26 — Fix DV: cockpit "Tools" pill opens the global tools menu
+// so L5 users can reach Drills/Library/Mark Location/etc — prior layout
+// trapped them with just Vision/Motion/Play/Settings.
+import { useToolsMenuStore } from '../../store/toolsMenuStore';
 // 2026-05-22 — Ghost Rounds. "vs last time" row renders only when a ghost
 // is active. Subscribed inline; refreshes on activate/deactivate and on
 // every logScore (roundStore.logScore → ghostStore.updateHole).
@@ -370,6 +374,10 @@ export default function CockpitCaddieScreen({
           }}
           onPlay={() => router.push('/lie-analysis' as never)}
           onSettings={() => router.push('/settings' as never)}
+          onAllTools={() => {
+            void Haptics.selectionAsync().catch(() => undefined);
+            useToolsMenuStore.getState().open();
+          }}
         />
 
         {/* Primary voice affordance — full-width pill with badge + state
