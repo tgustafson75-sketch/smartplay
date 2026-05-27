@@ -556,10 +556,13 @@ function meetsSpeedBar(parsed: SwingAnalysisResponse | null): boolean {
   // to OpenAI + Anthropic on ~20% of clean swings (per audit). Now
   // those return immediately as a passing read with the honest "no
   // dominant fault" verdict instead of timing out into tentative.
+  // primary_fault type is the union of canonical fault IDs +
+  // 'inconclusive' + 'no_dominant_fault'. Already excluded
+  // 'inconclusive' above; only 'no_dominant_fault' is the
+  // evidence-optional case.
   const namedFault =
     parsed.primary_fault &&
-    parsed.primary_fault !== 'no_dominant_fault' &&
-    parsed.primary_fault !== 'none';
+    parsed.primary_fault !== 'no_dominant_fault';
   if (namedFault && (typeof parsed.evidence !== 'string' || parsed.evidence.length === 0)) {
     return false;
   }
