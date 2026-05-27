@@ -550,7 +550,63 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     useCageStore.getState().setSessionAnalysisStatus(sessionId, 'analyzing_pattern');
     uploadLog('classifier-start', { results_count: results.length }, sessionId);
     V6('STAGE 5 — classifySession call', { resultsCount: results.length });
-    const primary_issue = classifySession(results);
+    let primary_issue = classifySession(results);
+
+    // 2026-05-26 — Fix DR (commit 3/3): tentative-fallback ALSO fires
+    // when the classifier returned null AND every primary read came
+    // back as 'inconclusive' or 'none' (i.e. the footage was readable
+    // but the analyst couldn't pin a tendency on any swing). Prior
+    // behavior left primary_issue=null in that case, surfacing as
+    // 'no dominant fault' silence. Tentative uses different frame
+    // sampling and a more permissive prompt — gives the user a
+    // useful low-confidence read instead of dead-ending. The
+    // original zero-results tentative path is unchanged above.
+    if (!primary_issue && results.length > 0) {
+      const allInconclusive = results.every(r =>
+        r.analysis.detected_issue === 'none' ||
+        r.analysis.primary_fault === 'inconclusive',
+      );
+      if (allInconclusive) {
+        const firstSwingWithClip = swings.find(s => s.clipUri);
+        if (firstSwingWithClip?.clipUri) {
+          V6('STAGE 5 — all results inconclusive, attempting tentative fallback', {
+            swing_id: firstSwingWithClip.id,
+          });
+          uploadLog('tentative-fallback-start', {
+            swing_id: firstSwingWithClip.id,
+            via: 'post_classifier_all_inconclusive',
+          }, sessionId);
+          const tentative = await analyzeSwingTentative(firstSwingWithClip.clipUri, {
+            club: firstSwingWithClip.club,
+            swing_number: 1,
+          });
+          uploadLog('tentative-fallback-complete', {
+            kind: tentative.kind,
+            status: tentative.kind === 'ok' ? 'ok' : 'failed',
+            via: 'post_classifier_all_inconclusive',
+          }, sessionId);
+          if (tentative.kind === 'ok') {
+            primary_issue = {
+              issue_id: 'tentative_read',
+              name: 'Tentative observation',
+              category: 'other',
+              severity: 'minor',
+              occurrence_count: 1,
+              visual_reference_path: null,
+              mechanical_breakdown: tentative.analysis.observation
+                || 'I could see the swing but no single tendency stood out.',
+              feel_cue: tentative.analysis.follow_up_question
+                || 'Try a clearer recording — wider angle, better lighting — for a full analysis.',
+              detected_in_shots: [firstSwingWithClip.id],
+              confidence: 'low',
+            };
+            V6('STAGE 5 FINAL — post-classifier tentative ok', {
+              observation_head: tentative.analysis.observation.slice(0, 200),
+            });
+          }
+        }
+      }
+    }
     V6('STAGE 5 — classifySession returned', {
       primary_issue_id: primary_issue?.issue_id ?? null,
       primary_issue_name: primary_issue?.name ?? null,
