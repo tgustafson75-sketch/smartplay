@@ -123,11 +123,16 @@ async function probeElevenLabs(): Promise<ProbeResult> {
   if (!process.env.ELEVENLABS_API_KEY) return { status: 'unconfigured' };
   const startedAt = Date.now();
   try {
-    // GET /v1/user/subscription is the cheapest authenticated endpoint —
-    // no generation, no audio, just confirms the key is live + ElevenLabs
-    // is responding.
+    // 2026-05-26 — Fix CX: probe /v1/voices instead of
+    // /v1/user/subscription. The latter requires user-info scope
+    // which newer scoped ElevenLabs API keys (TTS-only) don't carry —
+    // a valid key would 401 against /subscription while working fine
+    // against /text-to-speech. Tim hit this: his key worked for voice
+    // generation but my probe reported 'down', sending him on a wild
+    // goose chase. /v1/voices is permitted by all key scopes (including
+    // the minimal TTS-only ones) so the probe matches actual usability.
     const res = await withTimeout(
-      fetch('https://api.elevenlabs.io/v1/user/subscription', {
+      fetch('https://api.elevenlabs.io/v1/voices', {
         method: 'GET',
         headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY },
       }),
