@@ -19,6 +19,11 @@ import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg
 import { safeBack } from '../services/safeBack';
 import { useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
+// 2026-05-26 — Fix CM: theme the StyleSheet. Shared useStyles() hook
+// below means each of the 9 sub-components only adds one line to
+// pick up themed styles, vs duplicating useTheme + useMemo per
+// component.
+import { useTheme } from '../contexts/ThemeContext';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
 import { DeviceMotion } from 'expo-sensors';
@@ -63,6 +68,7 @@ const LOCK_DURATION_MS = 30_000;
  * the standard header.
  */
 export default function SmartFinder() {
+  const styles = useStyles();
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const _insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -329,6 +335,7 @@ function CameraSmartFinder({
   onClose: () => void;
   height: number;
 }) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [locationGranted, setLocationGranted] = useState(false);
@@ -474,6 +481,7 @@ function StandardCameraOverlay({
   zoomLabel: string;
   yards: GreenYardages;
 }) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const headingRef = useRef(0);
   const pitchRef = useRef(-10);
@@ -711,6 +719,7 @@ function StandardCameraOverlay({
 // distances. Replaces the old top-down flat-canvas TargetView.
 
 function TargetCameraOverlay({ yards }: { yards: GreenYardages }) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const [targetYards, setTargetYards] = useState<number | null>(yards.middle);
 
@@ -754,6 +763,7 @@ function TargetCameraOverlay({ yards }: { yards: GreenYardages }) {
 }
 
 function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGranted: boolean }) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const pitchRef = useRef(0);
   const [pointA, setPointA] = useState<{ x: number; y: number } | null>(null);
@@ -902,6 +912,7 @@ function readSlope(pct: number): string {
 // ─── Target view (SVG tap-to-target) ─────────────────────────────────────────
 
 function TargetView({ geometry, width }: { geometry: HoleGeometry | null; width: number }) {
+  const styles = useStyles();
   const [tap, setTap] = useState<{ xPx: number; yPx: number; yards: number } | null>(null);
 
   if (!geometry || !geometry.tee || !geometry.green) {
@@ -973,6 +984,7 @@ function MapView({
   weather: WeatherSnapshot | null;
   shotBearingDeg: number | null;
 }) {
+  const styles = useStyles();
   const router = useRouter();
   if (!geometry || !geometry.tee || !geometry.green) {
     const playsLike = (actual: number | null): number | null => {
@@ -1046,6 +1058,7 @@ function MapView({
 function BigCell({ label, value, emphasis, playsLikeValue }: {
   label: string; value: number | null; emphasis?: boolean; playsLikeValue?: number | null;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.bigCell}>
       <Text style={[styles.bigValue, emphasis && styles.bigValueEmphasis]}>
@@ -1067,6 +1080,7 @@ function HolePickerModal({
   onClose: () => void;
   width: number;
 }) {
+  const styles = useStyles();
   const cols = width >= 700 ? 6 : 3;
   const cellWidth = Math.floor((Math.min(width, 480) - 32 - (cols - 1) * 8) / cols);
   return (
@@ -1099,9 +1113,17 @@ function HolePickerModal({
   );
 }
 
-const styles = StyleSheet.create({
+// 2026-05-26 — Fix CM: themed StyleSheet wrapped in makeStyles(colors)
+// + a useStyles() hook so each function component picks it up with one
+// line. Dark-theme hex codes pulled from `c` so light mode renders.
+function useStyles() {
+  const { colors } = useTheme();
+  return useMemo(() => makeStyles(colors), [colors]);
+}
+function makeStyles(c: ReturnType<typeof useTheme>['colors']) {
+return StyleSheet.create({
   // SVG mode container
-  svgContainer: { flex: 1, backgroundColor: '#060f09' },
+  svgContainer: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 8,
@@ -1297,7 +1319,7 @@ const styles = StyleSheet.create({
   permTitle: { color: '#ffffff', fontSize: 20, fontWeight: '800', marginBottom: 12 },
   permText: { color: '#9ca3af', fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 28 },
   permBtn: { backgroundColor: '#00C896', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 32 },
-  permBtnText: { color: '#060f09', fontSize: 16, fontWeight: '800' },
+  permBtnText: { color: c.background, fontSize: 16, fontWeight: '800' },
   backLink: { marginTop: 20 },
   backLinkText: { color: '#6b7280', fontSize: 14 },
 
@@ -1322,7 +1344,7 @@ const styles = StyleSheet.create({
     flex: 1, minWidth: 0,
     paddingHorizontal: 6,
   },
-  standardDivider: { width: 1, height: 40, backgroundColor: '#1e3a28' },
+  standardDivider: { width: 1, height: 40, backgroundColor: c.border },
   bigValue: { color: '#e8f5e9', fontSize: 32, fontWeight: '900', fontVariant: ['tabular-nums'] },
   bigValueEmphasis: { color: '#ffffff', fontSize: 56 },
   bigLabel: { color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginTop: 4 },
@@ -1345,14 +1367,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#003d20',
   },
-  markGreenBtnText: { color: '#0a1f12', fontSize: 13, fontWeight: '800', letterSpacing: 0.5 },
+  markGreenBtnText: { color: c.background, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 },
 
   holeNav: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 24, paddingTop: 24,
   },
   holeBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 16, borderWidth: 1, borderColor: '#00C896' },
-  holeBtnDisabled: { borderColor: '#1e3a28' },
+  holeBtnDisabled: { borderColor: c.border },
   holeBtnText: { color: '#00C896', fontSize: 13, fontWeight: '700' },
   holeBtnTextDisabled: { color: '#374151' },
   holeNavLabel: { color: '#ffffff', fontSize: 14, fontWeight: '800', letterSpacing: 1.2 },
@@ -1381,13 +1403,13 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16,
   },
   pickerCard: {
-    backgroundColor: '#0d2418', borderRadius: 14, borderWidth: 1, borderColor: '#1e3a28',
+    backgroundColor: c.surface_elevated, borderRadius: 14, borderWidth: 1, borderColor: c.border,
     padding: 16, width: '100%', maxWidth: 480,
   },
   pickerTitle: { color: '#00C896', fontSize: 11, fontWeight: '800', letterSpacing: 1.4, marginBottom: 12, textAlign: 'center' },
   pickerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   pickerBtn: {
-    backgroundColor: '#0a1e12', borderWidth: 1, borderColor: '#1e3a28', borderRadius: 8,
+    backgroundColor: '#0a1e12', borderWidth: 1, borderColor: c.border, borderRadius: 8,
     alignItems: 'center', justifyContent: 'center',
   },
   pickerBtnActive: { backgroundColor: '#003d20', borderColor: '#00C896' },
@@ -1395,7 +1417,8 @@ const styles = StyleSheet.create({
   pickerBtnTextActive: { color: '#00C896' },
   pickerCloseBtn: {
     marginTop: 16, paddingVertical: 10, alignItems: 'center',
-    borderWidth: 1, borderColor: '#1e3a28', borderRadius: 10,
+    borderWidth: 1, borderColor: c.border, borderRadius: 10,
   },
   pickerCloseText: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
 });
+}

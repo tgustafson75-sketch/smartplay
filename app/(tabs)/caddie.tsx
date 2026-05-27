@@ -124,6 +124,11 @@ export default function CaddieTab() {
   // produce immediate, visible change on the home tab. Brand accent and
   // L2/L3 avatar treatments stay literal (intentional brand consistency).
   const theme = useTheme();
+  // 2026-05-26 — Fix CN: theme the bottom StyleSheet so the Caddie
+  // tab respects light mode like every other tab. makeStyles is at
+  // the bottom of the file; the FAB sub-components (ToolFabIcon,
+  // ToolFabIconCycler) use inline styles so they're unaffected.
+  const styles = useMemo(() => makeStyles(theme.colors), [theme.colors]);
 
   const { width: W, height: H } = useWindowDimensions();
   // Natural 9:16 frame height — shows Kevin's full portrait without over-zoom
@@ -3617,10 +3622,13 @@ function ToolFabIconCycler({
 
 // ─── STYLES ───────────────────────────────
 
-const styles = StyleSheet.create({
+// 2026-05-26 — Fix CN: themed StyleSheet via makeStyles(colors). Hex codes
+// matching dark-theme tokens pulled from `c` so light mode renders.
+function makeStyles(c: ReturnType<typeof useTheme>['colors']) {
+return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#060f09',
+    backgroundColor: c.background,
   },
   topNav: {
     position: 'absolute',
@@ -3705,10 +3713,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   modeCard: {
-    backgroundColor: '#060f09',
+    backgroundColor: c.background,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#1e3a28',
+    borderColor: c.border,
     paddingVertical: 10,
     paddingHorizontal: 14,
     gap: 2,
@@ -3782,13 +3790,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#0d2418',
+    backgroundColor: c.surface_elevated,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
     paddingBottom: 40,
     borderTopWidth: 1,
-    borderTopColor: '#1e3a28',
+    borderTopColor: c.border,
     maxHeight: '80%',
   },
   moreSheet: {
@@ -3799,7 +3807,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 24,
     borderTopWidth: 1,
-    borderTopColor: '#1e3a28',
+    borderTopColor: c.border,
     maxHeight: '85%',
   },
   moreScroll: {
@@ -3807,9 +3815,9 @@ const styles = StyleSheet.create({
   },
   toolsStatusRow: {
     flexDirection: 'row',
-    backgroundColor: '#0d2418',
+    backgroundColor: c.surface_elevated,
     borderWidth: 1,
-    borderColor: '#1e3a28',
+    borderColor: c.border,
     borderRadius: 10,
     paddingVertical: 10,
     marginBottom: 14,
@@ -3818,14 +3826,14 @@ const styles = StyleSheet.create({
   toolsStatusItem: { flex: 1, alignItems: 'center' },
   toolsStatusLabel: { color: '#6b7280', fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
   toolsStatusValue: { color: '#ffffff', fontSize: 13, fontWeight: '800', marginTop: 2 },
-  toolsStatusDivider: { width: 1, height: 26, backgroundColor: '#1e3a28' },
+  toolsStatusDivider: { width: 1, height: 26, backgroundColor: c.border },
   moreScrollContent: {
     paddingBottom: 24,
   },
   handle: {
     width: 40,
     height: 4,
-    backgroundColor: '#1e3a28',
+    backgroundColor: c.border,
     borderRadius: 2,
     alignSelf: 'center',
     marginBottom: 16,
@@ -3876,8 +3884,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#1e3a28',
-    backgroundColor: '#060f09',
+    borderColor: c.border,
+    backgroundColor: c.background,
     alignItems: 'center',
     minWidth: 80,
   },
@@ -3914,8 +3922,8 @@ const styles = StyleSheet.create({
   findTeeBtnText: { color: '#F5A623', fontSize: 14, fontWeight: '800' },
   notesWrap: {
     flexDirection: 'row',
-    backgroundColor: '#0d1a0d',
-    borderColor: '#1e3a28',
+    backgroundColor: c.surface,
+    borderColor: c.border,
     borderWidth: 1,
     borderRadius: 12,
     padding: 4,
@@ -3938,7 +3946,7 @@ const styles = StyleSheet.create({
     margin: 4,
   },
   startBtnDisabled: {
-    backgroundColor: '#1e3a28',
+    backgroundColor: c.border,
     opacity: 0.5,
   },
   startBtnText: {
@@ -3966,9 +3974,9 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#0d2418',
+    backgroundColor: c.surface_elevated,
     borderWidth: 1,
-    borderColor: '#1e3a28',
+    borderColor: c.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3999,7 +4007,7 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#1e3a28',
+    borderBottomColor: c.border,
   },
   moreIcon: {
     fontSize: 22,
@@ -4046,8 +4054,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#1e3a28',
-    backgroundColor: '#0d2418',
+    borderColor: c.border,
+    backgroundColor: c.surface_elevated,
     marginBottom: 6,
   },
   ghostRowSelected: {
@@ -4130,8 +4138,8 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#1e3a28',
-    backgroundColor: '#060f09',
+    borderColor: c.border,
+    backgroundColor: c.background,
     alignItems: 'center',
     paddingVertical: 10,
     gap: 2,
@@ -4161,8 +4169,8 @@ const styles = StyleSheet.create({
   outcomePill: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#1e3a28',
-    backgroundColor: '#060f09',
+    borderColor: c.border,
+    backgroundColor: c.background,
     paddingVertical: 6,
     paddingHorizontal: 8,
     alignItems: 'center',
@@ -4192,7 +4200,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#374151',
-    backgroundColor: '#0d2418',
+    backgroundColor: c.surface_elevated,
     paddingVertical: 12,
     alignItems: 'center',
   },
@@ -4213,8 +4221,8 @@ const styles = StyleSheet.create({
   shotChip: {
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1e3a28',
-    backgroundColor: '#0d2418',
+    borderColor: c.border,
+    backgroundColor: c.surface_elevated,
     paddingVertical: 4,
     paddingHorizontal: 8,
   },
@@ -4223,3 +4231,4 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
 });
+}

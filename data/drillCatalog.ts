@@ -29,7 +29,15 @@ export type CanonicalIssue =
   | 'early_extension'
   | 'over_the_top'
   | 'chicken_wing'
-  | 'reverse_pivot';
+  | 'reverse_pivot'
+  // 2026-05-26 — Short-game + branded categories. chipping_inconsistent
+  // surfaces Randy Chang's "Chang Chip" video; tank_caddie_practice
+  // surfaces the SmartPlay-branded Tank placeholder card. Both fit the
+  // pair-grid layout on the Drills surface (Tim's "drills go in twos"
+  // observation — six prior + chipping + tank_caddie = eight, two
+  // clean rows of four).
+  | 'chipping_inconsistent'
+  | 'tank_caddie_practice';
 
 export type Drill = {
   name: string;
@@ -228,6 +236,47 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
     ],
     videoCategory: 'weight_transfer',
     cardImage: CARD_WEIGHT_TRANSFER,
+  },
+  // 2026-05-26 — Chipping drill that routes to Randy Chang's
+  // "Chang Chip" video. cardImage intentionally omitted (no
+  // chipping fundamentals image bundled yet); the Drills surface
+  // falls back to the title + video thumbnail.
+  {
+    id: 'chipping_inconsistent',
+    title: 'Inconsistent Chipping',
+    primary: 'Strike inconsistent around the green — sometimes thin, sometimes fat, distance unpredictable.',
+    commonFaults: [
+      'Wrists release too aggressively at the ball — adds loft variability',
+      'Weight stuck on trail foot through the strike',
+      'Stance too wide or too narrow for the swing length',
+    ],
+    missPattern: 'Bladed runners, chunky shorts, distance scatter inside 30 yards',
+    drills: [
+      { name: 'Chang Chip setup', steps: 'Narrow stance, weight 60% on lead foot, ball back of center. Hands stay ahead of the clubhead through impact — no flip.' },
+      { name: 'Towel drill',      steps: 'Place a towel 12 inches behind the ball. Chip without the club hitting the towel — forces a descending strike instead of a scoop.' },
+      { name: '3-distance ladder',steps: 'Pick three landing spots (5 / 10 / 15 yards). Hit five chips to each, same club. Train carry distance through length-of-swing, not effort.' },
+    ],
+    videoCategory: 'chipping',
+  },
+  // 2026-05-26 — Reserved 8th slot for Tank-narrated SmartPlay-branded
+  // content. Drill entry exists so the slot appears on the Drills
+  // surface; the linked InstructorVideoLink renders the SmartPlay
+  // placeholder thumbnail until Tank's recording lands (url === '').
+  {
+    id: 'tank_caddie_practice',
+    title: "Tank's Take — Practice with Standards",
+    primary: 'When you bring intensity to practice, the round takes care of itself.',
+    commonFaults: [
+      'Practice with no intent — beating balls instead of working a routine',
+      'Skipping the uncomfortable shots (the ones you actually need)',
+      'Stopping before fatigue sets in (where the bad habits show up)',
+    ],
+    missPattern: 'Performance plateau despite hours on the range',
+    drills: [
+      { name: '10-ball pressure block', steps: 'Pick one club, one target. Hit 10 in a row. Restart from zero on the first miss-direction. Builds focus under pressure.' },
+      { name: 'Worst-shot warm-up',     steps: 'Start each session with the shot you LEAST want to hit. Three solid reps before moving on. Removes avoidance from your range pattern.' },
+    ],
+    videoCategory: 'tank_caddie',
   },
 ];
 
