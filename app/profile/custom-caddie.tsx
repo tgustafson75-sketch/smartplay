@@ -29,7 +29,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as FileSystem from 'expo-file-system';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
@@ -41,7 +40,7 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 // Same UI as the AI portrait flow per Tim's directive — no separate
 // screen — so the user records their own greetings right where they
 // took the selfie + generated the caddie image.
-import { CUSTOM_CADDIE_PHRASES, phrasesByCategory, type CustomCaddiePhrase } from '../../services/customCaddieClips';
+import { phrasesByCategory, type CustomCaddiePhrase } from '../../services/customCaddieClips';
 
 const DEFAULT_PROMPT =
   "Stylize this person as a confident golf caddie. Keep their face recognizable. Place them on a sunny PGA-style fairway, wearing a clean caddie polo and visor, holding a golf club. Photorealistic, soft warm lighting, 9:16 portrait composition with the head and shoulders centered.";
@@ -58,10 +57,15 @@ export default function CustomCaddieScreen() {
     setCustomCaddiePortraitB64,
     setUseCustomCaddie,
     // 2026-05-26 — Fix DY: recorded-greeting clips.
-    customCaddieClips,
+    // 2026-05-27 — Fix ED: default to {} so users hydrating from a
+    // persist snapshot that pre-dates Fix DY can't crash this UI on
+    // an undefined lookup. Zustand's persist middleware does merge
+    // defaults but belt-and-suspenders here is free.
+    customCaddieClips: rawCustomCaddieClips,
     setCustomCaddieClip,
     clearAllCustomCaddieClips,
   } = usePlayerProfileStore();
+  const customCaddieClips: Record<string, string> = rawCustomCaddieClips ?? {};
 
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [busy, setBusy] = useState<'capture' | 'generate' | null>(null);

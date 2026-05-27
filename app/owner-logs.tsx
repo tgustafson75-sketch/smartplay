@@ -199,15 +199,15 @@ export default function OwnerLogsScreen() {
   // log: silently no-op (matches the disabled state of the share btn).
   const autoSentRef = React.useRef(false);
   // onExport intentionally omitted from deps — it isn't memoized and
-  // adding it would re-fire on every render. The ref guard above
-  // already prevents double-firing.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // adding it would re-fire on every render. The autoSentRef guard
+  // above already prevents double-firing.
   React.useEffect(() => {
     if (autoSentRef.current) return;
     if (params.send !== '1') return;
     if (entries.length === 0) return;
     autoSentRef.current = true;
     void onExport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.send, entries.length]);
 
   return (

@@ -297,7 +297,6 @@ export default function VideoAnnotationOverlay() {
         }
       },
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   ).current;
 
   const commitText = () => {
