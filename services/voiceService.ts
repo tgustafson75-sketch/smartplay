@@ -864,6 +864,12 @@ export const speak = async (
         language,
         text_head: text.slice(0, 40),
       });
+      // 2026-05-27 — Fix EH: also clear the caption. Without this, the
+      // text caption stayed on screen for the full TTL even though the
+      // utterance silently failed — exact match for Tim's recurring
+      // "text shows but no audio" report. notifySpeaking(false) alone
+      // cleared the talking-state badge but the caption text lingered.
+      notifyCaption(null);
       notifySpeaking(false);
       return;
     }
