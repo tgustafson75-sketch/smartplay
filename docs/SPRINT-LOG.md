@@ -1818,5 +1818,37 @@ Items Tim explicitly deferred this session. NOT regressions, NOT pending — the
 
 **Status:** all three parked items are documented for revisit. No code work pending. Will surface as "should we tackle X yet?" prompts in future sessions when adjacent work creates a natural opening.
 
+#### 4. Screenshot mode — Android bottom nav-bar hide (native build batch)
+
+**Context:** Fix EA (Day 7 / 2026-05-27, commit `391163b`) shipped the Screenshot Mode toggle OTA. It hides the **top** status bar app-wide on both iOS and Android. iOS is fully clean (no bottom nav bar — only the slim home indicator). **Android still shows the bottom system nav bar** (back / home / recent) because the proper API for hiding it is [`expo-navigation-bar`](https://docs.expo.dev/versions/latest/sdk/navigation-bar/), which is a native dep — requires EAS Build, not OTA-able per [[ota-first-policy]].
+
+**The fix when we batch it:**
+1. `npx expo install expo-navigation-bar` (adds to package.json + Android plugin auto-config).
+2. In [app/_layout.tsx](../app/_layout.tsx) `AppNavigator`, alongside the existing `<StatusBar hidden={screenshotMode} />`, call `NavigationBar.setVisibilityAsync(screenshotMode ? 'hidden' : 'visible')` from an `useEffect` keyed on `screenshotMode`. iOS is a no-op since the module is Android-only.
+3. Update the toggle's sub-text in [app/settings.tsx](../app/settings.tsx) to drop the "bottom nav bar still shows in this build" caveat.
+4. Re-test on Android — screenshots should now be fully chrome-free.
+
+**When to ship:** next time we're already doing an EAS Build for any reason (Apple-credentials wiring, glasses SDK, MediaPipe, manifest change, new bundled asset). Don't burn an APK rev just for this; bundle it with whatever else is going native.
+
+**Why deferred:** Tim said "not yet just make sure its on the roadmap" — current OTA-only version is good enough for the marketing video he's working on now (iOS shots are fully clean today).
+
+#### 5. Marketing video → in-app placement (conditional on Tim's approval of the cut)
+
+**Context:** The voiceover MP3s generated 2026-05-27 (Day 7, commit `b92c7b5` + `535e5f5`) — both the 60-second narration and the 30-second short, in three voices each — are inputs to a marketing video Tim is editing in CapCut. **IF** the final cut meets his bar, the next step is to surface the video inside the app (likely on welcome / onboarding / or an "About SmartPlay" surface).
+
+**Where it would land (candidates, pick when video is approved):**
+- [app/welcome.tsx](../app/welcome.tsx) — first-launch surface. Best for first-impression / "what is this thing" framing. Highest impact, but risks adding friction to onboarding (auto-play vs tap-to-play decision).
+- [app/(tabs)/dashboard.tsx](../app/(tabs)/dashboard.tsx) — pinned card at the top of the home dashboard. Lower friction, more passive — user discovers it after they're already in.
+- New `app/about.tsx` route + link from Settings → About. Lowest impact, most deliberate. Doesn't surface unless user goes looking.
+
+**Hosting decision (when we get to it):**
+- Self-hosted MP4 in `assets/` would bloat the bundle by ~5-15 MB (60s + 30s combined, depending on encoding). Forces a new APK build to ship updates to the video itself.
+- External (YouTube / Vimeo embed) — lighter bundle, easy to swap, but requires an in-app browser / WebView pattern and breaks offline (acceptable trade for a marketing video).
+- CDN-hosted MP4 (Vercel blob, Cloudflare R2, S3) — middle ground; native `<Video>` player from `expo-av`; OTA-swappable URL.
+
+**Recommended path** (TBD when Tim approves the cut): CDN-hosted MP4 with OTA-swappable URL stored in a single constant. Lets us swap the video for a v2 cut without an APK rebuild, keeps the bundle slim, native playback experience.
+
+**Status:** Tim said "I am going to work on the video and if its right we will link it in the app" — feature is conditional on the cut being good. No code work yet; this entry exists so the decision tree is ready when Tim signs off on the video.
+
 
 
