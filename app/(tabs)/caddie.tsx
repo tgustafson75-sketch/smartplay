@@ -894,18 +894,19 @@ export default function CaddieTab() {
     // the opener on the next launch. voiceEnabled (settings-level mute)
     // is still respected — that's the canonical "I want total silence"
     // toggle.
-    // 2026-05-26 — Fix CQ: explicit gate-skip logs so Tim's "opener
-    // not firing" reports become diagnosable. Previously the gate just
-    // silently skipped with no breadcrumb, making it impossible to
-    // tell whether the cause was the spoken-flag (already fired this
-    // process), the voiceEnabled setting (mic toggled off via the new
-    // FAB), or the OTA simply not applying. Now we log every skip
-    // reason BEFORE the gate decides.
+    // 2026-05-26 — Fix CQ + DA: explicit gate-skip logs. Now also
+    // logs WHICH gate skipped so future "opener silent" reports
+    // pinpoint cause without code re-read.
     console.log('[caddie] opener gate check:', {
       alreadySpoken: openingPromptSpokenThisProcess,
       voiceEnabled,
       trustLevel,
     });
+    if (openingPromptSpokenThisProcess) {
+      console.log('[caddie] opener SKIPPED: already spoken this process (tab cycle, hot reload, or duplicate mount)');
+    } else if (!voiceEnabled) {
+      console.log('[caddie] opener SKIPPED: voiceEnabled=false (mic toggle off via FAB or Settings)');
+    }
     if (!openingPromptSpokenThisProcess && voiceEnabled) {
       openingPromptSpokenThisProcess = true;
       // 2026-05-26 — Fix BB: 600ms → 3000ms. Tim wanted natural

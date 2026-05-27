@@ -205,9 +205,17 @@ export const configureAudioForSpeech =
         interruptionModeIOS: InterruptionModeIOS.DuckOthers,
         interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
       });
+      // 2026-05-26 — Fix CZ: only mark mode='speech' if the OS call
+      // actually succeeded. Prior code set the flag inside the try
+      // even after a thrown setAudioModeSerial — so currentAudioMode
+      // could falsely report 'speech' while the iOS/Android session
+      // was still in 'record' (or unset). Next speak() would
+      // short-circuit on line 192 thinking it was already configured.
       currentAudioMode = 'speech';
     } catch (err) {
-      console.log('[voice] configure speech error:', err);
+      // Audio mode flag intentionally NOT set on error so the next
+      // speak() retries the configuration instead of trusting a lie.
+      console.log('[voice] configure speech error — leaving mode flag stale for retry:', err);
     }
   };
 
@@ -326,20 +334,38 @@ const applyCustomRate = async (sound: Audio.Sound): Promise<void> => {
 };
 
 const isVoiceAllowed = (opts?: SpeakOpts): boolean => {
+  // 2026-05-26 — Fix CZ: log EVERY denial reason. Tim spent hours
+  // chasing silent voice failures because this gate returned false
+  // with no breadcrumb. Now any speak() that gets gated leaves a
+  // grep-able log entry: '[voice] gate denied: <reason>'.
   try {
     const settingsMod = require('../store/settingsStore');
     const routingMod = require('./audioRoutingService');
     const trustMod = require('../store/trustLevelStore');
     const settings = settingsMod.useSettingsStore.getState();
-    if (!settings.voiceEnabled) return false;
+    if (!settings.voiceEnabled) {
+      console.log('[voice] gate denied: voiceEnabled=false', { userInitiated: !!opts?.userInitiated });
+      return false;
+    }
     const trustLevel = trustMod.useTrustLevelStore.getState().level;
-    if (trustLevel === 1 && !opts?.userInitiated) return false;
+    if (trustLevel === 1 && !opts?.userInitiated) {
+      console.log('[voice] gate denied: trustLevel=1 (Quiet) and !userInitiated');
+      return false;
+    }
     const route = routingMod.getCurrentRoute();
-    if (route === 'phone_speaker' && !settings.voiceOnPhoneSpeaker) return false;
+    if (route === 'phone_speaker' && !settings.voiceOnPhoneSpeaker) {
+      console.log('[voice] gate denied: phone_speaker route + voiceOnPhoneSpeaker=false');
+      return false;
+    }
     return true;
-  } catch {
-    // If the guard itself fails, fall through — never block speech on a guard error.
-    return true;
+  } catch (e) {
+    // 2026-05-26 — Fix CZ: BLOCK on guard failure (was: allow).
+    // Returning true on a broken guard meant voice fired
+    // unconditionally if the store import cycle ever broke. Blocking
+    // is the safer default — and we now log the actual error so a
+    // store-bootstrap regression is immediately visible.
+    console.log('[voice] gate ERROR — blocking speech:', e instanceof Error ? e.message : String(e));
+    return false;
   }
 };
 
@@ -724,7 +750,13 @@ export const speak = async (
     currentAbortController = null;
 
     if (!response.ok) {
-      console.log('[voice] speak API error:', response.status);
+      // 2026-05-26 — Fix CZ: emit full error body when /api/voice
+      // returns non-ok so server-side issues (401 ElevenLabs, 429
+      // quota, 500 OpenAI) surface in client logs. Previously only
+      // the status code was logged — meaningless without context.
+      const errBody = await response.text().catch(() => '<unreadable>');
+      console.log('[voice] speak API error:', response.status, response.statusText, '— body:', errBody.slice(0, 300));
+      notifyCaption(null);
       notifySpeaking(false);
       return;
     }
