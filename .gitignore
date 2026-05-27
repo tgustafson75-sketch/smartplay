@@ -71,3 +71,8 @@ credentials.json
 # commit the generated audio.
 vo-output/
 SmartPlay_VO_*.mp3
+
+# 2026-05-27 — Claude Code session worktrees. These are agent-scratch
+# git repos nested inside this project; never track them as content or
+# submodule references in the parent.
+.claude/worktrees/
