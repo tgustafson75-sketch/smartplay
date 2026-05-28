@@ -734,6 +734,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (isShortGame) {
       ctxLines.push(`Shot type: ${swingTag}`);
     }
+    // 2026-05-28 — Fix FP: coach/player audio transcript from the clip.
+    // When the player narrates ("buttery hands here") or a coach is
+    // talking through the swing in the recorded audio ("feel like your
+    // hands are softer at the top"), Whisper transcribes it and we
+    // thread it here. The analyzer treats it as expert / self-reported
+    // context: confirm with vision where it agrees, call out mismatch
+    // when it doesn't. Trimmed at 1500 chars to keep prompt budget
+    // bounded on long instructor clips.
+    const coachAudioRaw = typeof ctx.coach_audio === 'string' ? ctx.coach_audio.trim() : '';
+    if (coachAudioRaw.length > 0) {
+      const trimmed = coachAudioRaw.length > 1500
+        ? coachAudioRaw.slice(0, 1500) + '…[truncated]'
+        : coachAudioRaw;
+      ctxLines.push(
+        `AUDIO TRANSCRIPT from the clip (coach narrating, or player describing feel mid-swing):\n"${trimmed}"\n` +
+        `Treat this as expert / self-reported context. CONFIRM what you see when the audio agrees, ` +
+        `and call out mismatches when it doesn't (e.g. "you said buttery hands but I see grip tightening at impact"). ` +
+        `Do NOT take the audio as ground truth over your visual read — both inform the diagnosis.`
+      );
+    }
     // 2026-05-21 — Fix B: camera angle is chosen BEFORE recording and
     // routed in so biomechanical reads use the correct orientation.
     // Down-the-line view = camera behind the player looking down the

@@ -458,6 +458,16 @@ export async function analyzeSwing(
     // the existing library / Cage upload behavior — full Haiku →
     // OpenAI → Sonnet escalation chain.
     tier?: 'quick' | 'full';
+    // 2026-05-28 — Fix FP: spoken-audio transcript from the same clip
+    // (Whisper via /api/transcribe, written to shot.commentary_transcript
+    // by swingCommentaryService). When present, the analyzer prompt
+    // sees what the coach OR player said while the swing was being
+    // recorded — Katie demoing "feel like your hands are softer at
+    // the top", or Tim's glasses-POV "buttery hands here". The
+    // analyzer uses it as expert / self-reported context, not as
+    // ground truth, and can call out mismatches (player said X but
+    // I see Y). Empty / null = vision-only analysis as before.
+    coach_audio?: string | null;
   },
   boundaries?: { startSec: number; endSec: number },
   // Phase 403b — when provided, the persisted fault-frame JPEG will be

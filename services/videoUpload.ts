@@ -253,6 +253,13 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     return { primary_issue: null, drill_recommendation: null };
   }
 
+  // 2026-05-28 — Fix FP: audio transcription is handled by the
+  // pre-existing swingCommentaryService (started at app/_layout.tsx),
+  // which subscribes to cageStore and transcribes every clip's audio
+  // to shot.commentary_transcript. NOT re-fired here — that would
+  // duplicate the network call. See swingCommentaryService for the
+  // file-size + sub-pipeline behavior.
+
   try {
     store.setSessionAnalysisStatus(sessionId, 'analyzing_frames');
     await new Promise(r => setTimeout(r, 50));
@@ -375,6 +382,11 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         const calMod = require('../store/cageOverlayCalibrationStore');
         cageAngleCtx = calMod.useCageOverlayCalibrationStore.getState().cameraAngle as 'down_the_line' | 'face_on';
       } catch { /* ignore — default in analyzer */ }
+      // 2026-05-28 — Fix FP: thread coach/player audio transcript when
+      // already attached to the shot. Re-analyze passes pick this up
+      // for free (transcript lands within 3-8s of upload via
+      // swingCommentaryService; first analysis may race ahead of it).
+      const coachAudio = (swing.commentary_transcript ?? '').trim();
       const r = await analyzeSwing(swing.clipUri!, {
         club: swing.club,
         swing_number: i + 1,
@@ -386,6 +398,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         ball_area_norm: ballAreaCtx,
         target_norm: targetCtx,
         ...(cageAngleCtx ? { angle: cageAngleCtx } : {}),
+        ...(coachAudio.length > 0 ? { coach_audio: coachAudio } : {}),
       }, boundaries, {
         faultFrameBaseName: `${sessionId}_${swing.id}_fault`,
       });

@@ -33,12 +33,11 @@
 import { useCageStore, type CageShot } from '../store/cageStore';
 import { track } from './analytics';
 import { detectCue } from './metaGlassesCueRouter';
+import { transcribeVideoAudio } from './videoTranscription';
+import { useSettingsStore } from '../store/settingsStore';
 
 const inflight = new Set<string>();
 const done = new Set<string>();
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
-const REQUEST_TIMEOUT_MS = 60_000;
 
 async function transcribeShotCommentary(sessionId: string, shot: CageShot): Promise<void> {
   if (!shot.clipUri) return;
@@ -50,33 +49,24 @@ async function transcribeShotCommentary(sessionId: string, shot: CageShot): Prom
   }
   inflight.add(shot.id);
   try {
-    const formData = new FormData();
-    formData.append('audio', {
-      uri: shot.clipUri,
-      type: 'video/mp4',
-      name: 'clip.mp4',
-    } as unknown as Blob);
-    formData.append('language', 'en');
+    // 2026-05-28 — Fix FP: route through the shared transcribeVideoAudio
+    // helper which adds:
+    //   - file-size pre-check (skips + logs cleanly when > 20MB, where
+    //     /api/transcribe would otherwise reject after a long upload —
+    //     Tim's repro was Katie's full-body coach clips silently
+    //     producing no transcript despite the pipeline existing)
+    //   - language threaded from settingsStore (was hardcoded 'en')
+    //   - Whisper failure logging with status + body head visible
+    //   - elapsed_ms telemetry on every call (success or failure)
+    const language = useSettingsStore.getState().language;
+    const text = await transcribeVideoAudio(shot.clipUri, { language });
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    const res = await fetch(API_URL + '/api/transcribe', {
-      method: 'POST',
-      body: formData,
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeout));
-
-    if (!res.ok) {
-      console.log('[swingCommentary] transcribe failed:', res.status);
-      track('swing_commentary_transcribe_error', { status: res.status });
-      return;
-    }
-    const data = (await res.json()) as { text?: string };
-    const text = (data.text ?? '').trim();
-    if (text.length === 0) {
-      // Silent clip — mark done so we don't retry on every subscribe tick.
+    if (!text) {
+      // Could be: no audio, file too large, network failure, empty
+      // transcript. Mark done so we don't retry on every subscribe tick
+      // (the helper already logged the specific reason).
       done.add(shot.id);
-      track('swing_commentary_transcribe_empty');
+      track('swing_commentary_transcribe_skip_or_empty');
       return;
     }
     useCageStore.getState().setShotCommentaryTranscript(sessionId, shot.id, text);

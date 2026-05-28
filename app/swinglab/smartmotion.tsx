@@ -229,6 +229,11 @@ export default function SmartMotion() {
     }
   }, [clipUri, angle, profile.firstName]);
 
+  // 2026-05-28 — Fix FP: audio transcription is handled by
+  // swingCommentaryService (started in app/_layout.tsx) which
+  // subscribes to cageStore and writes shot.commentary_transcript.
+  // Re-firing here would duplicate the network call.
+
   // Kick off cloud swing analysis on mount.
   useEffect(() => {
     if (!clipUri) return;
