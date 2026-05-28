@@ -94,11 +94,12 @@ export default function SmartMotion() {
   // synthesizer emits source:'acoustic' for ball speed with the
   // honest estimate-tier shape per C1 (~ prefix, ±10% range, med
   // confidence). Absent on camera-roll uploads → pose-only fallback.
-  const { clipUri, angle: angleParam, measuredBallSpeedMph: measuredBallSpeedParam, club: clubParam } = useLocalSearchParams<{
+  const { clipUri, angle: angleParam, measuredBallSpeedMph: measuredBallSpeedParam, club: clubParam, shotType: shotTypeParam } = useLocalSearchParams<{
     clipUri?: string;
     angle?: string;
     measuredBallSpeedMph?: string;
     club?: string;
+    shotType?: string;
   }>();
   // 2026-05-24 — Club tag for the captured swing. Drives the metric
   // synthesizer's smash + carry math. Sourced from (a) URL param when
@@ -262,6 +263,26 @@ export default function SmartMotion() {
           // Library uploads (videoUpload.runPhaseKOnSession) stay on
           // the full chain where deeper analysis matters more.
           tier: 'quick',
+          // 2026-05-28 — Fix FN: route chip/putt clips to the server's
+          // PUTT_SYSTEM_PROMPT short-game branch so the analyzer
+          // doesn't try to call full-swing faults (early extension,
+          // over-the-top, etc.) on a chip or putt motion. Two signals
+          // produce the tag: (a) voice "chip cam" / "putt cam" passed
+          // shotType via quick-record forward; (b) club selection of a
+          // wedge or putter. Either is sufficient. Without this tag
+          // every glasses-POV chip was getting full-swing fault
+          // classification → spurious "early extension" reads.
+          swing_tag: (() => {
+            const fromShotType =
+              typeof shotTypeParam === 'string' &&
+              (shotTypeParam === 'chip' || shotTypeParam === 'putt')
+                ? shotTypeParam
+                : null;
+            if (fromShotType) return fromShotType;
+            if (selectedClub === 'PT') return 'putt';
+            if (selectedClub === 'LW' || selectedClub === 'SW' || selectedClub === 'GW') return 'chip';
+            return null;
+          })(),
         });
         if (cancelled) return;
         if (result.kind === 'ok') {
