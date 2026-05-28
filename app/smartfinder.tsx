@@ -24,7 +24,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 // pick up themed styles, vs duplicating useTheme + useMemo per
 // component.
 import { useTheme } from '../contexts/ThemeContext';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import * as Location from 'expo-location';
 import { DeviceMotion } from 'expo-sensors';
 import { useRoundStore } from '../store/roundStore';
@@ -375,6 +375,19 @@ function CameraSmartFinder({
   const cameraRef = useRef<CameraView | null>(null);
   const [locked, setLocked] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  // 2026-05-27 — Fix EV: video capture mode for SmartFinder.
+  // Toggle pill above the capture button selects photo vs video.
+  // CameraView mode is bound to this state so the underlying camera
+  // is in the right capture pipeline before the user hits record.
+  // recordingRef tracks the in-flight recordAsync promise so the
+  // second tap stops it cleanly.
+  const [captureMode, setCaptureMode] = useState<'picture' | 'video'>('picture');
+  const [recording, setRecording] = useState(false);
+  // Mic permission is required for video audio. Reusing the existing
+  // pattern from cage-mode / quick-record (request on demand, not at
+  // screen mount — keeps the GPS-only photo flow from prompting for
+  // mic unnecessarily).
+  const [micPerm, requestMicPerm] = useMicrophonePermissions();
   // Continuous zoom in [0, 1]. baseZoom captures the value at the start
   // of a pinch so subsequent pinches feel relative, not absolute. Resets
   // to 1.0× when the screen mounts (matches a real rangefinder power-on).
@@ -468,7 +481,16 @@ function CameraSmartFinder({
     <GestureHandlerRootView style={styles.cameraContainer}>
       <GestureDetector gesture={pinchGesture}>
         <View style={styles.cameraContainer} collapsable={false}>
-          <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" zoom={zoom} />
+          <CameraView
+            ref={cameraRef}
+            style={StyleSheet.absoluteFill}
+            facing="back"
+            zoom={zoom}
+            // 2026-05-27 — Fix EV: bind capture mode + audio so the
+            // underlying camera is ready for either photo or video.
+            mode={captureMode}
+            videoQuality="720p"
+          />
 
           {mode === 'standard' ? (
             <StandardCameraOverlay
@@ -514,10 +536,83 @@ function CameraSmartFinder({
             <Ionicons name={locked ? 'lock-closed' : 'lock-open'} size={20} color={locked ? '#0d1a0d' : '#F0C030'} />
           </TouchableOpacity>
         )}
+        {/* Mode toggle pill — photo / video. Sits above the capture
+            button so it's easy to switch before pressing record.
+            Switching mode mid-recording is disabled (would invalidate
+            the in-flight recordAsync). */}
+        <View
+          style={{
+            flexDirection: 'row',
+            backgroundColor: 'rgba(0,0,0,0.55)',
+            borderRadius: 14,
+            padding: 2,
+            opacity: recording ? 0.5 : 1,
+          }}
+          pointerEvents={recording ? 'none' : 'auto'}
+        >
+          {(['picture', 'video'] as const).map(m => (
+            <TouchableOpacity
+              key={m}
+              onPress={() => setCaptureMode(m)}
+              accessibilityRole="button"
+              accessibilityLabel={m === 'picture' ? 'Switch to photo' : 'Switch to video'}
+              style={{
+                paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
+                backgroundColor: captureMode === m ? '#ffffff' : 'transparent',
+              }}
+            >
+              <Text style={{
+                fontSize: 10, fontWeight: '800', letterSpacing: 0.8,
+                color: captureMode === m ? '#0d1a0d' : '#ffffff',
+              }}>{m === 'picture' ? 'PHOTO' : 'VIDEO'}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
         <TouchableOpacity
           onPress={async () => {
             if (capturing) return;
             if (!cameraRef.current) return;
+            // 2026-05-27 — Fix EV: split path on captureMode.
+            if (captureMode === 'video') {
+              if (recording) {
+                // Second tap on the recording button = stop. recordAsync
+                // resolves with the file URI; the running promise
+                // captured below handles the share.
+                try { cameraRef.current.stopRecording(); } catch (e) { console.log('[smartfinder] stopRecording threw', e); }
+                return;
+              }
+              // First tap = start recording. Need mic permission first.
+              if (!micPerm?.granted) {
+                const result = await requestMicPerm();
+                if (!result.granted) {
+                  useToastStore.getState().show('Microphone access needed for video.');
+                  return;
+                }
+              }
+              setRecording(true);
+              try {
+                // recordAsync resolves when stopRecording is called or
+                // maxDuration hits. 60s cap so a forgotten tap doesn't
+                // fill the device.
+                const result = await cameraRef.current.recordAsync({ maxDuration: 60 });
+                setRecording(false);
+                if (result?.uri) {
+                  const Sharing = await import('expo-sharing');
+                  const can = await Sharing.isAvailableAsync().catch(() => false);
+                  if (can) {
+                    await Sharing.shareAsync(result.uri, { mimeType: 'video/mp4', dialogTitle: 'SmartFinder video' });
+                  } else {
+                    useToastStore.getState().show('Saved · sharing not available');
+                  }
+                }
+              } catch (e) {
+                console.log('[smartfinder] video recording failed', e);
+                useToastStore.getState().show('Recording failed — try again.');
+                setRecording(false);
+              }
+              return;
+            }
+            // Photo path — unchanged from Fix EQ.
             setCapturing(true);
             try {
               const photo = await cameraRef.current.takePictureAsync({ quality: 0.85, skipProcessing: false });
@@ -538,16 +633,24 @@ function CameraSmartFinder({
             }
           }}
           accessibilityRole="button"
-          accessibilityLabel="Take photo"
+          accessibilityLabel={
+            captureMode === 'video'
+              ? (recording ? 'Stop video recording' : 'Start video recording')
+              : 'Take photo'
+          }
           style={{
             width: 60, height: 60, borderRadius: 30,
-            backgroundColor: '#ffffff',
-            borderWidth: 3, borderColor: 'rgba(0,0,0,0.4)',
+            backgroundColor: recording ? '#ef4444' : '#ffffff',
+            borderWidth: 3, borderColor: recording ? '#ffffff' : 'rgba(0,0,0,0.4)',
             alignItems: 'center', justifyContent: 'center',
             opacity: capturing ? 0.5 : 1,
           }}
         >
-          <Ionicons name="camera" size={26} color="#0d1a0d" />
+          <Ionicons
+            name={captureMode === 'video' ? (recording ? 'stop' : 'videocam') : 'camera'}
+            size={26}
+            color={recording ? '#ffffff' : '#0d1a0d'}
+          />
         </TouchableOpacity>
       </View>
 
