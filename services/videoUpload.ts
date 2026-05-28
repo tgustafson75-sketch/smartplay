@@ -307,6 +307,46 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         ? session.primary_issue.primary_fault
         : null;
 
+    // 2026-05-28 — Fix FQ (speed #10): hoist cageAngleCtx ABOVE the
+    // per-swing loop. Was dynamically required + read from the
+    // calibration store on every iteration. Identical for every swing
+    // in the session, so resolving once saves ~50ms × swings.length.
+    let cageAngleCtx: 'down_the_line' | 'face_on' | 'glasses_pov' | undefined;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const calMod = require('../store/cageOverlayCalibrationStore');
+      cageAngleCtx = calMod.useCageOverlayCalibrationStore.getState().cameraAngle as 'down_the_line' | 'face_on';
+    } catch { /* ignore — default in analyzer */ }
+
+    // 2026-05-28 — Fix FQ (bug #3): bounded wait for the audio
+    // transcript when the clip has audio. swingCommentaryService is
+    // running fire-and-forget in parallel; on a normal network the
+    // transcript lands within 3-8s of upload. If we don't wait,
+    // analyzeSwing fires with empty coach_audio — first analysis is
+    // blind to Katie's narration, and the user has to re-analyze to
+    // pick it up. 5s budget is the typical Whisper return time;
+    // beyond that we proceed and let the re-analyze path catch the
+    // late transcript. Skipped entirely for silent clips
+    // (has_audio === false) so the speed path stays speed.
+    if (session.upload?.has_audio) {
+      const haveTranscriptAlready = session.shots.some(
+        s => (s.commentary_transcript ?? '').trim().length > 0,
+      );
+      if (!haveTranscriptAlready) {
+        const TRANSCRIPT_BUDGET_MS = 5_000;
+        const POLL_MS = 250;
+        const deadline = Date.now() + TRANSCRIPT_BUDGET_MS;
+        while (Date.now() < deadline) {
+          await new Promise(r => setTimeout(r, POLL_MS));
+          const liveSession = useCageStore.getState().sessionHistory.find(s => s.id === sessionId);
+          if (liveSession?.shots.some(s => (s.commentary_transcript ?? '').trim().length > 0)) {
+            uploadLog('coach-audio-wait-resolved', { ms: Date.now() - (deadline - TRANSCRIPT_BUDGET_MS) }, sessionId);
+            break;
+          }
+        }
+      }
+    }
+
     // 2026-05-26 — Fix DQ (commit 2/3): parallelize per-shot analysis
     // in batches of USE_PARALLEL_BATCH_SIZE. Sequential 10-shot
     // session = ~150s (10 × ~15s) and routinely hit the client's 55s
@@ -374,19 +414,15 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       // into the analyzer. Cage Mode lets the user pick down-the-line
       // vs face-on at SETUP; that picks the right read framing
       // (DTL=path/plane/EE, face-on=weight/rotation). Without this,
-      // every cage swing was analyzed as down-the-line by default —
-      // wrong for face-on captures.
-      let cageAngleCtx: 'down_the_line' | 'face_on' | 'glasses_pov' | undefined;
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const calMod = require('../store/cageOverlayCalibrationStore');
-        cageAngleCtx = calMod.useCageOverlayCalibrationStore.getState().cameraAngle as 'down_the_line' | 'face_on';
-      } catch { /* ignore — default in analyzer */ }
-      // 2026-05-28 — Fix FP: thread coach/player audio transcript when
-      // already attached to the shot. Re-analyze passes pick this up
-      // for free (transcript lands within 3-8s of upload via
-      // swingCommentaryService; first analysis may race ahead of it).
-      const coachAudio = (swing.commentary_transcript ?? '').trim();
+      // 2026-05-28 — Fix FQ: cageAngleCtx now hoisted above the loop
+      // (computed once per session — see above). Read the LIVE shot
+      // from the store for commentary_transcript so a transcript that
+      // landed AFTER `swings` was snapshotted (line 221) is still seen
+      // by the analyzer. The closure variable `swing` was frozen at
+      // snapshot time.
+      const liveShot = useCageStore.getState().sessionHistory
+        .find(s => s.id === sessionId)?.shots.find(x => x.id === swing.id);
+      const coachAudio = (liveShot?.commentary_transcript ?? swing.commentary_transcript ?? '').trim();
       const r = await analyzeSwing(swing.clipUri!, {
         club: swing.club,
         swing_number: i + 1,
