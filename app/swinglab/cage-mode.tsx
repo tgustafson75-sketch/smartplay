@@ -160,6 +160,16 @@ export default function CageModeScreen() {
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordCountdownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 2026-05-28 — Fix EZ: pre-fire ball detection during the COUNTDOWN
+  // phase so the analyzer has ball-area context ready the moment
+  // recording ends. Same logic as Fix EK's pre-warm — uses the
+  // otherwise-idle countdown seconds productively. Result is held in
+  // a ref because the cage session ID doesn't exist until after
+  // ingestUploadedSwing fires (post-recording); we apply the ref to
+  // the session via setSessionBallArea right after ingest.
+  const pendingBallDetectionRef = useRef<{ x: number; y: number; r: number } | null>(null);
+  const [ballDetectStatus, setBallDetectStatus] = useState<'idle' | 'detecting' | 'found' | 'not_found'>('idle');
+
   // 2026-05-24 — Pre-record countdown ticker, used by COUNTDOWN phase.
   const preRecordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -305,6 +315,9 @@ export default function CageModeScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPreRecordCountdown(PRE_RECORD_COUNTDOWN_SECONDS);
     setPhase('COUNTDOWN');
+    // 2026-05-28 — Fix EZ: reset pre-fire state for this round.
+    pendingBallDetectionRef.current = null;
+    setBallDetectStatus('idle');
     preRecordTimerRef.current = setInterval(() => {
       setPreRecordCountdown(prev => {
         if (prev <= 1) {
@@ -312,11 +325,77 @@ export default function CageModeScreen() {
           void handleStartRecording();
           return PRE_RECORD_COUNTDOWN_SECONDS;
         }
+        // 2026-05-28 — Fix EZ: at countdown=3 (2s after countdown starts,
+        // 3s before record fires) snapshot a frame + run ball-detection
+        // async. User has had a beat to settle into address; we have
+        // 3s of fetch budget before recording starts. Result lands in
+        // pendingBallDetectionRef and gets applied to the session after
+        // recording completes. Same shape as Fix EK pre-warm —
+        // productive use of otherwise-idle countdown seconds.
+        if (prev === 3 && ballDetectStatus === 'idle') {
+          void prefireBallDetection();
+        }
         return prev - 1;
       });
     }, 1000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [micPerm, requestMicPerm]);
+
+  // 2026-05-28 — Fix EZ: pre-fire ball detection during the COUNTDOWN
+  // phase. Grabs a low-quality snapshot from the live camera, sends to
+  // /api/swing-analysis mode='detect_ball' (Claude Haiku vision), and
+  // stashes the result in pendingBallDetectionRef so the post-recording
+  // ingest path can apply it as the session's ball_area_norm. Visual
+  // feedback via setBallDetectStatus drives the small "Detecting ball…"
+  // → "✓ Ball detected" chip during countdown.
+  //
+  // Fire-and-forget: never blocks the countdown ticker. If detection
+  // misses (low light, ball not in frame), the session just doesn't
+  // get a ball-area anchor and the analyzer runs as before.
+  const prefireBallDetection = useCallback(async () => {
+    if (!cameraRef.current) return;
+    setBallDetectStatus('detecting');
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.4,
+        skipProcessing: true,
+      });
+      if (!photo?.uri) {
+        setBallDetectStatus('not_found');
+        return;
+      }
+      const FS = await import('expo-file-system/legacy');
+      const b64 = await FS.readAsStringAsync(photo.uri, { encoding: FS.EncodingType.Base64 });
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+      const res = await fetch(`${apiUrl}/api/swing-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'detect_ball',
+          frames: [{ b64, media_type: 'image/jpeg' }],
+        }),
+        signal: AbortSignal.timeout(8_000),
+      });
+      const data = (await res.json()) as { found?: boolean; x?: number; y?: number; r?: number };
+      if (data.found && typeof data.x === 'number' && typeof data.y === 'number') {
+        pendingBallDetectionRef.current = {
+          x: data.x,
+          y: data.y,
+          r: typeof data.r === 'number' ? data.r : 0.06,
+        };
+        setBallDetectStatus('found');
+        console.log('[cage-mode] pre-fire ball detection found ball at', pendingBallDetectionRef.current);
+      } else {
+        setBallDetectStatus('not_found');
+        console.log('[cage-mode] pre-fire ball detection: ball not found in frame');
+      }
+      // Clean up the temp snapshot — we already have the base64 + result.
+      try { await FS.deleteAsync(photo.uri, { idempotent: true }); } catch { /* ignore */ }
+    } catch (e) {
+      console.log('[cage-mode] pre-fire ball detection failed (non-fatal):', e);
+      setBallDetectStatus('not_found');
+    }
+  }, []);
 
   const handleStartRecording = useCallback(async () => {
     if (!cameraRef.current) return;
@@ -541,6 +620,18 @@ export default function CageModeScreen() {
           },
           source: 'live_cage',
         });
+        // 2026-05-28 — Fix EZ: apply the pre-fired ball detection
+        // result (if any) to the freshly-ingested session. The
+        // analyzer pipeline (Fix ES) reads ball_area_norm off the
+        // session and threads it into the vision prompt as an anchor.
+        // Net effect: by the time analysis fires, the model already
+        // knows where the ball was at address — better impact-frame
+        // selection, more confident fault reads.
+        if (pendingBallDetectionRef.current) {
+          useCageStore.getState().setSessionBallArea(sessionId, pendingBallDetectionRef.current);
+          console.log('[cage-mode] applied pre-fired ball detection to session', sessionId);
+          pendingBallDetectionRef.current = null;
+        }
         const issue: PrimaryIssue = {
           issue_id: 'cage_coach_review',
           name: 'Cage swing — coach review',
@@ -739,6 +830,37 @@ export default function CageModeScreen() {
             <Text style={[styles.countdownNum, { color: '#fbbf24' }]}>{preRecordCountdown}</Text>
             <Text style={styles.countdownLabel}>GET IN POSITION</Text>
           </View>
+          {/* 2026-05-28 — Fix EZ: ball-detection HUD chip. Surfaces the
+              pre-fire status to the user — "checking ball position"
+              while detection runs, "✓ ball detected" on success, soft
+              "—" when missed (doesn't read as a failure; analysis
+              still works, just without the anchor). Subtle so it
+              doesn't compete with the main GET IN POSITION block. */}
+          {ballDetectStatus !== 'idle' && (
+            <View style={{
+              marginTop: 10,
+              flexDirection: 'row', alignItems: 'center', gap: 6,
+              paddingVertical: 5, paddingHorizontal: 10,
+              backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 12,
+              borderWidth: 1,
+              borderColor: ballDetectStatus === 'found' ? '#00C896' : 'rgba(255,255,255,0.35)',
+            }}>
+              <View style={{
+                width: 8, height: 8, borderRadius: 4,
+                backgroundColor: ballDetectStatus === 'found' ? '#00C896'
+                  : ballDetectStatus === 'detecting' ? '#fbbf24'
+                  : '#9ca3af',
+              }} />
+              <Text style={{
+                color: ballDetectStatus === 'found' ? '#00C896' : '#ffffff',
+                fontSize: 11, fontWeight: '700', letterSpacing: 0.4,
+              }}>
+                {ballDetectStatus === 'detecting' ? 'Locating ball…'
+                  : ballDetectStatus === 'found' ? '✓ Ball locked'
+                  : 'Ball not seen — manual placement after'}
+              </Text>
+            </View>
+          )}
           <TouchableOpacity style={styles.stopBtn} onPress={cancelPreRecordCountdown}>
             <View style={[styles.stopSquare, { backgroundColor: '#fbbf24' }]} />
             <Text style={styles.stopText}>CANCEL</Text>
