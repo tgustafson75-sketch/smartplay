@@ -12,6 +12,9 @@ import { getGreenYardages, resolveGreenCoords } from '../smartFinderService';
 // strips to { lat, lng }, so it can't drive the soft-GPS tell. Importing
 // directly from gpsManager for the yardage handler enrichment.
 import { getOneShotFix } from '../gpsManager';
+// 2026-05-28 — Fix FE: presence helper so the no-fix branch fills the
+// silence with character-true patience instead of returning "—".
+import { presenceFill } from '../presenceCaddie';
 
 // 2026-05-24 — Voice-language localization for distance_to_green
 // responses. Source of truth for `lang` is AppContext.language, which
@@ -604,10 +607,52 @@ export const queryStatusHandler: IntentHandler = {
         // OS-reported accuracy when GPS is locked.
         const fix = await getOneShotFix({ maxAgeMs: 5_000 });
         if (!fix) {
+          // 2026-05-28 — Fix FE: "keep the presence alive." Instead of
+          // returning the dry t.noGps fallback ("I don't have GPS"),
+          // route through presenceFill — character-true caddie patter
+          // using what we KNOW about this hole, ending with a "yardage
+          // back in a beat" promise. Server brain (register='presence')
+          // does the persona-tone composition; local-synthesis fallback
+          // ensures the presence still lands if the brain is offline.
+          // Caches per-trigger 60s so rapid re-asks during the same
+          // drought don't spam.
+          const roundState = useRoundStore.getState();
+          const holeMeta = roundState.courseHoles?.find(h => h.hole === greenHole);
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const profileMod = require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore');
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const settingsMod = require('../../store/settingsStore') as typeof import('../../store/settingsStore');
+          const player = profileMod.usePlayerProfileStore.getState();
+          const settings = settingsMod.useSettingsStore.getState();
+          // Find last score on THIS hole from roundHistory — gives the
+          // brain a concrete past-fact to anchor patter ("last time you
+          // walked out with a 5"). Walk newest-first; first match wins.
+          let lastScoreThisHole: number | null = null;
+          try {
+            for (let i = roundState.roundHistory.length - 1; i >= 0; i--) {
+              const r = roundState.roundHistory[i];
+              if (r.courseId && r.courseId === roundState.activeCourseId) {
+                const s = r.scores?.[greenHole];
+                if (typeof s === 'number') { lastScoreThisHole = s; break; }
+              }
+            }
+          } catch { /* non-fatal */ }
+          const presenceLine = await presenceFill({
+            trigger: 'gps_unready',
+            context: {
+              courseName: roundState.activeCourse ?? null,
+              holeNumber: greenHole,
+              par: holeMeta?.par ?? null,
+              teeYardage: holeMeta?.distance ?? null,
+              lastScoreThisHole,
+              playerName: player.firstName ?? null,
+              persona: (settings.caddiePersonality ?? null) as 'kevin' | 'serena' | 'tank' | 'harry' | null,
+            },
+          });
           return {
             success: true,
-            voice_response: t.noGps,
-            side_effects: ['query:distance_to_green:no_gps', `lang:${lang}`],
+            voice_response: presenceLine ?? t.noGps,
+            side_effects: ['query:distance_to_green:presence_fill', `lang:${lang}`],
             follow_up_needed: false,
           };
         }
