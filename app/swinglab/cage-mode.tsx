@@ -81,6 +81,12 @@ import { safeBack } from '../../services/safeBack';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { getCaddieName } from '../../lib/persona';
+// 2026-05-28 — Fix FJ: caddie presence when mic is denied. Instead of
+// the bare Alert.alert("Microphone needed") landing in silence, the
+// active caddie also speaks a short context-aware line about why the
+// mic matters. Same brain/fallback path the GPS + analysis_failed
+// triggers use.
+import { presenceFill } from '../../services/presenceCaddie';
 import CageOverlay, { type CageOverlayPhase } from '../../components/swinglab/CageOverlay';
 import { setActiveSurface } from '../../services/activeSurfaceRegistry';
 import { subscribeCapture } from '../../services/mediaCapture';
@@ -336,6 +342,7 @@ export default function CageModeScreen() {
           'Microphone needed',
           'Cage Drill records audio to detect strikes. Allow microphone access to record.',
         );
+        void notifyMicBlocked();
         return;
       }
     }
@@ -435,6 +442,27 @@ export default function CageModeScreen() {
     }
   }, []);
 
+  // 2026-05-28 — Fix FJ: presence speak helper for mic-denied. Both
+  // mic-gate sites (handleConfirmReady + handleStartRecording) call
+  // this AFTER firing the Alert.alert, so the user sees the
+  // permission ask AND hears the caddie explain why it matters.
+  // userInitiated:true because we're responding to a Start tap —
+  // L1 Quiet would otherwise gate it silent at the same moment the
+  // user is asking why nothing happened.
+  const notifyMicBlocked = useCallback(async () => {
+    try {
+      const line = await presenceFill({
+        trigger: 'mic_blocked',
+        context: { persona: caddiePersonality },
+      });
+      if (!line) return;
+      await configureAudioForSpeech();
+      await speak(line, voiceGender, language, apiUrl, { userInitiated: true });
+    } catch (e) {
+      console.log('[cage-mode] mic-blocked presence speak failed (non-fatal):', e);
+    }
+  }, [caddiePersonality, voiceGender, language, apiUrl]);
+
   const handleStartRecording = useCallback(async () => {
     if (!cameraRef.current) return;
     // Audit fix — double-tap guard. If a recording promise is already
@@ -451,6 +479,7 @@ export default function CageModeScreen() {
           'Microphone needed',
           'Cage Drill records audio to detect strikes. Allow microphone access to record.',
         );
+        void notifyMicBlocked();
         return;
       }
     }
