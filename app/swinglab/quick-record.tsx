@@ -44,7 +44,15 @@ import { detectBallSpeed } from '../../services/acousticDetectApi';
 // countdown + 30s of recording window means the user has up to 35s
 // from tap to finished swing, and a visible "Recording in 5… 4…"
 // signal so they know when the camera actually starts capturing.
-const PRE_RECORD_COUNTDOWN_SECONDS = 5;
+// 2026-05-28 — Tim's call: bumped manual 5s → 10s. Voice-triggered
+// recording (autoStart=1 from "record me down the line") drops to 3s
+// because the voice command IS the "I'm ready" signal — no need to
+// wait for the user to walk into address; they did that before
+// speaking. Matches the dual-duration pattern in cage-mode.tsx.
+const PRE_RECORD_COUNTDOWN_MANUAL = 10;
+const PRE_RECORD_COUNTDOWN_VOICE = 3;
+// Default for any caller that doesn't specify (manual button).
+const PRE_RECORD_COUNTDOWN_SECONDS = PRE_RECORD_COUNTDOWN_MANUAL;
 const MAX_RECORD_SECONDS = 30;
 
 type Angle = 'down_the_line' | 'face_on';
@@ -278,7 +286,11 @@ export default function QuickRecord() {
   //   - if currently COUNTING DOWN → cancel countdown.
   //   - otherwise → kick off the pre-record countdown, then
   //     startActualRecording when it ticks to 0.
-  const handleRecord = useCallback(() => {
+  // 2026-05-28 — viaVoice routes through the same handler but uses the
+  // shorter 3s countdown (user already said "record" via voice — no
+  // need to wait for them to walk into address). Manual button taps
+  // get the full 10s. Default is manual.
+  const handleRecord = useCallback((opts?: { viaVoice?: boolean }) => {
     if (recording) {
       try { cameraRef.current?.stopRecording(); } catch {}
       return;
@@ -290,11 +302,12 @@ export default function QuickRecord() {
       return;
     }
     if (!cameraRef.current) return;
-    if (PRE_RECORD_COUNTDOWN_SECONDS <= 0) {
+    const duration = opts?.viaVoice ? PRE_RECORD_COUNTDOWN_VOICE : PRE_RECORD_COUNTDOWN_MANUAL;
+    if (duration <= 0) {
       void startActualRecording();
       return;
     }
-    setCountdown(PRE_RECORD_COUNTDOWN_SECONDS);
+    setCountdown(duration);
     countdownRef.current = setInterval(() => {
       setCountdown(prev => {
         if (prev == null) return null;
@@ -329,7 +342,10 @@ export default function QuickRecord() {
     // Slight delay so the CameraView ref is attached before we call
     // recordAsync. 250ms is generous; on real device the view mounts
     // in <100ms.
-    const t = setTimeout(() => { void handleRecord(); }, 250);
+    // 2026-05-28 — autoStart=1 only fires from the voice intent path
+    // (openToolHandler "record me down the line" / "face on"), so we
+    // pass viaVoice:true to drop to the 3s countdown.
+    const t = setTimeout(() => { void handleRecord({ viaVoice: true }); }, 250);
     return () => clearTimeout(t);
   }, [autoStartParam, camPerm?.granted, micPerm?.granted, handleRecord]);
 
@@ -513,7 +529,7 @@ export default function QuickRecord() {
             : `Tap record · ${PRE_RECORD_COUNTDOWN_SECONDS}s countdown, then up to ${MAX_RECORD_SECONDS}s of capture`}
         </Text>
         <TouchableOpacity
-          onPress={handleRecord}
+          onPress={() => handleRecord()}
           disabled={processing}
           style={[
             styles.recordOuter,

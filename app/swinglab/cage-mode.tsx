@@ -125,7 +125,19 @@ const RECORDING_MAX_SECONDS = 30;
 // Pre-record countdown — same shape + duration as SmartMotion quick-record
 // so the muscle memory transfers. Gives the solo user time to walk from
 // the phone tripod to the hitting position after tapping Start.
-const PRE_RECORD_COUNTDOWN_SECONDS = 5;
+// 2026-05-28 — Tim's call: 5s was too aggressive; gives the solo player
+// barely enough time to walk into address. 10s is the more humane
+// rhythm — settle, breathe, glance at the ball-detection chip, swing.
+//
+// VOICE shortcut: when the user says "record" / "capture" / "start" via
+// the Active Voice listener (subscribeCapture below), they've already
+// declared they're ready — so we drop to 3s instead of making them wait
+// the full 10s. Saved seconds compound over a 30-ball range session.
+const PRE_RECORD_COUNTDOWN_MANUAL = 10;
+const PRE_RECORD_COUNTDOWN_VOICE = 3;
+// Kept as the initial state default; the actual duration is decided
+// per-trigger inside handleConfirmReady.
+const PRE_RECORD_COUNTDOWN_SECONDS = PRE_RECORD_COUNTDOWN_MANUAL;
 
 const KEVIN_CAPTION: Partial<Record<Phase, string>> = {
   SETUP:     "Frame your hitting area. Tap 'I'm Set' when you're ready.",
@@ -254,11 +266,10 @@ export default function CageModeScreen() {
     const unsub = subscribeCapture(['swing'], () => {
       if (cancelled) return;
       if (phase === 'SETUP') {
-        // Route through handleConfirmReady so voice "record" gets the
-        // same 5s pre-record countdown the button does — gives the
-        // solo player time to walk into position regardless of how
-        // they triggered the capture.
-        void handleConfirmReady();
+        // 2026-05-28 — Tim's call: voice path declares "ready" → 3s
+        // countdown. Manual button gets the full 10s settle. Same
+        // handler, different duration via the viaVoice flag.
+        void handleConfirmReady({ viaVoice: true });
       }
     });
     return () => { cancelled = true; unsub(); };
@@ -295,7 +306,11 @@ export default function CageModeScreen() {
     setPhase('SETUP');
   }, []);
 
-  const handleConfirmReady = useCallback(async () => {
+  // 2026-05-28 — viaVoice signals the user already declared ready (said
+  // "record" / "capture" / "start"); skip the long 10s manual settle
+  // and use the snappier 3s. Manual button taps stay 10s (Tim's call —
+  // solo player tapping the button needs time to walk into address).
+  const handleConfirmReady = useCallback(async (opts?: { viaVoice?: boolean }) => {
     if (!cameraRef.current) return;
     if (recordingPromiseRef.current) return;
     if (!micPerm?.granted) {
@@ -308,31 +323,38 @@ export default function CageModeScreen() {
         return;
       }
     }
-    if (PRE_RECORD_COUNTDOWN_SECONDS <= 0) {
+    const duration = opts?.viaVoice ? PRE_RECORD_COUNTDOWN_VOICE : PRE_RECORD_COUNTDOWN_MANUAL;
+    if (duration <= 0) {
       void handleStartRecording();
       return;
     }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setPreRecordCountdown(PRE_RECORD_COUNTDOWN_SECONDS);
+    setPreRecordCountdown(duration);
     setPhase('COUNTDOWN');
     // 2026-05-28 — Fix EZ: reset pre-fire state for this round.
     pendingBallDetectionRef.current = null;
     setBallDetectStatus('idle');
+    // 2026-05-28 — Adaptive ball-detect trigger threshold.
+    //   10s manual countdown → fire at countdown=5 (5s settle, 5s feedback)
+    //   3s voice countdown   → fire at countdown=2 (1s settle, 2s feedback)
+    // Voice path: the user has already settled before saying "record,"
+    // so even a 1s settle is fine. Detection has 2s before recording —
+    // tight but realistic on Haiku (~2-4s typical), and a miss just
+    // means no anchor, not a failure.
+    const ballDetectAtCount = opts?.viaVoice ? 2 : 5;
     preRecordTimerRef.current = setInterval(() => {
       setPreRecordCountdown(prev => {
         if (prev <= 1) {
           if (preRecordTimerRef.current) { clearInterval(preRecordTimerRef.current); preRecordTimerRef.current = null; }
           void handleStartRecording();
-          return PRE_RECORD_COUNTDOWN_SECONDS;
+          return PRE_RECORD_COUNTDOWN_MANUAL;
         }
-        // 2026-05-28 — Fix EZ: at countdown=3 (2s after countdown starts,
-        // 3s before record fires) snapshot a frame + run ball-detection
-        // async. User has had a beat to settle into address; we have
-        // 3s of fetch budget before recording starts. Result lands in
-        // pendingBallDetectionRef and gets applied to the session after
-        // recording completes. Same shape as Fix EK pre-warm —
-        // productive use of otherwise-idle countdown seconds.
-        if (prev === 3 && ballDetectStatus === 'idle') {
+        // 2026-05-28 — Fix EZ: pre-fire ball detection mid-countdown so
+        // the analyzer has the ball-area anchor ready by the time
+        // recording ends. Productive use of otherwise-idle countdown
+        // seconds. Trigger threshold scales with countdown duration
+        // (5 for 10s manual, 2 for 3s voice).
+        if (prev === ballDetectAtCount && ballDetectStatus === 'idle') {
           void prefireBallDetection();
         }
         return prev - 1;
