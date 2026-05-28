@@ -26,6 +26,12 @@ import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession } from '../../../services/videoUpload';
+// 2026-05-28 — Fix FI: presence fill when analysis fails. Instead of
+// leaving the user staring at "Couldn't analyze this one" with no
+// caddie voice, the caddie speaks a short context-aware line
+// (re-record advice, reassurance that one miss doesn't change the
+// read of their game).
+import { presenceFill } from '../../../services/presenceCaddie';
 import { uploadLog } from '../../../services/uploadDiagnostic';
 import PrimaryIssueCard from '../../../components/swinglab/PrimaryIssueCard';
 import AskYourSwingCard from '../../../components/swinglab/AskYourSwingCard';
@@ -78,6 +84,8 @@ export default function SwingDetail() {
   const watchFiredRef = useRef(false);
   const trustLevel = useTrustLevelStore(s => s.level);
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
+  // 2026-05-28 — Fix FI: caddie persona for presence brain calls.
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
 
   // Phase V — subscribe via the store selector so the surface re-renders
@@ -257,6 +265,34 @@ export default function SwingDetail() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisStatus, swing_id, session?.primary_issue?.issue_id]);
+
+  // 2026-05-28 — Fix FI: presence fill on analysis_failed. Mirrors the
+  // ok-path speak-once pattern (gated on swing_id via spokenFailRef so
+  // a re-mount doesn't double-speak). When the analyzer punts on a
+  // clip, the caddie says something context-aware about the club /
+  // re-record suggestion instead of leaving the user with silent red
+  // text. Same voice/trust gates as the ok path.
+  const spokenFailRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (analysisStatus !== 'failed' || !swing_id) return;
+    if (spokenFailRef.current === swing_id) return;
+    spokenFailRef.current = swing_id;
+    if (!voiceEnabled || trustLevel === 1) return;
+    void (async () => {
+      const line = await presenceFill({
+        trigger: 'analysis_failed',
+        context: {
+          persona: caddiePersonality,
+          club: session?.club ?? null,
+          swingTitle: session?.upload?.notes ?? null,
+        },
+      });
+      if (!line) return;
+      await configureAudioForSpeech();
+      await speak(line, voiceGender, language, apiUrl);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisStatus, swing_id]);
 
   const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;

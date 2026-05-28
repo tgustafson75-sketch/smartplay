@@ -30,7 +30,12 @@
  *   library_empty etc.) can plug in by adding to the trigger union.
  */
 
-type PresenceTrigger = 'gps_unready';
+// 2026-05-28 — Fix FI: trigger union expanded beyond gps_unready.
+// Each trigger represents a moment where the exact tactical answer
+// isn't available and the caddie should fill it with presence rather
+// than dropping into silence / canned UI text. The brain prompt in
+// api/kevin.ts knows how to handle each trigger string.
+type PresenceTrigger = 'gps_unready' | 'analysis_failed' | 'mic_blocked';
 
 interface PresenceContext {
   /** Course-side context the brain uses to ground the patter. */
@@ -43,6 +48,11 @@ interface PresenceContext {
   /** Player + persona context — same shape as other /api/kevin calls. */
   playerName?: string | null;
   persona?: 'kevin' | 'serena' | 'tank' | 'harry' | null;
+  /** 2026-05-28 — Fix FI: swing context for analysis_failed trigger.
+   *  Lets the brain reference the club / user's note instead of just
+   *  apologizing for a generic failure. */
+  swingTitle?: string | null;
+  club?: string | null;
 }
 
 const CACHE_TTL_MS = 60_000;
@@ -102,14 +112,23 @@ async function fetchPresenceFromBrain(
       context.lastScoreThisHole != null
         ? `Last time on this hole: scored ${context.lastScoreThisHole}.`
         : '';
+    const swingLine = context.swingTitle
+      ? `Swing: ${context.swingTitle}${context.club ? ` (${context.club})` : ''}.`
+      : context.club
+        ? `Club: ${context.club}.`
+        : '';
     const triggerLine =
       trigger === 'gps_unready'
         ? 'GPS still acquiring — exact yardage will be back in a moment. Give the player a brief presence beat using what is known about the hole + their history. Do NOT apologize. End with a phrase implying yardage returns soon.'
-        : 'Keep the presence alive briefly while the signal returns.';
+        : trigger === 'analysis_failed'
+          ? 'The visual swing analyzer could not get a clean read on this clip (lighting, angle, or video quality). Acknowledge briefly without piling on apologies, point to what could be tried next (re-record at better angle, or tap re-analyze), and reassure the player that one missed read does not change the read of their game.'
+          : trigger === 'mic_blocked'
+            ? 'Cage Mode wants the microphone for strike detection but the user has not granted permission. Briefly explain why the mic matters (catching the impact transient so we can time the swing), invite them to enable it in settings, and stay warm — this is a permission moment, not a failure.'
+            : 'Keep the presence alive briefly while the signal returns.';
 
     const message =
       `${triggerLine}\n\n` +
-      `Context:\n${[playerLine, courseLine, holeLine, histLine].filter(Boolean).join(' ')}\n\n` +
+      `Context:\n${[playerLine, courseLine, holeLine, histLine, swingLine].filter(Boolean).join(' ')}\n\n` +
       `Give ONE response: 1-3 sentences, ~10-25 words, in the active persona's voice. Stay in PRESENCE register.`;
 
     const res = await fetch(`${apiUrl}/api/kevin`, {
@@ -138,15 +157,23 @@ async function fetchPresenceFromBrain(
  * presence still lands. Use when the brain endpoint is unreachable.
  */
 function localPresenceFallback(trigger: PresenceTrigger, ctx: PresenceContext): string {
-  if (trigger !== 'gps_unready') return 'Hold tight — back to you in a beat.';
-  const holePart =
-    ctx.holeNumber != null
-      ? `Hole ${ctx.holeNumber}${ctx.par != null ? `, par ${ctx.par}` : ''}${ctx.teeYardage != null ? `, plays ${ctx.teeYardage} from the tees` : ''}.`
-      : '';
-  const histPart =
-    ctx.lastScoreThisHole != null
-      ? ` Last time here you carded a ${ctx.lastScoreThisHole}.`
-      : '';
-  // Concrete + brief + "yardage in a beat" promise.
-  return `Still finding you. ${holePart}${histPart} Yardage right back when signal sharpens.`.replace(/\s+/g, ' ').trim();
+  if (trigger === 'gps_unready') {
+    const holePart =
+      ctx.holeNumber != null
+        ? `Hole ${ctx.holeNumber}${ctx.par != null ? `, par ${ctx.par}` : ''}${ctx.teeYardage != null ? `, plays ${ctx.teeYardage} from the tees` : ''}.`
+        : '';
+    const histPart =
+      ctx.lastScoreThisHole != null
+        ? ` Last time here you carded a ${ctx.lastScoreThisHole}.`
+        : '';
+    return `Still finding you. ${holePart}${histPart} Yardage right back when signal sharpens.`.replace(/\s+/g, ' ').trim();
+  }
+  if (trigger === 'analysis_failed') {
+    const clubPart = ctx.club ? ` your ${ctx.club}` : ' that swing';
+    return `Couldn't get a clean read on${clubPart} — could be lighting or angle. Try re-analyze, or grab another from a cleaner side view. One missed clip doesn't change what I know about your game.`;
+  }
+  if (trigger === 'mic_blocked') {
+    return `Need the mic for Cage Mode — that's how I catch the impact to time the swing. Pop into settings and turn it on, and we're back in business.`;
+  }
+  return 'Hold tight — back to you in a beat.';
 }
