@@ -289,9 +289,25 @@ export async function startImpactRecording(opts?: {
           }
           // 2. Check current sample for a new candidate. Hold as pending
           //    until next-sample decay verification.
+          //
+          // 2026-05-28 — Fix FC (Path C, Pass A): per-user calibration.
+          // When the user has run the test bench + applied a session
+          // as their calibration, use the tuned transientThresholdDb
+          // instead of the hardcoded 18dB. Falls back to the constant
+          // when no calibration is applied. Live read each tick so a
+          // fresh apply takes effect without a session restart.
           if (!state.pendingPeak && state.meterBuffer.length >= NOISE_FLOOR_MIN_SAMPLES) {
             const noiseFloor = state.meterBuffer.reduce((a, b) => a + b, 0) / state.meterBuffer.length;
-            const threshold = noiseFloor + TRANSIENT_THRESHOLD_DB;
+            let thresholdOffset = TRANSIENT_THRESHOLD_DB;
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const calMod = require('../store/acousticCalibrationStore') as typeof import('../store/acousticCalibrationStore');
+              const applied = calMod.useAcousticCalibrationStore.getState().appliedCalibration;
+              if (applied && typeof applied.transientThresholdDb === 'number') {
+                thresholdOffset = applied.transientThresholdDb;
+              }
+            } catch { /* ignore — fall back to constant */ }
+            const threshold = noiseFloor + thresholdOffset;
             if (db > threshold) {
               state.pendingPeak = { db, threshold, offset_ms: offset, ts: Date.now() };
             }

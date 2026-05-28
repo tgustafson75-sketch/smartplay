@@ -72,6 +72,10 @@ export default function AcousticTestScreen() {
   const saveSession = useAcousticCalibrationStore(s => s.saveSession);
   const savedSessions = useAcousticCalibrationStore(s => s.sessions);
   const deleteSavedSession = useAcousticCalibrationStore(s => s.deleteSession);
+  // 2026-05-28 — Fix FC: Apply-as-my-calibration wiring.
+  const applyCalibration = useAcousticCalibrationStore(s => s.applyCalibrationFromSession);
+  const clearAppliedCalibration = useAcousticCalibrationStore(s => s.clearAppliedCalibration);
+  const appliedCalibration = useAcousticCalibrationStore(s => s.appliedCalibration);
 
   // Tick elapsed time during recording.
   useEffect(() => {
@@ -507,18 +511,58 @@ export default function AcousticTestScreen() {
               {[...savedSessions].reverse().slice(0, 10).map((session) => {
                 const dt = new Date(session.capturedAt);
                 const diff = session.corrected.length - session.autoDetected.length;
+                // 2026-05-28 — Fix FC: highlight the session that's
+                // currently feeding the live cage detector.
+                const isActive = appliedCalibration?.sourceSessionId === session.id;
                 return (
                   <View key={session.id} style={styles.savedRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.savedRowTitle}>
                         {dt.toLocaleDateString()} {dt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                        {isActive ? '  ✓ active' : ''}
                       </Text>
                       <Text style={styles.savedRowMeta}>
                         Auto {session.autoDetected.length} → Corrected {session.corrected.length}
                         {diff !== 0 ? ` (${diff > 0 ? '+' : ''}${diff})` : ''} ·
                         {' '}{(session.durationMs / 1000).toFixed(1)}s
+                        {isActive && appliedCalibration ? ` · thresh ${appliedCalibration.transientThresholdDb}dB` : ''}
                       </Text>
                     </View>
+                    {/* 2026-05-28 — Fix FC: per-session Apply button.
+                        Promotes this session to the live cage detector's
+                        active calibration. Hidden on the active session
+                        (replaced by a Revert button so user can drop
+                        back to the hardcoded defaults if needed). */}
+                    {isActive ? (
+                      <Pressable
+                        onPress={() => clearAppliedCalibration()}
+                        hitSlop={10}
+                        style={({ pressed }) => [{
+                          paddingHorizontal: 10, paddingVertical: 6,
+                          borderRadius: 8, borderWidth: 1,
+                          borderColor: theme.colors.text_muted,
+                          marginRight: 8,
+                          opacity: pressed ? 0.5 : 1,
+                        }]}
+                      >
+                        <Text style={{ color: theme.colors.text_muted, fontSize: 11, fontWeight: '700' }}>Revert</Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        onPress={() => applyCalibration(session.id)}
+                        hitSlop={10}
+                        style={({ pressed }) => [{
+                          paddingHorizontal: 10, paddingVertical: 6,
+                          borderRadius: 8, borderWidth: 1,
+                          borderColor: theme.colors.accent,
+                          backgroundColor: theme.colors.accent_muted,
+                          marginRight: 8,
+                          opacity: pressed ? 0.5 : 1,
+                        }]}
+                      >
+                        <Text style={{ color: theme.colors.accent, fontSize: 11, fontWeight: '700' }}>Apply</Text>
+                      </Pressable>
+                    )}
                     <Pressable
                       onPress={() => deleteSavedSession(session.id)}
                       hitSlop={10}
