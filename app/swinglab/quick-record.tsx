@@ -120,6 +120,13 @@ export default function QuickRecord() {
   useEffect(() => {
     if (!camPerm) void requestCamPerm();
     if (!micPerm) void requestMicPerm();
+    // 2026-05-27 — Fix EK: pre-warm the swing-analysis Lambda the
+    // moment the user opens this screen. By the time they finish
+    // recording (5-30s later), the function is hot — the first real
+    // analysis call doesn't pay cold-start. Throttled to 1/30s by
+    // the helper, so re-opening this screen is cheap.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis();
     // request permissions on mount; intentionally one-shot
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -6,7 +6,7 @@
  * confirmation and can browse the new entry in My Swing Library.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator, Alert,
@@ -42,6 +42,13 @@ export default function UploadSwing() {
   const { isWide } = useDeviceLayout();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+
+  // 2026-05-27 — Fix EK: pre-warm /api/swing-analysis on mount so the
+  // first uploaded swing doesn't pay Vercel cold-start.
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis();
+  }, []);
 
   const [step, setStep] = useState<'pick' | 'metadata' | 'saving'>('pick');
   const [uri, setUri] = useState<string | null>(null);

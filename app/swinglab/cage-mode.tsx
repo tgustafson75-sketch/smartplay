@@ -216,6 +216,10 @@ export default function CageModeScreen() {
   useEffect(() => {
     if (!camPerm?.granted) void requestCamPerm();
     if (!micPerm?.granted) void requestMicPerm();
+    // 2026-05-27 — Fix EK: pre-warm /api/swing-analysis so the first
+    // cage-captured swing doesn't pay Vercel cold-start.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

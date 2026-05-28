@@ -68,12 +68,16 @@ import PoseSourceBadge from '../../components/PoseSourceBadge';
 import { CaddieIntroSheet, useCaddieIntro } from '../../components/caddie/CaddieIntroSheet';
 
 type Angle = 'down_the_line' | 'face_on';
-// 2026-05-20 — Shot Tracer + Body Mechanics are overlays on the same
-// SmartMotion video, NOT separate tabs. User toggles them on/off
-// independently and they composite on the swing playback.
+// 2026-05-20 — Body Mechanics + Grid are overlays on the same SmartMotion
+// video, NOT separate tabs. User toggles them on/off independently and
+// they composite on the swing playback.
+// 2026-05-27 — Fix EL: removed `shot_tracer` from the overlay set
+// (Tim: "looks goofy and to my knowledge is not functional"). The
+// rendered SVG was a placeholder arc + two dots, not a real
+// ball-tracking pipeline. Removed cleanly — when real ball detection
+// lands, it can re-introduce its own overlay state.
 interface OverlayState {
   body_mechanics: boolean;
-  shot_tracer: boolean;
   grid: boolean;
   draw: boolean;
 }
@@ -136,7 +140,6 @@ export default function SmartMotion() {
   const [angle, setAngle] = useState<Angle>(initialAngle);
   const [overlays, setOverlays] = useState<OverlayState>({
     body_mechanics: true,
-    shot_tracer: false,
     grid: false,
     draw: false,
   });
@@ -180,6 +183,16 @@ export default function SmartMotion() {
   // SmartMotion record path previously hard-coded the account holder
   // regardless of who was being filmed. familyStore is read at ingest
   // time so changing the active member between recordings is honored.
+  // 2026-05-27 — Fix EK: pre-warm /api/swing-analysis on hub mount so
+  // the first downstream analysis (whether from quick-record or
+  // re-analyze on this clip) lands on a hot Lambda. Helper throttles
+  // to 1/30s so multiple SmartMotion screens in a session don't
+  // hammer the warmup endpoint.
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis();
+  }, []);
+
   useEffect(() => {
     if (!clipUri) return;
     if (ingestedForClipUriRef.current === clipUri) return;
@@ -393,11 +406,11 @@ export default function SmartMotion() {
             cover its use cases; Range was a redundant middle option). */}
       </View>
 
-      {/* 2026-05-20 — Single-view overlay toggle row (not tabs). Tim:
-          "Shot Tracer and Body Mechanics are integrated within
-          SmartMotion. They can be toggled so you can overlay the
-          shot tracer over the SmartMotion video and/or body
-          mechanics over the same video — it's all one interface." */}
+      {/* 2026-05-20 — Single-view overlay toggle row (not tabs). Body
+          Mechanics + Grid composite on the swing playback.
+          2026-05-27 — Fix EL: Shot Tracer toggle removed (Tim:
+          "looks goofy and to my knowledge is not functional"). The
+          rendered SVG was placeholder art, not real ball tracking. */}
       {clipUri ? (
         <View style={styles.overlayRow}>
           <OverlayToggle
@@ -406,13 +419,6 @@ export default function SmartMotion() {
             active={overlays.body_mechanics}
             colors={colors}
             onPress={() => toggleOverlay('body_mechanics')}
-          />
-          <OverlayToggle
-            label="Shot Tracer"
-            icon="trail-sign-outline"
-            active={overlays.shot_tracer}
-            colors={colors}
-            onPress={() => toggleOverlay('shot_tracer')}
           />
           <OverlayToggle
             label="Grid"
@@ -833,29 +839,17 @@ function VisualCard({
             <StubSkeletonOverlay videoRect={videoRect} accent={colors.accent} />
           ) : null
         )}
-        {clipUri && overlays.shot_tracer && overlaysGated && (
-          <Svg
-            style={
-              videoRect
-                ? { position: 'absolute', left: videoRect.left, top: videoRect.top, width: videoRect.width, height: videoRect.height }
-                : StyleSheet.absoluteFill
-            }
-            pointerEvents="none"
-          >
-            {/* Tracer placeholder — arcs from ball position through
-                projected flight. Real ball tracking lands with the
-                ball-detection pipeline. */}
-            <Line x1="50%" y1="78%" x2="78%" y2="22%" stroke="#F5A623" strokeWidth={2.5} opacity={0.7} strokeDasharray="4,3" />
-            <Circle cx="50%" cy="78%" r={5} fill="#F5A623" opacity={0.85} />
-            <Circle cx="78%" cy="22%" r={4} fill="#F5A623" opacity={0.85} />
-          </Svg>
-        )}
+        {/* 2026-05-27 — Fix EL: Shot Tracer SVG render block removed.
+            Was a placeholder dashed arc with two orange dots ("ball
+            star"-style markers) — not real ball tracking, looked goofy
+            per Tim. When real ball detection ships, it will own its
+            own overlay layer. */}
 
         {/* Phase 418 — honest "no swing" badge over the video when the
             validity gate rejects the footage. User sees the rejection
             reason directly on the clip rather than scrolling for the
             caddie insight to explain it. */}
-        {clipUri && !analyzing && !validity.valid && (overlays.body_mechanics || overlays.shot_tracer) ? (
+        {clipUri && !analyzing && !validity.valid && overlays.body_mechanics ? (
           <View style={styles.noSwingBadge} pointerEvents="none">
             <Ionicons name="alert-circle-outline" size={16} color="#fff" />
             <Text style={styles.noSwingBadgeText} numberOfLines={2}>
@@ -1364,19 +1358,9 @@ function BodyMechanicsCard({ analysis, colors }: {
   );
 }
 
-function ShotTracerCard({ colors }: {
-  colors: ReturnType<typeof useTheme>['colors'];
-}) {
-  return (
-    <View style={[styles.card, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-      <Text style={[styles.insightHeader, { color: colors.accent }]}>SHOT TRACER</Text>
-      <Text style={[styles.bubbleText, { color: colors.text_muted, marginTop: 6 }]}>
-        Ball-flight tracking via post-impact frame detection lands in a follow-up. The tracer will
-        draw the trajectory line on shots where the ball is visible in frame.
-      </Text>
-    </View>
-  );
-}
+// 2026-05-27 — Fix EL: ShotTracerCard removed. Was dead code anyway
+// (defined here, never rendered). The Shot Tracer overlay toggle +
+// SVG render branch were also removed elsewhere in this file.
 
 function BottomBar({ colors, onTagClub, onCompare, clubLabel }: {
   colors: ReturnType<typeof useTheme>['colors'];

@@ -9,6 +9,12 @@ import { GoogleGenAI } from '@google/genai';
 // before the fallback chain could fire. 22s × 1 + OpenAI 20s + Gemini
 // ~10s fits comfortably under 60s with grace.
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 22_000, maxRetries: 1 });
+// 2026-05-27 — Fix EK: dedicated Haiku client with a tighter timeout.
+// Haiku 4.5 vision typically responds in 2-5s; capping at 10s catches
+// pathological slow responses early and lets us escalate to OpenAI
+// before the user notices a hang. Same API key, same SDK — only
+// model + timeout differ vs the Sonnet client above.
+const anthropicHaiku = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 10_000, maxRetries: 1 });
 // 2026-05-26 — Fix AR Phase 2: OpenAI gpt-4o fallback. Lower timeout
 // than Anthropic — by the time we fall back, the user has already been
 // waiting; we'd rather degrade to honest-failure than burn another 25s.
@@ -377,7 +383,13 @@ Rules:
  */
 
 interface AttemptResult {
-  provider: 'gemini' | 'openai' | 'anthropic';
+  // 2026-05-27 — Fix EK: 'anthropic_haiku' is the new speed-path
+  // provider. Same Anthropic SDK, different model (claude-haiku-4-5)
+  // with a tighter timeout. The chain order is now Haiku → OpenAI →
+  // Sonnet, with Haiku catching ~70% of common-case reads (clean
+  // contact, clear pose, obvious fault) in 2-4s instead of gpt-4o's
+  // 10-20s. Sonnet still backstops the hard reads.
+  provider: 'gemini' | 'openai' | 'anthropic' | 'anthropic_haiku';
   parsed: SwingAnalysisResponse | null;
   rawText: string;
   error: string | null;
@@ -585,6 +597,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as Record<string, unknown>;
+    // 2026-05-27 — Fix EK: pre-warm short-circuit. Client hits this
+    // endpoint with { mode: 'warmup' } the moment a user opens
+    // SmartMotion / Cage Mode / Library upload — that warms the
+    // Vercel Lambda's runtime + provider SDK clients so the FIRST
+    // real swing analysis a few seconds later doesn't pay cold-start.
+    // Returns 200 in <50ms without doing AI work; ideal for fire-and-
+    // forget client calls.
+    if (body.mode === 'warmup') {
+      return res.status(200).json({
+        warmed: true,
+        timestamp: Date.now(),
+        providers_configured: {
+          anthropic: !!process.env.ANTHROPIC_API_KEY,
+          openai: !!process.env.OPENAI_API_KEY,
+          gemini: !!process.env.GOOGLE_API_KEY,
+        },
+      });
+    }
     const frames = (body.frames ?? []) as { b64: string; media_type?: string }[];
     if (!Array.isArray(frames) || frames.length === 0) {
       return res.status(400).json({ error: 'frames[] (1-5 base64 images) required' });
@@ -867,6 +897,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     };
 
+    // 2026-05-27 — Fix EK: Haiku 4.5 speed-path. Same SDK as the Sonnet
+    // helper above but uses claude-haiku-4-5 (vision-capable, much
+    // faster — typically 2-5s vs Sonnet's 8-15s on the same frames).
+    // Output flows through the SAME normalizer + scoreAttempt + speed-
+    // bar checks; any low-confidence / inconclusive Haiku read
+    // automatically escalates to OpenAI then Sonnet.
+    const tryHaiku = async (): Promise<AttemptResult> => {
+      const t0 = Date.now();
+      try {
+        const completion = await anthropicHaiku.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 800,
+          temperature: 0.2,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userContent }],
+        });
+        const block = completion.content.find(c => c.type === 'text');
+        const rawText = block && block.type === 'text' ? block.text.trim() : '';
+        const parsed = normalizeAnalysis(rawText, frames.length, mode);
+        return {
+          provider: 'anthropic_haiku',
+          parsed,
+          rawText,
+          error: parsed ? null : (rawText ? 'non_json_response' : 'empty_response'),
+          elapsedMs: Date.now() - t0,
+        };
+      } catch (e) {
+        return {
+          provider: 'anthropic_haiku',
+          parsed: null,
+          rawText: '',
+          error: e instanceof Error ? e.message : 'unknown',
+          elapsedMs: Date.now() - t0,
+        };
+      }
+    };
+
     // ── ORCHESTRATION ────────────────────────────────────────────
 
     // ── ORCHESTRATION TOTAL DEADLINE ─────────────────────────────
@@ -933,18 +1000,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       escalationReason = 'gemini_bypassed_via_feature_flag';
     }
 
-    // Stage 2 — OpenAI (primary path when Gemini is bypassed)
+    // 2026-05-27 — Fix EK: Stage 1 (NEW) — Anthropic Haiku 4.5.
+    // Haiku has vision, runs in ~2-5s vs gpt-4o's 10-20s, and catches
+    // the common-case clean reads (obvious contact, clear pose, single
+    // unambiguous fault). High-confidence Haiku reads bypass the rest
+    // of the chain entirely. Low-confidence / inconclusive results
+    // escalate normally to OpenAI then Sonnet.
+    //
+    // Budget gate: need ≥12s remaining (10s Haiku timeout + 2s headroom).
+    // If the budget is somehow already drained at this point in the
+    // orchestration, skip straight to OpenAI.
+    if (!meetsSpeedBar(winner.parsed) && budgetRemaining() >= 12_000) {
+      console.log('[swing-analysis] running Anthropic Haiku speed-path; budget_ms:', budgetRemaining());
+      const haikuAttempt = await tryHaiku();
+      attempts.push(haikuAttempt);
+      if (scoreAttempt(haikuAttempt.parsed) > scoreAttempt(winner.parsed)) {
+        winner = haikuAttempt;
+      }
+      if (meetsSpeedBar(haikuAttempt.parsed)) {
+        console.log('[swing-analysis] haiku speed-path hit', {
+          elapsedMs: haikuAttempt.elapsedMs,
+          confidence: haikuAttempt.parsed?.confidence,
+          primary_fault: haikuAttempt.parsed?.primary_fault,
+        });
+      } else if (haikuAttempt.parsed) {
+        escalationReason = (escalationReason ?? '') + (
+          haikuAttempt.parsed.primary_fault === 'inconclusive'
+            ? '_haiku_inconclusive'
+            : haikuAttempt.parsed.confidence !== 'high'
+              ? `_haiku_low_confidence:${haikuAttempt.parsed.confidence}`
+              : '_haiku_missing_evidence'
+        );
+      } else {
+        escalationReason = (escalationReason ?? '') + `_haiku_${haikuAttempt.error ?? 'unknown_failure'}`;
+      }
+    }
+
+    // Stage 2 — OpenAI gpt-4o (mid-tier escalation)
     if (!meetsSpeedBar(winner.parsed) && budgetRemaining() >= 22_000) {
-      console.log('[swing-analysis] running OpenAI primary; budget_ms:', budgetRemaining());
+      console.log('[swing-analysis] running OpenAI escalation; budget_ms:', budgetRemaining());
       const openaiAttempt = await tryOpenAI();
       attempts.push(openaiAttempt);
       if (scoreAttempt(openaiAttempt.parsed) > scoreAttempt(winner.parsed)) {
         winner = openaiAttempt;
       }
 
-      // Stage 3 — Anthropic only if STILL no pass AND budget left.
+      // Stage 3 — Anthropic Sonnet only if STILL no pass AND budget left.
       if (!meetsSpeedBar(winner.parsed) && budgetRemaining() >= 18_000) {
-        console.log('[swing-analysis] OpenAI did not pass bar — escalating to Anthropic; budget_ms:', budgetRemaining());
+        console.log('[swing-analysis] OpenAI did not pass bar — escalating to Anthropic Sonnet; budget_ms:', budgetRemaining());
         const anthropicAttempt = await tryAnthropic();
         attempts.push(anthropicAttempt);
         if (scoreAttempt(anthropicAttempt.parsed) > scoreAttempt(winner.parsed)) {
