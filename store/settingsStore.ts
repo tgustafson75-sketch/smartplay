@@ -477,10 +477,19 @@ export const useSettingsStore = create<SettingsState>()(
       setTtsCaptions: (v) => set({ ttsCaptions: v }),
       setTtsCaptionsBluetoothPrompt: (v) => set({ ttsCaptionsBluetoothPrompt: v }),
       setSimpleBriefing: (v) => set({ simpleBriefing: v, simpleBriefingUserTouched: true }),
+      // 2026-05-28 — Fix FD: per-persona intensity floor of 30. Tim's
+      // report: Serena set + silent on Android. Investigation showed
+      // currentPlaybackVolume floors at 0.3, BUT a 0% dial maps to
+      // 30% playback volume which on a phone speaker in a loud room
+      // can FEEL silent. Setting a floor of 30 on the dial itself
+      // means the slider can't go below "30% intensity" — that's our
+      // mid-low "always at least audible" guarantee. Users who want
+      // true silence flip voiceEnabled off in Settings → Voice, which
+      // is the explicit kill switch.
       setPersonaIntensity: (p, v) => set((s) => ({
         personaIntensity: {
           ...s.personaIntensity,
-          [p]: Math.max(0, Math.min(100, Math.round(v))),
+          [p]: Math.max(30, Math.min(100, Math.round(v))),
         },
       })),
       setTankSoftIntro: (v) => set({ tankSoftIntro: v }),
@@ -547,7 +556,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 7,
+      version: 8,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -606,6 +615,33 @@ export const useSettingsStore = create<SettingsState>()(
         // mute on speaker can flip the toggle off in Settings → Voice.
         if (version < 7) {
           p.voiceOnPhoneSpeaker = true;
+        }
+        // 2026-05-28 — v8 — Fix FD: persona intensity floor repair.
+        // Tim's report: Serena selected on Android + silent. If a
+        // persisted intensity got dragged near zero in an older
+        // build (or arrived from a corrupted state), playback was
+        // technically running but inaudible on a phone speaker. New
+        // setPersonaIntensity setter enforces a 30 floor going
+        // forward; this migration repairs any historical dial that
+        // was already below 30 (lift to 70 — a confident mid value
+        // that matches Tank's existing default). Hardcoded list of
+        // personas so we don't depend on import order at migrate time.
+        if (version < 8) {
+          const dial = p.personaIntensity as Record<string, number> | undefined;
+          if (dial && typeof dial === 'object') {
+            const repaired: Record<string, number> = { ...dial };
+            (['kevin', 'serena', 'harry', 'tank'] as const).forEach((persona) => {
+              const v = repaired[persona];
+              if (typeof v !== 'number' || v < 30) {
+                repaired[persona] = 70;
+              }
+            });
+            p.personaIntensity = repaired as Record<Persona, number>;
+          } else {
+            // No personaIntensity persisted at all (very old payload that
+            // somehow skipped v4 seeding). Seed to mid defaults.
+            p.personaIntensity = { kevin: 100, serena: 100, harry: 90, tank: 70 };
+          }
         }
         return p as SettingsState;
       },

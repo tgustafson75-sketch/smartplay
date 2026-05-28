@@ -295,7 +295,12 @@ const currentPlaybackVolume = (): number => {
     let base = 1.0;
     if (typeof dial === 'number') {
       const clamped = Math.max(0, Math.min(100, dial));
-      base = Math.max(0.3, clamped / 100);
+      // 2026-05-28 — Fix FD: floor bumped 0.3 → 0.5. Even with the
+      // setter+migration floor at 30 on the dial itself, a 30 dial
+      // mapped to 30% playback can read as inaudible on a phone
+      // speaker in a loud room. 0.5 is the "always actually hearable"
+      // floor. Users mute entirely via voiceEnabled, not the dial.
+      base = Math.max(0.5, clamped / 100);
     }
     // Phase BI — when the user's custom caddie is active, "tone down" by
     // multiplying volume by 0.85. Combined with the rate bump below this
