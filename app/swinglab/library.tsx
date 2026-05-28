@@ -14,7 +14,7 @@
  *   - Empty states: cleaner copy + correct CTA per context.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Image,
   ActivityIndicator,
@@ -125,6 +125,71 @@ export default function SwingLibrary() {
 
   const advancedFiltersActive = dateFilter !== 'all' || clubFilter !== 'all';
   const filtersActive = filter !== 'all' || advancedFiltersActive || swingerFilter !== 'all';
+
+  // 2026-05-27 — Fix EN: defensive file-existence probe per row.
+  //
+  // Problem: persisted file:// URIs (first-shot clipUri, thumbnail_uri)
+  // can outlive the file behind them — OTA-triggered sandbox reshuffles,
+  // OS cache eviction, document-dir cleanup. Before this fix the
+  // library list rendered such rows looking fine until the user tapped
+  // in and got an empty/broken video player, or the thumbnail showed a
+  // blank tile. External testers hit this harder than insiders ("my
+  // videos disappeared" panic).
+  //
+  // One-time probe on mount + when `entries` changes. Stores result
+  // in a Map keyed by session id. Rendering reads the cache — no
+  // per-frame FS work. Rows are NOT hidden when missing; metadata is
+  // still useful and the user can delete via trash icon. A small
+  // "unavailable" badge surfaces on rows whose video file is gone so
+  // they know why tapping in won't play.
+  const [fileStatus, setFileStatus] = useState<Map<string, { video: boolean; thumb: boolean }>>(new Map());
+  useEffect(() => {
+    if (!hasHydrated) return;
+    if (entries.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const FS = await import('expo-file-system/legacy');
+        const next = new Map<string, { video: boolean; thumb: boolean }>();
+        let missingCount = 0;
+        for (const entry of entries) {
+          const clipUri = entry.session.shots[0]?.clipUri ?? null;
+          const thumbUri = entry.thumbnail_uri;
+          let videoOk = clipUri == null;
+          let thumbOk = thumbUri == null;
+          if (clipUri && clipUri.startsWith('file://')) {
+            try {
+              const info = await FS.getInfoAsync(clipUri);
+              videoOk = !!info.exists;
+            } catch { videoOk = false; }
+          } else if (clipUri && !clipUri.startsWith('file://')) {
+            videoOk = true;
+          }
+          if (thumbUri && thumbUri.startsWith('file://')) {
+            try {
+              const info = await FS.getInfoAsync(thumbUri);
+              thumbOk = !!info.exists;
+            } catch { thumbOk = false; }
+          } else if (thumbUri && !thumbUri.startsWith('file://')) {
+            thumbOk = true;
+          }
+          next.set(entry.session.id, { video: videoOk, thumb: thumbOk });
+          if (!videoOk) {
+            missingCount++;
+            console.log('[library] missing video file for session', entry.session.id, 'uri=', clipUri);
+          }
+        }
+        if (cancelled) return;
+        setFileStatus(next);
+        if (missingCount > 0) {
+          console.log('[library] file-existence probe done —', missingCount, 'of', entries.length, 'sessions have missing video files');
+        }
+      } catch (e) {
+        console.log('[library] file-existence probe failed (non-fatal):', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [entries, hasHydrated]);
 
   // 2026-05-23 — Library Compare action. When the user taps Compare on
   // a row, we open the same CompareReferencePickerSheet used in the
@@ -465,19 +530,31 @@ export default function SwingLibrary() {
                 accessibilityRole="button"
                 accessibilityLabel={`${entry.display_label}, ${dateStr}, ${entry.swing_count} swings`}
               >
-                {/* Thumbnail — fault frame from Phase K analysis when
-                    available; icon placeholder otherwise. */}
-                <View style={[styles.thumb, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-                  {entry.thumbnail_uri ? (
-                    <Image source={{ uri: entry.thumbnail_uri }} style={styles.thumbImage} resizeMode="cover" />
-                  ) : (
-                    <Ionicons
-                      name={isUpload ? 'film-outline' : 'golf-outline'}
-                      size={24}
-                      color={colors.text_muted}
-                    />
-                  )}
-                </View>
+                {/* 2026-05-27 — Fix EN: read cached file-existence
+                    status. When the thumbnail file is gone we fall
+                    back to the icon (broken Image tile would render
+                    a blank square otherwise). When the underlying
+                    video file is gone we render a small "unavailable"
+                    badge below the metadata so the user knows why
+                    tapping in won't play (rather than getting a
+                    broken video player). */}
+                {(() => {
+                  const status = fileStatus.get(entry.session.id);
+                  const thumbAvailable = !status || status.thumb;
+                  return (
+                    <View style={[styles.thumb, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
+                      {entry.thumbnail_uri && thumbAvailable ? (
+                        <Image source={{ uri: entry.thumbnail_uri }} style={styles.thumbImage} resizeMode="cover" />
+                      ) : (
+                        <Ionicons
+                          name={isUpload ? 'film-outline' : 'golf-outline'}
+                          size={24}
+                          color={colors.text_muted}
+                        />
+                      )}
+                    </View>
+                  );
+                })()}
                 <View style={styles.rowMain}>
                   <Text style={[styles.rowTitle, { color: colors.text_primary }]} numberOfLines={1}>
                     {entry.display_label}
@@ -485,6 +562,17 @@ export default function SwingLibrary() {
                   <Text style={[styles.rowMeta, { color: colors.text_muted }]} numberOfLines={1}>
                     {dateStr} · {entry.swing_count} swing{entry.swing_count === 1 ? '' : 's'}
                   </Text>
+                  {(() => {
+                    const status = fileStatus.get(entry.session.id);
+                    if (status && !status.video) {
+                      return (
+                        <Text style={[styles.rowIssue, { color: '#ef4444' }]} numberOfLines={1}>
+                          Video file unavailable on this device
+                        </Text>
+                      );
+                    }
+                    return null;
+                  })()}
                   {entry.primary_issue_name && (
                     <Text style={[styles.rowIssue, { color: colors.accent }]} numberOfLines={1}>
                       {entry.primary_issue_name}

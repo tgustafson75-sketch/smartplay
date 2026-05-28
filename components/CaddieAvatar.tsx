@@ -301,6 +301,20 @@ const VOICE_EMOTION: Record<string, string> = {
   speaking:  'speaking',
 };
 
+// 2026-05-27 — Fix EM: persona display name (capitalized first letter).
+// Used in the proactive-state badge so EVERY persona reads its own name
+// instead of the hardcoded "Kevin." Defaults to 'Kevin' if persona is
+// somehow null/unknown — same fallback the rest of the file uses.
+function personaDisplayName(persona: Persona | undefined | null): string {
+  switch (persona) {
+    case 'kevin':  return 'Kevin';
+    case 'serena': return 'Serena';
+    case 'tank':   return 'Tank';
+    case 'harry':  return 'Harry';
+    default:       return 'Kevin';
+  }
+}
+
 // ─── TYPES ────────────────────────────────
 
 export type VoiceState =
@@ -778,11 +792,23 @@ export default function CaddieAvatar({
     voiceState === 'proactive'               ? '#F5A623' :
     (voiceState === 'thinking' || isThinking) ? '#F5A623' : themeColors.accent;
 
+  // 2026-05-27 — Fix EM: the 'proactive' label was hardcoded to
+  // "Kevin" — visible as "◆ Kevin" on EVERY persona's avatar AND on
+  // the user's Personal Caddie portrait (where the face is the user's
+  // own stylized photo, not Kevin's). Tim's external-tester screenshot:
+  // female Personal Caddie portrait with "Kevin" label = instantly
+  // confusing. Now derives from the active persona, and when the user
+  // is running a Personal Caddie (customPortraitB64 set), drops the
+  // persona name entirely and shows a neutral "Your Caddie" so the
+  // name no longer mismatches the visible face.
+  const proactiveLabel = customPortraitB64
+    ? '◆ Your Caddie'
+    : '◆ ' + personaDisplayName(persona);
   const stateText =
     voiceState === 'listening'             ? '● Listening' :
     (voiceState === 'thinking' || isThinking) ? '◌ Thinking'  :
     voiceState === 'speaking'              ? '▶ Speaking'  :
-    voiceState === 'proactive'             ? '◆ Kevin'      : '';
+    voiceState === 'proactive'             ? proactiveLabel : '';
 
   const hudItems = [
     { label: 'HOLE',  value: hud.hole      !== null ? String(hud.hole)      : '—' },
