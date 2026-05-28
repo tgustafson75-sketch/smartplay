@@ -180,7 +180,11 @@ const FALLBACK_DURATION_MS = 2000;
 
 export type Frame = { b64: string; media_type: string; time_sec: number };
 
-async function probeDurationMs(clipUri: string): Promise<number> {
+// 2026-05-28 — Fix FO: exported so poseAnalysisApi.ts can reuse the
+// same duration-probe path (Audio.Sound primary, VT.getThumbnailAsync
+// upper-bound fallback) instead of relying on caller-provided
+// durationMs which often arrives null / wrong on uploaded clips.
+export async function probeDurationMs(clipUri: string): Promise<number> {
   // Phase V.6 — try Audio.Sound first (works when video has an audio
   // track), then probe via VT.getThumbnailAsync at large timestamps as a
   // fallback (if a frame extracts at t=Xms, the video is at least that

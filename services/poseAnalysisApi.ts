@@ -232,7 +232,17 @@ function pairWidth(frame: PoseFrame, leftName: string, rightName: string): numbe
  *  occur, as fractions of total video length. Tunable; matches a typical
  *  3s recorded swing where address = 5%, P2 = 25%, top = 50%, impact =
  *  65%, finish = 90%. Real implementation should use audio-impact
- *  detection to anchor P6 then derive others. For v1 spike this is fine. */
+ *  detection to anchor P6 then derive others. For v1 spike this is fine.
+ *
+ *  2026-05-28 — Fix FO: tiered sampling for longer uploaded clips.
+ *  These FRACTIONS are correct for in-app captures where the entire
+ *  clip is the swing. Library uploads of instructor footage (Katie's
+ *  videos: ~30s with talking pre-swing + drill demo + actual swing
+ *  somewhere in the middle/end) sampled 5%-90% of total → 5 frames
+ *  of Katie standing talking, none containing the swing. computeAtSwingPositions
+ *  below now picks the right fractions based on probed clip length.
+ *  Long-clip fractions mirror poseDetection.LONG_CLIP_FRACTIONS so
+ *  vision + pose pipelines sample the same windows. */
 const SWING_POSITIONS: { key: PoseFrame['position']; fraction: number }[] = [
   { key: 'P1_address',  fraction: 0.05 },
   { key: 'P2_takeaway', fraction: 0.25 },
@@ -240,6 +250,24 @@ const SWING_POSITIONS: { key: PoseFrame['position']; fraction: number }[] = [
   { key: 'P6_impact',   fraction: 0.65 },
   { key: 'P10_finish',  fraction: 0.90 },
 ];
+
+// 2026-05-28 — Fix FO: for clips > 10s, the swing typically occupies
+// a small window inside a longer demo / coach clip. These fractions
+// cluster more aggressively in the back-half (where Katie-style
+// "demo then swing" clips usually place the actual swing) while
+// keeping enough spread that we don't miss a mid-clip swing entirely.
+// Mirror of LONG_CLIP_FRACTIONS in services/poseDetection.ts so the
+// pose backfill samples the same windows the vision analyzer reads.
+const LONG_CLIP_POSITIONS: { key: PoseFrame['position']; fraction: number }[] = [
+  { key: 'P1_address',  fraction: 0.20 },
+  { key: 'P2_takeaway', fraction: 0.40 },
+  { key: 'P4_top',      fraction: 0.60 },
+  { key: 'P6_impact',   fraction: 0.78 },
+  { key: 'P10_finish',  fraction: 0.92 },
+];
+const LONG_CLIP_THRESHOLD_MS = 10_000;
+const MEDIUM_CLIP_THRESHOLD_MS = 4_000;
+const MEDIUM_CLIP_BACK_WINDOW_MS = 5_000;
 
 /** Extract a JPEG keyframe from a video at the given time and run pose
  *  detection on it. Returns null on any failure. */
@@ -497,20 +525,67 @@ export async function analyzeSwingFromVideo(videoUri: string, durationMs: number
  *  no regression vs the existing behavior).
  */
 export async function extractPoseFramesFromVideo(videoUri: string, durationMs: number): Promise<PoseFrame[] | null> {
-  if (durationMs < 500) {
-    console.warn('[pose] video too short to sample');
+  // 2026-05-28 — Fix FO: caller-supplied durationMs is unreliable on
+  // library uploads (the swing detail backfill passes 3000 when
+  // session.upload.duration_sec is null — typical for camera-roll
+  // uploads). Probe the real duration first; if probing yields a
+  // meaningfully different number, use it.
+  let effectiveDurationMs = durationMs;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { probeDurationMs } = require('./poseDetection') as { probeDurationMs: (uri: string) => Promise<number> };
+    const probed = await probeDurationMs(videoUri);
+    if (probed && probed >= 500) {
+      // Trust the probe when caller-supplied was the suspicious
+      // 3000ms default OR when the probe disagrees by > 50%.
+      if (durationMs === 3000 || Math.abs(probed - durationMs) / Math.max(probed, durationMs) > 0.5) {
+        console.log('[pose] duration probe correction', { caller_ms: durationMs, probed_ms: probed });
+        effectiveDurationMs = probed;
+      }
+    }
+  } catch (e) {
+    console.log('[pose] duration probe failed (non-fatal, using caller value)', e);
+  }
+
+  if (effectiveDurationMs < 500) {
+    console.warn('[pose] video too short to sample', { duration_ms: effectiveDurationMs });
     return null;
   }
-  const positionTimes = SWING_POSITIONS.map(p => ({
-    ...p,
-    timeMs: Math.round(durationMs * p.fraction),
-  }));
+
+  // 2026-05-28 — Fix FO: tiered sampling so library uploads of long
+  // instructor clips actually hit swing-position frames instead of
+  // pre-swing chat. Mirrors poseDetection.ts windows.
+  let positionTimes: { key: PoseFrame['position']; timeMs: number }[];
+  if (effectiveDurationMs > LONG_CLIP_THRESHOLD_MS) {
+    positionTimes = LONG_CLIP_POSITIONS.map(p => ({
+      key: p.key,
+      timeMs: Math.round(effectiveDurationMs * p.fraction),
+    }));
+    console.log('[pose] long-clip wide-spread sampling', { duration_ms: effectiveDurationMs });
+  } else if (effectiveDurationMs > MEDIUM_CLIP_THRESHOLD_MS) {
+    // Medium clips: back-window the last 5s (where the swing usually
+    // lives in a short demo / preroll-then-swing capture).
+    const windowStartMs = Math.max(0, effectiveDurationMs - MEDIUM_CLIP_BACK_WINDOW_MS);
+    const windowMs = effectiveDurationMs - windowStartMs;
+    positionTimes = SWING_POSITIONS.map(p => ({
+      key: p.key,
+      timeMs: windowStartMs + Math.round(windowMs * p.fraction),
+    }));
+    console.log('[pose] medium-clip back-window sampling', { duration_ms: effectiveDurationMs, window_start_ms: windowStartMs });
+  } else {
+    positionTimes = SWING_POSITIONS.map(p => ({
+      key: p.key,
+      timeMs: Math.round(effectiveDurationMs * p.fraction),
+    }));
+  }
+
   // Sequential to be polite to the rate limit (RapidAPI throttles bursts).
   const frames: PoseFrame[] = [];
   for (const { key, timeMs } of positionTimes) {
     const f = await poseAtTime(videoUri, timeMs, key);
     if (f) frames.push(f);
   }
+  console.log('[pose] extracted frames', { requested: positionTimes.length, got: frames.length, duration_ms: effectiveDurationMs });
   if (frames.length === 0) return null;
   return frames;
 }
