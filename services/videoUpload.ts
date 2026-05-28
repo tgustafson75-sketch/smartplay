@@ -363,6 +363,18 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       const liveSession = useCageStore.getState().sessionHistory.find(s => s.id === sessionId);
       const ballAreaCtx = liveSession?.ball_area_norm ?? null;
       const targetCtx = liveSession?.target_norm ?? null;
+      // 2026-05-27 — Fix EU: thread the user's chosen cage camera angle
+      // into the analyzer. Cage Mode lets the user pick down-the-line
+      // vs face-on at SETUP; that picks the right read framing
+      // (DTL=path/plane/EE, face-on=weight/rotation). Without this,
+      // every cage swing was analyzed as down-the-line by default —
+      // wrong for face-on captures.
+      let cageAngleCtx: 'down_the_line' | 'face_on' | 'glasses_pov' | undefined;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const calMod = require('../store/cageOverlayCalibrationStore');
+        cageAngleCtx = calMod.useCageOverlayCalibrationStore.getState().cameraAngle as 'down_the_line' | 'face_on';
+      } catch { /* ignore — default in analyzer */ }
       const r = await analyzeSwing(swing.clipUri!, {
         club: swing.club,
         swing_number: i + 1,
@@ -373,6 +385,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         prior_analyzed_fault: priorAnalyzedFault,
         ball_area_norm: ballAreaCtx,
         target_norm: targetCtx,
+        ...(cageAngleCtx ? { angle: cageAngleCtx } : {}),
       }, boundaries, {
         faultFrameBaseName: `${sessionId}_${swing.id}_fault`,
       });

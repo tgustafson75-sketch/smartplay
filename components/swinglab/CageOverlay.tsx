@@ -56,13 +56,26 @@ export default function CageOverlay({ phase }: Props) {
 
   const palette = COLOR_BY_PHASE[phase];
 
-  // Body alignment box — STATIC defaults sized to viewport.
-  // 2026-05-27 — Fix ER: defaults compute as before; user-saved
-  // bodyBox in the calibration store overrides via the live state
-  // below. When the user adjusts the box to fit their actual cage,
-  // the stored fractions take effect and we ignore the defaults.
-  const defaultBoxHeightFrac = isFoldOpen ? 0.78 : 0.62;
-  const defaultBoxWidthFrac = isFoldOpen ? 0.45 : 0.62;
+  // 2026-05-27 — Fix EU: angle-aware body box defaults.
+  //   down_the_line — camera behind player on target line. Body
+  //     silhouette is narrow (shoulder-to-feet vertical strip).
+  //     Tighter width, taller height. THIS is the analyzer-preferred
+  //     angle for path/plane/early-extension reads.
+  //   face_on — camera perpendicular to target line. Body fills more
+  //     of the frame width. Wider width, slightly less height.
+  //     Better for weight-shift / hip-rotation reads.
+  // User-saved bodyBox in the store overrides these defaults once the
+  // user fits the box to their actual setup.
+  const cameraAngle = useCageOverlayCalibrationStore((s) => s.cameraAngle);
+  const setCameraAngle = useCageOverlayCalibrationStore((s) => s.setCameraAngle);
+  const defaultBoxHeightFrac =
+    cameraAngle === 'face_on'
+      ? (isFoldOpen ? 0.70 : 0.55)
+      : (isFoldOpen ? 0.78 : 0.62);
+  const defaultBoxWidthFrac =
+    cameraAngle === 'face_on'
+      ? (isFoldOpen ? 0.62 : 0.72)
+      : (isFoldOpen ? 0.45 : 0.55);
   const savedBodyBox = useCageOverlayCalibrationStore((s) => s.bodyBox);
   const setBodyBoxStore = useCageOverlayCalibrationStore((s) => s.setBodyBox);
   // Live pixel-space body box (move + resize). Restored from store
@@ -407,6 +420,55 @@ export default function CageOverlay({ phase }: Props) {
           minimumFontScale={0.75}
         >{palette.label}</Text>
       </View>
+
+      {/* 2026-05-27 — Fix EU: camera angle toggle. Only in SETUP phase.
+          Sits top-center so it doesn't compete with the bottom F/M/B
+          strip (Round-mode chrome). Two pills. Default body-box
+          dimensions adjust on toggle — face-on widens, DTL narrows.
+          User's manually-resized box (Fix ER) wins over the angle
+          default once they touch the corner handles. */}
+      {phase === 'SETUP' && (
+        <View
+          pointerEvents="box-none"
+          style={{
+            position: 'absolute',
+            top: 60,
+            left: 0,
+            right: 0,
+            alignItems: 'center',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            gap: 6,
+          }}
+        >
+          {([
+            { id: 'down_the_line' as const, label: 'Down-the-Line' },
+            { id: 'face_on' as const,       label: 'Face-On' },
+          ]).map(opt => {
+            const active = cameraAngle === opt.id;
+            return (
+              <Text
+                key={opt.id}
+                onPress={() => setCameraAngle(opt.id)}
+                accessibilityRole="button"
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: active ? palette.stroke : 'rgba(255,255,255,0.45)',
+                  backgroundColor: active ? palette.fill : 'rgba(0,0,0,0.55)',
+                  color: active ? palette.stroke : '#ffffff',
+                  fontSize: 11,
+                  fontWeight: '800',
+                  letterSpacing: 0.6,
+                  overflow: 'hidden',
+                }}
+              >{opt.label}</Text>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }

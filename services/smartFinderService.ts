@@ -64,7 +64,14 @@ export type GreenYardages = {
   reason: GreenYardagesReason;
 };
 
-export type GPSQualityLevel = 'strong' | 'moderate' | 'weak' | 'none';
+// 2026-05-27 — Fix ET: added 'stale' level so the GPS chip can tell
+// the user honestly when the underlying fix is old enough that the
+// accuracy number is misleading. Old reading: a 30-second-old fix
+// still reported its accuracy as if it were current, so the user saw
+// "GPS strong · ±10ft" while standing 40 yards from where the chip
+// thought they were. Now: any fix older than STALE_THRESHOLD_MS
+// reports 'stale' regardless of accuracy.
+export type GPSQualityLevel = 'strong' | 'moderate' | 'weak' | 'stale' | 'none';
 
 export type GPSQualityReading = {
   level: GPSQualityLevel;
@@ -195,11 +202,25 @@ export async function refreshFix(): Promise<LastFix | null> {
   }
 }
 
-export function classifyAccuracy(accuracy_m: number | null): GPSQualityReading {
+// 2026-05-27 — Fix ET: stale threshold. A fix older than this is
+// reported as 'stale' regardless of its original accuracy — the user
+// has likely walked / driven the cart since, so the cached number is
+// untrustworthy. 30s catches "phone in pocket, GPS sleeping" and
+// "user crossed the cart path" without false-positiving the normal
+// 1-3s gap between watch ticks on healthy GPS.
+const STALE_THRESHOLD_MS = 30_000;
+
+export function classifyAccuracy(accuracy_m: number | null, fixTimestamp?: number | null): GPSQualityReading {
   if (accuracy_m == null) {
     return { level: 'none', accuracy_m: null, accuracy_ft: null };
   }
   const accuracy_ft = Math.round(accuracy_m * 3.281);
+  // 2026-05-27 — Fix ET: stale check fires BEFORE the accuracy bands
+  // so a stale-but-otherwise-strong fix still reads as 'stale'. Caller
+  // can omit fixTimestamp for backward compat (treated as fresh).
+  if (fixTimestamp != null && Date.now() - fixTimestamp > STALE_THRESHOLD_MS) {
+    return { level: 'stale', accuracy_m, accuracy_ft };
+  }
   if (accuracy_m < 5) return { level: 'strong', accuracy_m, accuracy_ft };
   if (accuracy_m < 15) return { level: 'moderate', accuracy_m, accuracy_ft };
   return { level: 'weak', accuracy_m, accuracy_ft };

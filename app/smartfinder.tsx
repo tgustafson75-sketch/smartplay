@@ -92,9 +92,13 @@ export default function SmartFinder() {
   const setMode = useSmartFinderStore(s => s.setMode);
 
   const [yards, setYards] = useState<GreenYardages>(() => getGreenYardagesSync(currentHole));
-  const [gps, setGps] = useState<GPSQualityReading>(() =>
-    classifyAccuracy(getLastFix()?.accuracy_m ?? null),
-  );
+  const [gps, setGps] = useState<GPSQualityReading>(() => {
+    const f = getLastFix();
+    // 2026-05-27 — Fix ET: thread fix timestamp into classifyAccuracy
+    // so a stale fix reports honestly even when its old accuracy
+    // number looks fine.
+    return classifyAccuracy(f?.accuracy_m ?? null, f?.timestamp ?? null);
+  });
   const [geometry, setGeometry] = useState<HoleGeometry | null>(null);
 
   useEffect(() => {
@@ -102,7 +106,7 @@ export default function SmartFinder() {
     const tick = async () => {
       const fix = await refreshFix();
       if (cancelled) return;
-      setGps(classifyAccuracy(fix?.accuracy_m ?? null));
+      setGps(classifyAccuracy(fix?.accuracy_m ?? null, fix?.timestamp ?? null));
       setYards(getGreenYardagesSync(currentHole));
     };
     tick();

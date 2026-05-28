@@ -45,6 +45,15 @@ export interface OverlayRect {
   h: number;  // height as fraction of viewport height
 }
 
+// 2026-05-27 — Fix EU: camera angle for cage capture. Tim's directive:
+// "all the body logic has to be based on whether they're down the line,
+// face on, or behind." Body-alignment defaults differ per angle (DTL =
+// narrow tall box for shoulder-to-feet silhouette; face-on = wider box
+// for full body across the frame). Persisted so the user only picks
+// once per setup. Threaded into the analyzer context too so the vision
+// prompt gets the right read for the angle.
+export type CageCameraAngle = 'down_the_line' | 'face_on';
+
 interface CageOverlayCalibrationState {
   /** Bullseye crosshair center — defaults to viewport center (0.5/0.5). */
   bullseye: OverlayPosition | null;
@@ -52,12 +61,15 @@ interface CageOverlayCalibrationState {
   ballBox: OverlayPosition | null;
   /** 2026-05-27 — Fix ER: user-adjusted body alignment box (move + resize). */
   bodyBox: OverlayRect | null;
+  /** 2026-05-27 — Fix EU: user's chosen camera angle for cage capture. */
+  cameraAngle: CageCameraAngle;
   /** When the user last touched the calibration (informational). */
   calibrated_at: number | null;
 
   setBullseye: (pos: OverlayPosition) => void;
   setBallBox: (pos: OverlayPosition) => void;
   setBodyBox: (rect: OverlayRect | null) => void;
+  setCameraAngle: (angle: CageCameraAngle) => void;
   /** Reset all positions to defaults. */
   reset: () => void;
 }
@@ -68,6 +80,9 @@ export const useCageOverlayCalibrationStore = create<CageOverlayCalibrationState
       bullseye: null,
       ballBox: null,
       bodyBox: null,
+      // 2026-05-27 — Fix EU: default to down-the-line (standard swing-
+      // analysis convention; what most cage / range setups produce).
+      cameraAngle: 'down_the_line',
       calibrated_at: null,
 
       setBullseye: (pos) => set({ bullseye: pos, calibrated_at: Date.now() }),
@@ -89,7 +104,8 @@ export const useCageOverlayCalibrationStore = create<CageOverlayCalibrationState
           calibrated_at: Date.now(),
         };
       }),
-      reset: () => set({ bullseye: null, ballBox: null, bodyBox: null, calibrated_at: null }),
+      setCameraAngle: (angle) => set({ cameraAngle: angle, calibrated_at: Date.now() }),
+      reset: () => set({ bullseye: null, ballBox: null, bodyBox: null, cameraAngle: 'down_the_line', calibrated_at: null }),
     }),
     {
       name: 'cage-overlay-calibration-v1',

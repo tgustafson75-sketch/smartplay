@@ -35,9 +35,10 @@ export default function SmartFinderCard() {
   const currentHole = useRoundStore(s => s.currentHole);
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const [yards, setYards] = useState<GreenYardages>(() => getGreenYardagesSync(currentHole));
-  const [gps, setGps] = useState<GPSQualityReading>(() =>
-    classifyAccuracy(getLastFix()?.accuracy_m ?? null),
-  );
+  const [gps, setGps] = useState<GPSQualityReading>(() => {
+    const f = getLastFix();
+    return classifyAccuracy(f?.accuracy_m ?? null, f?.timestamp ?? null);
+  });
 
   useEffect(() => {
     if (!isRoundActive) return;
@@ -45,7 +46,7 @@ export default function SmartFinderCard() {
     const tick = async () => {
       const fix = await refreshFix();
       if (cancelled) return;
-      setGps(classifyAccuracy(fix?.accuracy_m ?? null));
+      setGps(classifyAccuracy(fix?.accuracy_m ?? null, fix?.timestamp ?? null));
       setYards(getGreenYardagesSync(currentHole));
     };
     tick();
