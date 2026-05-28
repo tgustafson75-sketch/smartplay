@@ -1104,8 +1104,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // 2026-05-28 — Fix FM: tier='quick' short-circuit. SmartMotion's
+    // speed path (Quick Record / voice "open SmartMotion") prioritizes
+    // ~2-5s Haiku latency over deep escalation. Whatever Haiku
+    // returned — high, medium, low confidence, even no_dominant_fault —
+    // ship it now and skip the OpenAI + Sonnet 20-40s climb. Library
+    // uploads (no tier or tier='full') stay on the full chain.
+    const tier = typeof ctx.tier === 'string' && ctx.tier === 'quick' ? 'quick' : 'full';
+    const quickShortCircuit = tier === 'quick' && winner.parsed != null;
+    if (quickShortCircuit) {
+      console.log('[swing-analysis] tier=quick short-circuit; skipping OpenAI + Sonnet escalation', {
+        winner_provider: winner.provider,
+        winner_confidence: winner.parsed?.confidence,
+        winner_fault: winner.parsed?.primary_fault,
+      });
+      escalationReason = (escalationReason ?? '') + '_quick_tier_short_circuit';
+    }
+
     // Stage 2 — OpenAI gpt-4o (mid-tier escalation)
-    if (!meetsSpeedBar(winner.parsed) && budgetRemaining() >= 22_000) {
+    if (!quickShortCircuit && !meetsSpeedBar(winner.parsed) && budgetRemaining() >= 22_000) {
       console.log('[swing-analysis] running OpenAI escalation; budget_ms:', budgetRemaining());
       const openaiAttempt = await tryOpenAI();
       attempts.push(openaiAttempt);

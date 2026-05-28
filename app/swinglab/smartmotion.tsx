@@ -255,6 +255,13 @@ export default function SmartMotion() {
             dominant_miss: profile.dominantMiss ?? null,
             first_name: profile.name?.split(' ')[0] ?? null,
           },
+          // 2026-05-28 — Fix FM: SmartMotion is the speed surface.
+          // tier='quick' tells the server to run Haiku 4.5 only and
+          // ship whatever it returns — no OpenAI / Sonnet escalation,
+          // no 30-50s climb on a clip that already has a usable read.
+          // Library uploads (videoUpload.runPhaseKOnSession) stay on
+          // the full chain where deeper analysis matters more.
+          tier: 'quick',
         });
         if (cancelled) return;
         if (result.kind === 'ok') {

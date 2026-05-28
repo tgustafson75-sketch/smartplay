@@ -446,6 +446,14 @@ export async function analyzeSwing(
     // 0..1 relative to the video frame.
     ball_area_norm?: { x: number; y: number; r: number } | null;
     target_norm?: { x: number; y: number } | null;
+    // 2026-05-28 — Fix FM: tier='quick' = SmartMotion's speed path.
+    // Server runs Anthropic Haiku 4.5 only and returns whatever it
+    // gets (no escalation to gpt-4o / Sonnet). Trades occasional
+    // low-confidence reads for the ~2-5s Haiku latency Tim's voice
+    // path needs vs the 30-50s full chain. 'full' (or omitted) is
+    // the existing library / Cage upload behavior — full Haiku →
+    // OpenAI → Sonnet escalation chain.
+    tier?: 'quick' | 'full';
   },
   boundaries?: { startSec: number; endSec: number },
   // Phase 403b — when provided, the persisted fault-frame JPEG will be
