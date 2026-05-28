@@ -536,10 +536,13 @@ export async function distanceToPoint(target: ShotLocation): Promise<number | nu
   const fix = getLastFixInternal() ?? (await refreshFix());
   if (!fix) return null;
   const yards = Math.round(haversineYards(fix.location, target));
+  // 2026-05-28 — Fix FU: tag the source so calcLog rows from
+  // user-tapped targets don't appear as the green-resolution cascade's
+  // 'none' (which would falsely suggest a missing-data state).
   logYardageCalc(null, fix, { middle: target, front: null, back: null }, {
     front: null, middle: yards, back: null,
     hole_number: -1, reason: 'ok',
-  });
+  }, 'tapped_point');
   return yards;
 }
 
@@ -578,8 +581,12 @@ export type YardageCalcEntry = {
    *  if a marked-tee survey produced bad coords and stuck around in
    *  the truth store, every later yardage silently uses it. Was
    *  being computed in resolveGreenCoords but discarded via `void
-   *  source;` at the call site. */
-  source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none' | null;
+   *  source;` at the call site.
+   *  2026-05-28 — Fix FU: 'tapped_point' added for distanceToPoint
+   *  callers (rangefinder taps, smartfinder lock-in coords). Not a
+   *  cascade source — just identifies the source kind so debug tools
+   *  can distinguish green-yardage rows from arbitrary-target rows. */
+  source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none' | 'tapped_point' | null;
 };
 
 const CALC_LOG_MAX = 500;
@@ -590,7 +597,7 @@ function logYardageCalc(
   fix: LastFix,
   targets: { front: ShotLocation | null; middle: ShotLocation | null; back: ShotLocation | null },
   result: GreenYardages,
-  source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none' | null,
+  source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none' | 'tapped_point' | null,
 ): void {
   const entry: YardageCalcEntry = {
     ts: Date.now(),

@@ -318,21 +318,28 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       cageAngleCtx = calMod.useCageOverlayCalibrationStore.getState().cameraAngle as 'down_the_line' | 'face_on';
     } catch { /* ignore — default in analyzer */ }
 
-    // 2026-05-28 — Fix FQ (bug #3): bounded wait for the audio
-    // transcript when the clip has audio. swingCommentaryService is
-    // running fire-and-forget in parallel; on a normal network the
-    // transcript lands within 3-8s of upload. If we don't wait,
-    // analyzeSwing fires with empty coach_audio — first analysis is
-    // blind to Katie's narration, and the user has to re-analyze to
-    // pick it up. 5s budget is the typical Whisper return time;
-    // beyond that we proceed and let the re-analyze path catch the
-    // late transcript. Skipped entirely for silent clips
-    // (has_audio === false) so the speed path stays speed.
+    // 2026-05-28 — Fix FQ (bug #3) / Fix FU: bounded wait for the
+    // audio transcript when the clip has audio AND swingCommentaryService
+    // is genuinely still trying to transcribe. Three exits:
+    //   1. has_audio === false (silent clip) → skip wait
+    //   2. transcript already present on any shot → no wait
+    //   3. transcription service status === 'done' for every shot →
+    //      service has finished and produced empty (e.g. Cage Mode's
+    //      silent practice clips) — waiting is pointless, would just
+    //      eat 5s for nothing. This is the Fix FU refinement.
+    // Otherwise wait up to 5s for transcripts to land, polling every
+    // 250ms. Past 5s we proceed and let the re-analyze path catch the
+    // late transcript (typical Whisper return is 3-8s).
     if (session.upload?.has_audio) {
       const haveTranscriptAlready = session.shots.some(
         s => (s.commentary_transcript ?? '').trim().length > 0,
       );
-      if (!haveTranscriptAlready) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getTranscriptionStatus } = require('./swingCommentaryService') as typeof import('./swingCommentaryService');
+      const everyShotTranscriptionDone = session.shots.every(
+        s => getTranscriptionStatus(s.id) === 'done',
+      );
+      if (!haveTranscriptAlready && !everyShotTranscriptionDone) {
         const TRANSCRIPT_BUDGET_MS = 5_000;
         const POLL_MS = 250;
         const deadline = Date.now() + TRANSCRIPT_BUDGET_MS;
@@ -341,6 +348,14 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
           const liveSession = useCageStore.getState().sessionHistory.find(s => s.id === sessionId);
           if (liveSession?.shots.some(s => (s.commentary_transcript ?? '').trim().length > 0)) {
             uploadLog('coach-audio-wait-resolved', { ms: Date.now() - (deadline - TRANSCRIPT_BUDGET_MS) }, sessionId);
+            break;
+          }
+          // 2026-05-28 — Fix FU: also exit when the transcription
+          // service flips to 'done' for every shot (it gave up or
+          // returned empty). Avoid the worst case where Cage Mode's
+          // silent clips would otherwise eat the full 5s budget.
+          if (session.shots.every(s => getTranscriptionStatus(s.id) === 'done')) {
+            uploadLog('coach-audio-wait-skip-service-done', { ms: Date.now() - (deadline - TRANSCRIPT_BUDGET_MS) }, sessionId);
             break;
           }
         }

@@ -118,8 +118,27 @@ export async function fetchCourseContent(input: CourseContentInput): Promise<Cou
     // 2026-05-22 — Fix Q follow-up audit. Threading persona so
     // course About / Caddie Tips / Hole Notes render in the active
     // caddie's voice rather than the voiceGender→Kevin fallback.
+    //
+    // 2026-05-28 — Fix FU: gate persona/voiceGender reads on
+    // settingsStore.hasHydrated. Same race as Fix FS in greeting.tsx:
+    // if a user opens Course Detail in the first second of cold boot,
+    // settingsStore may still be returning defaults ('kevin', 'male')
+    // before AsyncStorage rehydration completes. The fetch body would
+    // get kevin → server generates Kevin-voice content → cached for
+    // a week. Wait up to 3s for hydration; if it never lands, fall
+    // back to defaults rather than block the user forever.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const _settings = require('../store/settingsStore').useSettingsStore.getState();
+    const settingsMod = require('../store/settingsStore');
+    const HYDRATION_BUDGET_MS = 3_000;
+    const HYDRATION_POLL_MS = 100;
+    const deadline = Date.now() + HYDRATION_BUDGET_MS;
+    while (
+      !(settingsMod.useSettingsStore.getState().hasHydrated as boolean | undefined)
+      && Date.now() < deadline
+    ) {
+      await new Promise(r => setTimeout(r, HYDRATION_POLL_MS));
+    }
+    const _settings = settingsMod.useSettingsStore.getState();
     const res = await fetch(`${apiUrl}/api/course-content`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

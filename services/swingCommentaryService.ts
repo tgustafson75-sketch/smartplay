@@ -39,6 +39,25 @@ import { useSettingsStore } from '../store/settingsStore';
 const inflight = new Set<string>();
 const done = new Set<string>();
 
+/**
+ * 2026-05-28 — Fix FU: lets videoUpload's bounded transcript wait
+ * (Fix FQ) skip itself when the commentary service has already
+ * finished a shot. Returns:
+ *   'inflight' — actively transcribing; caller should wait briefly
+ *   'done'     — transcription completed (transcript may be empty)
+ *   'pending'  — not started yet
+ * Empty `done` transcripts are still 'done' — the wait is pointless
+ * because the service won't retry. This is the primary signal
+ * distinguishing Cage Mode (silent → transcribes to empty quickly
+ * → status='done') from a real coach/instructor video upload
+ * (transcription takes 5-10s while running → status='inflight').
+ */
+export function getTranscriptionStatus(shotId: string): 'inflight' | 'done' | 'pending' {
+  if (done.has(shotId)) return 'done';
+  if (inflight.has(shotId)) return 'inflight';
+  return 'pending';
+}
+
 async function transcribeShotCommentary(sessionId: string, shot: CageShot): Promise<void> {
   if (!shot.clipUri) return;
   if (inflight.has(shot.id) || done.has(shot.id)) return;
