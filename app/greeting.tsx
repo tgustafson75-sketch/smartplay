@@ -62,6 +62,13 @@ export default function GreetingScreen() {
   const voiceGender = useSettingsStore(s => s.voiceGender);
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const language = useSettingsStore(s => s.language);
+  // 2026-05-28 — Fix FS: gate the audio-kickoff effect on settings
+  // hydration. Without this, the effect could fire while caddiePersonality
+  // is still the default 'kevin' even though the user persisted Serena /
+  // Tank / Harry — picking the wrong audio path. Once hydration lands
+  // the hook re-renders with the persisted values; the audio effect
+  // sees a stable state then fires.
+  const settingsHydrated = useSettingsStore(s => s.hasHydrated);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   const { width: W, height: H } = useWindowDimensions();
 
@@ -191,6 +198,13 @@ export default function GreetingScreen() {
   // ── Enter animation + audio kickoff once greeting is picked ────────
   useEffect(() => {
     if (!greeting) return;
+    // 2026-05-28 — Fix FS: hold the audio kickoff until settingsStore
+    // has hydrated. Persona/voiceGender/language reads below are
+    // load-bearing for which audio path runs — kevin-mp3 vs persona TTS.
+    // Once `settingsHydrated` flips true, the hook re-renders and this
+    // effect re-runs with the persisted values. Animation can still
+    // start without the gate, but audio waits.
+    if (!settingsHydrated) return;
 
     // Fade in avatar
     Animated.parallel([
@@ -330,8 +344,11 @@ export default function GreetingScreen() {
     // (startTransition, scheduleAdvance) work correctly with stale refs
     // here because they're called at most once per mount and the cleanup
     // tears them down on unmount.
+    // 2026-05-28 — Fix FS: `settingsHydrated` added so the effect re-fires
+    // once hydration completes (initial pass with hasHydrated=false bails
+    // at the new gate above).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [greeting]);
+  }, [greeting, settingsHydrated]);
 
   // Slow breathing pulse during SPEAKING — opacity 0.94↔1.0 at ~0.45 Hz with
   // sine easing. The previous 0.85↔1.0 / 180ms cycle read as a strobe.

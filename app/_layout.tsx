@@ -315,7 +315,16 @@ function AppNavigator() {
   // Meta or similar BT headset glasses on launch (not waiting for the
   // first speak() to fire configureAudioForSpeech). Uses the existing
   // queued helper to avoid racing the voice stack's audio mode writes.
+  //
+  // 2026-05-28 — Fix FS: subscribe to settingsStore.hasHydrated so the
+  // read fires AFTER persist rehydration. Previously this useEffect ran
+  // once on mount with [] deps, reading glassesMode while it was still
+  // the default false even if the user had it persisted true — silently
+  // skipping the BT pre-config and forcing the first speak() to pay
+  // the audio-mode cost on the slow path.
+  const settingsHydrated = useSettingsStore(s => s.hasHydrated);
   useEffect(() => {
+    if (!settingsHydrated) return;
     if (!useSettingsStore.getState().glassesMode) return;
     (async () => {
       try {
@@ -325,7 +334,7 @@ function AppNavigator() {
         console.log('[glassesMode boot] audio config failed (non-fatal):', e);
       }
     })();
-  }, []);
+  }, [settingsHydrated]);
 
   // 2026-05-24 — Keep i18n in sync with settingsStore.language. Voice
   // "switch to Spanish" / Settings picker both write to settings; this

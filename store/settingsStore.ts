@@ -21,6 +21,13 @@ export type CaddieAssignments = Record<CaddiePillar, Persona>;
 // ─── STATE ────────────────────────────────
 
 interface SettingsState {
+  /** 2026-05-28 — Fix FS: flipped true by onRehydrateStorage once
+   *  AsyncStorage finishes loading the persisted state. Consumers that
+   *  read persona/voice/language at boot (greeting audio kickoff, app
+   *  _layout glassesMode pre-config, etc.) must gate on this to avoid
+   *  reading the in-memory DEFAULTS while the persisted values are
+   *  still on disk. See the long onRehydrateStorage comment below. */
+  hasHydrated: boolean;
   voiceEnabled: boolean;
   voiceGender: 'male' | 'female';
   language: 'en' | 'es' | 'zh';
@@ -295,6 +302,12 @@ export const useSettingsStore = create<SettingsState>()(
       language: 'en',
       discreteMode: false,
       responseMode: 'neutral',
+      // 2026-05-28 — Fix FS: hydration flag (see onRehydrateStorage below).
+      // Defaults false; flipped true by the persist middleware once
+      // AsyncStorage rehydration completes. Audio-kickoff paths (greeting,
+      // boot-time persona reads) gate on this before reading caddie
+      // settings to avoid the stale-defaults race.
+      hasHydrated: false,
       caddiePersonality: 'kevin',
       caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
       caddieSuggestions: 'on' as const,
@@ -696,6 +709,27 @@ export const useSettingsStore = create<SettingsState>()(
         ghostAutoActivate: s.ghostAutoActivate,
         // watchConnected / glassesConnected not persisted — rechecked on mount
       }),
+      // 2026-05-28 — Fix FS: post-splash audio race fix. settingsStore
+      // had no hydration flag, so any module that read
+      // useSettingsStore.getState().caddiePersonality (or voiceGender /
+      // language / voiceEnabled) at boot got the DEFAULT 'kevin' / 'female'
+      // / 'en' before AsyncStorage rehydrated the persisted values. The
+      // greeting screen's audio-kickoff effect was the worst hit — it
+      // picked the kevin-mp3 vs other-persona-TTS branch based on a
+      // stale value, so users with persisted Serena / Tank heard Kevin's
+      // greeting (or silence, when the bundled mp3 didn't exist for the
+      // intended persona).
+      //
+      // Mirrors the pattern already in cageStore + roundStore. Consumers
+      // that need to read settings at boot now subscribe to hasHydrated
+      // and defer until it's true. setHasHydrated() is private to this
+      // file — only onRehydrateStorage below calls it.
+      onRehydrateStorage: () => (_state, error) => {
+        if (error) {
+          console.log('[settingsStore] rehydrate error:', error);
+        }
+        useSettingsStore.setState({ hasHydrated: true });
+      },
     },
   ),
 );
