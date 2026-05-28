@@ -24,12 +24,19 @@ interface Props {
   gpsDistances: { front: number | null; middle: number | null; back: number | null } | null;
   baseYardage: number | null;
   onTargetDistance?: (yards: number | null) => void;
+  // 2026-05-27 — Fix EQ: target lock. When true, the overlay stops
+  // capturing touches so the user can take a screenshot OR interact
+  // with controls underneath without the reticle chasing every tap.
+  // Tim's pain: every tap on the camera moved the target, making
+  // screenshots impossible. Lock = "Top Gun" reticle hold.
+  locked?: boolean;
 }
 
 export default function TargetingOverlay({
   gpsDistances,
   baseYardage,
   onTargetDistance,
+  locked = false,
 }: Props) {
   const { width, height } = useWindowDimensions();
 
@@ -80,7 +87,15 @@ export default function TargetingOverlay({
   const isCenter = Math.abs(targetX - width / 2) < 12 && Math.abs(targetY - height / 2) < 12;
 
   return (
-    <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers} pointerEvents="box-only">
+    <View
+      style={StyleSheet.absoluteFill}
+      {...(locked ? {} : panResponder.panHandlers)}
+      // 2026-05-27 — Fix EQ: when locked, pointerEvents="none" so taps
+      // pass through to whatever is underneath (e.g. the capture button
+      // OR straight to the system screenshot gesture). When unlocked,
+      // 'box-only' keeps the prior drag-anywhere-to-aim behavior.
+      pointerEvents={locked ? 'none' : 'box-only'}
+    >
       <View
         pointerEvents="none"
         style={[

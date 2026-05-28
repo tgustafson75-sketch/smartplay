@@ -435,6 +435,17 @@ export async function analyzeSwing(
     // the swing-analysis prompt so the observation text comes back
     // in the right language (Spanish / Chinese / English).
     language?: 'en' | 'es' | 'zh';
+    // 2026-05-27 — Fix ES (Phase 2.5): cage targeting context. When
+    // the user has set up a ball area + target on the session via
+    // CageTargetingCard, this gets threaded into the vision prompt
+    // as an anchor: "the ball is sitting at normalized x,y within
+    // radius r — confirm by looking at the first frame; impact is
+    // the moment the ball leaves that area." Strong prior reduces
+    // false-positive impact reads and tightens the temporal anchor
+    // for the fault-frame selection. Both fields are normalized
+    // 0..1 relative to the video frame.
+    ball_area_norm?: { x: number; y: number; r: number } | null;
+    target_norm?: { x: number; y: number } | null;
   },
   boundaries?: { startSec: number; endSec: number },
   // Phase 403b — when provided, the persisted fault-frame JPEG will be

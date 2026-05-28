@@ -771,6 +771,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? 'Camera is in front of the player, perpendicular to the target line. Best reads from this angle: weight shift, hip rotation, reverse pivot, sway, head movement, posture maintenance. Do NOT confidently diagnose swing path / plane / over-the-top from this angle — those need down-the-line.'
         : 'Camera is on the player\'s head (Meta-glasses first-person POV). No torso is visible. Best reads from this angle: grip, takeaway path direction, impact-zone contact, follow-through arc, and ball-flight start direction if visible. Do NOT diagnose body-rotation patterns (hip turn, weight shift, spine angle, shoulder coil) from this angle — the torso is out of frame and any body-pattern claim would be a guess. When the visible cues do not support a confident fault read, return mode="tentative" with a useful observation.')
     );
+
+    // 2026-05-27 — Fix ES (Phase 2.5): cage targeting anchor. When
+    // the user has marked the ball position + target in the app, we
+    // pass those normalized coords so the model has a strong prior
+    // for the impact moment ("ball at (x,y) ±r in early frames;
+    // ball gone = impact happened"). This tightens fault-frame
+    // selection vs guessing from pose alone, and gives the prompt
+    // a real reference for "what swing direction was attempted."
+    const ballArea = (ctx as Record<string, unknown>).ball_area_norm as { x: number; y: number; r: number } | null | undefined;
+    const targetPt = (ctx as Record<string, unknown>).target_norm as { x: number; y: number } | null | undefined;
+    if (ballArea && typeof ballArea.x === 'number' && typeof ballArea.y === 'number') {
+      const r = typeof ballArea.r === 'number' ? ballArea.r : 0.06;
+      ctxLines.push(
+        `Ball setup anchor: the player has marked the ball at normalized (x=${ballArea.x.toFixed(2)}, y=${ballArea.y.toFixed(2)}) within radius ${r.toFixed(2)} of the frame. Use this as a prior: address-frame should show the ball there; the frame where the ball is no longer in that area is impact or just-after-impact. Anchor your fault-frame selection accordingly. If your visual read of the frames contradicts this anchor, trust your visual read and note the disagreement in your observation.`
+      );
+    }
+    if (targetPt && typeof targetPt.x === 'number' && typeof targetPt.y === 'number') {
+      ctxLines.push(
+        `Target anchor: player aimed at normalized (x=${targetPt.x.toFixed(2)}, y=${targetPt.y.toFixed(2)}). When ball-flight is visible, deviation from the line ball→target is a real fault signal (push / pull / start-direction off). Don't invent ball-flight observations if not visible.`
+      );
+    }
     const userText = mode === 'tentative'
       ? (ctxLines.length > 0 ? ctxLines.join('\n') + '\n\n' : '') +
         `These ${frames.length} frame${frames.length === 1 ? '' : 's'} are from a swing where the full-analysis pipeline could not confirm a fault. Give a tentative observation only — no canonical fault claim. Return JSON per the schema.`

@@ -56,11 +56,37 @@ export default function CageOverlay({ phase }: Props) {
 
   const palette = COLOR_BY_PHASE[phase];
 
-  // Body alignment box — STATIC, sized to viewport.
-  const boxHeight = isFoldOpen ? H * 0.78 : H * 0.62;
-  const boxWidth = isFoldOpen ? W * 0.45 : W * 0.62;
-  const boxLeft = (W - boxWidth) / 2;
-  const boxTop = (H - boxHeight) / 2;
+  // Body alignment box — STATIC defaults sized to viewport.
+  // 2026-05-27 — Fix ER: defaults compute as before; user-saved
+  // bodyBox in the calibration store overrides via the live state
+  // below. When the user adjusts the box to fit their actual cage,
+  // the stored fractions take effect and we ignore the defaults.
+  const defaultBoxHeightFrac = isFoldOpen ? 0.78 : 0.62;
+  const defaultBoxWidthFrac = isFoldOpen ? 0.45 : 0.62;
+  const savedBodyBox = useCageOverlayCalibrationStore((s) => s.bodyBox);
+  const setBodyBoxStore = useCageOverlayCalibrationStore((s) => s.setBodyBox);
+  // Live pixel-space body box (move + resize). Restored from store
+  // on mount; persisted on gesture release.
+  const [bodyBox, setBodyBox] = useState({
+    cx: (savedBodyBox?.cx ?? 0.5) * W,
+    cy: (savedBodyBox?.cy ?? 0.5) * H,
+    w: (savedBodyBox?.w ?? defaultBoxWidthFrac) * W,
+    h: (savedBodyBox?.h ?? defaultBoxHeightFrac) * H,
+  });
+  // Re-seed on viewport change (Fold / rotation).
+  useEffect(() => {
+    setBodyBox({
+      cx: (savedBodyBox?.cx ?? 0.5) * W,
+      cy: (savedBodyBox?.cy ?? 0.5) * H,
+      w: (savedBodyBox?.w ?? defaultBoxWidthFrac) * W,
+      h: (savedBodyBox?.h ?? defaultBoxHeightFrac) * H,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [W, H]);
+  const boxWidth = bodyBox.w;
+  const boxHeight = bodyBox.h;
+  const boxLeft = bodyBox.cx - bodyBox.w / 2;
+  const boxTop = bodyBox.cy - bodyBox.h / 2;
 
   // Strike zone dimensions — fixed; only the center position is mobile.
   const strikeW = boxWidth * 0.28;
@@ -161,6 +187,64 @@ export default function CageOverlay({ phase }: Props) {
     onPanResponderTerminate: () => setDraggingTarget(null),
   })).current;
 
+  // 2026-05-27 — Fix ER: body-box move + resize PanResponders.
+  // - bodyMovePR: drag from inside the box → translate the whole box
+  // - bodyResizePR (×4 corners): drag a corner → resize from that corner,
+  //   keeping the opposite corner anchored. Maintains arbitrary aspect
+  //   ratio so the user can match a non-square cage.
+  const bodyBoxRef = useRef(bodyBox);
+  bodyBoxRef.current = bodyBox;
+  const bodyDragStart = useRef({ cx: 0, cy: 0, w: 0, h: 0 });
+  const persistBodyBox = () => {
+    const b = bodyBoxRef.current;
+    setBodyBoxStore({ cx: b.cx / W, cy: b.cy / H, w: b.w / W, h: b.h / H });
+  };
+  const bodyMovePR = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => {
+      bodyDragStart.current = { ...bodyBoxRef.current };
+    },
+    onPanResponderMove: (_, g) => {
+      const cx = clamp(bodyDragStart.current.cx + g.dx, bodyDragStart.current.w / 2, W - bodyDragStart.current.w / 2);
+      const cy = clamp(bodyDragStart.current.cy + g.dy, bodyDragStart.current.h / 2, H - bodyDragStart.current.h / 2);
+      setBodyBox({ ...bodyBoxRef.current, cx, cy });
+    },
+    onPanResponderRelease: () => persistBodyBox(),
+  })).current;
+
+  // Corner resize: each corner pulls the box edge from that direction.
+  // sx/sy = -1 (left/top edge) or +1 (right/bottom edge). When dragging
+  // the bottom-right corner the right edge + bottom edge follow the
+  // gesture; top-left stays anchored. Same logic for the other 3.
+  const MIN_DIM = 80; // px — keep the box visible / draggable
+  const makeResizePR = (sx: -1 | 1, sy: -1 | 1) => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => {
+      bodyDragStart.current = { ...bodyBoxRef.current };
+    },
+    onPanResponderMove: (_, g) => {
+      const start = bodyDragStart.current;
+      // New width / height: when sx=+1, gesture.dx grows the box.
+      // When sx=-1, gesture.dx grows the box if dx < 0 (left drag).
+      const dw = Math.max(MIN_DIM - start.w, sx * g.dx * 2);
+      const dh = Math.max(MIN_DIM - start.h, sy * g.dy * 2);
+      const w = Math.min(W, start.w + dw);
+      const h = Math.min(H, start.h + dh);
+      // Keep center fixed via symmetric resize (×2 above). Box grows
+      // outward from center as the user pulls the corner. Simpler than
+      // anchor-opposite-corner math and avoids the box drifting off-
+      // screen on aggressive resizes.
+      setBodyBox({ ...start, w, h });
+    },
+    onPanResponderRelease: () => persistBodyBox(),
+  });
+  const bodyResizeTLPR = useRef(makeResizePR(-1, -1)).current;
+  const bodyResizeTRPR = useRef(makeResizePR(+1, -1)).current;
+  const bodyResizeBLPR = useRef(makeResizePR(-1, +1)).current;
+  const bodyResizeBRPR = useRef(makeResizePR(+1, +1)).current;
+
   // Pulse the active drag handle ~10% larger so the user gets clear
   // tactile feedback that they grabbed it.
   const bullseyeScale = useRef(new Animated.Value(1)).current;
@@ -184,12 +268,10 @@ export default function CageOverlay({ phase }: Props) {
 
   return (
     <View style={StyleSheet.absoluteFill}>
-      {/* Static decorative SVG — body box, corner brackets. Doesn't
-          intercept touches (pointerEvents none on the wrapping View
-          ancestor below). */}
+      {/* Static decorative SVG — body box outline + corner brackets.
+          pointerEvents=none here; the draggable hit-areas overlay below. */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <Svg width={W} height={H}>
-          {/* Body alignment box */}
           <Rect
             x={boxLeft}
             y={boxTop}
@@ -201,7 +283,6 @@ export default function CageOverlay({ phase }: Props) {
             fill={palette.fill}
             rx={12}
           />
-          {/* Corner brackets */}
           {[
             [boxLeft, boxTop, 1, 1],
             [boxLeft + boxWidth, boxTop, -1, 1],
@@ -215,6 +296,58 @@ export default function CageOverlay({ phase }: Props) {
           ))}
         </Svg>
       </View>
+
+      {/* 2026-05-27 — Fix ER: body-box drag + resize hit-areas.
+          - Center hit-area: drag the whole box.
+          - 4 corner squares: drag a corner to resize from center
+            (symmetric — keeps the box visually anchored).
+          Sized generously (44×44 corners, full-rect center minus
+          corner cutouts) so users can grab them without precision.
+          Sits BELOW the bullseye/ballBox draggables so those still
+          win for taps inside their hit-area. SETUP-only render —
+          we don't want the resize handles obscuring CHECKING/READY
+          chrome on a tight cage view. */}
+      {phase === 'SETUP' && (
+        <>
+          <View
+            {...bodyMovePR.panHandlers}
+            style={{
+              position: 'absolute',
+              left: boxLeft + 22,
+              top: boxTop + 22,
+              width: Math.max(0, boxWidth - 44),
+              height: Math.max(0, boxHeight - 44),
+            }}
+          />
+          {([
+            { key: 'tl', handlers: bodyResizeTLPR, left: boxLeft - 22, top: boxTop - 22 },
+            { key: 'tr', handlers: bodyResizeTRPR, left: boxLeft + boxWidth - 22, top: boxTop - 22 },
+            { key: 'bl', handlers: bodyResizeBLPR, left: boxLeft - 22, top: boxTop + boxHeight - 22 },
+            { key: 'br', handlers: bodyResizeBRPR, left: boxLeft + boxWidth - 22, top: boxTop + boxHeight - 22 },
+          ] as const).map(c => (
+            <View
+              key={c.key}
+              {...c.handlers.panHandlers}
+              style={{
+                position: 'absolute',
+                left: c.left,
+                top: c.top,
+                width: 44,
+                height: 44,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {/* Tiny visible handle dot inside the larger hit-area. */}
+              <View style={{
+                width: 14, height: 14, borderRadius: 7,
+                backgroundColor: palette.stroke,
+                borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.5)',
+              }} />
+            </View>
+          ))}
+        </>
+      )}
 
       {/* Draggable bullseye crosshair — anchored at the saved center, sits
           on top of the static body-box. Generous hit-slop (40px) so users

@@ -353,6 +353,16 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       // results) — acceptable since prior_issues is loose informational
       // context for the prompt, not a hard dependency.
       const priorIssuesSnapshot = results.slice(-3).map(x => x.analysis.detected_issue);
+      // 2026-05-27 — Fix ES (Phase 2.5): pass the session's cage
+      // targeting markers (if any) into the analyzer context. Server
+      // uses them as a strong anchor in the vision prompt — "ball at
+      // (x,y) within radius r in frame 0; impact = first frame ball
+      // is absent." Reduces false-positive impact reads + tightens
+      // the fault-frame selection. No-op when the user hasn't set
+      // them up (which is the common case during early beta).
+      const liveSession = useCageStore.getState().sessionHistory.find(s => s.id === sessionId);
+      const ballAreaCtx = liveSession?.ball_area_norm ?? null;
+      const targetCtx = liveSession?.target_norm ?? null;
       const r = await analyzeSwing(swing.clipUri!, {
         club: swing.club,
         swing_number: i + 1,
@@ -361,6 +371,8 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         player_context: playerContext,
         swing_tag: swingTag,
         prior_analyzed_fault: priorAnalyzedFault,
+        ball_area_norm: ballAreaCtx,
+        target_norm: targetCtx,
       }, boundaries, {
         faultFrameBaseName: `${sessionId}_${swing.id}_fault`,
       });

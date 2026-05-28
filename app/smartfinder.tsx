@@ -55,6 +55,8 @@ import { speak } from '../services/voiceService';
 // itself has no video — the icon launches the share flow).
 import { isSendToTankAvailable } from '../services/tankReview';
 import { Ionicons } from '@expo/vector-icons';
+// 2026-05-27 — Fix EQ: toast feedback for capture results.
+import { useToastStore } from '../store/toastStore';
 
 const REFRESH_MS = 3_000;
 const CANVAS_W_FRACTION = 0.92;
@@ -361,6 +363,14 @@ function CameraSmartFinder({
   const insets = useSafeAreaInsets();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [locationGranted, setLocationGranted] = useState(false);
+  // 2026-05-27 — Fix EQ: Top Gun target lock + capture. cameraRef
+  // holds CameraView so the capture button can call takePictureAsync.
+  // `locked` is the reticle-hold state that TargetingOverlay reads;
+  // when on, the target stops chasing every tap so the user can take
+  // screenshots OR tap the capture button without the reticle jumping.
+  const cameraRef = useRef<CameraView | null>(null);
+  const [locked, setLocked] = useState(false);
+  const [capturing, setCapturing] = useState(false);
   // Continuous zoom in [0, 1]. baseZoom captures the value at the start
   // of a pinch so subsequent pinches feel relative, not absolute. Resets
   // to 1.0× when the screen mounts (matches a real rangefinder power-on).
@@ -454,7 +464,7 @@ function CameraSmartFinder({
     <GestureHandlerRootView style={styles.cameraContainer}>
       <GestureDetector gesture={pinchGesture}>
         <View style={styles.cameraContainer} collapsable={false}>
-          <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={zoom} />
+          <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" zoom={zoom} />
 
           {mode === 'standard' ? (
             <StandardCameraOverlay
@@ -464,12 +474,78 @@ function CameraSmartFinder({
               yards={yards}
             />
           ) : mode === 'target' ? (
-            <TargetCameraOverlay yards={yards} />
+            <TargetCameraOverlay yards={yards} locked={locked} />
           ) : (
             <PuttCameraOverlay locationGranted={locationGranted} />
           )}
         </View>
       </GestureDetector>
+
+      {/* 2026-05-27 — Fix EQ: Lock + Capture floating controls.
+          Sit OUTSIDE the GestureDetector + overlay tree so they're
+          always tappable regardless of the target-overlay touch
+          capture. Position bottom-right above the F/M/B strip.
+          Lock toggle: only renders in target mode (where the reticle
+          actually moves). Capture button: always available, snaps a
+          single photo with the full overlay composited via screen
+          capture-ish flow (takePictureAsync gets the live camera
+          frame; we don't bake overlays into the photo today — that
+          needs view-shot for the SVG layer. v1 = raw photo). */}
+      <View
+        style={{ position: 'absolute', right: 16, bottom: insets.bottom + 110, gap: 12, alignItems: 'center' }}
+        pointerEvents="box-none"
+      >
+        {mode === 'target' && (
+          <TouchableOpacity
+            onPress={() => setLocked(v => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={locked ? 'Unlock target' : 'Lock target'}
+            style={{
+              width: 48, height: 48, borderRadius: 24,
+              backgroundColor: locked ? '#F0C030' : 'rgba(0,0,0,0.55)',
+              borderWidth: 1.5, borderColor: '#F0C030',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Ionicons name={locked ? 'lock-closed' : 'lock-open'} size={20} color={locked ? '#0d1a0d' : '#F0C030'} />
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          onPress={async () => {
+            if (capturing) return;
+            if (!cameraRef.current) return;
+            setCapturing(true);
+            try {
+              const photo = await cameraRef.current.takePictureAsync({ quality: 0.85, skipProcessing: false });
+              if (photo?.uri) {
+                const Sharing = await import('expo-sharing');
+                const can = await Sharing.isAvailableAsync().catch(() => false);
+                if (can) {
+                  await Sharing.shareAsync(photo.uri, { mimeType: 'image/jpeg', dialogTitle: 'SmartFinder photo' });
+                } else {
+                  useToastStore.getState().show('Saved to cache · sharing not available');
+                }
+              }
+            } catch (e) {
+              console.log('[smartfinder] capture failed', e);
+              useToastStore.getState().show('Capture failed — try again.');
+            } finally {
+              setCapturing(false);
+            }
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Take photo"
+          style={{
+            width: 60, height: 60, borderRadius: 30,
+            backgroundColor: '#ffffff',
+            borderWidth: 3, borderColor: 'rgba(0,0,0,0.4)',
+            alignItems: 'center', justifyContent: 'center',
+            opacity: capturing ? 0.5 : 1,
+          }}
+        >
+          <Ionicons name="camera" size={26} color="#0d1a0d" />
+        </TouchableOpacity>
+      </View>
 
       {/* Top bar — back, hole+par, GPS quality */}
       <View style={[styles.cameraTopBar, { top: insets.top + 8 }]} pointerEvents="box-none">
@@ -740,7 +816,7 @@ function StandardCameraOverlay({
 // Bottom strip shows TO TARGET <yds> with Front / Middle / Back of green
 // distances. Replaces the old top-down flat-canvas TargetView.
 
-function TargetCameraOverlay({ yards }: { yards: GreenYardages }) {
+function TargetCameraOverlay({ yards, locked }: { yards: GreenYardages; locked?: boolean }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const [targetYards, setTargetYards] = useState<number | null>(yards.middle);
@@ -751,6 +827,7 @@ function TargetCameraOverlay({ yards }: { yards: GreenYardages }) {
         gpsDistances={{ front: yards.front, middle: yards.middle, back: yards.back }}
         baseYardage={yards.middle}
         onTargetDistance={(v) => setTargetYards(v)}
+        locked={locked}
       />
 
       {/* Bottom F/M/B strip — port of V3's TO TARGET row. */}

@@ -36,7 +36,7 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 // until that's live, beta-tester sends land in his spam catch-all.
 // Move to a configurable env var (EXPO_PUBLIC_TANK_REVIEW_EMAIL)
 // when we want to A/B test or change the destination without OTA.
-export const TANK_REVIEW_EMAIL = 'Marc@smartplaycaddie.com';
+export const TANK_REVIEW_EMAIL = 'marc@smartplaycaddie.com';
 
 export type SendToTankResult =
   | { kind: 'ok'; via: 'share_sheet' | 'fallback_share' }
