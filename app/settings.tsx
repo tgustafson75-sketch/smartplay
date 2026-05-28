@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -231,6 +231,13 @@ export default function Settings() {
   const [editLimitation, setEditLimitation] = useState(physicalLimitation ?? '');
   const [editBest, setEditBest] = useState(personalBest ? String(personalBest) : '');
 
+  // 2026-05-28 — Fix FB: ScrollView ref so we can scroll back to top on
+  // profile save. The collapsed slim card sits at the top of the
+  // ScrollView; without the scroll-back, the user is still down at the
+  // form's Save button position and visually "where did my form go?"
+  // since the slim card is far above the fold.
+  const scrollRef = useRef<ScrollView>(null);
+
   const handleSaveProfile = () => {
     if (editName.trim()) setName(editName.trim());
     const hcp = parseInt(editHandicap, 10);
@@ -240,7 +247,22 @@ export default function Settings() {
     const best = parseInt(editBest, 10);
     setPersonalBest(!isNaN(best) ? best : null);
     setProfileExpanded(false);
-    Alert.alert('Saved', 'Profile updated.');
+    // 2026-05-28 — Fix FB: three coordinated changes to make save
+    // actually feel like save.
+    //   1. Toast instead of blocking Alert — the Alert was sitting on
+    //      top of the freshly-collapsed slim card, so the user
+    //      dismissed it and was still looking at the (now-cached?)
+    //      old form layout. Toast slides in without blocking render.
+    //   2. setProfileExpanded(false) above — already was there, but
+    //      it never visibly took effect because the Alert blocked.
+    //   3. scrollRef.scrollTo({y:0}) below — even with collapse + no
+    //      blocking modal, the user's scroll position is mid-page at
+    //      the form's Save button. Scrolling back to top puts the
+    //      slim card under their eye where they expect.
+    useToastStore.getState().show('Profile saved');
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    });
   };
 
   // 2026-05-18 — Collapsible sections. Settings was ~5 scrolls long;
@@ -406,6 +428,7 @@ export default function Settings() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
       <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom + 16, 40) }]}
         style={{ backgroundColor: colors.background }}
@@ -475,7 +498,12 @@ export default function Settings() {
               accessibilityLabel="Edit profile"
               style={[styles.profileSlimGear, { borderColor: colors.accent }]}
             >
-              <Ionicons name="pencil-outline" size={16} color={colors.accent} />
+              {/* 2026-05-28 — Fix FB: settings-outline icon to match
+                  the dashboard's profileCard gear. Was pencil-outline;
+                  swap unifies the two slim cards as visually-same
+                  component. Size 18 matches the dashboard's gearBtn
+                  icon (was 16). */}
+              <Ionicons name="settings-outline" size={18} color={colors.accent} />
             </TouchableOpacity>
           </View>
         ) : (
