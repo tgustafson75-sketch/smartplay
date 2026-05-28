@@ -222,49 +222,53 @@ export function GlobalToolsMenu() {
           <Text style={[styles.title, { color: colors.text_muted }]}>TOOLS</Text>
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            {/* ─── PRESENCE & VOICE ─────────────────────────────── */}
+            {/* ─── PRESENCE & VOICE ───────────────────────────────
+                2026-05-28 — Fix FK: subtext tightened across the six
+                rows. Prior copy ("Caddie speaks responses aloud",
+                "Switch to large-text TV-casting layout", full persona
+                roster joined with dots, etc.) read as paragraphs in a
+                menu that's meant to scan in one glance. Now each row
+                is icon + state + one short hint. */}
             <SectionHeader colors={colors}>PRESENCE & VOICE</SectionHeader>
             <Row
               icon="options-outline"
-              label={`${caddieName}'s Presence: ${TRUST_LEVEL_META[trustLevel].label}`}
-              sub={`${TRUST_LEVEL_META[trustLevel].one_liner} · Tap to cycle`}
+              label={`Presence: ${TRUST_LEVEL_META[trustLevel].label}`}
+              sub="Tap to cycle modes"
               onPress={cycleMode}
               colors={colors}
             />
             <Row
               icon={trustLevel === 1 ? 'volume-high-outline' : 'volume-mute-outline'}
               label={trustLevel === 1 ? `Resume ${caddieName}` : 'Quiet Mode'}
-              sub={trustLevel === 1 ? `Bring ${caddieName} back to Companion` : `Mute ${caddieName} until I'm ready`}
+              sub={trustLevel === 1 ? 'Back to Companion' : `Mute ${caddieName}`}
               onPress={toggleQuiet}
               colors={colors}
             />
             <Row
               icon="people-outline"
               label={`Caddie: ${caddieName}`}
-              sub={`Tap to cycle · ${ACTIVE_PERSONAS.map((p) => getCaddieName(p)).join(' · ')}`}
+              sub="Tap to switch personas"
               onPress={cyclePersona}
               colors={colors}
             />
             <Row
               icon={voiceEnabled ? 'volume-high-outline' : 'volume-mute-outline'}
               label={voiceEnabled ? 'Voice: ON' : 'Voice: OFF'}
-              sub={voiceEnabled ? 'Caddie speaks responses aloud' : 'Caddie is silent — tap to enable'}
+              sub={voiceEnabled ? 'Speaking aloud' : 'Silent — tap to enable'}
               onPress={toggleVoice}
               colors={colors}
             />
             <Row
               icon={autoListenEnabled ? 'mic' : 'mic-off-outline'}
               label={autoListenEnabled ? 'Active Listening: ON' : 'Active Listening: OFF'}
-              sub={autoListenEnabled
-                ? `${caddieName} listens automatically during rounds. Tap to mute.`
-                : `Tap so ${caddieName} listens for voice commands during rounds.`}
+              sub={autoListenEnabled ? 'Hot mic during rounds' : 'Tap to enable hot mic'}
               onPress={toggleActiveListening}
               colors={colors}
             />
             <Row
               icon={castMode ? 'tv' : 'tv-outline'}
               label={castMode ? 'Cast Mode: ON' : 'Cast Mode: OFF'}
-              sub={castMode ? 'Large-text display for casting' : 'Switch to large-text TV-casting layout'}
+              sub={castMode ? 'Large-text TV layout' : 'Tap for large-text TV layout'}
               onPress={toggleCast}
               colors={colors}
             />
@@ -282,20 +286,30 @@ export function GlobalToolsMenu() {
               <>
                 <Row
                   icon={yardageMode === 'live' ? 'navigate-circle' : 'navigate-circle-outline'}
-                  label={`Yardage: ${yardageMode === 'live' ? 'LIVE (GPS)' : 'PRE-ROUND (static)'}`}
-                  sub={yardageMode === 'live' ? 'Tap to switch to scorecard yardages' : 'Tap to refresh GPS and go live'}
+                  label={`Yardage: ${yardageMode === 'live' ? 'LIVE' : 'PRE-ROUND'}`}
+                  sub={yardageMode === 'live' ? 'Tap for scorecard yardages' : 'Tap to go live on GPS'}
                   onPress={toggleYardageMode}
                   colors={colors}
                 />
                 <Row
                   icon="location-outline"
                   label="Mark Location"
-                  sub="Walk to a tee box or green center and capture real GPS coords for this hole"
+                  sub="Capture real GPS for this hole"
                   onPress={() => {
                     useToolsMenuStore.getState().close();
                     try { router.push('/mark-green' as never); }
                     catch (e) { console.log('[tools] mark-location nav failed', e); }
                   }}
+                  colors={colors}
+                />
+                {/* 2026-05-28 — Fix FK: Shot Log relocated from PRACTICE
+                    to here. It's round-context only; living under
+                    PRACTICE made it look like a between-rounds tool. */}
+                <Row
+                  icon="list-outline"
+                  label="Shot Log"
+                  sub="Every shot this round"
+                  onPress={() => nav('/shot-log')}
                   colors={colors}
                 />
                 <Row
@@ -308,38 +322,27 @@ export function GlobalToolsMenu() {
               </>
             )}
 
-            {/* ─── PRACTICE ────────────────────────────────────── */}
+            {/* ─── PRACTICE ──────────────────────────────────────
+                2026-05-28 — Fix FK: Cage Mode + SmartMotion + Shot Log
+                rows trimmed/relocated. Cage Mode used to route to the
+                legacy /cage flow (wrong tool); the SwingLab tab card
+                is the canonical Pro entry, so this section now points
+                at the launcher rather than duplicating the cards.
+                SmartVision + SmartFinder stay because they're routinely
+                opened mid-round from this menu (not via SwingLab). */}
             <SectionHeader colors={colors}>PRACTICE</SectionHeader>
             <Row
               icon="golf-outline"
-              label="Practice"
-              sub="SwingLab · drills · range"
+              label="SwingLab"
+              sub="Cage Mode · SmartMotion · drills · library"
               onPress={() => nav('/(tabs)/swinglab')}
               colors={colors}
             />
-            <Row
-              icon="videocam-outline"
-              label="Cage Mode"
-              sub="Multi-shot session"
-              onPress={() => navOrPaywall('cage_mode', '/cage')}
-              colors={colors}
-            />
-            <Row
-              icon="flash-outline"
-              label="SmartMotion"
-              sub="Quick swing check · camera opens immediately"
-              onPress={() => nav('/swinglab/quick-record')}
-              colors={colors}
-            />
-            {/* 2026-05-21 — Day 2 / Fix 9B: SmartMotion entry skips the
-                NoClipHero (Option D speed). Cage Mode is a separate
-                deeper practice/lesson tool reachable from the SwingLab
-                tab; not duplicated here. */}
             {isOwner && (
               <Row
                 icon="construct-outline"
                 label="Reference Authoring"
-                sub="Internal · capture instructor reference assets"
+                sub="Internal · capture instructor assets"
                 onPress={() => nav('/author/reference-assets')}
                 colors={colors}
               />
@@ -356,17 +359,6 @@ export function GlobalToolsMenu() {
               label="SmartFinder"
               sub="Tap-to-lock rangefinder"
               onPress={() => navOrPaywall('smartfinder', '/smartfinder')}
-              colors={colors}
-            />
-            {/* 2026-05-25 — Fix X: Shot Log route. Renders the full
-                round's shots via the new ShotTimeline component (icons,
-                outcome chips, distances). Tim's "v1 had icons + numbers
-                shot-by-shot" ask. */}
-            <Row
-              icon="list-outline"
-              label="Shot Log"
-              sub="Every shot this round — newest first"
-              onPress={() => nav('/shot-log')}
               colors={colors}
             />
 
