@@ -801,6 +801,14 @@ export const speak = async (
     try {
       persona = require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? null;
     } catch { /* ignore */ }
+    // 2026-05-27 — Fix EX: snapshot the playback volume + rate NOW so
+    // the TTS request, log, first createAsync, retry createAsync, and
+    // applyRate all use the SAME persona's intensity dial. Prior code
+    // re-read currentPlaybackVolume() at each callsite — if the user
+    // switched persona during the ~3s fetch window, voice ID came back
+    // for persona A but volume read persona B's dial. Mismatched output.
+    const snapshotVolume = currentPlaybackVolume();
+    const snapshotRate = currentPlaybackRate();
 
     // 2026-05-24 — Derive ElevenLabs model_id from language at the
     // client and pass it through. Server still falls back to a
@@ -904,14 +912,14 @@ export const speak = async (
     {
       const first = await Audio.Sound.createAsync(
         { uri: audioFile.uri },
-        { shouldPlay: true, volume: currentPlaybackVolume() },
+        { shouldPlay: true, volume: snapshotVolume },
       );
       sound = first.sound;
       status = first.status;
       const loaded = (status as { isLoaded?: boolean }).isLoaded === true;
       const dur = (status as { isLoaded?: boolean; durationMillis?: number }).durationMillis ?? 0;
       console.log('[voice] speak Sound.createAsync — myId=', myId,
-        'isLoaded=', loaded, 'durationMillis=', dur, 'volume=', currentPlaybackVolume(), 'bytes=', arrayBuffer.byteLength);
+        'isLoaded=', loaded, 'durationMillis=', dur, 'volume=', snapshotVolume, 'bytes=', arrayBuffer.byteLength);
       const looksDead = !loaded || dur === 0;
       if (looksDead) {
         console.log('[voice] speak first load looked dead — unloading and retrying with forced audio reset', { isLoaded: loaded, dur });
@@ -930,7 +938,7 @@ export const speak = async (
         }
         const second = await Audio.Sound.createAsync(
           { uri: audioFile.uri },
-          { shouldPlay: true, volume: currentPlaybackVolume() },
+          { shouldPlay: true, volume: snapshotVolume },
         );
         sound = second.sound;
         status = second.status;
@@ -958,7 +966,12 @@ export const speak = async (
     }
 
     currentSound = sound;
-    await applyCustomRate(sound);
+    // 2026-05-27 — Fix EX: inline the rate-apply with the snapshot so
+    // a mid-flight persona switch can't desync rate from voice ID.
+    if (snapshotRate !== 1.0) {
+      try { await sound.setRateAsync(snapshotRate, true); }
+      catch (e) { console.log('[voice] setRateAsync failed', e); }
+    }
 
     // 2026-05-27 — Fix EG: position-advances heartbeat. 500ms after
     // createAsync claims it's playing, poll the position once. If

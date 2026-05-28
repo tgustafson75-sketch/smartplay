@@ -316,9 +316,16 @@ async function tick(): Promise<void> {
   const fix = getLastFix();
   if (!fix) return;
 
-  // GPS quality freeze: if signal is weak/none, skip detection entirely
-  const quality = classifyAccuracy(fix.accuracy_m);
-  if (quality.level === 'weak' || quality.level === 'none') {
+  // GPS quality freeze: if signal is weak/none/stale, skip detection
+  // entirely. 2026-05-27 — Fix EY: pass fix.timestamp so the new
+  // 'stale' classification from Fix ET actually triggers here.
+  // Without the timestamp, a 30s-old fix was reported by stored
+  // accuracy alone and could fire a hole transition off cached
+  // coordinates (e.g., player sits idle on tee, phone deep-sleeps,
+  // cached fix is 60s old, app resumes and immediately transitions
+  // hole based on stale coords).
+  const quality = classifyAccuracy(fix.accuracy_m, fix.timestamp);
+  if (quality.level === 'weak' || quality.level === 'none' || quality.level === 'stale') {
     candidateHole = null;
     candidateSince = 0;
     return;

@@ -33,6 +33,12 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
+// 2026-05-27 — Fix EW: route audio-mode changes through voiceService's
+// setAudioModeSerial queue (configureAudioForRecording /
+// configureAudioForSpeech) instead of direct Audio.setAudioModeAsync.
+// Direct calls race the speech queue and can silently downgrade audio
+// when speech is in-flight at record time.
+import { configureAudioForRecording, configureAudioForSpeech } from '../../services/voiceService';
 import { router, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -271,10 +277,14 @@ export default function CustomCaddieScreen() {
       // Playback-quality recording (not the low-bitrate Whisper preset).
       // These clips are HEARD by the user, not transcribed — full
       // quality preset gives a noticeably cleaner result.
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
+      // 2026-05-27 — Fix EW: route through voiceService's
+      // configureAudioForRecording() so this hits the SAME
+      // setAudioModeSerial queue everything else uses. Prior direct
+      // Audio.setAudioModeAsync call bypassed the queue — if speech
+      // was in-flight when the user tapped record, the modes raced
+      // and audio could silently downgrade (same class of bug as
+      // Fix EI / intro-video).
+      await configureAudioForRecording();
       const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY,
       );
@@ -326,9 +336,10 @@ export default function CustomCaddieScreen() {
       setRecordingPhraseId(null);
       // Restore playback-mode audio session so the preview / app voice
       // playback works after we recorded.
-      try {
-        await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
-      } catch { /* ignore */ }
+      // 2026-05-27 — Fix EW: same queue-bypass fix as the start path.
+      // configureAudioForSpeech sets the full mode field set through
+      // setAudioModeSerial so playback after recording isn't racing.
+      try { await configureAudioForSpeech(); } catch { /* ignore */ }
     }
   };
 
