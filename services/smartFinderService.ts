@@ -111,7 +111,41 @@ function getLastFixInternal(): LastFix | null {
 type FixChangeListener = (fix: LastFix) => void;
 const fixChangeListeners = new Set<FixChangeListener>();
 
+// 2026-05-28 — Fix FL: stationary GPS noise coalescing. gpsManager fans
+// out fixes at up to 1Hz in active mode. Each fanout fires every
+// subscriber — SmartVision rerenders its full screen, Caddie tab
+// rerenders the BrandHeaderRow + Tools pill — and on iPad with a
+// larger image surface this reads as visual "glitch" between shots
+// where the player is stationary (the only actual movement is GPS
+// noise inside a 3-5m circle). Tim's reconcile-the-loop fix: keep a
+// last-notified anchor and skip notification when the new fix hasn't
+// meaningfully moved AND the heartbeat interval hasn't elapsed.
+//
+// Meaningful = ≥ NOTIFY_DISTANCE_YDS from last notified fix (covers
+// real walking + cart movement; GPS noise typically <3yd circle).
+// Heartbeat = NOTIFY_HEARTBEAT_MS forces a notification even when
+// stationary so consumers periodically refresh (e.g. accuracy chip
+// going from 5m → 3m as the warmup tightens).
+//
+// Mark events bypass this throttle entirely — they fire via
+// positionMarkBus on a separate channel that all consumers also
+// subscribe to. Hole-advance is its own signal via roundStore.
+const NOTIFY_DISTANCE_YDS = 3;
+const NOTIFY_HEARTBEAT_MS = 8_000;
+let lastNotifiedFix: LastFix | null = null;
+let lastNotifyAt = 0;
+
 function notifyFixChange(fix: LastFix): void {
+  const now = Date.now();
+  if (lastNotifiedFix) {
+    const movedYds = haversineYards(fix.location, lastNotifiedFix.location);
+    const sinceLast = now - lastNotifyAt;
+    if (movedYds < NOTIFY_DISTANCE_YDS && sinceLast < NOTIFY_HEARTBEAT_MS) {
+      return;
+    }
+  }
+  lastNotifiedFix = fix;
+  lastNotifyAt = now;
   for (const cb of fixChangeListeners) {
     try { cb(fix); } catch (e) { console.warn('[smartFinder] fix listener threw:', e); }
   }
