@@ -209,6 +209,21 @@ export interface CageSession {
    *  rendered as its own card on that screen. Independent of
    *  primary_issue / putting_analysis — they coexist. */
   coach_note?: string | null;
+  /** 2026-05-27 — Fix EO: cage targeting metadata. Normalized 0-1
+   *  coordinates relative to the video frame.
+   *  - ball_area_norm: center + radius of the ball setup area. Both
+   *    manually placed (user taps frame in Phase 1) and auto-detected
+   *    (Phase 2, gpt-4o vision on the address frame) flow into this
+   *    field. radius defaults to ~5% of frame height when manually
+   *    placed; auto-detection returns a tight bound.
+   *  - target_norm: the player's chosen aiming point (cage bullseye /
+   *    pin / wall target). User-placed only — there's no reliable
+   *    visual signal for "where the user is AIMING" without explicit
+   *    input. Future: track-the-flag detection for course shots.
+   *  Both fields are session-scoped (cage setup persists across the
+   *  many swings in one session) and null when unset. */
+  ball_area_norm?: { x: number; y: number; r: number } | null;
+  target_norm?: { x: number; y: number } | null;
   /** 2026-05-24 — Display-quality diagnostic fault frame persisted to
    *  FileSystem at session-creation time. Pre-requisite for the
    *  visual-annotation feature (coach markup + AI auto-annotation)
@@ -461,6 +476,9 @@ interface CageState {
    *  AI analysis path — both display side-by-side on the swing
    *  detail screen. Pass empty string or null to clear. */
   setSessionCoachNote: (sessionId: string, note: string | null) => void;
+  /** 2026-05-27 — Fix EO: cage targeting setters. Pass null to clear. */
+  setSessionBallArea: (sessionId: string, area: { x: number; y: number; r: number } | null) => void;
+  setSessionTarget: (sessionId: string, target: { x: number; y: number } | null) => void;
   /** 2026-05-24 — Persist the display-quality diagnostic fault frame
    *  metadata on a session after analyzeSwing returns successfully.
    *  Wires the annotation + share prerequisite: a stable file URI
@@ -990,6 +1008,39 @@ export const useCageStore = create<CageState>()(
               coach_note: note && note.trim().length > 0 ? note.trim() : null,
             }
           ),
+        })),
+
+      // 2026-05-27 — Fix EO: cage targeting setters. Defensive normalize:
+      // coord values are clamped to [0,1] before persist so a renderer
+      // bug or weird gesture never writes off-frame coords that would
+      // render the overlay outside the video viewport.
+      setSessionBallArea: (sessionId, area) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session => {
+            if (session.id !== sessionId) return session;
+            if (area == null) return { ...session, ball_area_norm: null };
+            const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+            return {
+              ...session,
+              ball_area_norm: {
+                x: clamp01(area.x),
+                y: clamp01(area.y),
+                r: Math.max(0.01, Math.min(0.5, area.r)),
+              },
+            };
+          }),
+        })),
+      setSessionTarget: (sessionId, target) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session => {
+            if (session.id !== sessionId) return session;
+            if (target == null) return { ...session, target_norm: null };
+            const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+            return {
+              ...session,
+              target_norm: { x: clamp01(target.x), y: clamp01(target.y) },
+            };
+          }),
         })),
 
       setSessionFaultFrame: (sessionId, frame) =>

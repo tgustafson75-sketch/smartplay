@@ -31,6 +31,8 @@ import PrimaryIssueCard from '../../../components/swinglab/PrimaryIssueCard';
 import AskYourSwingCard from '../../../components/swinglab/AskYourSwingCard';
 import ZoomableView from '../../../components/swinglab/ZoomableView';
 import VideoAnnotationOverlay from '../../../components/swinglab/VideoAnnotationOverlay';
+// 2026-05-27 — Fix EO: cage targeting card + overlay.
+import CageTargetingCard, { CageTargetingOverlay } from '../../../components/swinglab/CageTargetingCard';
 import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
@@ -653,6 +655,15 @@ export default function SwingDetail() {
                   showTrace={showTrace}
                 />
               )}
+              {/* 2026-05-27 — Fix EO: cage targeting overlay. Renders
+                  the ball-area circle (green) + target marker (gold)
+                  on top of the playing video. pointerEvents="none"
+                  so the underlying video controls + annotation tools
+                  stay tappable. Null/null = no render. */}
+              <CageTargetingOverlay
+                ballArea={session?.ball_area_norm ?? null}
+                target={session?.target_norm ?? null}
+              />
               <VideoWatermark position="bottomRight" size={36} />
             </View>
             {hasPose && (
@@ -912,6 +923,14 @@ export default function SwingDetail() {
                   list too. Tank's "hips stalled at impact" lives
                   here. Visible on every swing detail — POV self
                   swings get it too if the user wants to journal. */}
+              {/* 2026-05-27 — Fix EO: cage targeting card. Lets the
+                  user mark where the ball sat and where they were
+                  aiming, with optional one-tap auto-detect for the
+                  ball position. Both flow through cageStore as
+                  normalized coords; the overlay above the video
+                  renders them on playback. */}
+              <CageTargetingSlot session={session} />
+
               <CoachNoteCard
                 sessionId={session.id}
                 initialNote={session.coach_note ?? null}
@@ -1177,6 +1196,80 @@ export default function SwingDetail() {
         </TouchableOpacity>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+/**
+ * 2026-05-27 — Fix EO: Cage Targeting card wrapper. Self-contained
+ * slot that subscribes to the session's ball_area_norm + target_norm,
+ * wires the setters, and handles the Phase 2 auto-detect call to the
+ * server. Kept as its own function so the parent screen stays clean.
+ *
+ * Auto-detect flow: send the address frame (fault_frame_uri preferred,
+ * thumbnail_uri fallback) as base64 to /api/swing-analysis with
+ * mode='detect_ball'. Server runs Claude Haiku vision and returns
+ * normalized x/y/r. We commit that as the ball area. If detection
+ * fails (no ball found, server error), we just leave the area unset
+ * and the user can tap-place manually.
+ */
+function CageTargetingSlot({ session }: { session: import('../../../store/cageStore').CageSession }) {
+  const { colors } = useTheme();
+  const setBallArea = useCageStore(s => s.setSessionBallArea);
+  const setTarget = useCageStore(s => s.setSessionTarget);
+  const [autoDetecting, setAutoDetecting] = React.useState(false);
+
+  // Address frame source — fault frame is the best available shot of
+  // the address position; thumbnail is the next-best fallback. When
+  // both are missing the card still renders, but the Set buttons are
+  // disabled (we don't have a frame to tap on).
+  const frameUri =
+    session.fault_frame_uri ??
+    session.primary_issue?.visual_reference_path ??
+    session.shots.find(s => s.perShotAnalysis?.visual_reference_path)?.perShotAnalysis?.visual_reference_path ??
+    null;
+
+  const autoDetect = async () => {
+    if (!frameUri) return;
+    setAutoDetecting(true);
+    try {
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+      const FS = await import('expo-file-system/legacy');
+      const b64 = await FS.readAsStringAsync(frameUri, { encoding: FS.EncodingType.Base64 });
+      const res = await fetch(`${apiUrl}/api/swing-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'detect_ball',
+          frames: [{ b64, media_type: 'image/jpeg' }],
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      const data = (await res.json()) as { found?: boolean; x?: number; y?: number; r?: number };
+      if (data.found && typeof data.x === 'number' && typeof data.y === 'number') {
+        setBallArea(session.id, { x: data.x, y: data.y, r: typeof data.r === 'number' ? data.r : 0.06 });
+        useToastStore.getState().show('Ball detected ✓');
+      } else {
+        useToastStore.getState().show('Couldn’t find the ball — tap to place manually.');
+      }
+    } catch (e) {
+      console.log('[cage-targeting] auto-detect failed', e);
+      useToastStore.getState().show('Detection failed — tap to place manually.');
+    } finally {
+      setAutoDetecting(false);
+    }
+  };
+
+  return (
+    <CageTargetingCard
+      colors={colors}
+      frameUri={frameUri}
+      ballArea={session.ball_area_norm ?? null}
+      target={session.target_norm ?? null}
+      onChangeBallArea={(a) => setBallArea(session.id, a)}
+      onChangeTarget={(t) => setTarget(session.id, t)}
+      onAutoDetectBall={frameUri ? autoDetect : undefined}
+      autoDetecting={autoDetecting}
+    />
   );
 }
 

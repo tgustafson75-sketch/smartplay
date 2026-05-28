@@ -615,6 +615,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         },
       });
     }
+    // 2026-05-27 — Fix EO Phase 2: ball-position detection. Client
+    // sends a single address frame (`frames[0]`) + `mode: 'detect_ball'`.
+    // Server asks Anthropic Haiku 4.5 to locate the golf ball in the
+    // frame and return normalized x/y/r coords. Lightweight prompt,
+    // tight JSON contract, ~2s typical roundtrip on Haiku. Used by
+    // the CageTargetingCard's "Auto-detect ball" button to prefill
+    // the ball area marker without the user having to tap-place it.
+    if (body.mode === 'detect_ball') {
+      const detectFrames = (body.frames ?? []) as { b64: string; media_type?: string }[];
+      if (!Array.isArray(detectFrames) || detectFrames.length === 0 || !detectFrames[0]?.b64) {
+        return res.status(400).json({ error: 'frames[0] (single address-frame image) required' });
+      }
+      try {
+        const completion = await anthropicHaiku.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 200,
+          temperature: 0.0,
+          system: `You are a precise image-coordinate detector. You will be shown one image from a golf swing setup. Find the golf ball (a small white sphere sitting on the ground, mat, tee, or grass). Return ONLY a JSON object with the ball's normalized coordinates relative to the image: { "found": true, "x": <0-1 from left>, "y": <0-1 from top>, "r": <0.01-0.2 normalized radius> }. If you can't see a golf ball with high confidence, return { "found": false }. No prose, no markdown, just the JSON.`,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: (detectFrames[0].media_type ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif', data: detectFrames[0].b64 } },
+              { type: 'text', text: 'Locate the golf ball.' },
+            ],
+          }],
+        });
+        const block = completion.content.find(c => c.type === 'text');
+        const raw = block && block.type === 'text' ? block.text.trim() : '';
+        let parsed: { found?: boolean; x?: number; y?: number; r?: number } = {};
+        try {
+          const m = raw.match(/\{[\s\S]*\}/);
+          if (m) parsed = JSON.parse(m[0]);
+        } catch { /* fallthrough returns not_found */ }
+        if (!parsed.found || typeof parsed.x !== 'number' || typeof parsed.y !== 'number') {
+          return res.status(200).json({ found: false });
+        }
+        return res.status(200).json({
+          found: true,
+          x: Math.max(0, Math.min(1, parsed.x)),
+          y: Math.max(0, Math.min(1, parsed.y)),
+          r: Math.max(0.02, Math.min(0.2, typeof parsed.r === 'number' ? parsed.r : 0.06)),
+        });
+      } catch (e) {
+        console.error('[swing-analysis] detect_ball failed', e);
+        return res.status(500).json({ found: false, error: e instanceof Error ? e.message : 'detection failed' });
+      }
+    }
     const frames = (body.frames ?? []) as { b64: string; media_type?: string }[];
     if (!Array.isArray(frames) || frames.length === 0) {
       return res.status(400).json({ error: 'frames[] (1-5 base64 images) required' });
