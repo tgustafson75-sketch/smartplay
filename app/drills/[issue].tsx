@@ -39,6 +39,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getDrillEntry } from '../../data/drillCatalog';
 import { getInstructorVideo } from '../../data/instructorVideos';
+// 2026-05-27 — Fix EP: send-to-Tank CTA on Tank's drill detail.
+import { isSendToTankAvailable } from '../../services/tankReview';
 
 export default function DrillDetail() {
   const router = useRouter();
@@ -197,6 +199,40 @@ export default function DrillDetail() {
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
         </TouchableOpacity>
+
+        {/* 2026-05-27 — Fix EP: Send-to-Tank CTA. ONLY on Tank's
+            drill (videoCategory === 'tank_caddie') for now — Tank IS
+            the human review layer behind the AI analysis, and the
+            other drills route through their respective pro instructors
+            (Hank Haney, Sean Foley, etc.) who don't have a review
+            queue. Tapping routes the user to the Library so they can
+            pick the swing to send. Hidden when paywall locked. */}
+        {entry.videoCategory === 'tank_caddie' && isSendToTankAvailable() && (
+          <>
+            <Text style={[styles.sectionLabel, { color: '#F0C030' }]}>ASK TANK DIRECTLY</Text>
+            <TouchableOpacity
+              onPress={() => router.push('/swinglab/library' as never)}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Open library to pick a swing to send to Tank"
+              style={[styles.watchCard, { backgroundColor: colors.surface_elevated, borderColor: '#F0C030' }]}
+            >
+              <View style={[styles.youtubeBadge, { backgroundColor: 'rgba(240,192,48,0.18)' }]}>
+                <Ionicons name="paper-plane-outline" size={24} color="#F0C030" />
+              </View>
+              <View style={styles.watchText}>
+                <Text style={[styles.watchTitle, { color: colors.text_primary }]} numberOfLines={2}>
+                  Send a swing to Tank
+                </Text>
+                <Text style={[styles.watchInstructor, { color: '#F0C030' }]} numberOfLines={1}>
+                  Pick a swing in your Library → tap the paper-plane icon
+                </Text>
+                <Text style={[styles.watchRuntime, { color: colors.text_muted }]}>Human review · premium feature</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+            </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
 
       {/* ZOOM MODAL */}

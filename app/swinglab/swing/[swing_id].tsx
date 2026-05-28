@@ -33,6 +33,8 @@ import ZoomableView from '../../../components/swinglab/ZoomableView';
 import VideoAnnotationOverlay from '../../../components/swinglab/VideoAnnotationOverlay';
 // 2026-05-27 — Fix EO: cage targeting card + overlay.
 import CageTargetingCard, { CageTargetingOverlay } from '../../../components/swinglab/CageTargetingCard';
+// 2026-05-27 — Fix EP: send-to-Tank stub.
+import { sendSwingToTank, isSendToTankAvailable, TANK_REVIEW_EMAIL } from '../../../services/tankReview';
 import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
@@ -529,13 +531,67 @@ export default function SwingDetail() {
           <Text style={[styles.title, { color: colors.text_primary }]} numberOfLines={1}>
             {session.upload?.notes ?? `${session.club} swing`}
           </Text>
-          <TouchableOpacity
-            onPress={handleSessionShare}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={{ width: 60, alignItems: 'flex-end' }}
-          >
-            <Ionicons name="share-outline" size={22} color={colors.accent} />
-          </TouchableOpacity>
+          <View style={{ width: 84, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 14 }}>
+            {/* 2026-05-27 — Fix EP: send-to-Tank icon. Sits next to
+                the existing share icon. Sends this swing's video to
+                Tank's review queue via system Share sheet. Pre-set
+                to TANK_REVIEW_EMAIL. Hidden entirely when
+                isSendToTankAvailable() returns false (paywall locked) —
+                during beta SUBSCRIPTIONS_ENABLED=false so it's always
+                shown. The button is disabled when there's no clip URI
+                to send (rare, but defensive). */}
+            {isSendToTankAvailable() && (
+              <TouchableOpacity
+                onPress={() => {
+                  const clip = session.shots[0]?.clipUri ?? null;
+                  if (!clip) {
+                    useToastStore.getState().show('No video on this swing yet.');
+                    return;
+                  }
+                  const dateStr = new Date(session.date).toLocaleDateString();
+                  const ctx: string[] = [
+                    `Club: ${session.club ?? 'unknown'}`,
+                    `Date: ${dateStr}`,
+                  ];
+                  if (session.primary_issue?.name) {
+                    ctx.push(`AI fault read: ${session.primary_issue.name}`);
+                  }
+                  if (session.coach_note) {
+                    ctx.push(`Player note: ${session.coach_note}`);
+                  }
+                  void sendSwingToTank({
+                    videoUri: clip,
+                    swingTitle: session.upload?.notes ?? `${session.club} swing`,
+                    contextLines: ctx,
+                  }).then(result => {
+                    if (result.kind === 'paywall') {
+                      useToastStore.getState().show('Send to Tank — premium review (coming soon).');
+                    } else if (result.kind === 'no_file') {
+                      useToastStore.getState().show('No video to send.');
+                    } else if (result.kind === 'error') {
+                      useToastStore.getState().show('Send failed — try again.');
+                      console.log('[swing-detail] send-to-tank error:', result.message);
+                    } else if (result.kind === 'ok') {
+                      useToastStore.getState().show(`Sharing to ${TANK_REVIEW_EMAIL}…`);
+                    }
+                  });
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel="Send this swing to Tank for review"
+              >
+                <Ionicons name="paper-plane-outline" size={20} color="#F0C030" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={handleSessionShare}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Share this swing"
+            >
+              <Ionicons name="share-outline" size={22} color={colors.accent} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Phase BZ-v1 — comparison banner during compare-picker mode */}
