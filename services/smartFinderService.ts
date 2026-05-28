@@ -482,8 +482,7 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
     hole_number: hole,
     reason: 'ok' as const,
   };
-  logYardageCalc(hole, fix, { front, middle, back }, yards);
-  void source;
+  logYardageCalc(hole, fix, { front, middle, back }, yards, source);
   // 2026-05-18 — Sanity clamp. If any computed yardage exceeds 800y the
   // GPS fix is in a different city than the green coord (Tim hit
   // "80,000 yards" on Standard's F/M/B strip when his real-GPS fix
@@ -523,8 +522,7 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
     hole_number: hole,
     reason: 'ok' as const,
   };
-  logYardageCalc(hole, syncFix, { front, middle, back }, yards);
-  void source;
+  logYardageCalc(hole, syncFix, { front, middle, back }, yards, source);
   // 2026-05-18 — same sanity clamp as the async path above. See note.
   if ((yards.middle ?? 0) > 800 || (yards.front ?? 0) > 800 || (yards.back ?? 0) > 800) {
     console.log('[smartFinder:sync] yardages out of range — falling back to scorecard:', yards);
@@ -574,6 +572,14 @@ export type YardageCalcEntry = {
   front_yards: number | null;
   middle_yards: number | null;
   back_yards: number | null;
+  /** 2026-05-28 — Fix FR: which source produced the green coords
+   *  (truth → user override → courseHoles → geometryCache → none).
+   *  Owner debug surface needs this to spot "wrong-course" issues:
+   *  if a marked-tee survey produced bad coords and stuck around in
+   *  the truth store, every later yardage silently uses it. Was
+   *  being computed in resolveGreenCoords but discarded via `void
+   *  source;` at the call site. */
+  source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none' | null;
 };
 
 const CALC_LOG_MAX = 500;
@@ -584,6 +590,7 @@ function logYardageCalc(
   fix: LastFix,
   targets: { front: ShotLocation | null; middle: ShotLocation | null; back: ShotLocation | null },
   result: GreenYardages,
+  source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none' | null,
 ): void {
   const entry: YardageCalcEntry = {
     ts: Date.now(),
@@ -600,6 +607,7 @@ function logYardageCalc(
     front_yards: result.front,
     middle_yards: result.middle,
     back_yards: result.back,
+    source: source ?? null,
   };
   calcLog.push(entry);
   if (calcLog.length > CALC_LOG_MAX) {
