@@ -467,14 +467,45 @@ export async function analyzeSwing(
       api_base: apiUrl,
     });
     const t0 = Date.now();
-    const res = await fetch(`${apiUrl}/api/swing-analysis`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // context now includes player_context + swing_tag for personalized
-      // + short-game-aware analysis per Phase 502.
-      body: JSON.stringify({ frames: wireFrames, context }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
+    // 2026-05-27 — Fix EJ: single-shot fast-failure retry on transient
+    // network blips. Tim's report from on-course YouTube shoot:
+    // "SmartMotion did a reading or analyzing one out of five times."
+    // The 4-out-of-5 failures land as no_network in the V6 trace,
+    // typical of cellular hiccups at the range (walking behind a
+    // tree, BT-vs-cell handoff, brief Wi-Fi flap). Retry once if the
+    // first attempt FAILED FAST (<10s) — that's a network blip, not
+    // a server timeout. A real server timeout (~55s) is NOT retried
+    // because retrying would just wait another 55s for the same
+    // failure. Each attempt gets its own fresh AbortSignal because
+    // the prior signal is bound to the prior fetch.
+    const FAST_FAIL_MS = 10_000;
+    const MAX_ATTEMPTS = 2;
+    const tryFetch = async (attempt: number): Promise<Response> => {
+      const attemptT0 = Date.now();
+      try {
+        return await fetch(`${apiUrl}/api/swing-analysis`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // context now includes player_context + swing_tag for personalized
+          // + short-game-aware analysis per Phase 502.
+          body: JSON.stringify({ frames: wireFrames, context }),
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        });
+      } catch (err) {
+        const elapsed = Date.now() - attemptT0;
+        const msg = err instanceof Error ? err.message : String(err);
+        const fastTransient = elapsed < FAST_FAIL_MS && /network|fetch/i.test(msg) && !/abort|timeout/i.test(msg);
+        if (attempt < MAX_ATTEMPTS && fastTransient) {
+          V6('STAGE 3 RETRY — fast-failure network blip, retrying after 1500ms', {
+            error_head: msg.slice(0, 120), elapsed_ms: elapsed, attempt,
+          });
+          await new Promise(r => setTimeout(r, 1500));
+          return tryFetch(attempt + 1);
+        }
+        throw err;
+      }
+    };
+    const res = await tryFetch(1);
     const elapsedMs = Date.now() - t0;
     V6('STAGE 4 — /api/swing-analysis response', {
       status: res.status,

@@ -289,11 +289,13 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
       { name: 'Worst-shot warm-up',     steps: 'Start each session with the shot you LEAST want to hit. Three solid reps before moving on. Removes avoidance from your range pattern.' },
     ],
     videoCategory: 'tank_caddie',
-    // 2026-05-26 — Fix DF: Tank's existing 'Let's go, Marine' avatar
-    // — matches the drill's Marine drill-sergeant push energy.
-    // Replaces the generic SmartPlay logo fallback (Fix DE) so the
-    // Drills grid shows Tank's actual face on his card.
-    cardImage: require('../assets/avatars/tank_v2_lets_go_marine.png'),
+    // 2026-05-27 — Fix EI: swapped from tank_v2_lets_go_marine.png
+    // (which is a 9-face COMPOSITE grid — bad for a drill card; reads
+    // as cluttered) to tank_v2_lets_go.png — a SINGLE Tank portrait
+    // with the SmartPlay Caddie polo and the fist-pump energy that
+    // matches "Practice with Standards." Tim's call:
+    // "we don't need tanks card to be fifteen tanks pictures."
+    cardImage: require('../assets/avatars/tank_v2_lets_go.png'),
     // 2026-05-27 — Fix EF: Tank's Tips card for early extension.
     // Full-page PGA-vs-Golf-Father infographic Tim authored. Rendered
     // as a dedicated tap-to-zoom section on the drill detail screen

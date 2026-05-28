@@ -74,31 +74,21 @@ export default function IntroVideoScreen() {
     return () => clearTimeout(t);
   }, []);
 
-  // Pre-load the optional ball-drop sound. Failure to load is silent —
-  // the video itself plays muted, so the worst case is "no sound."
-  useEffect(() => {
-    (async () => {
-      try {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          shouldDuckAndroid: true,
-        }).catch(() => {});
-        // Optional asset — if the file isn't there yet, the require()
-        // would be a build-time error, so we leave it commented until
-        // the audio file is dropped at assets/intro/ball_drop.mp3.
-        // Once added, uncomment this block and the trigger effect below
-        // and the sound layers in over the muted video at ~3.2s.
-        //
-        // const { sound } = await Audio.Sound.createAsync(
-        //   require('../assets/intro/ball_drop.mp3'),
-        //   { volume: 0.85, shouldPlay: false },
-        // );
-        // ballDropRef.current = sound;
-      } catch (e) {
-        console.log('[intro-video] ball-drop preload failed (non-fatal):', e);
-      }
-    })();
-  }, []);
+  // 2026-05-27 — Fix EI: REMOVED the Audio.setAudioModeAsync call
+  // that lived here. It was scaffolding for an optional ball-drop
+  // sound (still commented out below) but was actively muddying the
+  // app's audio session BEFORE voiceService had a chance to configure
+  // it for speech. Tim's report: "ever since we put the mp4 video
+  // splash intro, our voice behavior has not worked right." This
+  // setAudioModeAsync call ran on cold-launch, partially set the
+  // session (only 2 of 7 fields), and bypassed voiceService's
+  // setAudioModeSerial queue — meaning the next configureAudioForSpeech
+  // could race with this orphan write and the OS session ended up in
+  // a state where playback loaded but didn't emit (matches the
+  // silence symptom). Removing the call entirely: the video is
+  // muted (line ~140), so it needs NO audio session at all. When the
+  // ball-drop sound is wired up, it should route through
+  // voiceService's setAudioModeSerial to stay coordinated.
 
   // Trigger the ball-drop sound at a hand-tuned offset into the video
   // (3.2s — close to where the ball drops in the typical golf cup
