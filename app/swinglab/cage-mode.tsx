@@ -95,6 +95,10 @@ import {
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
 import { useCageCalibrationStore } from '../../store/cageCalibrationStore';
 import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
+// 2026-05-28 — Fix FH: first-cage calibration prompt. Reads applied-
+// calibration + dismissed-flag from the acoustic store. Banner only
+// renders during SETUP when both are false.
+import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useFamilyStore } from '../../store/familyStore';
 // 2026-05-21 — Fix A: shared CaddieMicBadge for consistent
@@ -181,11 +185,23 @@ export default function CageModeScreen() {
   // the session via setSessionBallArea right after ingest.
   const pendingBallDetectionRef = useRef<{ x: number; y: number; r: number } | null>(null);
   const [ballDetectStatus, setBallDetectStatus] = useState<'idle' | 'detecting' | 'found' | 'not_found'>('idle');
+  // 2026-05-28 — Fix FH: calibration prompt state declared here; the
+  // showCalibratePrompt boolean uses `phase` which is declared a few
+  // lines below, so derive it AFTER phase is in scope (see line ~205
+  // for the computed boolean).
+  const appliedCalibration = useAcousticCalibrationStore(s => s.appliedCalibration);
+  const calibratePromptDismissed = useAcousticCalibrationStore(s => s.calibratePromptDismissed);
+  const dismissCalibratePrompt = useAcousticCalibrationStore(s => s.dismissCalibratePrompt);
 
   // 2026-05-24 — Pre-record countdown ticker, used by COUNTDOWN phase.
   const preRecordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [phase, setPhase] = useState<Phase>('SETUP');
+  // 2026-05-28 — Fix FH: derived after phase is in scope. Banner only
+  // renders during SETUP when neither condition is met (no applied
+  // calibration AND user hasn't dismissed).
+  const showCalibratePrompt =
+    phase === 'SETUP' && !appliedCalibration && !calibratePromptDismissed;
   const [recordedSeconds, setRecordedSeconds] = useState(0);
   // Pre-record countdown remaining seconds (only valid while phase === 'COUNTDOWN').
   const [preRecordCountdown, setPreRecordCountdown] = useState<number>(PRE_RECORD_COUNTDOWN_SECONDS);
@@ -841,6 +857,70 @@ export default function CageModeScreen() {
         <Text style={styles.caption}>{KEVIN_CAPTION[phase] ?? ''}</Text>
         {isMockMode() && <Text style={styles.mockHint}>MOCK MODE</Text>}
       </Animated.View>
+
+      {/* 2026-05-28 — Fix FH: first-cage calibration banner. Renders
+          ONLY during SETUP, ONLY when the user hasn't applied a
+          calibration AND hasn't explicitly dismissed. One-shot per
+          device: tap Calibrate → /acoustic-test; tap Skip → persisted
+          dismissal so we never re-pester. Positioned below the Kevin
+          caption + above the body box so it reads as a hint, not a
+          blocker. Calibrating means the live cage detector reads the
+          user's actual floor + threshold (Fix FC pipeline) instead
+          of the hardcoded defaults that assume a generic mic. */}
+      {showCalibratePrompt && (
+        <View
+          style={{
+            position: 'absolute',
+            top: insets.top + 130,
+            left: isFoldOpen ? 96 : 16,
+            right: isFoldOpen ? 96 : 16,
+            backgroundColor: 'rgba(0,0,0,0.78)',
+            borderColor: '#F5A623',
+            borderWidth: 1,
+            borderRadius: 12,
+            padding: 12,
+          }}
+        >
+          <Text style={{ color: '#F5A623', fontSize: 11, fontWeight: '800', letterSpacing: 1.0, marginBottom: 6 }}>
+            QUICK MIC CALIBRATION
+          </Text>
+          <Text style={{ color: '#ffffff', fontSize: 13, lineHeight: 18, marginBottom: 10 }}>
+            Run a 30-second test so Cage Mode catches YOUR strikes (not generic ones). One time.
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => router.push('/acoustic-test' as never)}
+              accessibilityRole="button"
+              accessibilityLabel="Calibrate now"
+              style={{
+                flex: 1,
+                paddingVertical: 9,
+                borderRadius: 8,
+                backgroundColor: '#F5A623',
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ color: '#0d1a0d', fontSize: 13, fontWeight: '800', letterSpacing: 0.4 }}>Calibrate</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => dismissCalibratePrompt()}
+              accessibilityRole="button"
+              accessibilityLabel="Skip mic calibration"
+              style={{
+                paddingVertical: 9,
+                paddingHorizontal: 14,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.4)',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '700' }}>Skip</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* 2026-05-24 — COUNTDOWN — pre-record window. The user just hit
           "I'm Set" or said "record"; this gives them PRE_RECORD_COUNTDOWN_SECONDS

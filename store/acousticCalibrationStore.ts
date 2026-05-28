@@ -60,6 +60,11 @@ interface AcousticCalibrationState {
   /** 2026-05-28 — Fix FC: active per-device tuning. Null = use the
    *  hardcoded defaults in constants/cageDetection.ts. */
   appliedCalibration: AppliedCalibration | null;
+  /** 2026-05-28 — Fix FH: one-time dismissal flag for the first-cage
+   *  calibration prompt. When true, the SETUP-phase banner that
+   *  suggests running the test bench is suppressed forever (per
+   *  device). Cleared by reset(). */
+  calibratePromptDismissed: boolean;
   /** Append a new calibration session. Auto-trims to last 50 to keep
    *  AsyncStorage payload bounded — beyond ~50 sessions the tail is
    *  no longer informative for tuning. */
@@ -71,6 +76,12 @@ interface AcousticCalibrationState {
    *  hardcoded defaults). */
   applyCalibrationFromSession: (sessionId: string) => boolean;
   clearAppliedCalibration: () => void;
+  /** 2026-05-28 — Fix FH: persist the one-shot dismissal so the
+   *  calibration prompt doesn't re-pester a user who already chose
+   *  to skip. Calling apply on any session also clears this flag
+   *  (calibration completes the loop — user can re-prompt later
+   *  by clearing applied calibration in owner tools). */
+  dismissCalibratePrompt: () => void;
   /** Remove a session by id. Used by the in-app delete affordance. */
   deleteSession: (id: string) => void;
   /** Clear everything. Owner-only utility for debugging. */
@@ -88,6 +99,7 @@ export const useAcousticCalibrationStore = create<AcousticCalibrationState>()(
     (set, get) => ({
       sessions: [],
       appliedCalibration: null,
+      calibratePromptDismissed: false,
       saveSession: (input) => {
         const id = newSessionId();
         const session: CalibrationSession = {
@@ -146,9 +158,12 @@ export const useAcousticCalibrationStore = create<AcousticCalibrationState>()(
         set({ appliedCalibration: null });
         console.log('[acousticCalibration] cleared applied calibration (reverting to constants/cageDetection.ts defaults)');
       },
+      dismissCalibratePrompt: () => {
+        set({ calibratePromptDismissed: true });
+      },
       deleteSession: (id) =>
         set((s) => ({ sessions: s.sessions.filter((x) => x.id !== id) })),
-      clearAll: () => set({ sessions: [], appliedCalibration: null }),
+      clearAll: () => set({ sessions: [], appliedCalibration: null, calibratePromptDismissed: false }),
     }),
     {
       name: 'acoustic-calibration-v1',
