@@ -7,10 +7,28 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * notes. Persists per-course locally via AsyncStorage; weekly refresh.
  */
 
+// 2026-05-28 — Fix FT: hole_description type. Mirrors the server-side
+// type in api/course-content.ts. description_source carries the
+// confidence marker the UI surfaces ("from public data" vs
+// "field-verified"). Phase 1 always emits 'public_synthesis'; future
+// 'pro_contributed' (Tank/Randy at their home courses) and
+// 'field_verified' (player corrections) flow through the same field.
+export type HoleDescription = {
+  hole_number: number;
+  description: string;
+  description_source: 'public_synthesis' | 'pro_contributed' | 'field_verified';
+};
+
 export type CourseContent = {
   about: string;
   caddie_tips: string[];
   hole_notes: { hole_number: number; note: string }[];
+  /** 2026-05-28 — Fix FT: per-hole 2-3 sentence previews for players
+   *  on courses they've never seen. Length depends on how many of the
+   *  input holes the model returned descriptions for — missing entries
+   *  are intentional (model declined rather than invent), so callers
+   *  must tolerate sparse coverage. */
+  hole_descriptions?: HoleDescription[];
   fetched_at: number;
 };
 
@@ -25,7 +43,13 @@ export type CourseContentInput = {
   holes: { hole_number: number; par: number; yardage: number }[];
 };
 
-const KEY_PREFIX = 'course-content-v1::';
+// 2026-05-28 — Fix FT: bumped v1 → v2 to invalidate the prior cached
+// blobs. v1 payloads predate hole_descriptions, so re-using them would
+// leave the new feature missing on every previously-visited course
+// for up to a week. New key forces a one-time fetch per course on the
+// next visit; v1 blobs naturally age out via AsyncStorage and never
+// get read again.
+const KEY_PREFIX = 'course-content-v2::';
 const REFRESH_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 const memCache: Map<string, CourseContent> = new Map();

@@ -280,15 +280,31 @@ export default function CourseDetailScreen() {
     return m;
   }, [content]);
 
+  // 2026-05-28 — Fix FT: map hole_descriptions (longer per-hole previews
+  // for first-time players). Carries the description_source marker the
+  // HoleGuide row uses to render the "from public data" attribution.
+  const descriptionByHole = useMemo(() => {
+    const m = new Map<number, { description: string; source: 'public_synthesis' | 'pro_contributed' | 'field_verified' }>();
+    (content?.hole_descriptions ?? []).forEach(d =>
+      m.set(d.hole_number, { description: d.description, source: d.description_source }),
+    );
+    return m;
+  }, [content]);
+
   const holeRows = useMemo(() => {
     if (!tee) return [];
-    return tee.holes.map(h => ({
-      hole_number: h.hole_number,
-      par: h.par,
-      yardage: h.yardage,
-      note: noteByHole.get(h.hole_number),
-    }));
-  }, [tee, noteByHole]);
+    return tee.holes.map(h => {
+      const desc = descriptionByHole.get(h.hole_number);
+      return {
+        hole_number: h.hole_number,
+        par: h.par,
+        yardage: h.yardage,
+        note: noteByHole.get(h.hole_number),
+        description: desc?.description,
+        description_source: desc?.source,
+      };
+    });
+  }, [tee, noteByHole, descriptionByHole]);
 
   // Hole photos. Resolution order per hole:
   //   1. Curated bundled image for the named course (Palms, Lakes,
