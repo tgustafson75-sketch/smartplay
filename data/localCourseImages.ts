@@ -242,6 +242,42 @@ export const PEMBROKE_PINES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   18: require('../assets/courses/pembroke-pines/hole-18.jpg'),
 };
 
+// 2026-05-28 — Westlake Country Club, Jackson NJ. Full 18-hole bundle
+// from Tim's Green Maps Android screenshots (IMG 7502-7519 + 7527-7529,
+// 1768x2208 / 1768x1976). Cropped to 1768x1450 via ffmpeg to match the
+// Palms aesthetic: clean aerial, tee→green measurement line preserved,
+// Green Maps "wind & slope" pill kept on the side, device chrome and
+// Yds/Par/Handicap header bar removed.
+//
+// Per-hole quick reference (from the original capture headers):
+//   01 par 4 416y    02 par 5 472y    03 par 3 146y
+//   04 par 4 380y    05 par 4 432y    06 par 3 170y
+//   07 par 4 366y    08 par 4 416y    09 par 4 333y
+//   10 par 5 510y    11 par 4 374y    12 par 4 351y
+//   13 par 3 198y    14 par 5 500y    15 par 4 379y
+//   16 par 4 378y    17 par 3 144y    18 par 4 288y
+// Total: par 71, ~6253y from this tee box.
+export const WESTLAKE_CC_NJ_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1:  require('../assets/courses/westlake-cc-nj/holes/hole-01.jpg'),
+  2:  require('../assets/courses/westlake-cc-nj/holes/hole-02.jpg'),
+  3:  require('../assets/courses/westlake-cc-nj/holes/hole-03.jpg'),
+  4:  require('../assets/courses/westlake-cc-nj/holes/hole-04.jpg'),
+  5:  require('../assets/courses/westlake-cc-nj/holes/hole-05.jpg'),
+  6:  require('../assets/courses/westlake-cc-nj/holes/hole-06.jpg'),
+  7:  require('../assets/courses/westlake-cc-nj/holes/hole-07.jpg'),
+  8:  require('../assets/courses/westlake-cc-nj/holes/hole-08.jpg'),
+  9:  require('../assets/courses/westlake-cc-nj/holes/hole-09.jpg'),
+  10: require('../assets/courses/westlake-cc-nj/holes/hole-10.jpg'),
+  11: require('../assets/courses/westlake-cc-nj/holes/hole-11.jpg'),
+  12: require('../assets/courses/westlake-cc-nj/holes/hole-12.jpg'),
+  13: require('../assets/courses/westlake-cc-nj/holes/hole-13.jpg'),
+  14: require('../assets/courses/westlake-cc-nj/holes/hole-14.jpg'),
+  15: require('../assets/courses/westlake-cc-nj/holes/hole-15.jpg'),
+  16: require('../assets/courses/westlake-cc-nj/holes/hole-16.jpg'),
+  17: require('../assets/courses/westlake-cc-nj/holes/hole-17.jpg'),
+  18: require('../assets/courses/westlake-cc-nj/holes/hole-18.jpg'),
+};
+
 export type LocalCourseSlug =
   | 'palms' | 'lakes' | 'rancho-california' | 'crystal-springs'
   | 'mariners-point' | 'san-jose-muni' | 'sunnyvale' | 'maplewood'
@@ -251,7 +287,13 @@ export type LocalCourseSlug =
   // is available via golfcourseapi + Mapbox satellite imagery so we
   // skip bundled hole-* images for now (the Partial<Record<>> on
   // LOCAL_COURSE_IMAGES lets a slug exist as a centroid-only entry).
-  | 'journey-at-pechanga';
+  | 'journey-at-pechanga'
+  // 2026-05-28 — Westlake Country Club, Jackson NJ. First East Coast
+  // course Tim has personally captured. All 18 holes bundled from
+  // Green Maps screenshots; geometry comes from golfcourseapi at
+  // runtime (no per-hole tee/green coords baked into data/courses.ts —
+  // matches the Maplewood / Pembroke Pines pattern).
+  | 'westlake-cc-nj';
 
 export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number, ImageSourcePropType>>> = {
   'palms': PALMS_HOLE_IMAGES,
@@ -263,6 +305,7 @@ export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number,
   'sunnyvale': SUNNYVALE_HOLE_IMAGES,
   'maplewood': MAPLEWOOD_HOLE_IMAGES,
   'pembroke-pines': PEMBROKE_PINES_HOLE_IMAGES,
+  'westlake-cc-nj': WESTLAKE_CC_NJ_HOLE_IMAGES,
   // 'journey-at-pechanga' intentionally omitted — hole imagery comes
   // from Mapbox satellite live; getLocalHoleImage() returns null which
   // the SmartVision render path already handles (falls through to the
@@ -312,6 +355,11 @@ export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng:
   // Tim or Randy visits — the 800m detect radius is generous enough
   // to catch a parking-lot arrival even with this rough lat/lng.
   'journey-at-pechanga': { lat: 33.4691, lng: -117.0744 },
+  // 2026-05-28 — Westlake Country Club, 1 Westlake Blvd, Jackson NJ
+  // 08527. Approximate centroid from the property landmark; refine
+  // on-site via Mark Location when Tim plays there. The 800m detect
+  // radius covers parking-lot + clubhouse arrival.
+  'westlake-cc-nj':   { lat: 40.0828,    lng: -74.3196 },
 };
 
 /**
@@ -340,6 +388,16 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   // or "journey at pechanga" so voice ("I'm at Pechanga", "open
   // Journey") and golfcourseapi search results both resolve.
   if (c.includes('pechanga') || (c.includes('journey') && c.includes('pechanga'))) return 'journey-at-pechanga';
+  // 2026-05-28 — Westlake CC (Jackson NJ). Substring match on
+  // "westlake" alone is too broad — there are multiple Westlake
+  // country clubs / golf courses across the US. Disambiguate by
+  // requiring either an explicit "jackson" / "nj" hint OR voice
+  // "open westlake" while the GPS-derived course context already
+  // pegs us to the NJ property.
+  if (c.includes('westlake') && (c.includes('jackson') || c.includes('nj') || c.includes('new jersey'))) return 'westlake-cc-nj';
+  // Voice/UI lookup: bare "westlake" resolves here too (single bundled
+  // Westlake property today; revisit if we add a sibling).
+  if (c.includes('westlake')) return 'westlake-cc-nj';
   return null;
 }
 
@@ -375,6 +433,10 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   if (c.includes('settlers crossing') || c.includes("settler's crossing")) {
     return MAPLEWOOD_HOLE_IMAGES[holeNumber] ?? null;
   }
+  // 2026-05-28 — Westlake CC, Jackson NJ. Match on "westlake" — single
+  // bundled Westlake property today, so the bare substring is enough.
+  // Revisit if a sibling Westlake course gets bundled.
+  if (c.includes('westlake')) return WESTLAKE_CC_NJ_HOLE_IMAGES[holeNumber] ?? null;
   return null;
 }
 

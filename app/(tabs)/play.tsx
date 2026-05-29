@@ -52,6 +52,7 @@ import {
   SUNNYVALE_HOLE_IMAGES,
   MAPLEWOOD_HOLE_IMAGES,
   PEMBROKE_PINES_HOLE_IMAGES,
+  WESTLAKE_CC_NJ_HOLE_IMAGES,
 } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
@@ -205,6 +206,21 @@ const LOCAL_COURSES: CourseSummary[] = [
     thumbnail: (PEMBROKE_PINES_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
     lat: 43.1417,
     lng: -71.4544,
+  },
+  // 2026-05-28 — Westlake Country Club, Jackson NJ. First East Coast
+  // course Tim has personally captured (full 18 Green Maps screenshots,
+  // cropped to Palms aesthetic). Geometry comes from golfcourseapi at
+  // runtime; bundled images only.
+  {
+    id: 'local:westlake-cc-nj',
+    club_name: 'Westlake Country Club',
+    location: 'Jackson, NJ',
+    rating: null,
+    slope: null,
+    isLocal: true,
+    thumbnail: (WESTLAKE_CC_NJ_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    lat: 40.0828,
+    lng: -74.3196,
   },
 ];
 
