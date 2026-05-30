@@ -19,6 +19,9 @@ import {
   classifyQuery,
 } from '../services/fillerLibrary';
 import { checkContent } from '../services/contentGuardrail';
+// 2026-05-30 — Fix FX: voice/network circuit-breaker. /api/kevin +
+// /api/transcribe attempts short-circuit when the endpoint has tripped.
+import { isEndpointDegraded, recordFetchOutcome } from '../services/networkHealth';
 // 2026-05-21 — Consolidation 4: routine voice traces gated through devLog.
 import { devLog } from '../services/devLog';
 import { voiceCommandRouter } from '../services/intents';
@@ -542,6 +545,14 @@ export const useVoiceCaddie = ({
         }
       }
 
+      // 2026-05-30 — Fix FX: skip the fetch when the breaker has
+      // tripped on /api/kevin. Return the same "snag" response shape
+      // the catch-block uses so callers route through their existing
+      // failure UX without firing a doomed radio wake.
+      if (isEndpointDegraded('kevin')) {
+        console.log('[voice] skipping /api/kevin — circuit-breaker tripped (degraded)');
+        return { text: 'Hit a snag on my end. Try again.', audioBase64: null, toolAction: null };
+      }
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25_000);
 
@@ -708,6 +719,7 @@ export const useVoiceCaddie = ({
           tankSoftIntro: useSettingsStore.getState().tankSoftIntro,
         }),
       }).finally(() => clearTimeout(timeout));
+      recordFetchOutcome('kevin', res.ok);
 
       if (!res.ok) {
         // Phase V.7+ — short haptic so Tim feels the network blip even if
@@ -736,6 +748,12 @@ export const useVoiceCaddie = ({
 
     } catch (err) {
       console.log('[voice] brain error:', err);
+      // 2026-05-30 — Fix FX: record the failure so 3 consecutive trips
+      // the breaker. AbortError counts here too — at the brain layer
+      // an abort is always our timeout firing (no user-initiated abort
+      // path on /api/kevin), so the radio attempt failed and the wake
+      // was real.
+      recordFetchOutcome('kevin', false);
       try { Vibration.vibrate(120); } catch {}
       return { text: 'Hit a snag on my end. Try again.', audioBase64: null, toolAction: null };
     }
@@ -899,6 +917,17 @@ export const useVoiceCaddie = ({
       formData.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
       formData.append('language', language);
 
+      // 2026-05-30 — Fix FX: skip /api/transcribe when the breaker
+      // has tripped. Same UX as a network-failure outcome below
+      // ("Network hiccup on transcribe").
+      if (isEndpointDegraded('transcribe')) {
+        console.log('[voice] skipping /api/transcribe — circuit-breaker tripped (degraded)');
+        try { Vibration.vibrate(120); } catch {}
+        onResponseReceived('Network hiccup on transcribe. Try again.');
+        wrappedOnVoiceStateChange('idle');
+        isProcessingRef.current = false;
+        return;
+      }
       const transcribeController = new AbortController();
       const transcribeTimeout = setTimeout(() => transcribeController.abort(), 10000);
 
@@ -907,6 +936,7 @@ export const useVoiceCaddie = ({
         body: formData,
         signal: transcribeController.signal,
       }).finally(() => clearTimeout(transcribeTimeout));
+      recordFetchOutcome('transcribe', transcribeRes.ok);
 
       const transcribeData = await transcribeRes.json().catch(() => ({})) as { text?: string; error?: string };
       const transcript = transcribeData.text ?? '';

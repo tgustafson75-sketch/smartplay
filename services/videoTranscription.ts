@@ -29,6 +29,10 @@
  */
 
 import * as FileSystem from 'expo-file-system/legacy';
+// 2026-05-30 — Fix FX: voice/network circuit-breaker. /api/transcribe
+// attempts short-circuit when degraded so swing-audio uploads don't
+// burn radio wakes during weak-signal windows.
+import { isEndpointDegraded, recordFetchOutcome } from './networkHealth';
 
 interface TranscribeOpts {
   /** Caller-known has_audio flag from probeVideo. When explicitly
@@ -104,6 +108,13 @@ export async function transcribeVideoAudio(
     } as any);
     form.append('language', language);
 
+    // 2026-05-30 — Fix FX: skip when /api/transcribe is degraded.
+    // Returns null (same as a failed response) — caller (commentary
+    // service) marks the shot 'done' and moves on.
+    if (isEndpointDegraded('transcribe')) {
+      console.log('[transcribe-video] skipping — circuit-breaker tripped');
+      return null;
+    }
     const res = await fetch(`${apiUrl}/api/transcribe`, {
       method: 'POST',
       body: form,
@@ -111,6 +122,7 @@ export async function transcribeVideoAudio(
       // Gemini fallback + larger uploads can stretch. Cap generously.
       signal: AbortSignal.timeout(60_000),
     });
+    recordFetchOutcome('transcribe', res.ok);
     const elapsedMs = Date.now() - t0;
     if (!res.ok) {
       const body = await res.text().catch(() => '<unreadable>');
@@ -133,6 +145,8 @@ export async function transcribeVideoAudio(
   } catch (e) {
     const elapsedMs = Date.now() - t0;
     const msg = e instanceof Error ? e.message : String(e);
+    // 2026-05-30 — Fix FX: count thrown failures toward the breaker.
+    recordFetchOutcome('transcribe', false);
     console.log('[transcribe-video] fetch failed', { elapsed_ms: elapsedMs, error: msg.slice(0, 200) });
     return null;
   }
