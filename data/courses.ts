@@ -476,6 +476,45 @@ const MARINERS_POINT_HOLES: CourseHole[] = [
   { hole: 9, par: 3, distance:  90, front:  78, back: 102, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
 ];
 
+// 2026-05-28 — Westlake Country Club, Jackson NJ (18 holes, par 71).
+// Par/distance transcribed from the Green Maps header on each
+// bundled hole screenshot (Mid Green Yds). Front/Back/teeLat/Lng are
+// either: read off the explicit F/M/B overlays on par 3s (holes 3, 6,
+// 17 — Green Maps shows all three numbers on par 3s); or estimated
+// ±12y from mid for par 4/5 (typical green depth ~24y, this is a
+// fair pre-round approximation until golfcourseapi geometry caches).
+// teeLat/Lng/middleLat/Lng/frontLat/Lng/backLat/Lng all 0 — populated
+// at runtime by services/courseGeometryService when the user is
+// online; the pixel-interpolation path in SmartVision doesn't need
+// real lat/lng to drive the measuring tool's F/M/B numbers (it
+// interpolates against `distance` along the tee→pin canvas axis).
+//
+// Why this matters: without a COURSES entry, getBundledHoles() returns
+// empty for local:westlake-cc-nj, SmartVision can't compute F/M/B
+// from the yellow target's pixel position, and the measuring tool
+// reads as "—" on every cell — making the curated images feel dead.
+// Same latent gap exists for Maplewood + Pembroke; address separately.
+export const WESTLAKE_NJ_HOLES: CourseHole[] = [
+  { hole:  1, par: 4, distance: 416, front: 404, back: 428, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  2, par: 5, distance: 472, front: 460, back: 484, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  3, par: 3, distance: 149, front: 135, back: 164, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  4, par: 4, distance: 380, front: 368, back: 392, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  5, par: 4, distance: 432, front: 420, back: 444, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  6, par: 3, distance: 168, front: 155, back: 182, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  7, par: 4, distance: 366, front: 354, back: 378, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  8, par: 4, distance: 416, front: 404, back: 428, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole:  9, par: 4, distance: 333, front: 321, back: 345, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 10, par: 5, distance: 510, front: 498, back: 522, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 11, par: 4, distance: 374, front: 362, back: 386, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 12, par: 4, distance: 351, front: 339, back: 363, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 13, par: 3, distance: 198, front: 185, back: 211, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 14, par: 5, distance: 500, front: 488, back: 512, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 15, par: 4, distance: 379, front: 367, back: 391, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 16, par: 4, distance: 378, front: 366, back: 390, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 17, par: 3, distance: 141, front: 128, back: 154, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 18, par: 4, distance: 288, front: 276, back: 300, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+];
+
 export const COURSES: Course[] = [
   {
     id: 'palms',
@@ -550,5 +589,20 @@ export const COURSES: Course[] = [
     par: 72,
     totalYards: 6948, // sum of distance column
     holes: SAN_JOSE_MUNI_HOLES,
+  },
+  // 2026-05-28 — Westlake Country Club, Jackson NJ. Tim's first East
+  // Coast capture. Per-hole par/distance from the Green Maps headers
+  // in each bundled screenshot; tee/green coords resolved at runtime
+  // from golfcourseapi (offline pre-round uses bundled distances only).
+  // Rating/slope blanks until Tim confirms from a scorecard on site.
+  {
+    id: 'westlake-cc-nj',
+    name: 'Westlake Country Club',
+    fullName: 'Westlake Country Club — Jackson, NJ',
+    rating: '',
+    slope: '',
+    par: 71,
+    totalYards: 6251, // sum of distance column (par 71)
+    holes: WESTLAKE_NJ_HOLES,
   },
 ];

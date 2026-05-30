@@ -15,6 +15,8 @@ const LOCAL_COURSE_HOLE_COUNT: Record<string, number> = {
   'mariners-point': 9,
   'san-jose-muni': 18,
   'sunnyvale': 18,
+  // 2026-05-28 — Westlake Country Club, Jackson NJ.
+  'westlake-cc-nj': 18,
 };
 
 /**
@@ -52,6 +54,10 @@ const LOCAL_COURSE_API_HINTS: Record<string, LocalCourseHint> = {
   'rancho-california': { search: 'Rancho California Golf Club', expectedCity: 'temecula' },
   'crystal-springs': { search: 'Crystal Springs Golf Course', expectedCity: 'burlingame' },
   'mariners-point': { search: 'Mariners Point Golf Center', expectedCity: 'foster city' },
+  // 2026-05-28 — Westlake Country Club, Jackson NJ. golfcourseapi
+  // should resolve this on the first online visit; result cached
+  // forever per the resolvedIdMem + AsyncStorage layer above.
+  'westlake-cc-nj': { search: 'Westlake Country Club Jackson', expectedCity: 'jackson' },
 };
 
 const RESOLVED_ID_KEY_PREFIX = 'local-courseapi-id-v1::';
