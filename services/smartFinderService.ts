@@ -130,7 +130,17 @@ const fixChangeListeners = new Set<FixChangeListener>();
 // Mark events bypass this throttle entirely — they fire via
 // positionMarkBus on a separate channel that all consumers also
 // subscribe to. Hole-advance is its own signal via roundStore.
-const NOTIFY_DISTANCE_YDS = 3;
+//
+// 2026-05-30 — Fix FW: NOTIFY_DISTANCE_YDS bumped 3 → 5 for battery.
+// At a typical 3 mph walking pace (~1.5 yd/s), the prior 3yd gate
+// fired re-render fanout every ~2s while walking — re-rendering the
+// Caddie data strip + SmartVision marker on a faster cadence than
+// any human-readable yardage display needs. 5yd = one fire per ~3-4s
+// walking, one per ~1-2s in a cart at 8-10 mph. Heartbeat still
+// catches stationary accuracy refinements. Audit estimated 15-20%
+// reduction in subscribeFixChange-driven re-render wakes during play,
+// ~0.5-1% battery/hr saved on a typical round.
+const NOTIFY_DISTANCE_YDS = 5;
 const NOTIFY_HEARTBEAT_MS = 8_000;
 let lastNotifiedFix: LastFix | null = null;
 let lastNotifyAt = 0;
