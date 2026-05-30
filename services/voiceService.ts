@@ -375,6 +375,18 @@ const isVoiceAllowed = (opts?: SpeakOpts): boolean => {
       console.log('[voice] gate denied: trustLevel=1 (Quiet) and !userInitiated');
       return false;
     }
+    // 2026-05-30 — Fix FY: Local Mode gate. Mirrors the trustLevel=1
+    // behavior but ON BY USER CHOICE rather than as a side-effect of
+    // the trust slider. Suppresses proactive utterances (opener,
+    // fillers, presence, follow-up loop replies) while letting
+    // userInitiated:true through (mic-tap responses, hero confirms).
+    // Independent of trustLevel so a user can be in Companion mode +
+    // Local Mode (active responses, no proactive chatter) — that's
+    // the combination Tim wants as the testable baseline.
+    if (settings.localMode === true && !opts?.userInitiated) {
+      console.log('[voice] gate denied: localMode=true and !userInitiated');
+      return false;
+    }
     const route = routingMod.getCurrentRoute();
     if (route === 'phone_speaker' && !settings.voiceOnPhoneSpeaker) {
       console.log('[voice] gate denied: phone_speaker route + voiceOnPhoneSpeaker=false');

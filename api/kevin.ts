@@ -1015,10 +1015,19 @@ ${onCourseContextBlock}${baseMessage}`
     // 2026-05-22 — vision present forces Sonnet (Haiku's multimodal
     // grounding is weaker for the kind of cues we're handing it — lie
     // texture, body angle in glasses POV, putter face read).
+    // 2026-05-30 — Fix FY: client may pass forceTier='TACTICAL' (Local
+    // Mode) to pin Haiku 4.5 and skip the classifyQuestion auto-tier.
+    // Honored UNLESS vision is present (Haiku's multimodal too weak to
+    // ship a swing/lie read on its own) — vision still escalates to
+    // Sonnet for read quality even in Local Mode. inRoundDiagnostic also
+    // wins (Tim's spec: deep pattern reasoning is worth the tier bump).
+    const forceTierRaw = typeof body.forceTier === 'string' ? body.forceTier : null;
+    const clientForceTactical = forceTierRaw === 'TACTICAL';
     const tier = visionBase64
       ? 'CONVERSATIONAL'
-      : sv ? 'TACTICAL'
       : inRoundDiagnostic ? 'CONVERSATIONAL'
+      : clientForceTactical ? 'TACTICAL'
+      : sv ? 'TACTICAL'
       : await classifyQuestion(baseMessage);
     const model = tier === 'TACTICAL' ? 'claude-haiku-4-5' : 'claude-sonnet-4-5';
 

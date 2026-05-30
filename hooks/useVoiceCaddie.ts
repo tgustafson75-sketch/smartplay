@@ -717,6 +717,15 @@ export const useVoiceCaddie = ({
           persona: useSettingsStore.getState().caddiePersonality,
           personaIntensity: useSettingsStore.getState().personaIntensity?.[useSettingsStore.getState().caddiePersonality] ?? 100,
           tankSoftIntro: useSettingsStore.getState().tankSoftIntro,
+          // 2026-05-30 — Fix FY: Local Mode → pin brain to TACTICAL
+          // tier (Haiku 4.5). Server's classifyQuestion auto-tier is
+          // skipped; query gets the cheapest, fastest, least-radio-time
+          // path. Server falls back to OpenAI gpt-4o if Haiku errors
+          // (same fallback path as today). Sonnet escalation is
+          // suppressed in this mode — the user explicitly chose
+          // conservation over depth. Omitted when localMode is off so
+          // the server's default classifyQuestion behavior is unchanged.
+          forceTier: useSettingsStore.getState().localMode === true ? 'TACTICAL' : undefined,
         }),
       }).finally(() => clearTimeout(timeout));
       recordFetchOutcome('kevin', res.ok);

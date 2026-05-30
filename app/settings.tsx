@@ -80,6 +80,9 @@ export default function Settings() {
     setVoiceOnPhoneSpeaker,
     setKevinGreetingEnabled,
     setVoiceEnabled,
+    // 2026-05-30 — Fix FY: Local Mode toggle.
+    localMode,
+    setLocalMode,
     setLanguage,
     setDiscreteMode,
     setResponseMode,
@@ -914,6 +917,17 @@ export default function Settings() {
               // resume in subsequent rounds.
               if (v) clearMicDenial();
             })}
+          />
+          {/* 2026-05-30 — Fix FY: Local Mode toggle. Conservation +
+              stability mode — proactive speech off, brain calls pinned
+              to Haiku (the cheapest/fastest tier), navigation intents
+              resolved locally. GPS, yardage, scorecard untouched.
+              Honest framing in the sub-line — not a warning. */}
+          <ToggleRow
+            label="Local Mode"
+            sub={`Conserves battery + handles weak signal cleanly. ${caddieName} only speaks when you ask. Tap-to-talk uses the fastest brain. GPS + yardages unchanged.`}
+            value={localMode}
+            onValueChange={confirmToggle('Local Mode', setLocalMode)}
           />
           <ToggleRow
             label="Discrete Mode"

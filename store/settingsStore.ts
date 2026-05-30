@@ -28,6 +28,35 @@ interface SettingsState {
    *  reading the in-memory DEFAULTS while the persisted values are
    *  still on disk. See the long onRehydrateStorage comment below. */
   hasHydrated: boolean;
+  /** 2026-05-30 — Fix FY: Local Mode.
+   *
+   *  Tim: "I would rather know and work in local mode than get
+   *  frustrated or have my users get frustrated by quirky behavior."
+   *
+   *  When TRUE:
+   *   - voiceService.speak() suppresses proactive utterances; only
+   *     userInitiated:true (mic-tap responses, hero-moment confirmations)
+   *     produces audio.
+   *   - useVoiceCaddie tries a local nav-only intent classifier
+   *     BEFORE the brain call ("open SmartMotion", "quiet mode",
+   *     "resume") — zero network for those.
+   *   - When the brain IS hit, the request body includes
+   *     forceTier: 'TACTICAL' so api/kevin pins to Haiku 4.5 instead
+   *     of classifyQuestion-driven Sonnet escalation. Faster, cheaper,
+   *     less radio time.
+   *   - A small leaf indicator appears next to the Tools pill so the
+   *     user knows which mode they're in. Honest, not alarming.
+   *
+   *  What stays unchanged in Local Mode (deliberately not gated):
+   *   - GPS cadence (already tiered; Tim: "GPS needs to be the first
+   *     priority of working")
+   *   - Yardage / hole navigation (GPS-dependent — high regression risk
+   *     if local intent classifier got these wrong)
+   *   - SmartMotion / Cage Mode (short sessions, full power fine)
+   *   - Shot tracking, scorecard, course images (already local-only)
+   *
+   *  Defaults to false — opt-in toggle. */
+  localMode: boolean;
   voiceEnabled: boolean;
   voiceGender: 'male' | 'female';
   language: 'en' | 'es' | 'zh';
@@ -232,6 +261,8 @@ interface SettingsState {
   // ─── ACTIONS ────────────────────────────
 
   setVoiceEnabled: (v: boolean) => void;
+  /** 2026-05-30 — Fix FY: Local Mode toggle. */
+  setLocalMode: (v: boolean) => void;
   setCecilyMode: (v: boolean) => void;
   setContinuousConversationMode: (v: boolean) => void;
   setVoiceGender: (g: 'male' | 'female') => void;
@@ -308,6 +339,9 @@ export const useSettingsStore = create<SettingsState>()(
       // boot-time persona reads) gate on this before reading caddie
       // settings to avoid the stale-defaults race.
       hasHydrated: false,
+      // 2026-05-30 — Fix FY: Local Mode. Defaults false (opt-in).
+      // Persisted via partialize so the user's choice survives restarts.
+      localMode: false,
       caddiePersonality: 'kevin',
       caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
       caddieSuggestions: 'on' as const,
@@ -374,6 +408,8 @@ export const useSettingsStore = create<SettingsState>()(
       ghostAutoActivate: true,
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
+      // 2026-05-30 — Fix FY: Local Mode setter.
+      setLocalMode: (v) => set({ localMode: v }),
       setCecilyMode: (v) => set({ cecilyMode: v }),
       setContinuousConversationMode: (v) => set({ continuousConversationMode: v }),
       setVoiceGender: (g) => set({ voiceGender: g }),
@@ -660,6 +696,10 @@ export const useSettingsStore = create<SettingsState>()(
       },
       partialize: (s) => ({
         voiceEnabled: s.voiceEnabled,
+        // 2026-05-30 — Fix FY: persist the Local Mode user choice.
+        // (hasHydrated is intentionally NOT in partialize — that's
+        // transient state by design; see onRehydrateStorage below.)
+        localMode: s.localMode,
         cecilyMode: s.cecilyMode,
         continuousConversationMode: s.continuousConversationMode,
         voiceGender: s.voiceGender,

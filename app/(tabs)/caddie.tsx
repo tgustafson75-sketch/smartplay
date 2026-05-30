@@ -597,6 +597,9 @@ export default function CaddieTab() {
   })));
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const setCaddiePersonality = useSettingsStore(s => s.setCaddiePersonality);
+  // 2026-05-30 — Fix FY: Local Mode indicator subscription. Re-renders
+  // the leaf icon when the user toggles Local Mode in Settings.
+  const localMode = useSettingsStore(s => s.localMode);
   const daysLeft = useMemo(
     () => trialDaysLeft(trial_started_at),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2240,7 +2243,22 @@ export default function CaddieTab() {
 
         <View style={styles.modeBadgePlaceholder} />
 
-        <View style={{ alignItems: 'flex-end' }}>
+        <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: 6 }}>
+          {/* 2026-05-30 — Fix FY: Local Mode indicator. Subtle leaf
+              next to the Tools pill when localMode is ON. Honest "you
+              are here" — NOT a warning, NOT an error state. Tap routes
+              to Settings so the user can toggle off without hunting. */}
+          {localMode && (
+            <TouchableOpacity
+              onPress={() => router.push('/settings' as never)}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Local Mode is on. Tap to open Settings."
+              style={[styles.navBtn, { paddingHorizontal: 4 }]}
+            >
+              <Ionicons name="leaf-outline" size={20} color="#00C896" />
+            </TouchableOpacity>
+          )}
           {/* Tool ••• — ALWAYS visible in upper right (Tim: "Make sure
               tools pill is ALWAYS in upper right"). At L4 the green-arrow
               dropdown also contains a Tools entry as a convenience, but
