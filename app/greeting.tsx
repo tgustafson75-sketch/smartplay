@@ -92,15 +92,28 @@ export default function GreetingScreen() {
   // internally as its first step).
   const [audioReady, setAudioReady] = useState(false);
 
-  // 2026-05-25 — D-ID Kevin intro video gate. When Kevin is active and
-  // the bundled video clip is present, render the talking-head video
-  // instead of the static avatar + bundled mp3 fork. The video's
-  // built-in audio plays inline; we wait for didJustFinish before
-  // transitioning. Other personas keep their existing avatar + TTS
-  // caption fork (until their own D-ID clips land).
-  const useKevinIntroVideo = caddiePersonality === 'kevin' && hasCaddieClip('kevin', 'intro');
+  // 2026-06-01 — Fix GG: REVERT the D-ID Kevin intro video. Tim's repro
+  // across many sessions: video renders visually but audio fires late
+  // on the NEXT screen with the captions appearing there instead of
+  // on the splash. Confirmed by screenshots showing "Good morning,
+  // Tim" captions popping up on the SwingLab tab after the splash
+  // ended. Fix GB tried to address by gating Video mount on audio
+  // session being configured — that didn't solve it. Going back to
+  // the prior bundled-mp3 method per Tim's explicit instruction.
+  //
+  // Set useKevinIntroVideo=false unconditionally so the Kevin branch
+  // takes the bundled-mp3 fallback path that has worked historically.
+  // The Video JSX still exists below but is now never rendered. Kept
+  // in place (not deleted) so we can re-enable later if/when the
+  // audio-session race is properly diagnosed.
+  const useKevinIntroVideo = false;
+  // Reference + ref values kept so the gated branches and unmount
+  // cleanup still type-check; unused at runtime with the toggle off.
   const videoRef = useRef<Video>(null);
   const videoDoneResolveRef = useRef<(() => void) | null>(null);
+  // 2026-06-01 — Fix GG: silence unused-var lint on the kept-for-later
+  // video ref. It'll be live again when/if the video path is restored.
+  void videoRef;
   // 2026-05-25 — Tail-clip defense. Set true when the greeting playback
   // (video / speak / mp3) resolves naturally. The unmount cleanup gates
   // its stopSpeaking() on !naturalEndRef.current so a happy-path natural
