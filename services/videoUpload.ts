@@ -643,19 +643,68 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
 
     // 2026-05-26 — Fix DR (commit 3/3): tentative-fallback ALSO fires
     // when the classifier returned null AND every primary read came
-    // back as 'inconclusive' or 'none' (i.e. the footage was readable
-    // but the analyst couldn't pin a tendency on any swing). Prior
-    // behavior left primary_issue=null in that case, surfacing as
-    // 'no dominant fault' silence. Tentative uses different frame
-    // sampling and a more permissive prompt — gives the user a
-    // useful low-confidence read instead of dead-ending. The
-    // original zero-results tentative path is unchanged above.
+    // back as 'inconclusive' (i.e. the footage was readable but the
+    // analyst couldn't pin a tendency on any swing). Prior behavior
+    // left primary_issue=null in that case, surfacing as 'no dominant
+    // fault' silence. Tentative uses different frame sampling and a
+    // more permissive prompt — gives the user a useful low-confidence
+    // read instead of dead-ending. The original zero-results
+    // tentative path is unchanged above.
+    //
+    // 2026-06-01 — Fix GD: bug. Prior code conflated TWO outcomes:
+    //   - detected_issue === 'none'  → model SUCCEEDED, read the
+    //     swing, correctly said "no clear fault" (e.g. clean swing).
+    //   - primary_fault === 'inconclusive' → model FAILED to read
+    //     the footage (unreadable lighting/angle/blur).
+    // Only the second deserves the tentative fallback. The first is a
+    // legitimate, honest "no fault" read and should surface as such.
+    // Bug symptom: EVERY clean-swing upload landed as "Tentative
+    // observation" because Haiku said detected_issue='none' (correct)
+    // and we treated it as if it had failed. Tim: "every video has
+    // tentative observation, has been consistent for a long time."
+    //
+    // Fix: split the cases.
     if (!primary_issue && results.length > 0) {
       const allInconclusive = results.every(r =>
-        r.analysis.detected_issue === 'none' ||
         r.analysis.primary_fault === 'inconclusive',
       );
-      if (allInconclusive) {
+      const allNoneDetected = results.every(r =>
+        r.analysis.detected_issue === 'none' &&
+        r.analysis.primary_fault !== 'inconclusive',
+      );
+
+      if (allNoneDetected) {
+        // 2026-06-01 — Fix GD: honest "no clear fault" path. Model
+        // read the swing(s) successfully and called no fault. Surface
+        // that as a real PrimaryIssue with issue_id='no_clear_fault'
+        // and high confidence — NOT as a tentative observation. Uses
+        // the first swing's actual observation text when present so
+        // the player gets the model's real read, not a placeholder.
+        const firstSwingWithClip = swings.find(s => s.clipUri);
+        const firstResult = results[0];
+        const observation = (firstResult?.analysis.observation ?? '').trim();
+        V6('STAGE 5 FINAL — no clear fault (model read OK, no tendency)', {
+          swings: results.length,
+          observation_head: observation.slice(0, 200),
+        });
+        uploadLog('no-clear-fault-surfaced', {
+          swings: results.length,
+          via: 'detected_issue_none',
+        }, sessionId);
+        primary_issue = {
+          issue_id: 'no_clear_fault',
+          name: 'No clear fault',
+          category: 'other',
+          severity: 'minor',
+          occurrence_count: results.length,
+          visual_reference_path: null,
+          mechanical_breakdown: observation
+            || 'I watched the swing and didn\'t see a single tendency standing out today. That\'s a clean read — keep doing what you\'re doing.',
+          feel_cue: 'Trust the swing. Hit a few more if you want a deeper pattern check.',
+          detected_in_shots: firstSwingWithClip ? [firstSwingWithClip.id] : [],
+          confidence: 'high',
+        };
+      } else if (allInconclusive) {
         const firstSwingWithClip = swings.find(s => s.clipUri);
         if (firstSwingWithClip?.clipUri) {
           V6('STAGE 5 — all results inconclusive, attempting tentative fallback', {
