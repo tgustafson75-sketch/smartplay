@@ -16,11 +16,41 @@ import { isEndpointDegraded, recordFetchOutcome } from './networkHealth';
 
 let audioModeQueue: Promise<void> = Promise.resolve();
 
+// 2026-06-01 — Fix GC: per-call timeout on Audio.setAudioModeAsync.
+// Verifiable defect this closes: native audio-mode calls can hang
+// (audio-focus contention, OS deadlock — real on both iOS and Android).
+// The prior queue had no timeout; one hung call would poison the chain
+// permanently, and every subsequent setAudioModeSerial caller would
+// await a never-resolving promise. Symptom: tap-to-talk freezes on
+// the 2nd or 3rd attempt (1st succeeds, then one call hangs, queue
+// dead). captureUtterance + configureAudioForSpeech + every other
+// audio path goes through this queue, so a single hang takes down
+// the whole voice stack.
+//
+// Fix: race each Audio.setAudioModeAsync against a 3s timeout. On
+// timeout, log loudly and let the queue move on with the requested
+// mode possibly unapplied — the next call will reapply. The queue
+// stays alive. No happy-path scenario changes: 3s is well above the
+// ~5-50ms a healthy setAudioModeAsync takes.
+const AUDIO_MODE_CALL_TIMEOUT_MS = 3_000;
+
 const setAudioModeSerial = (mode: Parameters<typeof Audio.setAudioModeAsync>[0]): Promise<void> => {
   audioModeQueue = audioModeQueue
     .catch(() => { /* drop prior failure */ })
-    .then(() => Audio.setAudioModeAsync(mode))
-    .then(() => undefined);
+    .then(() => Promise.race([
+      Audio.setAudioModeAsync(mode),
+      new Promise<void>((_resolve, reject) =>
+        setTimeout(() => reject(new Error('setAudioModeAsync timeout')), AUDIO_MODE_CALL_TIMEOUT_MS),
+      ),
+    ]))
+    .then(() => undefined)
+    .catch((err) => {
+      // Swallow the timeout/error so the queue stays alive for the
+      // NEXT caller. Worst case: audio mode is one call behind reality,
+      // and the next caller will reapply. Log loudly so the hang is
+      // visible in logcat — provable when it happens.
+      console.log('[voice] setAudioModeSerial swallowed error to keep queue alive:', err instanceof Error ? err.message : String(err));
+    });
   return audioModeQueue;
 };
 
