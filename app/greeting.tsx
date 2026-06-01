@@ -31,7 +31,7 @@ import { Asset } from 'expo-asset';
 import { Video, ResizeMode } from 'expo-av';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettingsStore } from '../store/settingsStore';
-import { playLocalFile, speak, stopSpeaking } from '../services/voiceService';
+import { playLocalFile, speak, stopSpeaking, configureAudioForSpeech } from '../services/voiceService';
 import {
   pickGreeting,
   recordLaunch,
@@ -75,6 +75,22 @@ export default function GreetingScreen() {
   const [phase, setPhase] = useState<Phase>('ENTERING');
   const [greeting, setGreeting] = useState<GreetingFilename | null>(null);
   const [reduceMotion, setReduceMotion] = useState(false);
+  // 2026-06-01 — Fix GB: gate the Kevin intro video render on audio
+  // session being configured for playback. Verifiable defect this
+  // closes: configureAudioForSpeech() was previously only called from
+  // (a) the speak() path used by Serena/Harry/Tank greetings, and
+  // (b) app/_layout.tsx's glasses-mode boot config (gated on
+  // settings.glassesMode === true — most users don't have it).
+  // The Kevin-video branch rendered <Video shouldPlay isMuted={false}>
+  // without ever configuring the audio session, so on iOS with the
+  // silent switch up (and Android defaults that vary), the video would
+  // play visually but emit no audio. Default audio category respects
+  // the silent switch unless playsInSilentModeIOS:true is set, which
+  // is what configureAudioForSpeech does. Setting audioReady true only
+  // after that call resolves; <Video> mount waits on it. The TTS
+  // branches were unaffected (speak() calls configureAudioForSpeech
+  // internally as its first step).
+  const [audioReady, setAudioReady] = useState(false);
 
   // 2026-05-25 — D-ID Kevin intro video gate. When Kevin is active and
   // the bundled video clip is present, render the talking-head video
@@ -129,6 +145,28 @@ export default function GreetingScreen() {
     AccessibilityInfo.isReduceMotionEnabled()
       .then(v => { if (!cancelled) setReduceMotion(v); })
       .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // 2026-06-01 — Fix GB: configure audio session for playback BEFORE
+  // the Kevin video gets a chance to render+play. Fire once on mount.
+  // configureAudioForSpeech is idempotent + safe to call when already
+  // configured. Flipping audioReady afterward gates the <Video>
+  // component mount in the JSX below — so on cold launch the video
+  // never plays into an unconfigured audio session. On Tim's iOS
+  // silent-switch-up case (default audio category respects silent),
+  // this is the difference between hearing intro and seeing only the
+  // video frames in silence.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        await configureAudioForSpeech();
+      } catch (e) {
+        console.log('[greeting] configureAudioForSpeech failed (proceeding anyway):', e);
+      }
+      if (!cancelled) setAudioReady(true);
+    })();
     return () => { cancelled = true; };
   }, []);
 
@@ -205,6 +243,14 @@ export default function GreetingScreen() {
     // effect re-runs with the persisted values. Animation can still
     // start without the gate, but audio waits.
     if (!settingsHydrated) return;
+    // 2026-06-01 — Fix GB: also wait for audioReady. The Kevin video
+    // branch below awaits videoDoneResolveRef which only fires when
+    // the <Video> component plays through. The <Video> JSX is itself
+    // gated on `audioReady` (see render below). Without this gate
+    // here too, the effect would start a 12s timer waiting for a
+    // video that hasn't mounted yet → ends silent. Effect re-runs
+    // when audioReady flips true.
+    if (!audioReady) return;
 
     // Fade in avatar
     Animated.parallel([
@@ -347,8 +393,11 @@ export default function GreetingScreen() {
     // 2026-05-28 — Fix FS: `settingsHydrated` added so the effect re-fires
     // once hydration completes (initial pass with hasHydrated=false bails
     // at the new gate above).
+    // 2026-06-01 — Fix GB: `audioReady` added for the same reason —
+    // effect re-runs after configureAudioForSpeech resolves so the
+    // Kevin-video await aligns with the actual <Video> mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [greeting, settingsHydrated]);
+  }, [greeting, settingsHydrated, audioReady]);
 
   // Slow breathing pulse during SPEAKING — opacity 0.94↔1.0 at ~0.45 Hz with
   // sine easing. The previous 0.85↔1.0 / 180ms cycle read as a strobe.
@@ -421,7 +470,7 @@ export default function GreetingScreen() {
                 no separate playLocalFile fires for this path. Falls
                 back to the static portrait when the clip isn't available
                 or for non-Kevin personas. */}
-            {useKevinIntroVideo ? (
+            {useKevinIntroVideo && audioReady ? (
               // 2026-05-25 — With the new narrow portrait wrap
               // (width = 0.55 × height), ResizeMode COVER naturally
               // crops the video's side panels (D-ID watermarks) because
@@ -429,6 +478,11 @@ export default function GreetingScreen() {
               // (~0.5625). The transform: scale 1.3 is a mild extra
               // zoom for nice face framing; if Android ignores it the
               // narrow-wrap geometry alone still hides watermarks.
+              // 2026-06-01 — Fix GB: audioReady gate — see the
+              // configureAudioForSpeech effect above. Video mount is
+              // deferred until the audio session is configured for
+              // playback so the intro is never played into silence
+              // (iOS silent-switch / unconfigured-session case).
               <Video
                 ref={videoRef}
                 source={getCaddieClip('kevin', 'intro') as number}
