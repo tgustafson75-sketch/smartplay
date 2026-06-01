@@ -35,6 +35,13 @@ import * as Location from 'expo-location';
 import { Platform, PermissionsAndroid } from 'react-native';
 // 2026-05-21 — Consolidation 4: routine lifecycle status logs gated.
 import { devLog } from './devLog';
+// 2026-06-01 — Fix GF.3: surface POST_NOTIFICATIONS denial via
+// ownerSentinel so the silent foreground-service degradation is
+// visible in owner-debug tools. Foreground GPS keeps working — the
+// round still functions — but pocket-tracking is dark, and the user
+// has no signal that's the case. Sentinel breadcrumb gives the owner
+// a way to spot the pattern across testers.
+import { ownerSentinel } from './ownerSentinel';
 
 export const BACKGROUND_LOCATION_TASK = 'smartplay-background-location';
 
@@ -191,6 +198,18 @@ export async function startBackgroundLocation(): Promise<void> {
         '[bgLocation] POST_NOTIFICATIONS not granted — skipping foreground service. ' +
         'Foreground GPS watch still provides fixes; phone-in-pocket Doze coverage is degraded.',
       );
+      // 2026-06-01 — Fix GF.3: emit ownerSentinel breadcrumb so the
+      // silent foreground-service skip is visible to owner-debug
+      // tools. The console.log above is the user-facing-debug-only
+      // path; the sentinel path persists the pattern across testers
+      // for triage (e.g. "all 3 of Tim's beta testers have BG GPS
+      // disabled because they denied the notification prompt").
+      try {
+        ownerSentinel(
+          'bgLocation.skip_foreground_service',
+          new Error('POST_NOTIFICATIONS not granted — BG GPS pocket-tracking disabled'),
+        );
+      } catch { /* sentinel itself must never crash the round */ }
       return;
     }
 

@@ -26,6 +26,15 @@ import { create } from 'zustand';
 import { useRoundStore } from '../store/roundStore';
 import { getLastFix } from './smartFinderService';
 import { haversineYards } from '../utils/geoDistance';
+// 2026-06-01 — Fix GF.1: geometryCache fallback. When roundStore.courseHoles
+// is sparse (golfcourseapi-only courses, no bundled COURSES entry — common
+// for non-Palms/Lakes/Crystal rounds), this detector was silent because
+// it iterated roundStore.courseHoles only. The geometry cache populated
+// asynchronously by services/courseGeometryService (via the Fix FZ
+// background fetch in runStartRound) DID have the hole references, but
+// offCourseDetector never read it. Now: if courseHoles yields no usable
+// candidates, walk the cached geometry as a second source.
+import { getCachedGeometry } from './courseGeometryService';
 
 // Off-course threshold: 400 yards beyond any hole reference point.
 // 2026-05-25 — Fix U: relaxed from 200y → 400y. Tim's Palms round
@@ -100,9 +109,36 @@ function tick(): void {
       if (d < nearest) nearest = d;
     }
   }
+
+  // 2026-06-01 — Fix GF.1: when courseHoles yielded no candidates
+  // (Number.isFinite(nearest) === false), fall back to the geometry
+  // cache populated async by courseGeometryService. Same shape as
+  // smartFinderService's 4-tier cascade — cache-as-secondary-source.
+  // Without this, the detector was silent for the entire round on any
+  // course where geometry arrived via the async cache rather than
+  // being baked into roundStore.courseHoles at round-start.
+  if (!Number.isFinite(nearest) && round.activeCourseId) {
+    const cached = getCachedGeometry(round.activeCourseId);
+    if (cached) {
+      for (const h of cached.holes) {
+        const candidates = [
+          h.green,
+          h.green_front,
+          h.green_back,
+          h.tee,
+        ].filter((c): c is { lat: number; lng: number } => c != null);
+        for (const c of candidates) {
+          const d = haversineYards(player, c);
+          if (d < nearest) nearest = d;
+        }
+      }
+    }
+  }
+
   if (!Number.isFinite(nearest)) {
-    // No usable course geometry — treat as not-off-course rather than
-    // misleading the user.
+    // No usable course geometry (neither courseHoles nor cache) — treat
+    // as not-off-course rather than misleading the user. Same
+    // "honest unknown" stance Fix FZ established at runStartRound.
     return;
   }
 

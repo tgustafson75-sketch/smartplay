@@ -31,6 +31,50 @@ import { haversineYards } from '../utils/geoDistance';
 import { ownerSentinel } from './ownerSentinel';
 
 // ─── Tunables ─────────────────────────────────────────────────────────
+//
+// 2026-06-01 — Fix GF.4: cross-constant interaction preamble.
+//
+// Three constants govern auto hole transition; they are INTERDEPENDENT
+// and changing one without considering the others will resurface the
+// Fix L false-transition pattern. Read this before touching any of them.
+//
+//   1. MIN_DISTANCE_FROM_GREEN_YD (60y)
+//      Gate A — "is the player still close to the current green?"
+//      If player is within this distance of the active hole's green
+//      centroid, ANY next-tee candidate is REJECTED. Bumped 30→60 in
+//      Fix L because a 30y gate let cart-path motion past the green
+//      trigger transitions while the player was still on/near the
+//      green (harness repro: 3 false transitions on a single Menifee
+//      Palms cart round).
+//
+//   2. TRANSITION_MARGIN_YD (30y)
+//      Gate B — "is the next tee meaningfully closer than the green?"
+//      Next-tee distance must be at least this many yards CLOSER than
+//      current-green distance. Pre-Fix-L the comparison was bare
+//      `nextTee < currentGreen` which fired the instant the next tee
+//      was even 1y closer — the H14→H15 disaster pattern
+//      (16y next-tee vs. 49y current-green = transition while putting).
+//      30y of margin requires clear commit-to-move-on, not coincidence.
+//
+//   3. CART_MODE_BONUS_YD (20y) + cartMode flag
+//      Modifier — added to BOTH Gate A and Gate B when cartMode=true.
+//      Cart paths swing wider than walker lines, regularly passing
+//      closer to adjacent tees than a walker would. The bonus raises
+//      the bar for cart players: 80y from current green AND 50y of
+//      margin to next tee. Without this, cart users got false
+//      transitions on every parallel-hole layout.
+//
+//   4. SUSTAINED_TRANSITION_MS (10s)
+//      Time gate — even when A+B+modifier pass, the candidate must be
+//      observed for 10s of sustained position before firing. Filters
+//      out flyby moments where the player walks past a tee retrieving
+//      a ball.
+//
+// If you change any of {1, 2, 3}, RE-RUN the GPS harness against the
+// Menifee Palms cart-round fixture (services/simulatedGPS scenarios)
+// to confirm no regressions on the known false-transition cases.
+// Comment on each constant below describes the specific incident or
+// audit that drove the chosen value.
 
 const POSITION_HISTORY_WINDOW_MS = 30_000;       // rolling 30s
 const SUSTAINED_TRANSITION_MS    = 10_000;        // 10s sustained position required

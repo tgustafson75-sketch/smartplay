@@ -510,6 +510,11 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
     hole_number: hole,
     reason: 'ok' as const,
   };
+  // 2026-06-01 — Fix GF.2: log the raw computed yardage BEFORE the
+  // sanity clamp checks it. This entry captures the bad >800y value
+  // that the clamp would otherwise discard — exactly the case where
+  // calcLog debug data matters most. When the clamp fires below, we
+  // overwrite with a second entry tagged outcome='clamp_fallback'.
   logYardageCalc(hole, fix, { front, middle, back }, yards, source);
   // 2026-05-18 — Sanity clamp. If any computed yardage exceeds 800y the
   // GPS fix is in a different city than the green coord (Tim hit
@@ -519,7 +524,14 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
   // mislead a user reaching for a club.
   if ((yards.middle ?? 0) > 800 || (yards.front ?? 0) > 800 || (yards.back ?? 0) > 800) {
     console.log('[smartFinder] yardages out of range — falling back to scorecard:', yards);
-    return staticYardages(hData, hole);
+    // 2026-06-01 — Fix GF.2: emit a second calcLog entry with
+    // outcome='clamp_fallback' so debug surfaces can see WHICH
+    // decision drove the displayed scorecard yardage. The raw bad
+    // value was logged above with outcome='ok'; this entry captures
+    // the fallback decision.
+    const fallback = staticYardages(hData, hole);
+    logYardageCalc(hole, fix, { front, middle, back }, fallback, source, 'clamp_fallback');
+    return fallback;
   }
   return yards;
 }
@@ -554,7 +566,11 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
   // 2026-05-18 — same sanity clamp as the async path above. See note.
   if ((yards.middle ?? 0) > 800 || (yards.front ?? 0) > 800 || (yards.back ?? 0) > 800) {
     console.log('[smartFinder:sync] yardages out of range — falling back to scorecard:', yards);
-    return staticYardages(hData, hole);
+    // 2026-06-01 — Fix GF.2: same clamp_fallback log emission as the
+    // async path above. See note there.
+    const fallback = staticYardages(hData, hole);
+    logYardageCalc(hole, syncFix, { front, middle, back }, fallback, source, 'clamp_fallback');
+    return fallback;
   }
   return yards;
 }
@@ -615,6 +631,19 @@ export type YardageCalcEntry = {
    *  cascade source — just identifies the source kind so debug tools
    *  can distinguish green-yardage rows from arbitrary-target rows. */
   source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none' | 'tapped_point' | null;
+  /** 2026-06-01 — Fix GF.2: outcome of the yardage decision. Previously
+   *  early-return paths (no_fix, no_hole, no_geometry) and the sanity-
+   *  clamp fallback bypassed logYardageCalc entirely, so the debug
+   *  ring buffer had no record of WHY a user saw scorecard yardages
+   *  instead of live GPS reads. Now every decision is captured with
+   *  the outcome that drove the displayed result.
+   *  Values:
+   *    'ok'             — live GPS yardage rendered
+   *    'no_fix'         — no GPS fix yet, scorecard fallback used
+   *    'no_hole'        — no hole data found
+   *    'no_geometry'    — GPS available but no green coords resolved
+   *    'clamp_fallback' — yardage > 800y sanity clamp; scorecard used */
+  outcome?: 'ok' | 'no_fix' | 'no_hole' | 'no_geometry' | 'clamp_fallback';
 };
 
 const CALC_LOG_MAX = 500;
@@ -626,6 +655,7 @@ function logYardageCalc(
   targets: { front: ShotLocation | null; middle: ShotLocation | null; back: ShotLocation | null },
   result: GreenYardages,
   source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none' | 'tapped_point' | null,
+  outcome: 'ok' | 'no_fix' | 'no_hole' | 'no_geometry' | 'clamp_fallback' = 'ok',
 ): void {
   const entry: YardageCalcEntry = {
     ts: Date.now(),
@@ -643,6 +673,7 @@ function logYardageCalc(
     middle_yards: result.middle,
     back_yards: result.back,
     source: source ?? null,
+    outcome,
   };
   calcLog.push(entry);
   if (calcLog.length > CALC_LOG_MAX) {
