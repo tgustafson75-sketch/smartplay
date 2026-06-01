@@ -65,19 +65,38 @@ import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS, getLocalCourseSlug } from '../data/localCourseImages';
 import { pointAlongHoleLine } from '../data/holeLineCalibration';
 import { getBundledHoles } from '../data/courses';
+// 2026-05-31 — Fix GA: consolidate to canonical haversine. Prior inline
+// implementation duplicated utils/geoDistance.ts and was a maintenance
+// liability (three copies across this file, hole-view.tsx, and utils).
+// Single source of truth now lives in utils/geoDistance.ts.
+import { haversineYards as canonicalHaversineYards } from '../utils/geoDistance';
 
 // ─── Geo helpers ──────────────────────────────────────────────────
 
+// 2026-05-31 — Fix GA: WGS84 range guard. Any coord with |lat| > 90 OR
+// |lng| > 180 is mathematically invalid (planet doesn't go there) and
+// indicates a unit-mismatch upstream — typically meters where degrees
+// were expected, or a projection result that wasn't normalized. Returns
+// false → caller skips the haversine call rather than producing the
+// deterministic ~246yd artifact Tim's harness flagged (225m × 1.09361).
+function isValidWgs84(lat: number, lng: number): boolean {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return false;
+  return true;
+}
+
+// 4-arg wrapper matching the prior inline signature so existing call
+// sites don't need restructuring. Internally delegates to the canonical
+// {lat,lng}-shape haversine in utils/geoDistance.ts.
 function haversineYards(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371000;
-  const φ1 = lat1 * Math.PI / 180;
-  const φ2 = lat2 * Math.PI / 180;
-  const Δφ = (lat2 - lat1) * Math.PI / 180;
-  const Δλ = (lng2 - lng1) * Math.PI / 180;
-  const a =
-    Math.sin(Δφ / 2) ** 2 +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 1.09361;
+  if (!isValidWgs84(lat1, lng1) || !isValidWgs84(lat2, lng2)) {
+    console.error('[smartvision/yardage] coord out of WGS84 range — skipping haversine', {
+      a: { lat: lat1, lng: lng1 },
+      b: { lat: lat2, lng: lng2 },
+    });
+    return NaN;
+  }
+  return canonicalHaversineYards({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
 }
 
 function bearingDeg(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
@@ -772,9 +791,20 @@ export default function SmartVisionScreen() {
     if (usingGpsTile && targetPx && geometry && pinPx) {
       const targetGeo = pixelsToLatLng(targetPx, projection!.center, projection!.zoom, projection!.bearing);
       const pinGeo = pixelsToLatLng(pinPx, projection!.center, projection!.zoom, projection!.bearing);
-      const front = geometry.green_front ? Math.round(haversineYards(targetGeo.lat, targetGeo.lng, geometry.green_front.lat, geometry.green_front.lng)) : null;
-      const middle = Math.round(haversineYards(targetGeo.lat, targetGeo.lng, pinGeo.lat, pinGeo.lng));
-      const back = geometry.green_back ? Math.round(haversineYards(targetGeo.lat, targetGeo.lng, geometry.green_back.lat, geometry.green_back.lng)) : null;
+      // 2026-05-31 — Fix GA: guard against out-of-range coords BEFORE
+      // any haversine call. If pixelsToLatLng ever returned something
+      // that isn't WGS84 (projection regression, bad input), the prior
+      // code blindly fed the result into haversine and produced the
+      // 246yd artifact. haversineYards itself now returns NaN on bad
+      // coords and we coerce that to null at the cell level below.
+      if (!isValidWgs84(targetGeo.lat, targetGeo.lng) || !isValidWgs84(pinGeo.lat, pinGeo.lng)) {
+        console.error('[smartvision/yardage] pixelsToLatLng produced out-of-range coord — skipping yardage tick', { targetGeo, pinGeo });
+        return { front: null as number | null, middle: null as number | null, back: null as number | null };
+      }
+      const cell = (v: number) => Number.isFinite(v) ? Math.round(v) : null;
+      const front = geometry.green_front ? cell(haversineYards(targetGeo.lat, targetGeo.lng, geometry.green_front.lat, geometry.green_front.lng)) : null;
+      const middle = cell(haversineYards(targetGeo.lat, targetGeo.lng, pinGeo.lat, pinGeo.lng));
+      const back = geometry.green_back ? cell(haversineYards(targetGeo.lat, targetGeo.lng, geometry.green_back.lat, geometry.green_back.lng)) : null;
       return { front, middle, back };
     }
     const h = courseHoles.find(x => x.hole === holeIndex);
@@ -800,7 +830,13 @@ export default function SmartVisionScreen() {
   const carryYards = useMemo(() => {
     if (usingGpsTile && targetPx && geometry?.tee) {
       const targetGeo = pixelsToLatLng(targetPx, projection!.center, projection!.zoom, projection!.bearing);
-      return Math.round(haversineYards(targetGeo.lat, targetGeo.lng, geometry.tee.lat, geometry.tee.lng));
+      // 2026-05-31 — Fix GA: same WGS84 guard as the yardages memo.
+      if (!isValidWgs84(targetGeo.lat, targetGeo.lng) || !isValidWgs84(geometry.tee.lat, geometry.tee.lng)) {
+        console.error('[smartvision/carry] out-of-range coord — skipping', { targetGeo, tee: geometry.tee });
+        return null;
+      }
+      const yds = haversineYards(targetGeo.lat, targetGeo.lng, geometry.tee.lat, geometry.tee.lng);
+      return Number.isFinite(yds) ? Math.round(yds) : null;
     }
     const h = courseHoles.find(x => x.hole === holeIndex);
     if (h && targetPx && teePx && pinPx) {

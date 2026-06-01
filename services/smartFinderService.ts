@@ -270,8 +270,26 @@ export function classifyAccuracy(accuracy_m: number | null, fixTimestamp?: numbe
   return { level: 'weak', accuracy_m, accuracy_ft };
 }
 
-function safeLoc(lat: number, lng: number): ShotLocation | null {
+// 2026-05-31 — Fix GA: hardened against half-null / out-of-range coords.
+// Prior implementation rejected only the {0,0} pair. Anything with one
+// zero axis (e.g. golfcourseapi returning {37.4, 0} for a malformed
+// hole) passed through and produced a real-looking-but-wrong yardage
+// against the equator-line meridian. Same applies to null/undefined
+// fields (which TS allows from CourseHole's optional coords). New
+// guards:
+//   - null/undefined → reject (TS-narrowed but defensive at runtime)
+//   - both zero → reject (legacy guard, kept)
+//   - either axis near-zero (|val| < 0.001°, ~110m of the equator or
+//     Greenwich) → reject as obvious placeholder/sentinel
+//   - either axis out of WGS84 range (|lat|>90, |lng|>180) → reject
+//     (catches projection regressions where meters leaked into a
+//     degree slot — the 246yd-artifact shape)
+function safeLoc(lat: number | null | undefined, lng: number | null | undefined): ShotLocation | null {
+  if (lat == null || lng == null) return null;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   if (lat === 0 && lng === 0) return null;
+  if (Math.abs(lat) < 0.001 || Math.abs(lng) < 0.001) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
   return { lat, lng };
 }
 

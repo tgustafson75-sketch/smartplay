@@ -92,21 +92,32 @@ const SATELLITE_CACHE: Record<string, string> = {};
 
 // ─── GPS HELPERS ──────────────────────────
 
+// 2026-05-31 — Fix GA: consolidated to canonical haversine. Same
+// rationale as the smartvision.tsx update — three inline copies of
+// the same formula was a maintenance liability and the deterministic
+// 246yd artifact in the harness traced to one of these unguarded
+// inline implementations being fed out-of-range coords. WGS84 guard
+// returns NaN on bad input (caller must check Number.isFinite).
+import { haversineYards as canonicalHaversineYards } from '../utils/geoDistance';
+
+function isValidWgs84(lat: number, lng: number): boolean {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return false;
+  return true;
+}
+
 const haversineYards = (
   lat1: number, lng1: number,
   lat2: number, lng2: number,
 ): number => {
-  const R = 6371000;
-  const φ1 = lat1 * Math.PI / 180;
-  const φ2 = lat2 * Math.PI / 180;
-  const Δφ = (lat2 - lat1) * Math.PI / 180;
-  const Δλ = (lng2 - lng1) * Math.PI / 180;
-  const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) *
-    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c * 1.09361;
+  if (!isValidWgs84(lat1, lng1) || !isValidWgs84(lat2, lng2)) {
+    console.error('[hole-view/yardage] coord out of WGS84 range — skipping haversine', {
+      a: { lat: lat1, lng: lng1 },
+      b: { lat: lat2, lng: lng2 },
+    });
+    return NaN;
+  }
+  return canonicalHaversineYards({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
 };
 
 const getHoleHeading = (
