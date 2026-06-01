@@ -438,6 +438,19 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       const liveShot = useCageStore.getState().sessionHistory
         .find(s => s.id === sessionId)?.shots.find(x => x.id === swing.id);
       const coachAudio = (liveShot?.commentary_transcript ?? swing.commentary_transcript ?? '').trim();
+      // 2026-06-01 — Fix GE: library uploads use tier='quick' (Haiku
+      // 4.5 only, no OpenAI/Sonnet escalation). Prior config left
+      // library on the full chain "where deeper analysis matters
+      // more." In practice on Tim's clips, Haiku was already producing
+      // the actual answer (detected_issue='none' on clean swings,
+      // mis-routed to Tentative by the GD bug, OR a real fault with
+      // confidence good enough to meet speedBar). Either way, the
+      // chain rarely improved the read but reliably added 20-40s.
+      // Net trade: ~30s server-side savings per upload, with the
+      // safety net intact — Haiku failing to produce a parseable
+      // result falls through to OpenAI/Sonnet escalation on the
+      // server (api/swing-analysis.ts quickShortCircuit gate only
+      // skips escalation when winner.parsed != null).
       const r = await analyzeSwing(swing.clipUri!, {
         club: swing.club,
         swing_number: i + 1,
@@ -448,6 +461,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         prior_analyzed_fault: priorAnalyzedFault,
         ball_area_norm: ballAreaCtx,
         target_norm: targetCtx,
+        tier: 'quick',
         ...(cageAngleCtx ? { angle: cageAngleCtx } : {}),
         ...(coachAudio.length > 0 ? { coach_audio: coachAudio } : {}),
       }, boundaries, {
