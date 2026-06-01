@@ -1548,7 +1548,25 @@ export default function CaddieTab() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
     let courseName = picked.name ?? 'Unknown Course';
-    let holes = getCourse('palms')?.holes ?? [];
+    // 2026-05-31 — Fix FZ: NO MORE PALMS FALLBACK.
+    // Prior code (this line + line below where holes.length===0 also
+    // re-substituted palms) caused EVERY round at any non-Palms course
+    // where bundled hole data wasn't found OR the golfcourseapi fetch
+    // failed to start with Palms's California lat/lng baked in as
+    // course geometry. offCourseDetector then measured the player's
+    // real location against Palms (Menifee CA) and got thousands of
+    // miles → flipped off-course in 20s and stayed there. Same
+    // wrong-coords poisoned yardages, hole detection, and every
+    // downstream geo check.
+    //
+    // Right fallback: empty holes. Downstream is already wired to
+    // handle this honestly:
+    //   - offCourseDetector exits early when no usable geometry
+    //   - smartFinderService falls back to scorecard yardages
+    //   - SmartVision's pixel-interpolation path uses bundled distance
+    //   - UI cells render "—" instead of misleading numbers
+    // Honest "unknown" beats wrong-course substituted as truth.
+    let holes: import('../../store/roundStore').CourseHole[] = [];
     let courseId: string | null = null;
 
     if (picked.isLocal) {
@@ -1579,8 +1597,32 @@ export default function CaddieTab() {
       }
     }
 
+    // 2026-05-31 — Fix FZ: killed the `holes = palms` fallback.
+    // When holes is empty here, the right answer is to START with
+    // empty + kick off fetchCourseGeometry in the background so it
+    // populates from golfcourseapi → OSM → Mapbox cache. Empty
+    // courseHoles is HONEST — every downstream surface degrades
+    // gracefully (offCourseDetector exits early, smartFinder uses
+    // scorecard yardages, UI shows "—"). What we never do again is
+    // pretend a non-Palms course IS Palms.
     if (holes.length === 0) {
-      holes = getCourse('palms')?.holes ?? [];
+      console.log('[startRound] no holes loaded for', courseName, '— starting empty; geometry fetch will populate async');
+      // Fire-and-forget geometry fetch. When it lands, it caches into
+      // courseGeometryService for subsequent reads; users in active
+      // rounds can re-enter via the geometry-aware paths (SmartVision,
+      // smartFinder) and pick up the cached data on the next call.
+      if (courseId) {
+        void (async () => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const geomMod = require('../../services/courseGeometryService') as typeof import('../../services/courseGeometryService');
+            await geomMod.fetchCourseGeometry(courseId);
+            console.log('[startRound] async geometry fetch landed for', courseId);
+          } catch (e) {
+            console.log('[startRound] async geometry fetch failed (non-fatal):', e);
+          }
+        })();
+      }
     }
 
     startRound(courseName, holes, {
