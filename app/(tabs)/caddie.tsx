@@ -59,7 +59,7 @@ import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
-import { speak, configureAudioForSpeech, captureUtterance, playLocalFile, waitForSplashLockRelease } from '../../services/voiceService';
+import { speak, configureAudioForSpeech, captureUtterance, playLocalFile, waitForSplashLockRelease, isSplashLocked } from '../../services/voiceService';
 // 2026-05-25 — Bestround celebration: when the round-end summary
 // detects a new personal best, play Kevin's D-ID bestround clip
 // instead of TTS-ing the text summary. Asset is resolved at fire
@@ -884,7 +884,15 @@ export default function CaddieTab() {
     // Initial on-screen text uses the generic fallback ask; the GPS
     // branch updates it below once the course resolves (or stays
     // generic when no course is nearby).
-    setOpeningPrompt(`${greeting} Practice or play?`);
+    // 2026-06-02 — Fix GO (Tim req): wording updated from "Practice or
+    // play?" → "Headed to the course or the SwingLab?" The richer
+    // phrasing matches the actual tab destinations and gives the user
+    // a clearer mental model of what each option does. Course = Play
+    // tab → start round. SwingLab = SwingLab tab → practice / cage /
+    // upload. Voice keyword router below already handles "course" /
+    // "play" / "round" + "swing" / "lab" / "practice" so the broader
+    // phrase doesn't break voice intent matching.
+    setOpeningPrompt(`${greeting} Headed to the course or the SwingLab?`);
 
     // 2026-05-26 — Fix BY: dropped the trustLevel !== 1 check from
     // the outer gate. Both speaks below pass { userInitiated: true }
@@ -911,14 +919,21 @@ export default function CaddieTab() {
       console.log('[caddie] opener SKIPPED: voiceEnabled=false (mic toggle off via FAB or Settings)');
     }
     if (!openingPromptSpokenThisProcess && voiceEnabled) {
-      openingPromptSpokenThisProcess = true;
+      // 2026-06-02 — Fix GO: DO NOT set the flag here. The audit
+      // (both passes converged) found that flipping `spoken=true`
+      // BEFORE the speak attempt means any silent failure (splash
+      // lock still held, /api/voice degraded, audio session in
+      // wrong state, custom-caddie clip missing, etc.) leaves the
+      // opener permanently "spoken" with NO recovery — user sees
+      // text "Practice or play?" forever but never hears voice.
+      // The flag is now set INSIDE the IIFE, only AFTER speak#1
+      // actually returns successfully. If speak fails silently,
+      // the flag stays false and the next tab cycle / app foreground
+      // re-attempts. The tap-to-retry handler on the prompt text
+      // also provides an immediate user recovery path.
       // 2026-05-26 — Fix BB: 600ms → 3000ms. Tim wanted natural
       // breathing room between the splash-screen greeting ending and
-      // the Caddie tab opener starting. Was 600ms (the splash speak
-      // would resolve, router.replace would fire, opener would speak
-      // within ~1s — felt jarring). 3s of silence creates a natural
-      // "now we're on the home screen" beat before the second voice
-      // starts.
+      // the Caddie tab opener starting.
       setTimeout(() => {
         void (async () => {
           try {
@@ -939,6 +954,15 @@ export default function CaddieTab() {
             // timed out before greeting released, opener fired with
             // lock still held → opener's speak blocked → silent.
             await waitForSplashLockRelease(15_000);
+            // 2026-06-02 — Fix GO: force-clear an auto-expired lock
+            // whose holder never called release. isSplashLocked
+            // internally checks-and-clears safety expiry, so calling
+            // it here ensures the gate inside speak() doesn't block
+            // on a stale lock that expired during the wait loop.
+            if (isSplashLocked()) {
+              console.log('[caddie] opener: splash lock STILL held after wait timeout — forcing expiry check');
+              isSplashLocked(); // triggers auto-clear if expired
+            }
             console.log('[caddie] opener: splash lock released, proceeding');
             // 2026-05-26 — Fix AV: GPS-aware second intro. Kick off the
             // nearest-course detection in parallel with the greeting
@@ -954,6 +978,13 @@ export default function CaddieTab() {
             console.log('[caddie] opener: speak#1 (greeting) start');
             await speak(greeting, voiceGender, language, apiUrl, { userInitiated: true });
             console.log('[caddie] opener: speak#1 (greeting) resolved');
+            // 2026-06-02 — Fix GO: mark spoken ONLY after speak#1
+            // resolves. If we got here, the speak call ran to
+            // completion (or at minimum claimed currentSpeechId and
+            // produced playback). Any earlier silent-failure path
+            // returned without reaching this line, leaving the flag
+            // false so the next caddie mount can retry.
+            openingPromptSpokenThisProcess = true;
 
             // Cap the GPS wait at 3s past greeting completion so a
             // stuck location read can't trap the opener.
@@ -973,9 +1004,12 @@ export default function CaddieTab() {
             // traced to this gate when his stored trustLevel resolved
             // to 1 mid-launch — first opener spoke, second never did.
 
+            // 2026-06-02 — Fix GO (Tim req): match the new opener
+            // wording — when no course detected, ask "course or
+            // SwingLab" instead of "practice or play".
             const followUp = course
               ? `I see you're at ${course.spokenName}. Want to start a round?`
-              : 'Practice or play?';
+              : 'Headed to the course or the SwingLab?';
             if (course) setOpeningPrompt(`${greeting} I see you're at ${course.spokenName}. Want to start a round?`);
 
             console.log('[caddie] opener: speak#2 (followUp) start; text=', followUp);

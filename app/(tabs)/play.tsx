@@ -224,12 +224,11 @@ const LOCAL_COURSES: CourseSummary[] = [
   },
 ];
 
-// 2026-05-24 — Hayes Open: Tim's Memorial Day weekend golf trip.
-// Maplewood Fri+Sat (back-to-back GPS validation), Pembroke Pines Sun.
-// Tagline dedication to Polly and Harry Hayes. Skin only — both courses
-// also appear in LOCAL_COURSES so they're reachable via the normal
-// course discovery flow; this card is a pinned shortcut + theming.
-const HAYES_OPEN_COURSE_IDS = ['local:maplewood', 'local:pembroke-pines'] as const;
+// 2026-06-02 — Fix GO: HAYES_OPEN_COURSE_IDS removed alongside the
+// pinned card on the play tab. Memorial Day weekend trip passed; the
+// courses are still in LOCAL_COURSES + TOURNAMENT_QUICK_LAUNCH_IDS
+// so they remain reachable + tournament-mode-enabled via the normal
+// course discovery flow.
 
 // 2026-05-24 — Course IDs that get a one-tap "Tournament Mode" launcher
 // directly on their card. Tim asked: "type tournament mode directly to
@@ -719,56 +718,12 @@ export default function PlayTab() {
           <AppIcon name="trophy" size={22} color="#00C896" />
         </TouchableOpacity>
 
-        {/* 2026-05-24 — 2026 Hayes Open card. Memorial Day weekend trip
-            skin (Maplewood Fri+Sat, Pembroke Pines Sun). Dedicated to
-            Polly and Harry Hayes. Each row taps into the standard
-            selectSummary flow so the rest of the app — round start,
-            Caddie, SmartVision, hole imagery — receives an unmodified
-            CourseSummary. No new pathways; pure pinning. */}
-        <View style={styles.hayesCard}>
-          <View style={styles.hayesStripeTop} />
-          <View style={styles.hayesHeader}>
-            <Text style={styles.hayesStar}>★</Text>
-            <Text style={styles.hayesTitle}>2026 Hayes Open</Text>
-            <Text style={styles.hayesStar}>★</Text>
-          </View>
-          <Text style={styles.hayesDedication}>Dedicated to Polly and Harry Hayes</Text>
-          <Text style={styles.hayesDates}>Memorial Day weekend</Text>
-          {HAYES_OPEN_COURSE_IDS.map(id => {
-            const c = LOCAL_COURSES.find(x => x.id === id);
-            if (!c) return null;
-            return (
-              <TouchableOpacity
-                key={id}
-                style={styles.hayesRow}
-                onPress={() => { void selectSummary(c); }}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel={`Select ${c.club_name}`}
-              >
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.hayesRowTitle} numberOfLines={1}>{c.club_name}</Text>
-                  <Text style={styles.hayesRowSub} numberOfLines={1}>{c.location}</Text>
-                </View>
-                {/* 2026-05-24 — One-tap Tournament launch with course
-                    pre-filled. Trophy icon stays inside the row but
-                    intercepts the tap so the outer selectSummary
-                    doesn't also fire. */}
-                <TouchableOpacity
-                  onPress={() => launchTournamentForCourse(c.club_name)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  style={styles.hayesTrophyBtn}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Start Tournament Mode at ${c.club_name}`}
-                >
-                  <AppIcon name="trophy" size={18} color="#fbbf24" />
-                </TouchableOpacity>
-                <AppIcon name="chevron-forward" size={18} color="#cbd5e1" />
-              </TouchableOpacity>
-            );
-          })}
-          <View style={styles.hayesStripeBottom} />
-        </View>
+        {/* 2026-06-02 — Fix GO (Tim req): removed the 2026 Hayes Open
+            card. The Memorial Day weekend trip has passed; the card
+            was a one-time tournament pin and no longer relevant on
+            the play tab. Constants HAYES_OPEN_COURSE_IDS +
+            LOCAL_COURSES entries for maplewood / pembroke-pines
+            remain (they're still valid courses, just not pinned). */}
 
         {/* Active-round banner — End Round lives here so the user doesn't
             have to dig into the Tools menu. Confirms before tearing down

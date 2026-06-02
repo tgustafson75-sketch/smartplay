@@ -988,6 +988,37 @@ export default function SwingDetail() {
                   totalShots={session.shots.length}
                 />
               )}
+              {/* 2026-06-02 — Fix GO: valid_swing safety net (Option C).
+                  When the AI returned but said "inconclusive" or
+                  "tentative_read", offer the user a re-analyze action
+                  next to the read. Without this, the user sees "I
+                  couldn't read this recording clearly" with no path
+                  forward — the failed-card retry only fires when
+                  analysis_status='failed', not when the analysis
+                  succeeded but flagged the swing as unreadable.
+                  Closes the "valid_swing=false silently suppresses
+                  real reads" defect from the SwingLab audit. */}
+              {analysisStatus === 'ok'
+                && session.primary_issue
+                && (session.primary_issue.primary_fault === 'inconclusive'
+                  || session.primary_issue.issue_id === 'tentative_read')
+                && (
+                <View style={[styles.failedCard, { backgroundColor: colors.surface, borderColor: '#f59e0b', marginTop: 10 }]}>
+                  <Text style={[styles.failedTitle, { color: '#f59e0b' }]}>Want a second look?</Text>
+                  <Text style={[styles.failedBody, { color: colors.text_primary }]}>
+                    Re-analyzing with a fresh pass sometimes catches what the first read missed — especially if the angle or lighting was borderline.
+                  </Text>
+                  <View style={styles.failedBtnRow}>
+                    <TouchableOpacity
+                      style={[styles.failedBtn, { borderColor: '#f59e0b', opacity: reanalyzing ? 0.5 : 1 }]}
+                      onPress={onReanalyze}
+                      disabled={reanalyzing}
+                    >
+                      <Text style={[styles.failedBtnText, { color: '#f59e0b' }]}>Re-analyze this swing</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
               {/* 2026-05-26 — Fix AT: Ask Your Swing card. Lives
                   directly under PrimaryIssue so the player can ask a
                   follow-up while the diagnosis is fresh. Renders only
