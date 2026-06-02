@@ -578,6 +578,22 @@ export default function SwingLibrary() {
                       {entry.primary_issue_name}
                     </Text>
                   )}
+                  {/* 2026-06-02 — Fix GN: needs-retry badge. Surfaces
+                      when analysis ended in failure OR is stuck in a
+                      non-terminal state (failed boot mid-analysis,
+                      etc.). Tap the row to open swing detail where
+                      the re-analyze action lives. */}
+                  {(() => {
+                    const status = entry.session.analysis_status;
+                    if (status === 'failed') {
+                      return (
+                        <Text style={[styles.rowIssue, { color: '#f59e0b' }]} numberOfLines={1}>
+                          Needs retry — tap to re-analyze
+                        </Text>
+                      );
+                    }
+                    return null;
+                  })()}
                 </View>
                 <View style={styles.rowTrailing}>
                   {entry.session.biomechanics ? (

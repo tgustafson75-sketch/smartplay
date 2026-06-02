@@ -110,7 +110,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingHorizontal: 12,
-    zIndex: 100,
+    // 2026-06-02 — Fix GN: explicit z-index hierarchy with
+    // GpsHealthBanner (1002). UpdateAvailableBanner sits BELOW
+    // GpsHealthBanner because a broken-mid-round GPS deserves the
+    // user's attention before a "new bundle ready" prompt.
+    zIndex: 1001,
   },
   card: {
     flexDirection: 'row',

@@ -439,6 +439,28 @@ function AppNavigator() {
     }
   }), []);
 
+  // 2026-06-02 — Fix GN: orphan-analysis cleanup. Audit found that
+  // cage / library swings where AI analysis was in-flight at force-
+  // close stayed at 'pending' or 'analyzing_*' forever — no auto-
+  // cleanup. Library showed "analyzing…" indefinitely. Boot-level
+  // sweep flips anything in a non-terminal status >24h old to
+  // 'failed' so the new retry badge can surface it.
+  // Wrapped in try/catch + dynamic require so a cageStore failure
+  // can never crash boot.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const mod = await import('../store/cageStore');
+        const count = mod.useCageStore.getState().purgeStaleAnalyses();
+        if (count > 0) {
+          devLog('[boot-guard] purged ' + count + ' orphan analyses');
+        }
+      } catch (e) {
+        console.log('[boot-guard] purgeStaleAnalyses failed (non-fatal):', e);
+      }
+    })();
+  }, []);
+
   // Phase O.5 — activate the native media session only while a round is
   // active, so other media apps (Spotify, podcasts) keep their system
   // controls when SmartPlay isn't the relevant earbud-tap target.

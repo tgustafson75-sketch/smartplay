@@ -76,7 +76,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     paddingTop: 44,
-    zIndex: 100,
+    // 2026-06-02 — Fix GN: explicit z-index hierarchy across the 4
+    // root-level banners. Order of urgency (highest on top):
+    //   1003 PermissionBanner   — round can't function at all
+    //   1002 GpsHealthBanner    — round broken right now
+    //   1001 UpdateAvailableBanner — new bundle ready
+    //   1000 NativeFallbackBanner  — informational
+    zIndex: 1002,
   },
   text: {
     flex: 1,

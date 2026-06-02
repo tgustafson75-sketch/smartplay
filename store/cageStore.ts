@@ -518,6 +518,13 @@ interface CageState {
   /** Phase V — track analysis lifecycle so the swing detail surface can
    *  show real progress and surface failures honestly. */
   setSessionAnalysisStatus: (sessionId: string, status: AnalysisStatus, error?: string | null) => void;
+  /** 2026-06-02 — Fix GN: walk every session and flip any non-terminal
+   *  analysis_status ('pending' / 'analyzing_*') older than maxAgeMs
+   *  to 'failed' with a "stale" error. Called once on app boot via
+   *  the rehydration gate so analyses that were in-flight when the
+   *  app was force-closed don't sit at 'analyzing…' forever. Returns
+   *  the count purged for telemetry. */
+  purgeStaleAnalyses: (maxAgeMs?: number) => number;
   /** Phase R — store frame timestamps for issue temporal alignment. */
   setShotIssueTimestamps: (sessionId: string, shotId: string, timestamps_sec: number[]) => void;
   /** 2026-05-25 — Path C: user-marked trim window for long uploaded
@@ -644,6 +651,37 @@ export const useCageStore = create<CageState>()(
       addShot: (shot) =>
         set(s => {
           if (!s.activeSession) return s;
+          // 2026-06-02 — Fix GN: hard cap at 100 shots per cage session.
+          // SwingLab QA audit found no rate cap on cage sessions —
+          // 30 shots × 52s full-analysis chain = 1560s of Vercel
+          // compute, no cost ceiling. The cap also protects users
+          // from accidentally running away with practice marathons
+          // that drown the library in unanalyzable swings. 100 is
+          // generous (most cage sessions are 20-40 shots) but acts
+          // as a safety net. A toast warning at 50 lets the user
+          // know they're halfway to the cap.
+          const SHOT_HARD_CAP = 100;
+          const SHOT_WARN_THRESHOLD = 50;
+          if (s.activeSession.shots.length >= SHOT_HARD_CAP) {
+            console.log('[cageStore] addShot blocked — cage session hit 100-shot cap');
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const { useToastStore } = require('./toastStore');
+              useToastStore.getState().show(
+                'Cage session hit 100-shot cap — end session and start a new one to keep practicing.',
+              );
+            } catch { /* noop */ }
+            return s;
+          }
+          if (s.activeSession.shots.length + 1 === SHOT_WARN_THRESHOLD) {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const { useToastStore } = require('./toastStore');
+              useToastStore.getState().show(
+                'Heads up — 50 shots logged in this session. Hard cap is 100.',
+              );
+            } catch { /* noop */ }
+          }
           // Phase BL — auto-tag with currentClub when set, falling back
           // to the session's initial club for back-compat with the legacy
           // single-club flow. The shot's own .club still wins if the
@@ -1072,6 +1110,37 @@ export const useCageStore = create<CageState>()(
             }
           ),
         })),
+
+      // 2026-06-02 — Fix GN: orphan-cleanup pass. Audit found that
+      // sessions where analysis was in-flight at force-close stayed
+      // at 'pending' or 'analyzing_*' forever — no auto-cleanup, no
+      // garbage collection. Library shows "analyzing…" indefinitely.
+      // Walking every session at boot and flipping stale non-terminal
+      // states to 'failed' surfaces them via the new retry badge so
+      // the user can re-trigger analysis instead of stuck library
+      // garbage. Default cutoff: 24h.
+      purgeStaleAnalyses: (maxAgeMs = 24 * 60 * 60 * 1000) => {
+        const cutoff = Date.now() - maxAgeMs;
+        let purged = 0;
+        const STALE_STATUSES: AnalysisStatus[] = ['pending', 'analyzing_frames', 'analyzing_pose', 'analyzing_pattern'];
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session => {
+            const status = session.analysis_status;
+            if (!status || !STALE_STATUSES.includes(status)) return session;
+            if (session.date > cutoff) return session;
+            purged += 1;
+            return {
+              ...session,
+              analysis_status: 'failed' as AnalysisStatus,
+              analysis_error: 'Analysis didn’t finish (app closed mid-analysis) — tap to retry.',
+            };
+          }),
+        }));
+        if (purged > 0) {
+          console.log('[cageStore] purgeStaleAnalyses flipped', purged, 'orphaned analyses to failed');
+        }
+        return purged;
+      },
 
       setShotIssueTimestamps: (sessionId, shotId, timestamps_sec) =>
         set(s => ({
