@@ -525,8 +525,27 @@ export default function SmartVisionScreen() {
         setLoading(false);
         return;
       }
-      // GPS tile only when allowed AND geometry has tee+green coords.
-      if (imageryMode !== 'curated' && geo?.green && courseId) {
+      // 2026-06-01 — Fix GI: when geo has polygons but no centroid
+      // (some upstream sources return green_polygon without computing
+      // green centroid), derive the centroid from the polygon so the
+      // satellite-tile fetch still fires. Prior code's `geo?.green`
+      // gate fell through when only polygons existed → no background
+      // image rendered, polygons floated on blank canvas. Symptom
+      // from Tim's screenshot: vector outline of green/bunkers with
+      // no aerial behind it in satellite mode.
+      const polygonCentroid = (poly: { lat: number; lng: number }[] | null | undefined) => {
+        if (!poly || poly.length === 0) return null;
+        const lat = poly.reduce((s, p) => s + p.lat, 0) / poly.length;
+        const lng = poly.reduce((s, p) => s + p.lng, 0) / poly.length;
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+        return { lat, lng };
+      };
+      const effectiveGreen = geo?.green ?? polygonCentroid(geo?.green_polygon);
+      const effectiveTee = geo?.tee ?? polygonCentroid(geo?.tee_polygon);
+      // GPS tile only when allowed AND we have at least a green coord
+      // (real centroid or polygon-derived).
+      if (imageryMode !== 'curated' && effectiveGreen && courseId) {
         // Phase 401 — cap Mapbox request dims at 1280 (API limit) while
         // preserving the container's aspect ratio. Without this, a
         // Galaxy Fold unfolded container (1800×1660) requests
@@ -543,14 +562,20 @@ export default function SmartVisionScreen() {
           reqW = Math.floor(reqW * scale);
           reqH = Math.floor(reqH * scale);
         }
+        // 2026-06-01 — Fix GI: thread the polygon-derived
+        // effective coords into the imagery fetch so the tile
+        // renders even when upstream only gave us polygons (not
+        // centroids). Without this, the tile fetch would still
+        // miss because geo.green is null even though we have a
+        // usable polygon centroid right here.
         const uri = await fetchHoleImagery(
           {
             courseId,
             holeNumber: holeIndex,
-            par: geo.par,
-            yardage: geo.yardage,
-            tee: geo.tee,
-            green: geo.green,
+            par: geo!.par,
+            yardage: geo!.yardage,
+            tee: effectiveTee,
+            green: effectiveGreen,
           },
           { width: reqW, height: reqH },
         );
@@ -814,13 +839,41 @@ export default function SmartVisionScreen() {
       // Y/P actually moves the yardage numbers.
       const totalSpan = pinPx.y - teePx.y; // image-y +up, pin > tee
       const targetSpan = targetPx.y - teePx.y;
-      const progress = totalSpan === 0 ? 0.5 : Math.max(0, Math.min(1, targetSpan / totalSpan));
+      const progress = totalSpan === 0 ? 0.5 : Math.max(0, Math.min(1, totalSpan === 0 ? 0.5 : targetSpan / totalSpan));
       const total = h.distance;
       const middleYd = Math.round((1 - progress) * total);
+      // 2026-06-01 — Fix GH: don't fake F/B when bundled hole data
+      // has no real front/back spread. Prior code computed
+      // `greenDepth = (h.back - h.front) / 2` then returned
+      // {middle - greenDepth, middle, middle + greenDepth}. When the
+      // bundled data has front===back (or both 0 / both same as
+      // middle), greenDepth=0 → all three cells render the same
+      // number (Tim's screenshot: 45/45/45). That's misleading — it
+      // implies we have F/B data when we don't. Render F/B as null
+      // when the spread is zero or nonsensical so the UI shows "—"
+      // honestly instead of three identical numbers.
+      const hasRealGreenSpread =
+        typeof h.front === 'number' && typeof h.back === 'number' &&
+        h.front > 0 && h.back > 0 && h.back > h.front;
+      if (!hasRealGreenSpread) {
+        return { front: null as number | null, middle: middleYd, back: null as number | null };
+      }
       const greenDepth = (h.back - h.front) / 2;
       return { front: Math.max(0, middleYd - greenDepth), middle: middleYd, back: middleYd + greenDepth };
     }
-    if (h) return { front: h.front ?? null, middle: h.distance ?? null, back: h.back ?? null };
+    if (h) {
+      // 2026-06-01 — Fix GH: same honesty for the static fallback
+      // (no target/tee/pin pixels yet — pre-mount render). Reject
+      // front===back or zero values as "no real F/B data."
+      const hasRealGreenSpread =
+        typeof h.front === 'number' && typeof h.back === 'number' &&
+        h.front > 0 && h.back > 0 && h.back > h.front;
+      return {
+        front: hasRealGreenSpread ? h.front : null,
+        middle: h.distance ?? null,
+        back: hasRealGreenSpread ? h.back : null,
+      };
+    }
     return { front: null as number | null, middle: null as number | null, back: null as number | null };
   }, [usingGpsTile, projection, targetPx, pinPx, teePx, geometry, courseHoles, holeIndex]);
 
