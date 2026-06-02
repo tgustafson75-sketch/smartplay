@@ -34,7 +34,15 @@ let audioModeQueue: Promise<void> = Promise.resolve();
 // ~5-50ms a healthy setAudioModeAsync takes.
 const AUDIO_MODE_CALL_TIMEOUT_MS = 3_000;
 
-const setAudioModeSerial = (mode: Parameters<typeof Audio.setAudioModeAsync>[0]): Promise<void> => {
+// 2026-06-01 — Fix GJ: export setAudioModeSerial so audioLifecycle's
+// goCold() can route through the SAME serial queue. Before this,
+// goCold called Audio.setAudioModeAsync directly, racing every
+// configureAudioForSpeech / configureAudioForRecording call going
+// through the queue. If goCold won the race mid-playback (app
+// backgrounded or trust→quiet), the audio session flipped to
+// playsInSilentModeIOS:false underneath an active mp3 → silence
+// mid-utterance. Single queue = no race.
+export const setAudioModeSerial = (mode: Parameters<typeof Audio.setAudioModeAsync>[0]): Promise<void> => {
   audioModeQueue = audioModeQueue
     .catch(() => { /* drop prior failure */ })
     .then(() => Promise.race([

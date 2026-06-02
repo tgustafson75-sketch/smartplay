@@ -39,7 +39,23 @@ async function goCold(reason: string): Promise<void> {
   if (state === 'cold') return;
   state = 'cold';
   try {
-    await Audio.setAudioModeAsync({
+    // 2026-06-01 — Fix GJ: route through voiceService.setAudioModeSerial
+    // so this call serializes with configureAudioForSpeech /
+    // configureAudioForRecording instead of racing them at the native
+    // audio singleton. Previously, calling Audio.setAudioModeAsync
+    // directly here would race any active speech-config call going
+    // through the queue. If goCold won mid-playback (app backgrounded,
+    // trust→quiet flip), playsInSilentModeIOS dropped to false under a
+    // live mp3 → silence mid-utterance.
+    //
+    // Dynamic require avoids the circular dep: voiceService imports
+    // noteAudioActivity from THIS module. Static `import { ... } from
+    // './voiceService'` would cycle. Require at call time is safe
+    // because by the time goCold ever fires (idle 90s / app
+    // background / trust quiet), the JS bundle is fully loaded.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const voiceMod = require('./voiceService') as typeof import('./voiceService');
+    await voiceMod.setAudioModeSerial({
       allowsRecordingIOS: false,
       playsInSilentModeIOS: false,
       staysActiveInBackground: false,

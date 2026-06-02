@@ -246,8 +246,26 @@ export default function GreetingScreen() {
     }, ms);
   }, [startTransition]);
 
+  // 2026-06-01 — Fix GJ: structural fix for the splash audio cut-off.
+  // The audio-kickoff effect's deps [greeting, settingsHydrated,
+  // audioReady] cause it to re-fire each time a dep flips. EACH
+  // re-fire runs the previous run's cleanup BEFORE the new body —
+  // and the cleanup calls stopSpeaking() when !naturalEndRef.current.
+  // At boot, deps flip multiple times in sequence (settings hydrate,
+  // audio session ready, etc). Any stray re-fire AFTER playback
+  // started would unload currentSound mid-mp3 — Tim's "2 words then
+  // cut off" symptom.
+  //
+  // Structural fix: gate kickoff on a startedRef so it runs EXACTLY
+  // ONCE per mount even if the effect re-fires. Cleanup is now
+  // safe to run on every dep flip because it no longer calls
+  // stopSpeaking — that's moved to a separate unmount-only effect
+  // below that fires ONLY when the component truly unmounts.
+  const audioKickoffStartedRef = useRef(false);
+
   // ── Enter animation + audio kickoff once greeting is picked ────────
   useEffect(() => {
+    if (audioKickoffStartedRef.current) return; // already started — don't re-fire
     if (!greeting) return;
     // 2026-05-28 — Fix FS: hold the audio kickoff until settingsStore
     // has hydrated. Persona/voiceGender/language reads below are
@@ -264,6 +282,13 @@ export default function GreetingScreen() {
     // video that hasn't mounted yet → ends silent. Effect re-runs
     // when audioReady flips true.
     if (!audioReady) return;
+
+    // 2026-06-01 — Fix GJ: claim the start so the effect can never
+    // re-enter mid-playback. Any subsequent dep flip will hit the
+    // `audioKickoffStartedRef.current` guard at the top and bail
+    // immediately — no double-kickoff, no spurious cleanup running
+    // stopSpeaking on the live mp3.
+    audioKickoffStartedRef.current = true;
 
     // Fade in avatar
     Animated.parallel([
@@ -378,19 +403,17 @@ export default function GreetingScreen() {
     })();
 
     return () => {
+      // 2026-06-01 — Fix GJ: dep-change cleanup MUST NOT call
+      // stopSpeaking. The audio kickoff is gated by
+      // audioKickoffStartedRef so it runs exactly once, but React still
+      // runs THIS cleanup on every dep flip (greeting, settingsHydrated,
+      // audioReady) and on unmount. If we called stopSpeaking here, any
+      // dep flip after playback started would unload currentSound
+      // mid-mp3 — the "2 words then cut off" symptom. The unmount-only
+      // cleanup below handles orphan-audio silence on true teardown.
       if (advanceTimerRef.current) {
         clearTimeout(advanceTimerRef.current);
         advanceTimerRef.current = null;
-      }
-      // 2026-05-25 — Tail-clip defense: only call stopSpeaking on
-      // unmount when the playback didn't already end naturally. Happy-
-      // path: speak/video resolved → naturalEndRef true → skip the
-      // stop. Skip handler still calls stopSpeaking explicitly via the
-      // handleSkip path so user-initiated cuts work the same. Edge case
-      // (mid-flight back gesture, system kill, etc.): naturalEndRef
-      // stays false → stopSpeaking fires → silence the orphan audio.
-      if (!naturalEndRef.current) {
-        void stopSpeaking().catch(() => {});
       }
     };
     // Bug fix — depend ONLY on `greeting`. Including `scheduleAdvance`
@@ -411,6 +434,20 @@ export default function GreetingScreen() {
     // Kevin-video await aligns with the actual <Video> mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [greeting, settingsHydrated, audioReady]);
+
+  // 2026-06-01 — Fix GJ: unmount-only cleanup. Runs ONLY when the
+  // greeting screen truly unmounts (router.replace → /(tabs)/caddie or
+  // back-gesture). Empty deps array means React fires this cleanup
+  // exactly once, on real unmount — never on dep flips. Tail-clip
+  // defense preserved: skip the stop if playback already ended
+  // naturally so we don't risk clipping the last syllable.
+  useEffect(() => {
+    return () => {
+      if (!naturalEndRef.current) {
+        void stopSpeaking().catch(() => {});
+      }
+    };
+  }, []);
 
   // Slow breathing pulse during SPEAKING — opacity 0.94↔1.0 at ~0.45 Hz with
   // sine easing. The previous 0.85↔1.0 / 180ms cycle read as a strobe.
