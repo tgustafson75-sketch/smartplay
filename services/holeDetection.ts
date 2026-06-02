@@ -28,6 +28,7 @@ import { useRoundStore } from '../store/roundStore';
 import { fetchCourseGeometry, getHoleGeometry } from './courseGeometryService';
 import { getLastFix, classifyAccuracy } from './smartFinderService';
 import { haversineYards } from '../utils/geoDistance';
+import { isValidGolfCoord } from '../utils/coordGuard';
 import { ownerSentinel } from './ownerSentinel';
 
 // ─── Tunables ─────────────────────────────────────────────────────────
@@ -236,8 +237,22 @@ export function detectCurrentHole(
     return { hole_number: currentHole, confidence: 'low', transition_recommended: false, reason: 'no course id' };
   }
 
+  // 2026-06-01 — Fix GL: validate player position before any haversine.
+  // Defense in depth — gpsManager.processFix should already guarantee
+  // valid lastFix coords, but holeDetection's reads can race a fresh
+  // round-start where lastFix is briefly null/stale.
+  if (!isValidGolfCoord(position.lat, position.lng)) {
+    return { hole_number: currentHole, confidence: 'low', transition_recommended: false, reason: 'invalid player coord' };
+  }
+
   const currentGeom = getHoleGeometry(courseId, currentHole);
-  if (!currentGeom?.green) {
+  // 2026-06-01 — Fix GL: also validate the cached green coord. Cache
+  // entries can have placeholder/garbage values from a partial API
+  // response. Without this guard, haversine against {0,0} returns
+  // ~10M yards, fails the >gate check trivially, and the player is
+  // pinned to currentHole forever (or worse, the next-hole gate
+  // succeeds against the same garbage and flips a wrong transition).
+  if (!currentGeom?.green || !isValidGolfCoord(currentGeom.green.lat, currentGeom.green.lng)) {
     return { hole_number: currentHole, confidence: 'low', transition_recommended: false, reason: 'no current-hole green geometry' };
   }
 
@@ -271,7 +286,14 @@ export function detectCurrentHole(
     if (scoresByHole[candidate] != null) continue; // already played
     const candGeom = getHoleGeometry(courseId, candidate);
     const candTee = candGeom?.tee;
-    if (!candTee) continue;
+    // 2026-06-01 — Fix GL: guard candidate tee coord. Garbage tee
+    // coord on hole N+1 would otherwise make the next-tee gate fire
+    // trivially (distance to {0,0} is huge so a forward gate that
+    // measures "closer than current green" would still always fail —
+    // but the inverse is also true: a near-zero tee would always be
+    // "closer" than the current green if the player is far from
+    // origin, triggering spurious forward transitions).
+    if (!candTee || !isValidGolfCoord(candTee.lat, candTee.lng)) continue;
     const d = haversineYards(position, candTee);
     if (d < bestNextDist) {
       bestNextDist = d;
@@ -311,7 +333,8 @@ export function detectCurrentHole(
       if (!Number.isFinite(playedHole) || playedHole === currentHole) continue;
       const playedGeom = getHoleGeometry(courseId, playedHole);
       const playedTee = playedGeom?.tee;
-      if (!playedTee) continue;
+      // 2026-06-01 — Fix GL: guard played-hole tee coord.
+      if (!playedTee || !isValidGolfCoord(playedTee.lat, playedTee.lng)) continue;
       const d = haversineYards(position, playedTee);
       if (d < 20) {
         return {

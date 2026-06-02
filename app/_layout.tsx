@@ -72,6 +72,7 @@ import GpsQualityOverlay from '../components/dev/GpsQualityOverlay';
 import CaptureOverlay from '../components/CaptureOverlay';
 import { UpdateAvailableBanner } from '../components/UpdateAvailableBanner';
 import NativeFallbackBanner from '../components/NativeFallbackBanner';
+import { GpsHealthBanner } from '../components/GpsHealthBanner';
 import CaptionStrip from '../components/CaptionStrip';
 import { GlobalToolsMenu } from '../components/tools/GlobalToolsMenu';
 import { GlobalToast } from '../components/toast/GlobalToast';
@@ -682,6 +683,12 @@ function AppNavigator() {
           knows they're in cloud mode rather than confused by silent
           feature absence. Renders nothing on healthy builds. */}
       <NativeFallbackBanner />
+      {/* 2026-06-01 — Fix GL: mid-round GPS health banner. Renders
+          only when isRoundActive AND the GPS subscription is
+          unhealthy (no_subscription / never_ticked / stale). Tap =
+          recalibrateGps. Without this the user had no UI signal that
+          their watch had silently stopped delivering fixes. */}
+      <GpsHealthBanner />
       {/* Phase 106 — caddie team handoff suggestion overlay. */}
       <CaddieSuggestionCard />
       {/* Phase 107 — GPS quality debug overlay (gated by settings flag). */}

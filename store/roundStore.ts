@@ -794,19 +794,28 @@ export const useRoundStore = create<RoundState>()(
             const Location = await import('expo-location');
             const perm = await Location.requestForegroundPermissionsAsync();
             if (!perm.granted) {
-              // 2026-05-16 — was silently returning here, leaving the
-              // user with a "round started" toast but no actual GPS
-              // tracking. The visible PermissionBanner on the Caddie
-              // tab covers the recovery affordance, but we also surface
-              // a toast at this exact moment so the user understands
-              // why yardages aren't populating.
-              console.log('[roundStore] foreground location permission denied at round start');
+              // 2026-06-01 — Fix GL: stronger handling. The previous
+              // behavior left isRoundActive=true with no GPS subscription,
+              // so every downstream consumer (holeDetection,
+              // offCourseDetector, yardages, scorecard, voice intents)
+              // thought the round was live but had no fix. Round appeared
+              // active for hours with zero feedback. New behavior:
+              // immediately discardRound() so the user sees the round
+              // never started, plus a persistent toast that explains
+              // why. They re-grant permission in Settings and tap Start
+              // Round again — clean state, no orphaned in-flight round.
+              console.log('[roundStore] foreground location permission denied at round start — discarding round');
               try {
                 const { useToastStore } = await import('./toastStore');
                 useToastStore.getState().show(
-                  'Location off — tap the GPS banner on the Caddie tab to enable.',
+                  'Location off — enable Location in Settings, then tap Start Round again.',
                 );
               } catch {}
+              try {
+                get().discardRound();
+              } catch (e) {
+                console.log('[roundStore] discardRound after permission denial failed:', e);
+              }
               return;
             }
             // Phase 405 wave 4 — also request background-location

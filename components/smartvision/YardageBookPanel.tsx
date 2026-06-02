@@ -17,36 +17,38 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import type { HoleGeometry, LandmarkFeature } from '../../services/courseGeometryService';
-
-const EARTH_RADIUS_YARDS = 6_371_000 / 0.9144;
-
-interface LatLng { lat: number; lng: number }
-
-function toRad(d: number): number {
-  return (d * Math.PI) / 180;
-}
+// 2026-06-01 — Fix GL: dropped the inline haversine + EARTH_RADIUS_YARDS
+// constant in favor of the canonical utils/geoDistance helper +
+// utils/coordGuard validation. The inline copy was the last surviving
+// duplicate of the math (Fix GA consolidated smartvision / hole-view /
+// smartFinder), and it had NO WGS84 guard — a 246yd artifact could
+// surface here on a bad polygon vertex. Now everyone runs through the
+// same code path.
+import { haversineYards as canonicalHaversineYards } from '../../utils/geoDistance';
+import { isValidGolfCoord, type LatLng } from '../../utils/coordGuard';
 
 function haversineYards(a: LatLng, b: LatLng): number {
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const lat1 = toRad(a.lat);
-  const lat2 = toRad(b.lat);
-  const x =
-    Math.sin(dLat / 2) ** 2 +
-    Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
-  return 2 * EARTH_RADIUS_YARDS * Math.asin(Math.sqrt(x));
+  if (!isValidGolfCoord(a.lat, a.lng) || !isValidGolfCoord(b.lat, b.lng)) {
+    return NaN;
+  }
+  return canonicalHaversineYards(a, b);
 }
 
 /** Front (nearest) and back (farthest) yardage to a polygon from origin. */
 function frontBackYards(origin: LatLng, polygon: LatLng[]): { front: number; back: number } | null {
   if (polygon.length === 0) return null;
+  // 2026-06-01 — Fix GL: skip the polygon entirely if origin is bad —
+  // every per-vertex haversine would just NaN out.
+  if (!isValidGolfCoord(origin.lat, origin.lng)) return null;
   let front = Infinity;
   let back = 0;
   for (const p of polygon) {
     const d = haversineYards(origin, p);
+    if (!Number.isFinite(d)) continue;
     if (d < front) front = d;
     if (d > back) back = d;
   }
+  if (!Number.isFinite(front)) return null;
   return { front: Math.round(front), back: Math.round(back) };
 }
 

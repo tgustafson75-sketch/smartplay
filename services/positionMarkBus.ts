@@ -26,6 +26,7 @@
 
 import * as Location from 'expo-location';
 import { useRoundStore } from '../store/roundStore';
+import { isValidGolfCoord } from '../utils/coordGuard';
 
 export interface MarkedPosition {
   lat: number;
@@ -83,6 +84,15 @@ export async function forceMarkPosition(): Promise<MarkResult> {
         setTimeout(() => reject(new Error('mark_gps_timeout')), 6000),
       ),
     ]);
+
+    // 2026-06-01 — Fix GL: reject a Mark with invalid coords (NaN
+    // from sensor glitch, {0,0} from permission revoke race, etc.).
+    // A bad Mark would seed lastFix everywhere via the subscriber
+    // fanout and corrupt the round.
+    if (!isValidGolfCoord(pos.coords.latitude, pos.coords.longitude)) {
+      console.log(`[mark] rejected — invalid coord lat=${pos.coords.latitude} lng=${pos.coords.longitude}`);
+      return { kind: 'error', message: 'invalid_coord' };
+    }
 
     const mark: MarkedPosition = {
       lat: pos.coords.latitude,

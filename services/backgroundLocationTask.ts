@@ -42,6 +42,7 @@ import { devLog } from './devLog';
 // has no signal that's the case. Sentinel breadcrumb gives the owner
 // a way to spot the pattern across testers.
 import { ownerSentinel } from './ownerSentinel';
+import { isValidGolfCoord } from '../utils/coordGuard';
 
 export const BACKGROUND_LOCATION_TASK = 'smartplay-background-location';
 
@@ -137,6 +138,14 @@ function ensureTaskDefined(): boolean {
         try {
           const { ingestExternalFix } = await import('./gpsManager');
           for (const l of locs) {
+            // 2026-06-01 — Fix GL: validate before ingest. processFix
+            // also gates, but rejecting at the boundary saves the
+            // dynamic import + per-fix overhead when the background
+            // task emits garbage (Doze can deliver stale/synthetic
+            // fixes on some Android OEMs after a long sleep).
+            if (!isValidGolfCoord(l.coords.latitude, l.coords.longitude)) {
+              continue;
+            }
             ingestExternalFix({
               lat: l.coords.latitude,
               lng: l.coords.longitude,

@@ -35,6 +35,7 @@ import { haversineYards } from '../utils/geoDistance';
 // offCourseDetector never read it. Now: if courseHoles yields no usable
 // candidates, walk the cached geometry as a second source.
 import { getCachedGeometry } from './courseGeometryService';
+import { isValidGolfCoord, safeLatLng } from '../utils/coordGuard';
 
 // Off-course threshold: 400 yards beyond any hole reference point.
 // 2026-05-25 — Fix U: relaxed from 200y → 400y. Tim's Palms round
@@ -93,16 +94,36 @@ function tick(): void {
   if (!fix || !fix.location) return;
   const player = fix.location;
 
+  // 2026-06-01 — Fix GL: guard the player location too. lastFix should
+  // already be valid (gpsManager.processFix gates at the OS boundary),
+  // but a stale fix from a prior bad state, a simulator/mark seed
+  // bypass, or a future regression could leak in. Belt-and-suspenders.
+  if (!isValidGolfCoord(player.lat, player.lng)) {
+    return;
+  }
+
   // Walk every hole's reference points and find the minimum distance.
   // courseHoles may include tee, middle, front, back coords; we use
   // the smallest of those per hole.
+  //
+  // 2026-06-01 — Fix GL: validate EACH coord pair via isValidGolfCoord
+  // (was: `h.middleLat && h.middleLng` truthy check). Smoking gun for
+  // Tim's "always off course": Westlake NJ / Sunnyvale / San Jose Muni /
+  // Mariners ship with zero or near-zero placeholder coords in some
+  // F/M/B fields. Truthy-check rejects {0,0} (zero is falsy) but lets
+  // through near-zero (e.g. 0.0001), NaN-via-undefined-arithmetic, and
+  // out-of-WGS84 garbage. haversine(playerOnPlanet, {0.0001, 0.0001})
+  // returns ~10M yards — finite but huge, passes the Infinity-fallback
+  // gate at line 138, and pegs off-course ON forever the moment 20s
+  // sustain elapses. safeLatLng centralizes the full rejection set so
+  // bad reference points don't pollute the nearest-distance math.
   let nearest = Infinity;
   for (const h of round.courseHoles) {
     const candidates = [
-      h.middleLat && h.middleLng ? { lat: h.middleLat, lng: h.middleLng } : null,
-      h.frontLat && h.frontLng ? { lat: h.frontLat, lng: h.frontLng } : null,
-      h.backLat && h.backLng ? { lat: h.backLat, lng: h.backLng } : null,
-      h.teeLat && h.teeLng ? { lat: h.teeLat, lng: h.teeLng } : null,
+      safeLatLng(h.middleLat, h.middleLng),
+      safeLatLng(h.frontLat, h.frontLng),
+      safeLatLng(h.backLat, h.backLng),
+      safeLatLng(h.teeLat, h.teeLng),
     ].filter((c): c is { lat: number; lng: number } => c != null);
     for (const c of candidates) {
       const d = haversineYards(player, c);
@@ -117,15 +138,17 @@ function tick(): void {
   // Without this, the detector was silent for the entire round on any
   // course where geometry arrived via the async cache rather than
   // being baked into roundStore.courseHoles at round-start.
+  // 2026-06-01 — Fix GL: also guard each cached coord. Cache entries
+  // can also have garbage values from a partial upstream response.
   if (!Number.isFinite(nearest) && round.activeCourseId) {
     const cached = getCachedGeometry(round.activeCourseId);
     if (cached) {
       for (const h of cached.holes) {
         const candidates = [
-          h.green,
-          h.green_front,
-          h.green_back,
-          h.tee,
+          h.green ? safeLatLng(h.green.lat, h.green.lng) : null,
+          h.green_front ? safeLatLng(h.green_front.lat, h.green_front.lng) : null,
+          h.green_back ? safeLatLng(h.green_back.lat, h.green_back.lng) : null,
+          h.tee ? safeLatLng(h.tee.lat, h.tee.lng) : null,
         ].filter((c): c is { lat: number; lng: number } => c != null);
         for (const c of candidates) {
           const d = haversineYards(player, c);

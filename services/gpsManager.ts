@@ -21,6 +21,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { useRoundStore } from '../store/roundStore';
 import { ownerSentinel } from './ownerSentinel';
 import { haversineMeters } from '../utils/geoDistance';
+import { isValidGolfCoord } from '../utils/coordGuard';
 
 export type GpsMode = 'active' | 'walking' | 'stationary';
 
@@ -154,6 +155,22 @@ function processFix(raw: GpsFix): boolean {
   // tick and the simulated round would jump to the player's actual
   // location.
   if (simulatedActive) return false;
+  // 2026-06-01 — Fix GL: WGS84 boundary guard. Reject coordinates
+  // that aren't real-world golf positions BEFORE they pollute lastFix
+  // and propagate through the smoothing buffer, subscribers,
+  // setLocationContext, courseDataOrchestrator, etc. Without this,
+  // a single bad OS callback (NaN from a hardware glitch, {0,0} from
+  // a permission-permission-revoked race, meters leaked into degree
+  // slots from a future regression) corrupts EVERY downstream
+  // consumer until the next acceptable fix arrives — and the
+  // smoothing buffer averages the bad value into the next few good
+  // fixes too. Single guard, applied at source, blocks the whole
+  // class.
+  if (!isValidGolfCoord(raw.lat, raw.lng)) {
+    outliersDiscarded++;
+    console.log(`[gps:outlier-rejected] invalid coord lat=${raw.lat} lng=${raw.lng}`);
+    return false;
+  }
   // (1) Discard if reported accuracy is worse than threshold.
   if (raw.accuracy_m != null && raw.accuracy_m > OUTLIER_ACCURACY_M) {
     outliersDiscarded++;
@@ -271,6 +288,11 @@ export function ingestExternalFix(fix: GpsFix): boolean {
  * sim fix (would otherwise pulse a real-device read).
  */
 export function setSimulatedFix(loc: { lat: number; lng: number }, accuracy_m = 3): void {
+  // 2026-06-01 — Fix GL: same coord guard as the real-fix path.
+  if (!isValidGolfCoord(loc.lat, loc.lng)) {
+    console.log(`[gps:sim-rejected] invalid coord lat=${loc.lat} lng=${loc.lng}`);
+    return;
+  }
   simulatedActive = true;
   lastFix = {
     lat: loc.lat,
@@ -305,6 +327,13 @@ export function isSimulatedActive(): boolean {
  * blend with the prior walking-mode samples.
  */
 export function setMarkedFix(lat: number, lng: number, accuracy_m: number | null): void {
+  // 2026-06-01 — Fix GL: reject Mark events with invalid coords. A
+  // bad Mark would otherwise poison lastFix and every downstream
+  // yardage / off-course / hole-detection consumer.
+  if (!isValidGolfCoord(lat, lng)) {
+    console.log(`[gps:mark-rejected] invalid coord lat=${lat} lng=${lng}`);
+    return;
+  }
   lastFix = {
     lat,
     lng,
@@ -459,6 +488,13 @@ async function handleAppStateChange(next: AppStateStatus): Promise<void> {
   // the new watch warms up.
   try {
     const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+    // 2026-06-01 — Fix GL: guard before seeding lastFix. A garbage
+    // one-shot here would replace good cached state with bad data
+    // even though processFix's gates protect every OTHER path.
+    if (!isValidGolfCoord(pos.coords.latitude, pos.coords.longitude)) {
+      console.log(`[gps] foreground one-shot returned invalid coord lat=${pos.coords.latitude} lng=${pos.coords.longitude}`);
+      return;
+    }
     const fresh: GpsFix = {
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
@@ -695,6 +731,43 @@ export function getLastBump(): { reason: string | null; ts: number | null } {
 }
 
 /**
+ * 2026-06-01 — Fix GL: surface GPS subscription health so the UI can
+ * show a mid-round "GPS stopped" banner instead of silently going
+ * blank. Three failure modes covered:
+ *  - 'no_subscription': startGpsManager was called but the watch
+ *    never landed (permission denied at orchestration, all-accuracy-
+ *    rungs failed). Subscription is null.
+ *  - 'never_ticked': subscription exists but no fix has ever arrived
+ *    (cold start blocked by GPS-off or chip warmup, or all incoming
+ *    fixes rejected as outliers).
+ *  - 'stale': subscription exists and a fix arrived once, but
+ *    nothing in the last STALE_HEALTH_MS. AppState foreground
+ *    recovery handles this by restarting the watch, but if the watch
+ *    silently dies WITHOUT a foreground transition (Doze on Android
+ *    without our foreground service), this is the only visible signal.
+ *
+ * UI consumers (DataStrip / Caddie banner) poll this every 5-10s.
+ */
+const STALE_HEALTH_MS = 30_000;
+export type GpsHealth =
+  | { state: 'healthy'; ageMs: number; accuracy_m: number | null }
+  | { state: 'no_subscription' }
+  | { state: 'never_ticked' }
+  | { state: 'stale'; ageMs: number };
+
+export function getGpsHealth(): GpsHealth {
+  if (simulatedActive) {
+    // Simulator owns the cache — always healthy from a UI POV.
+    return { state: 'healthy', ageMs: 0, accuracy_m: lastFix?.accuracy_m ?? null };
+  }
+  if (!subscription) return { state: 'no_subscription' };
+  if (lastTickAt === 0) return { state: 'never_ticked' };
+  const ageMs = Date.now() - lastTickAt;
+  if (ageMs > STALE_HEALTH_MS) return { state: 'stale', ageMs };
+  return { state: 'healthy', ageMs, accuracy_m: lastFix?.accuracy_m ?? null };
+}
+
+/**
  * One-shot read. Returns the cached fix if it's <10s old (cuts redundant
  * high-accuracy pulses); otherwise refreshes via Location.getCurrentPositionAsync.
  */
@@ -708,6 +781,11 @@ export async function getOneShotFix(opts?: { maxAgeMs?: number }): Promise<GpsFi
   if (lastFix && Date.now() - lastFix.timestamp < maxAge) return lastFix;
   try {
     const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+    // 2026-06-01 — Fix GL: reject one-shot reads with bad coords.
+    if (!isValidGolfCoord(pos.coords.latitude, pos.coords.longitude)) {
+      console.log(`[gps] one-shot returned invalid coord lat=${pos.coords.latitude} lng=${pos.coords.longitude}`);
+      return lastFix;
+    }
     const fix: GpsFix = {
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
@@ -760,6 +838,12 @@ export async function recalibrateGps(): Promise<GpsFix | null> {
     const pos = await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Highest,
     });
+    // 2026-06-01 — Fix GL: same coord guard as the OS-boundary path.
+    if (!isValidGolfCoord(pos.coords.latitude, pos.coords.longitude)) {
+      console.log(`[gps] recalibrate returned invalid coord lat=${pos.coords.latitude} lng=${pos.coords.longitude}`);
+      breadcrumb('manager_recalibrate_invalid_coord');
+      return null;
+    }
     const fresh: GpsFix = {
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
