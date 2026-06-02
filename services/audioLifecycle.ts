@@ -35,8 +35,34 @@ function breadcrumb(message: string, data?: Record<string, unknown>) {
   } catch {}
 }
 
+// 2026-06-01 — Fix GK: probe voiceService's splash lock without a
+// static import (avoids circular dep — voiceService imports
+// noteAudioActivity from this module). Returns false on any failure
+// so a lookup miss can never permanently block goCold.
+function tryRequireSplashLocked(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const voiceMod = require('./voiceService') as typeof import('./voiceService');
+    return voiceMod.isSplashLocked();
+  } catch {
+    return false;
+  }
+}
+
 async function goCold(reason: string): Promise<void> {
   if (state === 'cold') return;
+  // 2026-06-01 — Fix GK: defer goCold when the splash lock is held.
+  // goCold mutates the audio session to playsInSilentModeIOS:false /
+  // staysActiveInBackground:false, which silences any in-flight
+  // playback. During the launch greeting that means the user hears
+  // the first 1-2 words and then dead air. Skip the transition while
+  // the lock is held; the next legitimate goCold trigger (AppState
+  // change after splash, idle 90s, trust→quiet user flip) will
+  // re-evaluate and apply.
+  if (tryRequireSplashLocked()) {
+    console.log('[audio] goCold deferred (' + reason + ') — splash lock held');
+    return;
+  }
   state = 'cold';
   try {
     // 2026-06-01 — Fix GJ: route through voiceService.setAudioModeSerial

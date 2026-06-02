@@ -31,7 +31,7 @@ import { Asset } from 'expo-asset';
 import { Video, ResizeMode } from 'expo-av';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettingsStore } from '../store/settingsStore';
-import { playLocalFile, speak, stopSpeaking, configureAudioForSpeech } from '../services/voiceService';
+import { playLocalFile, speak, stopSpeaking, configureAudioForSpeech, acquireSplashLock, releaseSplashLock } from '../services/voiceService';
 import {
   pickGreeting,
   recordLaunch,
@@ -234,7 +234,15 @@ export default function GreetingScreen() {
       clearTimeout(advanceTimerRef.current);
       advanceTimerRef.current = null;
     }
-    void stopSpeaking().catch(() => {});
+    // 2026-06-01 — Fix GK: release the splash lock and pass
+    // bypassSplashLock:true on stopSpeaking so the user-initiated
+    // skip cuts the greeting cleanly (without the gate blocking
+    // its own stopSpeaking call).
+    if (splashLockIdRef.current !== null) {
+      releaseSplashLock(splashLockIdRef.current);
+      splashLockIdRef.current = null;
+    }
+    void stopSpeaking({ bypassSplashLock: true }).catch(() => {});
     startTransition();
   }, [startTransition]);
 
@@ -263,6 +271,14 @@ export default function GreetingScreen() {
   // below that fires ONLY when the component truly unmounts.
   const audioKickoffStartedRef = useRef(false);
 
+  // 2026-06-01 — Fix GK: splash lock held during the entire greeting
+  // playback so nothing else in the app (earbud tap → listening
+  // session, caddie opener if it mounts early, audioLifecycle.goCold
+  // on a brief AppState flicker, trust→quiet flip, any subscriber
+  // that calls speak) can preempt the greeting mid-mp3. ID stored
+  // here so the release path knows which lock to drop.
+  const splashLockIdRef = useRef<number | null>(null);
+
   // ── Enter animation + audio kickoff once greeting is picked ────────
   useEffect(() => {
     if (audioKickoffStartedRef.current) return; // already started — don't re-fire
@@ -289,6 +305,12 @@ export default function GreetingScreen() {
     // immediately — no double-kickoff, no spurious cleanup running
     // stopSpeaking on the live mp3.
     audioKickoffStartedRef.current = true;
+
+    // 2026-06-01 — Fix GK: acquire the splash lock BEFORE any audio
+    // call. 10s safety expiry covers the worst-case (Kevin video
+    // path + minDisplay floor). Release happens in three places:
+    // natural-end, skip handler, and unmount cleanup.
+    splashLockIdRef.current = acquireSplashLock(10_000);
 
     // Fade in avatar
     Animated.parallel([
@@ -342,6 +364,10 @@ export default function GreetingScreen() {
             minDisplay,
           ]);
           naturalEndRef.current = true;
+          if (splashLockIdRef.current !== null) {
+            releaseSplashLock(splashLockIdRef.current);
+            splashLockIdRef.current = null;
+          }
           if (!skippedRef.current) startTransition();
           return;
         }
@@ -355,7 +381,7 @@ export default function GreetingScreen() {
           const speakStartedAt = Date.now();
           const minDisplay = new Promise<void>(resolve => setTimeout(resolve, NONVIDEO_MIN_DISPLAY_MS));
           await Promise.all([
-            speak(captionForVoice, voiceGender, language as 'en' | 'es' | 'zh', apiUrl, { userInitiated: true }),
+            speak(captionForVoice, voiceGender, language as 'en' | 'es' | 'zh', apiUrl, { userInitiated: true, bypassSplashLock: true }),
             minDisplay,
           ]);
           // 2026-05-25 — If speak() resolved suspiciously fast (<800ms),
@@ -369,6 +395,10 @@ export default function GreetingScreen() {
             await new Promise<void>(resolve => setTimeout(resolve, 4500 - speakDurMs));
           }
           naturalEndRef.current = true;
+          if (splashLockIdRef.current !== null) {
+            releaseSplashLock(splashLockIdRef.current);
+            splashLockIdRef.current = null;
+          }
           if (!skippedRef.current) startTransition();
           return;
         }
@@ -381,6 +411,10 @@ export default function GreetingScreen() {
         await asset.downloadAsync();
         if (!asset.localUri) {
           console.warn('[greeting] asset has no localUri:', greeting);
+          if (splashLockIdRef.current !== null) {
+            releaseSplashLock(splashLockIdRef.current);
+            splashLockIdRef.current = null;
+          }
           scheduleAdvance(2000);
           return;
         }
@@ -393,11 +427,22 @@ export default function GreetingScreen() {
         // isVoiceAllowed silently drops the audio when the persisted
         // trustLevel is 1 (Quiet) — Tim hit this and heard nothing.
         const kevinMp3MinDisplay = new Promise<void>(resolve => setTimeout(resolve, NONVIDEO_MIN_DISPLAY_MS));
-        await Promise.all([playLocalFile(asset.localUri, undefined, { userInitiated: true }), kevinMp3MinDisplay]);
+        await Promise.all([playLocalFile(asset.localUri, undefined, { userInitiated: true, bypassSplashLock: true }), kevinMp3MinDisplay]);
         naturalEndRef.current = true;
+        if (splashLockIdRef.current !== null) {
+          releaseSplashLock(splashLockIdRef.current);
+          splashLockIdRef.current = null;
+        }
         if (!skippedRef.current) startTransition();
       } catch (e) {
         console.warn('[greeting] audio playback failed:', e);
+        // 2026-06-01 — Fix GK: release the splash lock on playback
+        // error so the caddie opener (and any other gated speaker)
+        // isn't blocked for the full 10s safety-expiry window.
+        if (splashLockIdRef.current !== null) {
+          releaseSplashLock(splashLockIdRef.current);
+          splashLockIdRef.current = null;
+        }
         scheduleAdvance(2000);
       }
     })();
@@ -443,8 +488,18 @@ export default function GreetingScreen() {
   // naturally so we don't risk clipping the last syllable.
   useEffect(() => {
     return () => {
+      // 2026-06-01 — Fix GK: always release the splash lock on true
+      // unmount so it can never outlive the greeting screen. If the
+      // playback ended naturally, the natural-end branch already
+      // released — this is a belt-and-suspenders.
+      if (splashLockIdRef.current !== null) {
+        releaseSplashLock(splashLockIdRef.current);
+        splashLockIdRef.current = null;
+      }
       if (!naturalEndRef.current) {
-        void stopSpeaking().catch(() => {});
+        // bypassSplashLock:true so this cleanup stop can never be
+        // gated by the lock (e.g. release race with re-acquire).
+        void stopSpeaking({ bypassSplashLock: true }).catch(() => {});
       }
     };
   }, []);

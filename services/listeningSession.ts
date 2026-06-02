@@ -1,5 +1,5 @@
 import { Linking, Vibration } from 'react-native';
-import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture } from './voiceService';
+import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture, isSplashLocked } from './voiceService';
 import { getDialog } from './dialogEngine';
 import { getTrustLevel } from './trustLevelService';
 import { useRoundStore } from '../store/roundStore';
@@ -145,6 +145,16 @@ export function getSessionState(): SessionState {
  * Toggle the listening session. Open if idle; close if any other state.
  */
 export async function toggle(): Promise<void> {
+  // 2026-06-01 — Fix GK: suppress earbud/wake triggers during the
+  // launch greeting. An accidental tap or voice-assistant wake during
+  // the 5s splash window would otherwise open a listening session,
+  // playing a filler and bumping the speech queue — cutting the
+  // greeting mid-utterance. Lock auto-expires (10s) so a stuck splash
+  // can't permanently swallow user input.
+  if (isSplashLocked()) {
+    console.log('[listeningSession] toggle BLOCKED — splash lock held');
+    return;
+  }
   if (state === 'idle') {
     await openSession();
   } else {

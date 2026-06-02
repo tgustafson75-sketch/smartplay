@@ -59,7 +59,7 @@ import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
-import { speak, configureAudioForSpeech, captureUtterance, playLocalFile } from '../../services/voiceService';
+import { speak, configureAudioForSpeech, captureUtterance, playLocalFile, waitForSplashLockRelease } from '../../services/voiceService';
 // 2026-05-25 — Bestround celebration: when the round-end summary
 // detects a new personal best, play Kevin's D-ID bestround clip
 // instead of TTS-ing the text summary. Asset is resolved at fire
@@ -923,6 +923,19 @@ export default function CaddieTab() {
         void (async () => {
           try {
             console.log('[caddie] opener IIFE start; trustLevel=', useTrustLevelStore.getState().level);
+            // 2026-06-01 — Fix GK: hard gate the opener on the splash
+            // lock being released. Even though the 3s setTimeout above
+            // intentionally gives splash room to finish, on slow boots
+            // (or if greeting's audio takes longer than 3s) caddie can
+            // arm its speak BEFORE greeting completes — and that's the
+            // exact path that cuts greeting mid-mp3 (opener's speak
+            // bumps currentSpeechId / unloads currentSound). Wait for
+            // greeting to release the splash lock (with 10s safety so
+            // a stuck lock cannot orphan the opener). When greeting
+            // already released, waitForSplashLockRelease returns
+            // synchronously.
+            await waitForSplashLockRelease(10_000);
+            console.log('[caddie] opener: splash lock released, proceeding');
             // 2026-05-26 — Fix AV: GPS-aware second intro. Kick off the
             // nearest-course detection in parallel with the greeting
             // so we don't add latency to the audible "good morning."
