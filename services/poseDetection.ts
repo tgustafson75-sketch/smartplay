@@ -774,7 +774,15 @@ export async function analyzeSwingTentative(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         frames: [{ b64: frame.b64, media_type: frame.media_type }],
-        context,
+        // 2026-06-02 — Fix GM: thread tier:'quick' into the tentative
+        // fallback context. The tentative path is by definition a
+        // fast-degraded fallback — a single frame, "best we can do"
+        // observation. Running the full Haiku→OpenAI→Sonnet escalation
+        // chain on it defeats the purpose: by the time we're asking
+        // for tentative, the user has already waited 30-40s for the
+        // primary attempt. Quick (Haiku-only) keeps the fallback in
+        // the 2-5s budget and matches the design intent.
+        context: { ...context, tier: 'quick' as const },
         mode: 'tentative',
       }),
       signal: AbortSignal.timeout(TENTATIVE_TIMEOUT_MS),

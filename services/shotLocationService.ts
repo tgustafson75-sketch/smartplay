@@ -2,6 +2,7 @@ import * as Location from 'expo-location';
 import { useRoundStore, type ShotLocation, type CourseHole } from '../store/roundStore';
 import { getHoleGeometry } from './courseGeometryService';
 import { getOneShotFix, getLastFix as getGpsLastFix } from './gpsManager';
+import { safeLatLng } from '../utils/coordGuard';
 
 /**
  * Phase B — GPS location capture for shots.
@@ -85,16 +86,24 @@ export function getGreenCentroid(holeNumber: number): ShotLocation | null {
   }
 
   // Legacy CourseHole-record fallback
+  // 2026-06-02 — Fix GM: replaced loose `!== 0` truthy-style checks
+  // with safeLatLng (full WGS84 guard). The old check rejected exact
+  // {0,0} but accepted near-zero (0.0001°) and out-of-range garbage —
+  // same root cause class as the offCourseDetector pattern Fix GL
+  // closed.
   const holes: CourseHole[] = round.courseHoles;
   const h = holes.find(x => x.hole === holeNumber);
   if (!h) return null;
-  if (h.middleLat !== 0 && h.middleLng !== 0) {
-    return { lat: h.middleLat, lng: h.middleLng };
-  }
-  if ((h.frontLat || h.backLat) && (h.frontLng || h.backLng)) {
+  const mid = safeLatLng(h.middleLat, h.middleLng);
+  if (mid) return mid;
+  // Front/back midpoint fallback. Both pairs must be valid for the
+  // midpoint to be meaningful — one bad coord poisons the average.
+  const front = safeLatLng(h.frontLat, h.frontLng);
+  const back = safeLatLng(h.backLat, h.backLng);
+  if (front && back) {
     return {
-      lat: (h.frontLat + h.backLat) / 2,
-      lng: (h.frontLng + h.backLng) / 2,
+      lat: (front.lat + back.lat) / 2,
+      lng: (front.lng + back.lng) / 2,
     };
   }
   return null;
@@ -102,10 +111,11 @@ export function getGreenCentroid(holeNumber: number): ShotLocation | null {
 
 /** Returns the tee centroid for a hole. */
 export function getTeeCentroid(holeNumber: number): ShotLocation | null {
+  // 2026-06-02 — Fix GM: same WGS84 guard as getGreenCentroid above.
   const holes: CourseHole[] = useRoundStore.getState().courseHoles;
   const h = holes.find(x => x.hole === holeNumber);
-  if (!h || (h.teeLat === 0 && h.teeLng === 0)) return null;
-  return { lat: h.teeLat, lng: h.teeLng };
+  if (!h) return null;
+  return safeLatLng(h.teeLat, h.teeLng);
 }
 
 /**

@@ -39,6 +39,7 @@
 
 import { useRoundStore } from '../store/roundStore';
 import { haversineYards } from '../utils/geoDistance';
+import { safeLatLng } from '../utils/coordGuard';
 
 type MetaVoiceEntry = {
   timestamp: string;
@@ -90,7 +91,15 @@ export async function ingestMetaGlassesJson(jsonPath: string): Promise<IngestRes
       let bestHole: number | null = null;
       let bestDist = Infinity;
       for (const h of round.courseHoles) {
-        const d = haversineYards(entry.location, { lat: h.middleLat, lng: h.middleLng });
+        // 2026-06-02 — Fix GM: guard against placeholder/garbage coords
+        // (Westlake NJ, Sunnyvale, San Jose Muni, Mariners ship with
+        // {0,0} or near-zero values for some F/M/B fields). Without
+        // this guard, haversine(real-fix, placeholder) returns ~10M
+        // yards finite, fails the 300y radius silently, hole stays
+        // null, glasses commentary attribution drifts to currentHole.
+        const mid = safeLatLng(h.middleLat, h.middleLng);
+        if (!mid) continue;
+        const d = haversineYards(entry.location, mid);
         if (d < bestDist) { bestDist = d; bestHole = h.hole; }
       }
       if (bestDist < 300) hole = bestHole;

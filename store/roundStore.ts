@@ -811,6 +811,16 @@ export const useRoundStore = create<RoundState>()(
                   'Location off — enable Location in Settings, then tap Start Round again.',
                 );
               } catch {}
+              // 2026-06-02 — Fix GM: belt-and-suspenders. Set
+              // isRoundActive=false FIRST so that even if discardRound
+              // throws (a subscriber teardown error, an AsyncStorage
+              // write race, etc.), the round-active flag is already
+              // false. Without this, an exception in discardRound left
+              // isRoundActive=true with no GPS subscription → orphan
+              // round, no banner (banner gates on isRoundActive=true
+              // AND unhealthy GPS — but GPS was never started so it
+              // never registered as unhealthy).
+              try { set({ isRoundActive: false }); } catch { /* noop */ }
               try {
                 get().discardRound();
               } catch (e) {

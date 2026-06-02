@@ -307,10 +307,19 @@ export default function GreetingScreen() {
     audioKickoffStartedRef.current = true;
 
     // 2026-06-01 — Fix GK: acquire the splash lock BEFORE any audio
-    // call. 10s safety expiry covers the worst-case (Kevin video
-    // path + minDisplay floor). Release happens in three places:
-    // natural-end, skip handler, and unmount cleanup.
-    splashLockIdRef.current = acquireSplashLock(10_000);
+    // call. Release happens in three places: natural-end, skip
+    // handler, and unmount cleanup.
+    //
+    // 2026-06-02 — Fix GM: bumped safety expiry 10s → 15s. Voice
+    // Pass 2 audit found that the Kevin VIDEO path (when re-enabled)
+    // caps at 12s + minDisplay 2s + slow asset download can push the
+    // greeting window to 12-14s. The prior 10s expiry would auto-
+    // release the lock mid-greeting, exposing a 2-4s window where
+    // caddie opener / earbud taps / goCold could preempt the
+    // remainder. 15s covers the worst-case greeting envelope with
+    // 1s headroom; the caddie opener's wait timeout is bumped to
+    // match in [caddie.tsx:937].
+    splashLockIdRef.current = acquireSplashLock(15_000);
 
     // Fade in avatar
     Animated.parallel([

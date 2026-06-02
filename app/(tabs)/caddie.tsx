@@ -934,7 +934,11 @@ export default function CaddieTab() {
             // a stuck lock cannot orphan the opener). When greeting
             // already released, waitForSplashLockRelease returns
             // synchronously.
-            await waitForSplashLockRelease(10_000);
+            // 2026-06-02 — Fix GM: bumped wait timeout 10s → 15s to
+            // match greeting's acquireSplashLock expiry. If wait
+            // timed out before greeting released, opener fired with
+            // lock still held → opener's speak blocked → silent.
+            await waitForSplashLockRelease(15_000);
             console.log('[caddie] opener: splash lock released, proceeding');
             // 2026-05-26 — Fix AV: GPS-aware second intro. Kick off the
             // nearest-course detection in parallel with the greeting

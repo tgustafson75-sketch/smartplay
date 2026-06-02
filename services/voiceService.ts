@@ -378,7 +378,16 @@ export function acquireSplashLock(maxDurationMs = 10_000): number {
 }
 
 export function releaseSplashLock(id: number): void {
-  if (splashLockHolder !== id) return;
+  if (splashLockHolder !== id) {
+    // 2026-06-02 — Fix GM: log mismatched releases so the "lock
+    // auto-expired before holder could release" case is visible in
+    // logs. Without this, a holder's release call after safety
+    // expiry was a silent no-op, making post-mortem analysis of
+    // "splash audio cut off at 14s" debugging confusing (was the
+    // release wrong? was the expiry hit? unclear from logs).
+    console.log('[voice] splash lock release MISMATCH — id=', id, 'currentHolder=', splashLockHolder, '(likely auto-expired)');
+    return;
+  }
   splashLockHolder = 0;
   splashLockExpiresAt = 0;
   console.log('[voice] splash lock RELEASED id=', id);

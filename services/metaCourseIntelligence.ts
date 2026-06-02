@@ -39,6 +39,7 @@ import { buildGolferModel, type GolferModel } from './golferModel';
 import { getCachedWeather, fetchWeatherAt, type WeatherSnapshot } from './weatherService';
 import { getLastFix } from './gpsManager';
 import { haversineYards, bearingDegrees } from '../utils/geoDistance';
+import { isValidGolfCoord } from '../utils/coordGuard';
 import { getCaddieName } from '../lib/persona';
 import { devLog } from './devLog';
 
@@ -142,12 +143,19 @@ export async function recommendShot(input: MetaIntelInput = {}): Promise<Strateg
   try { golfer = buildGolferModel(); } catch { /* non-fatal */ }
 
   // ─── Derive target distance + bearing ─────────────────────────────
+  // 2026-06-02 — Fix GM: guard both inputs to haversine. holeView.green
+  // can be a cached coord from a partial geometry response (placeholder
+  // values still possible). playerLoc is gpsManager-guarded upstream but
+  // defense-in-depth here costs nothing.
   let yardsToTarget: number | null = input.target_yards ?? null;
-  if (yardsToTarget == null && playerLoc && holeView?.green) {
-    yardsToTarget = Math.round(haversineYards(playerLoc, holeView.green));
+  const targetValid = playerLoc && holeView?.green
+    && isValidGolfCoord(playerLoc.lat, playerLoc.lng)
+    && isValidGolfCoord(holeView.green.lat, holeView.green.lng);
+  if (yardsToTarget == null && targetValid) {
+    yardsToTarget = Math.round(haversineYards(playerLoc!, holeView!.green!));
   }
-  const targetBearing = playerLoc && holeView?.green
-    ? bearingDegrees(playerLoc, holeView.green)
+  const targetBearing = targetValid
+    ? bearingDegrees(playerLoc!, holeView!.green!)
     : null;
 
   // ─── Wind decomposition ───────────────────────────────────────────

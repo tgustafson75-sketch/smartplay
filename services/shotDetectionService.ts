@@ -3,6 +3,7 @@ import { startGpsManager, subscribe as subscribeGps, stopGpsManager } from './gp
 import { startSmartFinderGpsTracking, stopSmartFinderGpsTracking } from './smartFinderService';
 import { ownerSentinel } from './ownerSentinel';
 import { haversineMeters } from '../utils/geoDistance';
+import { isValidGolfCoord } from '../utils/coordGuard';
 
 export interface GPSSample {
   lat: number;
@@ -151,6 +152,16 @@ class ShotDetector {
    * Manually feed a GPS sample (useful for testing or non-expo-location pipelines).
    */
   ingest(sample: GPSSample): void {
+    // 2026-06-02 — Fix GM: guard manually-ingested samples. The
+    // gpsManager.subscribe() path is already validated upstream, but
+    // this public method is also called from test harnesses and
+    // future non-expo-location pipelines (Meta glasses ingest, watch
+    // bridge). A {0,0} sample here would pollute the anchor average
+    // and produce a phantom shot at the equator.
+    if (!isValidGolfCoord(sample.lat, sample.lng)) {
+      console.log('[shotDetection] ingest rejected — invalid coord', sample.lat, sample.lng);
+      return;
+    }
     this.samples.push(sample);
     // PGA HOPE follow-up (B1): adaptive players (wheelchair transfers,
     // prosthetic adjustment, longer pre-shot routine) routinely take 90s+
@@ -168,9 +179,25 @@ class ShotDetector {
    */
   triggerManual(location?: { lat: number; lng: number }): void {
     const now = Date.now();
-    const start = location ?? (this.samples.length > 0
-      ? { lat: this.samples[this.samples.length - 1].lat, lng: this.samples[this.samples.length - 1].lng }
-      : { lat: 0, lng: 0 });
+    // 2026-06-02 — Fix GM: dropped the `{ lat: 0, lng: 0 }` final
+    // fallback. A shot emitted with start_location={0,0} would later
+    // produce a 246yd-class haversine artifact when downstream code
+    // measures distance from it. If we have no validated coord
+    // anywhere (no provided location, no samples), refuse to emit
+    // rather than poison the round with a bogus origin.
+    let start: { lat: number; lng: number } | null = null;
+    if (location && isValidGolfCoord(location.lat, location.lng)) {
+      start = location;
+    } else if (this.samples.length > 0) {
+      const last = this.samples[this.samples.length - 1];
+      if (isValidGolfCoord(last.lat, last.lng)) {
+        start = { lat: last.lat, lng: last.lng };
+      }
+    }
+    if (!start) {
+      console.log('[shotDetection] triggerManual rejected — no valid origin coord');
+      return;
+    }
     this.emit({ timestamp: now, start_location: start, estimated_distance_yards: 0 });
   }
 

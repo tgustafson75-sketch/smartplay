@@ -169,6 +169,11 @@ function processFix(raw: GpsFix): boolean {
   if (!isValidGolfCoord(raw.lat, raw.lng)) {
     outliersDiscarded++;
     console.log(`[gps:outlier-rejected] invalid coord lat=${raw.lat} lng=${raw.lng}`);
+    // 2026-06-02 — Fix GM: ownerSentinel breadcrumb so silent
+    // coord-rejection bursts mid-round are visible in telemetry.
+    // Without this, a round that silently lost GPS for 20-30 min
+    // due to an OEM glitch would look successful in Sentry.
+    ownerSentinel('gps.processFix.invalidCoord', new Error(`lat=${raw.lat} lng=${raw.lng}`));
     return false;
   }
   // (1) Discard if reported accuracy is worse than threshold.
@@ -291,6 +296,7 @@ export function setSimulatedFix(loc: { lat: number; lng: number }, accuracy_m = 
   // 2026-06-01 — Fix GL: same coord guard as the real-fix path.
   if (!isValidGolfCoord(loc.lat, loc.lng)) {
     console.log(`[gps:sim-rejected] invalid coord lat=${loc.lat} lng=${loc.lng}`);
+    ownerSentinel('gps.setSimulatedFix.invalidCoord', new Error(`lat=${loc.lat} lng=${loc.lng}`));
     return;
   }
   simulatedActive = true;
@@ -332,6 +338,7 @@ export function setMarkedFix(lat: number, lng: number, accuracy_m: number | null
   // yardage / off-course / hole-detection consumer.
   if (!isValidGolfCoord(lat, lng)) {
     console.log(`[gps:mark-rejected] invalid coord lat=${lat} lng=${lng}`);
+    ownerSentinel('gps.setMarkedFix.invalidCoord', new Error(`lat=${lat} lng=${lng}`));
     return;
   }
   lastFix = {

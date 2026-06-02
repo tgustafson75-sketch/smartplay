@@ -10,11 +10,20 @@ import { GoogleGenAI } from '@google/genai';
 // ~10s fits comfortably under 60s with grace.
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 22_000, maxRetries: 1 });
 // 2026-05-27 — Fix EK: dedicated Haiku client with a tighter timeout.
-// Haiku 4.5 vision typically responds in 2-5s; capping at 10s catches
+// Haiku 4.5 vision typically responds in 2-5s; capping it catches
 // pathological slow responses early and lets us escalate to OpenAI
 // before the user notices a hang. Same API key, same SDK — only
 // model + timeout differ vs the Sonnet client above.
-const anthropicHaiku = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 10_000, maxRetries: 1 });
+//
+// 2026-06-02 — Fix GM: bumped 10s → 13s. SwingLab QA audit found the
+// 10s cap was too tight for slow-network / cold-start Haiku calls,
+// triggering unnecessary OpenAI escalation that adds 15-20s to the
+// total budget (worse than just waiting 1-2s more for Haiku). 13s
+// keeps fast-path responsive while absorbing the long-tail without
+// burning the budget on a fallback that's NOT needed. Quick-tier
+// short-circuit at line ~1135 still saves the chain when Haiku
+// produces parseable output even at the upper edge of this window.
+const anthropicHaiku = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 13_000, maxRetries: 1 });
 // 2026-05-26 — Fix AR Phase 2: OpenAI gpt-4o fallback. Lower timeout
 // than Anthropic — by the time we fall back, the user has already been
 // waiting; we'd rather degrade to honest-failure than burn another 25s.
