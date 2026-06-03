@@ -477,13 +477,12 @@ function evaluateMode() {
   if (mode !== 'stationary' && lastMotionAt > 0 && now - lastMotionAt > STATIONARY_AFTER) {
     if (mode !== 'active') setMode('stationary', 'no_motion_90s');
   }
-  // Phase 405 wave 2 — sustained-poor-signal detector. Smartfinder
-  // already shows a quality indicator; this fires a one-shot voice/UI
-  // callout when the signal has been weak for POOR_SIGNAL_SUSTAINED_MS
-  // so the player gets actionable feedback ("step into open sky") not
-  // just a passive dot color change. Reset when the fix recovers.
+  // Phase 405 wave 2 — sustained-poor-signal detector. Fires the
+  // poorSignalListeners fanout after POOR_SIGNAL_SUSTAINED_MS of
+  // accuracy worse than the pipeline gate (i.e. fixes the pipeline
+  // is REJECTING). Reset when the fix recovers.
   const acc = lastFix?.accuracy_m ?? null;
-  const isPoor = acc == null || acc > 15;
+  const isPoor = acc == null || acc > OUTLIER_ACCURACY_M;
   if (isPoor) {
     if (poorSinceTs == null) poorSinceTs = now;
     else if (poorAlertedAt == null && now - poorSinceTs >= POOR_SIGNAL_SUSTAINED_MS) {
@@ -501,9 +500,10 @@ function evaluateMode() {
 
 /**
  * Phase 405 wave 2 — subscribe to sustained-poor-signal events. Fires
- * once when accuracy has been weak (>15m) for POOR_SIGNAL_SUSTAINED_MS.
- * Listener fires again only after signal recovers (accuracy drops back
- * under 15m) so the caddie doesn't loop the same callout.
+ * once when accuracy has stayed worse than OUTLIER_ACCURACY_M (the
+ * pipeline rejection gate) for POOR_SIGNAL_SUSTAINED_MS. Listener fires
+ * again only after signal recovers (accuracy drops back within the
+ * gate) so the caddie doesn't loop the same callout.
  */
 export function subscribePoorSignal(cb: PoorSignalListener): () => void {
   poorSignalListeners.add(cb);
