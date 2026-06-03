@@ -336,88 +336,7 @@ const playbackTimeoutForDuration = (durationMs: number | null | undefined): numb
 // Pass { userInitiated: true } from any speak() call that's a direct reply
 // to a user mic-tap or hero-moment confirmation. Default false treats the
 // utterance as scripted (briefing, opener, filler, proactive, summary).
-// 2026-06-01 — Fix GK: bypassSplashLock. When the splash lock is held
-// (greeting.tsx is playing the launch greeting), every other speak() /
-// playLocalFile() / speakFromBase64() / stopSpeaking() call from
-// anywhere in the app is short-circuited so nothing can preempt the
-// greeting mid-utterance. Greeting passes bypassSplashLock:true on its
-// OWN calls so it's the sole holder. Released by greeting on natural
-// end / user skip / true unmount.
-type SpeakOpts = { userInitiated?: boolean; bypassSplashLock?: boolean };
-
-// ─── SPLASH LOCK ──────────────────────────
-// 2026-06-01 — Fix GK: structural fix for the recurring "splash plays
-// 2 words then cuts off" symptom. Root cause class (proven by full
-// audit, not guess): ANY code path that bumps currentSpeechId or
-// unloads currentSound during the splash window kills the greeting
-// mid-mp3. The audit found at least these preemption surfaces:
-//  - earbud-tap → listeningSession.toggle() → playLocalFile filler
-//  - caddie opener setTimeout firing if caddie mounts early
-//  - app backgrounded → audioLifecycle.goCold → setAudioMode(silent)
-//  - trust→Quiet during splash → goCold path
-//  - voice-assistant wake → same path as earbud
-//  - any subscriber that fires speak() during the 5s window
-// Whack-a-mole on each was the failure pattern of the prior 8 fixes.
-// The structural fix is a single lock: greeting holds it for the
-// duration of the splash, every other voice/audio caller is gated on
-// it, and only the holder can release.
-//
-// Safety: lock auto-expires after maxDurationMs (default 10s) so a
-// crashed/unmounted holder cannot permanently silence the app.
-let splashLockHolder = 0;
-let splashLockSeq = 0;
-let splashLockExpiresAt = 0;
-
-export function acquireSplashLock(maxDurationMs = 10_000): number {
-  splashLockSeq += 1;
-  const id = splashLockSeq;
-  splashLockHolder = id;
-  splashLockExpiresAt = Date.now() + maxDurationMs;
-  console.log('[voice] splash lock ACQUIRED id=', id, 'expires in', maxDurationMs, 'ms');
-  return id;
-}
-
-export function releaseSplashLock(id: number): void {
-  if (splashLockHolder !== id) {
-    // 2026-06-02 — Fix GM: log mismatched releases so the "lock
-    // auto-expired before holder could release" case is visible in
-    // logs. Without this, a holder's release call after safety
-    // expiry was a silent no-op, making post-mortem analysis of
-    // "splash audio cut off at 14s" debugging confusing (was the
-    // release wrong? was the expiry hit? unclear from logs).
-    console.log('[voice] splash lock release MISMATCH — id=', id, 'currentHolder=', splashLockHolder, '(likely auto-expired)');
-    return;
-  }
-  splashLockHolder = 0;
-  splashLockExpiresAt = 0;
-  console.log('[voice] splash lock RELEASED id=', id);
-}
-
-export function isSplashLocked(): boolean {
-  if (splashLockHolder === 0) return false;
-  if (Date.now() > splashLockExpiresAt) {
-    console.log('[voice] splash lock auto-expired (safety timeout)');
-    splashLockHolder = 0;
-    splashLockExpiresAt = 0;
-    return false;
-  }
-  return true;
-}
-
-/**
- * Resolve when the splash lock is released, or after timeoutMs as a
- * safety. Polled at 50ms — cheap because typical wait is the full
- * splash window (5-7s) and only one or two callers ever wait. Used by
- * the caddie opener so its 3s setTimeout sequence runs AFTER the
- * greeting completes even if caddie somehow mounts during the splash.
- */
-export async function waitForSplashLockRelease(timeoutMs = 10_000): Promise<void> {
-  if (!isSplashLocked()) return;
-  const deadline = Date.now() + timeoutMs;
-  while (isSplashLocked() && Date.now() < deadline) {
-    await new Promise<void>((resolve) => setTimeout(resolve, 50));
-  }
-}
+type SpeakOpts = { userInitiated?: boolean };
 
 // PGA HOPE follow-up (A5) — read the active persona's intensity dial and
 // convert to playback volume. Floor at 0.3 so the slider never silences
@@ -576,17 +495,7 @@ export const subscribeToCaption = (
 
 // ─── STOP ─────────────────────────────────
 
-export const stopSpeaking = async (opts?: { bypassSplashLock?: boolean }): Promise<void> => {
-  // 2026-06-01 — Fix GK: block external stopSpeaking when the splash
-  // lock is held. Without this, ANY service that calls stopSpeaking
-  // during the launch greeting (audioLifecycle.goCold, listening
-  // session cleanup, caddie opener pre-speak hygiene, useVoiceCaddie
-  // teardown) would unload the greeting mp3 mid-word. Greeting's own
-  // skip handler passes bypassSplashLock:true to release intentionally.
-  if (isSplashLocked() && !opts?.bypassSplashLock) {
-    console.log('[voice] stopSpeaking BLOCKED — splash lock held');
-    return;
-  }
+export const stopSpeaking = async (): Promise<void> => {
   currentSpeechId++;
   speakGeneration++;
   if (currentAbortController) {
@@ -618,14 +527,6 @@ export const playLocalFile = async (
   // Phase V.7 — same Quiet/route guard as speak() so filler clips don't
   // play when voice is disabled or routed to the phone speaker.
   if (!isVoiceAllowed(opts)) return;
-
-  // 2026-06-01 — Fix GK: splash-lock gate. Skip when the splash lock
-  // is held by someone else (greeting). Greeting's own playLocalFile
-  // passes bypassSplashLock:true so it runs unimpeded.
-  if (isSplashLocked() && !opts?.bypassSplashLock) {
-    console.log('[voice] playLocalFile BLOCKED — splash lock held; uri=', uri);
-    return;
-  }
 
   currentSpeechId++;
   const myId = currentSpeechId;
@@ -716,12 +617,6 @@ export const playLocalFile = async (
 export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise<void> => enqueueSpeak(async () => {
   // Phase V.7 — guard for parity with speak() / playLocalFile.
   if (!isVoiceAllowed(opts)) return;
-
-  // 2026-06-01 — Fix GK: splash-lock gate. See playLocalFile / speak.
-  if (isSplashLocked() && !opts?.bypassSplashLock) {
-    console.log('[voice] speakFromBase64 BLOCKED — splash lock held');
-    return;
-  }
 
   currentSpeechId++;
   const myId = currentSpeechId;
@@ -870,14 +765,6 @@ export const speak = async (
 ): Promise<void> => enqueueSpeak(async () => {
   // Phase V.7 — shared guard (formerly inlined here).
   if (!isVoiceAllowed(opts)) return;
-
-  // 2026-06-01 — Fix GK: splash-lock gate. Skip when greeting holds
-  // the splash lock. Greeting's own persona-greeting speak (Serena /
-  // Tank / Harry path) passes bypassSplashLock:true.
-  if (isSplashLocked() && !opts?.bypassSplashLock) {
-    console.log('[voice] speak BLOCKED — splash lock held; text head=', text.slice(0, 40));
-    return;
-  }
 
   // Claim ownership: bump speechId and cancel anything in-flight.
   currentSpeechId++;
