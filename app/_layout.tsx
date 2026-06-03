@@ -28,7 +28,6 @@ import { activateMediaSession, deactivateMediaSession } from '../services/mediaK
 import { startHoleDetection, stopHoleDetection, subscribeToHoleDetection } from '../services/holeDetection';
 import { startOffCourseDetector, stopOffCourseDetector } from '../services/offCourseDetector';
 import { startMovementModeDetector, stopMovementModeDetector } from '../services/movementModeDetector';
-import { subscribePoorSignal } from '../services/gpsManager';
 // 2026-05-24 — GPS confidence-gated proactive ask orchestrator (Flow B).
 // Wires the existing subscribePoorSignal → speak() with trust-level
 // and cooldown gates so Kevin only asks "what hole?" when GPS is
@@ -72,7 +71,6 @@ import GpsQualityOverlay from '../components/dev/GpsQualityOverlay';
 import CaptureOverlay from '../components/CaptureOverlay';
 import { UpdateAvailableBanner } from '../components/UpdateAvailableBanner';
 import NativeFallbackBanner from '../components/NativeFallbackBanner';
-import { GpsHealthBanner } from '../components/GpsHealthBanner';
 import CaptionStrip from '../components/CaptionStrip';
 import { GlobalToolsMenu } from '../components/tools/GlobalToolsMenu';
 import { GlobalToast } from '../components/toast/GlobalToast';
@@ -525,17 +523,6 @@ function AppNavigator() {
       const round = useRoundStore.getState();
       if (round.currentHole !== nextHole) round.setCurrentHole(nextHole);
     });
-    // Phase 405 wave 2 — sustained-poor-signal callout. Fires once
-     // when accuracy has been weak for 45s during an active round; the
-     // listener pops a toast so the user gets actionable feedback
-     // ("step into open sky") instead of just a passive dot color
-     // change in SmartFinder. Subscription is process-lifetime — the
-     // service itself only emits during active rounds (evaluateMode
-     // only ticks while the watch is running).
-    const unsubPoor = subscribePoorSignal((info) => {
-      const acc = info.accuracy_m != null ? `~${Math.round(info.accuracy_m)}m` : 'unknown';
-      useToastStore.getState().show(`GPS weak (${acc}) — step into open sky or tap Mark.`);
-    });
     // 2026-05-24 (Flow B) — GPS confidence-gated proactive ask
     // orchestrator. Init alongside the toast subscriber. Subscribes
     // to the SAME poor-signal gate and adds a spoken "what hole?"
@@ -574,7 +561,6 @@ function AppNavigator() {
     return () => {
       unsubDetect();
       unsubRound();
-      unsubPoor();
       unsubGpsAsk();
       unsubRewards();
       stopHoleDetection();
@@ -705,12 +691,6 @@ function AppNavigator() {
           knows they're in cloud mode rather than confused by silent
           feature absence. Renders nothing on healthy builds. */}
       <NativeFallbackBanner />
-      {/* 2026-06-01 — Fix GL: mid-round GPS health banner. Renders
-          only when isRoundActive AND the GPS subscription is
-          unhealthy (no_subscription / never_ticked / stale). Tap =
-          recalibrateGps. Without this the user had no UI signal that
-          their watch had silently stopped delivering fixes. */}
-      <GpsHealthBanner />
       {/* Phase 106 — caddie team handoff suggestion overlay. */}
       <CaddieSuggestionCard />
       {/* Phase 107 — GPS quality debug overlay (gated by settings flag). */}

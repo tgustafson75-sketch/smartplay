@@ -68,27 +68,6 @@ const SMOOTHING_WINDOW = 3;
 // (10s) + 3 missed ticks of headroom; stationary (20s) tolerates 1 miss.
 const FIX_STALENESS_MS = 30_000;
 
-// 2026-05-25 — Fix H: warm-up tracking after a fresh subscription.
-// Tim's Z Fold sleeps fast on-course; on resume, the location chip
-// returns stale or low-confidence fixes for a few seconds before
-// settling. During that window we mark fixes "warming up" and surface
-// that via getIsGpsWarmingUp() so yardageResolver can downgrade
-// confidence + Kevin can hedge honestly ("GPS just woke up — give it
-// a beat"). Clears after WARMUP_FRESH_FIXES_REQUIRED consecutive
-// good-quality (≤15m accuracy) fixes.
-const WARMUP_FRESH_FIXES_REQUIRED = 3;
-// 2026-05-26 — Fix CL: hard ceiling on warmup. If the user resumes from
-// background indoors (or anywhere GPS won't deliver), no good fixes
-// arrive, warmupConsecutiveGood never advances, and isWarmingUp stays
-// true forever — yardages stay flagged as "GPS just woke up, give it a
-// beat" indefinitely until the next outdoor walk. Force-clear after this
-// long even without good fixes so downstream consumers stop hedging
-// once the warm-up is statistically over (whether or not GPS cooperated).
-const WARMUP_HARD_TIMEOUT_MS = 30_000;
-let isWarmingUp = false;
-let warmupConsecutiveGood = 0;
-let warmupStartedAt = 0;
-
 // Phase 405 wave 2 — "GPS signal weak" callout. When accuracy stays at
 // weak (>15m) or none for this long during an active round, fire the
 // onPoorSignal callbacks so the caddie / UI can speak a recovery hint.
@@ -223,30 +202,6 @@ function processFix(raw: GpsFix): boolean {
   }
   lastFix = fix;
   lastTickAt = Date.now();
-  // 2026-05-25 — Fix H: warm-up clearance. A "good" fix is ≤15m
-  // accuracy. After N consecutive good fixes the warmup flag clears.
-  // One bad fix resets the counter so the flag holds through any
-  // transient bad-fix run mid-warmup.
-  if (isWarmingUp) {
-    // 2026-05-26 — Fix CL: hard timeout. If we've been warming up for
-    // WARMUP_HARD_TIMEOUT_MS without the good-streak threshold landing
-    // (e.g. user resumed indoors), clear the flag anyway so downstream
-    // consumers stop hedging forever.
-    if (warmupStartedAt > 0 && Date.now() - warmupStartedAt >= WARMUP_HARD_TIMEOUT_MS) {
-      isWarmingUp = false;
-      warmupConsecutiveGood = 0;
-      breadcrumb('warmup_cleared_timeout', { ms_elapsed: Date.now() - warmupStartedAt });
-    } else if (fix.accuracy_m != null && fix.accuracy_m <= 15) {
-      warmupConsecutiveGood++;
-      if (warmupConsecutiveGood >= WARMUP_FRESH_FIXES_REQUIRED) {
-        isWarmingUp = false;
-        warmupConsecutiveGood = 0;
-        breadcrumb('warmup_cleared', { good_streak: WARMUP_FRESH_FIXES_REQUIRED });
-      }
-    } else {
-      warmupConsecutiveGood = 0;
-    }
-  }
   for (const cb of subscribers) {
     try { cb(fix); } catch (e) { ownerSentinel('gps.subscriber.fix', e); }
   }
@@ -483,13 +438,6 @@ async function handleAppStateChange(next: AppStateStatus): Promise<void> {
     mode,
   });
   console.log(`[gps] foreground: watch stale (${Date.now() - lastTickAt}ms) — restarting`);
-  // 2026-05-25 — Fix H: flip warm-up flag on app-resume restart so
-  // downstream consumers (yardageResolver, Kevin's prompt) know the
-  // first few fixes after resume aren't yet trustworthy. Clears when
-  // WARMUP_FRESH_FIXES_REQUIRED consecutive good fixes have landed.
-  isWarmingUp = true;
-  warmupConsecutiveGood = 0;
-  warmupStartedAt = Date.now();
   await restartWatch();
   // Force a one-shot read so consumers don't sit on a stale fix while
   // the new watch warms up.
@@ -581,11 +529,6 @@ export async function forceRefreshGps(): Promise<GpsFix | null> {
   mode = 'active';
   lastMotionAt = Date.now();
   lastTickAt = 0;
-  // 2026-05-25 — Fix H: explicit refresh also enters warm-up. The
-  // first few fixes after a forced restart can be cached/low-quality.
-  isWarmingUp = true;
-  warmupConsecutiveGood = 0;
-  warmupStartedAt = Date.now();
   await startWatchInternal();
   breadcrumb('manager_force_refresh');
 
@@ -716,17 +659,6 @@ export function bumpToActive(reason: string): void {
 
 export function getCurrentMode(): GpsMode {
   return mode;
-}
-
-/**
- * 2026-05-25 — Fix H: true when the GPS subscription is fresh from an
- * app-resume or forced refresh and hasn't yet seen
- * WARMUP_FRESH_FIXES_REQUIRED consecutive ≤15m fixes. Consumers (e.g.
- * yardageResolver) downgrade confidence while this is true so the UI +
- * Kevin's prompt hedge honestly during the warm-up window.
- */
-export function isGpsWarmingUp(): boolean {
-  return isWarmingUp;
 }
 
 export function getLastFix(): GpsFix | null {

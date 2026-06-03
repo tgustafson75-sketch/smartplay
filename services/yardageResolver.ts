@@ -32,7 +32,6 @@
 
 import { useRoundStore } from '../store/roundStore';
 import { getGreenYardagesSync, getLastFix, classifyAccuracy } from './smartFinderService';
-import { isGpsWarmingUp } from './gpsManager';
 
 export type YardageSource = 'user_stated' | 'gps_live' | 'static_card' | 'none';
 export type YardageConfidence = 'high' | 'med' | 'low';
@@ -88,11 +87,6 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
   const fixAge = fix ? now - fix.timestamp : Infinity;
   const accuracy = fix?.accuracy_m ?? null;
   const quality = classifyAccuracy(accuracy);
-  // 2026-05-25 — Fix H: during the post-resume / post-refresh warm-up
-  // window, downgrade confidence even when accuracy looks fine. The
-  // first few fixes are often stale/cached; honest hedge until the
-  // warmup clears (3 consecutive ≤15m fixes per gpsManager).
-  const warming = isGpsWarmingUp();
   const gpsHealthy =
     fix != null &&
     fixAge < 10_000 &&
@@ -102,19 +96,6 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
   if (gpsHealthy) {
     const y = getGreenYardagesSync(hole);
     if (y && y.middle != null && y.reason === 'ok') {
-      // Warming up → force med confidence + explicit reason so Kevin
-      // hedges ("GPS just woke up — settling in"). Strong-accuracy
-      // fixes outside warmup get high confidence as before.
-      if (warming) {
-        return {
-          value: y.middle,
-          source: 'gps_live',
-          confidence: 'med',
-          reason: 'GPS just woke up — settling in.',
-          asOf: fix.timestamp,
-          is_fallback: false,
-        };
-      }
       return {
         value: y.middle,
         source: 'gps_live',
