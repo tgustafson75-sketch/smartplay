@@ -235,6 +235,41 @@ async function writePersistedCache(geo: CourseGeometry): Promise<void> {
  * courseId so the rest of the app (which uses "local:sunnyvale" as
  * the active courseId) gets the cached hit on subsequent lookups.
  */
+
+// 2026-06-03 — Derive a course centroid from the active round's
+// courseHoles tee coords. Used for non-local: courseIds so the server-
+// side OSM fallback has a bounding-box anchor to query Overpass against.
+// Dynamic require avoids the circular import (roundStore lazy-requires
+// this service for greenForHole). Returns null when no active round
+// or no valid tee coords — caller treats null as "no centroid" and
+// the existing pre-fix behavior holds.
+function deriveCentroidFromActiveCourseHoles(): { lat: number; lng: number } | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
+    const holes = useRoundStore.getState().courseHoles ?? [];
+    let latSum = 0;
+    let lngSum = 0;
+    let count = 0;
+    for (const h of holes) {
+      if (
+        typeof h.teeLat === 'number' && typeof h.teeLng === 'number' &&
+        Number.isFinite(h.teeLat) && Number.isFinite(h.teeLng) &&
+        Math.abs(h.teeLat) > 0.001 && Math.abs(h.teeLng) > 0.001 &&
+        Math.abs(h.teeLat) <= 90 && Math.abs(h.teeLng) <= 180
+      ) {
+        latSum += h.teeLat;
+        lngSum += h.teeLng;
+        count += 1;
+      }
+    }
+    if (count === 0) return null;
+    return { lat: latSum / count, lng: lngSum / count };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchCourseGeometry(courseId: string): Promise<CourseGeometry | null> {
   if (!courseId) return null;
 
@@ -283,6 +318,15 @@ export async function fetchCourseGeometry(courseId: string): Promise<CourseGeome
       // synthesizes holes from OSM greens/tees when osmOnly=1).
       upstreamId = '__osm_only__';
     }
+  } else if (!centroid) {
+    // 2026-06-03 — Non-local: courseIds (golfcourseapi-only, e.g. Green
+    // Hill and every other course Tim hasn't bundled). Derive a centroid
+    // from the active round's courseHoles tee coords so the server-side
+    // OSM null-green fallback + polygon enrichment have a bounding box
+    // to query Overpass against. golfcourseapi free tier returns tee
+    // coords per hole but null greens; the OSM fallback fills the
+    // greens automatically — but only when we send a centroid.
+    centroid = deriveCentroidFromActiveCourseHoles();
   }
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
@@ -297,12 +341,13 @@ export async function fetchCourseGeometry(courseId: string): Promise<CourseGeome
   if (upstreamId === '__osm_only__') {
     params.set('osmOnly', '1');
   }
-  // 2026-05-17 — Always request polygons for local courses. The server
-  // adds ~3-8s to the Overpass fetch (5 polygon queries in parallel) but
-  // the result is cached client-side for a week, so the cost lands once
-  // per course per cache lifetime. Polygons drive the Bluegolf-style
-  // SmartVision hole overlay (fairway/bunker/water/tee/green fills).
-  if (courseId.startsWith('local:')) {
+  // 2026-05-17 — Polygon enrichment requires a centroid (server-side
+  // gate at api/course-geometry.ts checks `withPolygons && centroid`).
+  // local: courses always have a centroid from LOCAL_COURSE_CENTROIDS;
+  // non-local: courses get one derived from tee coords above. Either
+  // way, send withPolygons whenever we have a centroid so SmartVision
+  // gets full hole geometry on every course, not just bundled ones.
+  if (centroid) {
     params.set('withPolygons', '1');
   }
   const url = `${apiUrl}/api/course-geometry?${params.toString()}`;
@@ -352,6 +397,12 @@ async function refreshGeometryInBackground(courseId: string): Promise<void> {
       if (real) upstreamId = real;
       else if (!centroid) return;
       else upstreamId = '__osm_only__';
+    } else if (!centroid) {
+      // 2026-06-03 — Mirror of fetchCourseGeometry's non-local: centroid
+      // derivation. Stale-cache background refresh hits this for any
+      // golfcourseapi-only course; if we don't supply a centroid the
+      // refresh writes back a no-polygon entry, regressing SmartVision.
+      centroid = deriveCentroidFromActiveCourseHoles();
     }
     const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
     const params = new URLSearchParams({ courseId: upstreamId });
@@ -361,7 +412,7 @@ async function refreshGeometryInBackground(courseId: string): Promise<void> {
     }
     if (holeCount != null) params.set('holeCount', String(holeCount));
     if (upstreamId === '__osm_only__') params.set('osmOnly', '1');
-    if (courseId.startsWith('local:')) params.set('withPolygons', '1');
+    if (centroid) params.set('withPolygons', '1');
     const url = `${apiUrl}/api/course-geometry?${params.toString()}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
     if (!res.ok) {
