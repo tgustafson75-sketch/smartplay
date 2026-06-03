@@ -79,6 +79,18 @@ GPS, hole detection, voice path, scoring, round state, native boot — these sur
 
 ---
 
+## Rule 11 — Parallel sweeps with post-sweep audit
+
+For any significant change touching multiple independent surfaces, run sweeps in parallel and follow with a single read-only audit before declaring done. The audit catches incomplete removals, orphan references, threshold mismatches, and KEEP-list violations. **Audit is part of the work, not optional.**
+
+---
+
+## Rule 12 — Double-check before committing
+
+Every code-shipping prompt includes a verification step BEFORE `git add`: re-grep the file for what was supposed to change, confirm what was supposed to stay is still there, run `tsc --noEmit`, check for orphan imports of removed symbols. **Verification is part of the prompt, not a step that gets skipped.**
+
+---
+
 ## Operational hooks (assistant prompt practice)
 
 Every future fix prompt (whether Tim writes it or the assistant proposes it) MUST include where relevant:

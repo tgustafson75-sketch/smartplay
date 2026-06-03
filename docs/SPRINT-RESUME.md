@@ -1,6 +1,6 @@
 # SPRINT RESUME — read this first
 
-> **STANDING ENGINEERING RULES:** see [docs/ENGINEERING-PRINCIPLES.md](ENGINEERING-PRINCIPLES.md). **Read these before any fix prompt.** The anti-bandaid rules are non-negotiable — they exist because six weeks of GPS/voice band-aids almost shipped a broken product. **Find when it last worked. Prefer removing code. No new user-facing error surfaces without root cause. Two attempts then archaeology. Trust the user's lived reality. Competitor parity check.**
+> **STANDING ENGINEERING RULES:** see [docs/ENGINEERING-PRINCIPLES.md](ENGINEERING-PRINCIPLES.md). **Read these before any fix prompt.** The anti-bandaid rules are non-negotiable — they exist because six weeks of GPS/voice band-aids almost shipped a broken product. **Find when it last worked. Prefer removing code. No new user-facing error surfaces without root cause. Two attempts then archaeology. Trust the user's lived reality. Competitor parity check. Parallel sweeps + post-sweep audit. Double-check before commit.**
 
 If you are a fresh chat with no prior context: this is your starting point. Then read [SPRINT-LOG.md](SPRINT-LOG.md) for the daily detail and [audit-420-SPRINT-MAP.md](audit-420-SPRINT-MAP.md) for the full prioritized plan.
 

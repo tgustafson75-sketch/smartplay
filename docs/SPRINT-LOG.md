@@ -1859,7 +1859,7 @@ Items Tim explicitly deferred this session. NOT regressions, NOT pending — the
 
 **Action:** Created [docs/ENGINEERING-PRINCIPLES.md](ENGINEERING-PRINCIPLES.md) as the canonical, non-negotiable rule set for every future fix. Referenced from [docs/SPRINT-RESUME.md](SPRINT-RESUME.md) so every new chat and Claude Code session inherits these rules from the top.
 
-**The ten rules (titles only — see ENGINEERING-PRINCIPLES.md for full text):**
+**The twelve rules (titles only — see ENGINEERING-PRINCIPLES.md for full text):**
 
 1. **Find when it last worked, before any fix** — regression archaeology precedes patching, always.
 2. **Removing code is preferred over adding code** — root-cause fixes usually REMOVE; bandaids usually ADD.
@@ -1871,6 +1871,8 @@ Items Tim explicitly deferred this session. NOT regressions, NOT pending — the
 8. **Diagnose-before-fix on anything round-critical or recurring** — no speculative or defensive changes on these paths.
 9. **Honest degradation is not infinite latitude** — applies to KNOWN failure modes, not unknown ones.
 10. **Bandaid recognition** — explicit shapes for spotting bandaid vs root-cause commits.
+11. **Parallel sweeps with post-sweep audit** — run multi-surface sweeps in parallel and follow with a read-only audit before declaring done. Codified 2026-06-03 after the unwind audit caught the `isPoor > 15` threshold residual that would have shipped silently.
+12. **Double-check before committing** — re-grep + `tsc --noEmit` + orphan-import check before `git add`. Verification is part of the prompt, not a step that gets skipped.
 
 **Why this matters:** Net delta on `services/gpsManager.ts` in the 6-week regression window was hundreds of lines ADDED, almost none removed. That additive-only ratio was itself the diagnosis. These rules exist so that pattern is structurally impossible to repeat without each addition being explicitly justified against root-cause work.
 
