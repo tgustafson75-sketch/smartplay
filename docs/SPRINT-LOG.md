@@ -1851,4 +1851,32 @@ Items Tim explicitly deferred this session. NOT regressions, NOT pending — the
 **Status:** Tim said "I am going to work on the video and if its right we will link it in the app" — feature is conditional on the cut being good. No code work yet; this entry exists so the decision tree is ready when Tim signs off on the video.
 
 
+---
+
+## Engineering principles canonicalized (logged 2026-06-03)
+
+**Trigger:** [DIAGNOSIS-GPS-VOICE-2026-06-03.md](../DIAGNOSIS-GPS-VOICE-2026-06-03.md). Six weeks, ~80 commits to GPS + voice paths, the majority bandaids on top of 2-3 root-cause introductions (Phase 107's 15m accuracy gate for GPS; the D-ID Kevin intro video for voice). Tim's instinct that fixes were treating symptoms was correct.
+
+**Action:** Created [docs/ENGINEERING-PRINCIPLES.md](ENGINEERING-PRINCIPLES.md) as the canonical, non-negotiable rule set for every future fix. Referenced from [docs/SPRINT-RESUME.md](SPRINT-RESUME.md) so every new chat and Claude Code session inherits these rules from the top.
+
+**The ten rules (titles only — see ENGINEERING-PRINCIPLES.md for full text):**
+
+1. **Find when it last worked, before any fix** — regression archaeology precedes patching, always.
+2. **Removing code is preferred over adding code** — root-cause fixes usually REMOVE; bandaids usually ADD.
+3. **No new user-facing error/status surfaces without root cause first** — reporting a problem is not fixing it.
+4. **No new fallback / circuit-breaker / timeout / threshold without naming what it's masking** — defending against an unknown is a bandaid.
+5. **Two attempts, then archaeology** — the third attempt is the signal to step back.
+6. **Trust the user's lived reality over the code's claim** — competitor working on the same device outranks our explanation of why it shouldn't.
+7. **Competitor reality check** — architectural divergence demands architectural justification.
+8. **Diagnose-before-fix on anything round-critical or recurring** — no speculative or defensive changes on these paths.
+9. **Honest degradation is not infinite latitude** — applies to KNOWN failure modes, not unknown ones.
+10. **Bandaid recognition** — explicit shapes for spotting bandaid vs root-cause commits.
+
+**Why this matters:** Net delta on `services/gpsManager.ts` in the 6-week regression window was hundreds of lines ADDED, almost none removed. That additive-only ratio was itself the diagnosis. These rules exist so that pattern is structurally impossible to repeat without each addition being explicitly justified against root-cause work.
+
+**Standing usage:**
+- Every future fix prompt MUST include the "Diagnose first" section if the bug touches recurring or round-critical surfaces (GPS, hole detection, voice, scoring, round state, native boot).
+- Every defensive addition MUST include a "What this REMOVES" line if applicable, and an explicit "this is not a bandaid because:" justification.
+- Competitor-parity question must be answered when relevant.
+
 
