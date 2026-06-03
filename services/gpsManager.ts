@@ -54,7 +54,7 @@ const POLL_CONFIG: Record<GpsMode, { intervalMs: number; accuracy: Location.Accu
 
 // Phase 107 / B2 — outlier rejection thresholds.
 // accuracy_m worse than this = reading discarded entirely.
-const OUTLIER_ACCURACY_M = 15;
+const OUTLIER_ACCURACY_M = 60;
 // position jump > this between consecutive accepted fixes within 5s = impossible
 const OUTLIER_JUMP_M = 50;
 const OUTLIER_JUMP_WINDOW_MS = 5_000;
