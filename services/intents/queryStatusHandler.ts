@@ -8,9 +8,9 @@ import { playsLikeDistance, playsLikePhrase } from '../../utils/playsLike';
 import type { ShotLocation } from '../../store/roundStore';
 import { getGreenYardages, resolveGreenCoords } from '../smartFinderService';
 // 2026-05-24 — Flow A (GPS-verify) — getOneShotFix is the only GPS
-// accessor that exposes accuracy_m. shotLocationService.getCurrentLocation()
-// strips to { lat, lng }, so it can't drive the soft-GPS tell. Importing
-// directly from gpsManager for the yardage handler enrichment.
+// accessor that exposes accuracy_m. Importing directly from gpsManager
+// for the yardage handler enrichment (accuracy_m surfaces in
+// side_effects telemetry so owner-debug tools can see it).
 import { getOneShotFix } from '../gpsManager';
 // 2026-05-28 — Fix FE: presence helper so the no-fix branch fills the
 // silence with character-true patience instead of returning "—".
@@ -22,8 +22,8 @@ import { presenceFill } from '../presenceCaddie';
 // language (api/voice-intent.ts emits es/zh on Spanish/Chinese triggers).
 // English text is preserved verbatim from the prior implementation so
 // the default path has zero regression; es/zh siblings translate the
-// same meaning (green-middle yardage, soft-GPS hedge, no-green hint,
-// no-GPS hint). Lookup falls back to en on any unrecognized value.
+// same meaning (green-middle yardage, no-green hint, no-GPS hint).
+// Lookup falls back to en on any unrecognized value.
 //
 // NOTE: this localizes the TEXT only. The TTS voice model is still
 // selected from Settings (services/voiceService.ts → /api/voice), so
@@ -35,19 +35,16 @@ const TTS_STRINGS = {
     noGreen: "I don't have the green location for this hole — try marking it next time you pass through.",
     noGps: 'No GPS lock yet — give it a few seconds and try again.',
     distance: (y: number) => `${y} yards to the middle of the green.`,
-    softGps: (y: number) => `${y} yards to the middle of the green — but my GPS is a little soft right now.`,
   },
   es: {
     noGreen: 'No tengo la ubicación del green para este hoyo — intenta marcarla la próxima vez que pases.',
     noGps: 'Aún no tengo señal GPS — espera unos segundos e intenta otra vez.',
     distance: (y: number) => `${y} yardas al centro del green.`,
-    softGps: (y: number) => `${y} yardas al centro del green — pero mi GPS está un poco débil ahora.`,
   },
   zh: {
     noGreen: '这洞的果岭位置我还没有数据——下次经过时可以试试标记一下。',
     noGps: '还没有GPS信号——等几秒再试一次。',
     distance: (y: number) => `到果岭中心${y}码。`,
-    softGps: (y: number) => `到果岭中心${y}码——不过我的GPS信号现在有点弱。`,
   },
 } as const;
 
@@ -572,17 +569,9 @@ export const queryStatusHandler: IntentHandler = {
         // 2026-05-24 — Flow A (GPS-verify): RAW haversine yardage to the
         // middle of the green, never plays-like adjusted. This is the
         // Golfshot-comparable number Tim cross-checks during the test
-        // round. Three upgrades from the prior implementation:
-        //   1. resolveGreenCoords (Mark Green override > courseHoles >
-        //      geometry cache) replaces getGreenCentroid (courseHoles
-        //      only). Player-marked pin wins, matching the rest of the
-        //      yardage pipeline.
-        //   2. getOneShotFix replaces getCurrentLocation so we have
-        //      accuracy_m for the soft-GPS tell.
-        //   3. accuracy_m > 15 (the same threshold subscribePoorSignal
-        //      uses) appends "...but my GPS is a little soft right now"
-        //      so the player knows when to take the number with a
-        //      grain of salt.
+        // round. resolveGreenCoords (Mark Green override > courseHoles >
+        // geometry cache) means the player-marked pin wins, matching the
+        // rest of the yardage pipeline.
         const greenHole = context.current_hole ?? round.currentHole;
         const resolved = resolveGreenCoords(greenHole);
         const green = resolved.middle;
@@ -658,16 +647,9 @@ export const queryStatusHandler: IntentHandler = {
         }
         const here: ShotLocation = { lat: fix.lat, lng: fix.lng };
         const yds = Math.round(haversineYards(here, green));
-        // Soft-GPS tell threshold matches the existing
-        // subscribePoorSignal threshold in gpsManager.ts:436-462 (>15m
-        // sustained accuracy triggers a poor-signal toast today). Null
-        // accuracy_m means the OS didn't report a value — keep silent
-        // rather than guessing.
-        const SOFT_GPS_ACCURACY_M = 15;
-        const softGps = typeof fix.accuracy_m === 'number' && fix.accuracy_m > SOFT_GPS_ACCURACY_M;
         return {
           success: true,
-          voice_response: softGps ? t.softGps(yds) : t.distance(yds),
+          voice_response: t.distance(yds),
           side_effects: [
             'query:distance_to_green',
             `gps_accuracy_m:${typeof fix.accuracy_m === 'number' ? Math.round(fix.accuracy_m) : 'unknown'}`,
