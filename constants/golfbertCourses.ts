@@ -43,6 +43,10 @@ export const LOCAL_COURSE_TO_GOLFBERT: Record<string, GolfbertMapping> = {
   'local:palms': {
     golfbertCourseId: '17345',
   },
+  // 2026-06-04 — Menifee Lakes — Lakes (sister course to Palms).
+  'local:lakes': {
+    golfbertCourseId: '1747',
+  },
 };
 
 /** Returns the Golfbert mapping for a SmartPlay course id, or null when
