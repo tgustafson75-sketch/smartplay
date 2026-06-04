@@ -21,6 +21,7 @@ import {
 import { checkContent } from '../services/contentGuardrail';
 // 2026-05-21 — Consolidation 4: routine voice traces gated through devLog.
 import { devLog } from '../services/devLog';
+import { isSessionInFlight } from '../services/listeningSession';
 import { voiceCommandRouter } from '../services/intents';
 import type { AppContext } from '../types/voiceIntent';
 import type { ToolAction } from '../app/api/kevin+api';
@@ -1147,6 +1148,13 @@ export const useVoiceCaddie = ({
   // ── MAIN MIC HANDLER ─────────────────────
 
   const handleMicPress = useCallback(async () => {
+    // 2026-06-04 — Belt-and-suspenders guard: floating KevinBadge
+    // routes through this handler instead of listeningSession.toggle,
+    // so the toggle-level sessionInFlight check doesn't apply here.
+    // KevinBadge dims while locked (visual block) AND this guard
+    // blocks functionally so a taps that beats the dim still no-ops.
+    if (isSessionInFlight()) return;
+
     if (isSpeaking()) {
       await stopSpeaking();
       isProcessingRef.current = false;

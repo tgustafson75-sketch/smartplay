@@ -13,6 +13,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useKevinPresence } from '../contexts/KevinPresenceContext';
 import { useVoiceCaddie } from '../hooks/useVoiceCaddie';
+// 2026-06-04 — Lock during in-flight session. Subscribe to the
+// listening-session store for reactive re-renders; call the getter
+// at render time for the live flag value. Mirrors CaddieMicBadge's
+// dim behavior so both tap surfaces honor the same lock.
+import { isSessionInFlight } from '../services/listeningSession';
+import { useListeningSessionStore } from '../store/listeningSessionStore';
 
 const BADGE = require('../assets/avatars/smartplay_caddie_badge.png');
 
@@ -26,6 +32,11 @@ export default function KevinBadge({ onTap, onLongPress }: KevinBadgeProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { isThinking, isSpeaking, setIsThinking } = useKevinPresence();
+  // 2026-06-04 — Subscribe to listening-session state so this badge
+  // re-renders when the lock state changes. The getter is the source
+  // of truth; the subscription just forces React to look at it again.
+  useListeningSessionStore((s) => s.state);
+  const isLocked = isSessionInFlight();
 
   const glowOpacity = useSharedValue(0);
 
@@ -67,6 +78,7 @@ export default function KevinBadge({ onTap, onLongPress }: KevinBadgeProps) {
   const isOnCaddie = pathname === '/(tabs)/caddie';
 
   const handlePress = () => {
+    if (isLocked) return;
     onTap?.();
     handleMicPress();
   };
@@ -77,12 +89,13 @@ export default function KevinBadge({ onTap, onLongPress }: KevinBadgeProps) {
   };
 
   return (
-    <View style={[styles.container, { top: insets.top + 12 }]}>
+    <View style={[styles.container, { top: insets.top + 12, opacity: isLocked ? 0.4 : 1 }]}>
       <Animated.View style={[styles.glow, glowStyle]} />
       <TouchableOpacity
         style={styles.badge}
         onPress={handlePress}
         activeOpacity={0.85}
+        disabled={isLocked}
       >
         <Image source={BADGE} style={styles.image} resizeMode="contain" />
       </TouchableOpacity>
