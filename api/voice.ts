@@ -51,12 +51,34 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 2026-06-04 — Pre-warm short-circuit. Client hits this endpoint
-  // with { mode: 'warmup' } after splash completes so the Lambda
-  // runtime + OpenAI/ElevenLabs SDK clients are hot by the time the
-  // user actually taps to talk. Mirrors api/swing-analysis.ts's same
-  // pattern (Fix EK). Returns in <50ms with no TTS work — $0 cost.
+  // 2026-06-04 — Pre-warm. Client hits this endpoint with
+  // { mode: 'warmup' } after splash completes so OpenAI TTS SDK +
+  // network path are hot by the time the user actually taps to talk.
+  //
+  // Earlier shape (same-day) just returned 200 immediately, which
+  // warmed the Lambda runtime but NOT the OpenAI SDK + TLS handshake
+  // to api.openai.com — the dominant cold-start cost (~6-8s). This
+  // version runs the full SDK path with a minimal single-space input
+  // so the connection pool, auth, and first-call init are all hot.
+  // Audio is discarded after arrayBuffer() consumption so the HTTP
+  // connection releases back to the pool for the real speak() call.
+  // Cost: ~$0.0001 per warmup (gpt-4o-mini-tts at ~$0.015/1000 chars,
+  // ~5 chars including instructions overhead).
   if (req.body?.mode === 'warmup') {
+    try {
+      const mp3 = await openai.audio.speech.create({
+        model: 'gpt-4o-mini-tts',
+        voice: 'onyx',
+        input: ' ',
+        instructions: KEVIN_TTS_INSTRUCTIONS,
+      });
+      await mp3.arrayBuffer();
+      console.log('[voice] warmup completed (OpenAI TTS SDK hot)');
+    } catch (e) {
+      // Silent — warmup failure never surfaces to the user. Worst
+      // case is the user pays the cold-start cost on their first tap.
+      console.log('[voice] warmup failed (non-fatal):', e instanceof Error ? e.message : String(e));
+    }
     return res.status(200).json({ ok: true, mode: 'warmup' });
   }
 
