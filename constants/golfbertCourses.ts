@@ -28,29 +28,20 @@
  */
 
 /**
- * Mapping shape — supports both forms Golfbert exposes:
- *   golfbertCourseId — fetches all 18 holes in one call. Cheaper, but
- *     requires you know the upstream course id (not always exposed in
- *     the public Golfbert UI; sometimes only individual hole pages are).
- *   golfbertHoleIds — explicit list of hole ids. Use when you only have
- *     hole-level URLs (e.g. https://golfbert.com/courses/holes/17345).
- *     Fetcher loops the list, deriving hole_number from each response.
- *
- * Either form (or both) is fine. If both are set, the courseId path
- * wins (single fetch). If neither, no mapping → existing geometry.
+ * Mapping shape — Golfbert course id only. Fetches all 18 holes in one
+ * call via /api/golfbert-proxy?action=holes&id={courseId}. Lakes is not
+ * yet mapped (separate paid unlock needed).
  */
 export interface GolfbertMapping {
-  golfbertCourseId?: string;
-  golfbertHoleIds?: readonly (string | number)[];
+  golfbertCourseId: string;
 }
 
 export const LOCAL_COURSE_TO_GOLFBERT: Record<string, GolfbertMapping> = {
-  // Tim's Golfbert paid access — Menifee Lakes Palms.
-  // Seeded with hole 17345 (the URL Tim provided). Add more hole ids
-  // as you collect them from Golfbert (one URL per hole), or replace
-  // with golfbertCourseId once you find the parent course id.
+  // Tim's Golfbert paid access — Menifee Lakes Palms. 17345 is the
+  // upstream Golfbert courseId (confirmed via action=course audit
+  // 2026-06-03 — returns "Menifee Lakes Country Club (Palms course)").
   'local:palms': {
-    golfbertHoleIds: [17345],
+    golfbertCourseId: '17345',
   },
 };
 
@@ -60,19 +51,17 @@ export function getGolfbertMapping(smartplayCourseId: string | null | undefined)
   if (!smartplayCourseId) return null;
   const m = LOCAL_COURSE_TO_GOLFBERT[smartplayCourseId];
   if (!m) return null;
-  if (!m.golfbertCourseId && (!m.golfbertHoleIds || m.golfbertHoleIds.length === 0)) return null;
+  if (!m.golfbertCourseId) return null;
   return m;
 }
 
-/** Back-compat helper — returns just the courseId string (used by
- *  callers that only want the bulk-fetch path). Returns null for
- *  hole-list-only mappings or no-mapping. */
+/** Returns just the courseId string for callers that only want the id. */
 export function getGolfbertCourseId(smartplayCourseId: string | null | undefined): string | null {
   const m = getGolfbertMapping(smartplayCourseId);
   return m?.golfbertCourseId ?? null;
 }
 
-/** True if the given course has any Golfbert mapping (course or hole list). */
+/** True if the given course has a Golfbert mapping. */
 export function hasGolfbertCourseMapping(smartplayCourseId: string | null | undefined): boolean {
   return getGolfbertMapping(smartplayCourseId) !== null;
 }

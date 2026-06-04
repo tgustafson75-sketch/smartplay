@@ -40,6 +40,14 @@ export interface Teebox {
   par: number | null;
 }
 
+/** A single point Golfbert places on a hole — tee colors (Blue/White/Red
+ *  /Gold/Black) and the pin (`Flag`). Uses Golfbert's native `long` key. */
+export interface GolfbertPointVector {
+  type: string;
+  lat: number;
+  long: number;
+}
+
 /** Per-hole Golfbert data used by SmartVision and the lie-aware caddie. */
 export interface GolfbertHole {
   holeNumber: number;
@@ -50,6 +58,16 @@ export interface GolfbertHole {
   teeboxes: Teebox[];
   /** Direct URL to a Golfbert satellite image of this hole, if available. */
   imageryUrl: string | null;
+  /** Green center coord per /holes endpoint. Single point (no F/M/B
+   *  triplet). Used by resolveGreenCoords when present. */
+  flagcoords: { lat: number; long: number } | null;
+  /** Per-hole tee + flag points from /holes endpoint. type carries the
+   *  tee color label ('White'|'Blue'|'Gold'|'Red'|'Black') or 'Flag'. */
+  vectors: GolfbertPointVector[];
+  /** Bounding box for the hole's associated tile (lng on x, lat on y). */
+  range: { x: { min: number; max: number }; y: { min: number; max: number } } | null;
+  /** Tile rotation in radians (alignment for the satellite image). */
+  rotation: number | null;
 }
 
 // ─── Raw Golfbert response shapes (subset we use) ─────────────────────────────
@@ -59,9 +77,15 @@ interface RawGolfbertHole {
   number?: number;
   par?: number;
   yardage?: number;
-  vectors?: { type?: string; points?: LatLng[] }[];
+  // /hole/{id} detail endpoint returns vectors as polygon point lists;
+  // /holes endpoint returns vectors as single points with lat/long.
+  // Accept both shapes — normalizeHole routes each to the right field.
+  vectors?: Array<{ type?: string; points?: LatLng[]; lat?: number; long?: number }>;
   teeboxes?: { color?: string; latitude?: number; longitude?: number; yards?: number; par?: number }[];
   imageUrl?: string;
+  flagcoords?: { lat?: number; long?: number };
+  range?: { x?: { min?: number; max?: number }; y?: { min?: number; max?: number } };
+  rotation?: number;
 }
 
 // ─── Normalization ────────────────────────────────────────────────────────────
@@ -78,9 +102,13 @@ function normalizeVectorType(t: string | undefined): HolePolygon['type'] {
 }
 
 function normalizeHole(raw: RawGolfbertHole): GolfbertHole {
-  const polygons: HolePolygon[] = (raw.vectors ?? [])
+  const rawVectors = raw.vectors ?? [];
+  const polygons: HolePolygon[] = rawVectors
     .filter(v => Array.isArray(v.points) && v.points.length >= 3)
     .map(v => ({ type: normalizeVectorType(v.type), vectors: v.points! }));
+  const vectors: GolfbertPointVector[] = rawVectors
+    .filter(v => typeof v.lat === 'number' && typeof v.long === 'number' && Number.isFinite(v.lat) && Number.isFinite(v.long))
+    .map(v => ({ type: String(v.type ?? 'Unknown'), lat: v.lat!, long: v.long! }));
   const teeboxes: Teebox[] = (raw.teeboxes ?? [])
     .filter(t => typeof t.latitude === 'number' && typeof t.longitude === 'number')
     .map(t => ({
@@ -89,6 +117,16 @@ function normalizeHole(raw: RawGolfbertHole): GolfbertHole {
       yardage: typeof t.yards === 'number' ? t.yards : null,
       par: typeof t.par === 'number' ? t.par : null,
     }));
+  const fc = raw.flagcoords;
+  const flagcoords = fc && typeof fc.lat === 'number' && typeof fc.long === 'number' && Number.isFinite(fc.lat) && Number.isFinite(fc.long)
+    ? { lat: fc.lat, long: fc.long }
+    : null;
+  const r = raw.range;
+  const range = r && r.x && r.y
+    && typeof r.x.min === 'number' && typeof r.x.max === 'number'
+    && typeof r.y.min === 'number' && typeof r.y.max === 'number'
+    ? { x: { min: r.x.min, max: r.x.max }, y: { min: r.y.min, max: r.y.max } }
+    : null;
   return {
     holeNumber: typeof raw.number === 'number' ? raw.number : 0,
     par: typeof raw.par === 'number' ? raw.par : 4,
@@ -96,64 +134,87 @@ function normalizeHole(raw: RawGolfbertHole): GolfbertHole {
     polygons,
     teeboxes,
     imageryUrl: typeof raw.imageUrl === 'string' ? raw.imageUrl : null,
+    flagcoords,
+    vectors,
+    range,
+    rotation: typeof raw.rotation === 'number' ? raw.rotation : null,
   };
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+// Synchronous cache of Golfbert holes keyed by SmartPlay courseId so the
+// priority chain in resolveGreenCoords / resolveTeeCoords can read
+// Golfbert coords without going async. Populated by
+// getGolfbertHolesForCourse on successful fetch (typically triggered by
+// SmartVision mount); empty until then, in which case the resolvers
+// fall through to courseHoles / geometryCache.
+const golfbertCache = new Map<string, GolfbertHole[]>();
+
+/** Synchronous lookup for a single hole from the cache. Returns null
+ *  when the course's holes haven't been fetched yet OR the requested
+ *  hole isn't in the response. */
+export function getCachedGolfbertHole(smartplayCourseId: string, holeNumber: number): GolfbertHole | null {
+  const holes = golfbertCache.get(smartplayCourseId);
+  if (!holes) return null;
+  return holes.find(h => h.holeNumber === holeNumber) ?? null;
+}
+
 /** Return Golfbert holes for a SmartPlay course id, OR null when the
- *  course has no Golfbert mapping (caller falls back to golfcourseapi).
- *  Supports both mapping forms — bulk courseId fetch (cheaper, single
- *  request) and explicit hole-id list (loop, one fetch per hole). The
- *  hole-list path is what Tim uses for Menifee Palms because Golfbert's
- *  public site exposes hole URLs but not always course URLs. */
+ *  course has no Golfbert mapping (caller falls back to golfcourseapi). */
 export async function getGolfbertHolesForCourse(smartplayCourseId: string): Promise<GolfbertHole[] | null> {
   const mapping = getGolfbertMapping(smartplayCourseId);
   if (!mapping) return null;
 
-  // Path A — bulk courseId fetch (preferred when available).
-  if (mapping.golfbertCourseId) {
-    try {
-      const res = await fetch(proxyUrl({ action: 'holes', id: mapping.golfbertCourseId }), {
-        signal: AbortSignal.timeout(15_000),
-      });
-      if (!res.ok) {
-        console.warn('[golfbert] courseId holes fetch failed', res.status);
-      } else {
-        const data = await res.json() as { resources?: RawGolfbertHole[]; holes?: RawGolfbertHole[] };
-        const list = data.resources ?? data.holes ?? [];
-        if (Array.isArray(list) && list.length > 0) {
-          return list.map(normalizeHole).sort((a, b) => a.holeNumber - b.holeNumber);
-        }
-      }
-    } catch (e) {
-      console.warn('[golfbert] bulk fetch exception, falling through to hole list', e);
+  try {
+    const res = await fetch(proxyUrl({ action: 'holes', id: mapping.golfbertCourseId }), {
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) {
+      console.warn('[golfbert] courseId holes fetch failed', res.status);
+      return null;
+    }
+    const data = await res.json() as { resources?: RawGolfbertHole[]; holes?: RawGolfbertHole[] };
+    const list = data.resources ?? data.holes ?? [];
+    if (!Array.isArray(list) || list.length === 0) return null;
+    const sorted = list.map(normalizeHole).sort((a, b) => a.holeNumber - b.holeNumber);
+    golfbertCache.set(smartplayCourseId, sorted);
+    return sorted;
+  } catch (e) {
+    console.warn('[golfbert] holes fetch exception', e);
+    return null;
+  }
+}
+
+// ─── Coord extraction helpers (resolveGreenCoords / resolveTeeCoords) ─────────
+
+/** Return the green center coord for a Golfbert hole (the pin position
+ *  Golfbert anchors as the green centroid). Normalizes Golfbert's
+ *  `long` key to our standard `lng`. Returns null when missing. */
+export function getGolfbertGreenCoord(hole: GolfbertHole): { lat: number; lng: number } | null {
+  const fc = hole.flagcoords;
+  if (!fc) return null;
+  if (!Number.isFinite(fc.lat) || !Number.isFinite(fc.long)) return null;
+  return { lat: fc.lat, lng: fc.long };
+}
+
+/** Tee preference order — White (player default) → Blue → Gold → Red.
+ *  Black is intentionally omitted (championship tee, rarely the actual
+ *  play set; Tim's testers play forward of it). */
+const TEE_PREFERENCE: readonly string[] = ['White', 'Blue', 'Gold', 'Red'];
+
+/** Return the preferred tee coord for a Golfbert hole, walking the
+ *  fallback order White → Blue → Gold → Red. Normalizes `long` → `lng`.
+ *  Returns null when none of the preferred tee colors are present. */
+export function getGolfbertTeeCoord(hole: GolfbertHole): { lat: number; lng: number } | null {
+  const vectors = hole.vectors;
+  if (!Array.isArray(vectors) || vectors.length === 0) return null;
+  for (const preferred of TEE_PREFERENCE) {
+    const match = vectors.find(v => v.type === preferred);
+    if (match && Number.isFinite(match.lat) && Number.isFinite(match.long)) {
+      return { lat: match.lat, lng: match.long };
     }
   }
-
-  // Path B — explicit hole id list. Fetch each one individually. Failed
-  // fetches are skipped (we keep what worked); empty result returns null.
-  if (mapping.golfbertHoleIds && mapping.golfbertHoleIds.length > 0) {
-    const fetched = await Promise.all(
-      mapping.golfbertHoleIds.map(async (hid) => {
-        try {
-          const r = await fetch(proxyUrl({ action: 'hole', id: String(hid) }), {
-            signal: AbortSignal.timeout(12_000),
-          });
-          if (!r.ok) return null;
-          const d = await r.json() as RawGolfbertHole;
-          return normalizeHole(d);
-        } catch (e) {
-          console.warn('[golfbert] hole fetch exception for', hid, e);
-          return null;
-        }
-      }),
-    );
-    const valid = fetched.filter((h): h is GolfbertHole => h !== null);
-    if (valid.length === 0) return null;
-    return valid.sort((a, b) => a.holeNumber - b.holeNumber);
-  }
-
   return null;
 }
 

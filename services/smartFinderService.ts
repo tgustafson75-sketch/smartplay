@@ -29,6 +29,12 @@ import { getGreenOverride } from './courseGreenOverrides';
 // hole length" computation (marked tee → marked green).
 import { getTeeOverride } from './courseTeeOverrides';
 import { getCourseTruthSync } from './courseTruth';
+// 2026-06-03 — Golfbert paid premium data ranks above the free-tier
+// golfcourseapi courseHoles (which returns zeros for per-hole coords)
+// but below user Mark Green / Mark Tee overrides and surveyed truth.
+// Cache is populated when SmartVision (or any caller) invokes
+// getGolfbertHolesForCourse; until then the resolvers fall through.
+import { getCachedGolfbertHole, getGolfbertGreenCoord, getGolfbertTeeCoord } from './golfbertApi';
 
 /**
  * Phase D-2 — SmartFinder data layer.
@@ -312,7 +318,7 @@ export function resolveGreenCoords(holeNumber: number): {
   front: ShotLocation | null;
   middle: ShotLocation | null;
   back: ShotLocation | null;
-  source: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none';
+  source: 'truth' | 'override' | 'golfbert' | 'courseHoles' | 'geometryCache' | 'none';
 } {
   const round = useRoundStore.getState();
   const courseId = round.activeCourseId ?? null;
@@ -349,6 +355,17 @@ export function resolveGreenCoords(holeNumber: number): {
       if (ov.frontLat != null && ov.frontLng != null) front = { lat: ov.frontLat, lng: ov.frontLng };
       if (ov.backLat != null && ov.backLng != null) back = { lat: ov.backLat, lng: ov.backLng };
       return { front, middle: middleLoc, back, source: 'override' };
+    }
+  }
+  // 2026-06-03 — Golfbert paid premium data. Single pin point per
+  // hole (flagcoords); F/B stay null. Cache populated by SmartVision.
+  if (courseId) {
+    const golfbertHole = getCachedGolfbertHole(courseId, holeNumber);
+    if (golfbertHole) {
+      const greenLoc = getGolfbertGreenCoord(golfbertHole);
+      if (greenLoc) {
+        return { front: null, middle: greenLoc, back: null, source: 'golfbert' };
+      }
     }
   }
   const hData = round.courseHoles.find(h => h.hole === holeNumber);
@@ -389,7 +406,7 @@ export function resolveGreenCoords(holeNumber: number): {
  */
 export function resolveTeeCoords(holeNumber: number): {
   tee: ShotLocation | null;
-  source: 'override' | 'courseHoles' | 'none';
+  source: 'override' | 'golfbert' | 'courseHoles' | 'none';
 } {
   const round = useRoundStore.getState();
   const courseId = round.activeCourseId ?? null;
@@ -397,6 +414,18 @@ export function resolveTeeCoords(holeNumber: number): {
     const ov = getTeeOverride(courseId, holeNumber);
     if (ov) {
       return { tee: { lat: ov.lat, lng: ov.lng }, source: 'override' };
+    }
+  }
+  // 2026-06-03 — Golfbert tee data (White → Blue → Gold → Red
+  // fallback). Falls through to courseHoles when no Golfbert vectors
+  // are cached for this course/hole.
+  if (courseId) {
+    const golfbertHole = getCachedGolfbertHole(courseId, holeNumber);
+    if (golfbertHole) {
+      const teeLoc = getGolfbertTeeCoord(golfbertHole);
+      if (teeLoc) {
+        return { tee: teeLoc, source: 'golfbert' };
+      }
     }
   }
   const hData = round.courseHoles.find(h => h.hole === holeNumber);
@@ -630,7 +659,7 @@ export type YardageCalcEntry = {
    *  callers (rangefinder taps, smartfinder lock-in coords). Not a
    *  cascade source — just identifies the source kind so debug tools
    *  can distinguish green-yardage rows from arbitrary-target rows. */
-  source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none' | 'tapped_point' | null;
+  source?: 'truth' | 'override' | 'golfbert' | 'courseHoles' | 'geometryCache' | 'none' | 'tapped_point' | null;
   /** 2026-06-01 — Fix GF.2: outcome of the yardage decision. Previously
    *  early-return paths (no_fix, no_hole, no_geometry) and the sanity-
    *  clamp fallback bypassed logYardageCalc entirely, so the debug
@@ -654,7 +683,7 @@ function logYardageCalc(
   fix: LastFix,
   targets: { front: ShotLocation | null; middle: ShotLocation | null; back: ShotLocation | null },
   result: GreenYardages,
-  source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none' | 'tapped_point' | null,
+  source?: 'truth' | 'override' | 'golfbert' | 'courseHoles' | 'geometryCache' | 'none' | 'tapped_point' | null,
   outcome: 'ok' | 'no_fix' | 'no_hole' | 'no_geometry' | 'clamp_fallback' = 'ok',
 ): void {
   const entry: YardageCalcEntry = {
