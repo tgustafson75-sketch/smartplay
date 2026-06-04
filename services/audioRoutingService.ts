@@ -1,5 +1,3 @@
-import { Audio } from 'expo-av';
-
 /**
  * Phase O — Audio routing monitor.
  *
@@ -55,8 +53,19 @@ export function subscribeRouteChanges(listener: Listener): () => void {
 async function detectRoute() {
   // Configure audio mode once on first subscribe. Done synchronously
   // here (no polling); no-op when called repeatedly.
+  //
+  // 2026-06-03 — Route through voiceService.setAudioModeSerial instead
+  // of calling Audio.setAudioModeAsync directly. Previously, this
+  // direct call (fired from CaptionStrip mount at root layout) could
+  // land inside any active speak() / playLocalFile() window and
+  // downgrade audio routing mid-utterance via the underlying audio
+  // singleton — the exact race documented in voiceService.ts:45-63.
+  // Same dynamic-require pattern as audioLifecycle.goCold (avoids the
+  // circular dep with voiceService).
   try {
-    await Audio.setAudioModeAsync({
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const voiceMod = require('./voiceService') as typeof import('./voiceService');
+    await voiceMod.setAudioModeSerial({
       allowsRecordingIOS: false,
       playsInSilentModeIOS: true,
       staysActiveInBackground: true,
