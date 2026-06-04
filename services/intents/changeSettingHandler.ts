@@ -19,8 +19,8 @@ export const changeSettingHandler: IntentHandler = {
   intent_type: 'change_setting',
 
   parameter_schema: {
-    setting_name: 'one of: theme, voice_enabled, discrete_mode, auto_listen, language, response_mode, caddie_persona',
-    new_value: 'theme: light|dark|system; voice_enabled/discrete_mode/auto_listen: boolean; language: en|es|zh; response_mode: short|neutral|detailed; caddie_persona: kevin|tank|serena|harry',
+    setting_name: 'one of: theme, voice_enabled, auto_listen, language, response_mode, caddie_persona',
+    new_value: 'theme: light|dark|system; voice_enabled/auto_listen: boolean; language: en|es|zh; response_mode: short|neutral|detailed; caddie_persona: kevin|tank|serena|harry',
   },
 
   examples: [
@@ -54,13 +54,6 @@ export const changeSettingHandler: IntentHandler = {
         if (v === null) return clarify('On or off?');
         settings.setVoiceEnabled(v);
         return ack(v ? 'Voice on.' : 'Muted.', ['voice_enabled:' + v]);
-      }
-
-      case 'discrete_mode': {
-        const v = asBool(rawValue);
-        if (v === null) return clarify('Discrete mode on or off?');
-        settings.setDiscreteMode(v);
-        return ack(v ? 'Discrete mode on.' : 'Discrete mode off.', ['discrete_mode:' + v]);
       }
 
       case 'auto_listen': {

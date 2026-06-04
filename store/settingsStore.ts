@@ -98,7 +98,6 @@ interface SettingsState {
    * tester who hasn't asked for it sees zero behavior change.
    */
   continuousConversationMode: boolean;
-  discreteMode: boolean;
   responseMode: 'short' | 'neutral' | 'detailed';
   // Phase 105 — single caddiePersonality is preserved as the "current
   // primary persona" used by surfaces that pre-date the team architecture
@@ -267,7 +266,6 @@ interface SettingsState {
   setContinuousConversationMode: (v: boolean) => void;
   setVoiceGender: (g: 'male' | 'female') => void;
   setLanguage: (l: 'en' | 'es' | 'zh') => void;
-  setDiscreteMode: (v: boolean) => void;
   setResponseMode: (m: 'short' | 'neutral' | 'detailed') => void;
   setCaddiePersonality: (p: Persona) => void;
   // Phase 105 — assign / read per-pillar caddie. setCaddieForPillar updates
@@ -331,7 +329,6 @@ export const useSettingsStore = create<SettingsState>()(
       continuousConversationMode: false,
       voiceGender: 'male',
       language: 'en',
-      discreteMode: false,
       responseMode: 'neutral',
       // 2026-05-28 — Fix FS: hydration flag (see onRehydrateStorage below).
       // Defaults false; flipped true by the persist middleware once
@@ -431,7 +428,6 @@ export const useSettingsStore = create<SettingsState>()(
           } catch { /* ignore */ }
         }
       },
-      setDiscreteMode: (v) => set({ discreteMode: v }),
       setResponseMode: (m) => set({ responseMode: m }),
       setCaddiePersonality: (p) => {
         // 2026-05-21 — Fix Q (Path B): global persona is the single source
@@ -704,7 +700,6 @@ export const useSettingsStore = create<SettingsState>()(
         continuousConversationMode: s.continuousConversationMode,
         voiceGender: s.voiceGender,
         language: s.language,
-        discreteMode: s.discreteMode,
         responseMode: s.responseMode,
         caddiePersonality: s.caddiePersonality,
         caddieAssignments: s.caddieAssignments,

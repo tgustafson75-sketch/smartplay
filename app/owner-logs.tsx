@@ -78,7 +78,6 @@ export default function OwnerLogsScreen() {
         caddiePersonality: settings.caddiePersonality,
         voiceEnabled: settings.voiceEnabled,
         voiceOnPhoneSpeaker: settings.voiceOnPhoneSpeaker,
-        discreteMode: settings.discreteMode,
         skip_briefings: settings.skip_briefings,
         language: settings.language,
         responseMode: settings.responseMode,

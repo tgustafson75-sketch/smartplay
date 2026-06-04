@@ -50,16 +50,13 @@ export interface CaddieMicBadgeProps {
   hideTrustChip?: boolean;
 }
 
-// 2026-05-25 — Fix AN: trust-level → icon + short label map for the
-// quick-cycle chip. Each tap on the chip advances to the next level in
-// TRUST_LEVEL_SLIDER_ORDER ([1,5,2,3,4]) so the visual order matches
-// the Settings slider order (Quiet ↔ Cockpit adjacent, both minimal).
+// 2026-06-04 — Trust spectrum collapsed to {1,2,3}. L1 inherits the
+// prior L5 Cockpit + Harry binding; L4 / L5 removed. Slider order is
+// now plain numerical [1,2,3].
 const TRUST_CHIP: Record<TrustLevel, { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
-  1: { icon: 'volume-mute-outline', label: 'Q' },
-  2: { icon: 'person-outline', label: 'C' },
-  3: { icon: 'ear-outline', label: 'A' },
-  4: { icon: 'megaphone-outline', label: 'F' },
-  5: { icon: 'speedometer-outline', label: 'CP' },
+  1: { icon: 'speedometer-outline', label: 'Q' },  // Cockpit (Harry)
+  2: { icon: 'person-outline', label: 'C' },        // Companion
+  3: { icon: 'ear-outline', label: 'A' },           // Active
 };
 
 function nextTrustLevel(current: TrustLevel): TrustLevel {

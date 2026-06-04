@@ -58,15 +58,11 @@ export default function CageSummary() {
 
   // Phase K.5 refinement — speak the primary issue analysis when it lands,
   // using verbosity-keyed templates per trust level. L1 stays silent (terse
-  // text card only); L2/L3/L4 auto-play TTS at increasing engagement.
+  // text card only); L2/L3 auto-play TTS at increasing engagement.
   useEffect(() => {
     if (!primaryIssue || !voiceEnabled || trustLevel === 1) return;
-    const verbosityKey =
-      trustLevel === 4 ? 'primary_issue_summary_engaged' :
-      trustLevel === 3 ? 'primary_issue_summary_standard' :
-      'primary_issue_summary_standard';
-    // (L2 also gets standard — the difference between L2/L3 here is delivery
-    // pacing rather than content; tunable in a future K.5.5 if needed.)
+    // 2026-06-04 — L4 'engaged' template removed; L2/L3 both use standard.
+    const verbosityKey = 'primary_issue_summary_standard';
     const text = getDialog('coach', verbosityKey, {
       name: primaryIssue.name,
       mechanical: primaryIssue.mechanical_breakdown,

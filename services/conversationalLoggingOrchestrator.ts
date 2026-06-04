@@ -192,7 +192,7 @@ class ConversationalLoggingOrchestrator {
     }
 
     const settings = useSettingsStore.getState();
-    if (!settings.voiceEnabled || settings.discreteMode) {
+    if (!settings.voiceEnabled) {
       // Voice disabled — log a silent placeholder and surface manual fallback
       this.recordCadence(event, '', false, false, null, null);
       this.deps.onFallbackToManual?.(event);

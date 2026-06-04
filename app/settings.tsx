@@ -50,7 +50,6 @@ export default function Settings() {
   const { t } = useTranslation();
 
   const {
-    voiceEnabled,
     // 2026-05-26 — Fix BE: Cecily Mode toggle state + setter.
     cecilyMode,
     setCecilyMode,
@@ -58,7 +57,6 @@ export default function Settings() {
     continuousConversationMode,
     setContinuousConversationMode,
     language,
-    discreteMode,
     responseMode,
     castMode,
     highContrast,
@@ -79,12 +77,10 @@ export default function Settings() {
     setCageAutoClubDetection,
     setVoiceOnPhoneSpeaker,
     setKevinGreetingEnabled,
-    setVoiceEnabled,
     // 2026-05-30 — Fix FY: Local Mode toggle.
     localMode,
     setLocalMode,
     setLanguage,
-    setDiscreteMode,
     setResponseMode,
     setCastMode,
     setHighContrast,
@@ -906,18 +902,11 @@ export default function Settings() {
         </CollapsibleSection>
 
         {/* VOICE */}
+        {/* 2026-06-04 — "Voice Enabled" toggle removed. Voice presence is
+            controlled via the Trust spectrum (L1 Quiet = Cockpit + tap-to-talk,
+            L2 Companion = reactive, L3 Active = volunteers). voiceEnabled
+            field stays in the store as an internal kill switch. */}
         <CollapsibleSection title="Voice">
-          <ToggleRow
-            label="Voice Enabled"
-            sub={`${caddieName} speaks responses aloud`}
-            value={voiceEnabled}
-            onValueChange={confirmToggle('Voice', (v) => {
-              setVoiceEnabled(v);
-              // Phase A.4: re-enabling voice clears any prior mic denial so prompts
-              // resume in subsequent rounds.
-              if (v) clearMicDenial();
-            })}
-          />
           {/* 2026-05-30 — Fix FY: Local Mode toggle. Conservation +
               stability mode — proactive speech off, brain calls pinned
               to Haiku (the cheapest/fastest tier), navigation intents
@@ -928,12 +917,6 @@ export default function Settings() {
             sub={`Conserves battery + handles weak signal cleanly. ${caddieName} only speaks when you ask. Tap-to-talk uses the fastest brain. GPS + yardages unchanged.`}
             value={localMode}
             onValueChange={confirmToggle('Local Mode', setLocalMode)}
-          />
-          <ToggleRow
-            label="Discrete Mode"
-            sub="Haptic only — no audio"
-            value={discreteMode}
-            onValueChange={confirmToggle('Discrete Mode', setDiscreteMode)}
           />
           <ToggleRow
             label="Active Listening"

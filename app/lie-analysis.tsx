@@ -99,9 +99,10 @@ export default function LieAnalysisScreen() {
   const speakAnalysis = useCallback(async (a: LieAnalysis) => {
     if (!voiceEnabled) return;
     // Phase H v2 — pick verbosity by trust level.
+    // 2026-06-04 — L4 'engaged' template removed alongside L4 collapse.
+    // L3 Active now inherits the engaged tone implicitly via responseMode.
     const summaryKey =
       trustLevel === 1 ? 'lie_analysis_summary_terse'
-      : trustLevel === 4 ? 'lie_analysis_summary_engaged'
       : 'lie_analysis_summary';
     const summary = getDialog('caddie', summaryKey, {
       situation: a.situation_description,

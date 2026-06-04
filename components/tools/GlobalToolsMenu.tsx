@@ -102,7 +102,7 @@ export function GlobalToolsMenu() {
   const toggleQuiet = () => {
     const next = trustLevel === 1 ? 2 : 1;
     setTrustLevel(next);
-    useToastStore.getState().show(trustLevel === 1 ? 'Resumed' : 'Quiet Mode on');
+    useToastStore.getState().show(trustLevel === 1 ? 'Back to Companion' : 'Cockpit on');
     fire(() => undefined);
   };
 
@@ -238,9 +238,9 @@ export function GlobalToolsMenu() {
               colors={colors}
             />
             <Row
-              icon={trustLevel === 1 ? 'volume-high-outline' : 'volume-mute-outline'}
-              label={trustLevel === 1 ? `Resume ${caddieName}` : 'Quiet Mode'}
-              sub={trustLevel === 1 ? 'Back to Companion' : `Mute ${caddieName}`}
+              icon={trustLevel === 1 ? 'volume-high-outline' : 'speedometer-outline'}
+              label={trustLevel === 1 ? 'Exit Cockpit' : 'Cockpit Mode'}
+              sub={trustLevel === 1 ? `Back to ${caddieName}` : "Harry's cockpit · tap to talk"}
               onPress={toggleQuiet}
               colors={colors}
             />

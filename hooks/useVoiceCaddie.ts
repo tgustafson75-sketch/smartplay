@@ -300,7 +300,6 @@ export const useVoiceCaddie = ({
   const {
     voiceGender,
     voiceEnabled,
-    discreteMode,
     language,
     responseMode,
     fillerEnabled,
@@ -308,7 +307,6 @@ export const useVoiceCaddie = ({
     useShallow((s) => ({
       voiceGender: s.voiceGender,
       voiceEnabled: s.voiceEnabled,
-      discreteMode: s.discreteMode,
       language: s.language,
       responseMode: s.responseMode,
       fillerEnabled: s.fillerEnabled,
@@ -755,10 +753,6 @@ export const useVoiceCaddie = ({
 
   const speakResponse = async (text: string): Promise<void> => {
     if (!voiceEnabled || !text) return;
-    if (discreteMode) {
-      Vibration.vibrate(200);
-      return;
-    }
     // Phase V.7+ — userInitiated: this speakResponse path always answers a
     // user-tapped query, so it speaks at L1 too (the L1 badge would be
     // useless otherwise).
@@ -824,7 +818,7 @@ export const useVoiceCaddie = ({
       recordKevinTurn(checked.text);
       wrappedOnVoiceStateChange('speaking');
       await stopSpeaking();
-      if (checked.audioBase64 && voiceEnabled && !discreteMode) {
+      if (checked.audioBase64 && voiceEnabled) {
         await speakFromBase64(checked.audioBase64, { userInitiated: true });
       } else {
         await speakResponse(checked.text);
@@ -894,7 +888,7 @@ export const useVoiceCaddie = ({
       console.log('[voice] follow-up listen loop failed (non-fatal):', e);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voiceEnabled, discreteMode, voiceGender, language, apiUrl]);
+  }, [voiceEnabled, voiceGender, language, apiUrl]);
 
   // ── PROCESS AUDIO URI (shared by manual + VAD) ────
 
@@ -1073,7 +1067,7 @@ export const useVoiceCaddie = ({
           // and left the user stranded — "Hole 6 / Hole 6 / Hole 6"
           // entries with no enrichment.
           const replyEndsWithQuestion = (result.voice_response ?? '').trim().endsWith('?');
-          if (replyEndsWithQuestion && voiceEnabled && !discreteMode) {
+          if (replyEndsWithQuestion && voiceEnabled) {
             await runFollowUpListenLoop();
           }
           wrappedOnVoiceStateChange('idle');
@@ -1088,7 +1082,7 @@ export const useVoiceCaddie = ({
       // Fire filler clip in parallel with the brain call.
       // playLocalFile claims the audio singleton — when speakFromBase64 / speakResponse
       // runs below, it bumps speechId and naturally cancels any still-playing filler.
-      if (voiceEnabled && !discreteMode && fillerEnabled && isLibraryGenerated()) {
+      if (voiceEnabled && fillerEnabled && isLibraryGenerated()) {
         const clip = getClipForCategory(classifyQuery(transcript));
         if (clip) playLocalFile(clip.audio_path).catch(() => {});
       }
@@ -1110,7 +1104,7 @@ export const useVoiceCaddie = ({
       // generation, which both stops the currently-playing clip and
       // causes any queued not-yet-running bodies to skip.
       await stopSpeaking();
-      if (kevinResponse.audioBase64 && voiceEnabled && !discreteMode) {
+      if (kevinResponse.audioBase64 && voiceEnabled) {
         // Phase V.7+ — user-initiated reply, plays at L1 too.
         await speakFromBase64(kevinResponse.audioBase64, { userInitiated: true });
       } else {
@@ -1126,7 +1120,7 @@ export const useVoiceCaddie = ({
       // listening" gap Tim flagged tonight.
       const kevinText = (kevinResponse.text ?? '').trim();
       const endsWithQuestion = kevinText.endsWith('?');
-      if (endsWithQuestion && voiceEnabled && !discreteMode) {
+      if (endsWithQuestion && voiceEnabled) {
         await runFollowUpListenLoop();
       }
 
@@ -1143,7 +1137,7 @@ export const useVoiceCaddie = ({
     } finally {
       isProcessingRef.current = false;
     }
-  }, [language, voiceEnabled, discreteMode, voiceGender, fillerEnabled, currentYardage, currentHole, club, isRoundActive, roundMode]);
+  }, [language, voiceEnabled, voiceGender, fillerEnabled, currentYardage, currentHole, club, isRoundActive, roundMode]);
 
   // ── MAIN MIC HANDLER ─────────────────────
 
@@ -1269,7 +1263,6 @@ export const useVoiceCaddie = ({
   }, [
     language,
     voiceEnabled,
-    discreteMode,
     voiceGender,
     currentYardage,
     currentHole,

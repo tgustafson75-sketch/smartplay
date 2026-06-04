@@ -10,10 +10,12 @@ import type { TrustLevel } from '../store/trustLevelStore';
  * with the current level — adding a new level or tuning copy is a single-file
  * edit.
  *
- * L1 Quiet: hints null. The user picked silence; respect it.
- * L2 Companion: standard hints (this is the original copy).
+ * L1 Quiet (Cockpit + Harry): hints null. User picked tap-to-talk only.
+ * L2 Companion: standard hints (original copy).
  * L3 Active: more proactive framing.
- * L4 Full: full-engagement framing.
+ *
+ * 2026-06-04 — L4 + L5 entries removed (trust spectrum collapsed to
+ * {1,2,3}).
  */
 const HINTS_BY_LEVEL: Record<TrustLevel, {
   first_tee: string | null;
@@ -34,18 +36,6 @@ const HINTS_BY_LEVEL: Record<TrustLevel, {
     first_tee:  "I'll let you know what I notice as we go. What mode are you playing?",
     first_shot: "Talk to me about that one — I'll be chiming in along the way.",
     first_tool: "Just say 'open SmartFinder' anytime. I'll listen for it.",
-  },
-  4: {
-    first_tee:  "I'm right here. Talk to me anytime — what mode are you playing?",
-    first_shot: "Tell me about that shot — I'm listening.",
-    first_tool: "Just say what you need. I've got you.",
-  },
-  // L5 Cockpit — minimal surface, tools-first; no proactive hints. The
-  // Cockpit screen has its own AskCaddieButton + manual entry affordances.
-  5: {
-    first_tee:  null,
-    first_shot: null,
-    first_tool: null,
   },
 };
 

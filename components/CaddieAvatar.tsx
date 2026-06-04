@@ -352,7 +352,7 @@ interface CaddieAvatarProps {
   /** Phase R Component 14 — idle breathing animation intensity per
    *  Trust Spectrum level. L1 = none (Kevin not visible), L2 subtle,
    *  L3 standard, L4 most pronounced. Defaults to 3 (standard). */
-  trustLevel?: 1 | 2 | 3 | 4 | 5;
+  trustLevel?: 1 | 2 | 3;
   /** Phase BI — when set, overrides the persona avatar set with the
    *  user-generated portrait. Renders that single image with no
    *  emotion-driven crossfades. Pass raw base64 (no data: prefix). */
@@ -576,9 +576,9 @@ export default function CaddieAvatar({
   // L1 hides Kevin entirely — animation never visible there.
   useEffect(() => {
     const isIdle = voiceState === 'idle' && !isThinking;
+    // 2026-06-04 — L4 collapsed; L3 inherits the prior L4 max-intensity values.
     const intensity =
-      trustLevel === 4 ? { scale: 1.020, translate: -2 } :
-      trustLevel === 3 ? { scale: 1.015, translate: -2 } :
+      trustLevel === 3 ? { scale: 1.020, translate: -2 } :
                          { scale: 1.010, translate: -1 };  // L2 (and L1 fallback)
 
     if (!isIdle) {

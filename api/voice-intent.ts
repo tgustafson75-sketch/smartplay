@@ -121,7 +121,6 @@ Available intents:
    Recognized setting_name values:
    - "theme" (light/dark/system)
    - "voice_enabled" (true/false)
-   - "discrete_mode" (true/false)
    - "auto_listen" (true/false) — also recognized as "active listening" / "always listening" / "auto-listen" / "hands-free mode"
    - "language" (en/es/zh)
    - "response_mode" (short/neutral/detailed)

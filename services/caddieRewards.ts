@@ -70,13 +70,12 @@ function trustAllowsReward(): boolean {
   const level = useTrustLevelStore.getState().level;
   // L1 (Quiet) silent. L5 (Cockpit) inherits L1 minimal-surface treatment
   // per proactiveKevin comments. L2+ allowed.
-  return level >= 2 && level <= 4;
+  return level >= 2 && level <= 3;
 }
 
 async function fireReward(text: string): Promise<void> {
   const s = useSettingsStore.getState();
   if (!s.voiceEnabled) return;
-  if (s.discreteMode) return;
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   try {
     await voiceService.speak(text, s.voiceGender, s.language, apiUrl);

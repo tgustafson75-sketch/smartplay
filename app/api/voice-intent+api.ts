@@ -76,7 +76,6 @@ Available intents:
    Recognized setting_name values:
    - "theme" (light/dark/system)
    - "voice_enabled" (true/false)
-   - "discrete_mode" (true/false)
    - "auto_listen" (true/false) — also recognized as "active listening" / "always listening" / "auto-listen" / "hands-free mode"
    - "cart_mode" (true/false) — toggle when the player is riding in a golf cart. Also: "cart mode", "riding cart", "in a cart", "walking mode" (false), "I'm walking" (false)
    - "language" (en/es/zh)

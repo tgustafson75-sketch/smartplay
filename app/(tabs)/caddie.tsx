@@ -348,11 +348,10 @@ export default function CaddieTab() {
   // fix yet, falls back to static so the strip never renders "—".
   const yardageMode = useSettingsStore(s => s.yardageMode);
   const setYardageMode = useSettingsStore(s => s.setYardageMode);
-  // Cockpit is now Trust Level 5 (numeric value kept at 5 for back-compat
-  // with the original 1-4 era; the slider renders it between Quiet and
-  // Companion via TRUST_LEVEL_SLIDER_ORDER). The early-return below uses
-  // trustLevel === 5, not the deprecated settings.cockpitMode flag.
-  const cockpitMode = trustLevel === 5;
+  // 2026-06-04 — Cockpit is now Trust Level 1 (Quiet). The 2026-06-04
+  // collapse merged the prior L5 Cockpit + Harry binding into L1 and
+  // removed L4 / L5. The early-return below uses trustLevel === 1.
+  const cockpitMode = trustLevel === 1;
   // markTick increments on every position-mark event AND every 4s tick
   // during an active round so liveYardage recomputes both on push (Mark
   // fires) and pull (organic GPS movement during walking). Phase BG —
@@ -558,7 +557,6 @@ export default function CaddieTab() {
   const {
     voiceGender,
     voiceEnabled,
-    discreteMode,
     castMode,
     language,
     autoListenEnabled,
@@ -567,7 +565,6 @@ export default function CaddieTab() {
   } = useSettingsStore(useShallow((s) => ({
     voiceGender: s.voiceGender,
     voiceEnabled: s.voiceEnabled,
-    discreteMode: s.discreteMode,
     castMode: s.castMode,
     language: s.language,
     autoListenEnabled: s.autoListenEnabled,
@@ -645,8 +642,8 @@ export default function CaddieTab() {
             markProactiveFired(trigger.id);
             setCaddieResponse(trigger.message);
             setVoiceState('proactive');
-            const { voiceEnabled, discreteMode, voiceGender: vg, language: lang } = useSettingsStore.getState();
-            if (voiceEnabled && !discreteMode) {
+            const { voiceEnabled, voiceGender: vg, language: lang } = useSettingsStore.getState();
+            if (voiceEnabled) {
               speak(trigger.message, vg, lang, apiUrl)
                 .catch(() => {})
                 .finally(() => setVoiceState('idle'));
@@ -1021,10 +1018,10 @@ export default function CaddieTab() {
     const suggested = useRoundStore.getState().computeHoleScore(currentHole);
     if (suggested != null) setHoleScore(suggested);
     clearShotPending();
-    if (resolution.kevin_voice_line && voiceEnabled && !discreteMode) {
+    if (resolution.kevin_voice_line && voiceEnabled) {
       speak(resolution.kevin_voice_line, voiceGender, language, apiUrl).catch(() => {});
     }
-  }, [currentHole, club, logShot, clearShotPending, voiceEnabled, discreteMode, voiceGender, language, apiUrl]);
+  }, [currentHole, club, logShot, clearShotPending, voiceEnabled, voiceGender, language, apiUrl]);
 
   const handleDirectionTap = useCallback((direction: ShotResult['direction']) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -1050,14 +1047,14 @@ export default function CaddieTab() {
       setShowRulesChoice(true);
       setPendingOutcomeForRules(outcome);
       const resolution = resolvePenalty(outcome);
-      if (resolution.kevin_voice_line && voiceEnabled && !discreteMode) {
+      if (resolution.kevin_voice_line && voiceEnabled) {
         speak(resolution.kevin_voice_line, voiceGender, language, apiUrl).catch(() => {});
       }
       // Auto-resolve as play_forward after 15 seconds if user walks away.
       // Plays a voice line before committing so the user isn't surprised by a silent decision.
       outcomeAutoTimerRef.current = setTimeout(() => {
         outcomeAutoTimerRef.current = null;
-        if (voiceEnabled && !discreteMode) {
+        if (voiceEnabled) {
           speak("Locked in as play forward — let me know if I got that wrong.", voiceGender, language, apiUrl).catch(() => {});
         }
         commitShot(pendingDirection, outcome, 'play_forward');
@@ -1065,7 +1062,7 @@ export default function CaddieTab() {
       return;
     }
     commitShot(pendingDirection, outcome);
-  }, [pendingDirection, commitShot, voiceEnabled, discreteMode, voiceGender, language, apiUrl]);
+  }, [pendingDirection, commitShot, voiceEnabled, voiceGender, language, apiUrl]);
 
   const handleRulesChoice = useCallback((decision: RulesDecision) => {
     if (!pendingDirection || !pendingOutcomeForRules) return;
@@ -1696,7 +1693,7 @@ export default function CaddieTab() {
     const transition = scoreWord + contextLine + scoreContext;
     setCaddieResponse(transition);
 
-    if (voiceEnabled && !discreteMode) {
+    if (voiceEnabled) {
       speak(transition, voiceGender, language, apiUrl).catch(() => {});
     }
   };
@@ -1833,7 +1830,7 @@ export default function CaddieTab() {
                   emotion={kevinEmotion}
                   fillMode="cover"
                   isThinking={kevinThinking}
-                  trustLevel={trustLevel as 1 | 2 | 3 | 4}
+                  trustLevel={trustLevel}
                   customPortraitB64={activeCustomPortrait}
                 />
               </View>
@@ -1876,7 +1873,7 @@ export default function CaddieTab() {
                 emotion={kevinEmotion}
                 fillMode="cover"
                 isThinking={kevinThinking}
-                trustLevel={trustLevel as 1 | 2 | 3 | 4}
+                trustLevel={trustLevel}
                 customPortraitB64={activeCustomPortrait}
               />
             </View>
@@ -1958,138 +1955,17 @@ export default function CaddieTab() {
               emotion={kevinEmotion}
               fillMode="cover"
               isThinking={kevinThinking}
-              trustLevel={trustLevel as 1 | 2 | 3 | 4}
+              trustLevel={trustLevel}
               customPortraitB64={activeCustomPortrait}
             />
           </View>
         </>
       )}
-      {trustLevel === 4 && (
-        // ╔══════════════════════════════════════════════════════════╗
-        // ║  LOCKED: Kevin photoreal portrait container (Phase AU)   ║
-        // ║  Canonical: commit 19165fb (2026-04-26 12:43 PDT)        ║
-        // ║                                                          ║
-        // ║  Single rule for every aspect (Fold closed, Fold open,   ║
-        // ║  standard phones): natural 9:16 frame at top: insets.top ║
-        // ║  + 56 (clears the SmartPlay banner row uniformly), left: ║
-        // ║  0, width = W, height = W·16/9. The +56 offset applies   ║
-        // ║  to every aspect — it's NOT an aspect branch.            ║
-        // ║                                                          ║
-        // ║  Cover-mode in CaddieAvatar then frames Kevin canonically║
-        // ║  without over-zoom on any device.                        ║
-        // ║                                                          ║
-        // ║  DO NOT add aspect-ratio branches, top:-70 nudges, or    ║
-        // ║  per-fold offsets here. If a phase needs space above or  ║
-        // ║  below Kevin, add it to the OTHER element, not the Kevin ║
-        // ║  frame. See CLAUDE.md "Locked elements".                 ║
-        // ╚══════════════════════════════════════════════════════════╝
-        <View
-          // Z Fold reconfigure fix (3rd attempt — this one's the real one):
-          // - width: '100%' instead of literal W so the container width is
-          //   layout-driven and updates atomically with the parent on
-          //   fold transitions (was racing against safe-area insets).
-          // - right: 0 paired with left: 0 enforces full-width positioning
-          //   without needing the literal value at all.
-          // - key includes insets.top so the inner subtree fully remounts
-          //   when the safe area changes (which it does on fold open/close
-          //   independently of W/H — that race is what produced the
-          //   "half-face Kevin" symptom Tim flagged).
-          style={{ position: 'absolute', top: insets.top + 56, left: 0, right: 0, height: avatarFrameHeight }}
-          key={`avatar-frame-${W}x${H}-${insets.top}`}
-        >
-          <CaddieAvatar
-            key={`${W}x${H}-${insets.top}`}
-            gender={voiceGender === 'female' ? 'female' : 'male'}
-            persona={caddiePersonality}
-            isOnCourse={isRoundActive}
-            isCageMode={false}
-            voiceState={voiceState}
-            hud={NULL_HUD}
-            openingPrompt=""
-            caddieResponse=""
-            onTap={handleMicPress}
-            emotion={kevinEmotion}
-            fillMode="cover"
-            isThinking={kevinThinking}
-            trustLevel={trustLevel as 1 | 2 | 3 | 4}
-            customPortraitB64={activeCustomPortrait}
-          />
-        </View>
-      )}
-      {trustLevel === 1 && (
-        <>
-          {/* L1 Quiet — v3-style SmartFinder hero with a small SmartVision
-              inset in the corner. Kevin's face does not show. Voice entry
-              lives in the universal green-arrow dropdown (mic icon,
-              state-aware). The big yardage card dominates so the player
-              gets distances at a glance; the camera inset is one tap from
-              opening the full SmartVision when they want it.
-
-              Layout: SmartFinder card top-anchored at insets.top + 80,
-              fixed height around 240px. The SmartVision inset (~140×100)
-              floats below-right so it never overlaps the F/M/B numerals. */}
-          {(() => {
-            const cardTop = insets.top + 80;
-            const cardLeft = 16;
-            const cardRight = 16;
-            const insetW = 140;
-            const insetH = 100;
-            const insetGap = 12;
-            return (
-              <>
-                <View
-                  style={{
-                    position: 'absolute',
-                    left: cardLeft,
-                    right: cardRight,
-                    top: cardTop,
-                    zIndex: 7,
-                  }}
-                  pointerEvents="box-none"
-                >
-                  <DistanceCard
-                    fmb={fmb}
-                    baseYardage={currentYardage}
-                    gpsAccuracy={fmb && fmb.middle != null ? 'good' : currentYardage != null ? 'weak' : 'off'}
-                    unit={useSettingsStore.getState().distance_unit}
-                    onPressOpenRangefinder={() => { router.push('/smartfinder' as never); }}
-                  />
-                </View>
-
-                {/* Small SmartVision inset — tap-target for the full
-                    camera + AI analysis. Anchored top-right under the
-                    SmartFinder card so the wordmark above it stays clear. */}
-                <Pressable
-                  onPress={openSmartVision}
-                  accessibilityRole="button"
-                  accessibilityLabel="Open SmartVision"
-                  style={({ pressed }) => ({
-                    position: 'absolute',
-                    right: cardRight,
-                    top: cardTop + 240 + insetGap,
-                    width: insetW,
-                    height: insetH,
-                    zIndex: 8,
-                    borderRadius: 12,
-                    borderWidth: 1.5,
-                    borderColor: '#00C896',
-                    backgroundColor: 'rgba(13, 36, 24, 0.92)',
-                    overflow: 'hidden',
-                    opacity: pressed ? 0.85 : 1,
-                  })}
-                >
-                  <View style={{ position: 'absolute', top: 4, left: 6, zIndex: 2 }}>
-                    <Text style={{ color: '#00C896', fontSize: 9, fontWeight: '800', letterSpacing: 1.2 }}>
-                      SMARTVISION
-                    </Text>
-                  </View>
-                  <L1HolePreview onOpenSmartVision={openSmartVision} width={insetW} height={insetH} />
-                </Pressable>
-              </>
-            );
-          })()}
-        </>
-      )}
+      {/* 2026-06-04 — L4 'Full' photoreal portrait + old L1 SmartFinder-
+          hero layout both removed. Trust spectrum collapsed to {1,2,3};
+          L1 is now Cockpit (rendered by the early-return at line ~1775
+          via CockpitCaddieScreen), so anything-below-here only ever
+          renders for L2 Companion / L3 Active. */}
 
       {/* TOP BRAND ROW — shared v3 BrandHeaderRow so the Caddie tab matches
            Dashboard / SwingLab / Play / Scorecard exactly. Absolute-positioned
@@ -2621,7 +2497,7 @@ export default function CaddieTab() {
           that needs to move down so it never goes up into elements above
           it"). In-round bottom sits above the data strip (168 + insets) so
           it doesn't overlap the dropdown chevron. */}
-      {((!isRoundActive && shownText) || (isRoundActive && caddieResponse)) && trustLevel !== 1 ? (
+      {((!isRoundActive && shownText) || (isRoundActive && caddieResponse)) ? (
         <Animated.View
           style={[
             styles.bubble,
@@ -3321,18 +3197,16 @@ export default function CaddieTab() {
                 label: `Yardage: ${yardageMode === 'live' ? 'LIVE (GPS)' : 'PRE-ROUND (static)'}`,
                 sub: yardageMode === 'live' ? 'Tap to switch to scorecard yardages' : 'Tap to refresh GPS and go live',
                 action: () => { setYardageMode(yardageMode === 'live' ? 'preround' : 'live'); } },
-              // Pre-beta — Discrete Mode quick-toggle. First entry by design:
-              // when a player needs Kevin silent right now (quiet group, on a
-              // tee, etc.), the action must be the very first thing in the
-              // menu. Label flips between Quiet ↔ Resume based on current
-              // trust level.
-              { icon: trustLevel === 1 ? 'volume-high-outline' as IconName : 'volume-mute-outline' as IconName,
-                label: trustLevel === 1 ? 'Resume Kevin' : 'Quiet Mode',
-                sub: trustLevel === 1 ? 'Bring Kevin back to Companion' : "Mute Kevin until I'm ready",
-                action: () => { setShowMoreMenu(false); setTrustLevel(trustLevel === 1 ? 2 : 1); } },
+              // 2026-06-04 — L1 = Cockpit + Harry quick-toggle. First entry
+              // by design. Always shows "Cockpit Mode" here because the
+              // cockpit early-return at the top of render means we never
+              // reach this menu while already in L1. Tapping sets L1.
+              { icon: 'speedometer-outline' as IconName,
+                label: 'Cockpit Mode',
+                sub: "Harry's cockpit · tap to talk",
+                action: () => { setShowMoreMenu(false); setTrustLevel(1); } },
               { icon: 'options-outline',     label: `${getCaddieName(caddiePersonality)}'s Presence: ${TRUST_LEVEL_META[trustLevel].label}`, sub: `${TRUST_LEVEL_META[trustLevel].one_liner} · Tap to cycle`, action: () => {
-                  // Cycle through the slider display order so Cockpit (L5)
-                  // is reachable: Quiet → Cockpit → Companion → Active → Full → Quiet.
+                  // Cycle Quiet → Companion → Active → Quiet.
                   const cur = TRUST_LEVEL_SLIDER_ORDER.indexOf(trustLevel);
                   const next = TRUST_LEVEL_SLIDER_ORDER[(cur + 1) % TRUST_LEVEL_SLIDER_ORDER.length];
                   setTrustLevel(next);
