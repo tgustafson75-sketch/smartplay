@@ -1,8 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { QuickTutorial } from '../../components/QuickTutorial';
-// 2026-06-03 — Opener fires after greeting actually completes,
-// not on a hard-coded 3s timer (which races greeting duration).
-import { awaitGreetingComplete } from '../greeting';
 import {
   View,
   Text,
@@ -859,64 +856,16 @@ export default function CaddieTab() {
   }, []);
 
   // ── Opening prompt ───────────────────────
-  // 2026-06-03 — Clean rebuild. Linear async flow: wait for greeting
-  // to actually complete, brief pause, read settings live from store
-  // (no closure capture, hydration guaranteed by this point), speak
-  // greeting + question, listen once for routing keyword. If speak()
-  // fails silently the sequence ends — user taps mic to retry. No
-  // module-level flags, no splash lock, no setTimeout gates, no
-  // openingPromptSpokenThisProcess. Honest degradation throughout.
+  // 2026-06-03 — Auto-speak opener removed entirely after six failed
+  // fix attempts on the cold-launch opener sequence (Stage 3, voice-
+  // launch heuristic removal, awaitGreetingComplete signal, live
+  // voiceEnabled read, live voiceGender+language reads, audioRouting
+  // queue, clean linear rebuild). Replaced with a static prompt.
+  // Kevin only speaks when the user taps to talk. Simple, honest,
+  // user-driven. No flags, no sequence, no routing logic.
   useEffect(() => {
-    void runOpenerSequence();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setOpeningPrompt('Press to talk to Kevin.');
   }, []);
-
-  async function runOpenerSequence() {
-    await awaitGreetingComplete();
-    await new Promise<void>(res => setTimeout(res, 400));
-
-    const { voiceEnabled: liveVoiceEnabled, voiceGender: liveVoiceGender, language: liveLanguage } =
-      useSettingsStore.getState();
-    if (!liveVoiceEnabled) {
-      console.log('[caddie] opener: voiceEnabled=false — sequence ends');
-      return;
-    }
-
-    const { firstName: liveFirstName } = usePlayerProfileStore.getState();
-    const hour = new Date().getHours();
-    const tod =
-      hour < 12 ? 'Good morning' :
-      hour < 17 ? 'Good afternoon' :
-      'Good evening';
-    const namePart = liveFirstName ? `, ${liveFirstName}` : '';
-    const greeting = `${tod}${namePart}.`;
-    const question = 'Headed to the course or the SwingLab?';
-
-    setOpeningPrompt(`${greeting} ${question}`);
-
-    console.log('[caddie] opener: speak#1 (greeting) start');
-    await speak(greeting, liveVoiceGender, liveLanguage, apiUrl, { userInitiated: true });
-    console.log('[caddie] opener: speak#1 resolved');
-
-    await new Promise<void>(res => setTimeout(res, 300));
-
-    console.log('[caddie] opener: speak#2 (question) start');
-    await speak(question, liveVoiceGender, liveLanguage, apiUrl, { userInitiated: true });
-    console.log('[caddie] opener: speak#2 resolved');
-
-    const utterance = await captureUtterance(10_000, apiUrl, liveLanguage);
-    if (!utterance) {
-      console.log('[caddie] opener: no utterance — sequence ends');
-      return;
-    }
-
-    const lower = utterance.toLowerCase();
-    if (lower.includes('course') || lower.includes('round') || lower.includes('play')) {
-      router.push('/(tabs)/play' as never);
-    } else if (lower.includes('swing') || lower.includes('practice') || lower.includes('lab')) {
-      router.push('/(tabs)/swinglab' as never);
-    }
-  }
 
   // ── SmartVision ──────────────────────────
   const openSmartVision = () => {
