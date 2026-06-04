@@ -56,7 +56,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
-import { getLastFix, subscribeFixChange } from '../services/smartFinderService';
+import { getLastFix, subscribeFixChange, resolveGreenCoords, resolveTeeCoords } from '../services/smartFinderService';
 import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbertApi';
 import { hasGolfbertCourseMapping } from '../constants/golfbertCourses';
 import { fetchHoleImagery, computeFitView, getCenteredImageryUrl } from '../services/mapboxImagery';
@@ -541,8 +541,12 @@ export default function SmartVisionScreen() {
         if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
         return { lat, lng };
       };
-      const effectiveGreen = geo?.green ?? polygonCentroid(geo?.green_polygon);
-      const effectiveTee = geo?.tee ?? polygonCentroid(geo?.tee_polygon);
+      const resolved = resolveGreenCoords(holeIndex);
+      const resolvedTee = resolveTeeCoords(holeIndex);
+      const effectiveGreen =
+        resolved.middle ?? geo?.green ?? polygonCentroid(geo?.green_polygon);
+      const effectiveTee =
+        resolvedTee.tee ?? geo?.tee ?? polygonCentroid(geo?.tee_polygon);
       // GPS tile only when allowed AND we have at least a green coord
       // (real centroid or polygon-derived).
       if (imageryMode !== 'curated' && effectiveGreen && courseId) {
