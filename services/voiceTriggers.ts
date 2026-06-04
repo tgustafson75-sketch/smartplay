@@ -1,20 +1,12 @@
 /**
  * 2026-05-24 — Voice trigger orchestrator.
  *
- * Wires two non-mic input sources into the existing voice capture
- * orchestrator (services/listeningSession.ts):
- *
- *   1. Bluetooth headset media-button taps (Bose, AirPods, Pixel Buds,
- *      Galaxy Buds) — via the native BluetoothMediaButton module
- *      emitting "onRemoteControl" with type 'play' | 'pause' |
- *      'playPause'. Maps to notifyEarbudTap() — same path the
- *      on-screen mic uses.
- *
- *   2. Voice-assistant launch (Hey Siri / Hey Google / Meta AI on
- *      glasses) — heuristic: if AppState becomes 'active' within
- *      VOICE_LAUNCH_WINDOW_MS of cold app start, assume the user
- *      voice-launched and auto-trigger after a short delay so the
- *      audio session settles.
+ * Wires Bluetooth headset media-button taps (Bose, AirPods, Pixel Buds,
+ * Galaxy Buds) into the existing voice capture orchestrator
+ * (services/listeningSession.ts). The native BluetoothMediaButton
+ * module emits "onRemoteControl" with type 'play' | 'pause' |
+ * 'playPause'. All three map to notifyEarbudTap() — same path the
+ * on-screen mic uses.
  *
  * Architecture:
  *
@@ -24,11 +16,21 @@
  *     └──────────┬──────────┘
  *                ▼
  *      notifyEarbudTap()  ─────► listeningSession.toggle()
- *                ▲
- *     ┌──────────┴──────────┐
- *     │ Voice-assistant     │
- *     │ launch heuristic    │ (AppState 'active' < 2s from boot)
- *     └─────────────────────┘
+ *
+ * 2026-06-03 — REMOVED: voice-assistant launch heuristic that
+ * auto-fired notifyEarbudTap() ~300ms after the first AppState
+ * 'active' transition on cold launch. The heuristic had no real
+ * signal — it was a pure timing guess that fired on EVERY cold
+ * launch (false-positive by design). When Stage 3 removed the
+ * splash-lock that had been masking it, it landed mid-greeting and
+ * killed the splash mp3 via listeningSession.toggle() →
+ * stopSpeaking/speak chain. Confirmed root cause of "splash plays
+ * 2 words then silence" via 3-audit convergence (2026-06-03).
+ * Real earbud taps still flow through onRemoteControl above. Do
+ * NOT re-add a timing-based launch heuristic — if voice-assistant
+ * launch detection is needed, gate it on a real platform signal
+ * (Siri intent payload, Google Assistant launch extra), not on
+ * AppState timing.
  *
  * Idempotency: initVoiceTriggers() can be called multiple times safely;
  * the first call wires listeners and activates the native session, the
@@ -40,17 +42,10 @@
  * unmounts on app teardown, so deactivate is rarely invoked.
  */
 
-import { DeviceEventEmitter, AppState, NativeModules, Platform } from 'react-native';
-import type { AppStateStatus } from 'react-native';
+import { DeviceEventEmitter, NativeModules, Platform } from 'react-native';
 import { notifyEarbudTap } from './earbudControl';
 import { devLog } from './devLog';
 
-const VOICE_LAUNCH_WINDOW_MS = 2_000;
-const VOICE_LAUNCH_DELAY_MS = 300;
-
-// Set on first init so we can measure "did the app come active within
-// X ms of boot?" — the cold-launch-via-voice heuristic.
-let appStartTime: number | null = null;
 let inited = false;
 
 type BTModule = {
@@ -65,9 +60,9 @@ function getBTModule(): BTModule | null {
 }
 
 /**
- * Wire BT button + voice-assistant launch detection. Returns an
- * unsubscribe function. Safe to call multiple times — subsequent
- * calls return the existing teardown handle.
+ * Wire BT button. Returns an unsubscribe function. Safe to call
+ * multiple times — subsequent calls return the existing teardown
+ * handle.
  */
 let activeTeardown: (() => void) | null = null;
 export function initVoiceTriggers(): () => void {
@@ -75,7 +70,6 @@ export function initVoiceTriggers(): () => void {
     return activeTeardown;
   }
   inited = true;
-  appStartTime = Date.now();
 
   const subscriptions: Array<{ remove: () => void }> = [];
 
@@ -104,30 +98,6 @@ export function initVoiceTriggers(): () => void {
     // module. On-screen mic button still works; just no BT tap capture.
     devLog('[voiceTriggers] BluetoothMediaButton native module not present — BT tap capture disabled');
   }
-
-  // 2. Voice-assistant launch heuristic.
-  //    If AppState becomes 'active' within VOICE_LAUNCH_WINDOW_MS of
-  //    the FIRST initVoiceTriggers() call (= app boot), assume the
-  //    user launched the app via voice (Siri / Google Assistant / Meta
-  //    AI) and auto-trigger listening. False positives: cold launches
-  //    in general — which is an acceptable UX for a voice-first app.
-  //
-  //    Subsequent 'active' transitions (app switch from background)
-  //    are gated out by the launchTime < window check.
-  let launchTriggered = false;
-  const appStateSub = AppState.addEventListener('change', (state: AppStateStatus) => {
-    if (state !== 'active') return;
-    if (launchTriggered) return;
-    const elapsed = Date.now() - (appStartTime ?? 0);
-    if (elapsed < VOICE_LAUNCH_WINDOW_MS) {
-      launchTriggered = true;
-      devLog(`[voiceTriggers] voice-launch heuristic fired (elapsed=${elapsed}ms)`);
-      setTimeout(() => {
-        try { notifyEarbudTap(); } catch (e) { devLog('[voiceTriggers] launch trigger err: ' + String(e)); }
-      }, VOICE_LAUNCH_DELAY_MS);
-    }
-  });
-  subscriptions.push(appStateSub);
 
   devLog(`[voiceTriggers] inited (platform=${Platform.OS})`);
 

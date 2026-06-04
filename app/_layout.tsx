@@ -377,11 +377,13 @@ function AppNavigator() {
     // when present. Fire-and-forget; failures fall through to existing
     // API sources.
     void hydrateCourseTruthCache();
-    // 2026-05-24 — Native BT media-button bridge + voice-assistant
-    // launch heuristic. Both funnel through notifyEarbudTap() so they
-    // share the existing earbudControl pattern (no orchestrator change).
-    // Native BluetoothMediaButton module is absent in Expo Go — JS
-    // wiring gracefully no-ops in that case.
+    // 2026-05-24 — Native BT media-button bridge. Funnels through
+    // notifyEarbudTap() so it shares the existing earbudControl
+    // pattern (no orchestrator change). Native BluetoothMediaButton
+    // module is absent in Expo Go — JS wiring gracefully no-ops in
+    // that case.
+    // 2026-06-03 — voice-assistant launch heuristic removed (was
+    // killing splash mp3 on every cold launch).
     const teardownVoiceTriggers = initVoiceTriggers();
     const unsub = useSettingsStore.subscribe((s) => {
       setEarbudEnabled(s.earbudTapToTalk);
