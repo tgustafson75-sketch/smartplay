@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { QuickTutorial } from '../../components/QuickTutorial';
+// 2026-06-03 — Opener fires after greeting actually completes,
+// not on a hard-coded 3s timer (which races greeting duration).
+import { awaitGreetingComplete } from '../greeting';
 import {
   View,
   Text,
@@ -931,13 +934,22 @@ export default function CaddieTab() {
       // the flag stays false and the next tab cycle / app foreground
       // re-attempts. The tap-to-retry handler on the prompt text
       // also provides an immediate user recovery path.
-      // 2026-05-26 — Fix BB: 600ms → 3000ms. Tim wanted natural
-      // breathing room between the splash-screen greeting ending and
-      // the Caddie tab opener starting.
-      setTimeout(() => {
-        void (async () => {
-          try {
-            console.log('[caddie] opener IIFE start; trustLevel=', useTrustLevelStore.getState().level);
+      // 2026-06-03 — Replaced setTimeout(..., 3000) with
+      // awaitGreetingComplete() (greeting.tsx exports a promise that
+      // resolves when naturalEndRef flips true on any of its three
+      // completion paths). The 3s timer was a hopeful guess — splash
+      // audio actually runs ~4-5s, so the opener was racing splash
+      // playback. 8s safety net catches edge cases where greeting
+      // never resolves (force-quit mid-splash, skip-then-restore).
+      // Per Rule 4: the safety net names a real upstream condition
+      // ("greeting never signaled complete") — not a defensive guard.
+      void (async () => {
+        await Promise.race([
+          awaitGreetingComplete(),
+          new Promise<void>(res => setTimeout(res, 8000)),
+        ]);
+        try {
+          console.log('[caddie] opener IIFE start; trustLevel=', useTrustLevelStore.getState().level);
             // 2026-05-26 — Fix AV: GPS-aware second intro. Kick off the
             // nearest-course detection in parallel with the greeting
             // so we don't add latency to the audible "good morning."
@@ -1020,8 +1032,7 @@ export default function CaddieTab() {
           } catch (e) {
             console.log('[caddie] opening prompt + routing failed (non-fatal):', e);
           }
-        })();
-      }, 3000);
+      })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

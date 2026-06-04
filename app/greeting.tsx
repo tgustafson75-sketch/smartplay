@@ -48,6 +48,21 @@ import { GREETING_ASSETS } from '../services/kevinGreetingManifest';
 // own audio — no separate playLocalFile to race the screen transition.
 import { getCaddieClip, hasCaddieClip } from '../services/getCaddieClip';
 
+// 2026-06-03 — Greeting-complete signal for downstream consumers
+// (caddie opener). Resolves when ANY greeting playback path sets
+// naturalEndRef.current = true (Kevin video, non-Kevin TTS, Kevin
+// mp3). Replaces the prior hard-coded setTimeout(3000) in caddie's
+// opener IIFE with a real "greeting actually finished" signal.
+// Module-level on purpose so the promise survives greeting unmount
+// — caddie awaits it after navigating in.
+let _greetingCompleteResolve: (() => void) | null = null;
+const _greetingCompletePromise = new Promise<void>(res => {
+  _greetingCompleteResolve = res;
+});
+export function awaitGreetingComplete(): Promise<void> {
+  return _greetingCompletePromise;
+}
+
 type Phase = 'ENTERING' | 'SPEAKING' | 'TRANSITIONING' | 'COMPLETE';
 
 const ENTER_DURATION_MS = 300;
@@ -342,6 +357,7 @@ export default function GreetingScreen() {
             minDisplay,
           ]);
           naturalEndRef.current = true;
+          _greetingCompleteResolve?.();
           if (!skippedRef.current) startTransition();
           return;
         }
@@ -369,6 +385,7 @@ export default function GreetingScreen() {
             await new Promise<void>(resolve => setTimeout(resolve, 4500 - speakDurMs));
           }
           naturalEndRef.current = true;
+          _greetingCompleteResolve?.();
           if (!skippedRef.current) startTransition();
           return;
         }
@@ -395,6 +412,7 @@ export default function GreetingScreen() {
         const kevinMp3MinDisplay = new Promise<void>(resolve => setTimeout(resolve, NONVIDEO_MIN_DISPLAY_MS));
         await Promise.all([playLocalFile(asset.localUri, undefined, { userInitiated: true }), kevinMp3MinDisplay]);
         naturalEndRef.current = true;
+        _greetingCompleteResolve?.();
         if (!skippedRef.current) startTransition();
       } catch (e) {
         console.warn('[greeting] audio playback failed:', e);
