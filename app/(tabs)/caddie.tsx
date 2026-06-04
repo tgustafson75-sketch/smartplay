@@ -959,6 +959,16 @@ export default function CaddieTab() {
           console.log('[caddie] opener SKIPPED: voiceEnabled=false (live, post-greeting)');
           return;
         }
+        // 2026-06-03 — Same Fix FS pattern as voiceEnabled. The closure
+        // captures voiceGender + language at FIRST RENDER (defaults
+        // 'female' / 'en' before AsyncStorage hydrates). Passing those
+        // to /api/voice can produce silent failures or wrong-voice
+        // audio. Fix FS (07513da) closed this for greeting.tsx +
+        // _layout.tsx but never gated the caddie opener — orphan path
+        // since 2026-05-28. Live reads here guarantee post-hydration
+        // values reach the speak() calls below.
+        const liveVoiceGender = useSettingsStore.getState().voiceGender;
+        const liveLanguage = useSettingsStore.getState().language;
         try {
           console.log('[caddie] opener IIFE start; trustLevel=', useTrustLevelStore.getState().level);
             // 2026-05-26 — Fix AV: GPS-aware second intro. Kick off the
@@ -973,7 +983,7 @@ export default function CaddieTab() {
             const coursePromise = detectNearestLocalCourse().catch(() => null);
 
             console.log('[caddie] opener: speak#1 (greeting) start');
-            await speak(greeting, voiceGender, language, apiUrl, { userInitiated: true });
+            await speak(greeting, liveVoiceGender, liveLanguage, apiUrl, { userInitiated: true });
             console.log('[caddie] opener: speak#1 (greeting) resolved');
             // 2026-06-02 — Fix GO: mark spoken ONLY after speak#1
             // resolves. If we got here, the speak call ran to
@@ -1010,7 +1020,7 @@ export default function CaddieTab() {
             if (course) setOpeningPrompt(`${greeting} I see you're at ${course.spokenName}. Want to start a round?`);
 
             console.log('[caddie] opener: speak#2 (followUp) start; text=', followUp);
-            await speak(followUp, voiceGender, language, apiUrl, { userInitiated: true });
+            await speak(followUp, liveVoiceGender, liveLanguage, apiUrl, { userInitiated: true });
             console.log('[caddie] opener: speak#2 (followUp) resolved');
 
             const reply = await captureUtterance(6_000, apiUrl, language);
