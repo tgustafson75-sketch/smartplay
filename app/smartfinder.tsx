@@ -244,22 +244,19 @@ export default function SmartFinder() {
       <SmartFinderModeToggle mode={mode} onChange={setMode} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        {!isRoundActive ? (
-          <Text style={styles.empty}>Start a round to see yardages.</Text>
-        ) : (
-          // Phase 502 — target is now a camera mode (handled by
-          // CameraSmartFinder above); the only remaining non-camera mode
-          // is map. The legacy TargetView is left in the file below as
-          // dead code in case a future surface wants the flat top-down
-          // canvas back without re-deriving the geometry math.
-          <MapView
-            geometry={geometry}
-            yards={yards}
-            width={width * CANVAS_W_FRACTION}
-            weather={caddieWeather}
-            shotBearingDeg={shotBearingDeg}
-          />
-        )}
+        {/* 2026-06-04 — Empty state "Start a round to see yardages" removed.
+            getGreenYardagesSync already routes through staticYardages
+            (scorecard distances from data/courses.ts) when GPS is null OR
+            no green geometry is resolved, so the F/M/B yardages always
+            have a value when bundled course data exists. Per Rule 3,
+            don't report a problem we can solve from static data we have. */}
+        <MapView
+          geometry={geometry}
+          yards={yards}
+          width={width * CANVAS_W_FRACTION}
+          weather={caddieWeather}
+          shotBearingDeg={shotBearingDeg}
+        />
 
         <View style={styles.holeNav}>
           <TouchableOpacity
