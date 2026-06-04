@@ -32,6 +32,7 @@ import { Video, ResizeMode } from 'expo-av';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettingsStore } from '../store/settingsStore';
 import { playLocalFile, speak, stopSpeaking, configureAudioForSpeech } from '../services/voiceService';
+import { prewarmVoice } from '../services/voiceWarmup';
 import {
   pickGreeting,
   recordLaunch,
@@ -358,6 +359,7 @@ export default function GreetingScreen() {
           ]);
           naturalEndRef.current = true;
           _greetingCompleteResolve?.();
+          prewarmVoice();
           if (!skippedRef.current) startTransition();
           return;
         }
@@ -386,6 +388,7 @@ export default function GreetingScreen() {
           }
           naturalEndRef.current = true;
           _greetingCompleteResolve?.();
+          prewarmVoice();
           if (!skippedRef.current) startTransition();
           return;
         }
@@ -413,6 +416,7 @@ export default function GreetingScreen() {
         await Promise.all([playLocalFile(asset.localUri, undefined, { userInitiated: true }), kevinMp3MinDisplay]);
         naturalEndRef.current = true;
         _greetingCompleteResolve?.();
+        prewarmVoice();
         if (!skippedRef.current) startTransition();
       } catch (e) {
         console.warn('[greeting] audio playback failed:', e);

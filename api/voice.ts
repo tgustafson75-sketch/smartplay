@@ -51,6 +51,15 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // 2026-06-04 — Pre-warm short-circuit. Client hits this endpoint
+  // with { mode: 'warmup' } after splash completes so the Lambda
+  // runtime + OpenAI/ElevenLabs SDK clients are hot by the time the
+  // user actually taps to talk. Mirrors api/swing-analysis.ts's same
+  // pattern (Fix EK). Returns in <50ms with no TTS work — $0 cost.
+  if (req.body?.mode === 'warmup') {
+    return res.status(200).json({ ok: true, mode: 'warmup' });
+  }
+
   try {
     const { text, gender = 'male', language = 'en', persona = null, model_id: clientModelId = null } = req.body;
 
