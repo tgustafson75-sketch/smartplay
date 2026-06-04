@@ -403,7 +403,18 @@ export default function CourseDetailScreen() {
             read first. */}
         <View style={styles.titleBlock}>
           <Text style={styles.titleText} numberOfLines={2}>{displayClubName || course.club_name}</Text>
-          <Text style={styles.titleLocation} numberOfLines={1}>{location}</Text>
+          <View style={styles.titleMetaRow}>
+            <Text style={styles.titleLocation} numberOfLines={1}>{location}</Text>
+            {/* 2026-06-04 — Hole-count badge. Only renders when the
+                tee's hole list is definitively 9 or 18 — otherwise
+                the count is ambiguous (partial data, custom config)
+                and we'd rather show nothing than show a wrong number. */}
+            {(tee.holes.length === 9 || tee.holes.length === 18) && (
+              <View style={styles.holesBadge}>
+                <Text style={styles.holesBadgeText}>{tee.holes.length} Holes</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Caddie tips — leads the page. Expanded by default to match
@@ -507,6 +518,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 2,
     fontStyle: 'italic',
+    flex: 1,
+  },
+  titleMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  holesBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#0d2b1c',
+    borderWidth: 1,
+    borderColor: '#00C89644',
+  },
+  holesBadgeText: {
+    color: '#00C896',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   heroWrap: { width: '100%', position: 'relative' },
   // Phase 405 — banner-style hero. maxHeight 320 keeps the hero from

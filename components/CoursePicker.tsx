@@ -47,6 +47,10 @@ const LOCAL_COURSES: PickedCourse[] = [
 export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{ id: string; club_name: string; course_name: string; location: string }[]>([]);
+  // 2026-06-04 — Many golfcourseapi results share club names (e.g. multiple
+  // "Echo Hills" — Hemet CA vs Canton OH). Location styling below is
+  // bumped to a distinct color/weight so the city/state reads at a glance
+  // and the user can disambiguate without squinting.
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -155,7 +159,10 @@ export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
                 activeOpacity={0.75}
               >
                 <Text style={styles.resultName} numberOfLines={1}>{r.club_name}</Text>
-                <Text style={styles.resultSub} numberOfLines={1}>{r.location}</Text>
+                <Text style={styles.resultLocation} numberOfLines={1}>{r.location}</Text>
+                {r.course_name && r.course_name !== r.club_name && (
+                  <Text style={styles.resultCourseName} numberOfLines={1}>{r.course_name}</Text>
+                )}
               </TouchableOpacity>
               {onInfo && (
                 <TouchableOpacity
@@ -336,6 +343,23 @@ const styles = StyleSheet.create({
   resultSub: {
     color: '#6b7280',
     fontSize: 11,
+    marginTop: 1,
+  },
+  // 2026-06-04 — Location: brand-accent color + weight bump so it
+  // reads as the disambiguator (vs. the prior muted gray that
+  // visually merged with the club name on shared-name courses).
+  resultLocation: {
+    color: '#00C896',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  // 2026-06-04 — Optional third line for course_name when it differs
+  // from club_name (e.g. "Palms Course" under "Menifee Lakes CC").
+  resultCourseName: {
+    color: '#9ca3af',
+    fontSize: 11,
+    fontStyle: 'italic',
     marginTop: 1,
   },
   localSection: {
