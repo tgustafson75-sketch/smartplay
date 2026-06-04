@@ -38,6 +38,26 @@ export function getBundledHoles(courseId: string | null | undefined): CourseHole
   return course?.holes ?? [];
 }
 
+/**
+ * 2026-06-04 — Authoritative hole count for any course context.
+ * Priority:
+ *   1. Bundled length (our 10 local: courses — known-correct, e.g. 9 for
+ *      Echo Hills + Mariners Point, 18 for Palms/Lakes/etc).
+ *   2. Live courseHoles length from the round store (golfcourseapi-fed;
+ *      can be wrong for 9-hole executive courses where the API pads to 18).
+ *   3. 18 as last resort only.
+ * Never default to 18 when bundled data exists for the course.
+ */
+export function getCourseHoleCount(
+  courseId: string | null | undefined,
+  liveLength?: number,
+): number {
+  const bundled = getBundledHoles(courseId);
+  if (bundled.length > 0) return bundled.length;
+  if (liveLength && liveLength > 0) return liveLength;
+  return 18;
+}
+
 export const getHole = (
   courseName: string,
   holeNumber: number

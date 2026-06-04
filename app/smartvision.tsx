@@ -64,7 +64,7 @@ import YardageBookPanel from '../components/smartvision/YardageBookPanel';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS, getLocalCourseSlug } from '../data/localCourseImages';
 import { pointAlongHoleLine } from '../data/holeLineCalibration';
-import { getBundledHoles } from '../data/courses';
+import { getBundledHoles, getCourseHoleCount } from '../data/courses';
 // 2026-05-31 — Fix GA: consolidate to canonical haversine. Prior inline
 // implementation duplicated utils/geoDistance.ts and was a maintenance
 // liability (three copies across this file, hole-view.tsx, and utils).
@@ -366,7 +366,9 @@ export default function SmartVisionScreen() {
     if (liveCourseHoles.length > 0) return liveCourseHoles;
     return getBundledHoles(courseId);
   }, [liveCourseHoles, courseId]);
-  const totalHoles = courseHoles.length || 18;
+  // 2026-06-04 — Bundled length wins over live for known local courses
+  // (Echo Hills + Mariners Point are 9-hole; golfcourseapi can pad to 18).
+  const totalHoles = getCourseHoleCount(courseId, courseHoles.length);
   const addOrUpdatePlan = useRoundStore(s => s.addOrUpdatePlan);
   const existingPlan = useRoundStore(s => s.plans.find(p => p.hole_number === currentHole));
   const [savedFlash, setSavedFlash] = useState(false);
@@ -971,7 +973,7 @@ export default function SmartVisionScreen() {
 
   // ── Hole nav ────────────────────────────────────────────────────
   const goPrev = () => setHoleIndex(i => Math.max(1, i - 1));
-  const goNext = () => setHoleIndex(i => Math.min(totalHoles || 18, i + 1));
+  const goNext = () => setHoleIndex(i => Math.min(totalHoles, i + 1));
 
   // ── Save current marker positions as the hole plan ──────────────
   // Persists tee/approach(=yellow)/pin marker positions + computed
@@ -1040,8 +1042,8 @@ export default function SmartVisionScreen() {
                 glasses POV. Renders nothing on non-DAT builds. */}
             <GlassesStatusBadge />
           </View>
-          <TouchableOpacity onPress={goNext} disabled={holeIndex >= (totalHoles || 18)} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <Ionicons name="chevron-forward" size={22} color={holeIndex >= (totalHoles || 18) ? '#374151' : '#ffffff'} />
+          <TouchableOpacity onPress={goNext} disabled={holeIndex >= (totalHoles)} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <Ionicons name="chevron-forward" size={22} color={holeIndex >= (totalHoles) ? '#374151' : '#ffffff'} />
           </TouchableOpacity>
         </View>
         {/* Imagery mode toggle — cycles auto → curated → gps. Icon

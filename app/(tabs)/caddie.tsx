@@ -42,7 +42,7 @@ import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona'
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useCageStore } from '../../store/cageStore';
 import { usePointsStore } from '../../store/pointsStore';
-import { getCourseList, getCourse } from '../../data/courses';
+import { getCourseList, getCourse, getCourseHoleCount } from '../../data/courses';
 import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
 import StartRoundCourseCard from '../../components/course/StartRoundCourseCard';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
@@ -1634,7 +1634,9 @@ export default function CaddieTab() {
     useGhostStore.getState().updateHole(currentHole, holeScore);
 
     const par = getCurrentPar();
-    const maxHole = nineHoleMode ? 9 : 18;
+    // 2026-06-04 — Bundled-aware end-of-round detection so 9-hole
+    // executive courses (Echo Hills, Mariners Point) end at 9, not 18.
+    const maxHole = nineHoleMode ? 9 : getCourseHoleCount(useRoundStore.getState().activeCourseId, courseHoles.length);
 
     useRelationshipStore.getState().updateMentalState(holeScore, par ?? 4);
 
@@ -1720,7 +1722,10 @@ export default function CaddieTab() {
   const _courses = getCourseList();
 
   // ── Strip / start-round data ─────────────
-  const totalHoles = nineHoleMode ? 9 : (courseHoles.length || 18);
+  // 2026-06-04 — nineHoleMode override stays (user-stated 9-hole play);
+  // otherwise use the bundled-aware count so Echo Hills + Mariners Point
+  // don't default to 18 when their bundled scorecard says 9.
+  const totalHoles = nineHoleMode ? 9 : getCourseHoleCount(useRoundStore.getState().activeCourseId, courseHoles.length);
   // targetDirection: not yet in aim engine — show CENTER until wired
   const targetDirection = 'CENTER';
 

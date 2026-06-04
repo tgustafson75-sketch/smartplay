@@ -19,6 +19,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useRoundStore, type ShotResult, type ShotLocation } from '../store/roundStore';
+import { getCourseHoleCount } from '../data/courses';
 import { getLastFix as getSmartFinderLastFix } from '../services/smartFinderService';
 import { getLastFix as getGpsLastFix, getOneShotFix } from '../services/gpsManager';
 import { track } from '../services/analytics';
@@ -77,7 +78,10 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
   const { colors } = useTheme();
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const currentHole = useRoundStore(s => s.currentHole);
-  const courseHolesCount = useRoundStore(s => s.courseHoles.length || 18);
+  // 2026-06-04 — Bundled-aware hole count for 9-hole executive courses.
+  const activeCourseId = useRoundStore(s => s.activeCourseId);
+  const liveCourseHolesLen = useRoundStore(s => s.courseHoles.length);
+  const courseHolesCount = getCourseHoleCount(activeCourseId, liveCourseHolesLen);
   const setCurrentHole = useRoundStore(s => s.setCurrentHole);
   const logShot = useRoundStore(s => s.logShot);
   const shotsCount = useRoundStore(s => s.shots.filter(x => (x.hole_number ?? x.hole) === s.currentHole).length);

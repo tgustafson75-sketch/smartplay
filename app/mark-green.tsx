@@ -26,6 +26,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useRoundStore } from '../store/roundStore';
+import { getCourseHoleCount } from '../data/courses';
 import {
   getOneShotFix,
   subscribe as subscribeGps,
@@ -126,7 +127,10 @@ export default function MarkPositionScreen() {
     return () => { cancelled = true; unsub(); };
   }, []);
 
-  const totalHoles = courseHoles.length || 18;
+  // 2026-06-04 — Bundled hole count wins for known local courses (9-hole
+  // executive courses like Echo Hills + Mariners Point shouldn't allow
+  // navigating past hole 9).
+  const totalHoles = getCourseHoleCount(courseId, courseHoles.length);
 
   const onMark = useCallback(async () => {
     if (!courseId) {
