@@ -2,13 +2,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
-// 2026-05-21 — Consolidation 1 / Merge B: shared persona voice tuning.
-// Same maps that api/voice.ts uses; single source of truth in
-// api/_voiceTuning.ts.
-import {
-  ELEVEN_VOICES_BY_PERSONA,
-  ELEVEN_SETTINGS_BY_PERSONA,
-} from './_voiceTuning';
+// 2026-06-04 — ElevenLabs path removed. OpenAI gpt-4o-mini-tts is
+// the only TTS path. Per-persona voice mapping retained below
+// (nova for Serena, onyx for the rest).
 import { getCaddieName, getCharacterSpec } from '../lib/persona';
 
 // 2026-05-23 — maxRetries bumped from 1 → 3 after a user-reported
@@ -1244,83 +1240,20 @@ ${onCourseContextBlock}${baseMessage}`
     console.log('[kevin] response:', text);
     if (toolAction) console.log('[kevin] tool:', toolAction.type);
 
-    // 2026-05-20 — Persona-aware TTS. Was hardcoded to KEVIN_TTS_VOICE
-    // so Kevin's voice spoke for every persona (Tim flagged Serena
-    // utterances coming out in Kevin's voice). Mirror /api/voice's
-    // persona routing: ElevenLabs per-persona voice ID first, OpenAI
-    // gender-mapped voice (nova for Serena, onyx for the rest) as
-    // fallback.
+    // 2026-06-04 — OpenAI TTS only. ElevenLabs branch removed.
+    // Persona → voice mapping: nova for Serena, onyx for the rest.
     const personaKey =
       typeof personaInput === 'string' ? personaInput.toLowerCase() : '';
-    const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY;
-
-    let audioBase64: string | null = null;
-
-    if (ELEVENLABS_KEY && ELEVEN_VOICES_BY_PERSONA[personaKey]) {
-      try {
-        const voiceId = ELEVEN_VOICES_BY_PERSONA[personaKey];
-        const voiceSettings = ELEVEN_SETTINGS_BY_PERSONA[personaKey] ?? ELEVEN_SETTINGS_BY_PERSONA.kevin;
-        // 2026-05-21 — Fix E: pick the ElevenLabs model from the
-        // request language. `eleven_turbo_v2` is English-only;
-        // Spanish / Chinese / any non-English text needs
-        // `eleven_multilingual_v2` or the pronunciation is wrong.
-        // Mirrors api/voice.ts which already does this; this path
-        // was missed when api/kevin gained persona-aware TTS in
-        // Fix A (a63d1b3) so Tim's Spanish setting reached the LLM
-        // (Spanish text came back) but TTS rendered it through the
-        // English model. Voice IDs are language-agnostic — only the
-        // model_id needs to flip.
-        // 2026-05-26 — Fix BC: default to eleven_multilingual_v2 for ALL
-        // languages (was English-only turbo_v2). Lockstep with /api/voice
-        // fix from Batch 33 — turbo doesn't reliably render every voice
-        // in the persona catalog (Tank/Serena/Harry showed up degraded
-        // or silent for some users in English). Multilingual handles
-        // every voice ID reliably, costs a small latency hit, removes a
-        // class of silent-failure reports.
-        const ttsModel = 'eleven_multilingual_v2';
-        // 2026-05-22 — Same latency optimization as /api/voice.
-        // optimize_streaming_latency=2 cuts synthesis time ~25%; safe
-        // degradation if ElevenLabs ignores the param (no behavior change).
-        const elevenRes = await fetch(
-          'https://api.elevenlabs.io/v1/text-to-speech/' + voiceId + '?optimize_streaming_latency=2',
-          {
-            method: 'POST',
-            headers: {
-              'xi-api-key': ELEVENLABS_KEY,
-              'Content-Type': 'application/json',
-              'Accept': 'audio/mpeg',
-            },
-            body: JSON.stringify({
-              text,
-              model_id: ttsModel,
-              voice_settings: voiceSettings,
-            }),
-          },
-        );
-        if (elevenRes.ok) {
-          const buf = await elevenRes.arrayBuffer();
-          audioBase64 = Buffer.from(buf).toString('base64');
-        } else {
-          console.log('[kevin] ElevenLabs failed:', elevenRes.status, '— falling back to OpenAI');
-        }
-      } catch (e) {
-        console.log('[kevin] ElevenLabs error:', e, '— falling back to OpenAI');
-      }
-    }
-
-    if (!audioBase64) {
-      // OpenAI TTS fallback — pick voice by persona gender.
-      const ttsVoice: 'onyx' | 'nova' =
-        personaKey === 'serena' ? 'nova' : 'onyx';
-      const ttsResponse = await openai.audio.speech.create({
-        model: 'gpt-4o-mini-tts',
-        voice: ttsVoice,
-        input: text,
-        instructions: KEVIN_TTS_INSTRUCTIONS,
-      });
-      const arrayBuffer = await ttsResponse.arrayBuffer();
-      audioBase64 = Buffer.from(arrayBuffer).toString('base64');
-    }
+    const ttsVoice: 'onyx' | 'nova' =
+      personaKey === 'serena' ? 'nova' : 'onyx';
+    const ttsResponse = await openai.audio.speech.create({
+      model: 'gpt-4o-mini-tts',
+      voice: ttsVoice,
+      input: text,
+      instructions: KEVIN_TTS_INSTRUCTIONS,
+    });
+    const arrayBuffer = await ttsResponse.arrayBuffer();
+    const audioBase64: string = Buffer.from(arrayBuffer).toString('base64');
 
     // 2026-05-26 — Fix BT/BW: _debug surfaces provider + telemetry.
     // Lets Tim see fallback fires, tier routing, tool-round depth, and

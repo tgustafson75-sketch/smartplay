@@ -119,42 +119,10 @@ async function probeGemini(): Promise<ProbeResult> {
   }
 }
 
-async function probeElevenLabs(): Promise<ProbeResult> {
-  if (!process.env.ELEVENLABS_API_KEY) return { status: 'unconfigured' };
-  const startedAt = Date.now();
-  try {
-    // 2026-05-26 — Fix CX: probe /v1/voices instead of
-    // /v1/user/subscription. The latter requires user-info scope
-    // which newer scoped ElevenLabs API keys (TTS-only) don't carry —
-    // a valid key would 401 against /subscription while working fine
-    // against /text-to-speech. Tim hit this: his key worked for voice
-    // generation but my probe reported 'down', sending him on a wild
-    // goose chase. /v1/voices is permitted by all key scopes (including
-    // the minimal TTS-only ones) so the probe matches actual usability.
-    const res = await withTimeout(
-      fetch('https://api.elevenlabs.io/v1/voices', {
-        method: 'GET',
-        headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY },
-      }),
-      PROBE_TIMEOUT_MS,
-      'elevenlabs',
-    );
-    if (!res.ok) {
-      return {
-        status: 'down',
-        latency_ms: Date.now() - startedAt,
-        error: `http_${res.status}`,
-      };
-    }
-    return { status: 'ok', latency_ms: Date.now() - startedAt };
-  } catch (e) {
-    return {
-      status: 'down',
-      latency_ms: Date.now() - startedAt,
-      error: e instanceof Error ? e.message.slice(0, 200) : 'unknown',
-    };
-  }
-}
+// 2026-06-04 — probeElevenLabs removed. ElevenLabs path was stripped
+// from the entire runtime voice pipeline (api/voice.ts, api/kevin.ts,
+// app/api/voice+api.ts) so the health probe has no provider to report
+// on. Re-add if ElevenLabs is ever reintroduced as an active path.
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Backwards-compat fast path: callers passing ?lite=1 get the legacy
@@ -164,14 +132,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ status: 'ok', timestamp: Date.now() });
   }
 
-  const [anthropic, openai, gemini, elevenlabs] = await Promise.all([
+  const [anthropic, openai, gemini] = await Promise.all([
     probeAnthropic(),
     probeOpenAI(),
     probeGemini(),
-    probeElevenLabs(),
   ]);
 
-  const providers = { anthropic, openai, gemini, elevenlabs };
+  const providers = { anthropic, openai, gemini };
 
   // Overall status: 'ok' if no configured provider is 'down'. A single
   // 'down' provider on a configured key flips overall to 'degraded'.
