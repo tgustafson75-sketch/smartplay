@@ -6,7 +6,6 @@ import { noteAudioActivity } from './audioLifecycle';
 // /api/transcribe, that endpoint is marked degraded for 60s and we
 // short-circuit subsequent attempts without firing the actual fetch.
 // Saves the radio-wake cost during weak-signal stretches.
-import { isEndpointDegraded, recordFetchOutcome } from './networkHealth';
 
 // ─── AUDIO MODE MANAGEMENT ────────────────
 // Phase V.7 — serialize setAudioModeAsync calls. Without a queue, rapid
@@ -206,13 +205,6 @@ export const captureUtterance = async (
     formData.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
     formData.append('language', language);
 
-    // 2026-05-30 — Fix FX: skip /api/transcribe when the breaker is
-    // tripped. Returns null (same as a failed response) so callers
-    // route their existing failure path without the radio wake.
-    if (isEndpointDegraded('transcribe')) {
-      console.log('[voice] skipping /api/transcribe — circuit-breaker tripped (degraded)');
-      return null;
-    }
     const controller = new AbortController();
     const cancelTimer = setTimeout(() => controller.abort(), 12_000);
     const res = await fetch(apiUrl + '/api/transcribe', {
@@ -220,7 +212,6 @@ export const captureUtterance = async (
       body: formData,
       signal: controller.signal,
     }).finally(() => clearTimeout(cancelTimer));
-    recordFetchOutcome('transcribe', res.ok);
 
     if (!res.ok) return null;
     const data = await res.json() as { text?: string };
@@ -228,10 +219,6 @@ export const captureUtterance = async (
     return text || null;
   } catch (err) {
     console.log('[voice] captureUtterance error:', err);
-    // 2026-05-30 — Fix FX: non-abort exceptions count toward the breaker.
-    if (!(err instanceof Error && err.name === 'AbortError')) {
-      recordFetchOutcome('transcribe', false);
-    }
     if (recording) {
       try { await recording.stopAndUnloadAsync(); } catch { /* ignore */ }
     }
@@ -895,25 +882,12 @@ export const speak = async (
     // monolingual_v1 with an English accent.
     const ttsModel = language === 'en' ? 'eleven_monolingual_v1' : 'eleven_multilingual_v2';
 
-    // 2026-05-30 — Fix FX: skip the fetch entirely when the circuit-
-    // breaker has tripped on /api/voice. The catch-block-style cleanup
-    // below mirrors the real network-failure path so callers see the
-    // same "no audio, caption only" UX without wasting a radio wake.
-    if (isEndpointDegraded('voice')) {
-      console.log('[voice] skipping /api/voice — circuit-breaker tripped (degraded)');
-      clearTimeout(voiceTimeout);
-      currentAbortController = null;
-      notifyCaption(null);
-      notifySpeaking(false);
-      return;
-    }
     const response = await fetch(apiUrl + '/api/voice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: preprocessTtsText(text, language), gender, language, persona, model_id: ttsModel }),
       signal: abortController.signal,
     }).finally(() => clearTimeout(voiceTimeout));
-    recordFetchOutcome('voice', response.ok);
 
     // Bail if a newer speak() or stopSpeaking() fired while we were fetching.
     // 2026-05-26 — Fix DD: log the bail. Without this, opener silence
@@ -1127,12 +1101,7 @@ export const speak = async (
       notifySpeaking(false);
       notifyCaption(null);
     }
-    // 2026-05-30 — Fix FX: any thrown failure during the /api/voice
-    // path counts toward the breaker trip. AbortError doesn't count —
-    // those are deliberate cancellations from stopSpeaking / preempt,
-    // not network failures.
     if (!(err instanceof Error && err.name === 'AbortError')) {
-      recordFetchOutcome('voice', false);
       console.log('[voice] speak error:', err);
     }
   }
