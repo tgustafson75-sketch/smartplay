@@ -50,9 +50,8 @@ import {
   RANCHO_CALIFORNIA_HOLE_IMAGES,
   SAN_JOSE_MUNI_HOLE_IMAGES,
   SUNNYVALE_HOLE_IMAGES,
-  MAPLEWOOD_HOLE_IMAGES,
-  PEMBROKE_PINES_HOLE_IMAGES,
   WESTLAKE_CC_NJ_HOLE_IMAGES,
+  ECHO_HILLS_HOLE_IMAGES,
 } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
@@ -180,32 +179,22 @@ const LOCAL_COURSES: CourseSummary[] = [
     lng: -122.0417245,
   },
   // 2026-05-24 — Hayes Open courses (Memorial Day weekend trip).
-  // Maplewood: Fri+Sat day-to-day GPS validation. Pembroke Pines: Sun.
-  // 2026-05-26 — Tim playing next weekend in Bethlehem NH. Location +
-  // centroid now match Maplewood Golf Club's actual address
-  // (lat/lng = lockstep with data/localCourseImages.ts Fix BG centroid;
-  // play.tsx hadn't been synced when that file was corrected).
+  // 2026-06-04 — Maplewood + Pembroke Pines removed pending IP-clean
+  // re-bundle of their UI-chrome'd screenshots. Centroids in
+  // data/localCourseImages.ts also removed; both fall through to
+  // golfcourseapi search when the user types them.
+  // 2026-06-04 — Echo Hills, Hemet CA (9-hole executive par 35).
+  // Tim's local rotation.
   {
-    id: 'local:maplewood',
-    club_name: 'Maplewood Golf Club',
-    location: 'Bethlehem, NH',
+    id: 'local:echo-hills',
+    club_name: 'Echo Hills Golf Course',
+    location: 'Hemet, CA',
     rating: null,
     slope: null,
     isLocal: true,
-    thumbnail: (MAPLEWOOD_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
-    lat: 44.282,
-    lng: -71.683,
-  },
-  {
-    id: 'local:pembroke-pines',
-    club_name: 'Pembroke Pines Country Club',
-    location: 'Pembroke, NH',
-    rating: null,
-    slope: null,
-    isLocal: true,
-    thumbnail: (PEMBROKE_PINES_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
-    lat: 43.1417,
-    lng: -71.4544,
+    thumbnail: (ECHO_HILLS_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    lat: 33.7475,
+    lng: -116.9719,
   },
   // 2026-05-28 — Westlake Country Club, Jackson NJ. First East Coast
   // course Tim has personally captured (full 18 Green Maps screenshots,
@@ -230,15 +219,10 @@ const LOCAL_COURSES: CourseSummary[] = [
 // so they remain reachable + tournament-mode-enabled via the normal
 // course discovery flow.
 
-// 2026-05-24 — Course IDs that get a one-tap "Tournament Mode" launcher
-// directly on their card. Tim asked: "type tournament mode directly to
-// the courses that are in the 2026 Hayes Open card. And in the course
-// discovery, Maplewood Golf Club and Pembroke Pines." Same set as
-// HAYES_OPEN_COURSE_IDS for now; can extend per ask.
-const TOURNAMENT_QUICK_LAUNCH_IDS = new Set<string>([
-  'local:maplewood',
-  'local:pembroke-pines',
-]);
+// 2026-06-04 — Tournament Mode quick-launch set emptied with the
+// Maplewood + Pembroke Pines removal. Re-add course IDs here when
+// new tournament-eligible local courses get bundled.
+const TOURNAMENT_QUICK_LAUNCH_IDS = new Set<string>([]);
 
 type SearchKind = 'courses' | 'range_practice';
 
@@ -719,11 +703,10 @@ export default function PlayTab() {
         </TouchableOpacity>
 
         {/* 2026-06-02 — Fix GO (Tim req): removed the 2026 Hayes Open
-            card. The Memorial Day weekend trip has passed; the card
-            was a one-time tournament pin and no longer relevant on
-            the play tab. Constants HAYES_OPEN_COURSE_IDS +
-            LOCAL_COURSES entries for maplewood / pembroke-pines
-            remain (they're still valid courses, just not pinned). */}
+            card. 2026-06-04 — Maplewood + Pembroke Pines bundles also
+            removed pending IP-clean re-bundle of their UI-chrome'd
+            screenshots; HAYES_OPEN_COURSE_IDS + TOURNAMENT_QUICK_LAUNCH_IDS
+            were emptied in the same pass. */}
 
         {/* Active-round banner — End Round lives here so the user doesn't
             have to dig into the Tools menu. Confirms before tearing down

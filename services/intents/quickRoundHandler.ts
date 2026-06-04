@@ -37,8 +37,8 @@ const LOCAL_COURSE_SLUGS: { needles: string[]; id: string; displayName: string }
   { needles: ['mariners point', 'mariners'],        id: 'local:mariners-point',    displayName: 'Mariners Point' },
   { needles: ['san jose muni', 'san jose'],         id: 'local:san-jose-muni',     displayName: 'San Jose Municipal' },
   { needles: ['sunnyvale'],                         id: 'local:sunnyvale',         displayName: 'Sunnyvale Golf Course' },
-  { needles: ['maplewood'],                         id: 'local:maplewood',         displayName: 'Maplewood Golf Club' },
-  { needles: ['pembroke pines', 'pembroke'],        id: 'local:pembroke-pines',    displayName: 'Pembroke Pines Country Club' },
+  { needles: ['echo hills', 'echo'],                id: 'local:echo-hills',        displayName: 'Echo Hills Golf Course' },
+  { needles: ['westlake'],                          id: 'local:westlake-cc-nj',    displayName: 'Westlake Country Club' },
 ];
 
 function resolveLocalCourse(hint: string): { id: string; displayName: string } | null {

@@ -62,11 +62,8 @@ export const HOLE_LINE_CALIBRATION: Partial<Record<LocalCourseSlug, Record<numbe
   // Future: replace estimates with OpenCV-detected endpoints (the
   // 18B line is uniform ~#FFFFFF + ~3px wide — Hough transform
   // finds both endpoints reliably).
-  maplewood: {
-    // Hole 8: par 3, tee bottom-center, green near top-center (slight
-    // right bias). Reference seed; refined from initial scaffold entry.
-    8: { tee: { x: 884, y: 1190 }, green: { x: 884, y: 188 } },
-  },
+  // 2026-06-04 — Maplewood entry removed alongside the course bundle.
+  // Re-add when Maplewood gets an IP-clean re-bundle.
   palms: {
     // Hole 9: par 5, 503Yds. Line bends right around the water hazard;
     // tee at bottom-right, green near top-center. Big calibration win

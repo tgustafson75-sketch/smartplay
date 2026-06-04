@@ -40,6 +40,7 @@ const LOCAL_COURSES: PickedCourse[] = [
   { id: 'local:palms',             name: 'Menifee Lakes — Palms',       fullName: 'Menifee Lakes Country Club — Palms',       isLocal: true },
   { id: 'local:lakes',             name: 'Menifee Lakes — Lakes',       fullName: 'Menifee Lakes Country Club — Lakes',       isLocal: true },
   { id: 'local:rancho-california', name: 'Rancho California',           fullName: 'Rancho California Golf Club',              isLocal: true },
+  { id: 'local:echo-hills',        name: 'Echo Hills',                  fullName: 'Echo Hills Golf Course — Hemet, CA',       isLocal: true },
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────

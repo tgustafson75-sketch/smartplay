@@ -34,10 +34,9 @@ const SLUG_DISPLAY_NAMES: Record<LocalCourseSlug, string> = {
   'mariners-point':   'Mariners Point',
   'san-jose-muni':    'San Jose Municipal',
   'sunnyvale':        'Sunnyvale Golf Course',
-  'maplewood':        'Maplewood Golf Club',
-  'pembroke-pines':   'Pembroke Pines Country Club',
   'journey-at-pechanga': 'Journey at Pechanga',
   'westlake-cc-nj':   'Westlake Country Club',
+  'echo-hills':       'Echo Hills Golf Course',
 };
 
 /** Friendly spoken short-name — strips parent-course parens for TTS. */
@@ -49,10 +48,9 @@ const SLUG_SPOKEN_NAMES: Record<LocalCourseSlug, string> = {
   'mariners-point':   'Mariners Point',
   'san-jose-muni':    'San Jose Muni',
   'sunnyvale':        'Sunnyvale',
-  'maplewood':        'Maplewood',
-  'pembroke-pines':   'Pembroke Pines',
   'journey-at-pechanga': 'Journey at Pechanga',
   'westlake-cc-nj':   'Westlake',
+  'echo-hills':       'Echo Hills',
 };
 
 export interface NearestCourseResult {

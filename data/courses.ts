@@ -494,6 +494,22 @@ const MARINERS_POINT_HOLES: CourseHole[] = [
 // from the yellow target's pixel position, and the measuring tool
 // reads as "—" on every cell — making the curated images feel dead.
 // Same latent gap exists for Maplewood + Pembroke; address separately.
+// 2026-06-04 — Echo Hills Golf Course, Hemet CA (9-hole executive,
+// par 35). Yardages from Tim's Golfshot Green Center captures
+// (IMG 7635-7643). Coords zero — geometry comes from golfcourseapi
+// at runtime + Mapbox satellite for SmartVision.
+export const ECHO_HILLS_HOLES: CourseHole[] = [
+  { hole: 1, par: 4, distance: 322, front: 313, back: 331, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 2, par: 3, distance: 135, front: 126, back: 144, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 3, par: 4, distance: 221, front: 212, back: 230, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 4, par: 4, distance: 249, front: 240, back: 258, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 5, par: 4, distance: 251, front: 242, back: 260, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 6, par: 4, distance: 237, front: 228, back: 246, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 7, par: 4, distance: 263, front: 254, back: 272, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 8, par: 4, distance: 263, front: 254, back: 272, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 9, par: 4, distance: 255, front: 246, back: 264, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+];
+
 export const WESTLAKE_NJ_HOLES: CourseHole[] = [
   { hole:  1, par: 4, distance: 416, front: 404, back: 428, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
   { hole:  2, par: 5, distance: 472, front: 460, back: 484, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
@@ -604,5 +620,19 @@ export const COURSES: Course[] = [
     par: 71,
     totalYards: 6251, // sum of distance column (par 71)
     holes: WESTLAKE_NJ_HOLES,
+  },
+  // 2026-06-04 — Echo Hills Golf Course, Hemet CA. 9-hole executive
+  // par 35 in Tim's local rotation. Per-hole par/distance from Golfshot
+  // Green Center captures (IMG 7635-7643). Coords zero — golfcourseapi
+  // resolves runtime geometry; bundled screenshots drive SmartVision.
+  {
+    id: 'echo-hills',
+    name: 'Echo Hills',
+    fullName: 'Echo Hills Golf Course — Hemet, CA',
+    rating: '',
+    slope: '',
+    par: 35,
+    totalYards: 2196, // sum of distance column (9 holes)
+    holes: ECHO_HILLS_HOLES,
   },
 ];

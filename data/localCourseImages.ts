@@ -174,72 +174,31 @@ export const MARINERS_POINT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   9: require('../assets/courses/mariners-point/hole-09.jpg'),
 };
 
-// 2026-05-24 — Maplewood Golf Club, Lunenburg MA (9 holes). Bundled for
-// the 2026 Hayes Open. Tim playing Friday + Saturday of Memorial Day
-// weekend — day-to-day GPS + functionality validation opportunity.
-// Cropped from Golfshot Android screenshots (IMG 7274–7282, 1768x2208)
-// via sips: 820,300 → 640x1500. Removes status bar, ad strip, left
-// stats column, "Get Pro!" bar, and bottom Holes/Preview/Track nav so
-// only the hole map remains (Lakes/Palms aesthetic).
-// 2026-05-26 — Fix BH: Maplewood Golf Club is an 18-hole course in
-// Bethlehem, NH (also known locally as "Settlers Crossing Golf Course"
-// per Tim's brother DJ). Course has a unique hole 16 par 6. Holes
-// 1-4 + 6-18 sourced from 18Birdies screenshots (1768x2208 portrait,
-// ~2MB each) for beta validation — IP-clean replacement required
-// before public release. Hole 5 pending; missing entries fall
-// through to Mapbox aerial fallback automatically.
-//
-// NOTE: 18B screenshots carry baked-in UI chrome (top stats bar,
-// bottom Hole/Enter Score pill, floating yardage bubbles, "Green
-// Maps" icon) that should be cropped/masked before public release.
-// The white tee→green line baked into each image is intentionally
-// kept — it's a perfect visual reference for where SmartVision's
-// interactive measuring tool (yellow target dot + F/M/B yardage)
-// should sit on each hole.
-export const MAPLEWOOD_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1:  require('../assets/courses/maplewood/hole-01.jpg'),
-  2:  require('../assets/courses/maplewood/hole-02.jpg'),
-  3:  require('../assets/courses/maplewood/hole-03.jpg'),
-  4:  require('../assets/courses/maplewood/hole-04.jpg'),
-  5:  require('../assets/courses/maplewood/hole-05.jpg'),
-  6:  require('../assets/courses/maplewood/hole-06.jpg'),
-  7:  require('../assets/courses/maplewood/hole-07.jpg'),
-  8:  require('../assets/courses/maplewood/hole-08.jpg'),
-  9:  require('../assets/courses/maplewood/hole-09.jpg'),
-  10: require('../assets/courses/maplewood/hole-10.jpg'),
-  11: require('../assets/courses/maplewood/hole-11.jpg'),
-  12: require('../assets/courses/maplewood/hole-12.jpg'),
-  13: require('../assets/courses/maplewood/hole-13.jpg'),
-  14: require('../assets/courses/maplewood/hole-14.jpg'),
-  15: require('../assets/courses/maplewood/hole-15.jpg'),
-  16: require('../assets/courses/maplewood/hole-16.jpg'),
-  17: require('../assets/courses/maplewood/hole-17.jpg'),
-  18: require('../assets/courses/maplewood/hole-18.jpg'),
-};
+// 2026-06-04 — Maplewood + Pembroke Pines bundles removed. Both had
+// raw Golfshot/18Birdies UI chrome that needs an IP-clean replacement
+// pass before re-bundling. Until then they fall through to Mapbox
+// satellite (same path as journey-at-pechanga).
 
-// 2026-05-24 — Pembroke Pines Country Club, Pembroke NH (18 holes).
-// Bundled for the 2026 Hayes Open. Tim playing Sunday before Memorial
-// Day. Cropped from Golfshot Android screenshots (IMG 7283–7300,
-// 1768x2208) via sips with same params as Maplewood.
-export const PEMBROKE_PINES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1:  require('../assets/courses/pembroke-pines/hole-01.jpg'),
-  2:  require('../assets/courses/pembroke-pines/hole-02.jpg'),
-  3:  require('../assets/courses/pembroke-pines/hole-03.jpg'),
-  4:  require('../assets/courses/pembroke-pines/hole-04.jpg'),
-  5:  require('../assets/courses/pembroke-pines/hole-05.jpg'),
-  6:  require('../assets/courses/pembroke-pines/hole-06.jpg'),
-  7:  require('../assets/courses/pembroke-pines/hole-07.jpg'),
-  8:  require('../assets/courses/pembroke-pines/hole-08.jpg'),
-  9:  require('../assets/courses/pembroke-pines/hole-09.jpg'),
-  10: require('../assets/courses/pembroke-pines/hole-10.jpg'),
-  11: require('../assets/courses/pembroke-pines/hole-11.jpg'),
-  12: require('../assets/courses/pembroke-pines/hole-12.jpg'),
-  13: require('../assets/courses/pembroke-pines/hole-13.jpg'),
-  14: require('../assets/courses/pembroke-pines/hole-14.jpg'),
-  15: require('../assets/courses/pembroke-pines/hole-15.jpg'),
-  16: require('../assets/courses/pembroke-pines/hole-16.jpg'),
-  17: require('../assets/courses/pembroke-pines/hole-17.jpg'),
-  18: require('../assets/courses/pembroke-pines/hole-18.jpg'),
+// 2026-06-04 — Echo Hills Golf Course, Hemet CA (9-hole executive
+// par 35). Tim's local rotation. Bundled from raw Golfshot Android
+// screenshots (IMG 7635–7643, 1768x1976) via scripts/clean-course-
+// images.py — crop (460,170,1768,1750) → 1308x1580. Removes the
+// status bar, top ad banner, left "Hole / Back Edge / Green Center
+// / Front Edge / Par / Get Pro!" sidebar, and bottom Holes/Preview/
+// Track nav. Small residual chrome (info "i" top-right + pencil
+// bottom-right corner) — acceptable for beta. Baked-in tee→green
+// line + Green Center yardage bubble intentionally kept as
+// SmartVision visual reference.
+export const ECHO_HILLS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1: require('../assets/courses/echo-hills/hole-01.jpg'),
+  2: require('../assets/courses/echo-hills/hole-02.jpg'),
+  3: require('../assets/courses/echo-hills/hole-03.jpg'),
+  4: require('../assets/courses/echo-hills/hole-04.jpg'),
+  5: require('../assets/courses/echo-hills/hole-05.jpg'),
+  6: require('../assets/courses/echo-hills/hole-06.jpg'),
+  7: require('../assets/courses/echo-hills/hole-07.jpg'),
+  8: require('../assets/courses/echo-hills/hole-08.jpg'),
+  9: require('../assets/courses/echo-hills/hole-09.jpg'),
 };
 
 // 2026-05-28 — Westlake Country Club, Jackson NJ. Full 18-hole bundle
@@ -258,30 +217,29 @@ export const PEMBROKE_PINES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
 //   16 par 4 378y    17 par 3 144y    18 par 4 288y
 // Total: par 71, ~6253y from this tee box.
 export const WESTLAKE_CC_NJ_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1:  require('../assets/courses/westlake-cc-nj/holes/hole-01.jpg'),
-  2:  require('../assets/courses/westlake-cc-nj/holes/hole-02.jpg'),
-  3:  require('../assets/courses/westlake-cc-nj/holes/hole-03.jpg'),
-  4:  require('../assets/courses/westlake-cc-nj/holes/hole-04.jpg'),
-  5:  require('../assets/courses/westlake-cc-nj/holes/hole-05.jpg'),
-  6:  require('../assets/courses/westlake-cc-nj/holes/hole-06.jpg'),
-  7:  require('../assets/courses/westlake-cc-nj/holes/hole-07.jpg'),
-  8:  require('../assets/courses/westlake-cc-nj/holes/hole-08.jpg'),
-  9:  require('../assets/courses/westlake-cc-nj/holes/hole-09.jpg'),
-  10: require('../assets/courses/westlake-cc-nj/holes/hole-10.jpg'),
-  11: require('../assets/courses/westlake-cc-nj/holes/hole-11.jpg'),
-  12: require('../assets/courses/westlake-cc-nj/holes/hole-12.jpg'),
-  13: require('../assets/courses/westlake-cc-nj/holes/hole-13.jpg'),
-  14: require('../assets/courses/westlake-cc-nj/holes/hole-14.jpg'),
-  15: require('../assets/courses/westlake-cc-nj/holes/hole-15.jpg'),
-  16: require('../assets/courses/westlake-cc-nj/holes/hole-16.jpg'),
-  17: require('../assets/courses/westlake-cc-nj/holes/hole-17.jpg'),
-  18: require('../assets/courses/westlake-cc-nj/holes/hole-18.jpg'),
+  1:  require('../assets/courses/westlake-cc-nj/hole-01.jpg'),
+  2:  require('../assets/courses/westlake-cc-nj/hole-02.jpg'),
+  3:  require('../assets/courses/westlake-cc-nj/hole-03.jpg'),
+  4:  require('../assets/courses/westlake-cc-nj/hole-04.jpg'),
+  5:  require('../assets/courses/westlake-cc-nj/hole-05.jpg'),
+  6:  require('../assets/courses/westlake-cc-nj/hole-06.jpg'),
+  7:  require('../assets/courses/westlake-cc-nj/hole-07.jpg'),
+  8:  require('../assets/courses/westlake-cc-nj/hole-08.jpg'),
+  9:  require('../assets/courses/westlake-cc-nj/hole-09.jpg'),
+  10: require('../assets/courses/westlake-cc-nj/hole-10.jpg'),
+  11: require('../assets/courses/westlake-cc-nj/hole-11.jpg'),
+  12: require('../assets/courses/westlake-cc-nj/hole-12.jpg'),
+  13: require('../assets/courses/westlake-cc-nj/hole-13.jpg'),
+  14: require('../assets/courses/westlake-cc-nj/hole-14.jpg'),
+  15: require('../assets/courses/westlake-cc-nj/hole-15.jpg'),
+  16: require('../assets/courses/westlake-cc-nj/hole-16.jpg'),
+  17: require('../assets/courses/westlake-cc-nj/hole-17.jpg'),
+  18: require('../assets/courses/westlake-cc-nj/hole-18.jpg'),
 };
 
 export type LocalCourseSlug =
   | 'palms' | 'lakes' | 'rancho-california' | 'crystal-springs'
-  | 'mariners-point' | 'san-jose-muni' | 'sunnyvale' | 'maplewood'
-  | 'pembroke-pines'
+  | 'mariners-point' | 'san-jose-muni' | 'sunnyvale'
   // 2026-05-26 — Journey at Pechanga (Temecula CA). Randy Chang's home
   // course; testing opportunity if Tim or Randy plays it. Hole geometry
   // is available via golfcourseapi + Mapbox satellite imagery so we
@@ -291,9 +249,11 @@ export type LocalCourseSlug =
   // 2026-05-28 — Westlake Country Club, Jackson NJ. First East Coast
   // course Tim has personally captured. All 18 holes bundled from
   // Green Maps screenshots; geometry comes from golfcourseapi at
-  // runtime (no per-hole tee/green coords baked into data/courses.ts —
-  // matches the Maplewood / Pembroke Pines pattern).
-  | 'westlake-cc-nj';
+  // runtime (no per-hole tee/green coords baked into data/courses.ts).
+  | 'westlake-cc-nj'
+  // 2026-06-04 — Echo Hills Golf Course, Hemet CA. 9-hole executive
+  // course in Tim's local rotation. All 9 holes bundled.
+  | 'echo-hills';
 
 export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number, ImageSourcePropType>>> = {
   'palms': PALMS_HOLE_IMAGES,
@@ -303,9 +263,8 @@ export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number,
   'mariners-point': MARINERS_POINT_HOLE_IMAGES,
   'san-jose-muni': SAN_JOSE_MUNI_HOLE_IMAGES,
   'sunnyvale': SUNNYVALE_HOLE_IMAGES,
-  'maplewood': MAPLEWOOD_HOLE_IMAGES,
-  'pembroke-pines': PEMBROKE_PINES_HOLE_IMAGES,
   'westlake-cc-nj': WESTLAKE_CC_NJ_HOLE_IMAGES,
+  'echo-hills': ECHO_HILLS_HOLE_IMAGES,
   // 'journey-at-pechanga' intentionally omitted — hole imagery comes
   // from Mapbox satellite live; getLocalHoleImage() returns null which
   // the SmartVision render path already handles (falls through to the
@@ -339,16 +298,10 @@ export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng:
   'mariners-point':   { lat: 37.5731586, lng: -122.2823681 },
   'san-jose-muni':    { lat: 37.3771789, lng: -121.8881051 },
   'sunnyvale':        { lat: 37.3983857, lng: -122.0417245 },
-  // 2026-05-24 — Hayes Open courses. Approximate centroids from
-  // public records; refine on-site via OSM Overpass once Tim has
-  // walked the property (same correction the other 4 courses got).
-  // 2026-05-26 — Fix BG: Maplewood Golf Club is in Bethlehem, NH
-  // (NOT Maplewood, MA — Tim's correction). Centroid bumped from
-  // (42.5965, -71.7253) to Bethlehem-area (~44.282, -71.683). Will
-  // refine to true property centroid via OSM Overpass when verified
-  // on-site.
-  'maplewood':        { lat: 44.282,     lng: -71.683 },
-  'pembroke-pines':   { lat: 43.1417,    lng: -71.4544 },
+  // 2026-06-04 — Echo Hills Golf Course, Hemet CA. Approximate
+  // centroid from the Hemet-area property landmark; refine on-site
+  // via Mark Location when Tim plays there.
+  'echo-hills':       { lat: 33.7475,    lng: -116.9719 },
   // 2026-05-26 — Journey at Pechanga Resort, Temecula CA.
   // Approximate centroid from Pechanga Resort & Casino landmark
   // (45100 Pechanga Pkwy). Refine on-site via Mark Location once
@@ -377,13 +330,9 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   if (c.includes('rancho')) return 'rancho-california';
   if (c.includes('san jose')) return 'san-jose-muni';
   if (c.includes('sunnyvale')) return 'sunnyvale';
-  if (c.includes('pembroke')) return 'pembroke-pines';
-  // 2026-05-26 — Fix BH: "Settlers Crossing Golf Course" is the
-  // local-vernacular name (per Tim's brother DJ) for the same
-  // Maplewood Golf Club in Bethlehem NH. Both names route to the
-  // same bundled images.
-  if (c.includes('maplewood')) return 'maplewood';
-  if (c.includes('settlers crossing') || c.includes("settler's crossing")) return 'maplewood';
+  // 2026-06-04 — Echo Hills, Hemet CA. Short substring "echo" is
+  // distinctive enough for the local courses we bundle.
+  if (c.includes('echo')) return 'echo-hills';
   // 2026-05-26 — Journey at Pechanga matches "pechanga", "journey",
   // or "journey at pechanga" so voice ("I'm at Pechanga", "open
   // Journey") and golfcourseapi search results both resolve.
@@ -427,12 +376,8 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   if (c.includes('rancho')) return RANCHO_CALIFORNIA_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('san jose')) return SAN_JOSE_MUNI_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('sunnyvale')) return SUNNYVALE_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('pembroke')) return PEMBROKE_PINES_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('maplewood')) return MAPLEWOOD_HOLE_IMAGES[holeNumber] ?? null;
-  // 2026-05-26 — Fix BH: "Settlers Crossing" alias for Maplewood.
-  if (c.includes('settlers crossing') || c.includes("settler's crossing")) {
-    return MAPLEWOOD_HOLE_IMAGES[holeNumber] ?? null;
-  }
+  // 2026-06-04 — Echo Hills, Hemet CA.
+  if (c.includes('echo')) return ECHO_HILLS_HOLE_IMAGES[holeNumber] ?? null;
   // 2026-05-28 — Westlake CC, Jackson NJ. Match on "westlake" — single
   // bundled Westlake property today, so the bare substring is enough.
   // Revisit if a sibling Westlake course gets bundled.
