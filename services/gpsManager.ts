@@ -87,6 +87,31 @@ type PoorSignalListener = (info: { accuracy_m: number | null; duration_ms: numbe
 const poorSignalListeners = new Set<PoorSignalListener>();
 let mode: GpsMode = 'walking';
 let lastFix: GpsFix | null = null;
+// 2026-06-04 — Hard-clear timer for lastFix. Every accepted fix arms a
+// fresh 60s timer; if no fix arrives in that window, lastFix is null'd
+// so downstream consumers (smartFinderService.getGreenYardages) fall
+// through to staticYardages() instead of computing against a stale
+// position. classifyAccuracy's 30s 'stale' label is a UI hint only —
+// this is the structural reset that prevents wrong-by-100yd silent
+// failures when GPS drops mid-round.
+const STALE_HARD_LIMIT_MS = 60_000;
+let staleHardTimer: ReturnType<typeof setTimeout> | null = null;
+function armStaleHardTimer(): void {
+  if (staleHardTimer) clearTimeout(staleHardTimer);
+  staleHardTimer = setTimeout(() => {
+    if (lastFix) {
+      console.log('[gps] lastFix hard-cleared — no fresh fix in', STALE_HARD_LIMIT_MS, 'ms');
+      lastFix = null;
+    }
+    staleHardTimer = null;
+  }, STALE_HARD_LIMIT_MS);
+}
+function clearStaleHardTimer(): void {
+  if (staleHardTimer) {
+    clearTimeout(staleHardTimer);
+    staleHardTimer = null;
+  }
+}
 // 2026-05-20 — Day 1 / Fix 4: gpsManager is the canonical owner of
 // "current position." Sim and marked-fix write paths used to live in
 // smartFinderService.ts and only updated its local cache, leaving
@@ -202,6 +227,7 @@ function processFix(raw: GpsFix): boolean {
   }
   lastFix = fix;
   lastTickAt = Date.now();
+  armStaleHardTimer();
   for (const cb of subscribers) {
     try { cb(fix); } catch (e) { ownerSentinel('gps.subscriber.fix', e); }
   }
@@ -594,6 +620,7 @@ export function stopGpsManager(): void {
   }
   subscribers.clear();
   lastFix = null;
+  clearStaleHardTimer();
   // 2026-05-20 — Day 1 / Fix 4: clear the simulator flag on
   // round-end so the next round starts with real GPS enabled by
   // default. The simulator harness is round-scoped — leaving the
