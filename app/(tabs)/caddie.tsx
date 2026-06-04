@@ -110,12 +110,6 @@ import type { RulesDecision } from '../../types/penalty';
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
-// One-shot per process: speak the Caddie-tab opening prompt the FIRST
-// time the user lands here in this app session. Skips on subsequent
-// tab-switches so the user isn't re-greeted every time they leave and
-// come back. Reset on cold launch (module-level state).
-let openingPromptSpokenThisProcess = false;
-
 export default function CaddieTab() {
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
@@ -865,198 +859,64 @@ export default function CaddieTab() {
   }, []);
 
   // ── Opening prompt ───────────────────────
-  // 2026-05-24 — Replaced the six-branch interrogative opener with a
-  // single invitational, brand-led greeting.
-  // 2026-05-25 — Tim wanted the second "Welcome to SmartPlay Caddie"
-  // gone (the greeting screen already brand-leads). New copy is a
-  // personalized time-of-day greeting + a direct "practice or play"
-  // choice. After speak() resolves we auto-listen for ~6s and route
-  // on a simple keyword match: "practice" / "swing" / "lab" →
-  // SwingLab tab; "play" / "round" / "course" → Play tab. Silence,
-  // unmatched, or capture failure = stay on Caddie tab (no harm —
-  // user can still tap any tab or the mic manually).
+  // 2026-06-03 — Clean rebuild. Linear async flow: wait for greeting
+  // to actually complete, brief pause, read settings live from store
+  // (no closure capture, hydration guaranteed by this point), speak
+  // greeting + question, listen once for routing keyword. If speak()
+  // fails silently the sequence ends — user taps mic to retry. No
+  // module-level flags, no splash lock, no setTimeout gates, no
+  // openingPromptSpokenThisProcess. Honest degradation throughout.
   useEffect(() => {
-    const name = firstName || '';
+    void runOpenerSequence();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function runOpenerSequence() {
+    await awaitGreetingComplete();
+    await new Promise<void>(res => setTimeout(res, 400));
+
+    const { voiceEnabled: liveVoiceEnabled, voiceGender: liveVoiceGender, language: liveLanguage } =
+      useSettingsStore.getState();
+    if (!liveVoiceEnabled) {
+      console.log('[caddie] opener: voiceEnabled=false — sequence ends');
+      return;
+    }
+
+    const { firstName: liveFirstName } = usePlayerProfileStore.getState();
     const hour = new Date().getHours();
     const tod =
       hour < 12 ? 'Good morning' :
       hour < 17 ? 'Good afternoon' :
       'Good evening';
-    const namePart = name ? `, ${name}` : '';
-    const greeting = `${tod}${namePart}, good to see you.`;
-    // Initial on-screen text uses the generic fallback ask; the GPS
-    // branch updates it below once the course resolves (or stays
-    // generic when no course is nearby).
-    // 2026-06-02 — Fix GO (Tim req): wording updated from "Practice or
-    // play?" → "Headed to the course or the SwingLab?" The richer
-    // phrasing matches the actual tab destinations and gives the user
-    // a clearer mental model of what each option does. Course = Play
-    // tab → start round. SwingLab = SwingLab tab → practice / cage /
-    // upload. Voice keyword router below already handles "course" /
-    // "play" / "round" + "swing" / "lab" / "practice" so the broader
-    // phrase doesn't break voice intent matching.
-    setOpeningPrompt(`${greeting} Headed to the course or the SwingLab?`);
+    const namePart = liveFirstName ? `, ${liveFirstName}` : '';
+    const greeting = `${tod}${namePart}.`;
+    const question = 'Headed to the course or the SwingLab?';
 
-    // 2026-05-26 — Fix BY: dropped the trustLevel !== 1 check from
-    // the outer gate. Both speaks below pass { userInitiated: true }
-    // so isVoiceAllowed lets them through L1 Quiet (same gating Tim
-    // wants on app launch — user just opened the app, the opener is
-    // initiated by that action). Previously this gate blocked the
-    // ENTIRE IIFE at L1 — silent app launch, no greeting, no GPS
-    // course detection, no follow-up. The cycle pill we just shipped
-    // makes L1 reachable in one tap, so hitting L1 by accident silenced
-    // the opener on the next launch. voiceEnabled (settings-level mute)
-    // is still respected — that's the canonical "I want total silence"
-    // toggle.
-    // 2026-05-26 — Fix CQ + DA: explicit gate-skip logs. Now also
-    // logs WHICH gate skipped so future "opener silent" reports
-    // pinpoint cause without code re-read.
-    console.log('[caddie] opener gate check:', {
-      alreadySpoken: openingPromptSpokenThisProcess,
-      voiceEnabled,
-      trustLevel,
-    });
-    if (openingPromptSpokenThisProcess) {
-      console.log('[caddie] opener SKIPPED: already spoken this process (tab cycle, hot reload, or duplicate mount)');
+    setOpeningPrompt(`${greeting} ${question}`);
+
+    console.log('[caddie] opener: speak#1 (greeting) start');
+    await speak(greeting, liveVoiceGender, liveLanguage, apiUrl, { userInitiated: true });
+    console.log('[caddie] opener: speak#1 resolved');
+
+    await new Promise<void>(res => setTimeout(res, 300));
+
+    console.log('[caddie] opener: speak#2 (question) start');
+    await speak(question, liveVoiceGender, liveLanguage, apiUrl, { userInitiated: true });
+    console.log('[caddie] opener: speak#2 resolved');
+
+    const utterance = await captureUtterance(10_000, apiUrl, liveLanguage);
+    if (!utterance) {
+      console.log('[caddie] opener: no utterance — sequence ends');
+      return;
     }
-    if (!openingPromptSpokenThisProcess) {
-      // 2026-06-02 — Fix GO: DO NOT set the flag here. The audit
-      // (both passes converged) found that flipping `spoken=true`
-      // BEFORE the speak attempt means any silent failure (splash
-      // lock still held, /api/voice degraded, audio session in
-      // wrong state, custom-caddie clip missing, etc.) leaves the
-      // opener permanently "spoken" with NO recovery — user sees
-      // text "Practice or play?" forever but never hears voice.
-      // The flag is now set INSIDE the IIFE, only AFTER speak#1
-      // actually returns successfully. If speak fails silently,
-      // the flag stays false and the next tab cycle / app foreground
-      // re-attempts. The tap-to-retry handler on the prompt text
-      // also provides an immediate user recovery path.
-      // 2026-06-03 — Replaced setTimeout(..., 3000) with
-      // awaitGreetingComplete() (greeting.tsx exports a promise that
-      // resolves when naturalEndRef flips true on any of its three
-      // completion paths). The 3s timer was a hopeful guess — splash
-      // audio actually runs ~4-5s, so the opener was racing splash
-      // playback. 8s safety net catches edge cases where greeting
-      // never resolves (force-quit mid-splash, skip-then-restore).
-      // Per Rule 4: the safety net names a real upstream condition
-      // ("greeting never signaled complete") — not a defensive guard.
-      void (async () => {
-        await Promise.race([
-          awaitGreetingComplete(),
-          new Promise<void>(res => setTimeout(res, 8000)),
-        ]);
-        // 2026-06-03 — Read voiceEnabled LIVE from the store, not
-        // from the closure. useEffect deps=[] freezes voiceEnabled
-        // at first render, but zustand persist hydrates AsyncStorage
-        // async — the closure can capture the default (true) before
-        // hydration, or capture stale state if the user just toggled
-        // Voice off/on in Settings. Live read AFTER awaitGreetingComplete
-        // (which is itself ~5s post-mount) guarantees the persisted +
-        // current value is what we gate on.
-        const liveVoiceEnabled = useSettingsStore.getState().voiceEnabled;
-        if (!liveVoiceEnabled) {
-          console.log('[caddie] opener SKIPPED: voiceEnabled=false (live, post-greeting)');
-          return;
-        }
-        // 2026-06-03 — Same Fix FS pattern as voiceEnabled. The closure
-        // captures voiceGender + language at FIRST RENDER (defaults
-        // 'female' / 'en' before AsyncStorage hydrates). Passing those
-        // to /api/voice can produce silent failures or wrong-voice
-        // audio. Fix FS (07513da) closed this for greeting.tsx +
-        // _layout.tsx but never gated the caddie opener — orphan path
-        // since 2026-05-28. Live reads here guarantee post-hydration
-        // values reach the speak() calls below.
-        const liveVoiceGender = useSettingsStore.getState().voiceGender;
-        const liveLanguage = useSettingsStore.getState().language;
-        try {
-          console.log('[caddie] opener IIFE start; trustLevel=', useTrustLevelStore.getState().level);
-            // 2026-05-26 — Fix AV: GPS-aware second intro. Kick off the
-            // nearest-course detection in parallel with the greeting
-            // so we don't add latency to the audible "good morning."
-            // When GPS resolves a course within 800m, the follow-up
-            // becomes "I see you're at <Palms>. Want to start a round?"
-            // — both a personalized opener AND a GPS verification
-            // point. When GPS doesn't resolve, we fall through to
-            // the generic "Practice or play?" prompt (Play tab's own
-            // GPS-nearest auto-pick is the backup verification path).
-            const coursePromise = detectNearestLocalCourse().catch(() => null);
 
-            console.log('[caddie] opener: speak#1 (greeting) start');
-            await speak(greeting, liveVoiceGender, liveLanguage, apiUrl, { userInitiated: true });
-            console.log('[caddie] opener: speak#1 (greeting) resolved');
-            // 2026-06-02 — Fix GO: mark spoken ONLY after speak#1
-            // resolves. If we got here, the speak call ran to
-            // completion (or at minimum claimed currentSpeechId and
-            // produced playback). Any earlier silent-failure path
-            // returned without reaching this line, leaving the flag
-            // false so the next caddie mount can retry.
-            openingPromptSpokenThisProcess = true;
-
-            // Cap the GPS wait at 3s past greeting completion so a
-            // stuck location read can't trap the opener.
-            const course = await Promise.race([
-              coursePromise,
-              new Promise<null>(resolve => setTimeout(() => resolve(null), 3000)),
-            ]);
-            console.log('[caddie] opener: GPS race resolved; course=', course?.spokenName ?? 'null');
-
-            // 2026-05-26 — Fix BX: dropped the prior early-return on
-            // trustLevel===1. The speak() below already passes
-            // { userInitiated: true } so isVoiceAllowed lets it through
-            // even at L1 Quiet (same gating the speak#1 above uses).
-            // The hard-coded bail was inconsistent: speak#1 played but
-            // speak#2 was silenced when both should follow the same
-            // userInitiated-bypass rule. Tim's "still not firing" report
-            // traced to this gate when his stored trustLevel resolved
-            // to 1 mid-launch — first opener spoke, second never did.
-
-            // 2026-06-02 — Fix GO (Tim req): match the new opener
-            // wording — when no course detected, ask "course or
-            // SwingLab" instead of "practice or play".
-            const followUp = course
-              ? `I see you're at ${course.spokenName}. Want to start a round?`
-              : 'Headed to the course or the SwingLab?';
-            if (course) setOpeningPrompt(`${greeting} I see you're at ${course.spokenName}. Want to start a round?`);
-
-            console.log('[caddie] opener: speak#2 (followUp) start; text=', followUp);
-            await speak(followUp, liveVoiceGender, liveLanguage, apiUrl, { userInitiated: true });
-            console.log('[caddie] opener: speak#2 (followUp) resolved');
-
-            const reply = await captureUtterance(6_000, apiUrl, language);
-            if (!reply) return;
-            const r = reply.toLowerCase();
-
-            // GPS-aware branch: a confirming reply routes straight to
-            // Play (which auto-picks the GPS-nearest course — same
-            // course we detected). Negative reply falls through to
-            // the keyword router so "swing lab" / "practice" still
-            // wins from here.
-            if (course && /\b(yes|yeah|yep|sure|let'?s\s*go|start|go|ok|okay|sounds\s*good|absolutely)\b/.test(r)) {
-              router.push('/(tabs)/play' as never);
-              return;
-            }
-            if (course && /\b(no|nope|not\s*now|later|skip|nah)\b/.test(r)) {
-              // Explicit "no" — stay on Caddie tab. User can pick a
-              // tab manually or speak a different intent.
-              return;
-            }
-
-            // Keyword routing (generic ask path). Order matters:
-            // check "practice" first because "play practice" would
-            // otherwise route to play.
-            if (/\b(practice|swing\s*lab|swinglab|lab|range)\b/.test(r)) {
-              router.push('/(tabs)/swinglab' as never);
-            } else if (/\b(play|round|course|tee\s*off)\b/.test(r)) {
-              router.push('/(tabs)/play' as never);
-            }
-          } catch (e) {
-            console.log('[caddie] opening prompt + routing failed (non-fatal):', e);
-          }
-      })();
+    const lower = utterance.toLowerCase();
+    if (lower.includes('course') || lower.includes('round') || lower.includes('play')) {
+      router.push('/(tabs)/play' as never);
+    } else if (lower.includes('swing') || lower.includes('practice') || lower.includes('lab')) {
+      router.push('/(tabs)/swinglab' as never);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }
 
   // ── SmartVision ──────────────────────────
   const openSmartVision = () => {

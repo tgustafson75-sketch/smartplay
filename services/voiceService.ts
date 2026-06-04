@@ -120,7 +120,10 @@ const CAPTURE_RECORDING_OPTIONS: Audio.RecordingOptions = {
 // has spoken at least once (so we don't auto-stop on dead silence
 // before they start), end the recording early.
 const SILENCE_DB_THRESHOLD = -40;
-const SILENCE_TIMEOUT_MS = 3000;
+// 2026-06-03 — Bumped 3000 → 2500. Snappier session close while still
+// natural — 2.5s after last sound is past "thinking pause" but well
+// short of "user wandered off". All captureUtterance callers inherit.
+const SILENCE_TIMEOUT_MS = 2500;
 const SPEECH_DETECT_DB = -30; // higher bar to confirm "they spoke at least once"
 
 /**
