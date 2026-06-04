@@ -47,6 +47,28 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // 2026-06-04 — Pre-warm. Client hits this with ?mode=warmup after
+  // splash completes so the OpenAI SDK + TLS to api.openai.com are
+  // hot when the first real transcribe lands. Note: query param (not
+  // body) because this handler disables bodyParser (formidable parses
+  // multipart later). openai.audio.speech.create warms the SAME SDK
+  // HTTP layer that openai.audio.transcriptions.create uses, so this
+  // primes Whisper's connection too. Mirrors api/voice.ts shape.
+  if (req.query?.mode === 'warmup') {
+    try {
+      const mp3 = await openai.audio.speech.create({
+        model: 'gpt-4o-mini-tts',
+        voice: 'onyx',
+        input: ' ',
+      });
+      await mp3.arrayBuffer();
+      console.log('[transcribe] warmup completed (OpenAI SDK hot)');
+    } catch (e) {
+      console.log('[transcribe] warmup failed (non-fatal):', e instanceof Error ? e.message : String(e));
+    }
+    return res.status(200).json({ ok: true, mode: 'warmup' });
+  }
+
   try {
     const formidable = await import('formidable');
     const FormClass = (formidable as unknown as { default?: { IncomingForm: new (opts: object) => unknown }; IncomingForm?: new (opts: object) => unknown }).default?.IncomingForm

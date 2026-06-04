@@ -1,28 +1,43 @@
 /**
- * 2026-06-04 — Pre-warm /api/voice. Mirrors services/swingAnalysisWarmup.ts
- * (Fix EK pattern, 2026-05-27) — same shape, different endpoint.
+ * 2026-06-04 — Pre-warm the FOUR voice-pipeline Vercel functions in
+ * parallel after splash completes. Mirrors services/swingAnalysisWarmup.ts
+ * (Fix EK pattern, 2026-05-27) — same shape, four endpoints instead
+ * of one.
  *
- * Vercel serverless Lambdas pay a cold-start cost (~200-800ms) when
- * they haven't been hit recently. On cold app launch, the first user
- * tap to talk to Kevin otherwise eats that cold-start into wall-clock.
+ * On cold launch the user tap chain is:
+ *   /api/transcribe   (Whisper / Gemini fallback)
+ *   /api/voice-intent (Anthropic Haiku classifier)
+ *   /api/kevin        (Anthropic brain + OpenAI TTS)
+ *   /api/voice        (OpenAI TTS — used for some response paths)
  *
- * `prewarmVoice()` fires a tiny fire-and-forget POST to /api/voice
- * with `{ mode: 'warmup' }`. The server short-circuits in <50ms (no
- * TTS work), but the Lambda's runtime + provider SDK clients (OpenAI /
- * ElevenLabs) are now hot. By the time the user actually taps the
- * mic, the real call lands on a warm Lambda and the TTS time IS the
- * wall-clock time.
+ * Each is its own Vercel Lambda with its own cold-start (~200-800ms
+ * runtime + ~1-3s provider SDK + TLS init). Sequentially that's
+ * 8-12s of cold-start cost on the user's first tap. Warming all four
+ * in parallel after splash collapses that to a single ~3s window the
+ * user never sees — by the time they read "Press to talk to Kevin"
+ * and tap, every Lambda + every provider SDK is hot.
  *
- * Failure is silent. The warmup is opportunistic — if the network is
- * out, the warmup fails but the user's real tap will hit the same
- * network anyway and surface its own error.
+ * Each warmup is fire-and-forget with its own AbortSignal timeout.
+ * Failures are silent — the user's real tap will hit the same network
+ * anyway and surface its own error.
  *
- * Throttled so a user who launches the app repeatedly doesn't send a
- * flood of warmups. One warmup per 30s is the cap.
+ * Throttled at 30s dedupe so repeated launches don't flood.
+ *
+ * Each handler exposes a warmup short-circuit (req.body.mode === 'warmup'
+ * OR req.query.mode === 'warmup') that runs through the SDK init path
+ * with a minimal request and discards the output. Cost per warmup
+ * across all four: ~$0.0002.
  */
 
 const WARMUP_DEDUPE_MS = 30_000;
 let lastWarmupAt = 0;
+
+const WARMUP_PATHS = [
+  '/api/voice',
+  '/api/transcribe',
+  '/api/voice-intent',
+  '/api/kevin',
+] as const;
 
 export function prewarmVoice(): void {
   const now = Date.now();
@@ -32,19 +47,23 @@ export function prewarmVoice(): void {
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   if (!apiUrl) return;
 
-  // Fire and forget. Don't await; the user shouldn't be slowed by
-  // this. Failures are non-fatal — we'll just pay the cold-start on
-  // the real call later.
-  void fetch(`${apiUrl}/api/voice`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode: 'warmup' }),
-    // 3s is plenty for a warmup; if the server takes longer than that
-    // it's already past the cold-start cost we were trying to mask.
-    signal: AbortSignal.timeout(3_000),
-  }).then(() => {
-    console.log('[voiceWarmup] warmed');
-  }).catch(() => {
-    // Silent — pre-warm is opportunistic.
-  });
+  // Query param AND body both carry `mode: 'warmup'` so handlers can
+  // check either. /api/transcribe disables bodyParser (formidable
+  // parses multipart later) so the query check is required there;
+  // the others use the body check. Both present = every config works.
+  const warmup = (path: string): Promise<unknown> =>
+    fetch(`${apiUrl}${path}?mode=warmup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'warmup' }),
+      // 5s timeout — TTS+SDK init can take 2-3s cold; 5s gives
+      // headroom while still failing fast if Vercel is degraded.
+      signal: AbortSignal.timeout(5_000),
+    }).catch(() => {
+      // Silent — warmup is opportunistic.
+    });
+
+  void Promise.all(WARMUP_PATHS.map(warmup))
+    .then(() => { console.log('[voiceWarmup] all four endpoints warmed'); })
+    .catch(() => { /* Promise.all with .catch'd children won't reject — defensive */ });
 }

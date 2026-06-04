@@ -287,6 +287,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // 2026-06-04 — Pre-warm. Client hits this with { mode: 'warmup' }
+  // after splash completes so BOTH provider SDKs (Anthropic for brain,
+  // OpenAI for TTS at line 1291) and their TLS connections are hot
+  // when the first real /api/kevin call lands. Mirrors api/voice.ts
+  // pre-warm shape. ~$0.0001 per warmup (Anthropic ping + OpenAI
+  // single-space TTS). Distinct from the existing __ping__ keep-warm
+  // pattern below which only warms the Lambda runtime, not the SDKs.
+  if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
+    await Promise.allSettled([
+      anthropic.messages.create({
+        model: 'claude-haiku-4-5',
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'ping' }],
+      }),
+      openai.audio.speech.create({
+        model: 'gpt-4o-mini-tts',
+        voice: 'onyx',
+        input: ' ',
+      }).then(mp3 => mp3.arrayBuffer()),
+    ]);
+    console.log('[kevin] warmup completed (Anthropic + OpenAI SDKs hot)');
+    return res.status(200).json({ ok: true, mode: 'warmup' });
+  }
+
   try {
     const body = req.body ?? {};
 

@@ -64,7 +64,7 @@ export default async function handler(
   // connection releases back to the pool for the real speak() call.
   // Cost: ~$0.0001 per warmup (gpt-4o-mini-tts at ~$0.015/1000 chars,
   // ~5 chars including instructions overhead).
-  if (req.body?.mode === 'warmup') {
+  if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
     try {
       const mp3 = await openai.audio.speech.create({
         model: 'gpt-4o-mini-tts',

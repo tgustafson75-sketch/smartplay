@@ -455,6 +455,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // 2026-06-04 — Pre-warm. Client hits this with { mode: 'warmup' }
+  // after splash completes so the Anthropic SDK + TLS to
+  // api.anthropic.com are hot when the first real classification
+  // lands. Single 'ping' message, max_tokens:1 — minimal cost
+  // (~$0.00001 per warmup). Mirrors api/voice.ts pre-warm shape.
+  if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
+    try {
+      await anthropic.messages.create({
+        model: 'claude-haiku-4-5',
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'ping' }],
+      });
+      console.log('[voice-intent] warmup completed (Anthropic SDK hot)');
+    } catch (e) {
+      console.log('[voice-intent] warmup failed (non-fatal):', e instanceof Error ? e.message : String(e));
+    }
+    return res.status(200).json({ ok: true, mode: 'warmup' });
+  }
+
   try {
     const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as Record<string, unknown>;
     const text = String(body?.text ?? '').trim();
