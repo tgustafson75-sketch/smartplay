@@ -61,6 +61,20 @@ let state: SessionState = 'idle';
 let cancelMic: (() => void) | null = null;
 let unsubEarbud: (() => void) | null = null;
 
+// 2026-06-04 — Re-tap lock during the in-flight processing window
+// (opening → listening → thinking). Prevents currentSpeechId
+// preemption when the user double-taps during the 6-10s pipeline
+// (mic record + transcribe + intent classify + brain + TTS).
+// Cleared automatically by setSessionStateMirror when state →
+// 'responding' (Kevin starts speaking — user can interrupt) or
+// 'idle' (done / error / close). Exported getter for non-React
+// consumers; React UI should subscribe to listeningSessionStore.state
+// directly for reactive updates.
+let sessionInFlight = false;
+export function isSessionInFlight(): boolean {
+  return sessionInFlight;
+}
+
 // 2026-05-26 — Fix AP Phase 1: defensive time-gated dormancy. Safety
 // net that guarantees the listening session can't get stuck in any
 // non-idle state for more than DORMANCY_MAX_MS. Protects against:
@@ -118,6 +132,13 @@ function armDormancyTimer(forState: SessionState): void {
  */
 function setSessionStateMirror(next: SessionState): void {
   state = next;
+  // 2026-06-04 — Clear in-flight lock when the processing window
+  // ends. 'responding' = Kevin starts speaking (user can interrupt
+  // by tapping which routes through closeSession). 'idle' = the
+  // session is fully done OR an error/close path returned.
+  if (next === 'responding' || next === 'idle') {
+    sessionInFlight = false;
+  }
   armDormancyTimer(next);
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -145,7 +166,11 @@ export function getSessionState(): SessionState {
  * Toggle the listening session. Open if idle; close if any other state.
  */
 export async function toggle(): Promise<void> {
+  // 2026-06-04 — Ignore re-tap during in-flight processing window.
+  // See sessionInFlight comment above for rationale.
+  if (sessionInFlight) return;
   if (state === 'idle') {
+    sessionInFlight = true;
     await openSession();
   } else {
     closeSession();

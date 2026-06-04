@@ -84,6 +84,12 @@ export function CaddieMicBadge({
   const isThinking = listeningState === 'thinking' || listeningState === 'responding';
   const isOpening = listeningState === 'opening';
   const isActive = isListening || isThinking || isOpening;
+  // 2026-06-04 — In-flight lock window (mirrors sessionInFlight in
+  // services/listeningSession.ts). Badge dims during opening /
+  // listening / thinking; full opacity returns at 'responding'
+  // (Kevin starts speaking) or 'idle'.
+  const isInFlightLocked = listeningState === 'opening' || listeningState === 'listening' || listeningState === 'thinking';
+  const badgeOpacity = isInFlightLocked ? 0.4 : 1;
 
   const ringColor = isThinking ? '#F5A623' : isActive ? colors.accent : 'transparent';
   const micColor = isActive ? '#060f09' : '#060f09';
@@ -172,7 +178,7 @@ export function CaddieMicBadge({
     );
   }
   return (
-    <View style={{ width: ringSize, height: ringSize }}>
+    <View style={{ width: ringSize, height: ringSize, opacity: badgeOpacity }}>
       <Pressable
         onPress={handlePress}
         hitSlop={8}
