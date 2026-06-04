@@ -918,10 +918,8 @@ export default function CaddieTab() {
     });
     if (openingPromptSpokenThisProcess) {
       console.log('[caddie] opener SKIPPED: already spoken this process (tab cycle, hot reload, or duplicate mount)');
-    } else if (!voiceEnabled) {
-      console.log('[caddie] opener SKIPPED: voiceEnabled=false (mic toggle off via FAB or Settings)');
     }
-    if (!openingPromptSpokenThisProcess && voiceEnabled) {
+    if (!openingPromptSpokenThisProcess) {
       // 2026-06-02 — Fix GO: DO NOT set the flag here. The audit
       // (both passes converged) found that flipping `spoken=true`
       // BEFORE the speak attempt means any silent failure (splash
@@ -948,6 +946,19 @@ export default function CaddieTab() {
           awaitGreetingComplete(),
           new Promise<void>(res => setTimeout(res, 8000)),
         ]);
+        // 2026-06-03 — Read voiceEnabled LIVE from the store, not
+        // from the closure. useEffect deps=[] freezes voiceEnabled
+        // at first render, but zustand persist hydrates AsyncStorage
+        // async — the closure can capture the default (true) before
+        // hydration, or capture stale state if the user just toggled
+        // Voice off/on in Settings. Live read AFTER awaitGreetingComplete
+        // (which is itself ~5s post-mount) guarantees the persisted +
+        // current value is what we gate on.
+        const liveVoiceEnabled = useSettingsStore.getState().voiceEnabled;
+        if (!liveVoiceEnabled) {
+          console.log('[caddie] opener SKIPPED: voiceEnabled=false (live, post-greeting)');
+          return;
+        }
         try {
           console.log('[caddie] opener IIFE start; trustLevel=', useTrustLevelStore.getState().level);
             // 2026-05-26 — Fix AV: GPS-aware second intro. Kick off the
