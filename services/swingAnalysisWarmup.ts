@@ -39,9 +39,13 @@ export function prewarmSwingAnalysis(): void {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ mode: 'warmup' }),
-    // 3s is plenty for a warmup; if the server takes longer than that
-    // it's already past the cold-start cost we were trying to mask.
-    signal: AbortSignal.timeout(3_000),
+    // 2026-06-05 — Bumped 3s → 15s to match services/voiceWarmup.ts.
+    // The prior 3s was ABORTING truly-cold Vercel Lambdas mid-init
+    // (8-12s SDK init for Anthropic + OpenAI) before the warmup
+    // completed — the warmup was firing without actually warming.
+    // 15s lets the Lambda + SDK fully warm; cost of the extra budget
+    // is zero (warmup is fire-and-forget).
+    signal: AbortSignal.timeout(15_000),
   }).then(() => {
     console.log('[swingAnalysisWarmup] warmed');
   }).catch(() => {

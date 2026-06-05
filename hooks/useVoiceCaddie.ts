@@ -1267,13 +1267,19 @@ export const useVoiceCaddie = ({
         }, FILLER_DELAY_MS);
       }
 
-      const rawResponse = await sendToBrain(transcript);
-      // Brain arrived — cancel the pending filler so it never starts.
-      // If the filler already fired (brain took ≥400ms), this is a
-      // no-op and the existing stopSpeaking() below handles cleanup.
-      if (fillerTimer) {
-        clearTimeout(fillerTimer);
-        fillerTimer = null;
+      // 2026-06-05 — try/finally to guarantee fillerTimer cancellation
+      // even when sendToBrain throws. Previously the cancel ran only
+      // on the success path; on a brain exception the filler still
+      // fired 400ms later AFTER "Hit a snag" already played, layering
+      // an orphan "Hmm let me think..." over the error message.
+      let rawResponse: Awaited<ReturnType<typeof sendToBrain>>;
+      try {
+        rawResponse = await sendToBrain(transcript);
+      } finally {
+        if (fillerTimer) {
+          clearTimeout(fillerTimer);
+          fillerTimer = null;
+        }
       }
       const kevinResponse = {
         ...rawResponse,

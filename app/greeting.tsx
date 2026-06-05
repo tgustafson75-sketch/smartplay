@@ -49,13 +49,19 @@ import { GREETING_ASSETS } from '../services/kevinGreetingManifest';
 // own audio — no separate playLocalFile to race the screen transition.
 import { getCaddieClip, hasCaddieClip } from '../services/getCaddieClip';
 
-// 2026-06-03 — Greeting-complete signal for downstream consumers
-// (caddie opener). Resolves when ANY greeting playback path sets
+// 2026-06-03 — Greeting-complete signal exported for future consumers.
+// Resolves when ANY greeting playback path sets
 // naturalEndRef.current = true (Kevin video, non-Kevin TTS, Kevin
-// mp3). Replaces the prior hard-coded setTimeout(3000) in caddie's
-// opener IIFE with a real "greeting actually finished" signal.
-// Module-level on purpose so the promise survives greeting unmount
-// — caddie awaits it after navigating in.
+// mp3). Module-level on purpose so the promise survives greeting unmount.
+//
+// 2026-06-05 — Currently UNCONSUMED. The original caddie-opener
+// auto-speak path that awaited this was demolished after six failed
+// fix attempts and replaced with a static "Press to talk to Kevin"
+// prompt. The export is retained as a structural hook for a future
+// post-greeting handoff (avatar coaching intro, conditional opener
+// based on persona, etc.) without needing to re-add the promise
+// plumbing. If still unconsumed after the next major surface change,
+// consider deleting.
 let _greetingCompleteResolve: (() => void) | null = null;
 const _greetingCompletePromise = new Promise<void>(res => {
   _greetingCompleteResolve = res;
@@ -202,15 +208,19 @@ export default function GreetingScreen() {
   // 2026-06-04 — Fire prewarmVoice() at greeting MOUNT (not just at
   // greeting-end) so by the time the non-Kevin TTS speak() fires
   // ~4s later, every voice-pipeline endpoint has had a full warmup
-  // window. Previously warmup only fired AFTER speak completed,
-  // meaning the FIRST Serena/Harry/Tank greeting paid full cold-
-  // start cost (8-12s SDK init) and often silent-failed entirely
-  // because the request hit a Lambda mid-init. The 30s dedupe in
-  // prewarmVoice prevents double-firing with the existing
-  // post-greeting warmup.
+  // window. The 30s dedupe in prewarmVoice prevents double-firing
+  // with the existing post-greeting warmup.
+  //
+  // 2026-06-05 — Gated on settingsHydrated so the warmup pings the
+  // server with the user's REAL persona, not the default 'kevin'.
+  // Previously this fired at mount before persona had rehydrated,
+  // warming OpenAI's SDK with onyx (kevin) and leaving the actual
+  // Serena/Harry/Tank voice cold — root cause of the Harry-silent-
+  // at-launch report.
   useEffect(() => {
+    if (!settingsHydrated) return;
     prewarmVoice();
-  }, []);
+  }, [settingsHydrated]);
 
   // ── Pick greeting on mount; persist launch markers ─────────────────
   useEffect(() => {

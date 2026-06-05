@@ -1772,6 +1772,18 @@ export const useRoundStore = create<RoundState>()(
         // partialized above.
         pendingLieAnalysis: s.pendingLieAnalysis,
         selectedTee: s.selectedTee,
+        // 2026-06-05 — third audit pass: four more in-round fields
+        // that were initialized + mutated mid-round but missing from
+        // partialize, so a crash + relaunch silently lost them.
+        //   preRoundYardageSnapshot — frozen F/M/B at round start;
+        //     used by recap planned-vs-outcome comparison
+        //   userStatedYardage      — "I'm 140" voice override
+        //   currentLocationType    — tee/fairway/green tagging for shots
+        //   currentTeeBox          — tee anchor for hole-1 yardage
+        preRoundYardageSnapshot: s.preRoundYardageSnapshot,
+        userStatedYardage: s.userStatedYardage,
+        currentLocationType: s.currentLocationType,
+        currentTeeBox: s.currentTeeBox,
       }),
     },
   ),

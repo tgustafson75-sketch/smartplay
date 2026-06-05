@@ -206,6 +206,25 @@ class ShotDetector {
     if (now - this.lastShotEmitTime < this.EMIT_COOLDOWN_MS) return;
     if (this.samples.length < 3) return;
 
+    // 2026-06-05 — No-round guard. handleShotEvent (the subscriber
+    // callback that wires this to gpsManager) already gates on
+    // isRoundActive, but ingest() is a PUBLIC API also called from
+    // test harnesses, Meta-glasses pipelines, and watch-bridge
+    // ingestion paths. A phantom shot emitted while pre-round (e.g.
+    // browsing the Play tab with GPS moving) would surface a SHOT
+    // RESULT card from nowhere. Dynamic require avoids dragging
+    // roundStore into this module at boot.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const round = require('../store/roundStore') as typeof import('../store/roundStore');
+      if (!round.useRoundStore.getState().isRoundActive) return;
+    } catch (e) {
+      // If roundStore can't load (cyclical import race at boot), fail
+      // SAFE — bail rather than emit a phantom shot.
+      console.log('[shotDetection] roundStore probe failed; skipping evaluate:', e);
+      return;
+    }
+
     const latest = this.samples[this.samples.length - 1];
 
     // Suppress: user currently moving (or sustained moving in walking mode).

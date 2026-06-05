@@ -783,6 +783,23 @@ export const useCageStore = create<CageState>()(
 
       ingestUploadedSwing: ({ clipUri, club, upload, source }) => {
         const resolvedSource: SwingSource = source ?? 'uploaded_video';
+        // 2026-06-05 — Dedupe. Network glitches that retry the same
+        // upload (or rapid double-tap on the "Analyze" button) used to
+        // double-ingest, bloating the library with phantom duplicates
+        // and inflating per-session pattern counts. Stable identity
+        // pair = clipUri + upload.uploaded_at; if a session with the
+        // same pair already exists, return its id without re-adding.
+        const dedupeKey = `${clipUri}::${upload.uploaded_at}`;
+        const existing = get().sessionHistory.find(
+          s => `${s.shots[0]?.clipUri ?? ''}::${s.upload?.uploaded_at ?? 0}` === dedupeKey,
+        );
+        if (existing) {
+          cageLog('ingest-uploaded-swing', 'ok', {
+            session_id: existing.id,
+            note: 'deduped',
+          });
+          return existing.id;
+        }
         const idSuffix = resolvedSource === 'live_cage' ? '_cage' : '_upload';
         const sessionId = `${Date.now()}${idSuffix}`;
         cageLog('ingest-uploaded-swing', 'ok', {
@@ -822,6 +839,24 @@ export const useCageStore = create<CageState>()(
       },
 
       ingestLiveCageSession: ({ masterVideoPath, club, upload, shots }) => {
+        // 2026-06-05 — Dedupe. Same shape as ingestUploadedSwing.
+        // Live cage uniqueness = masterVideoPath + first shot
+        // correlationId (correlationId is per-detection-event, so
+        // same masterVideoPath + same correlationId = same session).
+        const firstCorrelationId = shots[0]?.correlationId ?? '';
+        const dedupeKey = `${masterVideoPath}::${firstCorrelationId}`;
+        const existing = get().sessionHistory.find(s => {
+          const sCorr = s.shots[0]?.correlationId ?? '';
+          const sPath = s.shots[0]?.clipUri ?? '';
+          return `${sPath}::${sCorr}` === dedupeKey;
+        });
+        if (existing) {
+          cageLog('ingest-live-cage-session', 'ok', {
+            session_id: existing.id,
+            note: 'deduped',
+          });
+          return existing.id;
+        }
         const sessionId = `${Date.now()}_cage`;
         cageLog('ingest-live-cage-session', 'ok', {
           session_id: sessionId,

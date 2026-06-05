@@ -289,6 +289,10 @@ export function setSimulatedFix(loc: { lat: number; lng: number }, accuracy_m = 
     timestamp: Date.now(),
   };
   lastTickAt = Date.now();
+  // 2026-06-05 — arm the stale-clear so a sim fix doesn't hard-clear
+  // 60s later when no real watch tick comes in. Without this, harness
+  // scenarios broke when a single sim seed sat for 60s+ between events.
+  armStaleHardTimer();
   for (const cb of subscribers) {
     try { cb(lastFix); } catch (e) { ownerSentinel('gps.subscriber.sim', e); }
   }
@@ -299,6 +303,7 @@ export function clearSimulatedFix(): void {
   simulatedActive = false;
   lastFix = null;
   smoothingBuffer = [];
+  clearStaleHardTimer();
 }
 
 export function isSimulatedActive(): boolean {
@@ -331,6 +336,11 @@ export function setMarkedFix(lat: number, lng: number, accuracy_m: number | null
   };
   smoothingBuffer = [];
   lastTickAt = Date.now();
+  // 2026-06-05 — arm the stale-clear so the user-marked position
+  // doesn't hard-clear 60s later if no watch tick arrives. Mark is an
+  // explicit "trust this spot" signal — losing it silently because
+  // the watcher was slow is exactly the wrong behavior.
+  armStaleHardTimer();
   for (const cb of subscribers) {
     try { cb(lastFix); } catch (e) { ownerSentinel('gps.subscriber.mark', e); }
   }
@@ -485,6 +495,9 @@ async function handleAppStateChange(next: AppStateStatus): Promise<void> {
     };
     lastFix = fresh;
     lastTickAt = Date.now();
+    // 2026-06-05 — arm stale-clear so a foreground-resume fix doesn't
+    // hard-clear 60s later before the restarted watcher ticks.
+    armStaleHardTimer();
     for (const cb of subscribers) {
       try { cb(fresh); } catch (e) { ownerSentinel('gps.subscriber.fresh', e); }
     }
@@ -760,6 +773,10 @@ export async function getOneShotFix(opts?: { maxAgeMs?: number }): Promise<GpsFi
       timestamp: pos.timestamp,
     };
     lastFix = fix;
+    // 2026-06-05 — arm stale-clear so explicit one-shot reads (e.g.
+    // SmartFinder refreshFix) don't hard-clear 60s later before a
+    // watch tick lands.
+    armStaleHardTimer();
     return fix;
   } catch (err) {
     console.log('[gps] one-shot error:', err);
@@ -819,6 +836,10 @@ export async function recalibrateGps(): Promise<GpsFix | null> {
     };
     lastFix = fresh;
     lastMotionAt = Date.now();
+    // 2026-06-05 — arm stale-clear. Without it, a recalibrate that
+    // happens just before backgrounding could hard-clear the fresh
+    // fix while the restarted watcher is still warming up.
+    armStaleHardTimer();
     // Bump to active so the restarted watch ticks at 1Hz/BestForNavigation
     // for the 60s convergence window.
     lastActiveBumpAt = Date.now();

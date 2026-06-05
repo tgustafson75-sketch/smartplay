@@ -910,6 +910,15 @@ export const speak = async (
       // because playLocalFile already bumped currentSpeechId and
       // reclaiming would race the next speak() call.
       console.log('[voice] custom-caddie clip playback failed (turn ends; re-record to fix):', e);
+      // 2026-06-05 — Surface to /owner-logs Voice tab so beta testers
+      // can see custom-clip playback failures without ADB. Every other
+      // silent-fail path in speak() already logs here; this was the
+      // last gap.
+      logVoiceSilentFail('custom_caddie_clip_playback_failed', {
+        speechId: myId,
+        error: e instanceof Error ? e.message : String(e),
+        textHead: text.slice(0, 60),
+      });
     }
     return;
   }
