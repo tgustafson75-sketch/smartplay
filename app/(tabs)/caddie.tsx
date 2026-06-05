@@ -2053,20 +2053,22 @@ export default function CaddieTab() {
               trustLevel={trustLevel}
               customPortraitB64={activeCustomPortrait}
             />
-            {/* 2026-06-04 — Coach Mode badge overlay. Small C★ in the
-                top-right corner of Kevin's box. Tappable to open Coach
-                Mode without blocking the tap-to-talk on the rest of
-                Kevin's avatar — the parent View uses default
-                pointerEvents so the TouchableOpacity wins inside its
-                own bounding box, and Kevin's onTap wins everywhere
-                else. Renders only when Coach Mode is enabled AND a
-                roster exists (otherwise the badge is meaningless). */}
+            {/* 2026-06-04 — Coach Mode badge overlay. Anchored BOTTOM-
+                right of Kevin's box so it clears the upper-right ⋯
+                Tools pill on fold-open / wide form factors (earlier
+                top-right anchor was colliding with the tool pill on
+                Z Fold Active mode per Tim). Tappable to open Coach
+                Mode without blocking tap-to-talk on the rest of Kevin's
+                avatar — the parent View uses default pointerEvents so
+                the TouchableOpacity wins inside its own bounding box,
+                and Kevin's onTap wins everywhere else. Renders only
+                when Coach Mode is enabled AND a roster exists. */}
             {coachModeEnabled && activeFamilyCount > 0 && (
               <TouchableOpacity
                 onPress={() => router.push('/swinglab/coach-mode' as never)}
                 style={{
                   position: 'absolute',
-                  top: 12,
+                  bottom: 12,
                   right: 12,
                   width: 36,
                   height: 36,
