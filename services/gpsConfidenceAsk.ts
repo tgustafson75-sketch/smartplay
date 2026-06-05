@@ -137,6 +137,18 @@ async function maybeAskWhatHole(accuracy_m: number | null): Promise<void> {
   const currentHole = isRoundActive ? round.useRoundStore.getState().currentHole : null;
   const health = useGpsHealthStore.getState();
 
+  // Gate 0 — No active round. The whole point of this orchestrator is
+  // in-round confidence: "we don't know which hole you're on, please
+  // tell us." Outside a round (SwingLab upload, swing library, demo,
+  // settings), Kevin asking "what hole?" is nonsense — there's no hole.
+  // 2026-06-04 — Tim hit this uploading a swing in the library; the
+  // poor-signal threshold tripped and Kevin asked "what hole?" with
+  // zero round context.
+  if (!isRoundActive) {
+    console.log('[gpsConfidenceAsk] skip — no active round');
+    return;
+  }
+
   // Gate 1 — Trust level. L1 (Quiet) suppresses all non-user-initiated
   // speech via voiceService.isVoiceAllowed already; we short-circuit
   // here so we don't even consume the speak queue slot. This is the
