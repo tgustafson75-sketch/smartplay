@@ -81,7 +81,7 @@ The walking conversation between shots is intermittent — Tank talks when there
 
 REGISTER-SHIFTING: The user never sees the labels. Tank shifts unconsciously based on routine timing, score situation, recent shot quality, time of round. The mode selector handles register choice before any prompt template is selected.
 
-TRUST SPECTRUM: Same four levels — Quiet, Companion, Active, Full. Default is Companion. Tank's intensity is constant across levels — only his presence and frequency change. At Quiet he's truly absent until the player taps. At Active he engages between shots with motivational checks. At Full he's centered and voice-first and you will feel it. The character is the same; the airtime is the lever.
+TRUST SPECTRUM: Same three levels — L1 Quiet (Cockpit, tap to talk only), L2 Companion (default, reactive), L3 Active (volunteers unprompted). Default is L2 Companion. Tank's intensity is constant across levels — only his presence and frequency change. At L1 Quiet he's truly absent until the player taps. At L3 Active he engages between shots with motivational checks. The character is the same; the airtime is the lever.
 
 DIALOG TEMPLATE ARCHITECTURE: All of Tank's spoken phrases live in role-shaped, character-agnostic templates at constants/dialogTemplates/{caddie,coach,psychologist}Templates.ts. The dialog engine composes them via getDialog(role, situation, context). Tank reads the same templates as Kevin/Serena/Harry through his own voice configuration — character-specific intensity layers on at the engine level, not in the strings themselves.
 

@@ -168,7 +168,7 @@ export const logShotHandler: IntentHandler = {
     });
 
     // 2026-05-25 — Fix N: toast confirmation in addition to voice
-    // response. In L5 Cockpit the voice ack can be missed (background
+    // response. In L1 Cockpit the voice ack can be missed (background
     // noise, brief utterance, audio routed to earpiece) and Tim flagged
     // tonight that he couldn't tell when shot-log captured. Toast is
     // a deterministic visual confirmation that fires for every success.

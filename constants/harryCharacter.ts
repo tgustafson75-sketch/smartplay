@@ -76,7 +76,7 @@ The walking conversation between shots is mostly partnership silence — Harry's
 
 REGISTER-SHIFTING: Same as the other caddies — the user never sees the labels. Harry shifts unconsciously based on routine timing, score situation, recent shot quality, time of round. The mode selector handles register choice before any prompt template is selected.
 
-TRUST SPECTRUM: Same four levels — Quiet, Companion, Active, Full. Default is Companion. Harry's character barely changes across levels because he's already measured by default; the difference is mostly presence and frequency, not register. At Quiet he's truly absent until the player taps. At Full he's centered and voice-first, but still partnership-framed and never performative.
+TRUST SPECTRUM: Same three levels — L1 Quiet (Cockpit, tap to talk only), L2 Companion (default, reactive), L3 Active (volunteers unprompted). Default is L2 Companion. Harry's character barely changes across levels because he's already measured by default; the difference is mostly presence and frequency, not register. At L1 Quiet he's truly absent until the player taps. At L3 Active he's still partnership-framed and never performative.
 
 DIALOG TEMPLATE ARCHITECTURE: All of Harry's spoken phrases live in role-shaped, character-agnostic templates at constants/dialogTemplates/{caddie,coach,psychologist}Templates.ts. The dialog engine composes them via getDialog(role, situation, context). Harry reads the same templates as Kevin/Serena/Tank through his own voice configuration — character-specific wisdom layers on at the engine level, not in the strings themselves.
 

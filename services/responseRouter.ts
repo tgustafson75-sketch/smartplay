@@ -34,9 +34,9 @@ export interface RouteDecision {
 export interface RouteContext {
   /** Active surface inferred role: caddie, coach, psychologist. */
   role?: 'caddie' | 'coach' | 'psychologist';
-  /** Trust spectrum 1-5 — affects filler verbosity. L5 Cockpit inherits
-   *  L1 quiet filler treatment (minimal surface). */
-  trust_level?: 1 | 2 | 3 | 4 | 5;
+  /** Trust spectrum 1-3 — affects filler verbosity. L1 (Quiet/Cockpit)
+   *  gets minimal-surface filler treatment. */
+  trust_level?: 1 | 2 | 3;
   /** Optional intent sub-topic (query_topic for query_status, etc.). */
   topic?: string | null;
 }

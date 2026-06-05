@@ -93,8 +93,8 @@ const TEMPLATES: Record<CaddieSituation, string[]> = {
   // the variation; client interpolates {variables}. Future Tank-character
   // variants can be added alongside without rewriting this surface.
   // Three verbosity variants per Trust Spectrum level — the screen picks
-  // which key to call based on getTrustLevel(): L1 → terse, L2/L3 → standard,
-  // L4 → engaged.
+  // which key to call based on getTrustLevel(): L1 (Quiet/Cockpit) → terse,
+  // L2 (Companion) → standard, L3 (Active) → engaged.
   lie_analysis_summary: [
     "{situation} {advice}",
     "Looks like {situation} {advice}",

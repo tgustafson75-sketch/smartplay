@@ -194,7 +194,8 @@ function pickOpener(): string {
     surface === 'arena' ? 'psychologist' :
     round.isRoundActive ? 'caddie' : 'coach';
 
-  // Trust-level-aware opener selection. L1 = terse "Yeah?"; L4 = engaged.
+  // Trust-level-aware opener selection. L1 stays silent (gated below);
+  // L2 = terse "Yeah?"; L3 = engaged.
   if (trustLevel === 1) return 'Yeah?';
 
   return getDialog(role, 'earbud_open');
@@ -346,7 +347,7 @@ async function openSession() {
     const role: 'caddie' | 'coach' | 'psychologist' = round.isRoundActive ? 'caddie' : 'coach';
     const decision = routeQuery(intent.intent_type, {
       role,
-      trust_level: getTrustLevel() as 1 | 2 | 3 | 4 | 5,
+      trust_level: getTrustLevel() as 1 | 2 | 3,
       topic: intent.parameters?.query_topic ?? null,
     });
     let fillerP: Promise<void> = Promise.resolve();

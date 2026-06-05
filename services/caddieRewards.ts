@@ -5,10 +5,10 @@
  *   - Persona-aware: routes through the user's selected persona (TTS
  *     voiceGender follows persona via settingsStore). Text is neutral
  *     so any caddie can deliver it.
- *   - Trust-gated: only fires at L2 (Companion) and above. L1 (Quiet)
- *     and L5 (Cockpit minimal-surface) inherit silent treatment via
- *     voiceService.isVoiceAllowed; we also short-circuit here for
- *     cleanliness so we don't burn a queue slot.
+ *   - Trust-gated: only fires at L2 (Companion) and above. L1 (Quiet /
+ *     Cockpit, minimal-surface) stays silent via voiceService.isVoiceAllowed;
+ *     we also short-circuit here for cleanliness so we don't burn a queue
+ *     slot.
  *   - Measured-only for drives: distance_yards must be a real number AND
  *     the shot must have been logged_via (voice or tap). Synth GPS-only
  *     shots don't carry distance_yards, so they naturally don't qualify.
@@ -68,8 +68,7 @@ function pickVariant(pool: readonly string[], lastIdx: number): { text: string; 
 
 function trustAllowsReward(): boolean {
   const level = useTrustLevelStore.getState().level;
-  // L1 (Quiet) silent. L5 (Cockpit) inherits L1 minimal-surface treatment
-  // per proactiveKevin comments. L2+ allowed.
+  // L1 (Quiet / Cockpit) silent. L2 (Companion) + L3 (Active) allowed.
   return level >= 2 && level <= 3;
 }
 

@@ -24,7 +24,12 @@
  * Env (.env.local):
  *   D_ID_API_KEY=...                  (required)
  *   D_ID_KEVIN_PRESENTER_ID=...       (optional — when set, uses your custom Kevin)
- *   D_ID_KEVIN_VOICE_ID=...           (optional — ElevenLabs voice id; falls back to Microsoft Azure default)
+ *
+ * TTS provider: Microsoft Azure (en-US-GuyNeural) via D-ID. 2026-06-04 —
+ * the ElevenLabs branch was removed when ElevenLabs left the runtime
+ * voice pipeline. To restore a richer voice here, update the provider
+ * call to use the api/voice endpoint pattern (OpenAI TTS via our server)
+ * and feed the resulting audio into D-ID's source_url instead.
  *
  * Never hardcodes the API key. Reads only from process.env.
  */
@@ -86,8 +91,14 @@ async function main(): Promise<void> {
   const presenterEnvKey = `D_ID_${caddie.toUpperCase()}_PRESENTER_ID`;
   const presenterId = process.env[presenterEnvKey];
 
-  const voiceIdEnvKey = `D_ID_${caddie.toUpperCase()}_VOICE_ID`;
-  const voiceId = process.env[voiceIdEnvKey] ?? null;
+  // 2026-06-04 — ElevenLabs removed from runtime voice pipeline. The
+  // D-ID provider branch that used D_ID_*_VOICE_ID env vars to route
+  // through ElevenLabs is gone; Microsoft Azure is the only D-ID
+  // provider this script now uses. To re-enable a richer voice
+  // provider here, update the provider call below to use the api/voice
+  // endpoint pattern (OpenAI TTS via our own server) and feed the
+  // resulting audio into D-ID's audio source_url path instead of
+  // letting D-ID render the TTS itself.
 
   // D-ID auth: Basic with apiKey:''
   const auth = 'Basic ' + Buffer.from(apiKey + ':').toString('base64');
@@ -113,9 +124,7 @@ async function main(): Promise<void> {
   const scriptBlock = {
     type: 'text' as const,
     input: scriptText,
-    ...(voiceId
-      ? { provider: { type: 'elevenlabs' as const, voice_id: voiceId } }
-      : { provider: { type: 'microsoft' as const, voice_id: 'en-US-GuyNeural' } }),
+    provider: { type: 'microsoft' as const, voice_id: 'en-US-GuyNeural' },
   };
   const createBody = presenterId
     ? {

@@ -23,7 +23,7 @@ export interface AppContext {
   } | null;
   current_hole: number | null;
   recent_shots: ShotResult[];
-  trust_spectrum_level: 1 | 2 | 3 | 4 | 5;
+  trust_spectrum_level: 1 | 2 | 3;
   language?: 'en' | 'es' | 'zh';
 }
 
