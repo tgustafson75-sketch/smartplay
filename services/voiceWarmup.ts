@@ -56,9 +56,13 @@ export function prewarmVoice(): void {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: 'warmup' }),
-      // 5s timeout — TTS+SDK init can take 2-3s cold; 5s gives
-      // headroom while still failing fast if Vercel is degraded.
-      signal: AbortSignal.timeout(5_000),
+      // 2026-06-04 — Bumped 5s → 15s. The prior 5s was ABORTING truly-
+      // cold Vercel Lambdas (8-12s SDK init + TLS handshake) before
+      // the warmup completed — so the user's first tap still paid full
+      // cold-start cost. 15s lets every endpoint genuinely warm; cost
+      // of the extra budget is zero (warmup is fire-and-forget and
+      // hits aborted-anyway endpoints when Vercel is fully degraded).
+      signal: AbortSignal.timeout(15_000),
     }).catch(() => {
       // Silent — warmup is opportunistic.
     });

@@ -199,6 +199,19 @@ export default function GreetingScreen() {
     return () => { cancelled = true; };
   }, []);
 
+  // 2026-06-04 — Fire prewarmVoice() at greeting MOUNT (not just at
+  // greeting-end) so by the time the non-Kevin TTS speak() fires
+  // ~4s later, every voice-pipeline endpoint has had a full warmup
+  // window. Previously warmup only fired AFTER speak completed,
+  // meaning the FIRST Serena/Harry/Tank greeting paid full cold-
+  // start cost (8-12s SDK init) and often silent-failed entirely
+  // because the request hit a Lambda mid-init. The 30s dedupe in
+  // prewarmVoice prevents double-firing with the existing
+  // post-greeting warmup.
+  useEffect(() => {
+    prewarmVoice();
+  }, []);
+
   // ── Pick greeting on mount; persist launch markers ─────────────────
   useEffect(() => {
     let cancelled = false;
@@ -368,14 +381,21 @@ export default function GreetingScreen() {
           // TTS the caption in the active persona's voice. speak() reads
           // caddiePersonality from the store at request time and threads
           // it as `persona` in the /api/voice body — server picks the
-          // persona-keyed ElevenLabs voice ID.
+          // persona-keyed OpenAI voice ID.
           const captionForVoice = getGreetingCaption(greeting, getCaddieName(caddiePersonality));
           const speakStartedAt = Date.now();
+          // 2026-06-04 — Launch-path diagnostic. Tim reports Harry's
+          // greeting went silent on app start; if speak() silent-fails,
+          // the voice-error log already catches the underlying reason,
+          // but this line confirms the greeting path FIRED for the
+          // expected persona at the expected time.
+          console.log('[greeting] non-Kevin TTS launch path:', { persona: caddiePersonality, voiceGender, captionLen: captionForVoice.length });
           const minDisplay = new Promise<void>(resolve => setTimeout(resolve, NONVIDEO_MIN_DISPLAY_MS));
           await Promise.all([
             speak(captionForVoice, voiceGender, language as 'en' | 'es' | 'zh', apiUrl, { userInitiated: true }),
             minDisplay,
           ]);
+          console.log('[greeting] non-Kevin TTS finished:', { persona: caddiePersonality, speakDurMs: Date.now() - speakStartedAt });
           // 2026-05-25 — If speak() resolved suspiciously fast (<800ms),
           // the audio likely silently failed (voice config issue, network
           // hiccup) — add a "read floor" so the user has time to read the
