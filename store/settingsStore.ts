@@ -351,11 +351,13 @@ export const useSettingsStore = create<SettingsState>()(
       // 2026-05-30 — Fix FY: Local Mode. Defaults false (opt-in).
       // Persisted via partialize so the user's choice survives restarts.
       localMode: false,
-      // 2026-06-04 — Coach Mode toggle. Default true so existing users
-      // who already have a roster see the same surfaces; turning off
-      // hides the Coach Mode CTA + shared-group card on dashboard AND
-      // the "Coach X" pill on the Caddie tab.
-      coachModeEnabled: true,
+      // 2026-06-04 — Coach Mode toggle. Default OFF so the shared-
+      // session pill doesn't crowd the brand logo on the Caddie tab
+      // for the 95% of users who never coach anyone. Users who do
+      // coach turn it on via the people icon in the L4 green-arrow
+      // expandable row. Earlier default of `true` was rolled back the
+      // same day after Tim caught the pill overlapping the logo.
+      coachModeEnabled: false,
       caddiePersonality: 'kevin',
       caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
       caddieSuggestions: 'on' as const,

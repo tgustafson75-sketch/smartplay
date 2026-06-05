@@ -2053,6 +2053,44 @@ export default function CaddieTab() {
               trustLevel={trustLevel}
               customPortraitB64={activeCustomPortrait}
             />
+            {/* 2026-06-04 — Coach Mode badge overlay. Small C★ in the
+                top-right corner of Kevin's box. Tappable to open Coach
+                Mode without blocking the tap-to-talk on the rest of
+                Kevin's avatar — the parent View uses default
+                pointerEvents so the TouchableOpacity wins inside its
+                own bounding box, and Kevin's onTap wins everywhere
+                else. Renders only when Coach Mode is enabled AND a
+                roster exists (otherwise the badge is meaningless). */}
+            {coachModeEnabled && activeFamilyCount > 0 && (
+              <TouchableOpacity
+                onPress={() => router.push('/swinglab/coach-mode' as never)}
+                style={{
+                  position: 'absolute',
+                  top: 12,
+                  right: 12,
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  backgroundColor: 'rgba(13, 36, 24, 0.92)',
+                  borderWidth: 1.5,
+                  borderColor: '#00C896',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  shadowColor: '#00C896',
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.55,
+                  shadowRadius: 6,
+                  elevation: 6,
+                }}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                accessibilityRole="button"
+                accessibilityLabel={activeFamilyMember ? `Coach Mode — current player ${activeFamilyMember.firstName}` : `Coach Mode — ${activeFamilyCount} golfers`}
+              >
+                <Text style={{ color: '#00C896', fontSize: 14, fontWeight: '900', lineHeight: 16 }}>C</Text>
+                <Ionicons name="star" size={9} color="#F5A623" style={{ marginLeft: 1, marginTop: -6 }} />
+              </TouchableOpacity>
+            )}
           </View>
         </>
       )}
@@ -2120,36 +2158,11 @@ export default function CaddieTab() {
           <Ionicons name="chevron-back" size={24} color="#6b7d72" />
         </TouchableOpacity>
 
-        {coachModeEnabled && activeFamilyCount > 0 ? (
-          <TouchableOpacity
-            style={[
-              styles.modeBadgePlaceholder,
-              {
-                paddingHorizontal: 10,
-                minWidth: 104,
-                borderRadius: 999,
-                borderWidth: 1,
-                borderColor: activeFamilyMember ? '#00C896' : '#4b6358',
-                backgroundColor: activeFamilyMember ? 'rgba(0, 200, 150, 0.12)' : 'rgba(27, 43, 34, 0.9)',
-                alignItems: 'center',
-                justifyContent: 'center',
-              },
-            ]}
-            onPress={() => router.push('/swinglab/coach-mode' as never)}
-            accessibilityRole="button"
-            accessibilityLabel={activeFamilyMember ? `Current player ${activeFamilyMember.firstName}. Open Coach Mode.` : `${activeFamilyCount} golfers available. Open Coach Mode.`}
-          >
-            <Text style={{ color: '#d7f7ea', fontSize: 11, fontWeight: '700' }} numberOfLines={1}>
-              {activeFamilyMember ? `Coach ${activeFamilyMember.firstName}` : `${activeFamilyCount} golfers`}
-            </Text>
-            {activeFamilyMember && (
-              <Text style={{ color: '#9ddbc5', fontSize: 10, marginTop: 1 }} numberOfLines={1}>
-                {activeFamilyMember.age != null ? `${activeFamilyMember.age}y` : 'shared session'}
-                {activeFamilyMember.approximate_handicap != null ? ` · HCP ${activeFamilyMember.approximate_handicap}` : ''}
-              </Text>
-            )}
-          </TouchableOpacity>
-        ) : (
+        {/* 2026-06-04 — Coach Mode wide pill removed from the brand row
+            (was overlapping the SmartPlay logo). The Coach Mode entry
+            now lives as a small C★ badge overlaid on Kevin's avatar
+            box further down — see the L3 Kevin View. */}
+        {false ? null : (
           <View style={styles.modeBadgePlaceholder} />
         )}
 
