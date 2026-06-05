@@ -40,6 +40,7 @@ import { getCourse as getApiCourse, courseSummaryForContext } from '../services/
 import { generatePatternInsights } from '../services/patternDetection';
 import { useGhostStore } from '../store/ghostStore';
 import { useSmartFinderStore } from '../store/smartFinderStore';
+import { logVoiceError, logTranscribeError } from '../services/voiceErrorLog';
 
 // ─── CONSTANTS ────────────────────────────
 
@@ -744,6 +745,7 @@ export const useVoiceCaddie = ({
 
     } catch (err) {
       console.log('[voice] brain error:', err);
+      logVoiceError('kevin_response', err);
       try { Vibration.vibrate(120); } catch {}
       return { text: 'Hit a snag on my end. Try again.', audioBase64: null, toolAction: null };
     }
@@ -923,6 +925,7 @@ export const useVoiceCaddie = ({
       // still "user said nothing" — silent return.
       if (!transcribeRes.ok || transcribeData.error) {
         console.error('[voice] transcribe failed', transcribeRes.status, transcribeData.error);
+        logTranscribeError(transcribeRes.status, transcribeData.error ?? `HTTP ${transcribeRes.status}`);
         try { Vibration.vibrate(120); } catch {}
         // Surface visible feedback — without this, Cockpit users saw the
         // badge cycle listening → idle with no clue why nothing happened
@@ -1128,6 +1131,7 @@ export const useVoiceCaddie = ({
 
     } catch (err) {
       console.log('[voice] process error:', err);
+      logVoiceError('process_audio', err);
       // Same Cockpit-visibility rationale as the transcribe/empty paths
       // above — without a text feedback, the badge silently cycled back
       // to idle and Tim had no way to tell whether the mic missed him

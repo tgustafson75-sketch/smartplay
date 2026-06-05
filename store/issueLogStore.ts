@@ -25,14 +25,33 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 
+// 2026-06-04 — Voice diagnostics surface. Kind defaults to 'user' for
+// the original "Kevin, log this..." entries. Voice failure paths use
+// the structured kinds so /owner-logs can filter to a Voice tab and
+// show speak/transcribe/kevin errors without an ADB cable.
+export type IssueLogKind =
+  | 'user'
+  | 'voice_error'
+  | 'voice_silent_fail'
+  | 'transcribe_error';
+
 export interface IssueLogEntry {
   /** Stable id: `${timestamp}_${random}`. */
   id: string;
   /** ms-since-epoch when the user spoke / typed the entry. */
   timestamp: number;
   /** The actual note text. From voice: the user's full utterance with
-   *  the wake phrase stripped. From manual: the typed text verbatim. */
+   *  the wake phrase stripped. From manual: the typed text verbatim.
+   *  For voice events: a one-line summary built from stage+errorMessage. */
   text: string;
+  /** Entry classification. Undefined = legacy 'user' entry. */
+  kind?: IssueLogKind;
+  /** Voice events only: which stage in the pipeline failed (e.g.
+   *  'speak_preempted_after_fetch', 'transcribe_http', 'brain_catch'). */
+  stage?: string;
+  /** Voice events only: extra diagnostic fields (speechId, http status,
+   *  truncated server body, etc.). */
+  details?: Record<string, unknown>;
   /** Context snapshot at capture time. Helps later diagnosis without
    *  having to ask the user "where were you when you saw this?". */
   context: {
@@ -48,6 +67,14 @@ export interface IssueLogEntry {
 interface IssueLogState {
   entries: IssueLogEntry[];
   addEntry: (text: string, context: IssueLogEntry['context']) => void;
+  /** Structured voice-pipeline event entry. Skips the wake-phrase /
+   *  trimmed-text path; builds a one-line summary from stage + details. */
+  addVoiceEvent: (
+    kind: Exclude<IssueLogKind, 'user'>,
+    stage: string,
+    context: IssueLogEntry['context'],
+    details?: Record<string, unknown>,
+  ) => void;
   clearAll: () => void;
   remove: (id: string) => void;
 }
@@ -65,21 +92,49 @@ export const useIssueLogStore = create<IssueLogState>()(
           id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           timestamp: Date.now(),
           text: trimmed,
+          kind: 'user',
           context,
         };
         set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
         console.log('[issueLog] new entry:', trimmed.slice(0, 80));
+      },
+      addVoiceEvent: (kind, stage, context, details) => {
+        const errorMessage =
+          typeof details?.error === 'string'
+            ? details.error
+            : details?.error != null
+              ? String(details.error)
+              : null;
+        const summary = errorMessage
+          ? `${kind}: ${stage} — ${errorMessage.slice(0, 200)}`
+          : `${kind}: ${stage}`;
+        const entry: IssueLogEntry = {
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: Date.now(),
+          text: summary,
+          kind,
+          stage,
+          details,
+          context,
+        };
+        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
+        console.log('[issueLog] voice event:', summary);
       },
       clearAll: () => set({ entries: [] }),
       remove: (id) => set(s => ({ entries: s.entries.filter(e => e.id !== id) })),
     }),
     {
       name: 'issue-log-v1',
-      // 2026-05-26 Fix BZ — __BZ_baseline__ version + passthrough migrate so future
-      // version bumps don't wipe state. Replace `as never` with the real
-      // state type when adding actual migration logic.
-      version: 1,
-      migrate: (s) => s as never,
+      // 2026-06-04 — v1→v2: added kind/stage/details for voice events.
+      // Legacy entries get kind='user' on read; no destructive migration.
+      version: 2,
+      migrate: (s) => {
+        const state = s as { entries?: IssueLogEntry[] } | undefined;
+        if (state?.entries) {
+          state.entries = state.entries.map(e => (e.kind ? e : { ...e, kind: 'user' as const }));
+        }
+        return state as never;
+      },
       storage: createJSONStorage(() => getPersistStorage()),
     },
   ),

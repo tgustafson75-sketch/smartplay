@@ -19,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
-import { useIssueLogStore } from '../store/issueLogStore';
+import { useIssueLogStore, type IssueLogKind } from '../store/issueLogStore';
 import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore } from '../store/roundStore';
@@ -35,15 +35,53 @@ function formatTimestamp(ms: number): string {
   return `${date} · ${time}`;
 }
 
+function kindLabel(kind: IssueLogKind): string {
+  switch (kind) {
+    case 'voice_error':       return 'KEVIN';
+    case 'voice_silent_fail': return 'SPEAK';
+    case 'transcribe_error':  return 'TRANSCRIBE';
+    case 'user':              return 'USER';
+  }
+}
+
+function kindColor(kind: IssueLogKind): string {
+  switch (kind) {
+    case 'voice_error':       return '#ef4444'; // red — Kevin/brain failed
+    case 'voice_silent_fail': return '#f59e0b'; // amber — TTS silent fail
+    case 'transcribe_error':  return '#8b5cf6'; // purple — Whisper failed
+    case 'user':              return '#6b7280';
+  }
+}
+
+type FilterTab = 'all' | 'user' | 'voice';
+
 export default function OwnerLogsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ send?: string }>();
   const { colors } = useTheme();
-  const entries = useIssueLogStore(s => s.entries);
+  const allEntries = useIssueLogStore(s => s.entries);
   const clearAll = useIssueLogStore(s => s.clearAll);
   const remove = useIssueLogStore(s => s.remove);
   const ownerEmail = usePlayerProfileStore(s => s.email);
   const isOwner = useMemo(() => isOwnerEmail(ownerEmail), [ownerEmail]);
+
+  // 2026-06-04 — Voice tab. Voice-pipeline failures (speak silent-fails,
+  // /api/transcribe errors, /api/kevin snags) land here as structured
+  // entries so Tim + beta testers can diagnose snags without ADB.
+  const [tab, setTab] = useState<FilterTab>('all');
+  const voiceEntryCount = useMemo(
+    () => allEntries.filter(e => e.kind && e.kind !== 'user').length,
+    [allEntries],
+  );
+  const userEntryCount = useMemo(
+    () => allEntries.filter(e => !e.kind || e.kind === 'user').length,
+    [allEntries],
+  );
+  const entries = useMemo(() => {
+    if (tab === 'user') return allEntries.filter(e => !e.kind || e.kind === 'user');
+    if (tab === 'voice') return allEntries.filter(e => e.kind && e.kind !== 'user');
+    return allEntries;
+  }, [allEntries, tab]);
 
   // 2026-05-22 — Path 1 (Owner Triage). Per-entry triage hypothesis
   // from Claude Sonnet via /api/owner-triage. Bundles the entry +
@@ -66,7 +104,7 @@ export default function OwnerLogsScreen() {
   }, []);
 
   const requestTriage = async (entryId: string) => {
-    const entry = entries.find(e => e.id === entryId);
+    const entry = allEntries.find(e => e.id === entryId);
     if (!entry) return;
     setTriageLoadingId(entryId);
     try {
@@ -88,7 +126,7 @@ export default function OwnerLogsScreen() {
         currentHole: round.isRoundActive ? round.currentHole : null,
         activeCourseId: round.activeCourseId,
       };
-      const recentIssues = entries
+      const recentIssues = allEntries
         .filter(e => e.id !== entryId)
         .slice(0, 5)
         .map(e => ({ text: e.text, timestamp: e.timestamp }));
@@ -127,7 +165,7 @@ export default function OwnerLogsScreen() {
   // one entry's text + context; same recipient + subject pattern as
   // the bulk export for consistency.
   const onExportSingle = async (entryId: string) => {
-    const entry = entries.find(e => e.id === entryId);
+    const entry = allEntries.find(e => e.id === entryId);
     if (!entry) return;
     const ctx = entry.context;
     const ctxLine = `[${formatTimestamp(entry.timestamp)} · ${ctx.persona ?? '—'} · ${ctx.isRoundActive ? `hole ${ctx.currentHole ?? '?'} @ ${ctx.courseId ?? '?'}` : 'no round'}]`;
@@ -236,13 +274,44 @@ export default function OwnerLogsScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* 2026-06-04 — Three-tab filter. Voice tab surfaces structured
+          speak/transcribe/kevin failures captured by services/voiceErrorLog.
+          Counts reflect the FULL entry pool so the user can see at a
+          glance which side is generating noise. */}
+      <View style={styles.tabsRow}>
+        {([
+          { id: 'all' as const,   label: 'All',    count: allEntries.length },
+          { id: 'user' as const,  label: 'Issues', count: userEntryCount },
+          { id: 'voice' as const, label: 'Voice',  count: voiceEntryCount },
+        ]).map(t => {
+          const active = tab === t.id;
+          return (
+            <TouchableOpacity
+              key={t.id}
+              onPress={() => setTab(t.id)}
+              style={[
+                styles.tabBtn,
+                { borderColor: active ? colors.accent : colors.border, backgroundColor: active ? colors.accent : 'transparent' },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`${t.label} tab — ${t.count} entries`}
+            >
+              <Text style={[styles.tabText, { color: active ? colors.background : colors.text_primary }]}>
+                {t.label} · {t.count}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       {entries.length === 0 ? (
         <View style={styles.placeholderWrap}>
           <Ionicons name="chatbubble-ellipses-outline" size={40} color={colors.text_muted} />
           <Text style={[styles.placeholderTitle, { color: colors.text_primary }]}>No entries yet</Text>
           <Text style={[styles.placeholderBody, { color: colors.text_muted }]}>
-            Say &quot;Kevin, log this: &lt;the issue&gt;&quot; or &quot;report a bug: ...&quot;
-            and entries land here with context.
+            {tab === 'voice'
+              ? 'Voice failures (TTS silent fails, transcribe errors, Kevin snags) land here as they happen.'
+              : 'Say "Kevin, log this: <the issue>" or "report a bug: ..." and entries land here with context.'}
           </Text>
         </View>
       ) : (
@@ -270,7 +339,26 @@ export default function OwnerLogsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={`Issue: ${entry.text}. Long-press to delete.`}
                   >
+                    {/* Voice events get a colored kind chip so the eye
+                        can scan a long list and pick the failures out. */}
+                    {entry.kind && entry.kind !== 'user' ? (
+                      <View style={styles.kindRow}>
+                        <View style={[styles.kindChip, { backgroundColor: kindColor(entry.kind) }]}>
+                          <Text style={styles.kindChipText}>{kindLabel(entry.kind)}</Text>
+                        </View>
+                        {entry.stage ? (
+                          <Text style={[styles.stageText, { color: colors.text_primary }]}>{entry.stage}</Text>
+                        ) : null}
+                      </View>
+                    ) : null}
                     <Text style={[styles.entryText, { color: colors.text_primary }]}>{entry.text}</Text>
+                    {entry.details ? (
+                      <Text style={[styles.detailsText, { color: colors.text_muted }]} numberOfLines={4}>
+                        {Object.entries(entry.details)
+                          .map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
+                          .join(' · ')}
+                      </Text>
+                    ) : null}
                     <Text style={[styles.entryMeta, { color: colors.text_muted }]}>
                       {formatTimestamp(entry.timestamp)}
                       {entry.context.persona ? ` · ${entry.context.persona}` : ''}
@@ -421,6 +509,33 @@ const styles = StyleSheet.create({
   },
   entryText: { fontSize: 14, lineHeight: 19, fontWeight: '600' },
   entryMeta: { fontSize: 11, fontWeight: '600', letterSpacing: 0.2 },
+  tabsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    gap: 6,
+  },
+  tabBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  tabText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.3 },
+  kindRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  kindChip: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  kindChipText: { color: '#ffffff', fontSize: 9, fontWeight: '900', letterSpacing: 0.6 },
+  stageText: { fontSize: 11, fontWeight: '700', fontFamily: 'monospace' },
+  detailsText: { fontSize: 11, lineHeight: 15, fontFamily: 'monospace', marginTop: 2 },
   triageRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,6 +1,7 @@
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import { File, Paths } from 'expo-file-system';
 import { noteAudioActivity } from './audioLifecycle';
+import { logVoiceSilentFail, logVoiceError, logTranscribeError } from './voiceErrorLog';
 // 2026-05-30 — Fix FX: voice/network circuit-breaker. After 3 consecutive
 // fetch failures within 30s on any of /api/voice, /api/kevin, or
 // /api/transcribe, that endpoint is marked degraded for 60s and we
@@ -213,12 +214,21 @@ export const captureUtterance = async (
       signal: controller.signal,
     }).finally(() => clearTimeout(cancelTimer));
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // Surface the upstream failure through the same /owner-logs Voice
+      // tab as the main processAudioUri path. Without this, captureUtterance
+      // (used by follow-up listen loops + ambiguity clarifications) would
+      // silently return null and the user would see no breadcrumb.
+      const body = await res.text().catch(() => null);
+      logTranscribeError(res.status, body, { source: 'captureUtterance' });
+      return null;
+    }
     const data = await res.json() as { text?: string };
     const text = (data.text ?? '').trim();
     return text || null;
   } catch (err) {
     console.log('[voice] captureUtterance error:', err);
+    logVoiceError('capture_utterance', err);
     if (recording) {
       try { await recording.stopAndUnloadAsync(); } catch { /* ignore */ }
     }
@@ -896,6 +906,7 @@ export const speak = async (
     // exactly which generation got bumped — diagnosable in one log line.
     if (myId !== currentSpeechId) {
       console.log('[voice] speak preempted after fetch — myId=', myId, 'currentSpeechId=', currentSpeechId, 'text=', text.slice(0, 60));
+      logVoiceSilentFail('speak_preempted_after_fetch', { speechId: myId, currentSpeechId, textHead: text.slice(0, 60) });
       notifyCaption(null);
       notifySpeaking(false);
       return;
@@ -909,6 +920,7 @@ export const speak = async (
       // the status code was logged — meaningless without context.
       const errBody = await response.text().catch(() => '<unreadable>');
       console.log('[voice] speak API error:', response.status, response.statusText, '— body:', errBody.slice(0, 300));
+      logVoiceSilentFail('speak_api_error', { speechId: myId, status: response.status, error: errBody.slice(0, 300) });
       notifyCaption(null);
       notifySpeaking(false);
       return;
@@ -917,6 +929,7 @@ export const speak = async (
     const arrayBuffer = await response.arrayBuffer();
     if (myId !== currentSpeechId) {
       console.log('[voice] speak preempted after arrayBuffer — myId=', myId, 'currentSpeechId=', currentSpeechId);
+      logVoiceSilentFail('speak_preempted_after_arraybuffer', { speechId: myId, currentSpeechId });
       notifyCaption(null);
       notifySpeaking(false);
       return;
@@ -935,6 +948,7 @@ export const speak = async (
         language,
         text_head: text.slice(0, 40),
       });
+      logVoiceSilentFail('speak_small_payload', { speechId: myId, bytes: arrayBuffer.byteLength, language, textHead: text.slice(0, 40) });
       // 2026-05-27 — Fix EH: also clear the caption. Without this, the
       // text caption stayed on screen for the full TTL even though the
       // utterance silently failed — exact match for Tim's recurring
@@ -955,6 +969,7 @@ export const speak = async (
 
     if (myId !== currentSpeechId) {
       console.log('[voice] speak preempted after file-write — myId=', myId, 'currentSpeechId=', currentSpeechId);
+      logVoiceSilentFail('speak_preempted_after_file_write', { speechId: myId, currentSpeechId });
       notifyCaption(null);
       notifySpeaking(false);
       return;
@@ -995,6 +1010,7 @@ export const speak = async (
         await configureAudioForSpeech();
         if (myId !== currentSpeechId) {
           console.log('[voice] speak retry preempted before second createAsync — myId=', myId, 'currentSpeechId=', currentSpeechId);
+          logVoiceSilentFail('speak_retry_preempted', { speechId: myId, currentSpeechId });
           notifyCaption(null);
           notifySpeaking(false);
           return;
@@ -1011,6 +1027,7 @@ export const speak = async (
           'isLoaded=', loaded2, 'durationMillis=', dur2);
         if (!loaded2 || dur2 === 0) {
           console.log('[voice] speak retry STILL dead — giving up on this utterance (likely OS audio session denied playback)');
+          logVoiceSilentFail('speak_dead_load_giving_up', { speechId: myId, isLoaded: loaded2, durationMillis: dur2, bytes: arrayBuffer.byteLength, textHead: text.slice(0, 60) });
           try { await sound.unloadAsync(); } catch {}
           notifyCaption(null);
           notifySpeaking(false);
@@ -1022,6 +1039,7 @@ export const speak = async (
     // Bail if ownership was taken during createAsync.
     if (myId !== currentSpeechId) {
       console.log('[voice] speak preempted after Sound.createAsync — myId=', myId, 'currentSpeechId=', currentSpeechId);
+      logVoiceSilentFail('speak_preempted_after_createasync', { speechId: myId, currentSpeechId });
       await sound.unloadAsync().catch(() => {});
       notifyCaption(null);
       notifySpeaking(false);
@@ -1103,6 +1121,7 @@ export const speak = async (
     }
     if (!(err instanceof Error && err.name === 'AbortError')) {
       console.log('[voice] speak error:', err);
+      logVoiceSilentFail('speak_catch', { speechId: myId, error: err instanceof Error ? err.message : String(err) });
     }
   }
 });
