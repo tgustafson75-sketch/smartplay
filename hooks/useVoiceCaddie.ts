@@ -1055,13 +1055,20 @@ export const useVoiceCaddie = ({
           (result.success || result.follow_up_needed);
 
         if (isCommandHit) {
-          if (result.tool_action) onToolAction?.(result.tool_action);
+          // 2026-06-04 — Order: speak BEFORE onToolAction. Previously
+          // navigation fired synchronously and the destination screen
+          // (notably SmartFinder → CameraView) mounted + claimed the
+          // iOS audio session mid-TTS, chopping "Opening SmartFinder"
+          // into "Op—" or silencing it entirely. Awaiting speak first
+          // costs ~1.5-2s before nav for tool-action utterances; user
+          // accepted that tradeoff to fix the choppy/silent TTS.
           if (result.voice_response) {
             onResponseReceived(result.voice_response);
             recordKevinTurn(result.voice_response);
             wrappedOnVoiceStateChange('speaking');
             await speakResponse(result.voice_response);
           }
+          if (result.tool_action) onToolAction?.(result.tool_action);
           // 2026-05-25 — Fix Z: when an intent-handler's voice_response
           // is a follow-up question (ends with '?'), auto-open the mic
           // so the user doesn't have to tap again. Mirrors Fix B which

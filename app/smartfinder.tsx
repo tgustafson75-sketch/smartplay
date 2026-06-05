@@ -104,14 +104,21 @@ export default function SmartFinder() {
   useEffect(() => {
     let cancelled = false;
     const tick = async () => {
+      if (cancelled) return;
       const fix = await refreshFix();
       if (cancelled) return;
       setGps(classifyAccuracy(fix?.accuracy_m ?? null, fix?.timestamp ?? null));
       setYards(getGreenYardagesSync(currentHole));
     };
-    tick();
+    // 2026-06-04 — Defer first tick ~500ms. Voice-open path now awaits
+    // speak BEFORE navigating (useVoiceCaddie order swap), so TTS is
+    // already done by the time we mount — but the navigation animation
+    // is still in-flight for ~300ms and bumpToActive + getOneShotFix
+    // are heavy native calls that compete with the animation thread.
+    // The interval keeps the existing 3s cadence regardless.
+    const firstTickTimer = setTimeout(() => { void tick(); }, 500);
     const id = setInterval(tick, REFRESH_MS);
-    return () => { cancelled = true; clearInterval(id); };
+    return () => { cancelled = true; clearTimeout(firstTickTimer); clearInterval(id); };
   }, [currentHole]);
 
   useEffect(() => {
@@ -485,6 +492,16 @@ function CameraSmartFinder({
             zoom={zoom}
             // 2026-05-27 — Fix EV: bind capture mode + audio so the
             // underlying camera is ready for either photo or video.
+            // 2026-06-04 — IMPORTANT: captureMode MUST default to 'picture'
+            // (and only flip to 'video' via explicit user tap on the pill).
+            // expo-camera CameraView with mode='video' claims the iOS
+            // AVAudioSession recording category on mount, which preempts
+            // any in-flight TTS. mode='picture' does not. There is no
+            // `mute` prop in expo-camera v17 to override this. The
+            // voice-open path is now ordered so speak completes BEFORE
+            // navigation (useVoiceCaddie.ts), so even when captureMode
+            // is later toggled to video the TTS is already finished —
+            // but do not default-mount in video mode.
             mode={captureMode}
             videoQuality="720p"
           />
