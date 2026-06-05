@@ -112,6 +112,21 @@ const TANK_RULES: Record<string, TankRule> = {
     }
     return i18n.t('tank.flag_or_center_balanced');
   },
+
+  // 2026-06-04 — Golf Father optical-illusion chapter. When the player
+  // asks "why did my fade leak?" / "I was sure I was aimed left enough"
+  // / similar, Tank checks alignment-trust BEFORE diagnosing swing
+  // mechanics. Static line keeps the <200ms contract; deeper signal-
+  // weighted diagnosis lives in
+  // services/knowledge/golfFather/opticalIllusionFadeAlignment.ts and
+  // will plug into the brain path (cage-coach / kevin) on a follow-up.
+  swing_alignment_check: () =>
+    'Tank: Before we touch your swing — many righties get a visual illusion when they aim left for a fade. The further left the start line, the harder it is to trust it from over the ball. Most of the time, the shape was fine; the line moved on you in setup. Pick the line behind the ball, walk in, commit to it, swing. If the miss keeps showing up with the same shape, it\'s alignment, not mechanics.',
+
+  // 2026-06-04 — Companion entry for the inverse case (draw target line
+  // looking too far right). Same principle, weaker illusion.
+  swing_alignment_draw: () =>
+    'Tank: Draw setups look closer to natural — the illusion is smaller. If your draw is starting on target instead of right of it, that\'s usually mechanics or face control, not alignment. Worth checking alignment first anyway. Cheap to rule out.',
 };
 
 export const askGolfFatherHandler: IntentHandler = {
