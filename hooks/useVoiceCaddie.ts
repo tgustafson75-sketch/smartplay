@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Audio } from 'expo-av';
 import { Vibration, Alert, Linking } from 'react-native';
@@ -23,13 +23,16 @@ import { checkContent } from '../services/contentGuardrail';
 import { devLog } from '../services/devLog';
 import { isSessionInFlight } from '../services/listeningSession';
 import { voiceCommandRouter } from '../services/intents';
-import type { AppContext } from '../types/voiceIntent';
+import { openToolHandler } from '../services/intents/openToolHandler';
+import { quickRoundHandler } from '../services/intents/quickRoundHandler';
+import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import type { ToolAction } from '../app/api/kevin+api';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import { useKevinPresence } from '../contexts/KevinPresenceContext';
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { useFamilyStore } from '../store/familyStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 import { useCageStore } from '../store/cageStore';
 import { getRecentTurns, recordUserTurn, recordKevinTurn, isAwaitingFollowUp } from '../services/conversationState';
@@ -52,6 +55,8 @@ import { logVoiceError, logTranscribeError } from '../services/voiceErrorLog';
 // stop early. Pairs with the conversational-default classifier fix so
 // natural chat flows end-to-end without truncation.
 const AUTO_STOP_MS = 12000;
+const TRANSCRIBE_TIMEOUT_MS = 15000;
+const BRAIN_TIMEOUT_MS = 30000;
 
 // 2026-05-26 — Fix BA: client-side close-intent matcher for the
 // follow-up listen loop. The brain handles most "no thanks" well, but
@@ -237,6 +242,86 @@ function pathnameToSurface(pathname: string | null | undefined): string {
   return 'caddie';
 }
 
+function normalizeForMatch(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[’'".,!?]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function splitGuestNames(text: string): string[] {
+  return text
+    .split(/,|\band\b/i)
+    .map(name => name.trim())
+    .filter(name => name.length > 0)
+    .map(name => name.replace(/^(?:my|our|the)\s+/i, ''));
+}
+
+function stripLeadIn(text: string): string {
+  return text.replace(/^(?:please\s+)?(?:can you\s+|could you\s+|would you\s+|hey\s+\w+\s+|me\s+)?/i, '').trim();
+}
+
+function includesAny(text: string, phrases: string[]): boolean {
+  return phrases.some(phrase => text.includes(phrase));
+}
+
+function buildPreRoundShortcutIntent(transcript: string): { intent_type: 'open_tool' | 'quick_round'; parameters: Record<string, unknown> } | null {
+  const cleaned = normalizeForMatch(transcript);
+  if (!cleaned) return null;
+
+  const familyHomeCourse = usePlayerProfileStore.getState().homeCourse?.trim() ?? '';
+
+  const toolText = stripLeadIn(cleaned.replace(/^(?:open|show|pull up|go to|launch|bring up|take me to)\s+(?:me\s+)?/i, ''));
+  const toolMatchers: Array<{ tool_name: string; aliases: string[] }> = [
+    { tool_name: 'smartvision', aliases: ['smart vision', 'smartvision', 'vision', 'analyze the hole', 'read the hole'] },
+    { tool_name: 'smartfinder', aliases: ['smart finder', 'smartfinder', 'finder', 'rangefinder', 'course map', 'hole map', 'show me the course', 'show the course', 'the course', 'course'] },
+    { tool_name: 'swinglab', aliases: ['swing lab', 'swinglab', 'practice', 'drills', 'library', 'swing library'] },
+    { tool_name: 'scorecard', aliases: ['scorecard', 'score card', 'scores', 'show the scorecard'] },
+    { tool_name: 'dashboard', aliases: ['dashboard', 'stats', 'overview', 'home stats'] },
+    { tool_name: 'settings', aliases: ['settings', 'preferences', 'voice settings', 'audio settings'] },
+    { tool_name: 'coach_mode', aliases: ['coach mode', 'coachmode', 'coach', 'watch my student', 'record their swing'] },
+    { tool_name: 'cage_mode', aliases: ['cage mode', 'cagemode', 'cage', 'start cage session', 'start practice'] },
+    { tool_name: 'library', aliases: ['player library', 'swing library', 'library', 'show my swings', 'my swings', 'show best shots', 'show my best shots', 'best shots'] },
+    { tool_name: 'smartmotion', aliases: ['smart motion', 'smartmotion', 'record my swing', 'capture my swing', 'down the line', 'face on'] },
+    { tool_name: 'issue_log', aliases: ['issue log', 'bug log', 'log an issue', 'send issue log', 'email issue log'] },
+    { tool_name: 'tightlie', aliases: ['tightlie', 'tight lie', 'open tightlie', 'check my lie', 'what should i hit'] },
+  ];
+
+  for (const matcher of toolMatchers) {
+    if (includesAny(toolText, matcher.aliases)) {
+      const params: Record<string, unknown> = { tool_name: matcher.tool_name };
+      if (matcher.tool_name === 'smartmotion' && includesAny(toolText, ['down the line', 'face on'])) {
+        params.auto_start = true;
+        params.angle = toolText.includes('down the line') ? 'down_the_line' : 'face_on';
+      }
+      if (matcher.tool_name === 'issue_log' && includesAny(toolText, ['send', 'email', 'share', 'export'])) {
+        params.send_log = true;
+      }
+      if (matcher.tool_name === 'coach_mode') {
+        const playerMatch = transcript.match(/\b(?:coach|watch my student|watching|i'?m coaching|let's coach)\s+([A-Z][a-zA-Z'-]*)/i);
+        if (playerMatch?.[1]) params.player_name = playerMatch[1];
+      }
+      return { intent_type: 'open_tool', parameters: params };
+    }
+  }
+
+  if (includesAny(cleaned, ['quick round', 'start a round', 'start round', "let's play", 'let us play', 'play a quick round', 'start another round', 'another round', 'start a quick round'])) {
+    const holeCount = /\b9[- ]?hole\b|\blet's play 9\b|\bplay 9\b/.test(cleaned) ? 9 : 18;
+    const courseMatch = transcript.match(/\b(?:at|on|for)\s+(.+?)(?:\s+with\s+|\s+today\b|\s+now\b|\s*$)/i);
+    const courseHint = courseMatch?.[1]?.trim() || familyHomeCourse;
+    const guestMatch = transcript.match(/\bwith\s+(.+?)(?:\s+at\b|\s+on\b|\s+for\b|\s+today\b|\s+now\b|$)/i);
+    const guestNames = guestMatch?.[1] ? splitGuestNames(guestMatch[1]) : [];
+    const params: Record<string, unknown> = { hole_count: holeCount };
+    if (courseHint) params.course_hint = courseHint;
+    if (guestNames.length > 0) params.guest_names = guestNames.slice(0, 4);
+    return { intent_type: 'quick_round', parameters: params };
+  }
+
+  return null;
+}
+
 export const useVoiceCaddie = ({
   onVoiceStateChange,
   onResponseReceived,
@@ -295,7 +380,15 @@ export const useVoiceCaddie = ({
       courseHoles: s.courseHoles,
     }))
   );
+  const familyMembers = useFamilyStore(s => s.members);
+  const activeFamilyMemberId = useFamilyStore(s => s.active_member_id);
+  const activeFamilyMember = useMemo(
+    () => familyMembers.find(m => m.id === activeFamilyMemberId && !m.archived) ?? null,
+    [familyMembers, activeFamilyMemberId],
+  );
   const getCurrentPar = useRoundStore((s) => s.getCurrentPar);
+  const courseContextRef = useRef<string | null>(null);
+  const courseContextCourseIdRef = useRef<string | null>(null);
 
   const {
     voiceGender,
@@ -312,6 +405,30 @@ export const useVoiceCaddie = ({
       fillerEnabled: s.fillerEnabled,
     }))
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isRoundActive || !activeCourseId) {
+      courseContextRef.current = null;
+      courseContextCourseIdRef.current = null;
+      return;
+    }
+    if (courseContextCourseIdRef.current === activeCourseId && courseContextRef.current) {
+      return;
+    }
+    courseContextCourseIdRef.current = activeCourseId;
+    courseContextRef.current = null;
+    void (async () => {
+      try {
+        const course = await getApiCourse(activeCourseId);
+        if (cancelled || !course) return;
+        courseContextRef.current = courseSummaryForContext(course);
+      } catch (e) {
+        console.warn('[voiceCaddie] course context preload failed:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeCourseId, isRoundActive]);
 
   // Load the filler library index into memory on first mount — fast, reads
   // AsyncStorage only. Phase AB — also fire-and-forget generateLibrary so
@@ -529,19 +646,10 @@ export const useVoiceCaddie = ({
       }
       const penaltyContext = penaltyLines.length > 0 ? penaltyLines.join(' ') : null;
 
-      // Load course context for active API rounds (cache hit = fast; miss = brief network fetch)
-      let courseContext: string | null = null;
-      if (isRoundActive && activeCourseId) {
-        try {
-          const course = await getApiCourse(activeCourseId);
-          if (course) courseContext = courseSummaryForContext(course);
-        } catch (e) {
-          console.warn('[voiceCaddie] course context load failed:', e);
-        }
-      }
+      const courseContext = isRoundActive ? courseContextRef.current : null;
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 25_000);
+      const timeout = setTimeout(() => controller.abort(), BRAIN_TIMEOUT_MS);
 
       const res = await fetch(apiUrl + '/api/kevin', {
         method: 'POST',
@@ -906,7 +1014,7 @@ export const useVoiceCaddie = ({
       formData.append('language', language);
 
       const transcribeController = new AbortController();
-      const transcribeTimeout = setTimeout(() => transcribeController.abort(), 10000);
+      const transcribeTimeout = setTimeout(() => transcribeController.abort(), TRANSCRIBE_TIMEOUT_MS);
 
       const transcribeRes = await fetch(apiUrl + '/api/transcribe', {
         method: 'POST',
@@ -959,6 +1067,73 @@ export const useVoiceCaddie = ({
       // available in its context.
       recordUserTurn(transcript);
 
+      const appContext: AppContext = {
+        active_screen: pathnameToSurface(currentPathname),
+        active_round: isRoundActive
+          ? {
+              course: activeCourse,
+              mode: roundMode,
+              holesPlayed: useRoundStore.getState().getHolesPlayed(),
+              totalScore: useRoundStore.getState().getTotalScore(),
+              scoreVsPar: useRoundStore.getState().getScoreVsPar(),
+            }
+          : null,
+        current_hole: currentHole,
+        recent_shots: shots.slice(-5),
+        trust_spectrum_level: 2,
+        active_player_name: activeFamilyMember?.firstName ?? null,
+        active_player_age: activeFamilyMember?.age ?? null,
+        active_player_handicap: activeFamilyMember?.approximate_handicap ?? null,
+        active_group_size: familyMembers.filter(m => !m.archived).length,
+      };
+
+      const shortcut = buildPreRoundShortcutIntent(transcript);
+      if (shortcut) {
+        if (shortcut.intent_type === 'open_tool') {
+          const result = await openToolHandler.execute({
+            intent_type: 'open_tool',
+            raw_text: transcript,
+            parameters: shortcut.parameters,
+            confidence: 'high',
+            follow_up_question: null,
+            language,
+          } as VoiceIntent, appContext);
+          if (result.voice_response) {
+            onResponseReceived(result.voice_response);
+            recordKevinTurn(result.voice_response);
+            wrappedOnVoiceStateChange('speaking');
+            await speakResponse(result.voice_response);
+          }
+          if (result.tool_action) onToolAction?.(result.tool_action);
+          wrappedOnVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
+        }
+
+        const result = await quickRoundHandler.execute({
+          intent_type: 'quick_round',
+          raw_text: transcript,
+          parameters: shortcut.parameters,
+          confidence: 'high',
+          follow_up_question: null,
+          language,
+        } as VoiceIntent, appContext);
+        if (result.voice_response) {
+          onResponseReceived(result.voice_response);
+          recordKevinTurn(result.voice_response);
+          wrappedOnVoiceStateChange('speaking');
+          await speakResponse(result.voice_response);
+        }
+        if (result.tool_action) onToolAction?.(result.tool_action);
+        const replyEndsWithQuestion = (result.voice_response ?? '').trim().endsWith('?');
+        if (replyEndsWithQuestion && voiceEnabled) {
+          await runFollowUpListenLoop();
+        }
+        wrappedOnVoiceStateChange('idle');
+        isProcessingRef.current = false;
+        return;
+      }
+
       const bypass = checkBypasses(transcript);
 
       if (bypass.handled) {
@@ -1001,22 +1176,6 @@ export const useVoiceCaddie = ({
       // Builds a snapshot of app state and parses the transcript into a structured
       // intent. If a handler matches with sufficient confidence, we execute it and
       // skip the full brain call. Tactical / conversational queries fall through.
-      const appContext: AppContext = {
-        active_screen: pathnameToSurface(currentPathname),
-        active_round: isRoundActive
-          ? {
-              course: activeCourse,
-              mode: roundMode,
-              holesPlayed: useRoundStore.getState().getHolesPlayed(),
-              totalScore: useRoundStore.getState().getTotalScore(),
-              scoreVsPar: useRoundStore.getState().getScoreVsPar(),
-            }
-          : null,
-        current_hole: currentHole,
-        recent_shots: shots.slice(-5),
-        trust_spectrum_level: 2,
-      };
-
       // Run intent routing only when we're NOT awaiting a follow-up.
       // The follow-up case routes straight to the brain below.
       if (!skipIntentRouter) try {
@@ -1157,13 +1316,21 @@ export const useVoiceCaddie = ({
       wrappedOnVoiceStateChange('idle');
 
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err ?? '');
+      const aborted = err instanceof Error && err.name === 'AbortError'
+        || message.toLowerCase().includes('aborted');
       console.log('[voice] process error:', err);
-      logVoiceError('process_audio', err);
-      // Same Cockpit-visibility rationale as the transcribe/empty paths
-      // above — without a text feedback, the badge silently cycled back
-      // to idle and Tim had no way to tell whether the mic missed him
-      // or the pipeline threw.
-      onResponseReceived('Hit a snag on my end. Try again.');
+      if (aborted) {
+        logTranscribeError(null, message, { source: 'process_audio_abort' });
+        onResponseReceived('That took too long. Please try again.');
+      } else {
+        logVoiceError('process_audio', err);
+        // Same Cockpit-visibility rationale as the transcribe/empty paths
+        // above — without a text feedback, the badge silently cycled back
+        // to idle and Tim had no way to tell whether the mic missed him
+        // or the pipeline threw.
+        onResponseReceived('Hit a snag on my end. Try again.');
+      }
       wrappedOnVoiceStateChange('idle');
     } finally {
       isProcessingRef.current = false;

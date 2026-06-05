@@ -37,6 +37,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import ShotTimeline from '../../components/caddie/ShotTimeline';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { useFamilyStore } from '../../store/familyStore';
 // 2026-06-04 — Progress card (Points + Tier) removed from dashboard
 // alongside the Highlights Card rework. pointsStore import dropped.
 import { generateKevinRead } from '../../services/kevinReadService';
@@ -123,6 +124,16 @@ export default function Dashboard() {
       longestPutt: s.longestPutt,
       kevinRead: s.kevinRead,
     })),
+  );
+  const familyMembers = useFamilyStore(s => s.members);
+  const activeFamilyMemberId = useFamilyStore(s => s.active_member_id);
+  const activeFamilyRoster = useMemo(
+    () => familyMembers.filter(m => !m.archived),
+    [familyMembers],
+  );
+  const activeFamilyMember = useMemo(
+    () => activeFamilyRoster.find(m => m.id === activeFamilyMemberId) ?? null,
+    [activeFamilyRoster, activeFamilyMemberId],
   );
 
   // ─── Live weather (current round only — hook returns null otherwise) ──
@@ -265,6 +276,58 @@ export default function Dashboard() {
             <Ionicons name="settings-outline" size={18} color={colors.accent} />
           </TouchableOpacity>
         </View>
+
+        {activeFamilyRoster.length > 0 && (
+          <View style={[styles.sharedCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}> 
+            <View style={styles.sharedHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sharedLabel, { color: colors.text_muted }]}>SHARED GROUP</Text>
+                <Text style={[styles.sharedTitle, { color: colors.text_primary }]} numberOfLines={1}>
+                  {activeFamilyRoster.length} golfer{activeFamilyRoster.length === 1 ? '' : 's'}
+                </Text>
+                <Text style={[styles.sharedMeta, { color: colors.text_muted }]} numberOfLines={1}>
+                  {activeFamilyMember ? `Active: ${activeFamilyMember.firstName}` : 'Tap a golfer to review swings'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => router.push('/swinglab/coach-mode' as never)}
+                style={[styles.sharedAction, { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                accessibilityRole="button"
+                accessibilityLabel="Open Coach Mode"
+              >
+                <Text style={styles.sharedActionText}>Coach Mode</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sharedChips}>
+              {activeFamilyRoster.map(member => {
+                const selected = member.id === activeFamilyMemberId;
+                return (
+                  <TouchableOpacity
+                    key={member.id}
+                    onPress={() => router.push(`/swinglab/player-library/${member.id}` as never)}
+                    style={[
+                      styles.sharedChip,
+                      {
+                        backgroundColor: selected ? colors.accent_muted : colors.background,
+                        borderColor: selected ? colors.accent : colors.border,
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${member.firstName} player library`}
+                  >
+                    <Text style={[styles.sharedChipName, { color: colors.text_primary }]} numberOfLines={1}>
+                      {member.firstName}
+                    </Text>
+                    <Text style={[styles.sharedChipMeta, { color: colors.text_muted }]} numberOfLines={1}>
+                      {member.age != null ? `${member.age}y` : 'shared'}
+                      {member.approximate_handicap != null ? ` · HCP ${member.approximate_handicap}` : ''}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         {/* ─── Selfie + AI portrait — ports v3's "Try a new look" card.
              Routes to Pro's /profile/custom-caddie which handles selfie
@@ -631,6 +694,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Shared group card
+  sharedCard: {
+    marginHorizontal: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+  },
+  sharedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  sharedLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.3, marginBottom: 2 },
+  sharedTitle: { fontSize: 16, fontWeight: '800' },
+  sharedMeta: { fontSize: 12, marginTop: 2 },
+  sharedAction: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  sharedActionText: { color: '#04140c', fontSize: 12, fontWeight: '800' },
+  sharedChips: {
+    gap: 10,
+    paddingTop: 12,
+  },
+  sharedChip: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minWidth: 110,
+  },
+  sharedChipName: { fontSize: 13, fontWeight: '800' },
+  sharedChipMeta: { fontSize: 11, marginTop: 2 },
   // Selfie + AI portrait card — ported from v3.
   selfieCard: {
     marginHorizontal: 16,

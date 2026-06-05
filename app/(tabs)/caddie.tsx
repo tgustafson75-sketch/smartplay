@@ -37,6 +37,7 @@ import CockpitCaddieScreen from '../../components/caddie/CockpitCaddieScreen';
 import { DistanceCard, type FrontMiddleBack } from '../../components/caddie/cockpit/DistanceCard';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { useFamilyStore } from '../../store/familyStore';
 import { useShallow } from 'zustand/react/shallow';
 import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
 import { useRelationshipStore } from '../../store/relationshipStore';
@@ -145,6 +146,16 @@ export default function CaddieTab() {
   const avatarFrameHeight = Math.min(Math.round(W * 16 / 9), _avatarMaxH);
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+  const familyMembers = useFamilyStore(s => s.members);
+  const activeFamilyMemberId = useFamilyStore(s => s.active_member_id);
+  const activeFamilyMember = useMemo(
+    () => familyMembers.find(m => m.id === activeFamilyMemberId && !m.archived) ?? null,
+    [familyMembers, activeFamilyMemberId],
+  );
+  const activeFamilyCount = useMemo(
+    () => familyMembers.filter(m => !m.archived).length,
+    [familyMembers],
+  );
 
   // ── Stores ──────────────────────────────
   // Audit 101 / W1 — useShallow subscribes only to the listed fields with
@@ -2054,7 +2065,38 @@ export default function CaddieTab() {
           <Ionicons name="chevron-back" size={24} color="#6b7d72" />
         </TouchableOpacity>
 
-        <View style={styles.modeBadgePlaceholder} />
+        {activeFamilyCount > 0 ? (
+          <TouchableOpacity
+            style={[
+              styles.modeBadgePlaceholder,
+              {
+                paddingHorizontal: 10,
+                minWidth: 104,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: activeFamilyMember ? '#00C896' : '#4b6358',
+                backgroundColor: activeFamilyMember ? 'rgba(0, 200, 150, 0.12)' : 'rgba(27, 43, 34, 0.9)',
+                alignItems: 'center',
+                justifyContent: 'center',
+              },
+            ]}
+            onPress={() => router.push('/swinglab/coach-mode' as never)}
+            accessibilityRole="button"
+            accessibilityLabel={activeFamilyMember ? `Current player ${activeFamilyMember.firstName}. Open Coach Mode.` : `${activeFamilyCount} golfers available. Open Coach Mode.`}
+          >
+            <Text style={{ color: '#d7f7ea', fontSize: 11, fontWeight: '700' }} numberOfLines={1}>
+              {activeFamilyMember ? `Coach ${activeFamilyMember.firstName}` : `${activeFamilyCount} golfers`}
+            </Text>
+            {activeFamilyMember && (
+              <Text style={{ color: '#9ddbc5', fontSize: 10, marginTop: 1 }} numberOfLines={1}>
+                {activeFamilyMember.age != null ? `${activeFamilyMember.age}y` : 'shared session'}
+                {activeFamilyMember.approximate_handicap != null ? ` · HCP ${activeFamilyMember.approximate_handicap}` : ''}
+              </Text>
+            )}
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.modeBadgePlaceholder} />
+        )}
 
         <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: 6 }}>
           {/* 2026-05-30 — Fix FY: Local Mode indicator. Subtle leaf

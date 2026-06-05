@@ -48,12 +48,18 @@ export class VoiceCommandRouter {
 
   async dispatch(intent: VoiceIntent, context: AppContext): Promise<IntentResult> {
     if (intent.intent_type === 'unknown' || intent.confidence === 'low') {
-      logVoiceMiss({
-        transcript: intent.raw_text,
-        missType: 'classifier_unknown',
-        intent_type: null,
-        error_message: null,
-      });
+      // Conversational fallbacks are intentionally routed to Kevin's brain
+      // and should not clutter the owner's miss log. Only log the case when
+      // the classifier asked for clarification, because that is a real UX gap
+      // the owner can act on.
+      if (intent.follow_up_question) {
+        logVoiceMiss({
+          transcript: intent.raw_text,
+          missType: 'classifier_unknown',
+          intent_type: null,
+          error_message: null,
+        });
+      }
       return {
         success: false,
         voice_response: intent.follow_up_question ?? null,

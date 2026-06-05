@@ -24,6 +24,10 @@ export interface AppContext {
   current_hole: number | null;
   recent_shots: ShotResult[];
   trust_spectrum_level: 1 | 2 | 3;
+  active_player_name?: string | null;
+  active_player_age?: number | null;
+  active_player_handicap?: number | null;
+  active_group_size?: number;
   language?: 'en' | 'es' | 'zh';
 }
 
