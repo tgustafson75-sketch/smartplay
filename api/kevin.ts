@@ -16,6 +16,21 @@ import { getCaddieName, getCharacterSpec } from '../lib/persona';
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 3 });
 const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 });
 
+// 2026-06-04 — Persona → OpenAI TTS voice map. Mirrors the table in
+// api/voice.ts so the inline brain-response audio matches the standalone
+// speak() path's voice for every persona. Previous shape only branched
+// serena → nova and used onyx for everyone else, which meant Tank lost
+// his "ash" voice and Harry lost his "fable" voice on every brain reply.
+// Future drift prevention: if a fifth persona is added, update both
+// files (api/voice.ts:28 and here) — extracting to a shared module would
+// require a TS path that compiles in both the Vercel and Expo builds.
+const VOICE_BY_PERSONA: Record<string, 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer' | 'verse'> = {
+  kevin:  'onyx',
+  serena: 'nova',
+  tank:   'ash',
+  harry:  'fable',
+};
+
 const CLASSIFIER_SYSTEM = `You are a fast classifier. Given a user's question to a golf caddie, output ONLY one word: either "TACTICAL" or "CONVERSATIONAL".
 
 TACTICAL = direct golf decisions, club choice, distance/yardage questions, where-to-aim, short pre-shot questions, anything answerable in 1-2 sentences with a recommendation. Examples: "what club from 150", "where do I aim", "is this a layup", "how far to the bunker", "should I hit driver", "what's the wind doing".
@@ -299,7 +314,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }),
       openai.audio.speech.create({
         model: 'gpt-4o-mini-tts',
-        voice: 'onyx',
+        voice: VOICE_BY_PERSONA.kevin,
         input: ' ',
       }).then(mp3 => mp3.arrayBuffer()),
     ]);
@@ -1221,11 +1236,12 @@ ${onCourseContextBlock}${baseMessage}`
     if (toolAction) console.log('[kevin] tool:', toolAction.type);
 
     // 2026-06-04 — OpenAI TTS only. ElevenLabs branch removed.
-    // Persona → voice mapping: nova for Serena, onyx for the rest.
+    // Full per-persona voice map at module top (VOICE_BY_PERSONA) so
+    // Tank → ash and Harry → fable land on the brain-reply path just
+    // like they do on the standalone /api/voice path.
     const personaKey =
       typeof personaInput === 'string' ? personaInput.toLowerCase() : '';
-    const ttsVoice: 'onyx' | 'nova' =
-      personaKey === 'serena' ? 'nova' : 'onyx';
+    const ttsVoice = VOICE_BY_PERSONA[personaKey] ?? VOICE_BY_PERSONA.kevin;
     const ttsResponse = await openai.audio.speech.create({
       model: 'gpt-4o-mini-tts',
       voice: ttsVoice,

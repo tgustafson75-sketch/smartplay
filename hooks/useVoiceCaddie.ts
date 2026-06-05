@@ -1089,15 +1089,31 @@ export const useVoiceCaddie = ({
         // Fall through to brain on routing errors — never get stuck.
       }
 
-      // Fire filler clip in parallel with the brain call.
-      // playLocalFile claims the audio singleton — when speakFromBase64 / speakResponse
-      // runs below, it bumps speechId and naturally cancels any still-playing filler.
+      // 2026-06-04 — Delay-then-cancel filler. The brain often comes back
+      // in <400ms on the warm path, in which case firing a filler at all
+      // produces a "Hmm, let me think..." that overlaps Kevin's real
+      // reply and sounds choppy. Schedule the filler 400ms out; if the
+      // brain answers first, clearTimeout cancels before the filler
+      // ever plays. When the brain is genuinely slow (>400ms), the
+      // filler plays normally and the existing speechId bump (inside
+      // stopSpeaking() below) preempts it when the real reply lands.
+      const FILLER_DELAY_MS = 400;
+      let fillerTimer: ReturnType<typeof setTimeout> | null = null;
       if (voiceEnabled && fillerEnabled && isLibraryGenerated()) {
-        const clip = getClipForCategory(classifyQuery(transcript));
-        if (clip) playLocalFile(clip.audio_path).catch(() => {});
+        fillerTimer = setTimeout(() => {
+          const clip = getClipForCategory(classifyQuery(transcript));
+          if (clip) playLocalFile(clip.audio_path).catch(() => {});
+        }, FILLER_DELAY_MS);
       }
 
       const rawResponse = await sendToBrain(transcript);
+      // Brain arrived — cancel the pending filler so it never starts.
+      // If the filler already fired (brain took ≥400ms), this is a
+      // no-op and the existing stopSpeaking() below handles cleanup.
+      if (fillerTimer) {
+        clearTimeout(fillerTimer);
+        fillerTimer = null;
+      }
       const kevinResponse = {
         ...rawResponse,
         ...checkContent(rawResponse.text, rawResponse.audioBase64),
