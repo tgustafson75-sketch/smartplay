@@ -78,6 +78,22 @@ export const useTrustLevelStore = create<TrustLevelState>()(
             if (currentPersona !== 'harry') {
               settingsMod.useSettingsStore.getState().setCaddiePersonality?.('harry');
             }
+            // 2026-06-04 — Route to the Caddie tab on L1 entry so the
+            // user lands on the Cockpit render immediately. The Caddie
+            // screen already early-returns into the Cockpit layout when
+            // trustLevel === 1 (see app/(tabs)/caddie.tsx — `cockpitMode`),
+            // so this hop is the only thing needed to make L1 selection
+            // from Settings or any other tab "go to Cockpit." Wrapped in
+            // its own try because the router import can throw before the
+            // navigation tree is mounted.
+            void (async () => {
+              try {
+                const { router } = await import('expo-router');
+                router.replace('/(tabs)/caddie' as never);
+              } catch (e) {
+                console.log('[trustLevel] L1 router nav skipped:', e);
+              }
+            })();
             return;
           }
           if (wasCockpit && !willBeCockpit) {
