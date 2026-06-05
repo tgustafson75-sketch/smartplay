@@ -71,6 +71,12 @@ export function GlobalToolsMenu() {
   // responding to my TV and I can't find the mute" report).
   const autoListenEnabled = useSettingsStore((s) => s.autoListenEnabled);
   const setAutoListenEnabled = useSettingsStore((s) => s.setAutoListenEnabled);
+  // 2026-06-04 — Coach Mode toggle moved into this central tool menu
+  // (was an L4 dropdown icon + an overlay badge on Kevin's box). When
+  // ON, Caddie tab + Dashboard surface the shared-session entry; when
+  // OFF, both hide regardless of roster.
+  const coachModeEnabled = useSettingsStore((s) => s.coachModeEnabled);
+  const setCoachModeEnabled = useSettingsStore((s) => s.setCoachModeEnabled);
   // Round
   const isRoundActive = useRoundStore((s) => s.isRoundActive);
   const endRound = useRoundStore((s) => s.endRound);
@@ -359,6 +365,19 @@ export function GlobalToolsMenu() {
               label="SmartFinder"
               sub="Tap-to-lock rangefinder"
               onPress={() => navOrPaywall('smartfinder', '/smartfinder')}
+              colors={colors}
+            />
+            {/* 2026-06-04 — Coach Mode toggle. Tap the row to flip the
+                setting (no nav). When ON, shared-session surfaces appear
+                on Caddie + Dashboard; when OFF, both hide. Sub-label
+                reflects current state so users see what they're flipping. */}
+            <Row
+              icon={coachModeEnabled ? 'people' : 'people-outline'}
+              label="Coach Mode"
+              sub={coachModeEnabled ? 'On — shared sessions visible' : 'Off — tap to enable shared sessions'}
+              onPress={() => {
+                setCoachModeEnabled(!coachModeEnabled);
+              }}
               colors={colors}
             />
 

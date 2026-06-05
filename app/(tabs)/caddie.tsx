@@ -2053,46 +2053,9 @@ export default function CaddieTab() {
               trustLevel={trustLevel}
               customPortraitB64={activeCustomPortrait}
             />
-            {/* 2026-06-04 — Coach Mode badge overlay. Anchored BOTTOM-
-                right of Kevin's box so it clears the upper-right ⋯
-                Tools pill on fold-open / wide form factors (earlier
-                top-right anchor was colliding with the tool pill on
-                Z Fold Active mode per Tim). Tappable to open Coach
-                Mode without blocking tap-to-talk on the rest of Kevin's
-                avatar — the parent View uses default pointerEvents so
-                the TouchableOpacity wins inside its own bounding box,
-                and Kevin's onTap wins everywhere else. Renders only
-                when Coach Mode is enabled AND a roster exists. */}
-            {coachModeEnabled && activeFamilyCount > 0 && (
-              <TouchableOpacity
-                onPress={() => router.push('/swinglab/coach-mode' as never)}
-                style={{
-                  position: 'absolute',
-                  bottom: 12,
-                  right: 12,
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  backgroundColor: 'rgba(13, 36, 24, 0.92)',
-                  borderWidth: 1.5,
-                  borderColor: '#00C896',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexDirection: 'row',
-                  shadowColor: '#00C896',
-                  shadowOffset: { width: 0, height: 0 },
-                  shadowOpacity: 0.55,
-                  shadowRadius: 6,
-                  elevation: 6,
-                }}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                accessibilityRole="button"
-                accessibilityLabel={activeFamilyMember ? `Coach Mode — current player ${activeFamilyMember.firstName}` : `Coach Mode — ${activeFamilyCount} golfers`}
-              >
-                <Text style={{ color: '#00C896', fontSize: 14, fontWeight: '900', lineHeight: 16 }}>C</Text>
-                <Ionicons name="star" size={9} color="#F5A623" style={{ marginLeft: 1, marginTop: -6 }} />
-              </TouchableOpacity>
-            )}
+            {/* 2026-06-04 — Coach Mode badge overlay removed. The
+                toggle now lives as a single entry in the central ⋯
+                Tools menu (components/tools/GlobalToolsMenu.tsx). */}
           </View>
         </>
       )}
@@ -2552,40 +2515,8 @@ export default function CaddieTab() {
                 <Ionicons name="camera" size={22} color="#00C896" />
               </TouchableOpacity>
 
-              {/* 2026-06-04 — Coach Mode toggle. When ON, the Caddie tab
-                  shows the "Coach X" pill and the Dashboard surfaces the
-                  shared-group card + Coach Mode CTA. When OFF, both
-                  surfaces hide even if the roster is non-empty. Doesn't
-                  navigate — just flips the setting. People icon = on,
-                  people-outline = off so the state is glanceable. */}
-              <TouchableOpacity
-                onPress={() => {
-                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                  setCoachModeEnabled(!coachModeEnabled);
-                  setCaddieResponse(`Coach Mode ${coachModeEnabled ? 'off' : 'on'}.`);
-                  setL4ActionsExpanded(false);
-                }}
-                style={{
-                  width: 48, height: 48, borderRadius: 24,
-                  backgroundColor: coachModeEnabled ? 'rgba(0, 200, 150, 0.18)' : 'rgba(13, 36, 24, 0.92)',
-                  borderWidth: 1.5, borderColor: coachModeEnabled ? '#00C896' : '#4b6358',
-                  alignItems: 'center', justifyContent: 'center',
-                  shadowColor: coachModeEnabled ? '#00C896' : 'transparent',
-                  shadowOffset: { width: 0, height: 0 },
-                  shadowOpacity: coachModeEnabled ? 0.55 : 0,
-                  shadowRadius: 8, elevation: coachModeEnabled ? 6 : 0,
-                }}
-                accessibilityRole="switch"
-                accessibilityState={{ checked: coachModeEnabled }}
-                accessibilityLabel={`Coach Mode is ${coachModeEnabled ? 'on' : 'off'}. Tap to ${coachModeEnabled ? 'turn off' : 'turn on'}.`}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons
-                  name={coachModeEnabled ? 'people' : 'people-outline'}
-                  size={22}
-                  color={coachModeEnabled ? '#00C896' : '#9ddbc5'}
-                />
-              </TouchableOpacity>
+              {/* 2026-06-04 — Coach Mode L4 toggle removed. Lives in
+                  the central ⋯ Tools menu instead (single source). */}
 
               {/* Phase AU — Tools (•••) removed from inside the dropdown.
                   The upper-right corner pill is the canonical Tools
