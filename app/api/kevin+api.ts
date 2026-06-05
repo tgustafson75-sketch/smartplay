@@ -145,7 +145,13 @@ export type ToolAction =
   | { type: 'log_shot'; direction?: string; contactQuality?: string; outcome?: string; feel?: string }
   | { type: 'log_emotional_state'; state: string; valence: 'positive' | 'neutral' | 'negative' }
   // Phase R — generic in-app navigation for voice handlers (swing detail, library)
-  | { type: 'open_url'; url: string };
+  | { type: 'open_url'; url: string }
+  // 2026-06-04 — Tool-handler navigation deferred to the client so the
+  // caller can await speak BEFORE the destination screen mounts. Previously
+  // openToolHandler.ts called router.push synchronously inside the handler,
+  // which raced TTS for screens that claim audio/camera resources on mount
+  // (SmartMotion quick-record, Coach Mode, cage mode, SmartFinder).
+  | { type: 'navigate'; path: string };
 
 // ── POST handler ──────────────────────────────────────────────────────────────
 

@@ -966,6 +966,15 @@ export default function CaddieTab() {
         }
         router.push('/smartfinder' as never);
         break;
+      case 'navigate':
+        // 2026-06-04 — Deferred navigation from openToolHandler. The
+        // handler used to call router.push synchronously inside its
+        // execute() body, which raced TTS for any destination that
+        // claimed audio/camera on mount (SmartMotion, Cage Mode,
+        // SmartFinder). Path is fully constructed (query params
+        // already appended) by the handler.
+        router.push(action.path as never);
+        break;
       default:
     }
     // Phase A.4: first-tool hint after first launch in first round.

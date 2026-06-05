@@ -815,7 +815,9 @@ export const useVoiceCaddie = ({
       wrappedOnVoiceStateChange('thinking');
       const reply = await sendToBrain(trimmed);
       const checked = { ...reply, ...checkContent(reply.text, reply.audioBase64) };
-      if (checked.toolAction) onToolAction?.(checked.toolAction);
+      // 2026-06-04 — Speak BEFORE navigating; see the intent-router branch
+      // for the rationale (audio-session race when destination claims mic
+      // or camera on mount).
       onResponseReceived(checked.text);
       recordKevinTurn(checked.text);
       wrappedOnVoiceStateChange('speaking');
@@ -825,6 +827,7 @@ export const useVoiceCaddie = ({
       } else {
         await speakResponse(checked.text);
       }
+      if (checked.toolAction) onToolAction?.(checked.toolAction);
       // Recurse one level if Kevin asked yet another question.
       // 2026-05-26 — Fix AP Phase 2: when continuousConversationMode
       // is ON, ALSO recurse when the reply doesn't end with `?` — but
@@ -1102,7 +1105,8 @@ export const useVoiceCaddie = ({
         ...rawResponse,
         ...checkContent(rawResponse.text, rawResponse.audioBase64),
       };
-      if (kevinResponse.toolAction) onToolAction?.(kevinResponse.toolAction);
+      // 2026-06-04 — Speak BEFORE navigating; see the intent-router branch
+      // for the rationale. onToolAction moved BELOW the speak await.
       onResponseReceived(kevinResponse.text);
       // Phase AR — record Kevin's reply so the next user follow-up has it
       // available as conversational antecedent.
@@ -1120,6 +1124,9 @@ export const useVoiceCaddie = ({
       } else {
         await speakResponse(kevinResponse.text);
       }
+      // 2026-06-04 — Navigation fires AFTER speak completes (see brain
+      // path comment above).
+      if (kevinResponse.toolAction) onToolAction?.(kevinResponse.toolAction);
 
       // 2026-05-25 — Fix B: auto-listen after Kevin asks a follow-up.
       // When Kevin's reply ends with a question, open the mic for

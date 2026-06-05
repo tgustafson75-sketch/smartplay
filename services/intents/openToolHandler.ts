@@ -369,36 +369,37 @@ export const openToolHandler: IntentHandler = {
         }
       }
 
-      try {
-        const { router } = await import('expo-router');
+      // 2026-06-04 — Build the final navigation path but DON'T call
+      // router.push here. Returning the path as a tool_action lets the
+      // caller (useVoiceCaddie) await speak BEFORE the destination screen
+      // mounts. This fixes the SmartFinder/SmartMotion/Cage Mode TTS race
+      // where the destination screen's CameraView / mic-recorder claimed
+      // the iOS audio session mid-utterance and clipped Kevin's reply.
+      let pushPath: string;
+      if (toolName === 'lie_analysis' || toolName === 'tightlie') {
         // Phase H — pass play_intent through as a query param for /lie-analysis.
         // Phase AS — TightLie alias also routes here.
-        if (toolName === 'lie_analysis' || toolName === 'tightlie') {
-          const playIntent = String(intent.parameters.play_intent ?? '').toLowerCase();
-          const path = (playIntent === 'aggressive' || playIntent === 'conservative')
-            ? `${action.path}?intent=${playIntent}`
-            : action.path;
-          router.push(path as never);
-        } else if (isIssueLog && wantsSend) {
-          // 2026-05-26 — Fix DW: ?send=1 tells owner-logs.tsx to fire
-          // the mailto export on mount. One utterance, one tap-to-send.
-          router.push(`${action.path}?send=1` as never);
-        } else if ((toolName === 'smartmotion' || toolName === 'smart_motion') && (angle || autoStart || shotType || subject)) {
-          const params: string[] = [];
-          if (angle) params.push(`angle=${angle}`);
-          if (autoStart) params.push('autoStart=1');
-          // 2026-05-25 — Fix AJ Phase 1: shotType ("chip"/"putt"/"swing")
-          // and subject (whose swing) get forwarded as URL params so
-          // quick-record can pre-fill the tag + family-member context
-          // without requiring the user to tap through the picker.
-          if (shotType) params.push(`shotType=${encodeURIComponent(shotType)}`);
-          if (subject) params.push(`subject=${encodeURIComponent(subject)}`);
-          router.push(`${action.path}?${params.join('&')}` as never);
-        } else {
-          router.push(action.path as never);
-        }
-      } catch (err) {
-        console.log('[openToolHandler] navigate failed:', err);
+        const playIntent = String(intent.parameters.play_intent ?? '').toLowerCase();
+        pushPath = (playIntent === 'aggressive' || playIntent === 'conservative')
+          ? `${action.path}?intent=${playIntent}`
+          : action.path;
+      } else if (isIssueLog && wantsSend) {
+        // 2026-05-26 — Fix DW: ?send=1 tells owner-logs.tsx to fire
+        // the mailto export on mount. One utterance, one tap-to-send.
+        pushPath = `${action.path}?send=1`;
+      } else if ((toolName === 'smartmotion' || toolName === 'smart_motion') && (angle || autoStart || shotType || subject)) {
+        const params: string[] = [];
+        if (angle) params.push(`angle=${angle}`);
+        if (autoStart) params.push('autoStart=1');
+        // 2026-05-25 — Fix AJ Phase 1: shotType ("chip"/"putt"/"swing")
+        // and subject (whose swing) get forwarded as URL params so
+        // quick-record can pre-fill the tag + family-member context
+        // without requiring the user to tap through the picker.
+        if (shotType) params.push(`shotType=${encodeURIComponent(shotType)}`);
+        if (subject) params.push(`subject=${encodeURIComponent(subject)}`);
+        pushPath = `${action.path}?${params.join('&')}`;
+      } else {
+        pushPath = action.path;
       }
 
       // 2026-05-21 — Fix B: when the voice command picked an angle,
@@ -431,6 +432,7 @@ export const openToolHandler: IntentHandler = {
         voice_response: voiceResponse,
         side_effects: sideEffects,
         follow_up_needed: false,
+        tool_action: { type: 'navigate', path: pushPath },
       };
     }
 
