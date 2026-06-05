@@ -34,7 +34,6 @@ const SYNTHETIC_GHOST: RoundRecord = {
   mode: 'free_play',
   scores: { 1: 5, 2: 4, 3: 5, 4: 4, 5: 4, 6: 6, 7: 3, 8: 5, 9: 7 },
   putts: {},
-  plans: [],
   shots: [],
 };
 
@@ -147,7 +146,6 @@ export default function GhostDebugScreen() {
         totalScore,
         scoreVsPar,
         scores,
-        plans: [],
         shots: [],
         courseHoles,
         patternInsights: ['DEBUG: synthetic ghost match data'],

@@ -1341,7 +1341,6 @@ export default function CaddieTab() {
         totalScore: total,
         scoreVsPar: vspar,
         scores: storeState.scores,
-        plans: storeState.plans,
         shots: storeState.shots,
         courseHoles: storeState.courseHoles,
         patternInsights: patternInsights.insights,
@@ -2968,38 +2967,6 @@ export default function CaddieTab() {
               <Text style={styles.sheetTitle}>
                 {'Hole ' + currentHole + (currentPar ? ' · Par ' + currentPar : '')}
               </Text>
-              {useRoundStore.getState().getPlanForHole(currentHole) && !useRoundStore.getState().getPlanForHole(currentHole)?.locked_at && (
-                <TouchableOpacity
-                  style={styles.holeViewNudge}
-                  onPress={() => {
-                    setShowShotCard(false);
-                    const hd = courseHoles.find(h => h.hole === currentHole);
-                    router.push({
-                      pathname: '/hole-view',
-                      params: {
-                        hole: String(currentHole),
-                        par: String(hd?.par ?? currentPar ?? 4),
-                        distance: String(currentYardage ?? hd?.distance ?? 150),
-                        courseName: activeCourse ?? '',
-                        courseId: useRoundStore.getState().activeCourseId ?? '',
-                        isRoundActive: String(isRoundActive),
-                        autoRunVision: 'false',
-                        teeLat: String(hd?.teeLat ?? 0),
-                        teeLng: String(hd?.teeLng ?? 0),
-                        middleLat: String(hd?.middleLat ?? 0),
-                        middleLng: String(hd?.middleLng ?? 0),
-                        front: String(hd?.front ?? 0),
-                        back: String(hd?.back ?? 0),
-                      },
-                    } as never);
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <AppIcon name="clipboard-outline" size={14} color="#00C896" />
-                    <Text style={styles.holeViewNudgeText}>Lock Plan</Text>
-                  </View>
-                </TouchableOpacity>
-              )}
             </View>
             <ScrollView
               showsVerticalScrollIndicator={false}

@@ -278,9 +278,6 @@ export default function CageDebug() {
         <TouchableOpacity style={styles.apiDebugBtn} onPress={() => router.push('/patterns-debug' as never)}>
           <Text style={styles.apiDebugBtnText}>Patterns</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.apiDebugBtn} onPress={() => router.push('/plan-debug' as never)}>
-          <Text style={styles.apiDebugBtnText}>Plans</Text>
-        </TouchableOpacity>
         <TouchableOpacity style={styles.apiDebugBtn} onPress={() => router.push('/ghost-debug' as never)}>
           <Text style={styles.apiDebugBtnText}>Ghost</Text>
         </TouchableOpacity>

@@ -112,7 +112,6 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   '/cage-debug',
   '/ghost-debug',
   '/patterns-debug',
-  '/plan-debug',
   '/smartfinder-debug',
   '/subscription-debug',
   '/voice-debug',
@@ -857,10 +856,6 @@ function AppNavigator() {
         />
         <Stack.Screen
           name="patterns-debug"
-          options={{ animation: 'slide_from_bottom', headerShown: false }}
-        />
-        <Stack.Screen
-          name="plan-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
         <Stack.Screen

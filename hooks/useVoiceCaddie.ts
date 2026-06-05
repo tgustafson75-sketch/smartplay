@@ -296,7 +296,6 @@ export const useVoiceCaddie = ({
     }))
   );
   const getCurrentPar = useRoundStore((s) => s.getCurrentPar);
-  const getPlanForHole = useRoundStore((s) => s.getPlanForHole);
 
   const {
     voiceGender,
@@ -500,7 +499,6 @@ export const useVoiceCaddie = ({
           }),
         }));
 
-      const holePlan = getPlanForHole(currentHole);
       const ghostContext = useGhostStore.getState().getSummaryText();
       const smartFinderLock = useSmartFinderStore.getState().currentLock;
       const smartFinderContext = smartFinderLock
@@ -576,7 +574,6 @@ export const useVoiceCaddie = ({
           courseContext,
           roundMode,
           patternInsights,
-          holePlan,
           ghostContext,
           smartFinderContext,
           penaltyContext,

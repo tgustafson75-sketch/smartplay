@@ -5,7 +5,8 @@ import { getPersistStorage } from '../services/ssrSafeStorage';
 // breadcrumbs ([path2:round], [audit:round-active]) stay on console.log.
 import { devLog } from '../services/devLog';
 import type { RoundMode } from '../types/patterns';
-import type { HolePlan } from '../types/plan';
+// 2026-06-04 — HolePlan removed. No pre-round authoring; recap renders
+// actual-outcome only. See types/plan.ts for the slimmed-down types.
 import type { ShotOutcome } from '../types/shot';
 import type { RulesDecision } from '../types/penalty';
 // 2026-05-22 — Static import. holeReconciliation imports useRoundStore
@@ -200,7 +201,6 @@ export interface RoundRecord {
   mode: RoundMode;
   scores: Record<number, number>;
   putts: Record<number, number>;
-  plans: HolePlan[];
   shots: ShotResult[];
   // Phase R — round memory photos captured during play, displayed in recap collage.
   round_photos?: RoundPhoto[];
@@ -228,7 +228,6 @@ interface RoundState {
   isRoundActive: boolean;
   mode: RoundMode;
   currentRoundId: string | null;
-  plans: HolePlan[];
   activeCourse: string | null;
   activeCourseId: string | null; // golfcourseapi course_id; null for local/manual rounds
   recentCourseIds: string[]; // last 5 API course IDs played
@@ -372,13 +371,6 @@ interface RoundState {
   clearPendingLieAnalysis: () => void;
   setActiveCourseId: (id: string | null) => void;
   setCurrentRoundMode: (mode: RoundMode) => void;
-  addOrUpdatePlan: (partial: {
-    hole_number: number;
-    markers: HolePlan['markers'];
-    computed_yardages: HolePlan['computed_yardages'];
-  }) => void;
-  lockPlanForHole: (holeNumber: number) => void;
-  getPlanForHole: (holeNumber: number) => HolePlan | null;
 
   /**
    * Finalize the active round and return the round_id of the just-
@@ -535,7 +527,6 @@ export const useRoundStore = create<RoundState>()(
       isRoundActive: false,
       mode: 'free_play' as RoundMode,
       currentRoundId: null,
-      plans: [],
       activeCourse: null,
       activeCourseId: null,
       recentCourseIds: [],
@@ -639,16 +630,6 @@ export const useRoundStore = create<RoundState>()(
           ? [courseId, ...prev.recentCourseIds.filter(id => id !== courseId)].slice(0, 5)
           : prev.recentCourseIds;
         const roundId = Date.now().toString();
-        // 2026-05-17 — preserve any pre-round plans the user saved for
-        // THIS course's holes. Plans for other courses are dropped at
-        // round start (they belong to a different course context). Each
-        // surviving plan gets re-keyed to the new round_id so the recap
-        // pipeline associates them with this round's shots correctly.
-        const carriedPlans = courseId
-          ? prev.plans
-              .filter(p => p.course_id === courseId)
-              .map(p => ({ ...p, round_id: roundId }))
-          : [];
         // 2026-05-24 — Freeze the bundled F/M/B yardages at round-start
         // so post-round recap can compare planned (here) vs outcome
         // (shot.end_location distance) without GPS drift contaminating
@@ -666,7 +647,6 @@ export const useRoundStore = create<RoundState>()(
           isRoundActive: true,
           mode: options.mode ?? 'free_play',
           currentRoundId: roundId,
-          plans: carriedPlans,
           activeCourse: course,
           activeCourseId: courseId,
           recentCourseIds: updatedRecent,
@@ -879,7 +859,6 @@ export const useRoundStore = create<RoundState>()(
           mode: input.mode ?? 'free_play',
           scores: { ...input.scores },
           putts: { ...input.putts },
-          plans: [],
           shots: [],
         };
         set(s => ({ roundHistory: [...s.roundHistory, record] }));
@@ -954,7 +933,6 @@ export const useRoundStore = create<RoundState>()(
           penalties: {},
           shots: [],
           holeStats: [],
-          plans: [],
           currentRoundPhotos: [],
           emotionalLog: [],
           pendingLieAnalysis: null,
@@ -986,53 +964,6 @@ export const useRoundStore = create<RoundState>()(
 
       setActiveCourseId: (id) => set({ activeCourseId: id }),
       setCurrentRoundMode: (mode) => set({ mode }),
-
-      addOrUpdatePlan: (partial) => {
-        const state = get();
-        const existing = state.plans.find(p => p.hole_number === partial.hole_number);
-        if (existing) {
-          set(s => ({
-            plans: s.plans.map(p =>
-              p.hole_number === partial.hole_number
-                ? { ...p, markers: partial.markers, computed_yardages: partial.computed_yardages }
-                : p
-            ),
-          }));
-        } else {
-          // 2026-05-17 — course_id fallback chain: active round id ->
-          // pending start course (pre-round planning) -> 'local' sentinel.
-          // Without the pending fallback, every pre-round plan got
-          // tagged 'local' and couldn't be filtered back to the right
-          // course when startRound fires.
-          const effectiveCourseId =
-            state.activeCourseId ?? state.pendingStartCourseId ?? 'local';
-          const newPlan: HolePlan = {
-            id: Date.now().toString() + '_h' + partial.hole_number,
-            round_id: state.currentRoundId ?? 'unknown',
-            course_id: effectiveCourseId,
-            hole_number: partial.hole_number,
-            player_id: 'primary',
-            created_at: Date.now(),
-            locked_at: null,
-            notes: null,
-            markers: partial.markers,
-            computed_yardages: partial.computed_yardages,
-          };
-          set(s => ({ plans: [...s.plans, newPlan] }));
-        }
-      },
-
-      lockPlanForHole: (holeNumber) =>
-        set(s => ({
-          plans: s.plans.map(p =>
-            p.hole_number === holeNumber && p.locked_at === null
-              ? { ...p, locked_at: Date.now() }
-              : p
-          ),
-        })),
-
-      getPlanForHole: (holeNumber) =>
-        get().plans.find(p => p.hole_number === holeNumber) ?? null,
 
       endRound: () => {
         const s = get();
@@ -1079,7 +1010,6 @@ export const useRoundStore = create<RoundState>()(
           mode: s.mode,
           scores: { ...s.scores },
           putts: { ...s.putts },
-          plans: [...s.plans],
           shots: [...s.shots],
           round_photos: s.currentRoundPhotos.length > 0 ? [...s.currentRoundPhotos] : undefined,
         };
@@ -1107,7 +1037,6 @@ export const useRoundStore = create<RoundState>()(
           penalties: {},
           shots: [],
           holeStats: [],
-          plans: [],
           currentRoundPhotos: [],
           emotionalLog: [],
           pendingLieAnalysis: null,
@@ -1278,7 +1207,6 @@ export const useRoundStore = create<RoundState>()(
               totalScore: record.totalScore,
               scoreVsPar: record.scoreVsPar,
               scores: record.scores,
-              plans: record.plans,
               shots: record.shots,
               courseHoles: s.courseHoles,
               patternInsights: [],
@@ -1730,7 +1658,6 @@ export const useRoundStore = create<RoundState>()(
         isRoundActive: s.isRoundActive,
         mode: s.mode,
         currentRoundId: s.currentRoundId,
-        plans: s.plans,
         activeCourse: s.activeCourse,
         activeCourseId: s.activeCourseId,
         recentCourseIds: s.recentCourseIds,

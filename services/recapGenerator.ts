@@ -1,8 +1,13 @@
-import type { HolePlan, HoleComparison, MatchedShot, RoundRecap } from '../types/plan';
+import type { HoleComparison, MatchedShot, RoundRecap } from '../types/plan';
 import type { ShotResult, CourseHole } from '../store/roundStore';
 import type { RoundMode } from '../types/patterns';
 import type { GhostMatchSnapshot } from '../types/ghost';
-import { archivePlans, saveRecap } from './planStorage';
+import { saveRecap } from './planStorage';
+
+// 2026-06-04 — HolePlan removed. Recap is actual-outcome only; no
+// planned-vs-actual comparison and no `total_planned_score`. The
+// MatchedShot label still tags each shot as tee/approach/pin by
+// sequence so the recap surface can still group shots semantically.
 
 // ─── Shot → result mapping ────────────────────────────────────────────────────
 
@@ -11,62 +16,33 @@ function shotResult(shot: ShotResult): MatchedShot['result'] {
   if (shot.direction === 'right')    return 'missed_right';
   if (shot.feel === 'fat')           return 'short';
   if (shot.feel === 'thin')          return 'long';
-  if (shot.direction === 'straight') return 'on_plan';
-  return 'off_plan';
+  if (shot.direction === 'straight') return 'on_target';
+  return 'unclassified';
 }
 
 const MARKER_ORDER: Array<MatchedShot['plan_marker']> = ['tee', 'approach', 'pin'];
 
 function buildHoleComparison(
   holeNumber: number,
-  par: number,
-  plan: HolePlan | null,
   shots: ShotResult[],
   score: number | null,
-  mode: RoundMode,
 ): HoleComparison {
-  // Match shots to plan markers by sequence
   const matched_shots: MatchedShot[] = shots.map((shot, i) => ({
     plan_marker: MARKER_ORDER[Math.min(i, MARKER_ORDER.length - 1)],
     actual_shot: shot,
-    distance_from_intended: null,
     result: shotResult(shot),
   }));
 
-  // Planned score: par for break_80/free_play/break_90, par+1 for break_100
-  const planned_score = plan
-    ? (mode === 'break_100' ? par + 1 : mode === 'break_80' ? par - 1 : par)
-    : null;
-
-  const variance = planned_score != null && score != null
-    ? score - planned_score
-    : null;
-
   return {
     hole_number: holeNumber,
-    plan,
     actual_shots: shots,
-    planned_score,
     actual_score: score,
-    variance,
     matched_shots,
     kevin_summary: null,
   };
 }
 
-// ─── Human-readable summaries for the API ────────────────────────────────────
-
-function planSummary(plan: HolePlan): string {
-  const t = plan.markers.tee;
-  const a = plan.markers.approach;
-  const p = plan.markers.pin;
-  const parts: string[] = [];
-  if (t.club_intent) parts.push(`${t.club_intent} off tee${plan.computed_yardages.from_tee_to_approach ? ' (' + plan.computed_yardages.from_tee_to_approach + 'y)' : ''}`);
-  if (a?.club_intent) parts.push(`${a.club_intent} approach${plan.computed_yardages.from_approach_to_pin ? ' (' + plan.computed_yardages.from_approach_to_pin + 'y)' : ''}`);
-  if (p?.club_intent) parts.push(`${p.club_intent} to pin`);
-  const locked = plan.locked_at ? ' (locked)' : ' (draft)';
-  return parts.length > 0 ? parts.join(', ') + locked : 'markers set' + locked;
-}
+// ─── Human-readable shot summary for the API ─────────────────────────────────
 
 function shotsSummary(shots: ShotResult[]): string {
   if (shots.length === 0) return 'no shots tracked';
@@ -95,7 +71,6 @@ export async function generateRecap(
     totalScore: number;
     scoreVsPar: number;
     scores: Record<number, number>;
-    plans: HolePlan[];
     shots: ShotResult[];
     courseHoles: CourseHole[];
     patternInsights: string[];
@@ -127,10 +102,7 @@ export async function generateRecap(
     persona?: 'kevin' | 'serena' | 'harry' | 'tank';
   },
 ): Promise<RoundRecap> {
-  const { courseName, courseId, mode, startedAt, endedAt, totalScore, scoreVsPar, scores, plans, shots, courseHoles } = round;
-
-  // Archive plans immediately
-  await archivePlans(roundId, plans);
+  const { courseName, courseId, mode, startedAt, endedAt, totalScore, scoreVsPar, scores, shots, courseHoles } = round;
 
   // Build hole comparisons for every scored hole
   const holeParsMap: Record<number, number> = {};
@@ -139,25 +111,17 @@ export async function generateRecap(
   const scoredHoles = Object.keys(scores).map(Number).sort((a, b) => a - b);
 
   const hole_comparisons: HoleComparison[] = scoredHoles.map(holeNum => {
-    const plan = plans.find(p => p.hole_number === holeNum) ?? null;
     const holeShots = shots.filter(s => s.hole === holeNum);
     const score = scores[holeNum] ?? null;
-    const par = holeParsMap[holeNum] ?? 4;
-    return buildHoleComparison(holeNum, par, plan, holeShots, score, mode);
+    return buildHoleComparison(holeNum, holeShots, score);
   });
-
-  const total_planned_score = hole_comparisons.every(h => h.planned_score != null)
-    ? hole_comparisons.reduce((acc, h) => acc + (h.planned_score ?? 0), 0)
-    : null;
 
   // Build API payload
   const holes = hole_comparisons.map(hc => ({
     hole_number: hc.hole_number,
     par: holeParsMap[hc.hole_number] ?? 4,
     score: hc.actual_score,
-    plan_summary: hc.plan ? planSummary(hc.plan) : null,
     shots_summary: hc.actual_shots.length > 0 ? shotsSummary(hc.actual_shots) : null,
-    variance: hc.variance,
   }));
 
   // Call /api/recap for Kevin summaries
@@ -224,7 +188,6 @@ export async function generateRecap(
     started_at: startedAt,
     ended_at: endedAt,
     total_score: totalScore,
-    total_planned_score,
     hole_comparisons: finalComparisons,
     overall_kevin_summary: overallSummary,
     ghost_match: round.ghostSnapshot ?? null,

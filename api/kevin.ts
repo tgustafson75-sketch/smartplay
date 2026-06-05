@@ -352,7 +352,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       courseContext = null,
       roundMode = 'free_play',
       patternInsights = null,
-      holePlan = null,
       ghostContext = null,
       smartFinderContext = null,
       penaltyContext = null,
@@ -799,32 +798,6 @@ ${insightLines}
 (shots analyzed: ${pi?.shot_count_analyzed ?? 0})`;
 })()}
 
-${(() => {
-  type HolePlanMarker = { x: number; y: number; club_intent: string | null; landmark_target?: { name: string; description: string } | null };
-  type HolePlan = {
-    hole_number?: number;
-    locked_at?: number | null;
-    markers?: { tee?: HolePlanMarker; approach?: HolePlanMarker | null; pin?: HolePlanMarker | null };
-    computed_yardages?: { from_tee_to_approach?: number | null; from_approach_to_pin?: number | null; total?: number | null };
-    notes?: string | null;
-  };
-  const hp = holePlan as HolePlan | null;
-  if (!hp) return '';
-  const t = hp.markers?.tee;
-  const a = hp.markers?.approach;
-  const p = hp.markers?.pin;
-  const parts: string[] = [];
-  const landmarkStr = (m: HolePlanMarker | null | undefined) => m?.landmark_target ? `, aim: ${m.landmark_target.name}` : '';
-  if (t?.club_intent) parts.push(`tee: ${t.club_intent}${hp.computed_yardages?.from_tee_to_approach ? ' (' + hp.computed_yardages.from_tee_to_approach + 'y to approach)' : ''}${landmarkStr(t)}`);
-  if (a?.club_intent) parts.push(`approach: ${a.club_intent}${hp.computed_yardages?.from_approach_to_pin ? ' (' + hp.computed_yardages.from_approach_to_pin + 'y to pin)' : ''}${landmarkStr(a)}`);
-  if (p?.club_intent) parts.push(`pin shot: ${p.club_intent}${landmarkStr(p)}`);
-  const status = hp.locked_at ? 'locked' : 'draft';
-  const planText = parts.length > 0 ? parts.join(', ') : 'markers set, no clubs chosen';
-  return `CURRENT HOLE PLAN (${status}): ${planText}
-Reference the plan naturally when relevant — confirm club choices, note if the player is on or off plan, adapt if conditions changed. Never read it aloud verbatim. Use it as shared context, not a script.
-`;
-})()}
-
 ${ghostContext ? `GHOST MATCH — PLAYING AGAINST PAST SELF:
 ${String(ghostContext)}
 When the player asks "how am I doing against past me?", "am I beating my last round?", "ghost status", or any variation — give a brief, vivid 1-2 sentence answer using this data. Name the margin and direction (ahead or behind). If they've just gained or lost a stroke this hole, acknowledge it. Keep it warm and honest.` : ''}
@@ -854,11 +827,8 @@ Rules:
 - Always recommend a target side or specific spot, not just a yardage number.
 - When the player has a known miss tendency, recommend targets that turn their miss into a safe miss — aim away from trouble on the miss side.
 - If no hazards data is available for the hole, give your best directional advice based on yardage and pattern context alone.
-- If a HolePlan is locked for this hole, treat the planned target as the anchor and only suggest deviations if conditions clearly warrant (wind, recent misses, pressure situation).
-- Named landmark priority: if the locked HolePlan contains a landmark_target name (e.g. "Left Bunker", "Right Palm Row"), use that name as the spatial anchor. Say "aim right of the Left Bunker" or "take dead aim on the Right Palm Row". Landmark names > hazards array > left/right/center > yardage numbers alone.
-- If a landmark is in the plan, always reference it by name in directional advice.
-- Do not invent landmark names. Use only what's in the HolePlan or the hazards array.
-- If the hazards array is empty or absent for the current hole, give your best directional advice based on yardage, mode, player tendencies, and any locked HolePlan. Recommend a target side from hole shape and player miss tendency alone ("with that right miss showing today, favor the left side off the tee"). Never invent hazards that aren't in the data.
+- Spatial anchor priority: hazards array > left/right/center descriptors > yardage numbers alone. Reference hazards by their array-provided name (e.g. "Left Bunker", "Right Palm Row"). Never invent hazard names that aren't in the data.
+- If the hazards array is empty or absent, recommend a target side from hole shape and player miss tendency alone ("with that right miss showing today, favor the left side off the tee"). Never invent hazards that aren't in the data.
 
 ON-COURSE CONVERSATION HANDLING (Phase BJ):
 

@@ -49,8 +49,8 @@ const BATTERY_TESTS = [
       player_name: 'Tim', course_name: 'Pebble Beach', mode: 'break_90',
       total_score: 92, score_vs_par: 20, holes_played: 18,
       holes: [
-        { hole_number: 7, par: 3, score: 4, plan_summary: '8-iron to center', shots_summary: 'shot 1: 8-iron thin right', variance: 1 },
-        { hole_number: 18, par: 5, score: 6, plan_summary: '3-wood, 9-iron approach', shots_summary: 'shot 1: 3-wood straight, shot 2: 9-iron left', variance: 1 },
+        { hole_number: 7, par: 3, score: 4, shots_summary: 'shot 1: 8-iron thin right' },
+        { hole_number: 18, par: 5, score: 6, shots_summary: 'shot 1: 3-wood straight, shot 2: 9-iron left' },
       ],
       pattern_insights: ['Tending right off the tee'],
     },

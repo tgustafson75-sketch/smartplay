@@ -842,7 +842,6 @@ function _startSyntheticRoundInternal(round: MockRound): string {
       penalties: {},
       shots: [],
       holeStats: [],
-      plans: [],
       currentRoundPhotos: [],
       emotionalLog: [],
       roundStartTime: Date.now(),

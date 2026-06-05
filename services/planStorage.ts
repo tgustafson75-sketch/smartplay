@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import type { HolePlan, RoundRecap } from '../types/plan';
+import type { RoundRecap } from '../types/plan';
+// 2026-06-04 — archivePlans / loadArchivedPlans removed with HolePlan.
 
 // ─── Paths ────────────────────────────────────────────────────────────────────
 
@@ -13,32 +14,6 @@ async function ensureRoundDir(roundId: string): Promise<void> {
   const dir = roundDir(roundId);
   const info = await FileSystem.getInfoAsync(dir);
   if (!info.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-}
-
-// ─── Plans archive ────────────────────────────────────────────────────────────
-
-export async function archivePlans(roundId: string, plans: HolePlan[]): Promise<void> {
-  try {
-    await ensureRoundDir(roundId);
-    await FileSystem.writeAsStringAsync(
-      roundDir(roundId) + 'plans.json',
-      JSON.stringify(plans),
-    );
-  } catch (e) {
-    console.warn('[planStorage] archivePlans failed:', e);
-  }
-}
-
-export async function loadArchivedPlans(roundId: string): Promise<HolePlan[]> {
-  try {
-    const path = roundDir(roundId) + 'plans.json';
-    const info = await FileSystem.getInfoAsync(path);
-    if (!info.exists) return [];
-    const raw = await FileSystem.readAsStringAsync(path);
-    return JSON.parse(raw) as HolePlan[];
-  } catch {
-    return [];
-  }
 }
 
 // ─── Recap archive ────────────────────────────────────────────────────────────

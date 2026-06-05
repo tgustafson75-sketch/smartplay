@@ -14,16 +14,12 @@ export function buildNarrationScript(recap: RoundRecap): NarrationSegment[] {
     : `${recap.total_score} on the card at ${recap.course_name}. Let's walk through it.`;
   segments.push({ audio_text: opener, hole_to_highlight: null });
 
-  // Hole highlights — only holes with a kevin_summary
+  // Hole highlights — only holes with a kevin_summary. 2026-06-04: the
+  // prior "most interesting" sort used HolePlan-derived variance; with
+  // plans removed we just take the first 4 by hole order.
   const notableHoles = recap.hole_comparisons
     .filter(hc => hc.actual_score != null && hc.kevin_summary && hc.kevin_summary.length > 10)
-    .sort((a, b) => {
-      // Sort by most interesting: eagles first, then birdies, then notable saves
-      const absA = Math.abs(a.variance ?? 0);
-      const absB = Math.abs(b.variance ?? 0);
-      if (absA !== absB) return absB - absA;
-      return (a.hole_number ?? 0) - (b.hole_number ?? 0);
-    })
+    .sort((a, b) => (a.hole_number ?? 0) - (b.hole_number ?? 0))
     .slice(0, 4);
 
   for (const hc of notableHoles) {

@@ -1,10 +1,16 @@
-import type { RoundRecap, HoleComparison } from '../types/plan';
+import type { RoundRecap } from '../types/plan';
 
 export interface RecapHero {
-  type: 'ghost_win' | 'mode_breakthrough' | 'exceptional_hole' | 'best_save' | 'default';
+  type: 'ghost_win' | 'mode_breakthrough' | 'default';
   headline: string;
   detail: string;
 }
+
+// 2026-06-04 — HolePlan removed. The 'exceptional_hole' and 'best_save'
+// hero types depended on `HoleComparison.variance` (planned-vs-actual).
+// Without plans, per-hole "good shot" / "saved par" detection would
+// require par data threaded through the comparison, which we don't carry.
+// Reduced to ghost_win > mode_breakthrough > default.
 
 const MODE_TARGETS: Record<string, number> = {
   break_100: 100,
@@ -33,40 +39,11 @@ export function computeRecapHero(recap: RoundRecap): RecapHero {
     };
   }
 
-  // 3. Exceptional hole — eagle or better
-  const comparisons = recap.hole_comparisons.filter(hc => hc.actual_score != null);
-  const exceptional = comparisons.find(hc => (hc.variance ?? 999) <= -2);
-  if (exceptional) {
-    const label = exceptional.variance === -2 ? 'Eagle' : exceptional.variance === -3 ? 'Albatross' : 'Eagle or better';
-    return {
-      type: 'exceptional_hole',
-      headline: `${label} — Hole ${exceptional.hole_number}`,
-      detail: `${exceptional.actual_score} on a par ${(exceptional.actual_score ?? 0) - (exceptional.variance ?? 0)}.`,
-    };
-  }
-
-  // 4. Best save — hole with biggest positive variance difference (planned well below par, executed near par)
-  let bestSave: HoleComparison | null = null;
-  let bestSaveDiff = -Infinity;
-  for (const hc of comparisons) {
-    if (hc.variance != null && hc.variance === 0) {
-      // par on any hole is worth noting
-      const diff = 1;
-      if (diff > bestSaveDiff) { bestSaveDiff = diff; bestSave = hc; }
-    }
-  }
-  if (bestSave) {
-    return {
-      type: 'best_save',
-      headline: `Par save — Hole ${bestSave.hole_number}`,
-      detail: 'Stayed disciplined when it mattered.',
-    };
-  }
-
-  // 5. Default — total score
+  // 3. Default — total score
+  const completedHoles = recap.hole_comparisons.filter(hc => hc.actual_score != null).length;
   return {
     type: 'default',
-    headline: `${comparisons.length} holes complete`,
+    headline: `${completedHoles} holes complete`,
     detail: `Shot ${recap.total_score}. Every round builds the foundation.`,
   };
 }

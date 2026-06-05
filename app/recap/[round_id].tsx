@@ -31,7 +31,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { useIssueLogStore } from '../../store/issueLogStore';
 import PhotoCollage from '../../components/recap/PhotoCollage';
 import HandicapImpactCard from '../../components/recap/HandicapImpactCard';
-import PlannedVsOutcomeCard from '../../components/recap/PlannedVsOutcomeCard';
+import OutcomeCard from '../../components/recap/OutcomeCard';
 import { track } from '../../services/analytics';
 import { buildShareCardProps } from '../../services/shareCardGenerator';
 import { computeRecapHero } from '../../services/recapHero';
@@ -109,22 +109,23 @@ function AnimatedHoleCard({
   }));
 
   const isHighlighted = highlightedHole === hc.hole_number;
-  const v = hc.variance;
   const hasScore = hc.actual_score != null;
+  // 2026-06-04 — HolePlan removed: no planned-vs-actual variance.
+  // The score pill now renders the raw score in a neutral color.
 
   return (
     <Animated.View style={[styles.holeCard, isHighlighted && styles.holeCardHighlighted, animStyle]}>
       <View style={styles.holeCardHeader}>
         <Text style={styles.holeNum}>Hole {hc.hole_number}</Text>
         {hasScore && !ghostResult && (
-          <View style={[styles.variancePill, { backgroundColor: varianceColor(v) + '22', borderColor: varianceColor(v) }]}>
-            <Text style={[styles.variancePillText, { color: varianceColor(v) }]}>
-              {hc.actual_score}{v != null ? ' (' + (v > 0 ? '+' : '') + v + ' plan)' : ''}
+          <View style={[styles.variancePill, { backgroundColor: varianceColor(null) + '22', borderColor: varianceColor(null) }]}>
+            <Text style={[styles.variancePillText, { color: varianceColor(null) }]}>
+              {hc.actual_score}
             </Text>
           </View>
         )}
         {hasScore && ghostResult && (
-          <Text style={[styles.variancePillText, { color: varianceColor(v) }]}>
+          <Text style={[styles.variancePillText, { color: varianceColor(null) }]}>
             Score: {hc.actual_score}
           </Text>
         )}
@@ -132,18 +133,12 @@ function AnimatedHoleCard({
 
       {ghostResult && <GhostRow ghostResult={ghostResult} holeNum={hc.hole_number} />}
 
-      {hc.plan && (
-        <Text style={styles.planLine}>
-          Plan: {hc.plan.markers.tee.club_intent ?? '—'}
-          {hc.plan.markers.approach?.club_intent ? ' → ' + hc.plan.markers.approach.club_intent : ''}
-          {hc.plan.markers.pin?.club_intent ? ' → ' + hc.plan.markers.pin.club_intent : ''}
-        </Text>
-      )}
-      {/* 2026-05-25 — Planned vs Outcome per-shot card. Renders only when
+      {/* 2026-06-04 — Plan line removed with HolePlan demolition. */}
+      {/* 2026-06-04 — Outcome card (actual shots only). Renders only when
           the hole has matched shots; the component itself returns null when
           matched_shots is empty so this guard is belt + suspenders. */}
       {hc.matched_shots.length > 0 && (
-        <PlannedVsOutcomeCard comparison={hc} />
+        <OutcomeCard comparison={hc} />
       )}
       {Boolean(hc.kevin_summary) && (
         <Text style={styles.kevinSummary}>{hc.kevin_summary}</Text>
@@ -443,12 +438,7 @@ export default function RecapScreen() {
                   <Text style={styles.scoreLabel}>SCORE</Text>
                   <Text style={styles.scoreValue}>{recap.total_score}</Text>
                 </View>
-                {recap.total_planned_score != null && (
-                  <View style={styles.scoreItem}>
-                    <Text style={styles.scoreLabel}>PLANNED</Text>
-                    <Text style={styles.scoreValue}>{recap.total_planned_score}</Text>
-                  </View>
-                )}
+                {/* 2026-06-04 — total_planned_score removed with HolePlan. */}
                 {ghost && (
                   <View style={styles.scoreItem}>
                     <Text style={styles.scoreLabel}>GHOST</Text>
@@ -555,8 +545,8 @@ export default function RecapScreen() {
                       }}
                     >
                       <Text style={styles.keyMomentHole}>Hole {hc.hole_number}</Text>
-                      <Text style={[styles.keyMomentScore, { color: varianceColor(hc.variance) }]}>
-                        {hc.actual_score ?? '—'} {hc.variance != null ? '(' + (hc.variance > 0 ? '+' : '') + hc.variance + ')' : ''}
+                      <Text style={[styles.keyMomentScore, { color: varianceColor(null) }]}>
+                        {hc.actual_score ?? '—'}
                       </Text>
                       <Text style={styles.keyMomentSummary} numberOfLines={3}>
                         {hc.kevin_summary}

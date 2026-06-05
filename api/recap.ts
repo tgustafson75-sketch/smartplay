@@ -49,9 +49,7 @@ interface HoleSummaryRequest {
   hole_number: number;
   par: number;
   score: number | null;
-  plan_summary: string | null;
   shots_summary: string | null;
-  variance: number | null;
 }
 
 interface CageContext {
@@ -121,11 +119,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const holesBlock = body.holes
       .map(h => {
         const scoreLine = h.score != null
-          ? `Score: ${h.score} (${h.variance != null ? (h.variance > 0 ? '+' + h.variance : String(h.variance)) : '?'} vs plan)`
+          ? `Score: ${h.score} (par ${h.par})`
           : 'Score: not recorded';
-        const planLine = h.plan_summary ? `Plan: ${h.plan_summary}` : 'Plan: none';
         const shotsLine = h.shots_summary ? `Shots: ${h.shots_summary}` : 'Shots: not tracked';
-        return `Hole ${h.hole_number} (par ${h.par}):\n  ${scoreLine}\n  ${planLine}\n  ${shotsLine}`;
+        return `Hole ${h.hole_number} (par ${h.par}):\n  ${scoreLine}\n  ${shotsLine}`;
       })
       .join('\n\n');
 

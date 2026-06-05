@@ -369,9 +369,8 @@ export default function SmartVisionScreen() {
   // 2026-06-04 — Bundled length wins over live for known local courses
   // (Echo Hills + Mariners Point are 9-hole; golfcourseapi can pad to 18).
   const totalHoles = getCourseHoleCount(courseId, courseHoles.length);
-  const addOrUpdatePlan = useRoundStore(s => s.addOrUpdatePlan);
-  const existingPlan = useRoundStore(s => s.plans.find(p => p.hole_number === currentHole));
-  const [savedFlash, setSavedFlash] = useState(false);
+  // 2026-06-04 — HolePlan removed. addOrUpdatePlan / existingPlan /
+  // savedFlash + the bookmark-save canvas button stripped out.
 
   const imageryMode = useSettingsStore(s => s.smartVisionImagery);
   const { setSmartVisionState } = useSmartVision();
@@ -975,42 +974,9 @@ export default function SmartVisionScreen() {
   const goPrev = () => setHoleIndex(i => Math.max(1, i - 1));
   const goNext = () => setHoleIndex(i => Math.min(totalHoles, i + 1));
 
-  // ── Save current marker positions as the hole plan ──────────────
-  // Persists tee/approach(=yellow)/pin marker positions + computed
-  // yardages so the player's pre-round strategy survives across hole
-  // navigation and app restarts. Replaces an existing plan for the
-  // hole if one exists.
-  const onSaveStrategy = useCallback(() => {
-    if (!targetPx || !pinPx || !teePx) return;
-    addOrUpdatePlan({
-      hole_number: holeIndex,
-      markers: {
-        tee:      { x: teePx.x,    y: teePx.y,    club_intent: null, landmark_target: null },
-        approach: { x: targetPx.x, y: targetPx.y, club_intent: null, landmark_target: null },
-        pin:      { x: pinPx.x,    y: pinPx.y,    club_intent: null, landmark_target: null },
-      },
-      computed_yardages: {
-        from_tee_to_approach: carryYards,
-        from_approach_to_pin: yardages.middle,
-        total: yardages.middle != null && carryYards != null ? carryYards + yardages.middle : null,
-      },
-    });
-    setSavedFlash(true);
-    setTimeout(() => setSavedFlash(false), 1400);
-  }, [targetPx, pinPx, teePx, holeIndex, carryYards, yardages.middle, addOrUpdatePlan]);
-
-  // ── Restore saved plan when entering a hole that has one ────────
-  useEffect(() => {
-    if (!existingPlan) return;
-    const m = existingPlan.markers;
-    if (m.approach && targetByHole[holeIndex] === undefined) {
-      setTargetByHole(prev => ({ ...prev, [holeIndex]: { x: m.approach!.x, y: m.approach!.y } }));
-    }
-    if (m.pin && pinByHole[holeIndex] === undefined) {
-      setPinByHole(prev => ({ ...prev, [holeIndex]: { x: m.pin!.x, y: m.pin!.y } }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [holeIndex, existingPlan?.id]);
+  // 2026-06-04 — HolePlan removed. onSaveStrategy + restore-plan effect
+  // demolished. Marker drags now drive only in-session per-hole state
+  // (targetByHole / pinByHole), no cross-session persistence.
 
   // ── Render ──────────────────────────────────────────────────────
   // Canvas-local coords feed both the SVG line and the markers directly.
@@ -1046,22 +1012,28 @@ export default function SmartVisionScreen() {
             <Ionicons name="chevron-forward" size={22} color={holeIndex >= (totalHoles) ? '#374151' : '#ffffff'} />
           </TouchableOpacity>
         </View>
-        {/* Imagery mode toggle — cycles auto → curated → gps. Icon
-            reflects current mode. Lets the user switch between live
-            satellite (when geometry available) and bundled screenshots. */}
+        {/* Imagery mode toggle — cycles auto → curated → gps. Icon +
+            label so the current mode is readable without guessing. Lets
+            the user switch between live satellite (when geometry is
+            available) and bundled screenshots. */}
         <TouchableOpacity
           onPress={() => {
             const next = imageryMode === 'auto' ? 'curated' : imageryMode === 'curated' ? 'gps' : 'auto';
             setImageryMode(next);
           }}
-          style={styles.iconBtn}
+          style={styles.modeBtn}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityRole="button"
+          accessibilityLabel={`Imagery mode: ${imageryMode === 'gps' ? 'Satellite' : imageryMode === 'curated' ? 'Photo' : 'Auto'} (tap to cycle)`}
         >
           <Ionicons
             name={imageryMode === 'gps' ? 'globe' : imageryMode === 'curated' ? 'image' : 'sparkles'}
-            size={22}
+            size={20}
             color="#ffffff"
           />
+          <Text style={styles.modeBtnText}>
+            {imageryMode === 'gps' ? 'Satellite' : imageryMode === 'curated' ? 'Photo' : 'Auto'}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -1344,26 +1316,7 @@ export default function SmartVisionScreen() {
           <Text style={styles.measureHintText}>Drag Y to layup · Drag P to set pin</Text>
         </View>
 
-        {/* Save strategy — right edge of canvas. Persists current marker
-            positions as the hole plan (tee/approach/pin + yardages).
-            Bookmark icon when no saved plan; checkmark + green when
-            saved or just-saved. */}
-        <TouchableOpacity
-          onPress={onSaveStrategy}
-          style={[
-            styles.saveBtn,
-            (savedFlash || existingPlan) && { backgroundColor: '#00C896', borderColor: '#00C896' },
-          ]}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          accessibilityRole="button"
-          accessibilityLabel="Save strategy"
-        >
-          <Ionicons
-            name={savedFlash ? 'checkmark' : existingPlan ? 'bookmark' : 'bookmark-outline'}
-            size={20}
-            color={savedFlash || existingPlan ? '#04140c' : '#ffffff'}
-          />
-        </TouchableOpacity>
+        {/* 2026-06-04 — Save-strategy bookmark button removed with HolePlan. */}
       </View>
 
       {/* Bottom panel — F/M/B yardages from yellow target. Phase 406:
@@ -1430,6 +1383,20 @@ const styles = StyleSheet.create({
   iconBtn: {
     width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
   },
+  // 2026-06-04 — modeBtn: icon + visible label for the imagery-mode cycler.
+  modeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+  },
+  modeBtnText: { color: '#ffffff', fontSize: 12, fontWeight: '700', letterSpacing: 0.4 },
   holeSwitch: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
   },

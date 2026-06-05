@@ -80,13 +80,6 @@ function getHoleBackgroundUri(courseId: string | null, holeNumber: number): stri
   return courseHole?.backgroundImageUri ?? null;
 }
 
-function timeAgo(ms: number): string {
-  const diff = Date.now() - ms;
-  if (diff < 60_000) return 'just now';
-  if (diff < 3600_000) return Math.floor(diff / 60_000) + 'm ago';
-  return Math.floor(diff / 3600_000) + 'h ago';
-}
-
 // ─── SATELLITE CACHE ──────────────────────
 const SATELLITE_CACHE: Record<string, string> = {};
 
@@ -210,9 +203,6 @@ export default function HoleView() {
   const { setSmartVisionState } = useSmartVision();
   const {
     isRoundActive: roundActive,
-    addOrUpdatePlan,
-    lockPlanForHole,
-    getPlanForHole,
     activeCourseId,
     activeCourse,
   } = useRoundStore();
@@ -556,52 +546,15 @@ export default function HoleView() {
     setMarkersReady(true);
   }, [displayType, IMAGE_WIDTH, IMAGE_HEIGHT_BUNDLED, markersReady, courseId, hole]);
 
-  // ── Restore existing plan when markers initialise ──
-  useEffect(() => {
-    if (!markersReady || !roundActive) return;
-    const plan = getPlanForHole(hole);
-    if (!plan) return;
-    const { tee, approach, pin } = plan.markers;
-    teePosRef.current   = { x: tee.x,      y: tee.y };
-    setTeePos({ x: tee.x, y: tee.y });
-    if (approach) {
-      targetPosRef.current = { x: approach.x, y: approach.y };
-      setTargetPos({ x: approach.x, y: approach.y });
-    }
-    if (pin) {
-      pinPosRef.current = { x: pin.x, y: pin.y };
-      setPinPos({ x: pin.x, y: pin.y });
-    }
-    setTeeClub(tee.club_intent);
-    setApproachClub(approach?.club_intent ?? null);
-    setPinClub(pin?.club_intent ?? null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [markersReady, roundActive, hole]); // intentionally not tracking getPlanForHole
-
-  // ── Auto-save plan when drag ends ──────
+  // 2026-06-04 — HolePlan removed. Auto-save / restore / lock callbacks
+  // demolished alongside the store action. Marker positions still
+  // persist via useHoleMarkerCalibrationStore (per-course/hole, survives
+  // across rounds); the per-round HolePlan layer that wrapped them is gone.
   useEffect(() => {
     if (displayType !== 'bundled' || !markersReady || !roundActive) return;
     if (prevDraggingRef.current && !isDragging) {
       if (planSaveTimerRef.current) clearTimeout(planSaveTimerRef.current);
       planSaveTimerRef.current = setTimeout(() => {
-        addOrUpdatePlan({
-          hole_number: hole,
-          markers: {
-            tee:      { x: teePos.x,    y: teePos.y,    club_intent: teeClub,    landmark_target: teeLandmark ? { name: teeLandmark.name, description: teeLandmark.description } : null },
-            approach: { x: targetPos.x, y: targetPos.y, club_intent: approachClub, landmark_target: approachLandmark ? { name: approachLandmark.name, description: approachLandmark.description } : null },
-            pin:      { x: pinPos.x,    y: pinPos.y,    club_intent: pinClub,    landmark_target: pinLandmark ? { name: pinLandmark.name, description: pinLandmark.description } : null },
-          },
-          computed_yardages: {
-            from_tee_to_approach: fromTeeYards,
-            from_approach_to_pin: approachYards,
-            total: fromTeeYards + approachYards,
-          },
-        });
-        // Also persist the marker fractions as per-(course, hole)
-        // calibration. The round plan only lives within the active
-        // round; this calibration store survives across rounds and
-        // app restarts so the markers come up at the user's last
-        // calibrated positions on the next visit.
         if (courseId) {
           useHoleMarkerCalibrationStore.getState().setCalibration(courseId, hole, {
             tee:    { x: teePos.x    / IMAGE_WIDTH, y: teePos.y    / IMAGE_HEIGHT_BUNDLED },
@@ -615,54 +568,23 @@ export default function HoleView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDragging]);
 
-  // ── Re-save when club intent changes ───
   const saveClubUpdate = useCallback((
-    nextTee: string | null,
-    nextApp: string | null,
-    nextPin: string | null,
+    _nextTee: string | null,
+    _nextApp: string | null,
+    _nextPin: string | null,
   ) => {
-    if (!roundActive || !markersReady) return;
-    addOrUpdatePlan({
-      hole_number: hole,
-      markers: {
-        tee:      { x: teePos.x,    y: teePos.y,    club_intent: nextTee, landmark_target: teeLandmark ? { name: teeLandmark.name, description: teeLandmark.description } : null },
-        approach: { x: targetPos.x, y: targetPos.y, club_intent: nextApp, landmark_target: approachLandmark ? { name: approachLandmark.name, description: approachLandmark.description } : null },
-        pin:      { x: pinPos.x,    y: pinPos.y,    club_intent: nextPin, landmark_target: pinLandmark ? { name: pinLandmark.name, description: pinLandmark.description } : null },
-      },
-      computed_yardages: {
-        from_tee_to_approach: fromTeeYards,
-        from_approach_to_pin: approachYards,
-        total: fromTeeYards + approachYards,
-      },
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roundActive, markersReady, hole, teePos, targetPos, pinPos, fromTeeYards, approachYards, teeLandmark, approachLandmark, pinLandmark]);
+    // HolePlan demolished — club picker now drives only local state; no
+    // round-scoped persistence. Keeping the callback shape so the picker
+    // component can call it without conditionals.
+  }, []);
 
   const saveLandmarkUpdate = useCallback((
-    nextTee: Landmark | null,
-    nextApp: Landmark | null,
-    nextPin: Landmark | null,
+    _nextTee: Landmark | null,
+    _nextApp: Landmark | null,
+    _nextPin: Landmark | null,
   ) => {
-    if (!roundActive || !markersReady) return;
-    addOrUpdatePlan({
-      hole_number: hole,
-      markers: {
-        tee:      { x: teePos.x,    y: teePos.y,    club_intent: teeClub,    landmark_target: nextTee ? { name: nextTee.name, description: nextTee.description } : null },
-        approach: { x: targetPos.x, y: targetPos.y, club_intent: approachClub, landmark_target: nextApp ? { name: nextApp.name, description: nextApp.description } : null },
-        pin:      { x: pinPos.x,    y: pinPos.y,    club_intent: pinClub,    landmark_target: nextPin ? { name: nextPin.name, description: nextPin.description } : null },
-      },
-      computed_yardages: {
-        from_tee_to_approach: fromTeeYards,
-        from_approach_to_pin: approachYards,
-        total: fromTeeYards + approachYards,
-      },
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roundActive, markersReady, hole, teePos, targetPos, pinPos, teeClub, approachClub, pinClub, fromTeeYards, approachYards]);
-
-  const handleLockPlan = useCallback(() => {
-    lockPlanForHole(hole);
-  }, [hole, lockPlanForHole]);
+    // HolePlan demolished — landmark picker now drives only local state.
+  }, []);
 
   // ── GPS validity ───────────────────────
   const checkGpsValid = (coords: {
@@ -844,10 +766,8 @@ export default function HoleView() {
   const playerPixel = isRoundActive && gpsValid ? getPlayerPixel() : null;
   const greenPixel = { x: IMAGE_WIDTH / 2, y: IMAGE_HEIGHT * 0.2 };
 
-  // Plan UI derived state
-  const existingPlan  = roundActive ? getPlanForHole(hole) : null;
-  const isPlanLocked  = existingPlan?.locked_at != null;
-  const planCreatedAt = existingPlan?.created_at ?? null;
+  // 2026-06-04 — HolePlan removed; Plan UI derived state + Lock Plan
+  // surface below stripped out.
 
   const modeBadgeText =
     isRoundActive && gpsValid ? '● LIVE GPS'
@@ -1115,27 +1035,7 @@ export default function HoleView() {
           </View>
         )}
 
-        {/* PLAN ROW — bundled + round active only */}
-        {displayType === 'bundled' && roundActive && markersReady && (
-          <View style={styles.planRow}>
-            {/* Lock / status button */}
-            <TouchableOpacity
-              style={[styles.lockBtn, isPlanLocked && styles.lockBtnLocked]}
-              onPress={handleLockPlan}
-              disabled={isPlanLocked}
-            >
-              <Text style={[styles.lockBtnText, isPlanLocked && styles.lockBtnTextLocked]}>
-                {isPlanLocked ? 'Plan Locked ✓' : existingPlan ? 'Lock Plan' : 'Lock Plan'}
-              </Text>
-            </TouchableOpacity>
-            {planCreatedAt != null && (
-              <Text style={styles.planAgeText}>
-                {isPlanLocked ? 'Locked ' : 'Draft · '}
-                {timeAgo(isPlanLocked ? (existingPlan?.locked_at ?? planCreatedAt) : planCreatedAt)}
-              </Text>
-            )}
-          </View>
-        )}
+        {/* 2026-06-04 — Plan row + Lock Plan button removed (HolePlan demolition). */}
 
         {/* CLUB INTENT ROW */}
         {displayType === 'bundled' && roundActive && markersReady && (
