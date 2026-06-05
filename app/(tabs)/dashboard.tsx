@@ -38,6 +38,7 @@ import { useRelationshipStore } from '../../store/relationshipStore';
 import ShotTimeline from '../../components/caddie/ShotTimeline';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useFamilyStore } from '../../store/familyStore';
+import { useSettingsStore } from '../../store/settingsStore';
 // 2026-06-04 — Progress card (Points + Tier) removed from dashboard
 // alongside the Highlights Card rework. pointsStore import dropped.
 import { generateKevinRead } from '../../services/kevinReadService';
@@ -127,6 +128,10 @@ export default function Dashboard() {
   );
   const familyMembers = useFamilyStore(s => s.members);
   const activeFamilyMemberId = useFamilyStore(s => s.active_member_id);
+  // 2026-06-04 — Coach Mode toggle. When false, the shared-group card +
+  // Coach Mode CTA below are hidden even if the user has a roster set
+  // up. Toggle lives in the Caddie tab's expandable green-arrow row.
+  const coachModeEnabled = useSettingsStore(s => s.coachModeEnabled);
   const activeFamilyRoster = useMemo(
     () => familyMembers.filter(m => !m.archived),
     [familyMembers],
@@ -277,8 +282,8 @@ export default function Dashboard() {
           </TouchableOpacity>
         </View>
 
-        {activeFamilyRoster.length > 0 && (
-          <View style={[styles.sharedCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}> 
+        {coachModeEnabled && activeFamilyRoster.length > 0 && (
+          <View style={[styles.sharedCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
             <View style={styles.sharedHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.sharedLabel, { color: colors.text_muted }]}>SHARED GROUP</Text>

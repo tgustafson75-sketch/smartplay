@@ -58,6 +58,12 @@ interface SettingsState {
    *  Defaults to false — opt-in toggle. */
   localMode: boolean;
   voiceEnabled: boolean;
+  /** 2026-06-04 — Coach Mode toggle. When false, hides the "Coach X"
+   *  pill on the Caddie tab and the Coach Mode CTA + shared-group card
+   *  on the Dashboard. Default true so existing users with rosters keep
+   *  the surface they already see. Tim: don't bury the toggle in
+   *  Settings — surfaced in the Caddie-tab expandable actions row. */
+  coachModeEnabled: boolean;
   voiceGender: 'male' | 'female';
   language: 'en' | 'es' | 'zh';
   /**
@@ -262,6 +268,8 @@ interface SettingsState {
   // ─── ACTIONS ────────────────────────────
 
   setVoiceEnabled: (v: boolean) => void;
+  /** 2026-06-04 — Coach Mode toggle (see field above). */
+  setCoachModeEnabled: (v: boolean) => void;
   /** 2026-05-30 — Fix FY: Local Mode toggle. */
   setLocalMode: (v: boolean) => void;
   setCecilyMode: (v: boolean) => void;
@@ -343,6 +351,11 @@ export const useSettingsStore = create<SettingsState>()(
       // 2026-05-30 — Fix FY: Local Mode. Defaults false (opt-in).
       // Persisted via partialize so the user's choice survives restarts.
       localMode: false,
+      // 2026-06-04 — Coach Mode toggle. Default true so existing users
+      // who already have a roster see the same surfaces; turning off
+      // hides the Coach Mode CTA + shared-group card on dashboard AND
+      // the "Coach X" pill on the Caddie tab.
+      coachModeEnabled: true,
       caddiePersonality: 'kevin',
       caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
       caddieSuggestions: 'on' as const,
@@ -415,6 +428,8 @@ export const useSettingsStore = create<SettingsState>()(
       ghostAutoActivate: true,
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
+      // 2026-06-04 — Coach Mode toggle setter.
+      setCoachModeEnabled: (v) => set({ coachModeEnabled: v }),
       // 2026-05-30 — Fix FY: Local Mode setter.
       setLocalMode: (v) => set({ localMode: v }),
       setCecilyMode: (v) => set({ cecilyMode: v }),
@@ -721,6 +736,8 @@ export const useSettingsStore = create<SettingsState>()(
       },
       partialize: (s) => ({
         voiceEnabled: s.voiceEnabled,
+        // 2026-06-04 — persist Coach Mode toggle.
+        coachModeEnabled: s.coachModeEnabled,
         // 2026-05-30 — Fix FY: persist the Local Mode user choice.
         // (hasHydrated is intentionally NOT in partialize — that's
         // transient state by design; see onRehydrateStorage below.)

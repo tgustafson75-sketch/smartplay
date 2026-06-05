@@ -60,7 +60,7 @@ import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
-import { speak, configureAudioForSpeech, captureUtterance, playLocalFile } from '../../services/voiceService';
+import { speak, configureAudioForSpeech, captureUtterance, playLocalFile, subscribeToSpeaking, isSpeaking } from '../../services/voiceService';
 // 2026-05-25 — Bestround celebration: when the round-end summary
 // detects a new personal best, play Kevin's D-ID bestround clip
 // instead of TTS-ing the text summary. Asset is resolved at fire
@@ -156,6 +156,10 @@ export default function CaddieTab() {
     () => familyMembers.filter(m => !m.archived).length,
     [familyMembers],
   );
+  // 2026-06-04 — Coach Mode toggle. Hides the "Coach X" pill below
+  // when off. Toggle lives in the L4 green-arrow expandable row.
+  const coachModeEnabled = useSettingsStore(s => s.coachModeEnabled);
+  const setCoachModeEnabled = useSettingsStore(s => s.setCoachModeEnabled);
 
   // ── Stores ──────────────────────────────
   // Audit 101 / W1 — useShallow subscribes only to the listed fields with
@@ -734,6 +738,19 @@ export default function CaddieTab() {
   const displayText = caddieResponse || openingPrompt;
   const [shownText, setShownText] = useState(displayText);
   const responseFade = useRef(new Animated.Value(1)).current;
+  // 2026-06-04 — Silence-aware caption fade. Mirror of the CaptionStrip
+  // behavior for the Caddie tab's own bubble (CaptionStrip is suppressed
+  // here at pathname '/'). When Kevin stops speaking, hold the bubble
+  // visible for 6s, then fade opacity to 0 over 1s. New speech cancels
+  // the fade and snaps opacity back to 1. The 8s hard auto-clear of
+  // caddieResponse below still runs as a belt-and-suspenders timeout.
+  const silenceFade = useRef(new Animated.Value(1)).current;
+  const silenceFadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const silenceFadeAnim = useRef<Animated.CompositeAnimation | null>(null);
+  const clearSilenceFade = useRef(() => {
+    if (silenceFadeTimer.current) { clearTimeout(silenceFadeTimer.current); silenceFadeTimer.current = null; }
+    if (silenceFadeAnim.current) { silenceFadeAnim.current.stop(); silenceFadeAnim.current = null; }
+  }).current;
 
   // Pre-beta — battery-saver state for the L1 badge dot color.
   const [_saverActive, setSaverActive] = useState(false);
@@ -798,6 +815,44 @@ export default function CaddieTab() {
     const id = setTimeout(() => setCaddieResponse(''), 8000);
     return () => clearTimeout(id);
   }, [isRoundActive, caddieResponse]);
+
+  // 2026-06-04 — Silence-fade wiring. Subscribes to speaking-state and
+  // (a) cancels any pending fade + snaps opacity back to 1 when Kevin
+  // starts a new line, (b) starts a 6s timer when Kevin stops, after
+  // which the bubble fades out over 1s. New caption content also resets
+  // the fade so a fresh line is always fully visible.
+  useEffect(() => {
+    const unsub = subscribeToSpeaking((nowSpeaking) => {
+      if (nowSpeaking) {
+        clearSilenceFade();
+        silenceFade.setValue(1);
+      } else {
+        clearSilenceFade();
+        silenceFadeTimer.current = setTimeout(() => {
+          silenceFadeAnim.current = Animated.timing(silenceFade, {
+            toValue: 0,
+            duration: 1000,
+            useNativeDriver: true,
+          });
+          silenceFadeAnim.current.start();
+        }, 6000);
+      }
+    });
+    return () => { clearSilenceFade(); unsub(); };
+  }, [silenceFade, clearSilenceFade]);
+
+  // Reset silence-fade when new caption content arrives so the user
+  // always sees a freshly-rendered line at full opacity.
+  useEffect(() => {
+    if (shownText || caddieResponse) {
+      clearSilenceFade();
+      silenceFade.setValue(1);
+    }
+  }, [shownText, caddieResponse, silenceFade, clearSilenceFade]);
+
+  // Bubble opacity is responseFade × silenceFade — the swap-in/out
+  // fade composes with the silence-driven fade.
+  const bubbleOpacity = useRef(Animated.multiply(responseFade, silenceFade)).current;
 
   const currentPar = getCurrentPar();
 
@@ -2065,7 +2120,7 @@ export default function CaddieTab() {
           <Ionicons name="chevron-back" size={24} color="#6b7d72" />
         </TouchableOpacity>
 
-        {activeFamilyCount > 0 ? (
+        {coachModeEnabled && activeFamilyCount > 0 ? (
           <TouchableOpacity
             style={[
               styles.modeBadgePlaceholder,
@@ -2482,6 +2537,41 @@ export default function CaddieTab() {
                 <Ionicons name="camera" size={22} color="#00C896" />
               </TouchableOpacity>
 
+              {/* 2026-06-04 — Coach Mode toggle. When ON, the Caddie tab
+                  shows the "Coach X" pill and the Dashboard surfaces the
+                  shared-group card + Coach Mode CTA. When OFF, both
+                  surfaces hide even if the roster is non-empty. Doesn't
+                  navigate — just flips the setting. People icon = on,
+                  people-outline = off so the state is glanceable. */}
+              <TouchableOpacity
+                onPress={() => {
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  setCoachModeEnabled(!coachModeEnabled);
+                  setCaddieResponse(`Coach Mode ${coachModeEnabled ? 'off' : 'on'}.`);
+                  setL4ActionsExpanded(false);
+                }}
+                style={{
+                  width: 48, height: 48, borderRadius: 24,
+                  backgroundColor: coachModeEnabled ? 'rgba(0, 200, 150, 0.18)' : 'rgba(13, 36, 24, 0.92)',
+                  borderWidth: 1.5, borderColor: coachModeEnabled ? '#00C896' : '#4b6358',
+                  alignItems: 'center', justifyContent: 'center',
+                  shadowColor: coachModeEnabled ? '#00C896' : 'transparent',
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: coachModeEnabled ? 0.55 : 0,
+                  shadowRadius: 8, elevation: coachModeEnabled ? 6 : 0,
+                }}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: coachModeEnabled }}
+                accessibilityLabel={`Coach Mode is ${coachModeEnabled ? 'on' : 'off'}. Tap to ${coachModeEnabled ? 'turn off' : 'turn on'}.`}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons
+                  name={coachModeEnabled ? 'people' : 'people-outline'}
+                  size={22}
+                  color={coachModeEnabled ? '#00C896' : '#9ddbc5'}
+                />
+              </TouchableOpacity>
+
               {/* Phase AU — Tools (•••) removed from inside the dropdown.
                   The upper-right corner pill is the canonical Tools
                   anchor; duplicating it here was the "duplicated tools
@@ -2574,7 +2664,7 @@ export default function CaddieTab() {
             styles.bubble,
             {
               bottom: (isRoundActive ? 168 : 108) + insets.bottom,
-              opacity: responseFade,
+              opacity: bubbleOpacity,
             },
           ]}
           pointerEvents="none"

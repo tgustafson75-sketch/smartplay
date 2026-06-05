@@ -376,6 +376,20 @@ export default function SmartVisionScreen() {
   const { setSmartVisionState } = useSmartVision();
   const setImageryMode = useSettingsStore(s => s.setSmartVisionImagery);
 
+  // 2026-06-04 — Pre-round force-auto. When the user opens SmartVision
+  // without an active round (course preview, hole-shopping, demo), reset
+  // the imagery mode to 'auto' so they get the best-available view
+  // regardless of what they last selected mid-round. Fires once per
+  // mount; mid-round opens leave the user's chosen mode alone.
+  useEffect(() => {
+    if (!isRoundActive && imageryMode !== 'auto') {
+      setImageryMode('auto');
+    }
+    // Intentionally not depending on imageryMode — we only want this to
+    // fire once on mount, not every time the user cycles modes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRoundActive]);
+
   // Phase BG — subscribe to position-mark bus so a Mark event triggers
   // re-render. Used to invalidate cached imagery and recompute marker
   // positions if/when this screen later supports live GPS overlays.

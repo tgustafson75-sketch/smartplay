@@ -57,7 +57,7 @@ export default async function handler(
     try {
       const mp3 = await openai.audio.speech.create({
         model: 'gpt-4o-mini-tts',
-        voice: 'onyx',
+        voice: OPENAI_VOICES_BY_PERSONA.kevin,
         input: ' ',
         instructions: KEVIN_TTS_INSTRUCTIONS,
       });
