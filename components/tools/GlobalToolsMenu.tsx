@@ -491,6 +491,14 @@ function Row({ icon, label, sub, onPress, colors }: RowProps) {
   return (
     <Pressable
       onPress={onPress}
+      // 2026-06-05 — Explicit accessibilityRole + label so screen
+      // readers announce "<label>, <sub>, button" instead of just
+      // reading the visible Text children sequentially. hitSlop gives
+      // off-target taps on fold-open / landscape a safety margin
+      // since paddingVertical alone is only 12pt.
+      accessibilityRole="button"
+      accessibilityLabel={`${label}. ${sub}`}
+      hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
       style={({ pressed }) => [
         styles.row,
         { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 },

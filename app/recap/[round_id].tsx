@@ -143,7 +143,13 @@ function AnimatedHoleCard({
       {Boolean(hc.kevin_summary) && (
         <Text style={styles.kevinSummary}>{hc.kevin_summary}</Text>
       )}
-      <TouchableOpacity style={styles.viewHoleBtn} onPress={() => onViewHole(hc.hole_number)}>
+      <TouchableOpacity
+        style={styles.viewHoleBtn}
+        onPress={() => onViewHole(hc.hole_number)}
+        accessibilityRole="button"
+        accessibilityLabel={`View detail for hole ${hc.hole_number}`}
+        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      >
         <Text style={styles.viewHoleBtnText}>View hole →</Text>
       </TouchableOpacity>
     </Animated.View>
@@ -489,12 +495,26 @@ export default function RecapScreen() {
               )}
               <View style={styles.kevinActions}>
                 {voiceEnabled && (
-                  <TouchableOpacity style={styles.playBtn} onPress={handlePlayAloud}>
+                  <TouchableOpacity
+                    style={styles.playBtn}
+                    onPress={handlePlayAloud}
+                    accessibilityRole="button"
+                    accessibilityLabel={speaking ? 'Stop playback' : 'Play recap aloud'}
+                    accessibilityState={{ busy: speaking }}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
                     <Text style={styles.playBtnText}>{speaking ? 'Stop' : '▶ Play aloud'}</Text>
                   </TouchableOpacity>
                 )}
                 {voiceEnabled && (
-                  <TouchableOpacity style={[styles.playBtn, narrating && styles.playBtnActive]} onPress={handleNarrate}>
+                  <TouchableOpacity
+                    style={[styles.playBtn, narrating && styles.playBtnActive]}
+                    onPress={handleNarrate}
+                    accessibilityRole="button"
+                    accessibilityLabel={narrating ? 'Stop narration' : 'Walk me through this round hole by hole'}
+                    accessibilityState={{ busy: narrating }}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
                     <Text style={[styles.playBtnText, narrating && styles.playBtnTextActive]}>
                       {narrating ? '■ Stop' : '◈ Walk me through it'}
                     </Text>

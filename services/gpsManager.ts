@@ -55,6 +55,16 @@ const POLL_CONFIG: Record<GpsMode, { intervalMs: number; accuracy: Location.Accu
 // Phase 107 / B2 — outlier rejection thresholds.
 // accuracy_m worse than this = reading discarded entirely.
 const OUTLIER_ACCURACY_M = 60;
+// 2026-06-05 — Absolute-distance outlier gate (cell-tower glitch).
+// The time-windowed jump check below only fires when the bad fix
+// arrives within OUTLIER_JUMP_WINDOW_MS of the last good fix. A
+// cell-tower handoff that delivers a 200m-off fix several seconds
+// AFTER a clean fix slips through both gates. 300m absolute is the
+// realistic "I did not teleport mid-swing" threshold — a golfer
+// can't move that far between watch ticks even at full cart speed.
+// We reject these regardless of time gap, then let the smoothing
+// buffer recover on the next real fix.
+const OUTLIER_ABSOLUTE_JUMP_M = 300;
 // position jump > this between consecutive accepted fixes within 5s = impossible
 const OUTLIER_JUMP_M = 50;
 const OUTLIER_JUMP_WINDOW_MS = 5_000;
@@ -192,6 +202,19 @@ function processFix(raw: GpsFix): boolean {
     if (jump > OUTLIER_JUMP_M) {
       outliersDiscarded++;
       console.log(`[gps:outlier-rejected] jump_m=${jump.toFixed(1)} dt_ms=${raw.timestamp - lastFix.timestamp}`);
+      return false;
+    }
+  }
+  // (3) 2026-06-05 — Absolute-distance gate regardless of time gap.
+  // Catches cell-tower handoff glitches that deliver a 200m+ off fix
+  // many seconds after the last clean fix (slips through gate 2).
+  // A golfer can't physically traverse OUTLIER_ABSOLUTE_JUMP_M between
+  // watch ticks even at full cart speed (≈4 m/s ⇒ would need ~75s).
+  if (lastFix) {
+    const absoluteJump = haversineMeters(lastFix, raw);
+    if (absoluteJump > OUTLIER_ABSOLUTE_JUMP_M) {
+      outliersDiscarded++;
+      console.log(`[gps:outlier-rejected] absolute_jump_m=${absoluteJump.toFixed(1)} dt_ms=${raw.timestamp - lastFix.timestamp}`);
       return false;
     }
   }

@@ -275,6 +275,10 @@ export default function SmartFinder() {
             style={[styles.holeBtn, prevHole == null && styles.holeBtnDisabled]}
             disabled={prevHole == null}
             onPress={() => prevHole != null && setCurrentHole(prevHole)}
+            accessibilityRole="button"
+            accessibilityLabel={prevHole != null ? `Previous hole (hole ${prevHole})` : 'Previous hole, unavailable'}
+            accessibilityState={{ disabled: prevHole == null }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Text style={[styles.holeBtnText, prevHole == null && styles.holeBtnTextDisabled]}>← Prev</Text>
           </TouchableOpacity>
@@ -285,6 +289,10 @@ export default function SmartFinder() {
             style={[styles.holeBtn, nextHole == null && styles.holeBtnDisabled]}
             disabled={nextHole == null}
             onPress={() => nextHole != null && setCurrentHole(nextHole)}
+            accessibilityRole="button"
+            accessibilityLabel={nextHole != null ? `Next hole (hole ${nextHole})` : 'Next hole, unavailable'}
+            accessibilityState={{ disabled: nextHole == null }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Text style={[styles.holeBtnText, nextHole == null && styles.holeBtnTextDisabled]}>Next →</Text>
           </TouchableOpacity>
@@ -685,7 +693,13 @@ function CameraSmartFinder({
 
       {/* Top bar — back, hole+par, GPS quality */}
       <View style={[styles.cameraTopBar, { top: insets.top + 8 }]} pointerEvents="box-none">
-        <TouchableOpacity style={styles.cameraIconBtn} onPress={onClose}>
+        <TouchableOpacity
+          style={styles.cameraIconBtn}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close camera and return"
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
           <Text style={styles.cameraIconText}>←</Text>
         </TouchableOpacity>
         <View style={styles.cameraTopCenter}>
