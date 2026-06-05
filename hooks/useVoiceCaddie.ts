@@ -989,6 +989,26 @@ export const useVoiceCaddie = ({
       isProcessingRef.current = true;
       wrappedOnVoiceStateChange('thinking');
 
+      // 2026-06-05 — File-size guard. Matches the captureUtterance
+      // pattern. Belt-and-suspenders alongside the <300ms duration
+      // gate in handleMicPress — covers the case where Recording
+      // status didn't surface a duration but the file is still tiny
+      // (some Android OEMs return durationMillis: 0 even on real
+      // audio). Silent return — no error toast for what is almost
+      // certainly a stray tap.
+      try {
+        const FS = await import('expo-file-system/legacy');
+        const info = await FS.getInfoAsync(uri);
+        if (!info.exists || ((info as { size?: number }).size ?? 0) < 1024) {
+          console.log('[voice] audio file too small (<1KB), skipping transcribe');
+          wrappedOnVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
+        }
+      } catch (e) {
+        console.log('[voice] file size probe failed (continuing):', e);
+      }
+
       const formData = new FormData();
       formData.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
       formData.append('language', language);
@@ -1351,11 +1371,29 @@ export const useVoiceCaddie = ({
       wrappedOnVoiceStateChange('thinking');
 
       try {
+        // 2026-06-05 — Capture duration BEFORE stopAndUnloadAsync.
+        // After unload the status loses durationMillis. Used below to
+        // silently skip transcribe for stray double-taps (<300ms),
+        // which otherwise round-trip to Whisper, return 502, and
+        // surface as a "Network hiccup" toast that reads as a bug.
+        let durationMs: number | null = null;
+        try {
+          const preStop = await recordingRef.current.getStatusAsync();
+          const d = (preStop as { durationMillis?: number }).durationMillis;
+          if (typeof d === 'number') durationMs = d;
+        } catch { /* non-fatal; processAudioUri also has a size guard */ }
+
         await recordingRef.current.stopAndUnloadAsync();
         const uri = recordingRef.current.getURI();
         recordingRef.current = null;
 
         if (!uri) {
+          wrappedOnVoiceStateChange('idle');
+          return;
+        }
+
+        if (durationMs != null && durationMs < 300) {
+          console.log('[voice] tap-record too short (', durationMs, 'ms), skipping transcribe');
           wrappedOnVoiceStateChange('idle');
           return;
         }
@@ -1424,6 +1462,14 @@ export const useVoiceCaddie = ({
       await configureAudioForRecording();
 
       const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
+
+      // 2026-06-05 — Same 100ms mic warm-up gap captureUtterance uses.
+      // Without it, the first ~50-150ms of audio on a cold mic is
+      // partial / zero-amplitude on some Android OEMs, which is the
+      // dominant cause of the "third tap to talk works" pattern Tim
+      // reports — the first tap's recording is too quiet for Whisper
+      // to land a confident transcript, so the user retries.
+      await new Promise<void>(r => setTimeout(r, 100));
 
       recordingRef.current = recording;
       devLog('[voice] recording started');
