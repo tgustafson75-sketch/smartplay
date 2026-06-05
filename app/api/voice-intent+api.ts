@@ -245,6 +245,14 @@ Available intents:
    - "hole 9" -> { hole_number: 9 }
    Disambiguation: "next hole" / "previous hole" → navigate (relative). "I'm on hole N" / "starting hole N" / "teeing off N" → declare_hole (absolute). A bare score number ("I got a 5") → log_score, not declare_hole.
 
+15c. set_hole_note — User adds hole-specific context that Kevin should remember while advising.
+   parameters: { hole: integer 1..18, note: string }
+   Examples:
+   - "I'm on hole 4, tight fairway, wind left to right" -> { hole: 4, note: "tight fairway, wind left to right" }
+   - "we're on hole 7, dogleg left, bunker right" -> { hole: 7, note: "dogleg left, bunker right" }
+   - "hole 12 downhill lie into wind" -> { hole: 12, note: "downhill lie into wind" }
+   Rule: declaration only (no descriptive context) = declare_hole. Hole + descriptive context = set_hole_note.
+
 16. ask_golf_father — User wants strategic in-round advice from Tank ("the Golf Father"). Hardcoded-rule channel for "what would Tank do here" / "Golf Father help" / "Tank advice" / "what's the play here". Distinct from query_status/shot_strategy (which is a generic shot question) — fires ONLY when the user names Tank / Golf Father OR asks for in-context strategic read.
    parameters: { topic?: "course_management" | "mental" | "swing", subtopic?: "tank_advice", use_context?: boolean }
    Examples:
@@ -316,7 +324,7 @@ The language reflects the transcript itself, not the user's preferred app langua
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "coach_refine" | "position_declaration" | "confirm_position" | "unknown",
+   "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "set_hole_note" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "coach_refine" | "position_declaration" | "confirm_position" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null,

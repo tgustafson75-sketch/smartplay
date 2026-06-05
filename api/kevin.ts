@@ -329,6 +329,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       currentHole = null,
       currentPar = null,
       currentYardage = null,
+      holeNotes = {},
       activeCourse = null,
       isRoundActive = false,
       isCompetition = false,
@@ -508,6 +509,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const totalScore = Object.values(scores as Record<string, number>).reduce((a: number, b: number) => a + b, 0);
     const holesPlayed = Object.keys(scores as Record<string, number>).length;
+    const currentHoleNote = (() => {
+      if (typeof currentHole !== 'number' || !Number.isFinite(currentHole)) return null;
+      const map = (holeNotes && typeof holeNotes === 'object') ? (holeNotes as Record<string, unknown>) : {};
+      const raw = map[String(currentHole)] ?? map[currentHole as unknown as string];
+      if (typeof raw !== 'string') return null;
+      const t = raw.trim();
+      return t.length > 0 ? t : null;
+    })();
 
     const scoreVsPar = (() => {
       let par = 0; let score = 0;
@@ -709,6 +718,7 @@ ${isRoundActive
   ? `CURRENT ROUND:
 Course: ${activeCourse || 'unknown'}
 Hole: ${currentHole} | Par: ${currentPar} | Yards: ${currentYardage}
+${currentHoleNote ? `Hole note: ${currentHoleNote}` : ''}
 Club: ${club || 'not selected'}
 Score: ${totalScore > 0 ? totalScore : 'no holes yet'} | Vs par: ${scoreVsPar === 0 ? 'even' : scoreVsPar > 0 ? '+' + scoreVsPar : String(scoreVsPar)} | Holes: ${holesPlayed}
 Competition: ${isCompetition ? 'yes — be conservative' : 'no'}`

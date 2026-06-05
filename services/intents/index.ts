@@ -25,6 +25,7 @@ import { coachRefineHandler } from './coachRefineHandler';
 import { positionDeclareHandler } from './positionDeclareHandler';
 import { inRoundDiagnosticHandler } from './inRoundDiagnosticHandler';
 import { confirmPositionHandler } from './confirmPositionHandler';
+import { setHoleNoteHandler } from './setHoleNoteHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
 
@@ -59,6 +60,7 @@ voiceCommandRouter.registerHandler(coachRefineHandler);
 voiceCommandRouter.registerHandler(positionDeclareHandler);
 voiceCommandRouter.registerHandler(inRoundDiagnosticHandler);
 voiceCommandRouter.registerHandler(confirmPositionHandler);
+voiceCommandRouter.registerHandler(setHoleNoteHandler);
 
 export {
   openToolHandler,
@@ -88,4 +90,5 @@ export {
   openExternalHandler,
   inRoundDiagnosticHandler,
   confirmPositionHandler,
+  setHoleNoteHandler,
 };

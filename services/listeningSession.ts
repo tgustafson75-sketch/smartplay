@@ -396,6 +396,7 @@ async function openSession() {
           currentHole: round.currentHole,
           activeCourse: round.activeCourse,
           courseHoles: round.courseHoles,
+          holeNotes: round.holeNotes,
           recentShots: round.shots.slice(-10),
           kevinContext: profile.kevinContext ?? null,
           persistentPatterns: profile.persistentPatterns ?? null,
@@ -489,6 +490,7 @@ async function openSession() {
                 currentHole: round.isRoundActive ? round.currentHole : null,
                 currentYardage: round.currentYardage ?? null,
                 activeCourse: round.activeCourse,
+                holeNotes: round.holeNotes,
                 isRoundActive: round.isRoundActive,
                 // 2026-05-21 — Fix Q: pass active persona + voiceGender
                 // so the small-talk reply uses the user's selected caddie

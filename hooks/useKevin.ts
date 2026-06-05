@@ -38,7 +38,7 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
   );
   const {
     currentHole, currentYardage, activeCourse,
-    isRoundActive, isCompetition, club, scores, courseHoles,
+    isRoundActive, isCompetition, club, scores, courseHoles, holeNotes,
   } = useRoundStore(
     useShallow((s) => ({
       currentHole: s.currentHole,
@@ -49,6 +49,7 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
       club: s.club,
       scores: s.scores,
       courseHoles: s.courseHoles,
+      holeNotes: s.holeNotes,
     }))
   );
   const getCurrentPar = useRoundStore((s) => s.getCurrentPar);
@@ -150,6 +151,7 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
           currentPar,
           currentYardage,
           activeCourse,
+          holeNotes,
           isRoundActive,
           isCompetition,
           club,
@@ -267,7 +269,7 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
   }, [
     name, firstName, handicap, language, roundsTogether, sessionsTogether,
     currentHole, currentYardage, activeCourse,
-    isRoundActive, isCompetition, club, scores, courseHoles,
+    isRoundActive, isCompetition, club, scores, courseHoles, holeNotes,
     getCurrentPar, callbacks,
   ]);
 

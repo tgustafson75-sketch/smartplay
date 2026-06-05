@@ -194,27 +194,37 @@ export default function CoachMode() {
             {roster.map(m => {
               const selected = activeMember?.id === m.id;
               return (
-                <TouchableOpacity
-                  key={m.id}
-                  onPress={() => pickPlayer(m)}
-                  style={[
-                    styles.memberCard,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: selected ? colors.accent : colors.border,
-                    },
-                    selected && { backgroundColor: colors.accent_muted },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Coach ${m.firstName}`}
-                  accessibilityState={{ selected }}
-                >
-                  <Text style={styles.memberAvatar}>{m.avatar_emoji ?? '🏌️'}</Text>
-                  <Text style={[styles.memberName, { color: colors.text_primary }]} numberOfLines={1}>
-                    {m.firstName}
-                  </Text>
-                  {selected && <Ionicons name="checkmark-circle" size={16} color={colors.accent} />}
-                </TouchableOpacity>
+                <View key={m.id} style={styles.memberCardWrap}>
+                  <TouchableOpacity
+                    onPress={() => pickPlayer(m)}
+                    style={[
+                      styles.memberCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: selected ? colors.accent : colors.border,
+                      },
+                      selected && { backgroundColor: colors.accent_muted },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Coach ${m.firstName}`}
+                    accessibilityState={{ selected }}
+                  >
+                    <Text style={styles.memberAvatar}>{m.avatar_emoji ?? '🏌️'}</Text>
+                    <Text style={[styles.memberName, { color: colors.text_primary }]} numberOfLines={1}>
+                      {m.firstName}
+                    </Text>
+                    {selected && <Ionicons name="checkmark-circle" size={16} color={colors.accent} />}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => router.push(`/swinglab/player-library/${m.id}` as never)}
+                    style={[styles.playerLibraryBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${m.firstName} Player Library`}
+                  >
+                    <Ionicons name="library-outline" size={13} color={colors.text_muted} />
+                    <Text style={[styles.playerLibraryBtnText, { color: colors.text_muted }]}>Player Library</Text>
+                  </TouchableOpacity>
+                </View>
               );
             })}
           </View>
@@ -476,6 +486,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 4,
   },
+  memberCardWrap: {
+    gap: 6,
+  },
   memberCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -487,6 +500,21 @@ const styles = StyleSheet.create({
   },
   memberAvatar: { fontSize: 18 },
   memberName: { fontSize: 14, fontWeight: '700' },
+  playerLibraryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderRadius: 9,
+    borderWidth: 1,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  playerLibraryBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
   card: {
     padding: 14,
     borderRadius: 14,

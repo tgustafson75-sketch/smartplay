@@ -288,6 +288,14 @@ Available intents:
    - "hole 9" -> { hole_number: 9 }
    Disambiguation: "next hole" / "previous hole" → navigate (relative). "I'm on hole N" / "starting hole N" / "teeing off N" → declare_hole (absolute). A bare score number ("I got a 5") → log_score, not declare_hole.
 
+15c. set_hole_note — User adds hole-specific context that Kevin should remember while advising.
+   parameters: { hole: integer 1..18, note: string }
+   Examples:
+   - "I'm on hole 4, tight fairway, wind left to right" -> { hole: 4, note: "tight fairway, wind left to right" }
+   - "we're on hole 7, dogleg left, bunker right" -> { hole: 7, note: "dogleg left, bunker right" }
+   - "hole 12 downhill lie into wind" -> { hole: 12, note: "downhill lie into wind" }
+   Rule: declaration only (no descriptive context) = declare_hole. Hole + descriptive context = set_hole_note.
+
 16. log_shot — User is on the course logging a shot they just hit. They name the club, optional distance, optional outcome.
    parameters: { club_phrase: string, distance_yards?: number, outcome_phrase?: string, raw_utterance: string }
    Examples:
@@ -434,7 +442,7 @@ The language reflects the transcript itself, not the user's preferred app langua
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-  "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "declare_hole" | "putt_watch" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "coach_refine" | "position_declaration" | "confirm_position" | "unknown",
+   "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "declare_hole" | "set_hole_note" | "putt_watch" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "coach_refine" | "position_declaration" | "confirm_position" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null,

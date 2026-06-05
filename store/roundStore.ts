@@ -263,6 +263,7 @@ interface RoundState {
   }[] | null;
 
   currentHole: number;
+  holeNotes: Record<number, string>;
   currentYardage: number | null;
   // 2026-05-25 — Tier 3 of the yardage resolver: user-stated number
   // ("I'm 142", "Golfshot says 156", "rangefinder reads 178"). Lives
@@ -470,6 +471,7 @@ interface RoundState {
     notes: string;
   } | null) => void;
   setCurrentHole: (hole: number) => void;
+  setHoleNote: (hole: number, note: string) => void;
   /** 2026-05-22 — User-initiated hole reconciliation against fresh GPS.
    *  Delegates to services/holeReconciliation. The UI's "Refresh GPS"
    *  button calls this. Returns a result the UI can surface as toast /
@@ -545,6 +547,7 @@ export const useRoundStore = create<RoundState>()(
       goal: null,
       preRoundYardageSnapshot: null,
       currentHole: 1,
+      holeNotes: {},
       currentYardage: null,
       userStatedYardage: null,
       club: null,
@@ -671,6 +674,7 @@ export const useRoundStore = create<RoundState>()(
           // else 'unspecified' for back-compat with callers predating wave 3.
           selectedTee: options.selectedTee ?? prev.selectedTee ?? 'unspecified',
           currentHole: 1,
+          holeNotes: {},
           currentYardage: holes[0]?.distance ?? null,
           scores: {},
           putts: {},
@@ -939,6 +943,7 @@ export const useRoundStore = create<RoundState>()(
           activeCourseId: null,
           courseLocation: null,
           courseHoles: [],
+          holeNotes: {},
           scores: {},
           putts: {},
           penalties: {},
@@ -1044,6 +1049,7 @@ export const useRoundStore = create<RoundState>()(
           activeCourseId: null,
           courseLocation: null,
           courseHoles: [],
+          holeNotes: {},
           scores: {},
           putts: {},
           penalties: {},
@@ -1306,6 +1312,21 @@ export const useRoundStore = create<RoundState>()(
       setPreviewCourse: (id) => set({ previewCourseId: id }),
       pendingStartFactors: null,
       setPendingStartFactors: (f) => set({ pendingStartFactors: f }),
+
+      setHoleNote: (hole, note) =>
+        set((s) => {
+          const n = Number(hole);
+          if (!Number.isInteger(n) || n < 1 || n > 18) return {};
+          const text = String(note ?? '').trim();
+          if (!text) {
+            if (!(n in s.holeNotes)) return {};
+            const next = { ...s.holeNotes };
+            delete next[n];
+            return { holeNotes: next };
+          }
+          if (s.holeNotes[n] === text) return {};
+          return { holeNotes: { ...s.holeNotes, [n]: text } };
+        }),
 
       addRoundPhoto: (uri) =>
         set(s => {
@@ -1716,6 +1737,7 @@ export const useRoundStore = create<RoundState>()(
         roundNotes: s.roundNotes,
         goal: s.goal,
         currentHole: s.currentHole,
+        holeNotes: s.holeNotes,
         currentYardage: s.currentYardage,
         club: s.club,
         scores: s.scores,

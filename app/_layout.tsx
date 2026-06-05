@@ -809,6 +809,10 @@ function AppNavigator() {
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
+          name="swinglab/player-library/[player_id]"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
+        <Stack.Screen
           name="swinglab/swing/[swing_id]"
           options={{ animation: 'slide_from_right' }}
         />
