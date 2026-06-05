@@ -12,10 +12,10 @@
  */
 
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, useWindowDimensions, Alert } from 'react-native';
+import { Animated, Text, StyleSheet, useWindowDimensions, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
-import { subscribeToCaption, getCurrentCaption, subscribeToSpeaking } from '../services/voiceService';
+import { subscribeToCaption, getCurrentCaption, subscribeToSpeaking, isSpeaking } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
 import { getCurrentRoute, subscribeRouteChanges, type AudioRoute } from '../services/audioRoutingService';
 
@@ -25,6 +25,10 @@ export default function CaptionStrip(): React.ReactElement | null {
   const ttsCaptions = useSettingsStore(s => s.ttsCaptions);
   const largeText = useSettingsStore(s => s.largeText);
   const [caption, setCaption] = useState<string | null>(getCurrentCaption());
+  const [speaking, setSpeaking] = useState<boolean>(isSpeaking());
+  const captionOpacity = useRef(new Animated.Value(1)).current;
+  const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fadeAnimRef = useRef<Animated.CompositeAnimation | null>(null);
   // 2026-05-16 — Suppress the global caption pill on the Caddie tab.
   // The Caddie tab's Cockpit screen renders its OWN speech bubble for
   // Kevin's latest line (displayText = caddieResponse || openingPrompt),
@@ -43,16 +47,61 @@ export default function CaptionStrip(): React.ReactElement | null {
   const [audioRoute, setAudioRoute] = useState<AudioRoute>(getCurrentRoute());
   const promptShownThisSession = useRef(false);
 
+  const clearCaptionFade = useRef(() => {
+    if (fadeTimerRef.current) {
+      clearTimeout(fadeTimerRef.current);
+      fadeTimerRef.current = null;
+    }
+    if (fadeAnimRef.current) {
+      fadeAnimRef.current.stop();
+      fadeAnimRef.current = null;
+    }
+  }).current;
+
   useEffect(() => {
     const unsubCaption = subscribeToCaption(setCaption);
     const unsubRoute = subscribeRouteChanges(setAudioRoute);
-    // Re-sim P3 — backstop: clear caption when speaking flips false even
-    // if notifyCaption(null) was missed (Tom's Bluetooth re-pair edge case).
     const unsubSpeaking = subscribeToSpeaking((speaking) => {
-      if (!speaking) setCaption(null);
+      setSpeaking(speaking);
+      if (speaking) {
+        clearCaptionFade();
+        captionOpacity.setValue(1);
+      }
     });
-    return () => { unsubCaption(); unsubRoute(); unsubSpeaking(); };
-  }, []);
+    return () => {
+      clearCaptionFade();
+      unsubCaption();
+      unsubRoute();
+      unsubSpeaking();
+    };
+  }, [captionOpacity, clearCaptionFade]);
+
+  useEffect(() => {
+    if (caption) {
+      clearCaptionFade();
+      captionOpacity.setValue(1);
+    }
+  }, [caption, captionOpacity, clearCaptionFade]);
+
+  useEffect(() => {
+    if (!caption) return;
+    if (speaking) return;
+    clearCaptionFade();
+    fadeTimerRef.current = setTimeout(() => {
+      fadeAnimRef.current = Animated.timing(captionOpacity, {
+        toValue: 0,
+        duration: 1000,
+        useNativeDriver: true,
+      });
+      fadeAnimRef.current.start(({ finished }) => {
+        if (finished && !isSpeaking()) {
+          setCaption(null);
+        }
+      });
+    }, 6000);
+
+    return () => clearCaptionFade();
+  }, [caption, speaking, captionOpacity, clearCaptionFade]);
 
   // First-time Bluetooth + active speech: ask once whether to keep on.
   useEffect(() => {
@@ -86,20 +135,20 @@ export default function CaptionStrip(): React.ReactElement | null {
   if (suppressOnCaddieTab) return null;
 
   return (
-    <View
+    <Animated.View
       pointerEvents="none"
       accessible
       accessibilityLiveRegion="polite"
       accessibilityRole="text"
       style={[
         styles.wrap,
-        { top: insets.top + 6, maxWidth: screenW - 24 },
+        { top: insets.top + 6, maxWidth: screenW - 24, opacity: captionOpacity },
       ]}
     >
       <Text style={[styles.text, largeText && styles.textLarge]} numberOfLines={4}>
         {caption}
       </Text>
-    </View>
+    </Animated.View>
   );
 }
 

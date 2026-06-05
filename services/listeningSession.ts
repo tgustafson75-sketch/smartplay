@@ -162,6 +162,10 @@ export function getSessionState(): SessionState {
   return state;
 }
 
+export function isActiveListeningEnabled(): boolean {
+  return useSettingsStore.getState().autoListenEnabled;
+}
+
 /**
  * Toggle the listening session. Open if idle; close if any other state.
  */

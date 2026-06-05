@@ -239,7 +239,9 @@ interface SettingsState {
   // voice intents like "switching to 6-iron". When false, only the
   // manual tap-grid picker is exposed. Voice intents still parse the
   // utterance but show the manual picker instead of registering.
+  autoClubDetection: boolean;
   cageAutoClubDetection: boolean;
+  hasSeenAutoClubPrompt: boolean;
 
   // 2026-05-22 — Ghost Rounds as first-class. When true (DEFAULT), startRound
   // auto-activates the most-recent prior round on the same course so the
@@ -307,8 +309,10 @@ interface SettingsState {
   setKevinGreetingEnabled: (v: boolean) => void;
   setSmartVisionImagery: (v: 'curated' | 'gps' | 'auto') => void;
   setYardageMode: (v: 'live' | 'preround') => void;
+  setAutoClubDetection: (v: boolean) => void;
   // Phase BL
   setCageAutoClubDetection: (v: boolean) => void;
+  setHasSeenAutoClubPrompt: (v: boolean) => void;
   // Phase Cockpit
   setCockpitMode: (v: boolean) => void;
   // 2026-05-22 — Ghost Rounds.
@@ -398,7 +402,9 @@ export const useSettingsStore = create<SettingsState>()(
       kevinGreetingEnabled: true,
       smartVisionImagery: 'auto' as const,
       yardageMode: 'live' as const,
+      autoClubDetection: true,
       cageAutoClubDetection: true,
+      hasSeenAutoClubPrompt: false,
       cockpitMode: false,
       // 2026-05-22 — Ghost Rounds default ON. 95%-case is the player wants
       // to know how they're tracking against their last round at this course.
@@ -580,7 +586,9 @@ export const useSettingsStore = create<SettingsState>()(
           })();
         }
       },
-      setCageAutoClubDetection: (v) => set({ cageAutoClubDetection: v }),
+      setAutoClubDetection: (v) => set({ autoClubDetection: v, cageAutoClubDetection: v }),
+      setCageAutoClubDetection: (v) => set({ cageAutoClubDetection: v, autoClubDetection: v }),
+      setHasSeenAutoClubPrompt: (v) => set({ hasSeenAutoClubPrompt: v }),
       setCockpitMode: (v) => set({ cockpitMode: v }),
       setGhostAutoActivate: (v) => set({ ghostAutoActivate: v }),
       // Phase 105 — per-pillar assignment.
@@ -601,7 +609,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 8,
+      version: 9,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -688,6 +696,17 @@ export const useSettingsStore = create<SettingsState>()(
             p.personaIntensity = { kevin: 100, serena: 100, harry: 90, tank: 70 };
           }
         }
+        // v9 — add auto-club prompt persistence and generic auto-club
+        // toggle alias. Existing users keep prior cageAutoClubDetection
+        // behavior; hasSeenAutoClubPrompt seeds false.
+        if (version < 9) {
+          if (p.autoClubDetection == null) {
+            p.autoClubDetection = p.cageAutoClubDetection ?? true;
+          }
+          if (p.hasSeenAutoClubPrompt == null) {
+            p.hasSeenAutoClubPrompt = false;
+          }
+        }
         return p as SettingsState;
       },
       partialize: (s) => ({
@@ -739,7 +758,9 @@ export const useSettingsStore = create<SettingsState>()(
         kevinGreetingEnabled: s.kevinGreetingEnabled,
         smartVisionImagery: s.smartVisionImagery,
         yardageMode: s.yardageMode,
+        autoClubDetection: s.autoClubDetection,
         cageAutoClubDetection: s.cageAutoClubDetection,
+        hasSeenAutoClubPrompt: s.hasSeenAutoClubPrompt,
         cockpitMode: s.cockpitMode,
         ghostAutoActivate: s.ghostAutoActivate,
         // watchConnected / glassesConnected not persisted — rechecked on mount

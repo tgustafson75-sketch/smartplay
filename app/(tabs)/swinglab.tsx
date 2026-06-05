@@ -41,6 +41,12 @@ import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLa
 // is the standard gate used across the app.
 import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
 import { usePlayerProfileStore, isOwnerEmail } from '../../store/playerProfileStore';
+import { useSettingsStore } from '../../store/settingsStore';
+import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { isActiveListeningEnabled } from '../../services/listeningSession';
+import { useTrustLevelStore } from '../../store/trustLevelStore';
+
+let swingLabListeningPromptShown = false;
 
 interface LauncherCardSpec {
   key: string;
@@ -123,6 +129,7 @@ const CARDS: LauncherCardSpec[] = [
 export default function SwingLab() {
   const router = useRouter();
   const { colors } = useTheme();
+  const trustLevel = useTrustLevelStore(s => s.level);
   // 2026-05-24 — beta-minimal responsive: centered max-width on wide
   // surfaces (fold-open, tablet, landscape). Narrow form factors render
   // unchanged.
@@ -141,6 +148,29 @@ export default function SwingLab() {
     if (!appliedCalibration) return CARDS;
     return CARDS.filter(c => c.key !== 'acoustic');
   }, [appliedCalibration, ownerEmail]);
+
+  React.useEffect(() => {
+    if (trustLevel === 1) return;
+    if (swingLabListeningPromptShown) return;
+    if (isActiveListeningEnabled()) return;
+    swingLabListeningPromptShown = true;
+    void (async () => {
+      try {
+        const s = useSettingsStore.getState();
+        const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+        await configureAudioForSpeech();
+        await speak(
+          'Heads up - turn on Active Listening for hands-free swing commands, or just tap me to talk.',
+          s.voiceGender,
+          s.language,
+          apiUrl,
+          { userInitiated: true },
+        );
+      } catch {
+        // Non-fatal; prompt is advisory only.
+      }
+    })();
+  }, [trustLevel]);
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>

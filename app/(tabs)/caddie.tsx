@@ -861,7 +861,7 @@ export default function CaddieTab() {
   // Kevin only speaks when the user taps to talk. Simple, honest,
   // user-driven. No flags, no sequence, no routing logic.
   useEffect(() => {
-    setOpeningPrompt('Press to talk to Kevin.');
+    setOpeningPrompt('Tap to talk.');
   }, []);
 
   // ── SmartVision ──────────────────────────

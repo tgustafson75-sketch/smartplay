@@ -79,7 +79,8 @@ import {
 import { toggle as toggleListening } from '../../services/listeningSession';
 import { safeBack } from '../../services/safeBack';
 import { useSettingsStore } from '../../store/settingsStore';
-import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { speak, configureAudioForSpeech, captureUtterance } from '../../services/voiceService';
+import { isActiveListeningEnabled } from '../../services/listeningSession';
 import { getCaddieName } from '../../lib/persona';
 // 2026-05-28 — Fix FJ: caddie presence when mic is denied. Instead of
 // the bare Alert.alert("Microphone needed") landing in silence, the
@@ -107,6 +108,7 @@ import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
 import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useFamilyStore } from '../../store/familyStore';
+import { useTrustLevelStore } from '../../store/trustLevelStore';
 // 2026-05-21 — Fix A: shared CaddieMicBadge for consistent
 // tap-to-talk affordance (ring + halo + mic-icon overlay).
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
@@ -163,6 +165,8 @@ const CONFIDENCE_DOT: Record<CoachReviewResponse['confidence'], string> = {
   medium: '#fbbf24',
   low:    '#9ca3af',
 };
+
+let cageListeningPromptShown = false;
 
 export default function CageModeScreen() {
   const router = useRouter();
@@ -253,8 +257,30 @@ export default function CageModeScreen() {
   const [batchPickerDismissed, setBatchPickerDismissed] = useState(false);
 
   const { voiceEnabled, voiceGender, language, caddiePersonality } = useSettingsStore();
+  const trustLevel = useTrustLevelStore(s => s.level);
   const caddieName = getCaddieName(caddiePersonality);
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+
+  useEffect(() => {
+    if (trustLevel === 1) return;
+    if (cageListeningPromptShown) return;
+    if (isActiveListeningEnabled()) return;
+    cageListeningPromptShown = true;
+    void (async () => {
+      try {
+        await configureAudioForSpeech();
+        await speak(
+          'Heads up - turn on Active Listening for hands-free swing commands, or just tap me to talk.',
+          voiceGender,
+          language,
+          apiUrl,
+          { userInitiated: true },
+        );
+      } catch {
+        // Non-fatal; prompt is advisory only.
+      }
+    })();
+  }, [trustLevel, voiceGender, language, apiUrl]);
 
   // ── Permissions ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -463,6 +489,55 @@ export default function CageModeScreen() {
     }
   }, [caddiePersonality, voiceGender, language, apiUrl]);
 
+  const maybePromptAutoClubDetection = useCallback(async () => {
+    const settings = useSettingsStore.getState();
+    if (settings.autoClubDetection) return;
+    if (settings.hasSeenAutoClubPrompt) return;
+
+    settings.setHasSeenAutoClubPrompt(true);
+    try {
+      await configureAudioForSpeech();
+      await speak(
+        "Want me to detect your clubs automatically? Say yes or tap to enable.",
+        voiceGender,
+        language,
+        apiUrl,
+        { userInitiated: true },
+      );
+
+      const heard = await captureUtterance(4500, apiUrl, language);
+      const normalized = heard?.trim().toLowerCase() ?? '';
+      const heardAffirmative = /\b(yes|yeah|yep|sure|ok|okay|enable|do it|turn it on)\b/.test(normalized);
+
+      const tappedEnable = heardAffirmative
+        ? false
+        : await new Promise<boolean>((resolve) => {
+            let resolved = false;
+            const done = (v: boolean) => {
+              if (resolved) return;
+              resolved = true;
+              resolve(v);
+            };
+            Alert.alert(
+              'Auto Club Detection',
+              'Enable automatic club detection for Cage Mode?',
+              [
+                { text: 'Not now', style: 'cancel', onPress: () => done(false) },
+                { text: 'Enable', onPress: () => done(true) },
+              ],
+              { cancelable: true, onDismiss: () => done(false) },
+            );
+          });
+
+      if (!heardAffirmative && !tappedEnable) return;
+
+      settings.setAutoClubDetection(true);
+      await speak('Auto club detection is now on.', voiceGender, language, apiUrl, { userInitiated: true });
+    } catch {
+      // Non-fatal prompt path.
+    }
+  }, [apiUrl, language, voiceGender]);
+
   const handleStartRecording = useCallback(async () => {
     if (!cameraRef.current) return;
     // Audit fix — double-tap guard. If a recording promise is already
@@ -486,6 +561,7 @@ export default function CageModeScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setRecordedSeconds(0);
     setPhase('RECORDING');
+    void maybePromptAutoClubDetection();
     // Reset any previous watch swing + impact reading + ball speed.
     setWatchSwing(null);
     setImpactReading(null);
@@ -523,7 +599,7 @@ export default function CageModeScreen() {
       setPhase('ERROR');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [micPerm, requestMicPerm]);
+  }, [micPerm, requestMicPerm, maybePromptAutoClubDetection]);
 
   const stopRecordingAndUpload = useCallback(async () => {
     if (recordTimerRef.current) {
