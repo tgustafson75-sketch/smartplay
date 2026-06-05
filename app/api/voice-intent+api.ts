@@ -302,19 +302,30 @@ Available intents:
     - "start a round" (no course named) -> { } (handler asks which course)
     - "fast round at Mariners with Jenny" -> { course_hint: "Mariners", guest_names: ["Jenny"] }
 
-7. unknown — Cannot determine intent.
+7. unknown — Cannot determine intent AND the words look like an ambiguous command.
    parameters: {}
    Set follow_up_question to a brief clarifying question ${caddieName} could ask.
+   ONLY use this when the user clearly issued a COMMAND that's ambiguous (e.g. "open the menu" — which menu?, "play that" — play what?). For ANY conversational utterance, use 8 or 9 below instead.
 
-CONVERSATIONAL DEFAULT — VERY IMPORTANT. ${caddieName} is the player's caddie AND a person they can talk to anytime, not just during a round. The classifier exists to route COMMANDS; everything else flows to the brain for a real conversational reply. If the user's words are NOT a clear command from the list above, return intent_type "unknown" with confidence "low" AND follow_up_question NULL — that lets the brain handle it conversationally instead of asking the user to "try again." This includes:
-- Small talk: "how are you", "what's up", "hello", "hey", "good morning", "thanks", "I'm tired", "rough day", "let's chat", "you there"
-- Questions about ${caddieName} or the app: "how does this work", "what can you do", "tell me about yourself"
-- Tactical golf questions: "what's the play here", "what club", "where do I aim", "what would you do"
-- Game/swing comments: "I've been slicing", "my putting is off", "I struggle with bunkers"
-- Anything reflective or conversational that doesn't map cleanly to a command intent
-For ALL of the above: intent_type="unknown", confidence="low", follow_up_question=null. The brain has full context to reply AND to glean information about the player's game from the exchange. Do NOT ask the user to clarify just because their words aren't a command — that breaks the conversational feel.
+8. social_greeting — Greeting or check-in directed at ${caddieName} as a person.
+   parameters: {}
+   confidence: "high" when unambiguous, "medium" otherwise.
+   follow_up_question: ALWAYS null. The brain handles it conversationally.
+   Examples: "hey ${caddieName}", "hello", "good morning", "how are you", "what's up", "thanks".
 
-ONLY use a clarifying follow_up_question when the user clearly issued a COMMAND that's ambiguous (e.g. "open the menu" — which menu?, "play that" — play what?). In that case, intent_type "unknown" with confidence "medium" and a clarifying follow_up_question. Don't guess between candidates; ask once.
+9. conversational — Free-form question, comment, story, or reflection. NOT a command.
+   parameters: {}
+   confidence: "high" when clearly conversational, "medium" if ambiguous between this and a command.
+   follow_up_question: ALWAYS null. The brain handles it conversationally.
+   Examples:
+   - Golf instruction: "how do I fix my slice", "why does my driver go right", "what is a fade"
+   - Trivia / history: "how many PGA wins does John Daly have", "tell me about Tiger"
+   - Tactical golf questions: "what's the play here", "where do I aim", "what would you do"
+   - Game / swing comments: "I've been slicing", "my putting is off"
+   - Reflections: "rough day", "I'm tired", "this is fun"
+   - Questions about ${caddieName} or the app: "how does this work", "what can you do"
+
+CATCH-ALL RULE — VERY IMPORTANT. If the utterance is not in commands 1-6, it is ALMOST CERTAINLY a social_greeting (#8) or conversational (#9). Pick one of those. Use "unknown" (#7) ONLY when the user issued a COMMAND that's genuinely ambiguous and needs disambiguation. Never default to "unknown" for ordinary speech.
 
 Language detection — emit a "language" field on EVERY response based on transcript content:
 - Spanish triggers (any of these substrings, case-insensitive): "cuántas yardas", "cuantas yardas", "qué distancia", "que distancia", "distancia al", "al banderín", "al centro del green", "cuánto al", "cuanto al" → "es"
@@ -324,7 +335,7 @@ The language reflects the transcript itself, not the user's preferred app langua
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-   "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "set_hole_note" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "coach_refine" | "position_declaration" | "confirm_position" | "unknown",
+   "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "set_trust_quiet" | "set_trust_companion" | "log_issue" | "media_capture" | "media_playback" | "putt_watch" | "log_score" | "sequence" | "declare_hole" | "set_hole_note" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "coach_refine" | "position_declaration" | "confirm_position" | "social_greeting" | "conversational" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null,
@@ -336,7 +347,7 @@ Confidence guide:
 - medium: intent is clear but parameters are partial or fuzzy
 - low: intent itself is uncertain — set follow_up_question
 
-Reminder of the conversational default above: any non-command utterance — tactical golf question, small talk, comment, or reflection — gets intent_type "unknown" + confidence "low" + follow_up_question null so it routes to ${caddieName}'s brain.`;
+Reminder of the catch-all rule above: greetings → social_greeting; ANY other non-command utterance → conversational. Both route to ${caddieName}'s brain. Reserve "unknown" strictly for genuinely ambiguous commands that need clarification.`;
 };
 
 export async function POST(request: Request) {

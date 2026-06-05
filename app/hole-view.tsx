@@ -702,7 +702,7 @@ export default function HoleView() {
       if (!message) throw new Error('Empty response');
       setAnalysisText(message);
       await configureAudioForSpeech();
-      await speak(message, voiceGender, language, apiUrl);
+      await speak(message, voiceGender, language, apiUrl, { userInitiated: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.log('[SmartVision] error:', msg);

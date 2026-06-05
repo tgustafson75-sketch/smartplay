@@ -21,7 +21,7 @@ import { initFeelCapture } from '../services/feelCaptureService';
 import { startSwingCommentarySubscription } from '../services/swingCommentaryService';
 import { initListeningSession } from '../services/listeningSession';
 import { hydrateCourseTruthCache } from '../services/courseTruth';
-import { initVoiceTriggers } from '../services/voiceTriggers';
+import { initVoiceTriggers, syncBluetoothMediaButtonState } from '../services/voiceTriggers';
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
 import { startHandsFreeOrchestrator } from '../services/handsFreeOrchestrator';
 import { activateMediaSession, deactivateMediaSession } from '../services/mediaKeyBridge';
@@ -386,8 +386,11 @@ function AppNavigator() {
     const teardownVoiceTriggers = initVoiceTriggers();
     const unsub = useSettingsStore.subscribe((s) => {
       setEarbudEnabled(s.earbudTapToTalk);
+      void syncBluetoothMediaButtonState(s.earbudTapToTalk);
     });
-    setEarbudEnabled(useSettingsStore.getState().earbudTapToTalk);
+    const initialEarbudEnabled = useSettingsStore.getState().earbudTapToTalk;
+    setEarbudEnabled(initialEarbudEnabled);
+    void syncBluetoothMediaButtonState(initialEarbudEnabled);
     return () => {
       unsub();
       teardownVoiceTriggers();

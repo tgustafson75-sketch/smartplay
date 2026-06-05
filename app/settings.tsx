@@ -61,6 +61,8 @@ export default function Settings() {
     castMode,
     highContrast,
     autoListenEnabled,
+    earbudTapToTalk,
+    setEarbudTapToTalk,
     cartMode,
     skip_briefings,
     proactive_kevin_enabled,
@@ -109,6 +111,8 @@ export default function Settings() {
   // display row. Reads from the dedicated watchStore — stays false
   // until the native SDK lands and flips it.
   const watchConnected = useWatchStore((s) => s.isConnected);
+  const watchHealthSnapshot = useWatchStore((s) => s.lastHealthSnapshot);
+  const watchHealthSyncAt = useWatchStore((s) => s.lastHealthSyncAt);
 
   // 4-persona caddie selector — driven by caddiePersonality (the source
   // of truth). voiceGender is auto-synced inside the store setter.
@@ -1170,17 +1174,31 @@ export default function Settings() {
           </View>
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Earbud / BT remote tap · Not wired</Text>
+              <Text style={labelStyle}>Health Connect heartbeat</Text>
               <Text style={subStyle}>
-                Hardware play/pause press for tap-to-talk needs a native media-key listener (react-native-track-player or equivalent) that was stripped earlier for New-Arch compat. Requires a new APK build to re-enable.
+                {watchHealthSnapshot?.hasData
+                  ? `Latest sample: ${watchHealthSnapshot.heartRateAvg != null ? `${watchHealthSnapshot.heartRateAvg} bpm` : 'heart rate unavailable'} · ${watchHealthSnapshot.steps} steps · ${Math.round(watchHealthSnapshot.distanceMeters)} m`
+                  : healthDataEnabled
+                    ? 'Waiting for a live sample during a round.'
+                    : 'Turn on Health Data to read steps and heart rate during rounds.'}
+                {watchHealthSyncAt != null
+                  ? ` Last sync ${Math.max(1, Math.round((Date.now() - watchHealthSyncAt) / 60_000))} min ago.`
+                  : ''}
+              </Text>
+            </View>
+          </View>
+          <View style={rowDivStyle}>
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>Earbud / BT remote tap</Text>
+              <Text style={subStyle}>
+                Off by default to reduce startup risk. Turn it on only if you want to test tap-to-talk with a build that has a native media-key listener.
               </Text>
             </View>
             <Switch
-              value={false}
-              onValueChange={() => {}}
+              value={earbudTapToTalk}
+              onValueChange={confirmToggle('Earbud tap-to-talk', setEarbudTapToTalk)}
               trackColor={{ false: colors.border, true: colors.accent }}
-              thumbColor={colors.text_primary}
-              disabled
+              thumbColor="#ffffff"
             />
           </View>
           <View style={rowDivStyle}>

@@ -13,6 +13,7 @@
  */
 
 import { useRoundStore } from '../store/roundStore';
+import type { GpsFix } from './gpsManager';
 
 export interface RefreshGpsResult {
   toast_text: string;
@@ -41,6 +42,17 @@ export async function refreshGpsAndReconcile(): Promise<RefreshGpsResult> {
     gps.bumpToActive('user_refresh_gps');
   } catch { /* non-fatal */ }
 
+  // 2026-06-04 — Force an actual fresh fix before hole reconciliation.
+  // The prior implementation reconciled immediately after bumping the
+  // GPS mode, which could still operate on the last cached fix. That was
+  // enough to change state sometimes, but not enough to guarantee a real
+  // refresh for the user.
+  let freshFix: GpsFix | null = null;
+  try {
+    const gps = await import('./gpsManager');
+    freshFix = await gps.forceRefreshGps();
+  } catch { /* non-fatal */ }
+
   const result = useRoundStore.getState().reconcileHole();
 
   // SmartVision synergy: when the hole actually changed, force a fresh
@@ -66,6 +78,8 @@ export async function refreshGpsAndReconcile(): Promise<RefreshGpsResult> {
     toast_text = result.accuracy_warning;
   } else if (result.applied) {
     toast_text = `Snapped to hole ${result.hole_number} · ${result.confidence}% confidence`;
+  } else if (freshFix) {
+    toast_text = `Fresh fix locked${freshFix.accuracy_m != null ? ` (${Math.round(freshFix.accuracy_m)}m)` : ''}.`;
   } else if (result.confidence > 0) {
     toast_text = `Confirmed hole ${result.hole_number} · ${result.confidence}% confidence`;
   } else {

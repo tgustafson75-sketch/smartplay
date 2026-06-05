@@ -139,6 +139,9 @@ export async function fetchCourseContent(input: CourseContentInput): Promise<Cou
       await new Promise(r => setTimeout(r, HYDRATION_POLL_MS));
     }
     const _settings = settingsMod.useSettingsStore.getState();
+    // 2026-06-04 — tightened from 20s to 8s. Stalled connections
+    // shouldn't hang the UI; caller's catch turns abort into a null
+    // fallback and the persisted-cache value (if any) wins.
     const res = await fetch(`${apiUrl}/api/course-content`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -147,7 +150,7 @@ export async function fetchCourseContent(input: CourseContentInput): Promise<Cou
         voiceGender: _settings.voiceGender ?? 'male',
         persona: _settings.caddiePersonality,
       }),
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) {
       console.warn('[courseContent] fetch failed:', res.status);

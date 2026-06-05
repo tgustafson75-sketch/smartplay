@@ -39,7 +39,7 @@ import {
 } from '../services/smartFinderService';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { refreshGpsAndReconcile } from '../services/refreshGpsAction';
-import { haversineYards, projectToAxis } from '../utils/geoDistance';
+import { bearingDegrees, haversineYards, projectToAxis, unprojectFromAxis } from '../utils/geoDistance';
 import { computeDistance, buildLock } from '../services/rangefinder';
 import GPSQuality from '../components/smartfinder/GPSQuality';
 import SmartFinderModeToggle from '../components/smartfinder/SmartFinderModeToggle';
@@ -49,6 +49,8 @@ import { playsLikeDistance } from '../utils/playsLike';
 import type { WeatherSnapshot } from '../services/weatherService';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTrustLevelStore } from '../store/trustLevelStore';
+import { usePracticeStore } from '../store/practiceStore';
+import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { speak } from '../services/voiceService';
 // 2026-05-27 — Fix EP: SmartFinder "Send to Tank" icon. Routes to
 // Library so the user picks the swing video to send (SmartFinder
@@ -213,6 +215,9 @@ export default function SmartFinder() {
         currentHole={currentHole}
         gps={gps}
         yards={yards}
+        geometry={geometry}
+        weather={caddieWeather}
+        shotBearingDeg={shotBearingDeg}
         onModeChange={setMode}
         onClose={() => safeBack()}
         height={height}
@@ -357,12 +362,15 @@ function zoomLabelFor(zoom: number): string {
 }
 
 function CameraSmartFinder({
-  mode, currentHole, gps, yards, onModeChange, onClose, height,
+  mode, currentHole, gps, yards, geometry, weather, shotBearingDeg, onModeChange, onClose, height,
 }: {
   mode: SmartFinderMode;
   currentHole: number;
   gps: GPSQualityReading;
   yards: GreenYardages;
+  geometry: HoleGeometry | null;
+  weather: WeatherSnapshot | null;
+  shotBearingDeg: number | null;
   onModeChange: (m: SmartFinderMode) => void;
   onClose: () => void;
   height: number;
@@ -514,7 +522,14 @@ function CameraSmartFinder({
               yards={yards}
             />
           ) : mode === 'target' ? (
-            <TargetCameraOverlay yards={yards} locked={locked} />
+            <TargetCameraOverlay
+              yards={yards}
+              gps={gps}
+              geometry={geometry}
+              weather={weather}
+              shotBearingDeg={shotBearingDeg}
+              locked={locked}
+            />
           ) : (
             <PuttCameraOverlay locationGranted={locationGranted} />
           )}
@@ -937,17 +952,354 @@ function StandardCameraOverlay({
 // Bottom strip shows TO TARGET <yds> with Front / Middle / Back of green
 // distances. Replaces the old top-down flat-canvas TargetView.
 
-function TargetCameraOverlay({ yards, locked }: { yards: GreenYardages; locked?: boolean }) {
+function recommendClubForDistance(yards: number | null): string | null {
+  if (yards == null || yards <= 0) return null;
+  if (yards >= 240) return 'Driver';
+  if (yards >= 215) return '3 Wood';
+  if (yards >= 195) return 'Hybrid';
+  if (yards >= 178) return '4 Iron';
+  if (yards >= 165) return '5 Iron';
+  if (yards >= 152) return '6 Iron';
+  if (yards >= 138) return '7 Iron';
+  if (yards >= 125) return '8 Iron';
+  if (yards >= 110) return '9 Iron';
+  if (yards >= 95) return 'PW';
+  if (yards >= 78) return 'GW';
+  if (yards >= 58) return 'SW';
+  if (yards >= 38) return 'LW';
+  return 'Putter';
+}
+
+function estimateCarryTotal(club: string | null, avgCarryDriver: number, avgCarry3Wood: number): { carry: number; total: number } | null {
+  if (!club) return null;
+  const dCarry = avgCarryDriver > 0 ? avgCarryDriver : 240;
+  const w3Carry = avgCarry3Wood > 0 ? avgCarry3Wood : Math.max(205, dCarry - 22);
+  const map: Record<string, number> = {
+    'Driver': dCarry,
+    '3 Wood': w3Carry,
+    'Hybrid': Math.max(188, w3Carry - 20),
+    '4 Iron': Math.max(176, w3Carry - 30),
+    '5 Iron': Math.max(165, w3Carry - 40),
+    '6 Iron': Math.max(154, w3Carry - 50),
+    '7 Iron': Math.max(143, w3Carry - 60),
+    '8 Iron': Math.max(132, w3Carry - 70),
+    '9 Iron': Math.max(121, w3Carry - 80),
+    'PW': 110,
+    'GW': 95,
+    'SW': 78,
+    'LW': 62,
+    'Putter': 12,
+  };
+  const carry = Math.round(map[club] ?? 140);
+  const rollout = club === 'Driver' ? 18 : club === '3 Wood' ? 14 : club === 'Hybrid' ? 10 : club.includes('Iron') ? 6 : 2;
+  return { carry, total: carry + rollout };
+}
+
+function estimateDispersion(club: string | null, handicap: number): { yards: number; band: 'tight' | 'moderate' | 'wide' } {
+  const base = club === 'Driver' ? 34 : club === '3 Wood' ? 28 : club === 'Hybrid' ? 24 : club?.includes('Iron') ? 18 : 10;
+  const hcpAdjust = handicap <= 2 ? -6 : handicap <= 8 ? -3 : handicap <= 14 ? 0 : handicap <= 22 ? 5 : 9;
+  const yards = Math.max(8, base + hcpAdjust);
+  const band = yards <= 16 ? 'tight' : yards <= 28 ? 'moderate' : 'wide';
+  return { yards, band };
+}
+
+function stepDownClub(club: string | null): string | null {
+  if (!club) return null;
+  const ladder = ['Driver', '3 Wood', 'Hybrid', '4 Iron', '5 Iron', '6 Iron', '7 Iron', '8 Iron', '9 Iron', 'PW', 'GW', 'SW', 'LW'];
+  const idx = ladder.indexOf(club);
+  if (idx < 0 || idx === ladder.length - 1) return club;
+  return ladder[idx + 1];
+}
+
+type HazardIntelligence = {
+  label: string;
+  kind: 'water' | 'bunker' | 'hazard';
+  side: 'left' | 'right' | 'center';
+  front: number;
+  center: number;
+  back: number;
+  carryToClear: number;
+  runoutDistance: number;
+  source: 'polygon' | 'point';
+};
+
+function computeHazardIntelligence(
+  player: { lat: number; lng: number } | null,
+  geometry: HoleGeometry | null,
+  landingTotal: number | null,
+  shotBearingDeg: number | null,
+): HazardIntelligence | null {
+  if (!player || !geometry) return null;
+
+  type Candidate = {
+    label: string;
+    kind: 'water' | 'bunker' | 'hazard';
+    sideHint: 'left' | 'right' | 'center' | null;
+    centroid: { lat: number; lng: number } | null;
+    distances: number[];
+    source: 'polygon' | 'point';
+  };
+  const candidates: Candidate[] = [];
+
+  for (const h of geometry.hazards ?? []) {
+    if (!h.location) continue;
+    const lower = h.label.toLowerCase();
+    const kind: 'water' | 'bunker' | 'hazard' =
+      lower.includes('water') || lower.includes('pond') || lower.includes('lake') ? 'water'
+      : lower.includes('bunker') || lower.includes('sand') ? 'bunker'
+      : 'hazard';
+    candidates.push({
+      label: h.label,
+      kind,
+      sideHint: null,
+      centroid: h.location,
+      distances: [Math.round(haversineYards(player, h.location))],
+      source: 'point',
+    });
+  }
+
+  const polygonFeatures = [...(geometry.bunkers ?? []), ...(geometry.water_hazards ?? [])];
+  for (const f of polygonFeatures) {
+    const dists: number[] = [];
+    if (f.polygon && f.polygon.length > 0) {
+      for (const p of f.polygon) dists.push(Math.round(haversineYards(player, p)));
+    }
+    if (dists.length === 0 && f.centroid) {
+      dists.push(Math.round(haversineYards(player, f.centroid)));
+    }
+    if (dists.length === 0) continue;
+    candidates.push({
+      label: f.name ?? (f.side === 'greenside' ? 'Greenside hazard' : 'Hazard'),
+      kind: geometry.water_hazards?.includes(f) ? 'water' : 'bunker',
+      sideHint: f.side === 'left' || f.side === 'right' ? f.side : null,
+      centroid: f.centroid ?? null,
+      distances: dists,
+      source: f.polygon && f.polygon.length > 0 ? 'polygon' : 'point',
+    });
+  }
+
+  if (candidates.length === 0) return null;
+
+  const scored = candidates.map((c) => {
+    const sorted = [...c.distances].sort((a, b) => a - b);
+    const front = sorted[0];
+    const back = sorted[sorted.length - 1];
+    const center = Math.round((front + back) / 2);
+    const sideFromBearing = (() => {
+      if (!shotBearingDeg || !c.centroid) return null;
+      const hazardBearing = bearingDegrees(player, c.centroid);
+      let rel = ((hazardBearing - shotBearingDeg) % 360 + 360) % 360;
+      if (rel > 180) rel -= 360;
+      if (Math.abs(rel) <= 12) return 'center' as const;
+      return rel < 0 ? 'left' as const : 'right' as const;
+    })();
+    const side = c.sideHint ?? sideFromBearing ?? 'center';
+    return { c, front, back, center, side };
+  }).sort((a, b) => a.center - b.center);
+
+  const best = scored[0];
+  const carryToClear = best.back + 1;
+  const runoutDistance = landingTotal != null ? Math.max(0, landingTotal - carryToClear) : 0;
+
+  return {
+    label: best.c.label,
+    kind: best.c.kind,
+    side: best.side,
+    front: best.front,
+    center: best.center,
+    back: best.back,
+    carryToClear,
+    runoutDistance,
+    source: best.c.source,
+  };
+}
+
+function riskBandFromHazards(nearestHazardYards: number | null, carryYards: number | null): 'Low' | 'Moderate' | 'High' {
+  if (nearestHazardYards == null || carryYards == null) return 'Moderate';
+  const delta = Math.abs(nearestHazardYards - carryYards);
+  if (delta <= 8) return 'High';
+  if (delta <= 20) return 'Moderate';
+  return 'Low';
+}
+
+function TargetCameraOverlay({
+  yards,
+  gps,
+  geometry,
+  weather,
+  shotBearingDeg,
+  locked,
+}: {
+  yards: GreenYardages;
+  gps: GPSQualityReading;
+  geometry: HoleGeometry | null;
+  weather: WeatherSnapshot | null;
+  shotBearingDeg: number | null;
+  locked?: boolean;
+}) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const [targetYards, setTargetYards] = useState<number | null>(yards.middle);
+  const [targetBearing, setTargetBearing] = useState<number | null>(shotBearingDeg);
+  const [reticleConfidence, setReticleConfidence] = useState<'high' | 'medium' | 'low'>('medium');
+  const [playerLoc, setPlayerLoc] = useState<{ lat: number; lng: number } | null>(null);
+  const headingRef = useRef(0);
+  const pitchRef = useRef(-10);
+  const lastYardsRef = useRef<number | null>(null);
+  const lastBearingRef = useRef<number | null>(null);
+
+  const avgCarryDriver = usePracticeStore(s => s.avgCarryDriver);
+  const avgCarry3Wood = usePracticeStore(s => s.avgCarry3Wood);
+  const handicap = usePlayerProfileStore(s => s.handicap);
+  const dominantMiss = usePlayerProfileStore(s => s.dominantMiss);
+
+  useEffect(() => {
+    DeviceMotion.setUpdateInterval(80);
+    const sub = DeviceMotion.addListener(data => {
+      if (data.rotation) {
+        const pitchDeg = ((data.rotation.beta ?? 0) * 180) / Math.PI;
+        pitchRef.current = pitchDeg;
+        const alphaDeg = ((data.rotation.alpha ?? 0) * 180) / Math.PI;
+        headingRef.current = ((alphaDeg % 360) + 360) % 360;
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  const onTargetPointNormalized = useCallback((point: { xNorm: number; yNorm: number }) => {
+    const fix = getLastFix();
+    if (!fix) {
+      setTargetYards(null);
+      setReticleConfidence('low');
+      return;
+    }
+    const userPos = {
+      lat: fix.location.lat,
+      lng: fix.location.lng,
+      accuracy: fix.accuracy_m ?? 10,
+    };
+    const result = computeDistance({
+      user_position: userPos,
+      compass_heading: headingRef.current,
+      tap_x_normalized: point.xNorm,
+      tap_y_normalized: point.yNorm,
+      device_pitch_degrees: pitchRef.current,
+    });
+    setReticleConfidence(result.confidence);
+    if (result.unmeasurable) {
+      if (lastYardsRef.current !== null) {
+        lastYardsRef.current = null;
+        setTargetYards(null);
+      }
+      return;
+    }
+    const target = { lat: result.target_lat, lng: result.target_lng };
+    const geodesicYards = Math.max(1, Math.round(haversineYards(fix.location, target)));
+    if (lastYardsRef.current !== geodesicYards) {
+      lastYardsRef.current = geodesicYards;
+      setTargetYards(geodesicYards);
+    }
+    const nextBearing = bearingDegrees(fix.location, target);
+    if (lastBearingRef.current !== nextBearing) {
+      lastBearingRef.current = nextBearing;
+      setTargetBearing(nextBearing);
+    }
+    setPlayerLoc(fix.location);
+  }, []);
+
+  const playsLike = useMemo(() => {
+    if (targetYards == null || !weather) return null;
+    const b = playsLikeDistance(targetYards, weather, targetBearing ?? shotBearingDeg);
+    return {
+      yards: b.plays_like_yards,
+      delta: b.delta_yards,
+      windText: weather.wind_speed_mph >= 4
+        ? `${Math.round(weather.wind_speed_mph)} mph ${describeWindDirection(weather.wind_direction_deg, targetBearing ?? shotBearingDeg)}`
+        : null,
+    };
+  }, [targetBearing, targetYards, shotBearingDeg, weather]);
+
+  const effectiveYards = playsLike?.yards ?? targetYards;
+  const recommendedClub = useMemo(() => recommendClubForDistance(effectiveYards), [effectiveYards]);
+  const landing = useMemo(() => estimateCarryTotal(recommendedClub, avgCarryDriver, avgCarry3Wood), [recommendedClub, avgCarryDriver, avgCarry3Wood]);
+  const dispersion = useMemo(() => estimateDispersion(recommendedClub, handicap), [recommendedClub, handicap]);
+
+  const hazardSummary = useMemo(() => {
+    if (!playerLoc || !geometry?.hazards || geometry.hazards.length === 0) return null;
+    const withDistance = geometry.hazards
+      .filter(h => h.location)
+      .map(h => ({ label: h.label, yards: Math.round(haversineYards(playerLoc, h.location!)) }))
+      .sort((a, b) => a.yards - b.yards);
+    if (withDistance.length === 0) return null;
+    const nearest = withDistance[0];
+    return {
+      nearest,
+      risk: riskBandFromHazards(nearest.yards, landing?.carry ?? null),
+      safeMiss: dominantMiss === 'right' ? 'Favor left center.' : dominantMiss === 'left' ? 'Favor right center.' : 'Favor center-left for margin.',
+      secondary: withDistance[1] ?? null,
+    };
+  }, [dominantMiss, geometry?.hazards, landing?.carry, playerLoc]);
+
+  const hazardIntel = useMemo(
+    () => computeHazardIntelligence(playerLoc, geometry, landing?.total ?? null, targetBearing ?? shotBearingDeg),
+    [geometry, landing?.total, playerLoc, shotBearingDeg, targetBearing],
+  );
+
+  const sideAwareMissGuidance = useMemo(() => {
+    if (!hazardIntel) {
+      return dominantMiss === 'right' ? 'Preferred miss: left-center.'
+        : dominantMiss === 'left' ? 'Preferred miss: right-center.'
+        : 'Preferred miss: center-left safe side.';
+    }
+    if (hazardIntel.side === 'left') return 'Safe miss: right-center (left trouble).';
+    if (hazardIntel.side === 'right') return 'Safe miss: left-center (right trouble).';
+    return dominantMiss === 'right' ? 'Safe miss: left-center.'
+      : dominantMiss === 'left' ? 'Safe miss: right-center.'
+      : 'Safe miss: center-left.';
+  }, [dominantMiss, hazardIntel]);
+
+  const confidenceLabel = useMemo(() => {
+    if (gps.level === 'none' || gps.level === 'stale') return 'Low';
+    if (reticleConfidence === 'high' && gps.level === 'strong') return 'High';
+    if (reticleConfidence === 'low' || gps.level === 'weak') return 'Low';
+    return 'Medium';
+  }, [gps.level, reticleConfidence]);
+
+  const conservativeYards = effectiveYards != null ? Math.max(20, effectiveYards - 28) : null;
+  const conservativeClub = recommendClubForDistance(conservativeYards);
+  const conservativeLanding = estimateCarryTotal(conservativeClub, avgCarryDriver, avgCarry3Wood);
+
+  const aggressiveLine = useMemo(() => {
+    if (!recommendedClub || effectiveYards == null) return 'Aggressive: unavailable until GPS settles.';
+    if (hazardIntel && landing) {
+      const risk = riskBandFromHazards(hazardIntel.carryToClear, landing.carry);
+      return `Aggressive: ${recommendedClub} to ${effectiveYards}y, carry ${landing.carry} (${risk} risk near ${hazardIntel.label}).`;
+    }
+    return `Aggressive: ${recommendedClub} to ${effectiveYards}y.`;
+  }, [effectiveYards, hazardIntel, landing, recommendedClub]);
+
+  const conservativeLine = useMemo(() => {
+    if (!conservativeClub || conservativeYards == null) return 'Conservative: unavailable.';
+    if (hazardIntel && conservativeLanding) {
+      const clears = conservativeLanding.carry >= hazardIntel.carryToClear;
+      const risk = clears ? 'Low' : 'Moderate';
+      return `Conservative: ${conservativeClub} to ~${conservativeYards}y (${risk} risk), leave full approach in.`;
+    }
+    return `Conservative: ${conservativeClub} to ~${conservativeYards}y, leave approach in.`;
+  }, [conservativeClub, conservativeLanding, conservativeYards, hazardIntel]);
+
+  const adjustedClub = useMemo(() => {
+    if (!hazardIntel || !recommendedClub || !landing) return recommendedClub;
+    const nearHazardWindow = Math.abs(landing.carry - hazardIntel.carryToClear) <= 10;
+    if (!nearHazardWindow) return recommendedClub;
+    return stepDownClub(recommendedClub) ?? recommendedClub;
+  }, [hazardIntel, landing, recommendedClub]);
 
   return (
     <View style={StyleSheet.absoluteFill}>
       <TargetingOverlay
-        gpsDistances={{ front: yards.front, middle: yards.middle, back: yards.back }}
-        baseYardage={yards.middle}
-        onTargetDistance={(v) => setTargetYards(v)}
+        targetYards={targetYards}
+        onTargetPointNormalized={onTargetPointNormalized}
         locked={locked}
       />
 
@@ -963,6 +1315,46 @@ function TargetCameraOverlay({ yards, locked }: { yards: GreenYardages; locked?:
             <Text style={styles.targetToLabelMuted}> yds</Text>
           </Text>
         )}
+        <View style={styles.targetIntelCard}>
+          <View style={styles.targetIntelTopRow}>
+            <View style={styles.targetIntelMetric}>
+              <Text style={styles.targetIntelLabel}>RAW</Text>
+              <Text style={styles.targetIntelValue}>{targetYards ?? '—'}</Text>
+            </View>
+            <View style={styles.targetIntelMetric}>
+              <Text style={styles.targetIntelLabel}>PLAYS</Text>
+              <Text style={styles.targetIntelValueAccent}>{effectiveYards ?? '—'}</Text>
+            </View>
+            <View style={styles.targetIntelMetric}>
+              <Text style={styles.targetIntelLabel}>CLUB</Text>
+              <Text style={styles.targetIntelValue}>{adjustedClub ?? '—'}</Text>
+            </View>
+            <View style={styles.targetIntelMetric}>
+              <Text style={styles.targetIntelLabel}>CONF</Text>
+              <Text style={styles.targetIntelValue}>{confidenceLabel}</Text>
+            </View>
+          </View>
+          {!!playsLike?.windText && <Text style={styles.targetIntelLine}>Wind: {playsLike.windText}</Text>}
+          <Text style={styles.targetIntelLine}>Elevation: unavailable · distance remains primary.</Text>
+          {landing && (
+            <Text style={styles.targetIntelLine}>
+              Landing Zone: carry {landing.carry} · total {landing.total} · dispersion {dispersion.yards}y ({dispersion.band})
+            </Text>
+          )}
+          {hazardSummary?.nearest && (
+            <Text style={styles.targetIntelLine}>
+              Hazard: {hazardSummary.nearest.label} at {hazardSummary.nearest.yards}y · risk {hazardSummary.risk}. {hazardSummary.safeMiss}
+            </Text>
+          )}
+          {hazardIntel && (
+            <Text style={styles.targetIntelLine}>
+              {hazardIntel.kind.toUpperCase()} ({hazardIntel.side}): {hazardIntel.label} · front {hazardIntel.front} · center {hazardIntel.center} · back {hazardIntel.back} · carry clear {hazardIntel.carryToClear} · runout {hazardIntel.runoutDistance}
+            </Text>
+          )}
+          <Text style={styles.targetIntelLine}>{sideAwareMissGuidance}</Text>
+          <Text style={styles.targetIntelPlan}>{aggressiveLine}</Text>
+          <Text style={styles.targetIntelPlan}>{conservativeLine}</Text>
+        </View>
         <View style={styles.targetFmbRow}>
           <View style={styles.targetFmbCol}>
             <Text style={styles.targetFmbHeader}>F</Text>
@@ -1133,16 +1525,18 @@ function readSlope(pct: number): string {
 
 function TargetView({ geometry, width }: { geometry: HoleGeometry | null; width: number }) {
   const styles = useStyles();
-  const [tap, setTap] = useState<{ xPx: number; yPx: number; yards: number } | null>(null);
+  const [tap, setTap] = useState<{ xPx: number; yPx: number; yards: number; approx: boolean } | null>(null);
 
   if (!geometry || !geometry.tee || !geometry.green) {
     return <View style={styles.canvasWrap}><Text style={styles.empty}>Course geometry isn&apos;t available for this hole.</Text></View>;
   }
+  const tee = geometry.tee;
+  const green = geometry.green;
   const fix = getLastFix();
   if (!fix) {
     return <View style={styles.canvasWrap}><Text style={styles.empty}>Waiting for GPS — make sure location permission is granted.</Text></View>;
   }
-  const axisYards = haversineYards(geometry.tee, geometry.green);
+  const axisYards = haversineYards(tee, green);
   if (axisYards <= 0) return <View style={styles.canvasWrap}><Text style={styles.empty}>Hole geometry invalid.</Text></View>;
 
   const playerProj = projectToAxis(fix.location, geometry.tee, geometry.green);
@@ -1164,10 +1558,10 @@ function TargetView({ geometry, width }: { geometry: HoleGeometry | null; width:
     const { locationX, locationY } = evt.nativeEvent;
     const tappedYx = (locationX - xPad) / scale - xRange / 2;
     const tappedYy = (yRange - (locationY - halfPad) / scale) - 30;
-    const dx = tappedYx - playerProj.x;
-    const dy = tappedYy - playerProj.y;
-    const yards = Math.round(Math.sqrt(dx * dx + dy * dy));
-    setTap({ xPx: locationX, yPx: locationY, yards });
+    const tapLoc = unprojectFromAxis({ x: tappedYx, y: tappedYy }, tee, green);
+    const yards = Math.max(1, Math.round(haversineYards(fix.location, tapLoc)));
+    const approx = (fix.accuracy_m ?? 0) > 15;
+    setTap({ xPx: locationX, yPx: locationY, yards, approx });
   };
 
   return (
@@ -1191,6 +1585,7 @@ function TargetView({ geometry, width }: { geometry: HoleGeometry | null; width:
         )}
       </Svg>
       {tap && <Text style={styles.tapResult}>{tap.yards} yards to tap</Text>}
+      {tap && tap.approx && <Text style={styles.tapResult}>Approximate due to GPS quality.</Text>}
     </View>
   );
 }
@@ -1417,6 +1812,43 @@ return StyleSheet.create({
   },
   targetToLabelMuted: { color: 'rgba(255,230,0,0.85)' },
   targetToYards: { color: '#FFE600', fontSize: 18 },
+  targetIntelCard: {
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(5,18,11,0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  targetIntelTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  targetIntelMetric: { alignItems: 'center', minWidth: 60 },
+  targetIntelLabel: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+  },
+  targetIntelValue: { color: '#ffffff', fontSize: 14, fontWeight: '800' },
+  targetIntelValueAccent: { color: '#00C896', fontSize: 14, fontWeight: '900' },
+  targetIntelLine: {
+    color: '#d1d5db',
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  targetIntelPlan: {
+    color: '#f3f4f6',
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 4,
+    fontWeight: '700',
+  },
   targetFmbRow: { flexDirection: 'row', justifyContent: 'space-around', alignSelf: 'stretch' },
   targetFmbCol: { alignItems: 'center', minWidth: 70 },
   targetFmbHeader: { color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '900', letterSpacing: 1.4 },

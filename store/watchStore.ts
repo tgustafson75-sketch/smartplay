@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
+import type { HealthSnapshot } from '../services/healthData';
 
 // ─── TYPES ────────────────────────────────
 
@@ -33,11 +34,14 @@ interface WatchState {
   isConnected: boolean;
   deviceName: string | null;
   lastHeartbeat: number | null;
+  lastHealthSyncAt: number | null;
+  lastHealthSnapshot: HealthSnapshot | null;
   lastSwing: SwingMetrics | null;
   isSwingDetected: boolean;
   sessionSwings: SwingMetrics[];
 
   setConnected: (connected: boolean, deviceName?: string) => void;
+  setHealthSnapshot: (snapshot: HealthSnapshot | null) => void;
   recordSwing: (metrics: Omit<SwingMetrics, 'timestamp'>) => void;
   clearSession: () => void;
   getSessionSummary: () => WatchSession | null;
@@ -52,6 +56,8 @@ export const useWatchStore = create<WatchState>()(
       isConnected: false,
       deviceName: null,
       lastHeartbeat: null,
+      lastHealthSyncAt: null,
+      lastHealthSnapshot: null,
       lastSwing: null,
       isSwingDetected: false,
       sessionSwings: [],
@@ -61,6 +67,12 @@ export const useWatchStore = create<WatchState>()(
           isConnected: connected,
           deviceName: deviceName ?? null,
           lastHeartbeat: connected ? Date.now() : null,
+        }),
+
+      setHealthSnapshot: (snapshot) =>
+        set({
+          lastHealthSnapshot: snapshot,
+          lastHealthSyncAt: snapshot?.hasData ? Date.now() : null,
         }),
 
       recordSwing: (metrics) => {

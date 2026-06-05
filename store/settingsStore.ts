@@ -395,7 +395,11 @@ export const useSettingsStore = create<SettingsState>()(
       tutorialsSeen: {},
       introOpens: {},
       fillerEnabled: true,
-      earbudTapToTalk: true,
+      // 2026-06-04 — Hands-free / BT tap-to-talk default OFF.
+      // The native media-key bridge is still a future APK path, so
+      // new installs start in the safer state and users opt in from
+      // Settings when they want to test it.
+      earbudTapToTalk: false,
       glassesMode: false,
       feelCaptureEnabled: false,
       voiceOnPhoneSpeaker: true,
@@ -706,6 +710,12 @@ export const useSettingsStore = create<SettingsState>()(
           if (p.hasSeenAutoClubPrompt == null) {
             p.hasSeenAutoClubPrompt = false;
           }
+        }
+        // v10 — hands-free safety pass. Earbud tap-to-talk starts OFF
+        // so app boot never enables the native media-key path unless
+        // the user explicitly opts in from Settings.
+        if (version < 10) {
+          p.earbudTapToTalk = false;
         }
         return p as SettingsState;
       },

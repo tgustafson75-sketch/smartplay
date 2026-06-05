@@ -120,7 +120,7 @@ export default function LieAnalysisScreen() {
     const text = (summary + clubLine + closer + goalLine).trim();
     setSpeaking(true);
     try {
-      await speak(text, voiceGender, language, apiUrl);
+      await speak(text, voiceGender, language, apiUrl, { userInitiated: true });
     } finally {
       setSpeaking(false);
     }

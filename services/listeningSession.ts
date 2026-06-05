@@ -57,6 +57,9 @@ function isAllowedExternalUrl(url: string): boolean {
 
 type SessionState = 'idle' | 'opening' | 'listening' | 'thinking' | 'responding';
 
+const INTENT_FETCH_TIMEOUT_MS = 8_000;
+const KEVIN_FETCH_TIMEOUT_MS = 25_000;
+
 let state: SessionState = 'idle';
 let cancelMic: (() => void) | null = null;
 let unsubEarbud: (() => void) | null = null;
@@ -146,6 +149,16 @@ function setSessionStateMirror(next: SessionState): void {
     useListeningSessionStore.getState().setState(next);
   } catch (e) {
     console.log('[listeningSession] state mirror failed', e);
+  }
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -276,6 +289,7 @@ async function openSession() {
   // Phase 2 — open mic for utterance
   setSessionStateMirror('listening');
   console.log('[audit:voice] listening engaged');
+  const t_capture_start = Date.now();
   let utterance: string | null = null;
   try {
     // 2026-05-25 — Bumped 8s→12s. Open-mic users need room to express a
@@ -299,6 +313,7 @@ async function openSession() {
     setSessionStateMirror('idle');
     return;
   }
+  const t_capture_end = Date.now();
 
   // Phase 3 — classify + respond
   setSessionStateMirror('thinking');
@@ -323,7 +338,7 @@ async function openSession() {
     };
 
     // Parse intent via the existing classifier
-    const parseRes = await fetch(`${apiUrl}/api/voice-intent`, {
+    const parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // 2026-05-21 — Fix Q: pass active persona so the classifier's
@@ -334,7 +349,7 @@ async function openSession() {
         voiceGender: settings.voiceGender ?? 'male',
         persona: settings.caddiePersonality,
       }),
-    });
+    }, INTENT_FETCH_TIMEOUT_MS);
     if (!parseRes.ok) {
       setSessionStateMirror('idle');
       return;
@@ -413,15 +428,19 @@ async function openSession() {
         // 2026-05-21 — Fix I shape A: track whether anything was spoken
         // and fall back to the honest failure line otherwise.
         let diagnosticSpoken = false;
-        const r = await fetch(`${apiUrl}/api/kevin`, {
+        const r = await fetchWithTimeout(`${apiUrl}/api/kevin`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(apiUrlBody),
-        });
+        }, KEVIN_FETCH_TIMEOUT_MS);
         if (r.ok) {
           const j = await r.json() as { text?: string; audioBase64?: string };
-          if (j.text && ttsAllowed) {
+          if (j.text && ttsAllowed && getSessionState() === 'responding') {
             await stopSpeaking().catch(() => {});
+            if (getSessionState() !== 'responding') {
+              setSessionStateMirror('idle');
+              return;
+            }
             await speak(j.text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true });
             diagnosticSpoken = true;
           }
@@ -440,12 +459,12 @@ async function openSession() {
         } else {
           console.log('[listeningSession] in_round_diagnostic non-ok:', r.status);
         }
-        if (!diagnosticSpoken && ttsAllowed) {
+        if (!diagnosticSpoken && ttsAllowed && getSessionState() === 'responding') {
           await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
         }
       } catch (e) {
         console.log('[listeningSession] in_round_diagnostic failed', e);
-        if (ttsAllowed) {
+        if (ttsAllowed && getSessionState() === 'responding') {
           await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
         }
       }
@@ -468,9 +487,13 @@ async function openSession() {
       await fillerP;
       if (responseAllowed) {
         if (intent.follow_up_question) {
-          await stopSpeaking().catch(() => {});
-          await speak(intent.follow_up_question, settings.voiceGender, intent.language ?? settings.language, apiUrl, { userInitiated: true })
-            .catch((e) => console.log('[listeningSession] follow_up speak failed', e));
+          if (getSessionState() === 'responding') {
+            await stopSpeaking().catch(() => {});
+            if (getSessionState() === 'responding') {
+              await speak(intent.follow_up_question, settings.voiceGender, intent.language ?? settings.language, apiUrl, { userInitiated: true })
+                .catch((e) => console.log('[listeningSession] follow_up speak failed', e));
+            }
+          }
         } else {
           // 2026-05-21 — Fix I shape A: every silent-failure branch below
           // now speaks an honest fallback line instead of letting the pill
@@ -481,7 +504,7 @@ async function openSession() {
           //   (3) fetch itself throws (network error, AbortController)
           let chatSpoken = false;
           try {
-            const chatRes = await fetch(`${apiUrl}/api/kevin`, {
+            const chatRes = await fetchWithTimeout(`${apiUrl}/api/kevin`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -501,7 +524,7 @@ async function openSession() {
                 voiceGender: settings.voiceGender ?? 'male',
                 persona: settings.caddiePersonality,
               }),
-            });
+            }, KEVIN_FETCH_TIMEOUT_MS);
             if (chatRes.ok) {
               const chatJson = await chatRes.json() as { text?: string; audioBase64?: string | null };
               // /api/kevin returns { text, audioBase64, toolAction } — not
@@ -516,8 +539,12 @@ async function openSession() {
               // with a non-empty `text` and we just speak it (no audio).
               const reply = typeof chatJson?.text === 'string' ? chatJson.text : null;
               const replyAudio = typeof chatJson?.audioBase64 === 'string' ? chatJson.audioBase64 : null;
-              if (reply) {
+              if (reply && getSessionState() === 'responding') {
                 await stopSpeaking().catch(() => {});
+                if (getSessionState() !== 'responding') {
+                  setSessionStateMirror('idle');
+                  return;
+                }
                 if (replyAudio) {
                   await speakFromBase64(replyAudio, { userInitiated: true })
                     .catch((e) => console.log('[listeningSession] chat fallback speakFromBase64 failed', e));
@@ -533,7 +560,7 @@ async function openSession() {
           } catch (e) {
             console.log('[listeningSession] chat fallback fetch failed', e);
           }
-          if (!chatSpoken && responseAllowed) {
+          if (!chatSpoken && responseAllowed && getSessionState() === 'responding') {
             await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
           }
         }
@@ -585,14 +612,20 @@ async function openSession() {
           intent: intent.intent_type,
           topic: intent.parameters?.query_topic ?? null,
           filler: decision.filler,
+          capture_ms: t_capture_end - t_capture_start,
           intent_ms: t_intent - t0,
           filler_start_ms: t_filler_start != null ? t_filler_start - t0 : null,
+          handler_ms: t_response_start - t_intent,
           response_start_ms: t_response_start - t0,
         }));
         // Cancel any in-flight / queued filler so the real response
         // doesn't queue behind a long conversational bridge — Tim's
         // "generic-then-relevant" disconnect on the 2nd question.
         await stopSpeaking().catch(() => {});
+        if (getSessionState() !== 'responding') {
+          setSessionStateMirror('idle');
+          return;
+        }
         // 2026-05-24 — Prefer the classifier-detected utterance language
         // over the user's Settings language so a Spanish/Chinese
         // utterance is spoken back through eleven_multilingual_v2 with
@@ -608,7 +641,7 @@ async function openSession() {
         // (e.g. navigation tool_actions that route the user); those set
         // result.tool_action, which we still execute below. For the
         // pure-no-output case the user gets the localized failure line.
-        if (!result.tool_action) {
+        if (!result.tool_action && getSessionState() === 'responding') {
           await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
         }
       }
@@ -652,7 +685,7 @@ async function openSession() {
       const settingsFresh = useSettingsStore.getState();
       const routeAllowed = getCurrentRoute() !== 'phone_speaker' ||
         (settingsFresh as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
-      if (settingsFresh.voiceEnabled && routeAllowed) {
+      if (settingsFresh.voiceEnabled && routeAllowed && getSessionState() !== 'idle') {
         await speakHonestFailure(
           settingsFresh.language,
           settingsFresh.voiceGender,
@@ -711,7 +744,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
     const settings = useSettingsStore.getState();
     const round = useRoundStore.getState();
     const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
-    const parseRes = await fetch(`${apiUrl}/api/voice-intent`, {
+    const parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -719,7 +752,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
         voiceGender: settings.voiceGender ?? 'male',
         persona: settings.caddiePersonality,
       }),
-    });
+    }, INTENT_FETCH_TIMEOUT_MS);
     if (!parseRes.ok) {
       console.log(`[handsFree-route] classifier non-ok ${parseRes.status}`);
       return;

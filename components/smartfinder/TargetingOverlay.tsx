@@ -10,9 +10,9 @@ import {
 /**
  * SmartFinder TARGET-mode draggable target overlay. Ported from V3
  * (components/smartfinder/TargetingOverlay.tsx). The user drags the
- * yellow corner-bracket reticle across the screen; yardage updates as
- * they drag using a linear pixel→yard scale derived from the front /
- * middle / back of green distances.
+ * yellow corner-bracket reticle across the screen; parent computes
+ * geodesic yardage from current GPS + projected target GPS and passes
+ * that yardage back for display.
  *
  * The user does NOT need full coords for both green ends — when only
  * the middle is known we fall back to a sensible default yards-per-px,
@@ -21,9 +21,8 @@ import {
  */
 
 interface Props {
-  gpsDistances: { front: number | null; middle: number | null; back: number | null } | null;
-  baseYardage: number | null;
-  onTargetDistance?: (yards: number | null) => void;
+  targetYards: number | null;
+  onTargetPointNormalized?: (point: { xNorm: number; yNorm: number }) => void;
   // 2026-05-27 — Fix EQ: target lock. When true, the overlay stops
   // capturing touches so the user can take a screenshot OR interact
   // with controls underneath without the reticle chasing every tap.
@@ -33,56 +32,44 @@ interface Props {
 }
 
 export default function TargetingOverlay({
-  gpsDistances,
-  baseYardage,
-  onTargetDistance,
+  targetYards,
+  onTargetPointNormalized,
   locked = false,
 }: Props) {
   const { width, height } = useWindowDimensions();
 
   const [targetX, setTargetX] = useState(width / 2);
   const [targetY, setTargetY] = useState(height / 2);
-  const [targetYards, setTargetYards] = useState<number | null>(null);
-
-  const calcYards = useCallback(
-    (_screenX: number, screenY: number): number | null => {
-      const midDist = gpsDistances?.middle ?? baseYardage;
-      if (midDist == null) return null;
-      const cy = height / 2;
-      const dy = screenY - cy;
-      let yardsPerPx = 0.6;
-      if (gpsDistances?.front != null && gpsDistances?.back != null) {
-        const frontBackYards = Math.abs(gpsDistances.back - gpsDistances.front);
-        yardsPerPx = frontBackYards / Math.max(1, height * 0.45);
-      }
-      const adjusted = Math.round(midDist - dy * yardsPerPx);
-      return Math.max(1, adjusted);
-    },
-    [gpsDistances, baseYardage, height],
-  );
+  const reportPoint = useCallback((x: number, y: number) => {
+    const xNorm = Math.max(0, Math.min(1, x / Math.max(1, width)));
+    const yNorm = Math.max(0, Math.min(1, y / Math.max(1, height)));
+    onTargetPointNormalized?.({ xNorm, yNorm });
+  }, [height, onTargetPointNormalized, width]);
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderMove: (evt) => {
-        setTargetX(evt.nativeEvent.pageX);
-        setTargetY(evt.nativeEvent.pageY);
+        const x = evt.nativeEvent.locationX;
+        const y = evt.nativeEvent.locationY;
+        setTargetX(x);
+        setTargetY(y);
+        reportPoint(x, y);
       },
       onPanResponderRelease: (evt) => {
-        setTargetX(evt.nativeEvent.pageX);
-        setTargetY(evt.nativeEvent.pageY);
+        const x = evt.nativeEvent.locationX;
+        const y = evt.nativeEvent.locationY;
+        setTargetX(x);
+        setTargetY(y);
+        reportPoint(x, y);
       },
     }),
   ).current;
 
-  const computedYards = calcYards(targetX, targetY);
   useEffect(() => {
-    if (computedYards !== targetYards) {
-      setTargetYards(computedYards);
-      onTargetDistance?.(computedYards);
-    }
-  }, [computedYards, targetYards, onTargetDistance]);
+    reportPoint(targetX, targetY);
+  }, [reportPoint, targetX, targetY]);
 
   const isCenter = Math.abs(targetX - width / 2) < 12 && Math.abs(targetY - height / 2) < 12;
 

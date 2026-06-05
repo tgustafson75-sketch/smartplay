@@ -33,14 +33,19 @@
 import { useRoundStore } from '../store/roundStore';
 import { useGhostStore } from '../store/ghostStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { usePracticeStore } from '../store/practiceStore';
+import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { getHoleView, type CourseHoleView } from './courseDataOrchestrator';
 import { getActiveVisionContext, type VisionContext } from './glassesVisionInput';
 import { buildGolferModel, type GolferModel } from './golferModel';
+import { recommendClubFromEquipmentIntelligence } from './distance/equipment_distance_modifier';
 import { getCachedWeather, fetchWeatherAt, type WeatherSnapshot } from './weatherService';
 import { getLastFix } from './gpsManager';
 import { haversineYards, bearingDegrees } from '../utils/geoDistance';
 import { isValidGolfCoord } from '../utils/coordGuard';
 import { getCaddieName } from '../lib/persona';
+import { buildEvidenceStack, clarifyingQuestion, confidenceNote } from './recommendationTransparency';
+import { adaptOnCourseVoice, deriveComplexityLevel, hasMobilityFlag } from './coachingAdaptation';
 import { devLog } from './devLog';
 
 // ─── Public types ────────────────────────────────────────────────────────
@@ -74,6 +79,12 @@ export interface StrategicRecommendation {
   sources_used: SourceTag[];
   /** 0..100 — overall confidence. */
   confidence: number;
+  /** Human-readable evidence sources used for this recommendation. */
+  evidence_stack: string[];
+  /** Confidence explanation line for UI/readback surfaces. */
+  confidence_note: string;
+  /** Follow-up when confidence is low; null otherwise. */
+  clarification_question: string | null;
 
   /** Persona-aware voice summary the caddie speaks (caller pipes
    *  through voiceService.speak). */
@@ -114,6 +125,7 @@ export async function recommendShot(input: MetaIntelInput = {}): Promise<Strateg
   const round = useRoundStore.getState();
   const ghost = useGhostStore.getState();
   const settings = useSettingsStore.getState();
+  const profile = usePlayerProfileStore.getState();
   const persona = settings.caddiePersonality;
   const caddieName = getCaddieName(persona);
 
@@ -185,7 +197,39 @@ export async function recommendShot(input: MetaIntelInput = {}): Promise<Strateg
   if (recentShots.length > 0) sources.push('recent_shots');
 
   // ─── Strategic synthesis ──────────────────────────────────────────
-  const club = recommendClub(yardsToTarget, windFactor, lieHint);
+  const baselineClub = recommendClub(yardsToTarget, windFactor, lieHint);
+  const roundForEvidence = useRoundStore.getState();
+  const practice = usePracticeStore.getState();
+  const effectiveTarget = computeEffectiveTargetYards(yardsToTarget, windFactor, lieHint);
+  const equipmentResult = recommendClubFromEquipmentIntelligence({
+    targetYards: effectiveTarget ?? yardsToTarget ?? 0,
+    fallbackClub: baselineClub ?? '7 iron',
+    actualShotHistory: roundForEvidence.shots
+      .filter((s) => typeof s.club === 'string' && Number.isFinite(s.carry_distance ?? s.distance_yards ?? null))
+      .map((s) => ({
+        club: s.club as string,
+        carryYards: Number(s.carry_distance ?? s.distance_yards ?? 0),
+        tier: 'actual_shot_history' as const,
+        sampleSize: 1,
+      })),
+    launchMonitorData: [
+      practice.avgCarryDriver > 0
+        ? { club: 'Driver', carryYards: practice.avgCarryDriver, tier: 'launch_monitor_data' as const, sampleSize: Math.max(1, practice.swingCount) }
+        : null,
+      practice.avgCarry3Wood > 0
+        ? { club: '3 wood', carryYards: practice.avgCarry3Wood, tier: 'launch_monitor_data' as const, sampleSize: Math.max(1, practice.swingCount) }
+        : null,
+    ].filter((x): x is NonNullable<typeof x> => x != null),
+    roundHistory: (golfer?.club_distances ?? [])
+      .filter((c) => c.median_yd != null)
+      .map((c) => ({
+        club: c.club,
+        carryYards: Number(c.median_yd),
+        tier: 'round_history' as const,
+        sampleSize: Math.max(1, c.sample_size),
+      })),
+  });
+  const club = equipmentResult.recommendedClub ?? baselineClub;
   const shape = recommendShape(dominantMiss, missType, windFactor, lieHint);
   const risk = assessRisk(yardsToTarget, holeView, windFactor, lieHint, ghost);
   const aim = buildAimPoint(holeView, shape, dominantMiss, risk);
@@ -196,9 +240,24 @@ export async function recommendShot(input: MetaIntelInput = {}): Promise<Strateg
     ghost: ghost.ghostRecord ? ghost.getSummaryText() : null,
     recentShots: recentShots.length,
   });
+  rationale.push(equipmentResult.rationale);
 
   const confidence = computeConfidence(sources, holeView, weather, golfer);
-  const voice = buildVoiceSummary(caddieName, club, yardsToTarget, shape, aim, rationale);
+  const evidenceStack = buildEvidenceStack([
+    { source: 'Distance', detail: yardsToTarget != null ? `${yardsToTarget}y to target` : 'unknown yardage' },
+    { source: 'Wind', detail: windFactor ? `${windFactor.total_mph} mph` : 'not available' },
+    { source: 'Lie', detail: lieHint ?? 'not available' },
+    { source: 'Club Prior', detail: equipmentResult.rationale, confidence: equipmentResult.confidence * 100 },
+  ]);
+  const confNote = confidenceNote(confidence);
+  const clarify = clarifyingQuestion(confidence);
+  const voice = buildVoiceSummary(caddieName, club, yardsToTarget, shape, aim, rationale, confNote, clarify);
+  const adaptedVoice = adaptOnCourseVoice(
+    voice,
+    deriveComplexityLevel(profile),
+    hasMobilityFlag(profile),
+    confidence,
+  );
 
   const result: StrategicRecommendation = {
     recId: 'meta_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 5),
@@ -213,7 +272,10 @@ export async function recommendShot(input: MetaIntelInput = {}): Promise<Strateg
     rationale,
     sources_used: sources,
     confidence,
-    voice_summary: voice,
+    evidence_stack: evidenceStack,
+    confidence_note: confNote,
+    clarification_question: clarify,
+    voice_summary: adaptedVoice,
   };
   devLog(
     `[metaIntel] hole=${holeNumber} yd=${yardsToTarget} club=${club} ` +
@@ -256,12 +318,7 @@ function recommendClub(
   lieHint: string | null,
 ): string | null {
   if (yards == null || yards <= 0) return null;
-  // Adjust for wind + lie. Headwind adds yards (need MORE club).
-  // Tailwind subtracts. Rough adds ~1 club's worth of needed yards.
-  let effective = yards;
-  if (wind) effective += -wind.along_mph * 1.5; // 1.5y per mph headwind
-  if (lieHint?.toLowerCase().includes('rough')) effective += 8;
-  if (lieHint?.toLowerCase().includes('sand') || lieHint?.toLowerCase().includes('bunker')) effective += 12;
+  const effective = computeEffectiveTargetYards(yards, wind, lieHint) ?? yards;
 
   // Adult-amateur club distance ladder.
   if (effective >= 240) return 'Driver';
@@ -278,6 +335,19 @@ function recommendClub(
   if (effective >= 55)  return 'SW';
   if (effective >= 25)  return 'LW';
   return 'putter';
+}
+
+function computeEffectiveTargetYards(
+  yards: number | null,
+  wind: WindFactor | null,
+  lieHint: string | null,
+): number | null {
+  if (yards == null || yards <= 0) return null;
+  let effective = yards;
+  if (wind) effective += -wind.along_mph * 1.5;
+  if (lieHint?.toLowerCase().includes('rough')) effective += 8;
+  if (lieHint?.toLowerCase().includes('sand') || lieHint?.toLowerCase().includes('bunker')) effective += 12;
+  return effective;
 }
 
 function recommendShape(
@@ -420,6 +490,8 @@ function buildVoiceSummary(
   shape: ShotShape,
   aim: string,
   rationale: string[],
+  confNote: string,
+  clarify: string | null,
 ): string {
   if (yards == null || !club) {
     return `${caddieName} — not enough info to call a shot yet.`;
@@ -432,5 +504,7 @@ function buildVoiceSummary(
   const lead = `${caddieName} — ${yards} yards, ${club}, ${shapePhrase}.`;
   const focus = `Aim ${aim}.`;
   const because = rationale.length > 0 ? ` ${rationale.slice(0, 2).join(' ')}` : '';
-  return `${lead} ${focus}${because}`.trim();
+  const conf = ` ${confNote}`;
+  const follow = clarify ? ` ${clarify}` : '';
+  return `${lead} ${focus}${because}${conf}${follow}`.trim();
 }

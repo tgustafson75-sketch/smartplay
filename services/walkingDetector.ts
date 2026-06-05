@@ -24,7 +24,8 @@
  * Nothing breaks; the suggestedMode just goes to null.
  */
 
-import { readStepsBetween, isHealthAvailable } from './healthData';
+import { isHealthAvailable, readHealthSnapshot } from './healthData';
+import { useWatchStore } from '../store/watchStore';
 
 export type ActivityMode = 'walking' | 'cart' | 'at_rest';
 
@@ -37,6 +38,15 @@ export interface DetectorReading {
   windowGpsSpeedMps: number;
   /** True if the watch contributed data (vs all-zero fallback). */
   hasHealthData: boolean;
+  /** Last Health Connect snapshot used for the decision window. */
+  healthSnapshot: {
+    steps: number;
+    distanceMeters: number;
+    heartRateAvg: number | null;
+    heartRateMax: number | null;
+    activeCalories: number;
+    hasData: boolean;
+  } | null;
 }
 
 const WINDOW_MS = 5 * 60 * 1000;            // 5-minute look-back
@@ -70,18 +80,19 @@ export async function detectActivity(windowGpsSpeedMps: number): Promise<Detecto
   // below) — which already produces a valid DetectorReading using
   // windowGpsSpeedMps + the manual cartMode toggle.
   let available = false;
-  let steps = 0;
+  let snapshot: Awaited<ReturnType<typeof readHealthSnapshot>> | null = null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const settingsMod = require('../store/settingsStore') as typeof import('../store/settingsStore');
     if (settingsMod.useSettingsStore.getState().hasAskedHealthPermission) {
       available = await isHealthAvailable();
-      if (available) steps = await readStepsBetween(start, end);
+      if (available) snapshot = await readHealthSnapshot(start, end);
     }
   } catch (e) {
     console.log('[walkingDetector] health read skipped:', e);
   }
-  const hasHealthData = available && steps > 0;
+  const steps = snapshot?.steps ?? 0;
+  const hasHealthData = available && !!snapshot?.hasData;
 
   // Decision tree.
   const gpsMoving = windowGpsSpeedMps > GPS_MOVE_MPS;
@@ -123,6 +134,7 @@ export async function detectActivity(windowGpsSpeedMps: number): Promise<Detecto
     windowSteps: steps,
     windowGpsSpeedMps,
     hasHealthData,
+    healthSnapshot: snapshot,
   };
 }
 
@@ -170,6 +182,7 @@ export function startActivityTicker(getGpsSpeedMps: () => number): void {
   const tick = async () => {
     try {
       _cached = await detectActivity(getGpsSpeedMps());
+      useWatchStore.getState().setHealthSnapshot(_cached.healthSnapshot);
     } catch (e) {
       console.log('[walkingDetector] tick failed:', e);
     }
@@ -184,6 +197,7 @@ export function stopActivityTicker(): void {
     _tickerHandle = null;
   }
   _cached = null;
+  useWatchStore.getState().setHealthSnapshot(null);
 }
 
 /** Sync answer to "should the orchestrator treat this as cart mode?"

@@ -7,6 +7,7 @@ function makeId(): string {
 export interface DistanceComputeInput {
   user_position: { lat: number; lng: number; accuracy: number };
   compass_heading: number;
+  tap_x_normalized?: number;
   tap_y_normalized: number;
   device_pitch_degrees: number;
 }
@@ -31,6 +32,7 @@ export interface DistanceComputeOutput {
 
 const EYE_HEIGHT_M = 1.6;
 const CAMERA_VFOV_DEG = 60;
+const CAMERA_HFOV_DEG = 60;
 const MIN_YARDS = 10;
 const MAX_YARDS = 400;
 
@@ -67,7 +69,13 @@ function projectPosition(
 }
 
 export function computeDistance(input: DistanceComputeInput): DistanceComputeOutput {
-  const { user_position, compass_heading, tap_y_normalized, device_pitch_degrees } = input;
+  const {
+    user_position,
+    compass_heading,
+    tap_x_normalized = 0.5,
+    tap_y_normalized,
+    device_pitch_degrees,
+  } = input;
 
   // Angle from horizontal: negative = looking down at ground
   // device_pitch_degrees from DeviceMotion: negative when tilted forward/down
@@ -111,10 +119,14 @@ export function computeDistance(input: DistanceComputeInput): DistanceComputeOut
     confidence = 'low';
   }
 
+  // Horizontal reticle displacement offsets the bearing.
+  const headingOffsetDeg = (tap_x_normalized - 0.5) * CAMERA_HFOV_DEG;
+  const projectedHeading = ((compass_heading + headingOffsetDeg) % 360 + 360) % 360;
+
   const target = projectPosition(
     user_position.lat,
     user_position.lng,
-    compass_heading,
+    projectedHeading,
     clampedM,
   );
 

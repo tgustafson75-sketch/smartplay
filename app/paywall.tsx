@@ -56,6 +56,7 @@ export default function PaywallScreen() {
         await speak(
           `Full ${caddieName} for nine ninety-nine a month, or seventy-nine a year. Seven days on me — no card required.`,
           voiceGender, language, apiUrl,
+          { userInitiated: true },
         );
       }, 800);
       return () => clearTimeout(delay);

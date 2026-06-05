@@ -1,6 +1,8 @@
 import type { LieAnalysisContext } from './lieAnalysisContext';
 import * as Sentry from '@sentry/react-native';
 import { bumpToActive } from './gpsManager';
+import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { adaptOnCourseVoice, deriveComplexityLevel, hasMobilityFlag } from './coachingAdaptation';
 
 /**
  * Phase H — client-side fetcher for the lie-analysis endpoint.
@@ -333,5 +335,17 @@ function composeEnrichedVoice(
     parts.push(`Last strike was ${acoustic.turf} — factor that in.`);
   }
   if (rr) parts.push(rr.tradeoff);
-  return parts.join(' ').trim();
+  const profile = usePlayerProfileStore.getState();
+  const baseVoice = parts.join(' ').trim();
+  const confidence = base.confidence_level === 'high'
+    ? 88
+    : base.confidence_level === 'medium'
+      ? 65
+      : 35;
+  return adaptOnCourseVoice(
+    baseVoice,
+    deriveComplexityLevel(profile),
+    hasMobilityFlag(profile),
+    confidence,
+  );
 }

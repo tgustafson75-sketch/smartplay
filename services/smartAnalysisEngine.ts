@@ -43,11 +43,16 @@ import { useSettingsStore, type Persona } from '../store/settingsStore';
 import { useRoundStore } from '../store/roundStore';
 import { useGhostStore } from '../store/ghostStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { usePracticeStore } from '../store/practiceStore';
 import { getHoleView, type CourseHoleView } from './courseDataOrchestrator';
 import { analyzePutt, type PuttingAnalysis, type PuttingAnalysisInput } from './puttingAnalysisService';
 import { analyzeLie, type LieAnalysis, type LieAnalysisResult } from './lieAnalysisService';
 import { bundleLieAnalysisContext } from './lieAnalysisContext';
 import { getActiveVisionContext, type VisionContext } from './glassesVisionInput';
+import { buildGolferModel } from './golferModel';
+import { recommendClubFromEquipmentIntelligence } from './distance/equipment_distance_modifier';
+import { buildEvidenceStack, confidenceNote, clarifyingQuestion } from './recommendationTransparency';
+import { adaptOnCourseVoice, deriveComplexityLevel, hasMobilityFlag, type CoachingComplexity } from './coachingAdaptation';
 import { getCaddieName } from '../lib/persona';
 import { devLog } from './devLog';
 
@@ -264,6 +269,9 @@ export async function analyze(request: AnalysisRequest): Promise<AnalysisEnvelop
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     devLog(`[engine] error in kind=${request.kind}: ${msg}`);
+    if (request.kind === 'swing_compare' || request.kind === 'pose_estimate') {
+      return swingRecoveryEnvelope(request.kind, persona, ctx, msg);
+    }
     return errorEnvelope(request.kind, persona, msg);
   }
 }
@@ -331,6 +339,13 @@ async function buildLearningContext(): Promise<LearningContext> {
 
 async function runPutting(req: PuttingRequest, persona: Persona, ctx: LearningContext): Promise<AnalysisEnvelope<PuttingAnalysis>> {
   const result = await analyzePutt(req.input);
+  const profile = usePlayerProfileStore.getState();
+  const adaptedVoice = adaptOnCourseVoice(
+    result.caddieComment,
+    deriveComplexityLevel(profile),
+    hasMobilityFlag(profile),
+    result.overallScore,
+  );
   const sources: AnalysisSource[] = ['voice', 'course_geometry', 'player_profile'];
   if ((req.input.frames_base64?.length ?? 0) > 0) sources.push('glasses_vision');
   if (ctx.ghostSummary) sources.push('ghost_match');
@@ -341,7 +356,7 @@ async function runPutting(req: PuttingRequest, persona: Persona, ctx: LearningCo
     confidence: result.overallScore,
     sources_used: sources,
     persona,
-    voice_summary: result.caddieComment,
+    voice_summary: adaptedVoice,
     timestamp_ms: Date.now(),
     analysis_id: newId('putt'),
   };
@@ -374,6 +389,13 @@ async function runLie(req: LieRequest, persona: Persona, _ctx: LearningContext):
   }
   const level = result.analysis.confidence_level;
   const conf: number = level === 'high' ? 90 : level === 'medium' ? 65 : 35;
+  const profile = usePlayerProfileStore.getState();
+  const adaptedVoice = adaptOnCourseVoice(
+    result.analysis.tactical_advice,
+    deriveComplexityLevel(profile),
+    hasMobilityFlag(profile),
+    conf,
+  );
   return {
     kind: 'lie',
     status: 'ok',
@@ -381,7 +403,7 @@ async function runLie(req: LieRequest, persona: Persona, _ctx: LearningContext):
     confidence: conf,
     sources_used: ['image_capture', 'course_geometry', 'player_profile'],
     persona,
-    voice_summary: result.analysis.tactical_advice,
+    voice_summary: adaptedVoice,
     follow_up: result.analysis.follow_up_question ?? null,
     timestamp_ms: Date.now(),
     analysis_id: newId('lie'),
@@ -410,6 +432,14 @@ async function runGreenRead(req: GreenReadRequest, persona: Persona, ctx: Learni
   const spoken = req.spoken_read?.trim() || 'Trust your read.';
   const caddieName = getCaddieName(persona);
   const trustConfidence: number = trust === 'high' ? 80 : trust === 'medium' ? 55 : 30;
+  const profile = usePlayerProfileStore.getState();
+  const baseVoice = `${caddieName} here. ${spoken}. ${contextNote}`;
+  const adaptedVoice = adaptOnCourseVoice(
+    baseVoice,
+    deriveComplexityLevel(profile),
+    hasMobilityFlag(profile),
+    trustConfidence,
+  );
   return {
     kind: 'green_read',
     status: 'ok',
@@ -417,7 +447,7 @@ async function runGreenRead(req: GreenReadRequest, persona: Persona, ctx: Learni
     confidence: trustConfidence,
     sources_used: ['voice', 'course_geometry'],
     persona,
-    voice_summary: `${caddieName} here. ${spoken}. ${contextNote}`,
+    voice_summary: adaptedVoice,
     timestamp_ms: Date.now(),
     analysis_id: newId('read'),
   };
@@ -427,13 +457,16 @@ interface ClubRecResult {
   recommended_club: string;
   rationale: string;
   yards_to_target: number;
+  evidence_stack?: string[];
+  confidence_note?: string;
+  clarification_question?: string | null;
 }
 
 function runClubRecommend(req: ClubRecommendRequest, persona: Persona, ctx: LearningContext): AnalysisEnvelope<ClubRecResult> {
   // Heuristic baseline. Future: read player's typical club distances from
   // playerProfile.clubDistances (when populated) and dispersion patterns.
   const y = req.yards_to_target;
-  const club =
+  const baselineClub =
     y >= 240 ? 'Driver / 3W' :
     y >= 200 ? '3W / Hybrid' :
     y >= 175 ? '4 iron' :
@@ -446,6 +479,47 @@ function runClubRecommend(req: ClubRecommendRequest, persona: Persona, ctx: Lear
     y >= 60  ? 'GW' :
     y >= 40  ? 'SW' :
     y >= 20  ? 'LW' : 'Putter';
+
+  const round = useRoundStore.getState();
+  const practice = usePracticeStore.getState();
+  const golfer = buildGolferModel();
+
+  const actualShotHistory = round.shots
+    .filter((s) => typeof s.club === 'string' && Number.isFinite(s.carry_distance ?? s.distance_yards ?? null))
+    .map((s) => ({
+      club: s.club as string,
+      carryYards: Number(s.carry_distance ?? s.distance_yards ?? 0),
+      tier: 'actual_shot_history' as const,
+      sampleSize: 1,
+    }));
+
+  const launchMonitorData = [
+    practice.avgCarryDriver > 0
+      ? { club: 'Driver', carryYards: practice.avgCarryDriver, tier: 'launch_monitor_data' as const, sampleSize: Math.max(1, practice.swingCount) }
+      : null,
+    practice.avgCarry3Wood > 0
+      ? { club: '3 wood', carryYards: practice.avgCarry3Wood, tier: 'launch_monitor_data' as const, sampleSize: Math.max(1, practice.swingCount) }
+      : null,
+  ].filter((x): x is NonNullable<typeof x> => x != null);
+
+  const roundHistory = golfer.club_distances
+    .filter((c) => c.median_yd != null)
+    .map((c) => ({
+      club: c.club,
+      carryYards: Number(c.median_yd),
+      tier: 'round_history' as const,
+      sampleSize: Math.max(1, c.sample_size),
+    }));
+
+  const equipmentResult = recommendClubFromEquipmentIntelligence({
+    targetYards: y,
+    fallbackClub: baselineClub,
+    actualShotHistory,
+    launchMonitorData,
+    roundHistory,
+  });
+  const club = equipmentResult.recommendedClub || baselineClub;
+
   const note = req.conditions_note ? ` (${req.conditions_note})` : '';
   const caddieName = getCaddieName(persona);
   // 2026-05-23 — Unified context enrichment: fold hazard awareness +
@@ -462,18 +536,33 @@ function runClubRecommend(req: ClubRecommendRequest, persona: Persona, ctx: Lear
     : '';
   const sources_used: AnalysisSource[] = ['gps', 'course_geometry', 'player_profile'];
   if (uc?.vision.streaming) sources_used.push('glasses_vision');
+  const confidenceScore = Math.round(Math.max(60, equipmentResult.confidence * 100));
+  const confNote = confidenceNote(confidenceScore);
+  const clarify = clarifyingQuestion(confidenceScore);
+  const complexity = deriveComplexityLevel(usePlayerProfileStore.getState());
+  const mobility = hasMobilityFlag(usePlayerProfileStore.getState());
+  const evidenceStack = buildEvidenceStack([
+    { source: 'Distance', detail: `${y}y to target` },
+    { source: 'Baseline', detail: baselineClub },
+    { source: 'Equipment Prior', detail: equipmentResult.rationale, confidence: equipmentResult.confidence * 100 },
+  ]);
+  const baseVoice = `${caddieName} — ${y} yards. ${club}${note}.${missWarn} ${confNote}${clarify ? ` ${clarify}` : ''}`.trim();
+  const adaptedVoice = adaptOnCourseVoice(baseVoice, complexity, mobility, confidenceScore);
   return {
     kind: 'club_recommend',
     status: 'ok',
     result: {
       recommended_club: club,
-      rationale: `${y}y to target${note}. Baseline club at this distance.${hazardWarn}`,
+      rationale: `${y}y to target${note}. Baseline club at this distance.${hazardWarn} ${equipmentResult.rationale}`.trim(),
       yards_to_target: y,
+      evidence_stack: evidenceStack,
+      confidence_note: confNote,
+      clarification_question: clarify,
     },
-    confidence: 60,
+    confidence: confidenceScore,
     sources_used,
     persona,
-    voice_summary: `${caddieName} — ${y} yards. ${club}${note}.${missWarn}`,
+    voice_summary: adaptedVoice,
     timestamp_ms: Date.now(),
     analysis_id: newId('club'),
   };
@@ -533,13 +622,20 @@ function runMentalCheck(req: MentalCheckRequest, persona: Persona, ctx: Learning
       ? 'Stay in this rhythm. One shot at a time.'
       : 'Reset. Pick your target. Commit.';
   const caddieName = getCaddieName(persona);
+  const profile = usePlayerProfileStore.getState();
+  const adaptedVoice = adaptOnCourseVoice(
+    `${caddieName} — ${cue}`,
+    deriveComplexityLevel(profile),
+    hasMobilityFlag(profile),
+    70,
+  );
   return {
     kind: 'mental_check', status: 'ok',
     result: { state, cue },
     confidence: 70,
     sources_used: ['mental_state', 'voice'],
     persona,
-    voice_summary: `${caddieName} — ${cue}`,
+    voice_summary: adaptedVoice,
     timestamp_ms: Date.now(),
     analysis_id: newId('mental'),
   };
@@ -614,6 +710,79 @@ function errorEnvelope(kind: AnalysisKind, persona: Persona, reason: string): An
   };
 }
 
+function swingRecoveryEnvelope(
+  kind: 'swing_compare' | 'pose_estimate',
+  persona: Persona,
+  ctx: LearningContext,
+  reason: string,
+): AnalysisEnvelope {
+  const caddieName = getCaddieName(persona);
+  const profile = usePlayerProfileStore.getState();
+  const complexity = deriveComplexityLevel(profile);
+  const mobility = hasMobilityFlag(profile);
+  const base = complexity === 'simple'
+    ? 'I still have enough to coach one move now: smooth tempo, centered contact, and hold your finish for two seconds.'
+    : 'I can still coach this rep: prioritize centered strike, stable head through impact, and a balanced finish.';
+  const mobilityNote = mobility
+    ? ' Keep the move compact and pain-free; no hard speed chase on this rep.'
+    : '';
+  return {
+    kind,
+    status: 'partial',
+    result: {
+      recovery_mode: true,
+      reason,
+      next_action: 'Record one additional swing from a steady side angle, then rerun analysis.',
+      primary_focus: 'centered_contact',
+      secondary_focus: 'balanced_finish',
+    },
+    confidence: 25,
+    sources_used: ['player_profile', 'voice'],
+    persona,
+    voice_summary: `${caddieName} — swing read is partial right now. ${base}${mobilityNote}`,
+    follow_up: `Try again on hole ${ctx.holeNumber} or your next practice rep and I will tighten this call.`,
+    reason,
+    timestamp_ms: Date.now(),
+    analysis_id: newId(kind.slice(0, 4)),
+  };
+}
+
+function prioritizeSwingFocus(metrics: Array<{ label: string; direction: string; match_score: number; verdict: string }>): { primary: string; secondary: string | null } {
+  const weak = metrics
+    .filter((m) => m.direction === 'worse')
+    .sort((a, b) => a.match_score - b.match_score);
+  if (weak.length === 0) return { primary: 'tempo_and_balance', secondary: null };
+  const primary = weak[0].label;
+  const secondary = weak.length > 1 ? weak[1].label : null;
+  return { primary, secondary };
+}
+
+function adaptSwingVoice(
+  base: string,
+  priorities: { primary: string; secondary: string | null },
+  complexity: CoachingComplexity,
+  mobilitySafe: boolean,
+): string {
+  const focus = complexity === 'simple'
+    ? `One focus right now: ${priorities.primary}.`
+    : `Primary focus: ${priorities.primary}.${priorities.secondary ? ` Secondary: ${priorities.secondary}.` : ''}`;
+  const mobility = mobilitySafe ? ' Keep effort at 70% and move pain-free.' : '';
+  return `${base} ${focus}${mobility}`.trim();
+}
+
+function buildPoseFallbackVoice(
+  persona: Persona,
+  complexity: CoachingComplexity,
+  mobilitySafe: boolean,
+): string {
+  const caddieName = getCaddieName(persona);
+  const line = complexity === 'simple'
+    ? 'Partial swing read: give me one more clean angle. For now, smooth tempo and balanced finish.'
+    : 'Partial swing read: capture one cleaner angle and I will rank your top fix. For now, prioritize centered strike and stable head.';
+  const mobility = mobilitySafe ? ' Stay compact and pain-free this rep.' : '';
+  return `${caddieName} — ${line}${mobility}`;
+}
+
 function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -681,7 +850,7 @@ async function runSwingCompare(req: SwingCompareRequest, persona: Persona, ctx: 
     : null;
 
   if (!current) {
-    return errorEnvelope('swing_compare', persona, 'no current swing video supplied');
+    return swingRecoveryEnvelope('swing_compare', persona, ctx, 'no current swing video supplied');
   }
 
   const reference = req.reference_video_uri && req.reference_video_duration_ms
@@ -697,16 +866,26 @@ async function runSwingCompare(req: SwingCompareRequest, persona: Persona, ctx: 
     reference ? 'self_vs_self' : 'self_vs_pro';
 
   const cmp = compareMod.compareSwings({ current, reference, kind });
-  void ctx;
+  const profile = usePlayerProfileStore.getState();
+  const priorities = prioritizeSwingFocus(cmp.metrics as Array<{ label: string; direction: string; match_score: number; verdict: string }>);
+  const complexity = deriveComplexityLevel(profile);
+  const mobility = hasMobilityFlag(profile);
+  const adaptedVoice = adaptSwingVoice(cmp.voice_summary, priorities, complexity, mobility);
 
   return {
     kind: 'swing_compare',
     status: cmp.overall_match >= 30 ? 'ok' : 'partial',
-    result: cmp,
+    result: {
+      ...cmp,
+      primary_focus: priorities.primary,
+      secondary_focus: priorities.secondary,
+      complexity_level: complexity,
+      mobility_safe_mode: mobility,
+    },
     confidence: cmp.overall_match,
     sources_used: reference ? ['player_profile', 'voice'] : ['player_profile'],
     persona,
-    voice_summary: cmp.voice_summary,
+    voice_summary: adaptedVoice,
     timestamp_ms: Date.now(),
     analysis_id: newId('cmp'),
   };
@@ -721,6 +900,10 @@ async function runPoseEstimate(req: PoseEstimateRequestX, persona: Persona, ctx:
     context: req.context,
   });
   void ctx;
+  const profile = usePlayerProfileStore.getState();
+  const complexity = deriveComplexityLevel(profile);
+  const mobility = hasMobilityFlag(profile);
+  const fallbackVoice = buildPoseFallbackVoice(persona, complexity, mobility);
   return {
     kind: 'pose_estimate',
     status: estimate.confidence > 0 ? 'ok' : 'partial',
@@ -728,7 +911,8 @@ async function runPoseEstimate(req: PoseEstimateRequestX, persona: Persona, ctx:
     confidence: estimate.confidence,
     sources_used: estimate.frames.length > 0 ? ['glasses_vision', 'voice'] : ['voice'],
     persona,
-    voice_summary: estimate.reason,
+    voice_summary: estimate.confidence > 0 ? estimate.reason : fallbackVoice,
+    follow_up: estimate.confidence > 0 ? null : 'Capture one face-on swing and one down-the-line swing so I can rank your top fix.',
     timestamp_ms: Date.now(),
     analysis_id: newId('pose'),
   };

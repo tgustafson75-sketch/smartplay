@@ -47,6 +47,19 @@ export class VoiceCommandRouter {
   }
 
   async dispatch(intent: VoiceIntent, context: AppContext): Promise<IntentResult> {
+    // 2026-06-04 — `social_greeting` and `conversational` are explicit
+    // catch-all intents the classifier picks for greetings and free-form
+    // questions. They behave like `unknown` here — fall through to the
+    // brain. They never carry a follow_up_question and are NOT logged
+    // to the voice-miss surface (they're not classifier failures).
+    if (intent.intent_type === 'social_greeting' || intent.intent_type === 'conversational') {
+      return {
+        success: false,
+        voice_response: null,
+        side_effects: ['route_to_brain:' + intent.intent_type],
+        follow_up_needed: false,
+      };
+    }
     if (intent.intent_type === 'unknown' || intent.confidence === 'low') {
       // Conversational fallbacks are intentionally routed to Kevin's brain
       // and should not clutter the owner's miss log. Only log the case when

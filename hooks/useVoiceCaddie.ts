@@ -1210,6 +1210,8 @@ export const useVoiceCaddie = ({
 
         const isCommandHit =
           intent.intent_type !== 'unknown' &&
+          intent.intent_type !== 'social_greeting' &&
+          intent.intent_type !== 'conversational' &&
           intent.confidence !== 'low' &&
           (result.success || result.follow_up_needed);
 

@@ -52,3 +52,16 @@ export type {
   AlignmentDiagnosisInput,
   AlignmentDiagnosisResult,
 } from './golfFather/opticalIllusionFadeAlignment';
+
+// Equipment intelligence priors for additive club recommendation fallback.
+export {
+  EQUIPMENT_DISTANCE_TIER_PRIORITY,
+  getIndustryAverageCarryYards,
+  getIndustryClubKnowledge,
+  getIndustryClubOrderByCarryDesc,
+  normalizeEquipmentClubLabel,
+} from './equipment/equipment_intelligence';
+export type {
+  EquipmentDistanceTier,
+  EquipmentClubKnowledge,
+} from './equipment/equipment_intelligence';

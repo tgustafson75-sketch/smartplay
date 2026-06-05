@@ -112,3 +112,19 @@ export function projectToAxis(
     y: dist * Math.cos(rel),
   };
 }
+
+/**
+ * Inverse of projectToAxis(): convert axis-plane yards back to GPS.
+ * x = yards right of the axis, y = yards forward along the axis.
+ */
+export function unprojectFromAxis(
+  xy: { x: number; y: number },
+  origin: ShotLocation,
+  axisTo: ShotLocation,
+): ShotLocation {
+  const distanceYards = Math.sqrt(xy.x * xy.x + xy.y * xy.y);
+  if (distanceYards <= 0) return origin;
+  const axisBearing = bearingDegrees(origin, axisTo);
+  const relativeDeg = (Math.atan2(xy.x, xy.y) * 180) / Math.PI;
+  return destinationPoint(origin, axisBearing + relativeDeg, distanceYards);
+}

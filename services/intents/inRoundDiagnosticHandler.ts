@@ -57,6 +57,24 @@ export const inRoundDiagnosticHandler: IntentHandler = {
     }
 
     try {
+      // Keep this call path persona-safe: if we omit persona, /api/kevin
+      // falls back to legacy gender defaults and can drift to Kevin's voice.
+      let persona: 'kevin' | 'serena' | 'harry' | 'tank' = 'kevin';
+      let voiceGender: 'male' | 'female' = 'male';
+      let personaIntensity = 100;
+      let tankSoftIntro = false;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const settings = require('../../store/settingsStore') as typeof import('../../store/settingsStore');
+        const s = settings.useSettingsStore.getState();
+        persona = s.caddiePersonality;
+        voiceGender = s.voiceGender;
+        personaIntensity = s.personaIntensity?.[s.caddiePersonality] ?? 100;
+        tankSoftIntro = s.tankSoftIntro;
+      } catch {
+        // Non-fatal: defaults keep behavior stable if store is unavailable.
+      }
+
       // 2026-05-26 — Brain call shape: pull the SAME envelope shape
       // hooks/useVoiceCaddie.ts:sendToBrain assembles (context blocks +
       // persona) BUT with the in-round-diagnostic flags set. We can't
@@ -73,6 +91,10 @@ export const inRoundDiagnosticHandler: IntentHandler = {
         inRoundDiagnostic: true,
         // is_proactive false because the user explicitly asked
         is_proactive: false,
+        voiceGender,
+        persona,
+        personaIntensity,
+        tankSoftIntro,
       };
       const res = await fetch(`${apiUrl}/api/kevin`, {
         method: 'POST',

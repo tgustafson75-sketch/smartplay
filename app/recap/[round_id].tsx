@@ -306,7 +306,7 @@ export default function RecapScreen() {
       const rawText = recap.overall_kevin_summary ?? '';
       if (!rawText) return;
       const { text } = checkContent(rawText, null);
-      await speak(text, voiceGender, 'en', apiUrl);
+      await speak(text, voiceGender, 'en', apiUrl, { userInitiated: true });
     } finally {
       setSpeaking(false);
     }
@@ -338,7 +338,7 @@ export default function RecapScreen() {
           setHighlightedHole(null);
         }
         const { text: safeSegmentText } = checkContent(segment.audio_text, null);
-        await speak(safeSegmentText, voiceGender, 'en', apiUrl);
+        await speak(safeSegmentText, voiceGender, 'en', apiUrl, { userInitiated: true });
         if (!narratingRef.current) break;
         await new Promise(r => setTimeout(r, 400));
       }

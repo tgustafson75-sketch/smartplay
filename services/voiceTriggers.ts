@@ -47,6 +47,7 @@ import { notifyEarbudTap } from './earbudControl';
 import { devLog } from './devLog';
 
 let inited = false;
+let btEnabled = false;
 
 type BTModule = {
   activate: () => Promise<{ active: boolean; sessionTag: string }>;
@@ -86,18 +87,10 @@ export function initVoiceTriggers(): () => void {
   });
   subscriptions.push(btSub);
 
-  // Activate the native session. Idempotent on the native side, so a
-  // race with the JS-side `inited` flag is harmless.
-  const bt = getBTModule();
-  if (bt) {
-    bt.activate()
-      .then((s) => devLog(`[voiceTriggers] BT module activated (${s.sessionTag})`))
-      .catch((e) => devLog('[voiceTriggers] activate failed: ' + String(e)));
-  } else {
-    // Expected when running in Expo Go or a build without the native
-    // module. On-screen mic button still works; just no BT tap capture.
-    devLog('[voiceTriggers] BluetoothMediaButton native module not present — BT tap capture disabled');
-  }
+  // Activation is opt-in and driven by Settings → Earbud / BT remote tap.
+  // This avoids claiming the media session on boot when the user has the
+  // feature turned off.
+  void syncBluetoothMediaButtonState(btEnabled);
 
   devLog(`[voiceTriggers] inited (platform=${Platform.OS})`);
 
@@ -111,6 +104,27 @@ export function initVoiceTriggers(): () => void {
     activeTeardown = null;
   };
   return activeTeardown;
+}
+
+/** Keep the native bridge in sync with the Settings toggle. */
+export async function syncBluetoothMediaButtonState(enabled: boolean): Promise<void> {
+  btEnabled = enabled;
+  const bt = getBTModule();
+  if (!bt) {
+    devLog('[voiceTriggers] BluetoothMediaButton native module not present — BT tap capture disabled');
+    return;
+  }
+  try {
+    if (enabled) {
+      const s = await bt.activate();
+      devLog(`[voiceTriggers] BT module activated (${s.sessionTag})`);
+    } else {
+      const s = await bt.deactivate();
+      devLog(`[voiceTriggers] BT module deactivated (${s.sessionTag})`);
+    }
+  } catch (e) {
+    devLog('[voiceTriggers] BT module sync failed: ' + String(e));
+  }
 }
 
 /** Test helper — manual trigger from a debug button, etc. */

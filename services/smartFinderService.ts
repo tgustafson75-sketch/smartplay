@@ -232,14 +232,19 @@ export function setMarkedFix(lat: number, lng: number, accuracy_m: number | null
 }
 
 /**
- * Pulls a high-accuracy GPS fix via gpsManager.getOneShotFix and returns
- * the mapped LastFix shape. Returns null on permission denial / failure.
+ * Pulls a fresh high-accuracy GPS fix via gpsManager.getOneShotFix and
+ * returns the mapped LastFix shape. Returns null on permission denial /
+ * failure.
+ *
+ * 2026-06-04 — Fix: always pass maxAgeMs: 0. The prior default cache
+ * path could hand back a <10s-old fix, which made explicit refresh UI
+ * actions look successful while still showing stale position data.
  */
 export async function refreshFix(): Promise<LastFix | null> {
   // SmartFinder being open is a shot-intent signal — bump GPS to active.
   bumpToActive('smartfinder_refresh');
   try {
-    const fix = await getOneShotFix();
+    const fix = await getOneShotFix({ maxAgeMs: 0 });
     if (!fix) return getLastFixInternal();
     return {
       location: { lat: fix.lat, lng: fix.lng },
