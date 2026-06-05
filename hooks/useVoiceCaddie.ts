@@ -11,6 +11,7 @@ import {
   isSpeaking,
   playLocalFile,
   captureUtterance,
+  RECORDING_OPTIONS,
 } from '../services/voiceService';
 import {
   initFillerLibrary,
@@ -116,32 +117,11 @@ export function resetMicPermissionCache(): void {
 // gives the user a clean slate on re-enable.
 let micBlockedPromptShown = false;
 
-// 16kHz mono 32kbps — 4x smaller than HIGH_QUALITY, same Whisper accuracy
-const RECORDING_OPTIONS: Audio.RecordingOptions = {
-  android: {
-    extension: '.m4a',
-    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-    audioEncoder: Audio.AndroidAudioEncoder.AAC,
-    sampleRate: 16000,
-    numberOfChannels: 1,
-    bitRate: 32000,
-  },
-  ios: {
-    extension: '.m4a',
-    outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-    audioQuality: Audio.IOSAudioQuality.LOW,
-    sampleRate: 16000,
-    numberOfChannels: 1,
-    bitRate: 32000,
-    linearPCMBitDepth: 16,
-    linearPCMIsBigEndian: false,
-    linearPCMIsFloat: false,
-  },
-  web: {
-    mimeType: 'audio/webm',
-    bitsPerSecond: 32000,
-  },
-};
+// 2026-06-05 — Recording options moved to services/voiceService.ts
+// (RECORDING_OPTIONS export, single source of truth). Drift between
+// the two duplicate definitions was a near-miss; one import keeps
+// both the manual-tap path here and the captureUtterance path in
+// voiceService aligned on format / sample rate / bit rate forever.
 
 // ─── BYPASS PHRASES ───────────────────────
 

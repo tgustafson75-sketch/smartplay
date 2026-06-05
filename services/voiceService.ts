@@ -85,10 +85,15 @@ export const configureAudioForRecording =
     }
   };
 
-const CAPTURE_RECORDING_OPTIONS: Audio.RecordingOptions = {
-  // 2026-05-25 — Fix A: enable metering so captureUtterance can detect
-  // silence and auto-stop. Required at root level for the status
-  // callback to receive `metering` (dB) values.
+// 2026-06-05 — Single source of truth for mic-record options.
+// captureUtterance (this file) and the manual-tap path in
+// hooks/useVoiceCaddie.ts both import this; the prior duplicate
+// in useVoiceCaddie was identical but invited drift. 16kHz mono
+// 32kbps matches Whisper's native input format and is ~4× smaller
+// than expo-av's HIGH_QUALITY preset with no transcription accuracy
+// loss. Metering ON so captureUtterance's silence-VAD callback
+// receives `metering` dB values.
+export const RECORDING_OPTIONS: Audio.RecordingOptions = {
   isMeteringEnabled: true,
   android: {
     extension: '.m4a',
@@ -167,7 +172,7 @@ export const captureUtterance = async (
     let lastLoudAt = Date.now();
 
     const r = await Audio.Recording.createAsync(
-      CAPTURE_RECORDING_OPTIONS,
+      RECORDING_OPTIONS,
       (status) => {
         if (!status.isRecording) return;
         const metering = (status as { metering?: number }).metering;
@@ -179,6 +184,16 @@ export const captureUtterance = async (
     );
     recording = r.recording;
     currentRecording = recording;
+
+    // 2026-06-05 — Mic warm-up gap. Audio.Recording.createAsync fuses
+    // prepare+start; on some Android OEMs (Samsung especially) the
+    // first 50-150ms of audio is partial or zero-amplitude while the
+    // mic stream stabilizes. 100ms sleep before the VAD loop reads
+    // metering avoids treating that warm-up silence as "user is quiet"
+    // and also keeps the file from being trivially-tiny on a fast
+    // tap-stop sequence.
+    await new Promise<void>(resolve => setTimeout(resolve, 100));
+    lastLoudAt = Date.now();
 
     // Wait up to timeoutMs OR until stopCapture flips the flag OR
     // silence-VAD trips early (Fix A).
@@ -200,9 +215,44 @@ export const captureUtterance = async (
     }
 
     currentRecording = null;
+    // 2026-06-05 — Capture duration BEFORE stopAndUnloadAsync so the
+    // status read still works; after unload, getStatusAsync returns
+    // an unloaded status with no durationMillis. We use it below to
+    // skip transcribe for stray double-taps that produced <300ms of
+    // audio.
+    let durationMs: number | null = null;
+    try {
+      const preStopStatus = await recording.getStatusAsync();
+      const d = (preStopStatus as { durationMillis?: number }).durationMillis;
+      if (typeof d === 'number') durationMs = d;
+    } catch { /* non-fatal; fall through to file-size check */ }
     await recording.stopAndUnloadAsync();
     const uri = recording.getURI();
     if (!uri) return null;
+
+    // 2026-06-05 — Validate the recorded audio before paying for a
+    // Whisper round-trip. A stray double-tap or a mic that never opened
+    // produces a tiny / empty .m4a; POSTing it returns 502 from
+    // /api/transcribe and surfaces a "Network hiccup" toast that the
+    // user reads as a bug. Both gates are silent skips (return null,
+    // treated as "user said nothing" upstream).
+    if (durationMs != null && durationMs < 300) {
+      console.log('[voice] capture too short (', durationMs, 'ms), skipping transcribe');
+      return null;
+    }
+    try {
+      const FS = await import('expo-file-system/legacy');
+      const info = await FS.getInfoAsync(uri);
+      if (!info.exists || ((info as { size?: number }).size ?? 0) < 1024) {
+        console.log('[voice] capture file too small (<1KB), skipping transcribe');
+        return null;
+      }
+    } catch (e) {
+      // Non-fatal — if the file-info probe itself throws, fall through
+      // to the transcribe attempt. Whisper's own error path will
+      // surface the failure if the file is genuinely broken.
+      console.log('[voice] file size probe failed (continuing):', e);
+    }
 
     const formData = new FormData();
     formData.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
