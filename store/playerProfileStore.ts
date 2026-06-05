@@ -125,6 +125,20 @@ interface PlayerProfileState {
   // variants like 'XXXX-XXXX'). null = not captured.
   ghin_number: string | null;
 
+  // 2026-06-04 — Personal-best tracking. `longestDrive` auto-updates
+  // from logShot when a Driver shot with carry_distance / distance_yards
+  // beats the current high; `longestPutt` is user-entered in Settings
+  // (no automatic detection today). null = never set.
+  longestDrive: number | null;
+  longestPutt: number | null;
+
+  // 2026-06-04 — Cached AI "Kevin's Read" — 2-3 sentence prevailing-
+  // tendency assessment generated from the last few rounds by
+  // services/kevinReadService. Refreshed on endRound and on explicit
+  // user tap (dashboard card). Never refreshed on cold launch or
+  // mid-round. null = use the default Kevin-voice fallback line.
+  kevinRead: { text: string; generatedAt: number } | null;
+
   // ─── ACTIONS ────────────────────────────
 
   setName: (name: string) => void;
@@ -165,6 +179,11 @@ interface PlayerProfileState {
   clearTermsAcceptance: () => void;
   // 2026-05-26 — Fix AB Phase 1: GHIN # capture.
   setGhinNumber: (ghin: string | null) => void;
+  // 2026-06-04 — Personal-best setters.
+  setLongestDrive: (yards: number | null) => void;
+  setLongestPutt: (yards: number | null) => void;
+  // 2026-06-04 — Kevin's Read cache setter.
+  setKevinRead: (read: { text: string; generatedAt: number } | null) => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -213,6 +232,10 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       termsAcceptedAt: null,
       // 2026-05-26 — Fix AB Phase 1: GHIN # default null until captured.
       ghin_number: null,
+      // 2026-06-04 — personal-best + Kevin's Read defaults.
+      longestDrive: null,
+      longestPutt: null,
+      kevinRead: null,
 
       setName: (name) =>
         set({ name, firstName: name.split(' ')[0] ?? name }),
@@ -300,6 +323,21 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
         const normalized = /^\d+$/.test(compact) ? compact : cleaned;
         set({ ghin_number: normalized });
       },
+      // 2026-06-04 — Personal-best setters. Both clamp to 0-1000 yards
+      // as a sanity gate (the highest drive on the PGA Tour is ~480y;
+      // putts longer than ~120ft / 40y are vanishingly rare). null
+      // clears the value.
+      setLongestDrive: (yards) => {
+        if (yards == null || !Number.isFinite(yards) || yards <= 0) return set({ longestDrive: null });
+        set({ longestDrive: Math.min(1000, Math.round(yards)) });
+      },
+      setLongestPutt: (yards) => {
+        if (yards == null || !Number.isFinite(yards) || yards <= 0) return set({ longestPutt: null });
+        set({ longestPutt: Math.min(1000, Math.round(yards)) });
+      },
+      // 2026-06-04 — Kevin's Read cache. null clears (forces the
+      // dashboard to render the default fallback line).
+      setKevinRead: (read) => set({ kevinRead: read }),
     }),
     {
       name: 'player-profile-v2',

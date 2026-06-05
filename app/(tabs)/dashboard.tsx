@@ -1,25 +1,26 @@
 /**
- * Dashboard tab — v3 visual layout + Pro's AI cards preserved.
+ * Dashboard tab — 2026-06-04 layout.
  *
- * Tonight's port (2026-05-13):
- *   - TOP-HALF mirrors v3 (cleaner, more scannable):
- *       BrandBlock → Title + Welcome → Profile card → Current Round
- *       → Weather → Shot Stats tiles → Recent Shots → Quick Actions.
- *   - BOTTOM-HALF preserves Pro's AI surfaces:
- *       Kevin's Read → Pattern Shift alert → Hero Reel → Milestones
- *       → Progress (Points + Tier).
+ * TOP-HALF:
+ *   BrandBlock → Title + Welcome → Profile card → Current Round →
+ *   Weather → Shot Stats tiles → Recent Shots.
  *
- * All data sources are Pro's existing ones (roundStore, relationshipStore,
- * playerProfileStore, pointsStore, useCurrentWeather). NO store changes.
- * NO migrations. Pure render-layer reorganization.
+ * BOTTOM-HALF:
+ *   Pattern Shift alert → Kevin's Read (AI prevailing tendencies,
+ *   cached on playerProfileStore.kevinRead) → Highlights (Best Round,
+ *   Longest Drive, Longest Putt, Saved Highlights) → Milestones.
  *
- * Non-developer note: this file changed shape but every number and quote
- * still comes from the same store the old dashboard read from. If Kevin's
- * Read or the Hero Reel ever shows wrong data, the fix is in the
- * underlying store, not here.
+ * Removed 2026-06-04:
+ *   - Quick Actions row (SmartFinder / SmartVision / Settings) — the
+ *     ⋯ pill upper-right already exposes them.
+ *   - Hero Reel feed (counted in Highlights instead).
+ *   - Progress card (Points + Tier).
+ *
+ * Data sources: roundStore, relationshipStore, playerProfileStore,
+ * useCurrentWeather, services/kevinReadService.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -36,7 +37,9 @@ import { useRoundStore } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import ShotTimeline from '../../components/caddie/ShotTimeline';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
-import { usePointsStore } from '../../store/pointsStore';
+// 2026-06-04 — Progress card (Points + Tier) removed from dashboard
+// alongside the Highlights Card rework. pointsStore import dropped.
+import { generateKevinRead } from '../../services/kevinReadService';
 import { useTheme } from '../../contexts/ThemeContext';
 import { detectPatternShift } from '../../services/patternDetection';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
@@ -77,22 +80,22 @@ export default function Dashboard() {
     [roundHistory],
   );
 
-  // ─── Relationship + profile + points ─────────────────────────────
+  // ─── Relationship + profile ──────────────────────────────────────
+  // 2026-06-04 — sessionsTogether, currentMentalState, confidenceByClub
+  // dropped from selectors (Kevin's Read inline block replaced by the
+  // AI-driven card below; topClubs / dominant-miss surface gone).
+  // heroMoments + breakthroughs retained — heroMoments feeds the
+  // Highlights card count; breakthroughs feeds the standalone
+  // Milestones card.
   const {
     roundsTogether,
-    sessionsTogether,
     heroMoments,
     breakthroughs,
-    confidenceByClub,
-    currentMentalState,
   } = useRelationshipStore(
     useShallow((s) => ({
       roundsTogether: s.roundsTogether,
-      sessionsTogether: s.sessionsTogether,
       heroMoments: s.heroMoments,
       breakthroughs: s.breakthroughs,
-      confidenceByClub: s.confidenceByClub,
-      currentMentalState: s.currentMentalState,
     })),
   );
 
@@ -104,6 +107,9 @@ export default function Dashboard() {
     personalBest,
     goal,
     dominantMiss,
+    longestDrive,
+    longestPutt,
+    kevinRead,
   } = usePlayerProfileStore(
     useShallow((s) => ({
       firstName: s.firstName,
@@ -113,11 +119,10 @@ export default function Dashboard() {
       personalBest: s.personalBest,
       goal: s.goal,
       dominantMiss: s.dominantMiss,
+      longestDrive: s.longestDrive,
+      longestPutt: s.longestPutt,
+      kevinRead: s.kevinRead,
     })),
-  );
-
-  const { totalPoints, tier } = usePointsStore(
-    useShallow((s) => ({ totalPoints: s.totalPoints, tier: s.tier })),
   );
 
   // ─── Live weather (current round only — hook returns null otherwise) ──
@@ -169,9 +174,50 @@ export default function Dashboard() {
     return [...last.shots].slice(-5).reverse();
   }, [allShots, roundHistory]);
 
-  const topClubs = Object.entries(confidenceByClub)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 3);
+  // 2026-06-04 — topClubs derivation removed (Kevin's Read inline block
+  // that consumed it is replaced by the AI-driven card below).
+
+  // 2026-06-04 — Highlights Card derived stats.
+  const derivedLongestDrive = useMemo(() => {
+    const fromHistory = roundHistory
+      .flatMap(r => r.shots)
+      .filter(s => s.club === 'Driver')
+      .map(s => s.carry_distance ?? s.distance_yards ?? 0)
+      .reduce((max, y) => (y > max ? y : max), 0);
+    const fromProfile = longestDrive ?? 0;
+    const best = Math.max(fromHistory, fromProfile);
+    return best > 0 ? best : null;
+  }, [roundHistory, longestDrive]);
+
+  const bestRound = useMemo(() => {
+    const completed = roundHistory
+      .filter(r => r.totalScore > 0 && r.holesPlayed >= 9)
+      .map(r => r.totalScore);
+    const fromHistory = completed.length > 0 ? Math.min(...completed) : null;
+    if (fromHistory != null && personalBest != null) return Math.min(fromHistory, personalBest);
+    return fromHistory ?? personalBest ?? null;
+  }, [roundHistory, personalBest]);
+
+  // 2026-06-04 — Kevin's Read regeneration. The card shows the cached
+  // text immediately (instant render); tapping fires a fresh API call
+  // and the cached text stays visible until the new one lands. No
+  // spinner blocks the card per spec.
+  const [refreshingKevinRead, setRefreshingKevinRead] = useState(false);
+  const refreshKevinRead = useCallback(async () => {
+    if (refreshingKevinRead) return;
+    setRefreshingKevinRead(true);
+    try { await generateKevinRead(); }
+    finally { setRefreshingKevinRead(false); }
+  }, [refreshingKevinRead]);
+
+  const KEVIN_READ_DEFAULT = 'Swing easy, hit it far. Play one shot at a time.';
+  const kevinReadText = kevinRead?.text ?? KEVIN_READ_DEFAULT;
+  const kevinReadFooter = useMemo(() => {
+    if (!kevinRead?.generatedAt) return 'Tap to generate';
+    const completedSince = roundHistory.filter(r => r.endedAt > kevinRead.generatedAt).length;
+    if (completedSince === 0) return 'Up to date';
+    return `${completedSince} round${completedSince === 1 ? '' : 's'} ago`;
+  }, [kevinRead, roundHistory]);
 
   // Welcome string falls back gracefully if the user never set a name.
   const welcomeName = firstName || name?.split(' ')[0] || 'Player';
@@ -363,13 +409,9 @@ export default function Dashboard() {
           <ShotTimeline maxRows={5} />
         )}
 
-        {/* ─── 8. QUICK ACTIONS — 3 icon buttons ────────────────────── */}
-        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>QUICK ACTIONS</Text>
-        <View style={styles.quickRow}>
-          <QuickAction colors={colors} icon="locate-outline" label="SmartFinder" onPress={() => router.push('/smartfinder' as never)} />
-          <QuickAction colors={colors} icon="eye-outline" label="SmartVision" onPress={() => router.push('/smartvision' as never)} />
-          <QuickAction colors={colors} icon="settings-outline" label="Settings" onPress={() => router.push('/settings' as never)} />
-        </View>
+        {/* 2026-06-04 — Quick Actions row removed. SmartFinder / SmartVision
+            / Settings are reachable via the ⋯ pill (GlobalToolsMenu) in the
+            top-right of every screen, so duplicating them here was clutter. */}
 
         {/* ═══════════════════════════════════════════════════════════
             BELOW THE FOLD: Pro's AI surfaces (preserved)
@@ -404,98 +446,68 @@ export default function Dashboard() {
           </TouchableOpacity>
         )}
 
-        {/* KEVIN'S READ */}
-        <View style={[styles.aiCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-          <Text style={[styles.aiCardTitle, { color: colors.text_primary }]}>Kevin&apos;s Read</Text>
-          <View style={styles.aiStatRow}>
-            <View style={styles.aiStat}>
-              <Text style={[styles.aiStatValue, { color: colors.text_primary }]}>{sessionsTogether}</Text>
-              <Text style={[styles.aiStatLabel, { color: colors.text_muted }]}>Sessions</Text>
-            </View>
-            <View style={styles.aiStat}>
-              <Text style={[styles.aiStatValue, { color: '#F5A623' }]}>{heroMoments.length}</Text>
-              <Text style={[styles.aiStatLabel, { color: colors.text_muted }]}>Hero Shots</Text>
-            </View>
-            <View style={styles.aiStat}>
-              <Text style={[styles.aiStatValue, { color: colors.accent }]}>{breakthroughs.length}</Text>
-              <Text style={[styles.aiStatLabel, { color: colors.text_muted }]}>Milestones</Text>
-            </View>
+        {/* KEVIN'S READ — AI prevailing-tendency assessment.
+            2026-06-04 — Replaces the old inline stats block (sessions /
+            hero shots / milestones / mental state / trusted clubs /
+            dominant miss). Tap the card to regenerate; cached text stays
+            visible during the request so the card never spinner-blocks. */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={refreshKevinRead}
+          style={[styles.aiCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}
+          accessibilityRole="button"
+          accessibilityLabel={`Kevin's Read. ${refreshingKevinRead ? 'Refreshing.' : 'Tap to refresh.'}`}
+        >
+          <View style={styles.kevinReadHeader}>
+            <Text style={[styles.aiCardTitle, { color: colors.text_primary }]}>Kevin&apos;s Read</Text>
+            {refreshingKevinRead ? (
+              <Text style={[styles.kevinReadFooter, { color: colors.accent }]}>Refreshing…</Text>
+            ) : null}
           </View>
-          <View style={[styles.mentalRow, { borderTopColor: colors.border }]}>
-            <Text style={[styles.mentalLabel, { color: colors.text_muted }]}>MENTAL STATE</Text>
-            <Text style={[
-              styles.mentalValue,
-              {
-                color:
-                  currentMentalState === 'confident' ? colors.accent
-                  : currentMentalState === 'spiraling' ? colors.error
-                  : currentMentalState === 'tight' ? '#fbbf24'
-                  : colors.text_muted,
-              },
-            ]}>
-              {currentMentalState.charAt(0).toUpperCase() + currentMentalState.slice(1)}
-            </Text>
-          </View>
-          {topClubs.length > 0 && (
-            <View style={[styles.clubRow, { borderTopColor: colors.border }]}>
-              <Text style={[styles.clubRowLabel, { color: colors.text_muted }]}>TRUSTED CLUBS</Text>
-              <View style={styles.clubPills}>
-                {topClubs.map(([club, conf]) => (
-                  <View key={club} style={[styles.clubPill, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}>
-                    <Text style={[styles.clubPillText, { color: colors.text_primary }]}>{club}</Text>
-                    <Text style={[styles.clubPillConf, { color: colors.accent }]}>
-                      {Math.round(conf * 100)}%
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-          {dominantMiss && (
-            <View style={[styles.clubRow, { borderTopColor: colors.border }]}>
-              <Text style={[styles.clubRowLabel, { color: colors.text_muted }]}>DOMINANT MISS</Text>
-              <Text style={[styles.aiInline, { color: colors.text_primary }]}>{dominantMiss}</Text>
-            </View>
-          )}
-        </View>
+          <Text style={[styles.kevinReadText, { color: colors.text_primary }]}>{kevinReadText}</Text>
+          <Text style={[styles.kevinReadFooter, { color: colors.text_muted }]}>
+            {kevinReadFooter} · tap to refresh
+          </Text>
+        </TouchableOpacity>
 
-        {/* HERO REEL */}
+        {/* HIGHLIGHTS — 2×2 grid replacing Hero Reel + Progress.
+            2026-06-04 — Best Round, Longest Drive, Longest Putt, Saved
+            Highlights. "—" renders when a stat is null (never show 0
+            for drive/putt; 0 is meaningless, — is honest). */}
         <View style={[styles.aiCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-          <View style={styles.heroHeader}>
-            <Text style={[styles.aiCardTitle, { color: colors.text_primary }]}>Hero Reel</Text>
-            {heroMoments.length > 0 && (
-              <Text style={[styles.heroCount, { color: colors.text_muted }]}>★ {heroMoments.length} saved</Text>
-            )}
+          <Text style={[styles.aiCardTitle, { color: colors.text_primary }]}>Highlights</Text>
+          <View style={styles.highlightsGrid}>
+            <View style={styles.highlightCell}>
+              <Text style={[styles.highlightLabel, { color: colors.text_muted }]}>BEST ROUND</Text>
+              <Text style={[styles.highlightValue, { color: colors.text_primary }]}>{bestRound ?? '—'}</Text>
+            </View>
+            <View style={styles.highlightCell}>
+              <Text style={[styles.highlightLabel, { color: colors.text_muted }]}>LONGEST DRIVE</Text>
+              <Text style={[styles.highlightValue, { color: colors.text_primary }]}>
+                {derivedLongestDrive != null ? `${derivedLongestDrive}y` : '—'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.highlightCell}
+              activeOpacity={0.7}
+              onPress={() => {
+                if (longestPutt == null) router.push('/settings' as never);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={longestPutt == null ? 'Set longest putt in Settings' : `Longest putt ${longestPutt} yards`}
+            >
+              <Text style={[styles.highlightLabel, { color: colors.text_muted }]}>LONGEST PUTT</Text>
+              <Text style={[styles.highlightValue, { color: colors.text_primary }]}>
+                {longestPutt != null ? `${longestPutt}y` : '—'}
+              </Text>
+            </TouchableOpacity>
+            <View style={styles.highlightCell}>
+              <Text style={[styles.highlightLabel, { color: colors.text_muted }]}>SAVED HIGHLIGHTS</Text>
+              <Text style={[styles.highlightValue, { color: '#F5A623' }]}>
+                {heroMoments.length > 0 ? `★ ${heroMoments.length}` : '—'}
+              </Text>
+            </View>
           </View>
-          {[...heroMoments]
-            .sort((a, b) => b.timestamp - a.timestamp)
-            .slice(0, 5)
-            .map((moment) => (
-              <View key={moment.id} style={styles.heroItem}>
-                <View style={[styles.heroStarBadge, { backgroundColor: '#F5A623' }]}>
-                  <Text style={styles.heroStarText}>★</Text>
-                </View>
-                <View style={styles.heroInfo}>
-                  <Text style={[styles.heroHole, { color: colors.text_primary }]}>
-                    Hole {moment.hole} · {moment.club}
-                  </Text>
-                  <Text style={[styles.heroCourse, { color: colors.text_muted }]}>
-                    {moment.courseName || 'Practice'}
-                  </Text>
-                  <Text style={[styles.heroKevin, { color: colors.accent }]}>
-                    &quot;{moment.kevinSaid}&quot;
-                  </Text>
-                </View>
-                <Text style={[styles.heroDate, { color: colors.text_muted }]}>
-                  {new Date(moment.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                </Text>
-              </View>
-            ))}
-          {heroMoments.length === 0 && (
-            <Text style={[styles.heroEmpty, { color: colors.text_muted }]}>
-              Say &quot;Kevin did you get that?&quot; after a pure shot to save it.
-            </Text>
-          )}
         </View>
 
         {/* MILESTONES (last 3) */}
@@ -510,25 +522,6 @@ export default function Dashboard() {
             ))}
           </View>
         )}
-
-        {/* PROGRESS — Points + Tier */}
-        <View style={[styles.aiCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-          <Text style={[styles.aiCardTitle, { color: colors.text_primary }]}>Progress</Text>
-          <View style={styles.aiStatRow}>
-            <View style={styles.aiStat}>
-              <Text style={[styles.aiStatValue, { color: '#F5A623' }]}>{totalPoints}</Text>
-              <Text style={[styles.aiStatLabel, { color: colors.text_muted }]}>Points</Text>
-            </View>
-            <View style={[styles.aiStat, { flex: 2 }]}>
-              <Text style={[styles.aiStatValue, { fontSize: 16, color: colors.accent }]}>{tier}</Text>
-              <Text style={[styles.aiStatLabel, { color: colors.text_muted }]}>Tier</Text>
-            </View>
-            <View style={styles.aiStat}>
-              <Text style={[styles.aiStatValue, { color: colors.text_primary }]}>{personalBest ?? '—'}</Text>
-              <Text style={[styles.aiStatLabel, { color: colors.text_muted }]}>Best Round</Text>
-            </View>
-          </View>
-        </View>
 
         {/* EMPTY STATE — no rounds yet */}
         {roundsTogether === 0 && (
@@ -564,30 +557,8 @@ function StatTile({
   );
 }
 
-function QuickAction({
-  colors,
-  icon,
-  label,
-  onPress,
-}: {
-  colors: ReturnType<typeof useTheme>['colors'];
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      style={[styles.quickBtn, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}
-      activeOpacity={0.85}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-    >
-      <Ionicons name={icon} size={24} color={colors.accent} />
-      <Text style={[styles.quickLabel, { color: colors.text_primary }]}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
+// 2026-06-04 — QuickAction component removed alongside the Quick Actions
+// row (SmartFinder / SmartVision / Settings are reachable via the ⋯ pill).
 
 // ─── STYLES ───────────────────────────────────────────────────────────
 
@@ -804,6 +775,26 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   aiCardTitle: { fontSize: 16, fontWeight: '800', marginBottom: 10 },
+  // 2026-06-04 — Kevin's Read AI card.
+  kevinReadHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 4,
+  },
+  kevinReadText: { fontSize: 14, lineHeight: 21, fontWeight: '500' },
+  kevinReadFooter: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3, marginTop: 8 },
+  // 2026-06-04 — Highlights 2×2 grid.
+  highlightsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  highlightCell: {
+    width: '50%',
+    paddingVertical: 10,
+  },
+  highlightLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6, marginBottom: 4 },
+  highlightValue: { fontSize: 24, fontWeight: '900' },
   aiStatRow: { flexDirection: 'row' },
   aiStat: { flex: 1, alignItems: 'center' },
   aiStatValue: { fontSize: 22, fontWeight: '900' },

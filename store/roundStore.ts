@@ -144,6 +144,11 @@ export interface ShotResult {
   rules_decision?: RulesDecision;
   // Phase A.2 — conversational logging fields. All optional for back-compat.
   distance_yards?: number | null;
+  // 2026-06-04 — Airtime-only carry distance (excludes roll). Populated
+  // when an acoustic / pose / shot-trace source has measured it; used by
+  // the dashboard Highlights "Longest Drive" and the auto-update path in
+  // logShot. Distinct from distance_yards (total to-resting-spot).
+  carry_distance?: number | null;
   raw_utterance?: string;
   logged_via?: 'voice' | 'tap';
   gps_location?: ShotLocation | null;       // legacy alias of start_location
@@ -1221,6 +1226,18 @@ export const useRoundStore = create<RoundState>()(
           }
         })();
 
+        // 2026-06-04 — Refresh the cached AI Kevin's Read after the
+        // round ends. Fire-and-forget — never blocks round end and
+        // failures fall through to the dashboard's default fallback.
+        void (async () => {
+          try {
+            const { generateKevinRead } = await import('../services/kevinReadService');
+            await generateKevinRead();
+          } catch (e) {
+            console.log('[roundStore] kevinRead refresh failed (non-fatal):', e);
+          }
+        })();
+
         // 2026-05-17 — Phase 413 — stop the walking-vs-cart ticker
         // started in startRound. Cleans up the interval and resets
         // the cached reading so a future round starts fresh.
@@ -1515,6 +1532,30 @@ export const useRoundStore = create<RoundState>()(
           // by a shot. If the user captures another lie later in the
           // round, setPendingLieAnalysis writes a fresh one. This
           // prevents a stale lie from haunting multiple shots.
+
+          // 2026-06-04 — Auto-update longestDrive when a Driver shot
+          // with a real distance beats the player's current best.
+          // Profile store is dynamic-required to avoid a module cycle
+          // (playerProfileStore doesn't import roundStore today, but
+          // this side-channel update is a single fire-and-forget hop).
+          const driverYards = (() => {
+            if (enriched.club !== 'Driver') return null;
+            const y = enriched.carry_distance ?? enriched.distance_yards ?? null;
+            return typeof y === 'number' && y > 0 ? y : null;
+          })();
+          if (driverYards != null) {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const profileMod = require('./playerProfileStore') as typeof import('./playerProfileStore');
+              const cur = profileMod.usePlayerProfileStore.getState().longestDrive;
+              if (cur == null || driverYards > cur) {
+                profileMod.usePlayerProfileStore.getState().setLongestDrive(driverYards);
+              }
+            } catch (e) {
+              console.log('[roundStore] longestDrive update failed (non-fatal):', e);
+            }
+          }
+
           return {
             shots: [...backfilled, enriched],
             pendingLieAnalysis: enriched.lie_analysis ? null : s.pendingLieAnalysis,

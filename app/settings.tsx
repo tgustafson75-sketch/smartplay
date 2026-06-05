@@ -229,6 +229,17 @@ export default function Settings() {
   }, []);
   const [editLimitation, setEditLimitation] = useState(physicalLimitation ?? '');
   const [editBest, setEditBest] = useState(personalBest ? String(personalBest) : '');
+  // 2026-06-04 — Personal-best capture for the dashboard Highlights card.
+  // longestDrive auto-updates from logShot when a Driver shot beats the
+  // current high (see roundStore.logShot); longestPutt is manual until
+  // a putt-distance sensor lands. Both clear when the user blanks the
+  // input.
+  const longestDrive = usePlayerProfileStore(s => s.longestDrive);
+  const setLongestDrive = usePlayerProfileStore(s => s.setLongestDrive);
+  const longestPutt = usePlayerProfileStore(s => s.longestPutt);
+  const setLongestPutt = usePlayerProfileStore(s => s.setLongestPutt);
+  const [editLongestDrive, setEditLongestDrive] = useState(longestDrive != null ? String(longestDrive) : '');
+  const [editLongestPutt, setEditLongestPutt] = useState(longestPutt != null ? String(longestPutt) : '');
 
   // 2026-05-28 — Fix FB: ScrollView ref so we can scroll back to top on
   // profile save. The collapsed slim card sits at the top of the
@@ -245,6 +256,11 @@ export default function Settings() {
     setPhysicalLimitation(editLimitation.trim() || null);
     const best = parseInt(editBest, 10);
     setPersonalBest(!isNaN(best) ? best : null);
+    // 2026-06-04 — Personal bests for the dashboard Highlights card.
+    const drv = parseInt(editLongestDrive, 10);
+    setLongestDrive(!isNaN(drv) && drv > 0 ? drv : null);
+    const putt = parseInt(editLongestPutt, 10);
+    setLongestPutt(!isNaN(putt) && putt > 0 ? putt : null);
     setProfileExpanded(false);
     // 2026-05-28 — Fix FB: three coordinated changes to make save
     // actually feel like save.
@@ -568,6 +584,36 @@ export default function Settings() {
             placeholder="Best round score"
             placeholderTextColor="#374151"
           />
+
+          {/* 2026-06-04 — Personal-best inputs surfaced on the dashboard
+              Highlights card. longestDrive auto-updates from logShot when
+              a Driver shot beats the current high (see roundStore.logShot);
+              longestPutt is manual until a putt-distance source lands. */}
+          <Text style={inputLblStyle}>Longest Drive (yards)</Text>
+          <TextInput
+            style={inputFldStyle}
+            value={editLongestDrive}
+            onChangeText={setEditLongestDrive}
+            keyboardType="numeric"
+            placeholder="e.g. 280"
+            placeholderTextColor="#374151"
+          />
+          <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>
+            Updated automatically as you log Driver shots.
+          </Text>
+
+          <Text style={inputLblStyle}>Longest Putt (yards)</Text>
+          <TextInput
+            style={inputFldStyle}
+            value={editLongestPutt}
+            onChangeText={setEditLongestPutt}
+            keyboardType="numeric"
+            placeholder="e.g. 45"
+            placeholderTextColor="#374151"
+          />
+          <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>
+            Manual entry for now.
+          </Text>
 
           <Text style={inputLblStyle}>Handicap Index (USGA)</Text>
           <TextInput
