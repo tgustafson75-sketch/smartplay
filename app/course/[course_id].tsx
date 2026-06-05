@@ -185,13 +185,37 @@ export default function CourseDetailScreen() {
           if (!real?.id) return;
           void getCourse(real.id).then(c => {
             if (!cancelled && c) setCourse(c);
+            const courseLocation =
+              c &&
+              typeof c.location?.latitude === 'number' &&
+              typeof c.location?.longitude === 'number' &&
+              Number.isFinite(c.location.latitude) &&
+              Number.isFinite(c.location.longitude) &&
+              Math.abs(c.location.latitude) <= 90 &&
+              Math.abs(c.location.longitude) <= 180 &&
+              !(Math.abs(c.location.latitude) < 0.001 && Math.abs(c.location.longitude) < 0.001)
+                ? { lat: c.location.latitude, lng: c.location.longitude }
+                : null;
+            void fetchCourseGeometry(real.id, { courseLocation }).catch(() => {});
           }).catch(() => {});
-          void fetchCourseGeometry(real.id).catch(() => {});
         }).catch(() => {});
         return;
       }
+      let fetchedCourseLocation: { lat: number; lng: number } | null = null;
       try {
         const c = await getCourse(realId);
+        if (
+          c &&
+          typeof c.location?.latitude === 'number' &&
+          typeof c.location?.longitude === 'number' &&
+          Number.isFinite(c.location.latitude) &&
+          Number.isFinite(c.location.longitude) &&
+          Math.abs(c.location.latitude) <= 90 &&
+          Math.abs(c.location.longitude) <= 180 &&
+          !(Math.abs(c.location.latitude) < 0.001 && Math.abs(c.location.longitude) < 0.001)
+        ) {
+          fetchedCourseLocation = { lat: c.location.latitude, lng: c.location.longitude };
+        }
         if (!cancelled) {
           setCourse(c);
           setLoading(false);
@@ -201,7 +225,7 @@ export default function CourseDetailScreen() {
         if (!cancelled) setLoading(false);
       }
       try {
-        await fetchCourseGeometry(realId);
+        await fetchCourseGeometry(realId, { courseLocation: fetchedCourseLocation });
         if (!cancelled) setGeometryReady(true);
       } catch (e) {
         console.log('[course-detail] geometry warm failed:', e);

@@ -43,7 +43,18 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
       const c = await getCourse(courseId);
       if (cancelled) return;
       setCourse(c);
-      try { await fetchCourseGeometry(courseId); } catch {}
+      const courseLocation =
+        c &&
+        typeof c.location?.latitude === 'number' &&
+        typeof c.location?.longitude === 'number' &&
+        Number.isFinite(c.location.latitude) &&
+        Number.isFinite(c.location.longitude) &&
+        Math.abs(c.location.latitude) <= 90 &&
+        Math.abs(c.location.longitude) <= 180 &&
+        !(Math.abs(c.location.latitude) < 0.001 && Math.abs(c.location.longitude) < 0.001)
+          ? { lat: c.location.latitude, lng: c.location.longitude }
+          : null;
+      try { await fetchCourseGeometry(courseId, { courseLocation }); } catch {}
       try {
         const tee = c?.tees[0];
         if (c && tee) {

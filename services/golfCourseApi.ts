@@ -100,10 +100,20 @@ type RawCourse = {
   club_name?: string;
   course_name?: string;
   name?: string;
+  location?: {
+    city?: string;
+    state?: string;
+    state_code?: string;
+    country?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+  };
   city?: string;
   state_code?: string;
   state?: string;
   country?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   tees?: RawTee[] | { male?: RawTee[]; female?: RawTee[] } | Record<string, RawTee[]>;
 };
 
@@ -192,15 +202,27 @@ function extractTees(raw: RawCourse): TeeBox[] {
 function normalizeCourse(raw: RawCourse, cachedAt = Date.now()): Course {
   const id = String(raw.id ?? '');
   const tees = extractTees(raw);
+  const rawLat = raw.location?.latitude ?? raw.latitude ?? null;
+  const rawLng = raw.location?.longitude ?? raw.longitude ?? null;
+  const latitude =
+    typeof rawLat === 'number' && Number.isFinite(rawLat) && Math.abs(rawLat) <= 90
+      ? rawLat
+      : undefined;
+  const longitude =
+    typeof rawLng === 'number' && Number.isFinite(rawLng) && Math.abs(rawLng) <= 180
+      ? rawLng
+      : undefined;
   console.log(`[golfcourseapi] normalized course "${raw.club_name ?? raw.name}" id=${id} tees=${tees.length} (${tees.map(t => t.tee_name).join(', ')})`);
   return {
     id,
     club_name: raw.club_name ?? raw.name ?? 'Unknown Club',
     course_name: raw.course_name ?? raw.name ?? 'Unknown Course',
     location: {
-      city: raw.city ?? '',
-      state: raw.state_code ?? raw.state ?? '',
-      country: raw.country ?? 'US',
+      city: raw.location?.city ?? raw.city ?? '',
+      state: raw.location?.state_code ?? raw.location?.state ?? raw.state_code ?? raw.state ?? '',
+      country: raw.location?.country ?? raw.country ?? 'US',
+      latitude,
+      longitude,
     },
     tees,
     cached_at: cachedAt,

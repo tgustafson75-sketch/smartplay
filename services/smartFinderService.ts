@@ -321,7 +321,7 @@ export function resolveGreenCoords(holeNumber: number): {
   source: 'truth' | 'override' | 'golfbert' | 'courseHoles' | 'geometryCache' | 'none';
 } {
   const round = useRoundStore.getState();
-  const courseId = round.activeCourseId ?? null;
+  const courseId = round.activeCourseId ?? round.pendingStartCourseId ?? round.previewCourseId ?? null;
   // 2026-05-24 — Surveyed ground truth wins over EVERYTHING. The dev
   // screen at app/dev/CourseTruth.tsx captures on-foot GPS at the
   // green center; getCourseTruthSync reads from a cache hydrated at
@@ -409,7 +409,7 @@ export function resolveTeeCoords(holeNumber: number): {
   source: 'override' | 'golfbert' | 'courseHoles' | 'none';
 } {
   const round = useRoundStore.getState();
-  const courseId = round.activeCourseId ?? null;
+  const courseId = round.activeCourseId ?? round.pendingStartCourseId ?? round.previewCourseId ?? null;
   if (courseId) {
     const ov = getTeeOverride(courseId, holeNumber);
     if (ov) {
@@ -450,7 +450,7 @@ export function resolveTeeCoords(holeNumber: number): {
  */
 export function getAnchoredHoleLengthYards(holeNumber: number): number | null {
   const round = useRoundStore.getState();
-  const courseId = round.activeCourseId ?? null;
+  const courseId = round.activeCourseId ?? round.pendingStartCourseId ?? round.previewCourseId ?? null;
   if (!courseId) return null;
   const teeOv = getTeeOverride(courseId, holeNumber);
   const greenOv = getGreenOverride(courseId, holeNumber);
@@ -480,8 +480,8 @@ function resolveHoleDataWithFallback(hole: number): import('../store/roundStore'
   if (live) return live;
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getBundledHoles } = require('../data/courses') as typeof import('../data/courses');
-  const previewId = round.activeCourseId ?? round.pendingStartCourseId ?? round.previewCourseId ?? null;
-  const bundled = getBundledHoles(previewId);
+  const courseId = round.activeCourseId ?? round.pendingStartCourseId ?? round.previewCourseId ?? null;
+  const bundled = getBundledHoles(courseId);
   return bundled.find(h => h.hole === hole) ?? null;
 }
 

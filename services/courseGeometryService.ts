@@ -270,7 +270,29 @@ function deriveCentroidFromActiveCourseHoles(): { lat: number; lng: number } | n
   }
 }
 
-export async function fetchCourseGeometry(courseId: string): Promise<CourseGeometry | null> {
+function deriveCentroidFromActiveCourseLocation(
+  courseId: string,
+): { lat: number; lng: number } | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
+    const round = useRoundStore.getState();
+    if (round.activeCourseId !== courseId) return null;
+    const loc = round.courseLocation;
+    if (!loc) return null;
+    if (!Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) return null;
+    if (Math.abs(loc.lat) > 90 || Math.abs(loc.lng) > 180) return null;
+    if (Math.abs(loc.lat) < 0.001 && Math.abs(loc.lng) < 0.001) return null;
+    return { lat: loc.lat, lng: loc.lng };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchCourseGeometry(
+  courseId: string,
+  options?: { courseLocation?: { lat: number; lng: number } | null },
+): Promise<CourseGeometry | null> {
   if (!courseId) return null;
 
   const memHit = memCache.get(courseId);
@@ -327,6 +349,22 @@ export async function fetchCourseGeometry(courseId: string): Promise<CourseGeome
     // coords per hole but null greens; the OSM fallback fills the
     // greens automatically — but only when we send a centroid.
     centroid = deriveCentroidFromActiveCourseHoles();
+    if (!centroid) {
+      const provided = options?.courseLocation;
+      if (
+        provided &&
+        Number.isFinite(provided.lat) &&
+        Number.isFinite(provided.lng) &&
+        Math.abs(provided.lat) <= 90 &&
+        Math.abs(provided.lng) <= 180 &&
+        !(Math.abs(provided.lat) < 0.001 && Math.abs(provided.lng) < 0.001)
+      ) {
+        centroid = { lat: provided.lat, lng: provided.lng };
+      }
+    }
+    if (!centroid) {
+      centroid = deriveCentroidFromActiveCourseLocation(courseId);
+    }
   }
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
@@ -403,6 +441,9 @@ async function refreshGeometryInBackground(courseId: string): Promise<void> {
       // golfcourseapi-only course; if we don't supply a centroid the
       // refresh writes back a no-polygon entry, regressing SmartVision.
       centroid = deriveCentroidFromActiveCourseHoles();
+      if (!centroid) {
+        centroid = deriveCentroidFromActiveCourseLocation(courseId);
+      }
     }
     const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
     const params = new URLSearchParams({ courseId: upstreamId });

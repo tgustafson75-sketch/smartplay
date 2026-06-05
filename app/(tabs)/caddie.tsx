@@ -28,7 +28,7 @@ import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
 import { ActiveListeningPill } from '../../components/caddie/ActiveListeningPill';
 import { PermissionBanner } from '../../components/PermissionBanner';
 import { useRoundStore } from '../../store/roundStore';
-import type { ShotResult } from '../../store/roundStore';
+import type { ShotLocation, ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
 // Phase Cockpit — alternate Caddie tab layout (v3-style). Gated by
 // useSettingsStore.cockpitMode; off by default. Voice/avatar code
@@ -1439,6 +1439,7 @@ export default function CaddieTab() {
     // Honest "unknown" beats wrong-course substituted as truth.
     let holes: import('../../store/roundStore').CourseHole[] = [];
     let courseId: string | null = null;
+    let courseLocation: ShotLocation | null = null;
 
     if (picked.isLocal) {
       const localId = picked.id.replace('local:', '');
@@ -1462,6 +1463,20 @@ export default function CaddieTab() {
         if (apiCourse && apiCourse.tees.length > 0) {
           holes = courseToHoles(apiCourse);
           courseName = apiCourse.club_name;
+          if (
+            typeof apiCourse.location?.latitude === 'number' &&
+            typeof apiCourse.location?.longitude === 'number' &&
+            Number.isFinite(apiCourse.location.latitude) &&
+            Number.isFinite(apiCourse.location.longitude) &&
+            Math.abs(apiCourse.location.latitude) <= 90 &&
+            Math.abs(apiCourse.location.longitude) <= 180 &&
+            !(Math.abs(apiCourse.location.latitude) < 0.001 && Math.abs(apiCourse.location.longitude) < 0.001)
+          ) {
+            courseLocation = {
+              lat: apiCourse.location.latitude,
+              lng: apiCourse.location.longitude,
+            };
+          }
         }
       } catch {
         setCaddieResponse("Couldn't load the course layout — starting with yardages only. You can still play.");
@@ -1487,7 +1502,7 @@ export default function CaddieTab() {
           try {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             const geomMod = require('../../services/courseGeometryService') as typeof import('../../services/courseGeometryService');
-            await geomMod.fetchCourseGeometry(courseId);
+            await geomMod.fetchCourseGeometry(courseId, { courseLocation });
             console.log('[startRound] async geometry fetch landed for', courseId);
           } catch (e) {
             console.log('[startRound] async geometry fetch failed (non-fatal):', e);
@@ -1502,11 +1517,12 @@ export default function CaddieTab() {
       notes: opts.notes,
       goal: null,
       courseId,
+      courseLocation,
       mode: opts.mode,
     });
 
     if (courseId) {
-      fetchCourseGeometry(courseId).catch(err => console.log('[caddie] geometry warm failed:', err));
+      fetchCourseGeometry(courseId, { courseLocation }).catch(err => console.log('[caddie] geometry warm failed:', err));
     }
 
     // 2026-05-21 — Fix N: the pre-warm GPS block that used to live

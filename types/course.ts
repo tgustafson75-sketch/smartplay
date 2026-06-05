@@ -2,7 +2,13 @@ export interface Course {
   id: string; // golfcourseapi course_id as string
   club_name: string;
   course_name: string;
-  location: { city: string; state: string; country: string };
+  location: {
+    city: string;
+    state: string;
+    country: string;
+    latitude?: number;
+    longitude?: number;
+  };
   tees: TeeBox[];
   cached_at: number; // unix ms
 }

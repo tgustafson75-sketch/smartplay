@@ -235,6 +235,7 @@ interface RoundState {
   currentRoundId: string | null;
   activeCourse: string | null;
   activeCourseId: string | null; // golfcourseapi course_id; null for local/manual rounds
+  courseLocation: ShotLocation | null;
   recentCourseIds: string[]; // last 5 API course IDs played
   courseHoles: CourseHole[];
   nineHoleMode: boolean;
@@ -361,6 +362,7 @@ interface RoundState {
       notes: string;
       goal: string | null;
       courseId?: string | null;
+      courseLocation?: ShotLocation | null;
       mode?: RoundMode;
       // Phase 405 wave 3 — tee box selection. Persisted on the round
       // record so recap shows which tees were played; informational
@@ -534,6 +536,7 @@ export const useRoundStore = create<RoundState>()(
       currentRoundId: null,
       activeCourse: null,
       activeCourseId: null,
+      courseLocation: null,
       recentCourseIds: [],
       courseHoles: [],
       nineHoleMode: false,
@@ -630,6 +633,7 @@ export const useRoundStore = create<RoundState>()(
 
       startRound: (course, holes, options) => {
         const courseId = options.courseId ?? null;
+        const courseLocation = options.courseLocation ?? null;
         const prev = get();
         const updatedRecent = courseId
           ? [courseId, ...prev.recentCourseIds.filter(id => id !== courseId)].slice(0, 5)
@@ -654,6 +658,7 @@ export const useRoundStore = create<RoundState>()(
           currentRoundId: roundId,
           activeCourse: course,
           activeCourseId: courseId,
+          courseLocation,
           recentCourseIds: updatedRecent,
           courseHoles: holes,
           nineHoleMode: options.nineHole,
@@ -752,7 +757,7 @@ export const useRoundStore = create<RoundState>()(
           void (async () => {
             try {
               const { fetchCourseGeometry } = await import('../services/courseGeometryService');
-              await fetchCourseGeometry(courseId);
+              await fetchCourseGeometry(courseId, { courseLocation });
               console.log(`[audit:round-active] geometry pre-warm complete for ${courseId}`);
             } catch (e) {
               console.log('[roundStore] geometry pre-warm failed (non-fatal):', e);
@@ -932,6 +937,7 @@ export const useRoundStore = create<RoundState>()(
           userStatedYardage: null,
           activeCourse: null,
           activeCourseId: null,
+          courseLocation: null,
           courseHoles: [],
           scores: {},
           putts: {},
@@ -1036,6 +1042,7 @@ export const useRoundStore = create<RoundState>()(
           userStatedYardage: null,
           activeCourse: null,
           activeCourseId: null,
+          courseLocation: null,
           courseHoles: [],
           scores: {},
           putts: {},
@@ -1701,6 +1708,7 @@ export const useRoundStore = create<RoundState>()(
         currentRoundId: s.currentRoundId,
         activeCourse: s.activeCourse,
         activeCourseId: s.activeCourseId,
+        courseLocation: s.courseLocation,
         recentCourseIds: s.recentCourseIds,
         courseHoles: s.courseHoles,
         nineHoleMode: s.nineHoleMode,
