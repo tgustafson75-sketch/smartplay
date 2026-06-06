@@ -31,8 +31,7 @@ import { Asset } from 'expo-asset';
 import { Video, ResizeMode } from 'expo-av';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettingsStore } from '../store/settingsStore';
-import { playLocalFile, speakOpenAITTS, stopSpeaking, configureAudioForSpeech } from '../services/voiceService';
-import { speakDevice, isDeviceTtsAvailable } from '../services/deviceTts';
+import { playLocalFile, speak, stopSpeaking, configureAudioForSpeech } from '../services/voiceService';
 import { prewarmVoice } from '../services/voiceWarmup';
 import {
   pickGreeting,
@@ -389,81 +388,33 @@ export default function GreetingScreen() {
         }
 
         if (caddiePersonality !== 'kevin') {
-          // 2026-06-05 — Tim's standing rule: "treat all profiles like
-          // Kevin — no more make-believe fixes." Kevin's greeting always
-          // plays audio because his path is bundled-mp3 with no network
-          // dependency. Non-Kevin previously depended on /api/voice TTS
-          // succeeding mid-cold-launch on the user's possibly-spotty
-          // connection — Tim's /owner-logs showed speak_catch "Network
-          // request failed" as the actual culprit on his device. Fix:
-          //   1) Try the persona TTS via speakOpenAITTS (now has 1
-          //      retry with 600ms backoff for transient cellular drops).
-          //   2) If that returns false (network failed both attempts /
-          //      payload tiny / API down / etc.), fall back to playing
-          //      the SAME bundled mp3 Kevin uses. The on-screen caption
-          //      stays persona-correct (Tim's name, Tank's "Devil Dog,"
-          //      etc.), the AUDIO is Kevin's voice as last resort. The
-          //      user hears SOMETHING instead of staring at silent text.
-          // This makes the greeting screen offline-safe for every
-          // persona, matching Kevin's bundled-mp3 guarantee.
+          // TTS the caption in the active persona's voice. speak() reads
+          // caddiePersonality from the store at request time and threads
+          // it as `persona` in the /api/voice body — server picks the
+          // persona-keyed OpenAI voice ID.
           const captionForVoice = getGreetingCaption(greeting, getCaddieName(caddiePersonality));
           const speakStartedAt = Date.now();
+          // 2026-06-04 — Launch-path diagnostic. Tim reports Harry's
+          // greeting went silent on app start; if speak() silent-fails,
+          // the voice-error log already catches the underlying reason,
+          // but this line confirms the greeting path FIRED for the
+          // expected persona at the expected time.
           console.log('[greeting] non-Kevin TTS launch path:', { persona: caddiePersonality, voiceGender, captionLen: captionForVoice.length });
           const minDisplay = new Promise<void>(resolve => setTimeout(resolve, NONVIDEO_MIN_DISPLAY_MS));
-          const [ttsPlayed] = await Promise.all([
-            // cacheable: true — greeting captions are a bounded set
-            // (~12 × persona × language). First successful network
-            // fetch writes the mp3 to local cache; every subsequent
-            // launch plays from cache instantly, offline-safe, with
-            // the correct persona voice. After 1-2 launches with each
-            // persona, the user never sees a silent splash again
-            // regardless of network state.
-            speakOpenAITTS(captionForVoice, voiceGender, language as 'en' | 'es' | 'zh', apiUrl, { userInitiated: true, cacheable: true }),
+          await Promise.all([
+            speak(captionForVoice, voiceGender, language as 'en' | 'es' | 'zh', apiUrl, { userInitiated: true }),
             minDisplay,
           ]);
-          console.log('[greeting] non-Kevin TTS finished:', { persona: caddiePersonality, ttsPlayed, speakDurMs: Date.now() - speakStartedAt });
-          if (!ttsPlayed) {
-            // 2026-06-05 — Two-tier fallback chain when persona TTS fails
-            // (no cache hit AND network fetch failed both attempts).
-            //
-            // Tier 1: device's built-in TTS engine (expo-speech) speaks
-            // the PERSONA-CORRECT caption text in the system voice. The
-            // voice isn't the persona's OpenAI voice, but the WORDS are
-            // exactly what the caption shows — context-aware feedback
-            // per Tim's standing rule. Only available in APKs built
-            // with expo-speech (next build forward); older APKs
-            // gracefully skip this and fall through to Tier 2.
-            //
-            // Tier 2 (last resort): play the bundled universal mp3 in
-            // Kevin's voice. Caption still shows persona-correct text;
-            // audio is Kevin's voice as worst-case. Better than silence.
-            // Only the persona-NEUTRAL bundled file (universal_01) is
-            // used — first_launch.mp3 would have Kevin saying "I'm Kevin"
-            // which clashes with the on-screen persona caption.
-            let fallbackSpoke = false;
-            if (isDeviceTtsAvailable()) {
-              console.log('[greeting] non-Kevin TTS failed — trying device TTS fallback');
-              fallbackSpoke = await speakDevice(captionForVoice, {
-                language: language as 'en' | 'es' | 'zh',
-                persona: caddiePersonality,
-              });
-              console.log('[greeting] device TTS fallback result:', fallbackSpoke);
-            }
-            if (!fallbackSpoke) {
-              console.log('[greeting] device TTS unavailable or failed — falling back to bundled mp3');
-              const fallbackFile: GreetingFilename = 'universal_01.mp3';
-              try {
-                const fallbackAsset = Asset.fromModule(GREETING_ASSETS[fallbackFile]);
-                await fallbackAsset.downloadAsync();
-                if (fallbackAsset.localUri) {
-                  await playLocalFile(fallbackAsset.localUri, undefined, { userInitiated: true });
-                } else {
-                  console.log('[greeting] fallback asset has no localUri');
-                }
-              } catch (fallbackErr) {
-                console.log('[greeting] bundled fallback also failed:', fallbackErr);
-              }
-            }
+          console.log('[greeting] non-Kevin TTS finished:', { persona: caddiePersonality, speakDurMs: Date.now() - speakStartedAt });
+          // 2026-05-25 — If speak() resolved suspiciously fast (<800ms),
+          // the audio likely silently failed (voice config issue, network
+          // hiccup) — add a "read floor" so the user has time to read the
+          // caption text-only. 4500ms after speak resolved is enough to
+          // scan a 2-3 line greeting. Doesn't fire on normal audio
+          // (typical greeting is 3-5s of audio so speak() takes that long).
+          const speakDurMs = Date.now() - speakStartedAt;
+          if (speakDurMs < 800) {
+            await new Promise<void>(resolve => setTimeout(resolve, 4500 - speakDurMs));
           }
           naturalEndRef.current = true;
           _greetingCompleteResolve?.();

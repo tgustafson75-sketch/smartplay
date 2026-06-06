@@ -2,7 +2,6 @@ import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import { File, Paths } from 'expo-file-system';
 import { noteAudioActivity } from './audioLifecycle';
 import { logVoiceSilentFail, logVoiceError, logTranscribeError } from './voiceErrorLog';
-import { readCachedTTS, writeCachedTTS, ttsCacheKey } from './ttsCache';
 // 2026-05-30 — Fix FX: voice/network circuit-breaker. After 3 consecutive
 // fetch failures within 30s on any of /api/voice, /api/kevin, or
 // /api/transcribe, that endpoint is marked degraded for 60s and we
@@ -423,26 +422,20 @@ const currentPlaybackVolume = (): number => {
   }
 };
 
-// 2026-06-05 — REVERTED back to 1.0. The 1.15× bump (commit d45ee39)
-// made setRateAsync(1.15, true) fire on EVERY playback. On Tim's
-// device this correlated with voice-toggle app restarts and short-
-// audio playback issues. Reverting restores 100% known-good behavior
-// from pre-tonight. Custom-caddie still gets a 1.08× multiplier as
-// always (only when useCustomCaddie + portrait, narrow use case).
-// Snappier-voice feature deferred — needs to be re-introduced via
-// shouldCorrectPitch path that doesn't destabilize playback.
-const DEFAULT_PLAYBACK_RATE = 1.0;
+// Phase BI — slight rate bump for the custom caddie. expo-av's setRateAsync
+// with shouldCorrectPitch=true keeps Kevin's voice timbre while playing
+// faster, satisfying "sped up" without raising into chipmunk territory.
 const currentPlaybackRate = (): number => {
   try {
     const profileMod = require('../store/playerProfileStore');
     const p = profileMod.usePlayerProfileStore.getState();
     if (p.useCustomCaddie && p.customCaddiePortraitB64) return 1.08;
   } catch {}
-  return DEFAULT_PLAYBACK_RATE;
+  return 1.0;
 };
 
 // Apply rate to a freshly-created Sound. Failure is non-fatal — the audio
-// just plays at 1.0× instead of the boosted rate, which is still correct.
+// just plays at 1.0× instead of 1.08×, which is still correct behavior.
 const applyCustomRate = async (sound: Audio.Sound): Promise<void> => {
   const rate = currentPlaybackRate();
   if (rate === 1.0) return;
@@ -811,156 +804,6 @@ function preprocessTtsText(text: string, language: 'en' | 'es' | 'zh'): string {
   let out = text;
   for (const [re, sub] of HETERONYM_FIXES) out = out.replace(re, sub);
   return out;
-}
-
-// ─── SPEAK VIA OPENAI TTS (uses proven speakFromBase64 playback path) ───
-//
-// 2026-06-05 — Greeting silence root cause analysis: speak() and
-// speakFromBase64() share IDENTICAL playback code (file write →
-// createAsync → didJustFinish wait). speakFromBase64 is proven working
-// for Kevin brain replies on the same audio session that goes silent
-// for non-Kevin greetings via speak(). The non-playback differences
-// (fetch step, custom-clip override, snapshot volume/rate captures,
-// 12s abort timeout) are the only candidates for the divergence.
-//
-// This helper bypasses speak()'s pre-fetch state machine entirely.
-// It performs the /api/voice fetch, validates the response, converts
-// the arrayBuffer to base64, and hands off to speakFromBase64 — the
-// path that demonstrably works for Kevin's brain audio on cold launch.
-// Used by the greeting screen for non-Kevin TTS where speak() has
-// repeatedly silent-failed despite a verified-healthy server.
-export type SpeakOpenAITTSOpts = SpeakOpts & {
-  /**
-   * If set, check the TTS cache first using this key (hashed via
-   * ttsCacheKey). On miss + successful fetch, write the bytes to
-   * cache so subsequent calls play instantly with no network.
-   * Only set for utterances drawn from a bounded set (greetings,
-   * confirmations) — arbitrary brain replies should NOT cache or
-   * they'll grow without bound.
-   */
-  cacheable?: boolean;
-};
-
-export const speakOpenAITTS = async (
-  text: string,
-  gender: 'male' | 'female',
-  language: 'en' | 'es' | 'zh',
-  apiUrl: string,
-  opts?: SpeakOpenAITTSOpts,
-): Promise<boolean> => {
-  // Returns true if audio successfully handed off to the playback path
-  // (either from cache OR from network fetch), false if both cache miss
-  // and network fail. Callers can use this to decide whether to fire a
-  // bundled-mp3 last-resort fallback.
-  if (!isVoiceAllowed(opts)) return false;
-  let persona: string | null = null;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    persona = require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? null;
-  } catch { /* ignore */ }
-
-  // 2026-06-05 — TTS cache. Greeting callers set opts.cacheable=true
-  // because greeting captions are a bounded set (~12 × persona ×
-  // language). First successful network fetch writes to cache; every
-  // subsequent launch plays from cache — offline-safe, correct persona
-  // voice, no network needed. Cache miss falls through to fetch path
-  // below.
-  const cacheKey = opts?.cacheable ? ttsCacheKey(persona, language, text) : null;
-  if (cacheKey) {
-    const cached = await readCachedTTS(cacheKey);
-    if (cached && cached.byteLength >= 1000) {
-      console.log('[voice] speakOpenAITTS cache HIT — bytes=', cached.byteLength, 'key=', cacheKey, 'persona=', persona);
-      const base64 = u8ToBase64(cached);
-      await speakFromBase64(base64, opts);
-      return true;
-    }
-  }
-
-  if (!apiUrl) {
-    console.log('[voice] speakOpenAITTS: no apiUrl — bailing');
-    logVoiceSilentFail('speak_openai_no_api_url', { textHead: text.slice(0, 60) });
-    return false;
-  }
-  const ttsModel = language === 'en' ? 'eleven_monolingual_v1' : 'eleven_multilingual_v2';
-
-  // Tim's /owner-logs 2026-06-05: speak_catch "Network request failed"
-  // is RN's fetch error when the host is unreachable at all (DNS, TLS,
-  // cellular hop, captive portal). Single-shot fetch was returning
-  // silent. One-retry with 600ms backoff handles transient cellular
-  // hiccups without piling unbounded waits on a truly-offline device.
-  const fetchOnce = async (): Promise<ArrayBuffer | null> => {
-    try {
-      const response = await fetch(apiUrl + '/api/voice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: preprocessTtsText(text, language),
-          gender,
-          language,
-          persona,
-          model_id: ttsModel,
-        }),
-        // 2026-06-05 — Tightened 15s → 6s. Tim's report: greeting
-        // showed white screen for 30s then Kevin played. 30s was
-        // 15s × 2 attempts. /api/voice typically responds in 1.2-2s
-        // when healthy; 6s is well above that envelope but cuts the
-        // worst-case wait to 6s × 2 = 12s before fallback fires.
-        signal: AbortSignal.timeout(6_000),
-      });
-      if (!response.ok) {
-        const errBody = await response.text().catch(() => '<unreadable>');
-        console.log('[voice] speakOpenAITTS API error:', response.status, errBody.slice(0, 200));
-        logVoiceSilentFail('speak_openai_api_error', { status: response.status, error: errBody.slice(0, 200) });
-        return null;
-      }
-      return await response.arrayBuffer();
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return null;
-      console.log('[voice] speakOpenAITTS fetch threw:', err);
-      return null;
-    }
-  };
-  let buf = await fetchOnce();
-  if (!buf) {
-    console.log('[voice] speakOpenAITTS retry after fetch failure (600ms backoff)');
-    await new Promise<void>(resolve => setTimeout(resolve, 600));
-    buf = await fetchOnce();
-  }
-  if (!buf) {
-    logVoiceSilentFail('speak_openai_fetch_failed_twice', { textHead: text.slice(0, 60), persona: persona ?? 'null' });
-    return false;
-  }
-  if (buf.byteLength < 1000) {
-    console.log('[voice] speakOpenAITTS small payload:', buf.byteLength);
-    logVoiceSilentFail('speak_openai_small_payload', { bytes: buf.byteLength, textHead: text.slice(0, 60) });
-    return false;
-  }
-  // arrayBuffer → base64. Char-by-char build of binary string then
-  // btoa is the standard RN-safe pattern (no Buffer global, no
-  // TextDecoder needed for binary). 45KB mp3 → ~60KB base64 string;
-  // sub-millisecond on a modern phone.
-  const u8 = new Uint8Array(buf);
-  const base64 = u8ToBase64(u8);
-  // Write to cache BEFORE playback so a mid-playback crash still leaves
-  // the cache populated for next launch. Sync write; non-fatal failure.
-  if (cacheKey) {
-    writeCachedTTS(cacheKey, u8);
-    console.log('[voice] speakOpenAITTS cache WRITE — bytes=', u8.byteLength, 'key=', cacheKey);
-  }
-  console.log('[voice] speakOpenAITTS handing off to speakFromBase64 — bytes=', buf.byteLength, 'base64Len=', base64.length, 'persona=', persona);
-  await speakFromBase64(base64, opts);
-  return true;
-};
-
-// Helper: RN-safe Uint8Array → base64. atob/btoa are polyfilled in RN's
-// JSCore/Hermes. Buffer.from fallback for any runtime without globals.
-function u8ToBase64(u8: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < u8.length; i++) binary += String.fromCharCode(u8[i]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const g = globalThis as any;
-  if (typeof g.btoa === 'function') return g.btoa(binary);
-  return Buffer.from(u8).toString('base64');
 }
 
 // ─── SPEAK ────────────────────────────────
