@@ -156,3 +156,29 @@ export function getGreetingAssetForPersona(
     default:       return GREETING_ASSETS[filename];
   }
 }
+
+// ─── POST-SPLASH OPENER ────────────────────────────────────────────────
+//
+// 2026-06-06 — Restored after a week-long search. Prior implementations
+// failed in 6 attempts because they used network TTS that intermittently
+// silent-failed during cold launch. With bundled mp3s (same pattern as
+// the persona greetings above), the opener plays reliably every time.
+//
+// One short invitation line per persona, in their voice. Fires once per
+// app process after the greeting completes, via awaitGreetingComplete()
+// signal from app/greeting.tsx and playLocalFile() in caddie.tsx.
+
+const OPENER_ASSETS: Record<string, AssetModule> = {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  kevin:  require('../assets/audio/openers/kevin.mp3'),
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  serena: require('../assets/audio/openers/serena.mp3'),
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  harry:  require('../assets/audio/openers/harry.mp3'),
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  tank:   require('../assets/audio/openers/tank.mp3'),
+};
+
+export function getOpenerAssetForPersona(persona: string | null | undefined): AssetModule {
+  return OPENER_ASSETS[persona ?? 'kevin'] ?? OPENER_ASSETS.kevin;
+}

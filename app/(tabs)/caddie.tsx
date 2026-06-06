@@ -67,6 +67,8 @@ import { speak, configureAudioForSpeech, captureUtterance, playLocalFile, subscr
 // time via getCaddieClip; falls back to TTS if the asset fails.
 import { getCaddieClip } from '../../services/getCaddieClip';
 import { Asset } from 'expo-asset';
+import { getOpenerAssetForPersona } from '../../services/kevinGreetingManifest';
+import { awaitGreetingComplete } from '../greeting';
 // Phase Y — shotDetectionService lifecycle moved to app/_layout.tsx so it
 // survives tab focus changes. Only the orchestrator's runtime configure()
 // stays here (apiUrl/voice/language can change at any time).
@@ -107,6 +109,14 @@ import type { ShotOutcome } from '../../types/shot';
 import type { RulesDecision } from '../../types/penalty';
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
+
+// 2026-06-06 — Module-level once-per-process flag for the post-splash
+// opener. Set true AFTER playLocalFile resolves successfully (Lesson
+// from prior 6 failed attempts: setting it BEFORE play meant silent
+// failures stuck the opener as "spoken" with no recovery).
+// Module-level (not useRef) so it survives tab cycles within the
+// same app process — opener fires exactly once per cold launch.
+let openerPlayedThisProcess = false;
 
 export default function CaddieTab() {
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
@@ -918,16 +928,74 @@ export default function CaddieTab() {
     return () => sub.remove();
   }, []);
 
-  // ── Opening prompt ───────────────────────
-  // 2026-06-03 — Auto-speak opener removed entirely after six failed
-  // fix attempts on the cold-launch opener sequence (Stage 3, voice-
-  // launch heuristic removal, awaitGreetingComplete signal, live
-  // voiceEnabled read, live voiceGender+language reads, audioRouting
-  // queue, clean linear rebuild). Replaced with a static prompt.
-  // Kevin only speaks when the user taps to talk. Simple, honest,
-  // user-driven. No flags, no sequence, no routing logic.
+  // ── Opening prompt + post-splash opener audio ──
+  // 2026-06-06 — RESTORED after a week-long search. Prior 6 attempts
+  // (Stage 3, voice-launch heuristic, awaitGreetingComplete signal,
+  // live voiceEnabled read, live voiceGender+language reads,
+  // audioRouting queue, clean linear rebuild) all failed because they
+  // depended on /api/voice TTS succeeding mid-cold-launch on flaky
+  // networks. With bundled persona opener mp3s (assets/audio/openers/
+  // <persona>.mp3, generated 2026-06-06), the opener uses the same
+  // proven path Kevin's greeting has always used — playLocalFile of a
+  // bundled asset. Zero network. Same reliability as the greeting.
+  //
+  // The four prior-bug avoidances baked in here:
+  //   1) Live-read settings AFTER awaitGreetingComplete (not closure
+  //      capture before hydration) — covers Fix FS pattern.
+  //   2) Set openerPlayedThisProcess flag AFTER playLocalFile resolves
+  //      (not before) — silent failure leaves flag false, next launch
+  //      retries cleanly.
+  //   3) Use awaitGreetingComplete signal + 10s safety race — never
+  //      use a static setTimeout that could race splash audio.
+  //   4) Bundled mp3 only — no /api/voice fetch in the opener path.
   useEffect(() => {
     setOpeningPrompt('Tap to talk.');
+
+    void (async () => {
+      if (openerPlayedThisProcess) return;
+      // Wait for greeting to actually finish (or 10s safety net in
+      // case greeting never resolved — force-quit mid-splash, etc.)
+      await Promise.race([
+        awaitGreetingComplete(),
+        new Promise<void>(res => setTimeout(res, 10_000)),
+      ]);
+      // Re-check guard in case a concurrent mount won the race (hot
+      // reload, tab cycle).
+      if (openerPlayedThisProcess) return;
+      // Live-read settings from store — post-hydration values, not
+      // stale closure captures from first render.
+      const liveSettings = useSettingsStore.getState();
+      if (!liveSettings.voiceEnabled) {
+        console.log('[caddie] opener skipped: voiceEnabled=false');
+        return;
+      }
+      // If audio is already playing (greeting tail still finishing,
+      // user already tapped to talk, brain reply mid-stream), skip
+      // the opener — don't double-speak.
+      if (isSpeaking()) {
+        console.log('[caddie] opener skipped: audio already in flight');
+        return;
+      }
+      try {
+        const openerMod = getOpenerAssetForPersona(liveSettings.caddiePersonality);
+        const asset = Asset.fromModule(openerMod);
+        await asset.downloadAsync();
+        if (!asset.localUri) {
+          console.log('[caddie] opener skipped: asset has no localUri', { persona: liveSettings.caddiePersonality });
+          return;
+        }
+        console.log('[caddie] opener playing:', { persona: liveSettings.caddiePersonality });
+        // userInitiated:true — cold launch IS user-initiated; lets
+        // L1 Quiet through (voiceEnabled is the hard kill switch above).
+        await playLocalFile(asset.localUri, undefined, { userInitiated: true });
+        // Set the flag ONLY after play resolves. Silent failures leave
+        // it false so the next launch (or hot-reload remount) retries.
+        openerPlayedThisProcess = true;
+      } catch (e) {
+        console.log('[caddie] opener failed (non-fatal):', e);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── SmartVision ──────────────────────────
