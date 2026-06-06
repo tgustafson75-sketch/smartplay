@@ -9,8 +9,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://smartplay-beta.vercel.app",
-        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCh6a4PaRpohas6kmh1KjrmdYDQkIZuth4",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCh6a4PaRpohas6kmh1KjrmdYDQkIZuth4"
       },
       "android": {
         "buildType": "apk"
@@ -26,8 +25,7 @@
       "developmentClient": false,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://smartplay-beta.vercel.app",
-        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCh6a4PaRpohas6kmh1KjrmdYDQkIZuth4",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCh6a4PaRpohas6kmh1KjrmdYDQkIZuth4"
       },
       "android": {
         "buildType": "apk"
@@ -43,8 +41,7 @@
       "credentialsSource": "local",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://smartplay-beta.vercel.app",
-        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCh6a4PaRpohas6kmh1KjrmdYDQkIZuth4",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCh6a4PaRpohas6kmh1KjrmdYDQkIZuth4"
       },
       "android": {
         "buildType": "app-bundle"

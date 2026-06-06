@@ -85,7 +85,9 @@
       [
         "@sentry/react-native",
         {
-          "uploadSourceMaps": false
+          "uploadSourceMaps": false,
+          "organization": "smartplay",
+          "project": "smartplay-caddie-mobile"
         }
       ],
       "react-native-health-connect",
