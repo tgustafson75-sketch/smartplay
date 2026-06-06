@@ -32,6 +32,7 @@ import { Video, ResizeMode } from 'expo-av';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettingsStore } from '../store/settingsStore';
 import { playLocalFile, speakOpenAITTS, stopSpeaking, configureAudioForSpeech } from '../services/voiceService';
+import { speakDevice, isDeviceTtsAvailable } from '../services/deviceTts';
 import { prewarmVoice } from '../services/voiceWarmup';
 import {
   pickGreeting,
@@ -422,22 +423,46 @@ export default function GreetingScreen() {
           ]);
           console.log('[greeting] non-Kevin TTS finished:', { persona: caddiePersonality, ttsPlayed, speakDurMs: Date.now() - speakStartedAt });
           if (!ttsPlayed) {
-            // TTS fetch failed — fall through to Kevin's bundled mp3 so
-            // the user gets audio. Caption already shows persona-correct
-            // text. Pick a persona-neutral universal greeting (not
-            // first_launch.mp3 — that one specifically says "I'm Kevin").
-            console.log('[greeting] non-Kevin TTS failed — falling back to bundled mp3 for audio');
-            const fallbackFile: GreetingFilename = 'universal_01.mp3';
-            try {
-              const fallbackAsset = Asset.fromModule(GREETING_ASSETS[fallbackFile]);
-              await fallbackAsset.downloadAsync();
-              if (fallbackAsset.localUri) {
-                await playLocalFile(fallbackAsset.localUri, undefined, { userInitiated: true });
-              } else {
-                console.log('[greeting] fallback asset has no localUri');
+            // 2026-06-05 — Two-tier fallback chain when persona TTS fails
+            // (no cache hit AND network fetch failed both attempts).
+            //
+            // Tier 1: device's built-in TTS engine (expo-speech) speaks
+            // the PERSONA-CORRECT caption text in the system voice. The
+            // voice isn't the persona's OpenAI voice, but the WORDS are
+            // exactly what the caption shows — context-aware feedback
+            // per Tim's standing rule. Only available in APKs built
+            // with expo-speech (next build forward); older APKs
+            // gracefully skip this and fall through to Tier 2.
+            //
+            // Tier 2 (last resort): play the bundled universal mp3 in
+            // Kevin's voice. Caption still shows persona-correct text;
+            // audio is Kevin's voice as worst-case. Better than silence.
+            // Only the persona-NEUTRAL bundled file (universal_01) is
+            // used — first_launch.mp3 would have Kevin saying "I'm Kevin"
+            // which clashes with the on-screen persona caption.
+            let fallbackSpoke = false;
+            if (isDeviceTtsAvailable()) {
+              console.log('[greeting] non-Kevin TTS failed — trying device TTS fallback');
+              fallbackSpoke = await speakDevice(captionForVoice, {
+                language: language as 'en' | 'es' | 'zh',
+                persona: caddiePersonality,
+              });
+              console.log('[greeting] device TTS fallback result:', fallbackSpoke);
+            }
+            if (!fallbackSpoke) {
+              console.log('[greeting] device TTS unavailable or failed — falling back to bundled mp3');
+              const fallbackFile: GreetingFilename = 'universal_01.mp3';
+              try {
+                const fallbackAsset = Asset.fromModule(GREETING_ASSETS[fallbackFile]);
+                await fallbackAsset.downloadAsync();
+                if (fallbackAsset.localUri) {
+                  await playLocalFile(fallbackAsset.localUri, undefined, { userInitiated: true });
+                } else {
+                  console.log('[greeting] fallback asset has no localUri');
+                }
+              } catch (fallbackErr) {
+                console.log('[greeting] bundled fallback also failed:', fallbackErr);
               }
-            } catch (fallbackErr) {
-              console.log('[greeting] bundled fallback also failed:', fallbackErr);
             }
           }
           naturalEndRef.current = true;
