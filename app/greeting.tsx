@@ -32,7 +32,7 @@ import { Video, ResizeMode } from 'expo-av';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettingsStore } from '../store/settingsStore';
 import { playLocalFile, speak, stopSpeaking, configureAudioForSpeech } from '../services/voiceService';
-import { prewarmVoice, awaitVoiceWarmup } from '../services/voiceWarmup';
+import { prewarmVoice } from '../services/voiceWarmup';
 import {
   pickGreeting,
   recordLaunch,
@@ -393,15 +393,15 @@ export default function GreetingScreen() {
           // it as `persona` in the /api/voice body — server picks the
           // persona-keyed OpenAI voice ID.
           const captionForVoice = getGreetingCaption(greeting, getCaddieName(caddiePersonality));
-          // 2026-06-05 — Wait for /api/voice warmup BEFORE the first
-          // cold call. Tim's report: Tank/Serena greeting goes silent
-          // on app launch. Root cause was the cold /api/voice Lambda
-          // racing the warmup — first request returned a too-small
-          // payload that voiceService filters as bad audio, and the
-          // user heard nothing. awaitVoiceWarmup() caps at 6s so a
-          // degraded Vercel doesn't hang the splash; the speak still
-          // tries and pays its own cost in that case.
-          await awaitVoiceWarmup(6_000);
+          // 2026-06-05 — Removed the awaitVoiceWarmup(6_000) wait that
+          // was here on the 1.0×→1.15× rate commit. Direct curl tests
+          // proved /api/voice returns valid 24kHz mono MP3 in ~1.2s
+          // for every persona, so the cold-Lambda-race hypothesis was
+          // wrong. The actual silent-fail is in the client Sound
+          // load/play path — addressed by the load+verify+rate-fallback
+          // restructure in voiceService.ts speak(). prewarmVoice still
+          // fires at mount so the Lambda is warm by speak() time, but
+          // we no longer pay perceived lag waiting for it.
           const speakStartedAt = Date.now();
           // 2026-06-04 — Launch-path diagnostic. Tim reports Harry's
           // greeting went silent on app start; if speak() silent-fails,

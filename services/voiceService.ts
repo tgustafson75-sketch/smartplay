@@ -1041,69 +1041,133 @@ export const speak = async (
     }
 
     console.log('[voice] speak about to createAsync — myId=', myId, 'bytes=', arrayBuffer.byteLength);
-    // 2026-05-27 — Fix EG: try-load-then-retry. Wrap the first
-    // createAsync; if the returned status is loaded but the OS audio
-    // session won't actually emit (isLoaded=true with durationMillis=0
-    // / undefined, OR a not-loaded result), unload + force-reconfigure
-    // the audio mode + retry ONCE. This addresses the recurring "text
-    // shows + 'talking' state on + no audio" pattern: the underlying
-    // cause is the OS session occasionally accepting a load but refusing
-    // to play (post-mic-record state hangover, audio route hiccup,
-    // ducking from another app, etc.).
+    // 2026-06-05 — Deep-fix the recurring "splash text shows + no
+    // audio" report for non-Kevin personas (Tank/Serena/Harry).
+    //
+    // PREVIOUS path: createAsync({shouldPlay:true}) → check loaded →
+    // retry once if dead → setRateAsync on already-playing sound →
+    // wait for didJustFinish. The mid-flight setRateAsync(rate,
+    // shouldCorrectPitch=true) on Android occasionally puts MediaCodec
+    // into a state where the sound reports isPlaying=true but emits
+    // no audio (MediaCodec time-stretch init race on freshly-started
+    // playback). Heartbeat at 500ms logged the symptom but didn't
+    // recover. /api/voice was verified healthy by direct curl across
+    // all four personas (Kevin/Serena/Tank/Harry) returning valid 24kHz
+    // mono MP3s in ~1.2s — confirming this is a client-side issue.
+    //
+    // NEW path: load-then-play with rate applied ATOMICALLY in the
+    // initial status. Audio.Sound.createAsync accepts rate +
+    // shouldCorrectPitch in AVPlaybackStatusToSet, so the rate is
+    // baked into the load — no separate setRateAsync race window.
+    // Also adds a position-advance recovery: if 700ms after play
+    // start positionMillis is still 0 AND isPlaying, unload and
+    // retry ONCE with rate=1.0 (proven-safe fallback that skips
+    // setRateAsync entirely). This converts the heartbeat from a
+    // diagnostic into an actual recovery path.
     let sound: Audio.Sound;
-    let status: Awaited<ReturnType<typeof Audio.Sound.createAsync>>['status'];
-    {
-      const first = await Audio.Sound.createAsync(
-        { uri: audioFile.uri },
-        { shouldPlay: true, volume: snapshotVolume },
-      );
-      sound = first.sound;
-      status = first.status;
-      const loaded = (status as { isLoaded?: boolean }).isLoaded === true;
-      const dur = (status as { isLoaded?: boolean; durationMillis?: number }).durationMillis ?? 0;
-      console.log('[voice] speak Sound.createAsync — myId=', myId,
-        'isLoaded=', loaded, 'durationMillis=', dur, 'volume=', snapshotVolume, 'bytes=', arrayBuffer.byteLength);
-      const looksDead = !loaded || dur === 0;
-      if (looksDead) {
-        console.log('[voice] speak first load looked dead — unloading and retrying with forced audio reset', { isLoaded: loaded, dur });
-        try { await sound.unloadAsync(); } catch {}
-        // Force the OS audio session back into speech mode in case the
-        // mode flag was stale (Fix DO already removed the short-circuit
-        // but the OS session can still drift from setAudioModeAsync
-        // failures on Android). Idempotent + cheap.
-        currentAudioMode = null;
-        await configureAudioForSpeech();
-        if (myId !== currentSpeechId) {
-          console.log('[voice] speak retry preempted before second createAsync — myId=', myId, 'currentSpeechId=', currentSpeechId);
-          logVoiceSilentFail('speak_retry_preempted', { speechId: myId, currentSpeechId });
-          notifyCaption(null);
-          notifySpeaking(false);
-          return;
-        }
-        const second = await Audio.Sound.createAsync(
-          { uri: audioFile.uri },
-          { shouldPlay: true, volume: snapshotVolume },
-        );
-        sound = second.sound;
-        status = second.status;
-        const loaded2 = (status as { isLoaded?: boolean }).isLoaded === true;
-        const dur2 = (status as { isLoaded?: boolean; durationMillis?: number }).durationMillis ?? 0;
-        console.log('[voice] speak retry Sound.createAsync — myId=', myId,
-          'isLoaded=', loaded2, 'durationMillis=', dur2);
-        if (!loaded2 || dur2 === 0) {
-          console.log('[voice] speak retry STILL dead — giving up on this utterance (likely OS audio session denied playback)');
-          logVoiceSilentFail('speak_dead_load_giving_up', { speechId: myId, isLoaded: loaded2, durationMillis: dur2, bytes: arrayBuffer.byteLength, textHead: text.slice(0, 60) });
-          try { await sound.unloadAsync(); } catch {}
-          notifyCaption(null);
-          notifySpeaking(false);
-          return;
-        }
-      }
-    }
 
-    // Bail if ownership was taken during createAsync.
+    // Helper: load + play with optional rate. Returns true if audio
+    // verifies as advancing at 700ms; false if it didn't load or didn't
+    // advance. Caller decides retry/abandon based on the return.
+    const loadAndVerify = async (
+      useRate: boolean,
+    ): Promise<{ ok: boolean; sound: Audio.Sound | null; reason?: string }> => {
+      const initial: Record<string, unknown> = {
+        shouldPlay: true,
+        volume: snapshotVolume,
+      };
+      if (useRate && snapshotRate !== 1.0) {
+        initial.rate = snapshotRate;
+        initial.shouldCorrectPitch = true;
+      }
+      let s: Audio.Sound;
+      let st: Awaited<ReturnType<typeof Audio.Sound.createAsync>>['status'];
+      try {
+        const created = await Audio.Sound.createAsync(
+          { uri: audioFile.uri },
+          initial as Parameters<typeof Audio.Sound.createAsync>[1],
+        );
+        s = created.sound;
+        st = created.status;
+      } catch (e) {
+        console.log('[voice] speak createAsync threw:', e);
+        return { ok: false, sound: null, reason: 'createAsync_threw' };
+      }
+      const loaded = (st as { isLoaded?: boolean }).isLoaded === true;
+      const dur = (st as { isLoaded?: boolean; durationMillis?: number }).durationMillis ?? 0;
+      console.log('[voice] speak createAsync result — myId=', myId,
+        'useRate=', useRate, 'isLoaded=', loaded, 'durationMillis=', dur, 'volume=', snapshotVolume);
+      if (!loaded || dur === 0) {
+        try { await s.unloadAsync(); } catch {}
+        return { ok: false, sound: null, reason: 'dead_load' };
+      }
+      // Wait 700ms then verify position advanced. 700ms gives MediaCodec
+      // enough time to start emitting on slow Android devices while
+      // staying short enough that recovery doesn't add perceptible lag.
+      await new Promise<void>(resolve => setTimeout(resolve, 700));
+      if (myId !== currentSpeechId) {
+        try { await s.unloadAsync(); } catch {}
+        return { ok: false, sound: null, reason: 'preempted_during_verify' };
+      }
+      try {
+        const probe = await s.getStatusAsync();
+        if (probe.isLoaded) {
+          const pos = probe.positionMillis ?? 0;
+          console.log('[voice] speak 700ms position check — myId=', myId,
+            'positionMillis=', pos, 'isPlaying=', probe.isPlaying);
+          if (pos === 0) {
+            // Loaded but silent — the MediaCodec/setRate race.
+            try { await s.unloadAsync(); } catch {}
+            return { ok: false, sound: null, reason: 'position_stuck_at_zero' };
+          }
+        }
+      } catch (e) {
+        console.log('[voice] speak position probe failed (continuing anyway):', e);
+      }
+      return { ok: true, sound: s };
+    };
+
+    // Attempt 1: with rate (1.15× snappy default).
+    let attempt = await loadAndVerify(true);
+    if (!attempt.ok && myId === currentSpeechId) {
+      console.log('[voice] speak attempt-1 failed —', attempt.reason, '— forcing audio reset + retrying with rate=1.0 fallback');
+      logVoiceSilentFail('speak_attempt1_failed_retry', {
+        speechId: myId,
+        reason: attempt.reason ?? 'unknown',
+        bytes: arrayBuffer.byteLength,
+        textHead: text.slice(0, 60),
+      });
+      currentAudioMode = null;
+      await configureAudioForSpeech();
+      if (myId !== currentSpeechId) {
+        console.log('[voice] speak retry preempted before attempt-2 — myId=', myId, 'currentSpeechId=', currentSpeechId);
+        logVoiceSilentFail('speak_retry_preempted', { speechId: myId, currentSpeechId });
+        notifyCaption(null);
+        notifySpeaking(false);
+        return;
+      }
+      // Attempt 2: rate=1.0 (skip setRateAsync entirely). Pure load+play
+      // path proven across all devices. Audio plays at base speed; the
+      // user hears the line even if rate-stretch is the culprit.
+      attempt = await loadAndVerify(false);
+    }
+    if (!attempt.ok || !attempt.sound) {
+      console.log('[voice] speak both attempts failed — giving up. last reason:', attempt.reason);
+      logVoiceSilentFail('speak_both_attempts_failed', {
+        speechId: myId,
+        lastReason: attempt.reason ?? 'unknown',
+        bytes: arrayBuffer.byteLength,
+        textHead: text.slice(0, 60),
+      });
+      notifyCaption(null);
+      notifySpeaking(false);
+      return;
+    }
+    sound = attempt.sound;
+
+    // Bail if ownership was taken during load+verify.
     if (myId !== currentSpeechId) {
-      console.log('[voice] speak preempted after Sound.createAsync — myId=', myId, 'currentSpeechId=', currentSpeechId);
+      console.log('[voice] speak preempted after load+verify — myId=', myId, 'currentSpeechId=', currentSpeechId);
       logVoiceSilentFail('speak_preempted_after_createasync', { speechId: myId, currentSpeechId });
       await sound.unloadAsync().catch(() => {});
       notifyCaption(null);
@@ -1112,31 +1176,6 @@ export const speak = async (
     }
 
     currentSound = sound;
-    // 2026-05-27 — Fix EX: inline the rate-apply with the snapshot so
-    // a mid-flight persona switch can't desync rate from voice ID.
-    if (snapshotRate !== 1.0) {
-      try { await sound.setRateAsync(snapshotRate, true); }
-      catch (e) { console.log('[voice] setRateAsync failed', e); }
-    }
-
-    // 2026-05-27 — Fix EG: position-advances heartbeat. 500ms after
-    // createAsync claims it's playing, poll the position once. If
-    // positionMillis is still 0 AND status reports isPlaying=true, the
-    // OS audio session loaded the file but isn't actually emitting
-    // audio — log it loudly so the next silence is provable from one
-    // logcat line. Non-fatal (audio may catch up); pure diagnostic.
-    setTimeout(() => {
-      // Only probe if WE still own this utterance (don't tail a stopped
-      // speech generation).
-      if (myId !== currentSpeechId) return;
-      sound.getStatusAsync().then((s) => {
-        if (!s.isLoaded) return;
-        const pos = s.positionMillis ?? 0;
-        if (pos === 0 && s.isPlaying) {
-          console.log('[voice] HEARTBEAT WARN: 500ms after play start, positionMillis=0 (audio loaded but not advancing). myId=', myId, 'durationMillis=', s.durationMillis);
-        }
-      }).catch(() => undefined);
-    }, 500);
 
     await Promise.race([
       new Promise<void>((resolve) => {
