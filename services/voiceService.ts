@@ -605,6 +605,17 @@ export const stopSpeaking = async (): Promise<void> => {
     } catch {}
     currentSound = null;
   }
+  // 2026-06-06 — Phase 1 of on-course resilience sprint. If a device-
+  // TTS fallback is currently mid-speech (the speak() catch block
+  // launched it after /api/voice failed), the user's tap-to-talk
+  // should cancel it cleanly. Dynamic require to avoid a module load
+  // cycle with deviceTts (which imports voiceErrorLog only). No-ops
+  // when expo-speech native isn't bundled (old APK).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const deviceTts = require('./deviceTts') as typeof import('./deviceTts');
+    await deviceTts.stopDeviceTts();
+  } catch { /* non-fatal */ }
   notifySpeaking(false);
   notifyCaption(null);
 };
@@ -1218,15 +1229,67 @@ export const speak = async (
     ]);
 
   } catch (err) {
+    const isAbort = err instanceof Error && err.name === 'AbortError';
+    // Cleanup state in all error cases EXCEPT the caption — for non-abort
+    // errors we want the caption to stay visible so the user can read
+    // what Kevin would have said while the device-TTS fallback fires
+    // (or even without TTS, just to read).
     if (myId === currentSpeechId) {
       currentSound = null;
       currentAbortController = null;
       notifySpeaking(false);
-      notifyCaption(null);
+      if (isAbort) {
+        // User-initiated cancel — fully clean up including caption.
+        notifyCaption(null);
+      }
     }
-    if (!(err instanceof Error && err.name === 'AbortError')) {
-      console.log('[voice] speak error:', err);
-      logVoiceSilentFail('speak_catch', { speechId: myId, error: err instanceof Error ? err.message : String(err) });
+    if (isAbort) return;
+    console.log('[voice] speak error:', err);
+    // 2026-06-06 — Phase 1 of on-course resilience sprint. Tim's
+    // Echo Hills round produced ~28 'speak_catch — Network request
+    // failed' entries; the round became silent every time cellular
+    // dropped. Device-TTS fallback: when /api/voice fails for any
+    // non-abort reason, speak the brain's text via the system TTS
+    // engine (expo-speech) so the user still gets audio + captioned
+    // text. On APKs without expo-speech native (old testers), the
+    // wrapper returns false and the caption alone stays visible
+    // 6s for reading — no crash, no regression.
+    //
+    // Persona pulled from settings at this moment so the system
+    // voice gets a per-persona rate/pitch tweak (Tank faster +
+    // lower; Serena neutral + higher; Harry slower + lower; Kevin
+    // baseline). System voice isn't the persona's OpenAI voice
+    // but the cadence approximates the character.
+    let devicePlayed = false;
+    if (myId === currentSpeechId) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const deviceTts = require('./deviceTts') as typeof import('./deviceTts');
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const settingsMod = require('../store/settingsStore') as typeof import('../store/settingsStore');
+        const persona = settingsMod.useSettingsStore.getState().caddiePersonality ?? 'kevin';
+        devicePlayed = await deviceTts.speakDevice(text, { language, persona });
+      } catch (e) {
+        console.log('[voice] device-TTS fallback threw:', e);
+      }
     }
+    // Caption cleanup: if device TTS spoke, clear immediately (audio
+    // just finished). If it didn't, leave caption visible for 6s so
+    // the user can read the response, then clear.
+    if (myId === currentSpeechId) {
+      if (devicePlayed) {
+        notifyCaption(null);
+      } else {
+        setTimeout(() => {
+          if (myId === currentSpeechId) notifyCaption(null);
+        }, 6_000);
+      }
+    }
+    logVoiceSilentFail('speak_catch_with_device_fallback', {
+      speechId: myId,
+      error: err instanceof Error ? err.message : String(err),
+      device_played: devicePlayed,
+      textHead: text.slice(0, 60),
+    });
   }
 });
