@@ -31,7 +31,7 @@ import { Asset } from 'expo-asset';
 import { Video, ResizeMode } from 'expo-av';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettingsStore } from '../store/settingsStore';
-import { playLocalFile, speak, stopSpeaking, configureAudioForSpeech } from '../services/voiceService';
+import { playLocalFile, speakOpenAITTS, stopSpeaking, configureAudioForSpeech } from '../services/voiceService';
 import { prewarmVoice } from '../services/voiceWarmup';
 import {
   pickGreeting,
@@ -393,25 +393,20 @@ export default function GreetingScreen() {
           // it as `persona` in the /api/voice body — server picks the
           // persona-keyed OpenAI voice ID.
           const captionForVoice = getGreetingCaption(greeting, getCaddieName(caddiePersonality));
-          // 2026-06-05 — Removed the awaitVoiceWarmup(6_000) wait that
-          // was here on the 1.0×→1.15× rate commit. Direct curl tests
-          // proved /api/voice returns valid 24kHz mono MP3 in ~1.2s
-          // for every persona, so the cold-Lambda-race hypothesis was
-          // wrong. The actual silent-fail is in the client Sound
-          // load/play path — addressed by the load+verify+rate-fallback
-          // restructure in voiceService.ts speak(). prewarmVoice still
-          // fires at mount so the Lambda is warm by speak() time, but
-          // we no longer pay perceived lag waiting for it.
           const speakStartedAt = Date.now();
-          // 2026-06-04 — Launch-path diagnostic. Tim reports Harry's
-          // greeting went silent on app start; if speak() silent-fails,
-          // the voice-error log already catches the underlying reason,
-          // but this line confirms the greeting path FIRED for the
-          // expected persona at the expected time.
+          // 2026-06-05 — Route through speakOpenAITTS (fetches /api/voice
+          // then hands off to speakFromBase64) instead of speak(). speak()
+          // and speakFromBase64 SHARE the same playback code (file write
+          // → createAsync → didJustFinish wait) but speakFromBase64 is
+          // proven working for Kevin's brain replies on the same cold-
+          // launch audio session that's been silently failing for
+          // non-Kevin via speak(). Empirical pattern: same playback
+          // code, different state-machine entry path, different observed
+          // behavior. Bypass speak()'s state machine for greeting.
           console.log('[greeting] non-Kevin TTS launch path:', { persona: caddiePersonality, voiceGender, captionLen: captionForVoice.length });
           const minDisplay = new Promise<void>(resolve => setTimeout(resolve, NONVIDEO_MIN_DISPLAY_MS));
           await Promise.all([
-            speak(captionForVoice, voiceGender, language as 'en' | 'es' | 'zh', apiUrl, { userInitiated: true }),
+            speakOpenAITTS(captionForVoice, voiceGender, language as 'en' | 'es' | 'zh', apiUrl, { userInitiated: true }),
             minDisplay,
           ]);
           console.log('[greeting] non-Kevin TTS finished:', { persona: caddiePersonality, speakDurMs: Date.now() - speakStartedAt });

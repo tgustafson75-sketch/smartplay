@@ -810,6 +810,86 @@ function preprocessTtsText(text: string, language: 'en' | 'es' | 'zh'): string {
   return out;
 }
 
+// ─── SPEAK VIA OPENAI TTS (uses proven speakFromBase64 playback path) ───
+//
+// 2026-06-05 — Greeting silence root cause analysis: speak() and
+// speakFromBase64() share IDENTICAL playback code (file write →
+// createAsync → didJustFinish wait). speakFromBase64 is proven working
+// for Kevin brain replies on the same audio session that goes silent
+// for non-Kevin greetings via speak(). The non-playback differences
+// (fetch step, custom-clip override, snapshot volume/rate captures,
+// 12s abort timeout) are the only candidates for the divergence.
+//
+// This helper bypasses speak()'s pre-fetch state machine entirely.
+// It performs the /api/voice fetch, validates the response, converts
+// the arrayBuffer to base64, and hands off to speakFromBase64 — the
+// path that demonstrably works for Kevin's brain audio on cold launch.
+// Used by the greeting screen for non-Kevin TTS where speak() has
+// repeatedly silent-failed despite a verified-healthy server.
+export const speakOpenAITTS = async (
+  text: string,
+  gender: 'male' | 'female',
+  language: 'en' | 'es' | 'zh',
+  apiUrl: string,
+  opts?: SpeakOpts,
+): Promise<void> => {
+  if (!isVoiceAllowed(opts)) return;
+  if (!apiUrl) {
+    console.log('[voice] speakOpenAITTS: no apiUrl — bailing');
+    logVoiceSilentFail('speak_openai_no_api_url', { textHead: text.slice(0, 60) });
+    return;
+  }
+  let persona: string | null = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    persona = require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? null;
+  } catch { /* ignore */ }
+  const ttsModel = language === 'en' ? 'eleven_monolingual_v1' : 'eleven_multilingual_v2';
+  let buf: ArrayBuffer;
+  try {
+    const response = await fetch(apiUrl + '/api/voice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: preprocessTtsText(text, language),
+        gender,
+        language,
+        persona,
+        model_id: ttsModel,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '<unreadable>');
+      console.log('[voice] speakOpenAITTS API error:', response.status, errBody.slice(0, 200));
+      logVoiceSilentFail('speak_openai_api_error', { status: response.status, error: errBody.slice(0, 200) });
+      return;
+    }
+    buf = await response.arrayBuffer();
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') return;
+    console.log('[voice] speakOpenAITTS fetch error:', err);
+    logVoiceSilentFail('speak_openai_fetch_error', { error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  if (buf.byteLength < 1000) {
+    console.log('[voice] speakOpenAITTS small payload:', buf.byteLength);
+    logVoiceSilentFail('speak_openai_small_payload', { bytes: buf.byteLength, textHead: text.slice(0, 60) });
+    return;
+  }
+  // arrayBuffer → base64. Char-by-char build of binary string then
+  // btoa is the standard RN-safe pattern (no Buffer global, no
+  // TextDecoder needed for binary). 45KB mp3 → ~60KB base64 string;
+  // sub-millisecond on a modern phone.
+  const u8 = new Uint8Array(buf);
+  let binary = '';
+  for (let i = 0; i < u8.length; i++) binary += String.fromCharCode(u8[i]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const base64 = (globalThis as any).btoa ? (globalThis as any).btoa(binary) : Buffer.from(u8).toString('base64');
+  console.log('[voice] speakOpenAITTS handing off to speakFromBase64 — bytes=', buf.byteLength, 'base64Len=', base64.length, 'persona=', persona);
+  await speakFromBase64(base64, opts);
+};
+
 // ─── SPEAK ────────────────────────────────
 
 export const speak = async (
