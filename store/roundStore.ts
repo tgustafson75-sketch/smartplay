@@ -696,6 +696,28 @@ export const useRoundStore = create<RoundState>()(
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           require('../services/courseDataOrchestrator').clearSustainedBuffer?.();
         } catch { /* non-fatal */ }
+        // 2026-06-06 — Phase 2 of on-course resilience sprint. Pre-warm
+        // per-course caches the moment the round commits, so SmartVision /
+        // Caddie / brain context all have data even when cellular drops
+        // mid-round (Tim's Echo Hills failure mode). Underlying services
+        // (courseGeometry + courseContent) own their own AsyncStorage
+        // caches with stale-while-revalidate; this is purely a nudge to
+        // populate them at the moment signal is most likely to be good.
+        // Fire-and-forget — UX never blocks on this.
+        if (courseId && holes.length > 0) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const prefetch = require('../services/roundPrefetch') as typeof import('../services/roundPrefetch');
+            void prefetch.prefetchRoundData({
+              courseId,
+              courseName: course,
+              courseLocation,
+              holes,
+            });
+          } catch (e) {
+            console.log('[roundStore.startRound] prefetch dispatch failed (non-fatal):', e);
+          }
+        }
         // 2026-05-21 — Fix N-3 — the original Phase 413 JIT Health Connect
         // permission ask used to live here. It was the prime suspect for the
         // Z Fold "app closes on Start Round, every time, reopen shows round
