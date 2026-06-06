@@ -140,6 +140,13 @@ const SPEECH_DETECT_DB = -30; // higher bar to confirm "they spoke at least once
  */
 let currentRecording: Audio.Recording | null = null;
 let captureCancelled = false;
+// 2026-06-06 — Distinct from captureCancelled: this means "user
+// explicitly ended the capture (tap during a follow-up listen) — DO
+// transcribe what was recorded." captureCancelled discards the audio;
+// captureEarlyStop preserves it. Set via endCaptureEarly() from
+// useVoiceCaddie's handleMicPress when the user taps during an
+// in-flight captureUtterance.
+let captureEarlyStop = false;
 
 export const stopCapture = async (): Promise<void> => {
   captureCancelled = true;
@@ -150,6 +157,28 @@ export const stopCapture = async (): Promise<void> => {
   }
 };
 
+/**
+ * 2026-06-06 — True when a captureUtterance() call is currently
+ * recording. Used by handleMicPress to detect tap-during-follow-up
+ * so it can route to endCaptureEarly() instead of starting a parallel
+ * recording (which would race the audio session and lose the user's
+ * follow-up turn).
+ */
+export const isCapturing = (): boolean => currentRecording !== null;
+
+/**
+ * 2026-06-06 — End the in-flight captureUtterance EARLY but still
+ * transcribe whatever was recorded. Mirrors the silence-VAD's "user
+ * stopped talking, run with what we have" behavior — but triggered by
+ * a tap. Lets the user choose between waiting for silence OR tapping
+ * when done; both produce the same result. No-op when nothing is
+ * recording.
+ */
+export const endCaptureEarly = (): void => {
+  if (!currentRecording) return;
+  captureEarlyStop = true;
+};
+
 export const captureUtterance = async (
   timeoutMs: number,
   apiUrl: string,
@@ -157,6 +186,7 @@ export const captureUtterance = async (
 ): Promise<string | null> => {
   let recording: Audio.Recording | null = null;
   captureCancelled = false;
+  captureEarlyStop = false;
   try {
     noteAudioActivity('capture');
     const { granted } = await Audio.requestPermissionsAsync();
@@ -196,9 +226,10 @@ export const captureUtterance = async (
     lastLoudAt = Date.now();
 
     // Wait up to timeoutMs OR until stopCapture flips the flag OR
-    // silence-VAD trips early (Fix A).
+    // silence-VAD trips early (Fix A) OR user taps to end early
+    // (2026-06-06 — endCaptureEarly path).
     const start = Date.now();
-    while (Date.now() - start < timeoutMs && !captureCancelled) {
+    while (Date.now() - start < timeoutMs && !captureCancelled && !captureEarlyStop) {
       await new Promise(resolve => setTimeout(resolve, 100));
       // Silence-VAD early stop: only after user has actually spoken
       // (avoid auto-stop on dead silence before they start) AND

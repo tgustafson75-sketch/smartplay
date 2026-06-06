@@ -11,6 +11,8 @@ import {
   isSpeaking,
   playLocalFile,
   captureUtterance,
+  isCapturing,
+  endCaptureEarly,
   RECORDING_OPTIONS,
 } from '../services/voiceService';
 import {
@@ -873,6 +875,16 @@ export const useVoiceCaddie = ({
     continuousSessionStartedAtRef.current = Date.now();
   }, []);
 
+  // 2026-06-06 — Hard cap on follow-up recursion depth, ALWAYS applied
+  // (independent of continuousConversationMode). Tim's report: "stuck
+  // on listening after a few back and forth messages." Root cause: when
+  // Kevin keeps asking questions (reply ends with `?`), processFollowUp
+  // recursively calls runFollowUpListenLoop with NO depth cap outside
+  // continuous mode. Long conversations stack mic-on cycles indefinitely.
+  // Cap prevents runaway; user can re-tap to keep going if they want.
+  const HARD_FOLLOWUP_DEPTH_CAP = 5;
+  const followUpDepthRef = useRef(0);
+
   const runFollowUpListenLoop = useCallback(async (): Promise<void> => {
     // 2026-06-05 — Bumped 6s → 30s. Same reason as AUTO_STOP_MS above:
     // this is a HARD cap on total mic-on time, not "stop after user
@@ -948,7 +960,17 @@ export const useVoiceCaddie = ({
           shouldRecurse = true;
         }
       }
+      // 2026-06-06 — Hard recursion cap (always applies, not just
+      // continuous mode). Prevents the runaway-mic state Tim reported.
+      // After 5 turns, the loop ends cleanly; user can tap mic to
+      // continue if they want — but the conversation no longer chains
+      // mic cycles indefinitely on long question/answer exchanges.
+      if (shouldRecurse && followUpDepthRef.current >= HARD_FOLLOWUP_DEPTH_CAP) {
+        console.log('[voice] follow-up depth cap reached — ending loop', { depth: followUpDepthRef.current });
+        shouldRecurse = false;
+      }
       if (shouldRecurse) {
+        followUpDepthRef.current += 1;
         await runFollowUpListenLoop();
       }
     };
@@ -963,6 +985,10 @@ export const useVoiceCaddie = ({
       if (continuousSessionStartedAtRef.current === 0
           || Date.now() - continuousSessionStartedAtRef.current >= CONTINUOUS_MAX_SESSION_MS) {
         resetContinuousSession();
+        // 2026-06-06 — Reset depth ONLY when a genuinely new session
+        // starts (same gate as continuous-mode timer). Recursive inner
+        // calls keep the same depth counter so the cap actually works.
+        followUpDepthRef.current = 0;
       }
 
       // Round 1
@@ -1371,6 +1397,26 @@ export const useVoiceCaddie = ({
       await stopSpeaking();
       isProcessingRef.current = false;
       wrappedOnVoiceStateChange('idle');
+      return;
+    }
+
+    // 2026-06-06 — Tap-during-follow-up-listen conflict resolution.
+    // Two recording paths exist: (a) this tap path's recordingRef and
+    // (b) voiceService.captureUtterance's currentRecording used by
+    // runFollowUpListenLoop. If the user taps to end while a follow-up
+    // listen is in flight, this handler would otherwise see
+    // recordingRef.current === null, fall through to the START branch,
+    // and try to create a parallel Audio.Recording — racing the audio
+    // session and losing the user's turn. Tim's report: "sometimes
+    // tapping creates a conflict with silence-wait." The fix: detect
+    // captureUtterance's recording via isCapturing(), end it EARLY
+    // (transcribe what was recorded — same as silence-VAD would have),
+    // then return. The follow-up loop receives the transcript and
+    // processes it normally. Tap and silence-VAD now produce the same
+    // outcome — Tim's intuition ("either works") is honored.
+    if (isCapturing()) {
+      console.log('[voice] tap during follow-up listen — routing to endCaptureEarly');
+      endCaptureEarly();
       return;
     }
 
