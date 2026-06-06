@@ -168,6 +168,10 @@ export const useAcousticCalibrationStore = create<AcousticCalibrationState>()(
     {
       name: 'acoustic-calibration-v1',
       version: 1,
+      // 2026-06-06 — Forward-compatible migrate scaffold. No legacy
+      // versions to coerce yet; future v2+ schema changes get their
+      // own version-branched logic here.
+      migrate: (persisted) => persisted as AcousticCalibrationState,
       storage: createJSONStorage(() => getPersistStorage()),
     },
   ),

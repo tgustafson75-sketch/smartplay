@@ -129,6 +129,8 @@ export const useGuestProfileStore = create<GuestProfileState>()(
       name: 'guest-profiles-v1',
       storage: createJSONStorage(() => AsyncStorage),
       version: 1,
+      // 2026-06-06 — Forward-compatible migrate scaffold.
+      migrate: (persisted) => persisted as GuestProfileState,
       onRehydrateStorage: () => (state) => {
         // Drop expired guests on app boot so a stale roster never leaks
         // into a fresh session.

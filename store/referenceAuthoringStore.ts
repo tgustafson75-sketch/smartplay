@@ -135,6 +135,8 @@ export const useReferenceAuthoringStore = create<ReferenceAuthoringState>()(
       name: '@smartplay/reference_authoring',
       storage: createJSONStorage(() => AsyncStorage),
       version: 1,
+      // 2026-06-06 — Forward-compatible migrate scaffold.
+      migrate: (persisted) => persisted as ReferenceAuthoringState,
     },
   ),
 );

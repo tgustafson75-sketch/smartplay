@@ -61,6 +61,8 @@ export const useFieldManualChecklistStore = create<FieldManualChecklistState>()(
       name: 'fieldManualChecklist-v1',
       storage: createJSONStorage(() => AsyncStorage),
       version: 1,
+      // 2026-06-06 — Forward-compatible migrate scaffold.
+      migrate: (persisted) => persisted as FieldManualChecklistState,
     },
   ),
 );

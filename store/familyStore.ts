@@ -274,6 +274,8 @@ export const useFamilyStore = create<FamilyState>()(
     {
       name: 'family-store-v1',
       version: 1,
+      // 2026-06-06 — Forward-compatible migrate scaffold.
+      migrate: (persisted) => persisted as FamilyState,
       storage: createJSONStorage(() => getPersistStorage()),
       partialize: (s) => ({
         members: s.members,
