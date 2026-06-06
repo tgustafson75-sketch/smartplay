@@ -832,12 +832,22 @@ export const speakOpenAITTS = async (
   language: 'en' | 'es' | 'zh',
   apiUrl: string,
   opts?: SpeakOpts,
-): Promise<void> => {
-  if (!isVoiceAllowed(opts)) return;
+): Promise<boolean> => {
+  // Returns true if audio successfully handed off to the playback path,
+  // false if it failed before playback. Callers can use this to decide
+  // whether to fire a bundled-mp3 fallback. The boolean is intentionally
+  // optimistic: it doesn't guarantee the user actually HEARD audio (the
+  // OS audio session could still silently drop it after handoff), but
+  // it does guarantee the fetch + decode + speakFromBase64 entry all
+  // succeeded. Empirical truth on Tim's device today: the silent splash
+  // is the network-fail branch (speak_catch "Network request failed"
+  // in /owner-logs), not a playback issue — so a boolean from the
+  // pre-playback path catches the actual failure mode.
+  if (!isVoiceAllowed(opts)) return false;
   if (!apiUrl) {
     console.log('[voice] speakOpenAITTS: no apiUrl — bailing');
     logVoiceSilentFail('speak_openai_no_api_url', { textHead: text.slice(0, 60) });
-    return;
+    return false;
   }
   let persona: string | null = null;
   try {
@@ -845,37 +855,53 @@ export const speakOpenAITTS = async (
     persona = require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? null;
   } catch { /* ignore */ }
   const ttsModel = language === 'en' ? 'eleven_monolingual_v1' : 'eleven_multilingual_v2';
-  let buf: ArrayBuffer;
-  try {
-    const response = await fetch(apiUrl + '/api/voice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: preprocessTtsText(text, language),
-        gender,
-        language,
-        persona,
-        model_id: ttsModel,
-      }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!response.ok) {
-      const errBody = await response.text().catch(() => '<unreadable>');
-      console.log('[voice] speakOpenAITTS API error:', response.status, errBody.slice(0, 200));
-      logVoiceSilentFail('speak_openai_api_error', { status: response.status, error: errBody.slice(0, 200) });
-      return;
+
+  // Tim's /owner-logs 2026-06-05: speak_catch "Network request failed"
+  // is RN's fetch error when the host is unreachable at all (DNS, TLS,
+  // cellular hop, captive portal). Single-shot fetch was returning
+  // silent. One-retry with 600ms backoff handles transient cellular
+  // hiccups without piling unbounded waits on a truly-offline device.
+  const fetchOnce = async (): Promise<ArrayBuffer | null> => {
+    try {
+      const response = await fetch(apiUrl + '/api/voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: preprocessTtsText(text, language),
+          gender,
+          language,
+          persona,
+          model_id: ttsModel,
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) {
+        const errBody = await response.text().catch(() => '<unreadable>');
+        console.log('[voice] speakOpenAITTS API error:', response.status, errBody.slice(0, 200));
+        logVoiceSilentFail('speak_openai_api_error', { status: response.status, error: errBody.slice(0, 200) });
+        return null;
+      }
+      return await response.arrayBuffer();
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return null;
+      console.log('[voice] speakOpenAITTS fetch threw:', err);
+      return null;
     }
-    buf = await response.arrayBuffer();
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') return;
-    console.log('[voice] speakOpenAITTS fetch error:', err);
-    logVoiceSilentFail('speak_openai_fetch_error', { error: err instanceof Error ? err.message : String(err) });
-    return;
+  };
+  let buf = await fetchOnce();
+  if (!buf) {
+    console.log('[voice] speakOpenAITTS retry after fetch failure (600ms backoff)');
+    await new Promise<void>(resolve => setTimeout(resolve, 600));
+    buf = await fetchOnce();
+  }
+  if (!buf) {
+    logVoiceSilentFail('speak_openai_fetch_failed_twice', { textHead: text.slice(0, 60), persona: persona ?? 'null' });
+    return false;
   }
   if (buf.byteLength < 1000) {
     console.log('[voice] speakOpenAITTS small payload:', buf.byteLength);
     logVoiceSilentFail('speak_openai_small_payload', { bytes: buf.byteLength, textHead: text.slice(0, 60) });
-    return;
+    return false;
   }
   // arrayBuffer → base64. Char-by-char build of binary string then
   // btoa is the standard RN-safe pattern (no Buffer global, no
@@ -888,6 +914,7 @@ export const speakOpenAITTS = async (
   const base64 = (globalThis as any).btoa ? (globalThis as any).btoa(binary) : Buffer.from(u8).toString('base64');
   console.log('[voice] speakOpenAITTS handing off to speakFromBase64 — bytes=', buf.byteLength, 'base64Len=', base64.length, 'persona=', persona);
   await speakFromBase64(base64, opts);
+  return true;
 };
 
 // ─── SPEAK ────────────────────────────────
