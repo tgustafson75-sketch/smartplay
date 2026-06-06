@@ -900,7 +900,12 @@ export const speakOpenAITTS = async (
           persona,
           model_id: ttsModel,
         }),
-        signal: AbortSignal.timeout(15_000),
+        // 2026-06-05 — Tightened 15s → 6s. Tim's report: greeting
+        // showed white screen for 30s then Kevin played. 30s was
+        // 15s × 2 attempts. /api/voice typically responds in 1.2-2s
+        // when healthy; 6s is well above that envelope but cuts the
+        // worst-case wait to 6s × 2 = 12s before fallback fires.
+        signal: AbortSignal.timeout(6_000),
       });
       if (!response.ok) {
         const errBody = await response.text().catch(() => '<unreadable>');
