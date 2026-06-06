@@ -1259,12 +1259,21 @@ export const speak = async (
         const probe = await s.getStatusAsync();
         if (probe.isLoaded) {
           const pos = probe.positionMillis ?? 0;
+          const dur = probe.durationMillis ?? 0;
+          const isPlaying = probe.isPlaying;
+          const didJustFinish = (probe as { didJustFinish?: boolean }).didJustFinish ?? false;
           console.log('[voice] speak 700ms position check — myId=', myId,
-            'positionMillis=', pos, 'isPlaying=', probe.isPlaying);
-          if (pos === 0) {
-            // Loaded but silent — the MediaCodec/setRate race.
+            'positionMillis=', pos, 'isPlaying=', isPlaying, 'durationMillis=', dur, 'didJustFinish=', didJustFinish);
+          // Stuck-silent is ONLY pos==0 AND still actively playing. If
+          // isPlaying is false, the sound either pre-rolled or already
+          // finished (short audio < 700ms — e.g. "Voice on" is ~500ms
+          // and would resolve to pos==0 + isPlaying==false here). In
+          // either case, abandoning would lose audio the user just
+          // heard or was about to hear. Conservative check avoids
+          // false-positive retries on short utterances.
+          if (pos === 0 && isPlaying === true && !didJustFinish) {
             try { await s.unloadAsync(); } catch {}
-            return { ok: false, sound: null, reason: 'position_stuck_at_zero' };
+            return { ok: false, sound: null, reason: 'position_stuck_at_zero_while_playing' };
           }
         }
       } catch (e) {
@@ -1323,44 +1332,72 @@ export const speak = async (
 
     currentSound = sound;
 
-    await Promise.race([
-      new Promise<void>((resolve) => {
-        sound.setOnPlaybackStatusUpdate((status) => {
-          if (!status.isLoaded) {
-            // Externally unloaded (stopSpeaking) — release the queue.
-            try { audioFile.delete(); } catch {}
+    // 2026-06-05 — Short-audio defense. If the utterance was short
+    // enough to FINISH during loadAndVerify's 700ms wait (e.g.,
+    // "Voice on" is ~500ms), didJustFinish already fired before we
+    // could attach a listener. Setting the listener now would never
+    // refire and the Promise.race below would wait until the full
+    // playback timeout (10-30s) — blocking the speak queue for tens
+    // of seconds for an audio that already played. Probe status
+    // once before the race; if already finished or unloaded, resolve
+    // immediately.
+    let preFinished = false;
+    try {
+      const preStatus = await sound.getStatusAsync();
+      if (!preStatus.isLoaded || (preStatus as { didJustFinish?: boolean }).didJustFinish) {
+        console.log('[voice] speak audio already finished pre-race — resolving immediately');
+        preFinished = true;
+      }
+    } catch { /* ignore probe failure */ }
+
+    if (preFinished) {
+      try { audioFile.delete(); } catch {}
+      try { await sound.unloadAsync(); } catch {}
+      if (myId === currentSpeechId) {
+        currentSound = null;
+        notifySpeaking(false);
+        notifyCaption(null);
+      }
+    } else {
+      await Promise.race([
+        new Promise<void>((resolve) => {
+          sound.setOnPlaybackStatusUpdate((status) => {
+            if (!status.isLoaded) {
+              // Externally unloaded (stopSpeaking) — release the queue.
+              try { audioFile.delete(); } catch {}
+              if (myId === currentSpeechId) {
+                currentSound = null;
+                notifySpeaking(false);
+                notifyCaption(null);
+              }
+              resolve();
+              return;
+            }
+            if (status.didJustFinish) {
+              sound.unloadAsync().catch(() => {});
+              try { audioFile.delete(); } catch {}
+              if (myId === currentSpeechId) {
+                currentSound = null;
+                notifySpeaking(false);
+                notifyCaption(null);
+              }
+              resolve();
+            }
+          });
+        }),
+        new Promise<void>((resolve) =>
+          setTimeout(() => {
+            console.log('[voice] speak timeout');
             if (myId === currentSpeechId) {
               currentSound = null;
               notifySpeaking(false);
               notifyCaption(null);
             }
             resolve();
-            return;
-          }
-          if (status.didJustFinish) {
-            sound.unloadAsync().catch(() => {});
-            try { audioFile.delete(); } catch {}
-            if (myId === currentSpeechId) {
-              currentSound = null;
-              notifySpeaking(false);
-              notifyCaption(null);
-            }
-            resolve();
-          }
-        });
-      }),
-      new Promise<void>((resolve) =>
-        setTimeout(() => {
-          console.log('[voice] speak timeout');
-          if (myId === currentSpeechId) {
-            currentSound = null;
-            notifySpeaking(false);
-            notifyCaption(null);
-          }
-          resolve();
-        }, playbackTimeoutForText(text))
-      ),
-    ]);
+          }, playbackTimeoutForText(text))
+        ),
+      ]);
+    }
 
   } catch (err) {
     if (myId === currentSpeechId) {
