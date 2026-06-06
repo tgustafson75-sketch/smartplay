@@ -422,20 +422,24 @@ const currentPlaybackVolume = (): number => {
   }
 };
 
-// Phase BI — slight rate bump for the custom caddie. expo-av's setRateAsync
-// with shouldCorrectPitch=true keeps Kevin's voice timbre while playing
-// faster, satisfying "sped up" without raising into chipmunk territory.
+// 2026-06-05 — Default playback rate bumped 1.0 → 1.15. OpenAI
+// gpt-4o-mini-tts speaks slowly by default; 1.15 with
+// shouldCorrectPitch=true keeps every persona's timbre while making
+// the cadence feel like a real caddie talking, not a robot reading.
+// Custom-caddie keeps the additional 1.08× multiplier on top
+// (effective ~1.24×) to preserve the user-recorded-voice character.
+const DEFAULT_PLAYBACK_RATE = 1.15;
 const currentPlaybackRate = (): number => {
   try {
     const profileMod = require('../store/playerProfileStore');
     const p = profileMod.usePlayerProfileStore.getState();
-    if (p.useCustomCaddie && p.customCaddiePortraitB64) return 1.08;
+    if (p.useCustomCaddie && p.customCaddiePortraitB64) return DEFAULT_PLAYBACK_RATE * 1.08;
   } catch {}
-  return 1.0;
+  return DEFAULT_PLAYBACK_RATE;
 };
 
 // Apply rate to a freshly-created Sound. Failure is non-fatal — the audio
-// just plays at 1.0× instead of 1.08×, which is still correct behavior.
+// just plays at 1.0× instead of the boosted rate, which is still correct.
 const applyCustomRate = async (sound: Audio.Sound): Promise<void> => {
   const rate = currentPlaybackRate();
   if (rate === 1.0) return;

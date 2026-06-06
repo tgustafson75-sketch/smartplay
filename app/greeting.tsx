@@ -32,7 +32,7 @@ import { Video, ResizeMode } from 'expo-av';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettingsStore } from '../store/settingsStore';
 import { playLocalFile, speak, stopSpeaking, configureAudioForSpeech } from '../services/voiceService';
-import { prewarmVoice } from '../services/voiceWarmup';
+import { prewarmVoice, awaitVoiceWarmup } from '../services/voiceWarmup';
 import {
   pickGreeting,
   recordLaunch,
@@ -393,6 +393,15 @@ export default function GreetingScreen() {
           // it as `persona` in the /api/voice body — server picks the
           // persona-keyed OpenAI voice ID.
           const captionForVoice = getGreetingCaption(greeting, getCaddieName(caddiePersonality));
+          // 2026-06-05 — Wait for /api/voice warmup BEFORE the first
+          // cold call. Tim's report: Tank/Serena greeting goes silent
+          // on app launch. Root cause was the cold /api/voice Lambda
+          // racing the warmup — first request returned a too-small
+          // payload that voiceService filters as bad audio, and the
+          // user heard nothing. awaitVoiceWarmup() caps at 6s so a
+          // degraded Vercel doesn't hang the splash; the speak still
+          // tries and pays its own cost in that case.
+          await awaitVoiceWarmup(6_000);
           const speakStartedAt = Date.now();
           // 2026-06-04 — Launch-path diagnostic. Tim reports Harry's
           // greeting went silent on app start; if speak() silent-fails,

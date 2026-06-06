@@ -17,9 +17,14 @@
  * user never sees — by the time they read "Press to talk to Kevin"
  * and tap, every Lambda + every provider SDK is hot.
  *
- * Each warmup is fire-and-forget with its own AbortSignal timeout.
- * Failures are silent — the user's real tap will hit the same network
- * anyway and surface its own error.
+ * 2026-06-05 — `prewarmVoice()` stays fire-and-forget. The new
+ * `awaitVoiceWarmup()` returns the in-flight Promise so callers that
+ * NEED warmup completed before they fire their own request (e.g. the
+ * non-Kevin greeting path — Tank/Serena were silent because the cold
+ * /api/voice call raced the warmup) can `await` it. Resolves after
+ * all four endpoints respond (or abort). Cap is 6s so the greeting
+ * doesn't hang on a degraded Vercel — the speak will still try and
+ * pay its own cold-start cost in that case.
  *
  * Throttled at 30s dedupe so repeated launches don't flood.
  *
@@ -31,6 +36,7 @@
 
 const WARMUP_DEDUPE_MS = 30_000;
 let lastWarmupAt = 0;
+let inFlightWarmup: Promise<void> | null = null;
 
 const WARMUP_PATHS = [
   '/api/voice',
@@ -39,13 +45,9 @@ const WARMUP_PATHS = [
   '/api/kevin',
 ] as const;
 
-export function prewarmVoice(): void {
-  const now = Date.now();
-  if (now - lastWarmupAt < WARMUP_DEDUPE_MS) return;
-  lastWarmupAt = now;
-
+function fireWarmup(): Promise<void> {
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
-  if (!apiUrl) return;
+  if (!apiUrl) return Promise.resolve();
 
   // Query param AND body both carry `mode: 'warmup'` so handlers can
   // check either. /api/transcribe disables bodyParser (formidable
@@ -67,7 +69,33 @@ export function prewarmVoice(): void {
       // Silent — warmup is opportunistic.
     });
 
-  void Promise.all(WARMUP_PATHS.map(warmup))
+  return Promise.all(WARMUP_PATHS.map(warmup))
     .then(() => { console.log('[voiceWarmup] all four endpoints warmed'); })
     .catch(() => { /* Promise.all with .catch'd children won't reject — defensive */ });
+}
+
+export function prewarmVoice(): void {
+  const now = Date.now();
+  if (now - lastWarmupAt < WARMUP_DEDUPE_MS) return;
+  lastWarmupAt = now;
+  inFlightWarmup = fireWarmup();
+  void inFlightWarmup;
+}
+
+/**
+ * 2026-06-05 — Returns the in-flight warmup promise so callers can wait
+ * for cold-start to complete before firing their real request. Resolves
+ * even when warmup errors. Caps at 6s so a degraded Vercel doesn't hang
+ * the caller's UI.
+ *
+ * If no warmup is currently in flight (because the 30s dedupe window
+ * suppressed a call), this resolves immediately — the assumption is
+ * the previous warmup already completed before the dedupe activated.
+ */
+export function awaitVoiceWarmup(maxWaitMs = 6_000): Promise<void> {
+  if (!inFlightWarmup) return Promise.resolve();
+  return Promise.race([
+    inFlightWarmup,
+    new Promise<void>(resolve => setTimeout(resolve, maxWaitMs)),
+  ]);
 }
