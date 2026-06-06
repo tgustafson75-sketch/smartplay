@@ -410,7 +410,14 @@ export default function GreetingScreen() {
           console.log('[greeting] non-Kevin TTS launch path:', { persona: caddiePersonality, voiceGender, captionLen: captionForVoice.length });
           const minDisplay = new Promise<void>(resolve => setTimeout(resolve, NONVIDEO_MIN_DISPLAY_MS));
           const [ttsPlayed] = await Promise.all([
-            speakOpenAITTS(captionForVoice, voiceGender, language as 'en' | 'es' | 'zh', apiUrl, { userInitiated: true }),
+            // cacheable: true — greeting captions are a bounded set
+            // (~12 × persona × language). First successful network
+            // fetch writes the mp3 to local cache; every subsequent
+            // launch plays from cache instantly, offline-safe, with
+            // the correct persona voice. After 1-2 launches with each
+            // persona, the user never sees a silent splash again
+            // regardless of network state.
+            speakOpenAITTS(captionForVoice, voiceGender, language as 'en' | 'es' | 'zh', apiUrl, { userInitiated: true, cacheable: true }),
             minDisplay,
           ]);
           console.log('[greeting] non-Kevin TTS finished:', { persona: caddiePersonality, ttsPlayed, speakDurMs: Date.now() - speakStartedAt });

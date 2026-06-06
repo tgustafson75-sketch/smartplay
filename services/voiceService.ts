@@ -2,6 +2,7 @@ import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import { File, Paths } from 'expo-file-system';
 import { noteAudioActivity } from './audioLifecycle';
 import { logVoiceSilentFail, logVoiceError, logTranscribeError } from './voiceErrorLog';
+import { readCachedTTS, writeCachedTTS, ttsCacheKey } from './ttsCache';
 // 2026-05-30 — Fix FX: voice/network circuit-breaker. After 3 consecutive
 // fetch failures within 30s on any of /api/voice, /api/kevin, or
 // /api/transcribe, that endpoint is marked degraded for 60s and we
@@ -826,34 +827,58 @@ function preprocessTtsText(text: string, language: 'en' | 'es' | 'zh'): string {
 // path that demonstrably works for Kevin's brain audio on cold launch.
 // Used by the greeting screen for non-Kevin TTS where speak() has
 // repeatedly silent-failed despite a verified-healthy server.
+export type SpeakOpenAITTSOpts = SpeakOpts & {
+  /**
+   * If set, check the TTS cache first using this key (hashed via
+   * ttsCacheKey). On miss + successful fetch, write the bytes to
+   * cache so subsequent calls play instantly with no network.
+   * Only set for utterances drawn from a bounded set (greetings,
+   * confirmations) — arbitrary brain replies should NOT cache or
+   * they'll grow without bound.
+   */
+  cacheable?: boolean;
+};
+
 export const speakOpenAITTS = async (
   text: string,
   gender: 'male' | 'female',
   language: 'en' | 'es' | 'zh',
   apiUrl: string,
-  opts?: SpeakOpts,
+  opts?: SpeakOpenAITTSOpts,
 ): Promise<boolean> => {
-  // Returns true if audio successfully handed off to the playback path,
-  // false if it failed before playback. Callers can use this to decide
-  // whether to fire a bundled-mp3 fallback. The boolean is intentionally
-  // optimistic: it doesn't guarantee the user actually HEARD audio (the
-  // OS audio session could still silently drop it after handoff), but
-  // it does guarantee the fetch + decode + speakFromBase64 entry all
-  // succeeded. Empirical truth on Tim's device today: the silent splash
-  // is the network-fail branch (speak_catch "Network request failed"
-  // in /owner-logs), not a playback issue — so a boolean from the
-  // pre-playback path catches the actual failure mode.
+  // Returns true if audio successfully handed off to the playback path
+  // (either from cache OR from network fetch), false if both cache miss
+  // and network fail. Callers can use this to decide whether to fire a
+  // bundled-mp3 last-resort fallback.
   if (!isVoiceAllowed(opts)) return false;
-  if (!apiUrl) {
-    console.log('[voice] speakOpenAITTS: no apiUrl — bailing');
-    logVoiceSilentFail('speak_openai_no_api_url', { textHead: text.slice(0, 60) });
-    return false;
-  }
   let persona: string | null = null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     persona = require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? null;
   } catch { /* ignore */ }
+
+  // 2026-06-05 — TTS cache. Greeting callers set opts.cacheable=true
+  // because greeting captions are a bounded set (~12 × persona ×
+  // language). First successful network fetch writes to cache; every
+  // subsequent launch plays from cache — offline-safe, correct persona
+  // voice, no network needed. Cache miss falls through to fetch path
+  // below.
+  const cacheKey = opts?.cacheable ? ttsCacheKey(persona, language, text) : null;
+  if (cacheKey) {
+    const cached = await readCachedTTS(cacheKey);
+    if (cached && cached.byteLength >= 1000) {
+      console.log('[voice] speakOpenAITTS cache HIT — bytes=', cached.byteLength, 'key=', cacheKey, 'persona=', persona);
+      const base64 = u8ToBase64(cached);
+      await speakFromBase64(base64, opts);
+      return true;
+    }
+  }
+
+  if (!apiUrl) {
+    console.log('[voice] speakOpenAITTS: no apiUrl — bailing');
+    logVoiceSilentFail('speak_openai_no_api_url', { textHead: text.slice(0, 60) });
+    return false;
+  }
   const ttsModel = language === 'en' ? 'eleven_monolingual_v1' : 'eleven_multilingual_v2';
 
   // Tim's /owner-logs 2026-06-05: speak_catch "Network request failed"
@@ -908,14 +933,28 @@ export const speakOpenAITTS = async (
   // TextDecoder needed for binary). 45KB mp3 → ~60KB base64 string;
   // sub-millisecond on a modern phone.
   const u8 = new Uint8Array(buf);
-  let binary = '';
-  for (let i = 0; i < u8.length; i++) binary += String.fromCharCode(u8[i]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const base64 = (globalThis as any).btoa ? (globalThis as any).btoa(binary) : Buffer.from(u8).toString('base64');
+  const base64 = u8ToBase64(u8);
+  // Write to cache BEFORE playback so a mid-playback crash still leaves
+  // the cache populated for next launch. Sync write; non-fatal failure.
+  if (cacheKey) {
+    writeCachedTTS(cacheKey, u8);
+    console.log('[voice] speakOpenAITTS cache WRITE — bytes=', u8.byteLength, 'key=', cacheKey);
+  }
   console.log('[voice] speakOpenAITTS handing off to speakFromBase64 — bytes=', buf.byteLength, 'base64Len=', base64.length, 'persona=', persona);
   await speakFromBase64(base64, opts);
   return true;
 };
+
+// Helper: RN-safe Uint8Array → base64. atob/btoa are polyfilled in RN's
+// JSCore/Hermes. Buffer.from fallback for any runtime without globals.
+function u8ToBase64(u8: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < u8.length; i++) binary += String.fromCharCode(u8[i]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const g = globalThis as any;
+  if (typeof g.btoa === 'function') return g.btoa(binary);
+  return Buffer.from(u8).toString('base64');
+}
 
 // ─── SPEAK ────────────────────────────────
 
