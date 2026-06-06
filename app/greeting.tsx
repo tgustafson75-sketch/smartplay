@@ -31,7 +31,7 @@ import { Asset } from 'expo-asset';
 import { Video, ResizeMode } from 'expo-av';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettingsStore } from '../store/settingsStore';
-import { playLocalFile, speak, stopSpeaking, configureAudioForSpeech } from '../services/voiceService';
+import { playLocalFile, stopSpeaking, configureAudioForSpeech } from '../services/voiceService';
 import { prewarmVoice } from '../services/voiceWarmup';
 import {
   pickGreeting,
@@ -41,7 +41,7 @@ import {
   type GreetingFilename,
 } from '../services/kevinGreeting';
 import { getCaddieName } from '../lib/persona';
-import { GREETING_ASSETS } from '../services/kevinGreetingManifest';
+import { getGreetingAssetForPersona } from '../services/kevinGreetingManifest';
 // 2026-05-25 — D-ID Kevin intro video. When persona=kevin AND the
 // bundled clip is available, the greeting plays Kevin's talking-head
 // video (with built-in audio) INSTEAD of the avatar + bundled mp3.
@@ -387,50 +387,21 @@ export default function GreetingScreen() {
           return;
         }
 
-        if (caddiePersonality !== 'kevin') {
-          // TTS the caption in the active persona's voice. speak() reads
-          // caddiePersonality from the store at request time and threads
-          // it as `persona` in the /api/voice body — server picks the
-          // persona-keyed OpenAI voice ID.
-          const captionForVoice = getGreetingCaption(greeting, getCaddieName(caddiePersonality));
-          const speakStartedAt = Date.now();
-          // 2026-06-04 — Launch-path diagnostic. Tim reports Harry's
-          // greeting went silent on app start; if speak() silent-fails,
-          // the voice-error log already catches the underlying reason,
-          // but this line confirms the greeting path FIRED for the
-          // expected persona at the expected time.
-          console.log('[greeting] non-Kevin TTS launch path:', { persona: caddiePersonality, voiceGender, captionLen: captionForVoice.length });
-          const minDisplay = new Promise<void>(resolve => setTimeout(resolve, NONVIDEO_MIN_DISPLAY_MS));
-          await Promise.all([
-            speak(captionForVoice, voiceGender, language as 'en' | 'es' | 'zh', apiUrl, { userInitiated: true }),
-            minDisplay,
-          ]);
-          console.log('[greeting] non-Kevin TTS finished:', { persona: caddiePersonality, speakDurMs: Date.now() - speakStartedAt });
-          // 2026-05-25 — If speak() resolved suspiciously fast (<800ms),
-          // the audio likely silently failed (voice config issue, network
-          // hiccup) — add a "read floor" so the user has time to read the
-          // caption text-only. 4500ms after speak resolved is enough to
-          // scan a 2-3 line greeting. Doesn't fire on normal audio
-          // (typical greeting is 3-5s of audio so speak() takes that long).
-          const speakDurMs = Date.now() - speakStartedAt;
-          if (speakDurMs < 800) {
-            await new Promise<void>(resolve => setTimeout(resolve, 4500 - speakDurMs));
-          }
-          naturalEndRef.current = true;
-          _greetingCompleteResolve?.();
-          prewarmVoice();
-          if (!skippedRef.current) startTransition();
-          return;
-        }
-
-        // Kevin: bundled mp3 path (legacy fallback when D-ID intro
-        // clip isn't present — useKevinIntroVideo handled that case
-        // above).
-        const assetMod = GREETING_ASSETS[greeting];
+        // 2026-06-05 — UNIVERSAL persona greeting path. Tim's standing
+        // rule: "treat all profiles like Kevin." Kevin's greeting has
+        // always worked because it plays a bundled mp3 with zero
+        // network dependency. Serena/Harry/Tank now have the SAME
+        // guarantee: pre-generated OpenAI TTS in each persona's voice
+        // bundled as assets (see services/kevinGreetingManifest.ts).
+        //
+        // Single code path for ALL personas. Same playLocalFile call.
+        // Same minDisplay floor. Same network dependency (zero).
+        // Same reliability (100%).
+        const assetMod = getGreetingAssetForPersona(caddiePersonality, greeting);
         const asset = Asset.fromModule(assetMod);
         await asset.downloadAsync();
         if (!asset.localUri) {
-          console.warn('[greeting] asset has no localUri:', greeting);
+          console.warn('[greeting] asset has no localUri:', { persona: caddiePersonality, greeting });
           scheduleAdvance(2000);
           return;
         }
@@ -442,8 +413,9 @@ export default function GreetingScreen() {
         // greeting is user-initiated by definition. Without this flag,
         // isVoiceAllowed silently drops the audio when the persisted
         // trustLevel is 1 (Quiet) — Tim hit this and heard nothing.
-        const kevinMp3MinDisplay = new Promise<void>(resolve => setTimeout(resolve, NONVIDEO_MIN_DISPLAY_MS));
-        await Promise.all([playLocalFile(asset.localUri, undefined, { userInitiated: true }), kevinMp3MinDisplay]);
+        const minDisplay = new Promise<void>(resolve => setTimeout(resolve, NONVIDEO_MIN_DISPLAY_MS));
+        console.log('[greeting] universal greeting path:', { persona: caddiePersonality, greeting });
+        await Promise.all([playLocalFile(asset.localUri, undefined, { userInitiated: true }), minDisplay]);
         naturalEndRef.current = true;
         _greetingCompleteResolve?.();
         prewarmVoice();
