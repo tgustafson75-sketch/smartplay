@@ -274,8 +274,21 @@ export const captureUtterance = async (
     try {
       const FS = await import('expo-file-system/legacy');
       const info = await FS.getInfoAsync(uri);
-      if (!info.exists || ((info as { size?: number }).size ?? 0) < 1024) {
+      const size = (info as { size?: number }).size ?? 0;
+      if (!info.exists || size < 1024) {
         console.log('[voice] capture file too small (<1KB), skipping transcribe');
+        return null;
+      }
+      // 2026-06-06 — Vercel platform request-body limit is 4.5 MB.
+      // Tim's Echo Hills round hit FUNCTION_PAYLOAD_TOO_LARGE on
+      // /api/transcribe. Cap at 3.5 MB client-side to leave headroom
+      // for multipart overhead and avoid the opaque 413 response from
+      // Vercel's edge. At 16kHz mono 32kbps AAC (RECORDING_OPTIONS),
+      // 45s is ~180KB so this is generous — only fires if some OEM
+      // ignored the bitrate setting or auto-stop didn't engage.
+      if (size > 3.5 * 1024 * 1024) {
+        console.log('[voice] capture file too large (', size, 'bytes), skipping transcribe to avoid Vercel 413');
+        logTranscribeError(null, `audio_too_large_${size}_bytes`, { size, source: 'captureUtterance_max_size' });
         return null;
       }
     } catch (e) {

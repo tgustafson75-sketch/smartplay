@@ -29,6 +29,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import { getCaddieName, getCharacterSpec } from '../lib/persona';
+import { getHoleContextBlock, getKnownCoursesBlock, detectCourseInText, detectHoleInText } from '../services/holeContextResolver';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 });
 
@@ -177,6 +178,32 @@ You are in CADDIE mode — on the course, mid-round.
 - Frame: "standing next to the player on the course."
 - Decide-or-defer. Never wander.`;
 
+    // 2026-06-06 — Hole-aware context. ON-COURSE: detect courseId from
+    // the activeCourse name (brain.ts doesn't receive activeCourseId
+    // directly — only the display name), then inject current hole's
+    // bundled data + landmarks. OFF-COURSE: detect "<known course>
+    // hole N" pattern in the user message and inject that hole's
+    // block. Always provide the known-courses summary so the brain
+    // knows which courses it has detailed data for.
+    let _holeContextBlock: string | null = null;
+    let _knownCoursesBlock: string | null = null;
+    if (isRoundActive && typeof currentHole === 'number' && typeof activeCourse === 'string' && activeCourse) {
+      const detectedCourseId = detectCourseInText(activeCourse);
+      if (detectedCourseId) {
+        const block = getHoleContextBlock(detectedCourseId, currentHole);
+        if (block) _holeContextBlock = `LIVE-HOLE DATA (use silently when asked about this hole):\n${block}`;
+      }
+    } else if (!isRoundActive) {
+      const msgText = typeof message === 'string' ? message : '';
+      const detectedCourseId = detectCourseInText(msgText);
+      const detectedHole = detectHoleInText(msgText);
+      if (detectedCourseId && detectedHole) {
+        const block = getHoleContextBlock(detectedCourseId, detectedHole);
+        if (block) _holeContextBlock = `HOLE THE PLAYER ASKED ABOUT (use specific features, not generic theory):\n${block}`;
+      }
+      _knownCoursesBlock = `COURSES IN APP DATA (you have per-hole info for these — refer naturally):\n${getKnownCoursesBlock()}`;
+    }
+
     const systemPrompt = `
 ${language === 'es' ? 'Responde SIEMPRE en español.' : language === 'zh' ? '请始终用中文回复。' : ''}
 
@@ -257,6 +284,7 @@ session, not a live round.
 
 Stay in this mode for the entire conversation until a real round starts.`}
 
+${_holeContextBlock ? `${_holeContextBlock}\n` : ''}${_knownCoursesBlock ? `${_knownCoursesBlock}\n` : ''}
 ${dominantMiss ? `DOMINANT MISS: ${dominantMiss} — factor into target advice silently` : ''}
 ${physicalLimitation ? `PHYSICAL NOTE: ${physicalLimitation} — never suggest movements that aggravate this` : ''}
 ${goal ? `GOAL: ${goal} — reference when relevant` : ''}

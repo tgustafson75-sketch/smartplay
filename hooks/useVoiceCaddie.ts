@@ -1037,8 +1037,20 @@ export const useVoiceCaddie = ({
       try {
         const FS = await import('expo-file-system/legacy');
         const info = await FS.getInfoAsync(uri);
-        if (!info.exists || ((info as { size?: number }).size ?? 0) < 1024) {
+        const size = (info as { size?: number }).size ?? 0;
+        if (!info.exists || size < 1024) {
           console.log('[voice] audio file too small (<1KB), skipping transcribe');
+          wrappedOnVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
+        }
+        // 2026-06-06 — Vercel 4.5 MB request-body cap. Cap client-side
+        // at 3.5 MB to avoid the opaque FUNCTION_PAYLOAD_TOO_LARGE 413
+        // Tim hit at Echo Hills. Surface to /owner-logs so it's
+        // diagnosable when it fires.
+        if (size > 3.5 * 1024 * 1024) {
+          console.log('[voice] audio file too large (', size, 'bytes), skipping transcribe to avoid Vercel 413');
+          logTranscribeError(null, `audio_too_large_${size}_bytes`, { size, source: 'processAudioUri_max_size' });
           wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;
           return;

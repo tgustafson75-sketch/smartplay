@@ -6,6 +6,7 @@ import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
 // the only TTS path. Per-persona voice mapping retained below
 // (nova for Serena, onyx for the rest).
 import { getCaddieName, getCharacterSpec } from '../lib/persona';
+import { getHoleContextBlock, getKnownCoursesBlock, detectCourseInText, detectHoleInText } from '../services/holeContextResolver';
 
 // 2026-05-23 — maxRetries bumped from 1 → 3 after a user-reported
 // API overload incident. Anthropic returns 529 `overloaded_error`
@@ -498,6 +499,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const _persistentPatterns: string | null = typeof persistentPatterns === 'string' && persistentPatterns.trim() ? persistentPatterns.trim() : null;
     const _practiceContext: string | null = typeof practice_context === 'string' && practice_context.trim() ? practice_context.trim() : null;
+    // 2026-06-06 — Hole-aware brain context. ON-COURSE: always inject
+    // current hole's bundled data (par, yardage, F/M/B, landmarks if
+    // known). OFF-COURSE: scan the incoming user message for "<known
+    // course> hole N" patterns and inject that hole's block — lets the
+    // brain reason about specific holes the player asks about
+    // ("Palms hole 1, how would I attack it?"). Plus a one-shot list
+    // of all bundled local courses so the brain knows what data it has.
+    let _holeContextBlock: string | null = null;
+    let _knownCoursesBlock: string | null = null;
+    if (isRoundActive && typeof currentHole === 'number' && activeCourseId) {
+      const block = getHoleContextBlock(activeCourseId, currentHole);
+      if (block) _holeContextBlock = `LIVE-HOLE DATA (use silently when asked about this hole):\n${block}`;
+    } else if (!isRoundActive) {
+      // OFF-COURSE: try to detect a course + hole in the current user message.
+      const msgText = typeof message === 'string' ? message : '';
+      const detectedCourseId = detectCourseInText(msgText);
+      const detectedHole = detectHoleInText(msgText);
+      if (detectedCourseId && detectedHole) {
+        const block = getHoleContextBlock(detectedCourseId, detectedHole);
+        if (block) _holeContextBlock = `HOLE THE PLAYER ASKED ABOUT (use specific features, not generic theory):\n${block}`;
+      }
+      // Always provide the known-courses list off-course so the brain
+      // can mention which courses have detailed data when asked.
+      _knownCoursesBlock = `COURSES IN APP DATA (you have per-hole info for these — refer naturally):\n${getKnownCoursesBlock()}`;
+    }
     type InsightLite = { course?: string; club?: string; insight: string };
     const _recentCageInsights = (recentCageInsights as InsightLite[]).filter(i => typeof i?.insight === 'string').slice(-3);
     const _recentRoundInsights = (recentRoundInsights as InsightLite[]).filter(i => typeof i?.insight === 'string').slice(-3);
@@ -766,6 +792,7 @@ session, not a live round.
 
 Stay in this mode for the entire conversation until a real round starts.`}
 
+${_holeContextBlock ? `${_holeContextBlock}\n` : ''}${_knownCoursesBlock ? `${_knownCoursesBlock}\n` : ''}
 ${wd ? `WATCH SENSOR DATA (silent context):
 Tempo: ${wd.averageTempo}:1 | Fault: ${wd.dominantFault || 'none'} | Early transition: ${wd.earlyTransitionRate}% | Club speed: ${wd.averageClubSpeed} mph | Swings: ${wd.swingCount}` : ''}
 
