@@ -52,10 +52,15 @@ import { logVoiceError, logTranscribeError } from '../services/voiceErrorLog';
 // utterance longer than a single short phrase ("what club"), making
 // open conversation with Kevin ("hey Kevin, I've been thinking about
 // my approach shots") feel like getting timed out mid-sentence.
-// 12s comfortably covers a full thought; users can also tap again to
-// stop early. Pairs with the conversational-default classifier fix so
-// natural chat flows end-to-end without truncation.
-const AUTO_STOP_MS = 12000;
+// 2026-06-05 — Bumped 12s → 45s. Tim's report: longer questions
+// ("on my last shot I was thinking about laying up but ended up
+// going for it, what would you have done in that situation?") were
+// being cut mid-sentence by the 12s hard cap. The silence-VAD at
+// SILENCE_TIMEOUT_MS=4s in services/voiceService.ts is the right
+// "user stopped talking" detector — this hard cap is just the
+// "user wandered away" backstop. 45s comfortably covers any
+// natural question without truncating; user can still tap to stop.
+const AUTO_STOP_MS = 45_000;
 const TRANSCRIBE_TIMEOUT_MS = 15000;
 const BRAIN_TIMEOUT_MS = 30000;
 
@@ -869,7 +874,14 @@ export const useVoiceCaddie = ({
   }, []);
 
   const runFollowUpListenLoop = useCallback(async (): Promise<void> => {
-    const FOLLOW_UP_CAPTURE_MS = 6000;
+    // 2026-06-05 — Bumped 6s → 30s. Same reason as AUTO_STOP_MS above:
+    // this is a HARD cap on total mic-on time, not "stop after user
+    // stops talking" (the 4s silence-VAD in voiceService.captureUtterance
+    // handles that). 6s was killing the mic mid-answer on any follow-up
+    // that needed more than a short reply. 30s gives any thoughtful
+    // answer breathing room; silence-VAD still ends it the moment
+    // the user actually pauses.
+    const FOLLOW_UP_CAPTURE_MS = 30_000;
     const processFollowUp = async (transcript: string): Promise<void> => {
       const trimmed = transcript.trim();
       if (!trimmed) return;
