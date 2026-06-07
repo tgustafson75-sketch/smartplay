@@ -21,7 +21,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-type Persona = 'kevin' | 'serena' | 'harry' | 'tank';
+type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
 type OpenAIVoice = 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer' | 'verse';
 
 const VOICE_BY_PERSONA: Record<Persona, OpenAIVoice> = {
@@ -29,6 +29,10 @@ const VOICE_BY_PERSONA: Record<Persona, OpenAIVoice> = {
   serena: 'nova',
   tank:   'ash',
   harry:  'fable',
+  // Custom caddie: do not pre-render server clips (the user's own
+  // recorded voice plays from local files). 'onyx' here is unused
+  // — the render script's main loop skips persona='custom'.
+  custom: 'onyx',
 };
 
 const ACKS: Array<{ slug: string; text: string }> = [
@@ -53,6 +57,8 @@ async function main(): Promise<void> {
   await fs.mkdir(outRoot, { recursive: true });
 
   for (const persona of Object.keys(VOICE_BY_PERSONA) as Persona[]) {
+    // Skip 'custom' — the user's own voice plays from local clips.
+    if (persona === 'custom') continue;
     const personaDir = path.join(outRoot, persona);
     await fs.mkdir(personaDir, { recursive: true });
     const voice = VOICE_BY_PERSONA[persona];

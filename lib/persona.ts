@@ -4,13 +4,23 @@ import { HARRY_CHARACTER_SPEC } from '../constants/harryCharacter';
 import { TANK_CHARACTER_SPEC } from '../constants/tankCharacter';
 
 export type VoiceGender = 'male' | 'female';
-export type Persona = 'kevin' | 'serena' | 'harry' | 'tank';
+// 2026-06-06 — 'custom' added as 5th persona for the user's
+// self-generated caddie (selfie portrait + recorded voice clips +
+// chosen name). All maps below carry a 'custom' entry that defaults
+// to Kevin-equivalent values so anything downstream that doesn't
+// know about 'custom' degrades gracefully (same fallback strategy
+// resolvePersona has used for unknown strings). The user's chosen
+// NAME lives in playerProfileStore.customCaddieName; UI surfaces
+// that want to show it pull from there directly. getCaddieName
+// returns 'My Caddie' as the static fallback.
+export type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
 
 const PERSONA_NAMES: Record<Persona, string> = {
   kevin: 'Kevin',
   serena: 'Serena',
   harry: 'Harry',
   tank: 'Tank',
+  custom: 'My Caddie',
 };
 
 const PERSONA_SPECS: Record<Persona, string> = {
@@ -18,6 +28,11 @@ const PERSONA_SPECS: Record<Persona, string> = {
   serena: SERENA_CHARACTER_SPEC,
   harry: HARRY_CHARACTER_SPEC,
   tank: TANK_CHARACTER_SPEC,
+  // Custom caddie inherits Kevin's neutral spec — server-side TTS
+  // and brain text fall back to Kevin's voice when the client
+  // doesn't have a user-recorded clip for the response. Local
+  // recorded-clip playback overrides this whenever a clip exists.
+  custom: KEVIN_CHARACTER_SPEC,
 };
 
 const PERSONA_GENDERS: Record<Persona, VoiceGender> = {
@@ -25,6 +40,9 @@ const PERSONA_GENDERS: Record<Persona, VoiceGender> = {
   serena: 'female',
   harry: 'male',
   tank: 'male',
+  // Default gender for server-TTS fallback only. The user's own
+  // recorded voice plays from local clips when available.
+  custom: 'male',
 };
 
 const PERSONA_PRONOUNS: Record<Persona, { subject: string; object: string; possessive: string }> = {
@@ -32,6 +50,10 @@ const PERSONA_PRONOUNS: Record<Persona, { subject: string; object: string; posse
   serena: { subject: 'she', object: 'her', possessive: 'her' },
   harry:  { subject: 'he', object: 'him', possessive: 'his' },
   tank:   { subject: 'he', object: 'him', possessive: 'his' },
+  // Gender-neutral pronouns for the user's custom caddie — works
+  // for any user-chosen identity without forcing a male/female
+  // assumption.
+  custom: { subject: 'they', object: 'them', possessive: 'their' },
 };
 
 // Resolve a Persona | VoiceGender input to a canonical Persona.
@@ -44,7 +66,7 @@ const PERSONA_PRONOUNS: Record<Persona, { subject: string; object: string; posse
 type PersonaInput = Persona | VoiceGender | string | undefined | null;
 
 function resolvePersona(input: PersonaInput): Persona {
-  if (input === 'kevin' || input === 'serena' || input === 'harry' || input === 'tank') return input;
+  if (input === 'kevin' || input === 'serena' || input === 'harry' || input === 'tank' || input === 'custom') return input;
   if (input === 'female') return 'serena';
   return 'kevin';
 }
@@ -73,7 +95,7 @@ export function getCaddiePossessive(input: PersonaInput): string {
   return PERSONA_PRONOUNS[resolvePersona(input)].possessive;
 }
 
-export const ALL_PERSONAS: readonly Persona[] = ['kevin', 'serena', 'harry', 'tank'] as const;
+export const ALL_PERSONAS: readonly Persona[] = ['kevin', 'serena', 'harry', 'tank', 'custom'] as const;
 
 /**
  * Personas exposed in the user-facing UI right now. Harry is currently
@@ -86,7 +108,7 @@ export const ALL_PERSONAS: readonly Persona[] = ['kevin', 'serena', 'harry', 'ta
  * intro picker, suggestion targets). Anything in ALL_PERSONAS but not in
  * ACTIVE_PERSONAS is dormant — type-valid, never shown.
  */
-export const ACTIVE_PERSONAS: readonly Persona[] = ['kevin', 'serena', 'tank'] as const;
+export const ACTIVE_PERSONAS: readonly Persona[] = ['kevin', 'serena', 'tank', 'custom'] as const;
 
 export function isActivePersona(p: Persona): boolean {
   return (ACTIVE_PERSONAS as readonly Persona[]).includes(p);

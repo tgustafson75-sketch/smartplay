@@ -90,6 +90,15 @@ interface PlayerProfileState {
   customCaddiePortraitB64: string | null;
   useCustomCaddie: boolean;
 
+  // 2026-06-06 — User-chosen NAME for the custom caddie. Drives the
+  // display label everywhere the cycler shows 'Custom' as the 5th
+  // persona ("Caddie: <customCaddieName>" toast, the avatar caption
+  // chip on the caddie tab, the Settings persona row). Null → UI
+  // falls back to "My Caddie" so the user can ship the custom
+  // persona without naming it. Set via the custom-caddie screen
+  // name input.
+  customCaddieName: string | null;
+
   // 2026-05-26 — Fix DY: Personal-caddie user-recorded voice clips.
   // Keyed by phrase id from services/customCaddieClips.ts (NOT by the
   // text — text can be re-worded later without orphaning recordings).
@@ -171,6 +180,7 @@ interface PlayerProfileState {
   setSelfieB64: (b: string | null) => void;
   setCustomCaddiePortraitB64: (b: string | null) => void;
   setUseCustomCaddie: (on: boolean) => void;
+  setCustomCaddieName: (name: string | null) => void;
   // 2026-05-26 — Fix DY: clip CRUD. Pass uri=null to clear a phrase.
   setCustomCaddieClip: (phraseId: string, uri: string | null) => void;
   clearAllCustomCaddieClips: () => void;
@@ -228,6 +238,9 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       useCustomCaddie: false,
       // 2026-05-26 — Fix DY default: empty map (no clips recorded yet).
       customCaddieClips: {},
+      // 2026-06-06 — Custom caddie name default null → UI falls back to
+      // "My Caddie" until the user names theirs.
+      customCaddieName: null,
       // 2026-05-22 — Launch-prep T&C acceptance default.
       termsAcceptedAt: null,
       // 2026-05-26 — Fix AB Phase 1: GHIN # default null until captured.
@@ -293,6 +306,10 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setSelfieB64: (b) => set({ selfieB64: b }),
       setCustomCaddiePortraitB64: (b) => set({ customCaddiePortraitB64: b }),
       setUseCustomCaddie: (on) => set({ useCustomCaddie: on }),
+      setCustomCaddieName: (name) => {
+        const trimmed = typeof name === 'string' ? name.trim() : '';
+        set({ customCaddieName: trimmed.length > 0 ? trimmed : null });
+      },
       // 2026-05-26 — Fix DY: clip URI CRUD. uri=null deletes the key
       // entirely so a phrase reverts to "un-recorded" instead of
       // pointing at a stale file path. File deletion is the caller's

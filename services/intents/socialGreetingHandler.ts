@@ -25,7 +25,7 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useSettingsStore } from '../../store/settingsStore';
 
-type Persona = 'kevin' | 'serena' | 'harry' | 'tank';
+type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
 
 const GREETINGS: Record<Persona, string[]> = {
   kevin: [
@@ -53,6 +53,17 @@ const GREETINGS: Record<Persona, string[]> = {
     "Go.",
     "Here.",
     "What do you need?",
+    "Talk to me.",
+    "Go ahead.",
+  ],
+  // Custom caddie greeting pool — neutral / friendly, suitable for
+  // any user-chosen identity. The user's own recorded clip overrides
+  // this when present (see services/quickAckClips.ts pattern for the
+  // recorded-clip resolution path).
+  custom: [
+    "Hey, what's up?",
+    "I'm here. What do you need?",
+    "Right here with you.",
     "Talk to me.",
     "Go ahead.",
   ],

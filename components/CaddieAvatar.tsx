@@ -149,7 +149,7 @@ const TANK_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
   kevin_self_critical: require('../assets/avatars/tank_v2_wtf.png'),
 };
 
-type Persona = 'kevin' | 'serena' | 'harry' | 'tank';
+type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
 
 function getAvatarSet(persona: Persona): Record<AvatarKey, ImageSourcePropType> {
   switch (persona) {
@@ -338,7 +338,7 @@ interface CaddieAvatarProps {
    *  kevin/serena/harry/tank). When omitted, falls back to gender-based
    *  selection for back-compat with older call sites (gender 'male' →
    *  Kevin, 'female' → Serena). New call sites should pass persona. */
-  persona?: 'kevin' | 'serena' | 'harry' | 'tank';
+  persona?: 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
   isOnCourse: boolean;
   isCageMode: boolean;
   voiceState: VoiceState;

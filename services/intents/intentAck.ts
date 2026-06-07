@@ -20,6 +20,10 @@ const ACK_PHRASES: Record<Persona, string[]> = {
   serena: ['Confirmed', 'Got it', 'Noted', 'Understood'],
   tank: ['Roger', 'Locked in', 'Copy', 'Done'],
   harry: ['Yep', 'On it', 'Got you', 'Cool'],
+  // Custom caddie uses the most neutral pool — the user's own voice
+  // clip would override this if recorded, but the text fallback
+  // stays generic to match any persona the user might be modeling.
+  custom: ['Got it', 'On it', 'Sure', 'Okay'],
 };
 
 function pickAckPhrase(persona: Persona): string {

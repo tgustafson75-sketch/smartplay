@@ -597,7 +597,7 @@ export default function CaddieTab() {
     setCastMode: s.setCastMode,
   })));
 
-  const { firstName, goal, subscription_status, trial_started_at, dominantMiss, useCustomCaddie, customCaddiePortraitB64 } = usePlayerProfileStore(useShallow((s) => ({
+  const { firstName, goal, subscription_status, trial_started_at, dominantMiss, useCustomCaddie, customCaddiePortraitB64, customCaddieName } = usePlayerProfileStore(useShallow((s) => ({
     firstName: s.firstName,
     goal: s.goal,
     subscription_status: s.subscription_status,
@@ -605,7 +605,9 @@ export default function CaddieTab() {
     dominantMiss: s.dominantMiss,
     useCustomCaddie: s.useCustomCaddie,
     customCaddiePortraitB64: s.customCaddiePortraitB64,
+    customCaddieName: s.customCaddieName,
   })));
+  const setUseCustomCaddie = usePlayerProfileStore((s) => s.setUseCustomCaddie);
   const activeCustomPortrait = useCustomCaddie ? customCaddiePortraitB64 : null;
   const { skip_briefings, proactive_kevin_enabled } = useSettingsStore(useShallow((s) => ({
     skip_briefings: s.skip_briefings,
@@ -3376,8 +3378,8 @@ export default function CaddieTab() {
                 sub: 'Selfie → AI portrait + voice',
                 action: () => { setShowMoreMenu(false); router.push('/profile/custom-caddie' as never); } },
               { icon: 'people-outline' as IconName,
-                label: `Caddie: ${getCaddieName(caddiePersonality)}`,
-                sub: `Tap to cycle · ${ACTIVE_PERSONAS.map(p => getCaddieName(p)).join(' · ')}`,
+                label: `Caddie: ${caddiePersonality === 'custom' ? (customCaddieName ?? 'My Caddie') : getCaddieName(caddiePersonality)}`,
+                sub: `Tap to cycle · ${ACTIVE_PERSONAS.map(p => p === 'custom' ? (customCaddieName ?? 'My Caddie') : getCaddieName(p)).join(' · ')}`,
                 action: () => {
                   const list = ACTIVE_PERSONAS as readonly Persona[];
                   const idx = list.indexOf(caddiePersonality as Persona);
@@ -3385,6 +3387,10 @@ export default function CaddieTab() {
                   // missed migration), -1 → start at index 0.
                   const next = list[(Math.max(idx, -1) + 1) % list.length];
                   setCaddiePersonality(next);
+                  // 2026-06-06 — Sync useCustomCaddie boolean when cycler
+                  // crosses the 'custom' boundary so the existing avatar +
+                  // voice-clip override paths fire / unfire correctly.
+                  setUseCustomCaddie(next === 'custom');
                 } },
               { icon: 'golf-outline',        label: 'Practice',         sub: 'Cage & swing lab',         action: () => { setShowMoreMenu(false); router.push('/(tabs)/swinglab' as never); } },
               { icon: 'videocam-outline',    label: 'Cage Mode',        sub: 'Range session',            action: () => { setShowMoreMenu(false); if (!canAccess('cage_mode', subscription_status)) { void triggerPaywall('cage_mode', () => router.push('/paywall' as never)); return; } router.push('/cage' as never); } },

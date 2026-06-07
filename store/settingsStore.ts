@@ -4,7 +4,13 @@ import { getPersistStorage } from '../services/ssrSafeStorage';
 
 // ─── Phase 105 — Team Caddie Architecture ─────────────────────────────────────
 
-export type Persona = 'kevin' | 'serena' | 'harry' | 'tank';
+// 2026-06-06 — 'custom' is the user's self-generated caddie (selfie
+// portrait + recorded clips + chosen name). Keep this union in sync
+// with lib/persona.ts. See lib/persona.ts for the canonical maps;
+// this duplicate type literal exists for back-compat with the
+// existing intent-handler imports that already pull Persona from
+// settingsStore.
+export type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
 export type CaddiePillar = 'round' | 'cage' | 'drills' | 'play';
 
 // Per-pillar default assignments. The user can override any pillar in Settings.
@@ -379,7 +385,7 @@ export const useSettingsStore = create<SettingsState>()(
       // Note: Harry is soft-removed from active UI (see lib/persona.ts
       // ACTIVE_PERSONAS) but the intensity entry stays so flipping him
       // back active is a single-line edit.
-      personaIntensity: { kevin: 100, serena: 100, harry: 90, tank: 70 },
+      personaIntensity: { kevin: 100, serena: 100, harry: 90, tank: 70, custom: 100 },
       tankSoftIntro: true,
       glassesConnected: false,
       autoListenEnabled: false,
@@ -630,7 +636,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 9,
+      version: 11,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -653,7 +659,7 @@ export const useSettingsStore = create<SettingsState>()(
           if (p.simpleBriefing == null) p.simpleBriefing = false;
           if (p.tankSoftIntro == null) p.tankSoftIntro = true;
           if (p.personaIntensity == null) {
-            p.personaIntensity = { kevin: 100, serena: 100, harry: 100, tank: 70 };
+            p.personaIntensity = { kevin: 100, serena: 100, harry: 100, tank: 70, custom: 100 };
           }
         }
         // Re-sim P0 #1 + P2 — auto-on simpleBriefing for new users
@@ -714,7 +720,7 @@ export const useSettingsStore = create<SettingsState>()(
           } else {
             // No personaIntensity persisted at all (very old payload that
             // somehow skipped v4 seeding). Seed to mid defaults.
-            p.personaIntensity = { kevin: 100, serena: 100, harry: 90, tank: 70 };
+            p.personaIntensity = { kevin: 100, serena: 100, harry: 90, tank: 70, custom: 100 };
           }
         }
         // v9 — add auto-club prompt persistence and generic auto-club
@@ -733,6 +739,16 @@ export const useSettingsStore = create<SettingsState>()(
         // the user explicitly opts in from Settings.
         if (version < 10) {
           p.earbudTapToTalk = false;
+        }
+        // v11 — 'custom' persona added (user's self-generated caddie).
+        // Seed personaIntensity.custom=100 on existing payloads so the
+        // Record<Persona, number> shape stays complete after the union
+        // widened. Lookup sites also use ?? 100 as a runtime guard, so
+        // this is belt-and-suspenders for older payloads.
+        if (version < 11) {
+          if (p.personaIntensity && (p.personaIntensity as Record<string, number>).custom == null) {
+            p.personaIntensity = { ...p.personaIntensity, custom: 100 };
+          }
         }
         return p as SettingsState;
       },

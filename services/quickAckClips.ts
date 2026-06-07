@@ -34,7 +34,7 @@
  *      mp3 files needs a new build).
  */
 
-type Persona = 'kevin' | 'serena' | 'harry' | 'tank';
+type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
 
 // The 8 default ack strings. Keys MUST match exactly what
 // api/kevin.ts defaults map produces, so the speak path can do a
@@ -79,6 +79,7 @@ const CLIPS: Record<Persona, ClipMap> = {
   serena: { ...EMPTY },
   harry:  { ...EMPTY },
   tank:   { ...EMPTY },
+  custom: { ...EMPTY },
 };
 
 /**
@@ -101,7 +102,7 @@ export function resolveAckClip(text: string | null | undefined, persona: string)
 
 /** Diagnostic — how many clips are actually bundled (per persona). */
 export function bundledAckClipCount(): Record<Persona, number> {
-  const out: Record<Persona, number> = { kevin: 0, serena: 0, harry: 0, tank: 0 };
+  const out: Record<Persona, number> = { kevin: 0, serena: 0, harry: 0, tank: 0, custom: 0 };
   for (const persona of Object.keys(CLIPS) as Persona[]) {
     out[persona] = Object.values(CLIPS[persona]).filter((v) => v != null).length;
   }

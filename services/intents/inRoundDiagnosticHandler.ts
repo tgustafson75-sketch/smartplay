@@ -59,7 +59,7 @@ export const inRoundDiagnosticHandler: IntentHandler = {
     try {
       // Keep this call path persona-safe: if we omit persona, /api/kevin
       // falls back to legacy gender defaults and can drift to Kevin's voice.
-      let persona: 'kevin' | 'serena' | 'harry' | 'tank' = 'kevin';
+      let persona: 'kevin' | 'serena' | 'harry' | 'tank' | 'custom' = 'kevin';
       let voiceGender: 'male' | 'female' = 'male';
       let personaIntensity = 100;
       let tankSoftIntro = false;

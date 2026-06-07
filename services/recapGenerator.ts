@@ -99,7 +99,7 @@ export async function generateRecap(
     // 2026-05-21 — Fix Q: pass active persona so the recap renders in
     // the user's selected caddie's voice + perspective, not the server's
     // voiceGender→Kevin fallback.
-    persona?: 'kevin' | 'serena' | 'harry' | 'tank';
+    persona?: 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
   },
 ): Promise<RoundRecap> {
   const { courseName, courseId, mode, startedAt, endedAt, totalScore, scoreVsPar, scores, shots, courseHoles } = round;

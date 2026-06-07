@@ -59,9 +59,11 @@ export default function CustomCaddieScreen() {
     selfieB64,
     customCaddiePortraitB64,
     useCustomCaddie,
+    customCaddieName,
     setSelfieB64,
     setCustomCaddiePortraitB64,
     setUseCustomCaddie,
+    setCustomCaddieName,
     // 2026-05-26 — Fix DY: recorded-greeting clips.
     // 2026-05-27 — Fix ED: default to {} so users hydrating from a
     // persist snapshot that pre-dates Fix DY can't crash this UI on
@@ -543,12 +545,40 @@ export default function CustomCaddieScreen() {
             </View>
           )}
 
-          {/* Use toggle */}
+          {/* 2026-06-06 — Phase Custom-as-5th-Persona: the previous
+              "Use my custom caddie" Switch toggle is replaced by
+              cycler integration. The custom caddie is now selectable
+              as the 5th persona in the ••• menu's "Caddie:" cycler;
+              picking it there flips useCustomCaddie automatically.
+              The standalone toggle is kept here for back-compat (it
+              still flips the boolean) but is no longer the primary
+              way to activate the custom caddie. */}
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowLabel}>Name your caddie</Text>
+              <Text style={styles.rowSub}>
+                What should they be called? Shown in the persona cycler.
+              </Text>
+            </View>
+          </View>
+          <TextInput
+            value={customCaddieName ?? ''}
+            onChangeText={setCustomCaddieName}
+            placeholder="My Caddie"
+            placeholderTextColor="#6b7d72"
+            style={[styles.nameInput]}
+            maxLength={20}
+            returnKeyType="done"
+          />
+
+          {/* Original toggle preserved so users on the toggle-flow path
+              still work. After cycler integration ships and is tested,
+              this toggle could be removed entirely (Tim's call). */}
           <View style={styles.toggleRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.rowLabel}>Use my custom caddie</Text>
               <Text style={styles.rowSub}>
-                Replaces Kevin&apos;s portrait + slightly tweaks the voice (sped up, toned down).
+                Or pick &quot;{customCaddieName ?? 'My Caddie'}&quot; in the persona cycler (••• menu).
               </Text>
             </View>
             <Switch
@@ -759,6 +789,18 @@ const styles = StyleSheet.create({
   },
   clearBtn: { alignItems: 'center', padding: 14, marginTop: 8 },
   clearBtnText: { color: '#ef4444', fontSize: 13, fontWeight: '600' },
+  nameInput: {
+    backgroundColor: '#0d2418',
+    color: '#f4f4f4',
+    fontSize: 16,
+    fontWeight: '600',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#1e3a28',
+    marginTop: 4,
+    marginBottom: 14,
+  },
   // 2026-05-26 — Fix DY: recorder UI styles. Tighter row layout than
   // the existing image-row pattern because each row only has text +
   // 1-3 tiny icon buttons. Reuses brand-green border / dark bg from

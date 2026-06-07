@@ -108,7 +108,7 @@ export async function analyzeLie(
     // voiceGender only; backend resolvePersona(voiceGender) fell back to
     // Kevin for non-Serena even when Serena/Tank was selected. Threading
     // persona now closes that silent bleed.
-    let _persona: 'kevin' | 'serena' | 'harry' | 'tank' | undefined;
+    let _persona: 'kevin' | 'serena' | 'harry' | 'tank' | 'custom' | undefined;
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mod = require('../store/settingsStore') as typeof import('../store/settingsStore');

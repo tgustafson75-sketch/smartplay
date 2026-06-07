@@ -88,6 +88,9 @@ const PERSONA_DISTINCTIVE_MARKERS: Record<Persona, string[]> = {
   serena: ['Trust your number', 'Smooth swing', 'composed'],
   harry:  ['Take a breath', 'partnership', 'Army medic'],
   tank:   ['Lock it in', 'Send it', 'Marine'],
+  // Custom inherits Kevin's spec — share its markers so the sim
+  // passes without false negatives.
+  custom: ['steady hand', 'friend in the cart'],
 };
 
 for (const p of ALL_PERSONAS) {
@@ -108,6 +111,8 @@ const CROSS_CHECK_NEGATIVE: Record<Persona, string[]> = {
   serena: ['Take a breath', 'Send it'],      // Harry's + Tank's
   harry:  ['Send it', 'Marine cadence'],     // Tank's
   tank:   ['friend in the cart', 'partnership'],  // Kevin's + Harry's distinctive
+  // Custom = Kevin's spec, so the same negative markers apply.
+  custom: ['Send it', 'Lock it in'],
 };
 
 for (const p of ALL_PERSONAS) {

@@ -26,7 +26,7 @@ const rrCounters: Partial<Record<FillerCategory, number>> = {};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-type Persona = 'kevin' | 'serena' | 'harry' | 'tank';
+type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
 
 function voiceHash(persona: Persona, language: string): string {
   // v4 = persona-keyed (was gender-keyed in v3). All male personas

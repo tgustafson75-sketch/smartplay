@@ -117,7 +117,31 @@ export function GlobalToolsMenu() {
     const idx = list.indexOf(caddiePersonality as Persona);
     const next = list[(Math.max(idx, -1) + 1) % list.length];
     setCaddiePersonality(next);
-    useToastStore.getState().show(`Caddie: ${getCaddieName(next)}`);
+    // 2026-06-06 — Custom-caddie sync. Selecting 'custom' in the cycler
+    // IS the way to activate the user's self-generated caddie; flip the
+    // existing useCustomCaddie boolean so the existing avatar-swap +
+    // voice-clip override paths (caddie.tsx, voiceService) fire. When
+    // leaving 'custom' for any other persona, flip it off so the
+    // standard persona's portrait + voice resume cleanly.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const profileMod = require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore');
+      profileMod.usePlayerProfileStore.getState().setUseCustomCaddie(next === 'custom');
+    } catch (e) {
+      console.log('[cyclePersona] custom sync failed (non-fatal):', e);
+    }
+    // Display the user's chosen name when they pick custom (or
+    // "My Caddie" if they haven't named it yet).
+    let displayName = getCaddieName(next);
+    if (next === 'custom') {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const profileMod = require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore');
+        const name = profileMod.usePlayerProfileStore.getState().customCaddieName;
+        if (name && name.trim()) displayName = name.trim();
+      } catch { /* fallback already set */ }
+    }
+    useToastStore.getState().show(`Caddie: ${displayName}`);
     fire(() => undefined);
   };
 

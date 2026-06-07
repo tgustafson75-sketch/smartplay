@@ -47,7 +47,7 @@ interface PresenceContext {
   lastScoreThisHole?: number | null;
   /** Player + persona context — same shape as other /api/kevin calls. */
   playerName?: string | null;
-  persona?: 'kevin' | 'serena' | 'tank' | 'harry' | null;
+  persona?: 'kevin' | 'serena' | 'tank' | 'harry' | 'custom' | null;
   /** 2026-05-28 — Fix FI: swing context for analysis_failed trigger.
    *  Lets the brain reference the club / user's note instead of just
    *  apologizing for a generic failure. */

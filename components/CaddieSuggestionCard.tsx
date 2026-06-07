@@ -28,10 +28,17 @@ const PORTRAIT_FOR: Record<Persona, ImageSourcePropType> = {
   serena: require('../assets/avatars/serena_portrait.jpg'),
   harry:  require('../assets/avatars/harry_portrait.png'),
   tank:   require('../assets/avatars/tank_v2_portrait.png'),
+  // Custom caddie falls back to Kevin's portrait here. The actual
+  // user-generated portrait (customCaddiePortraitB64) is consumed by
+  // CaddieAvatar.tsx + caddie.tsx where it has access to the profile
+  // store; this suggestion card is a teammate-style recommendation
+  // surface that doesn't need the user's own portrait.
+  custom: require('../assets/avatars/kevin_portrait.jpg'),
 };
 
 const NAME_FOR: Record<Persona, string> = {
   kevin: 'Kevin', serena: 'Serena', harry: 'Harry', tank: 'Tank',
+  custom: 'My Caddie',
 };
 
 export default function CaddieSuggestionCard() {

@@ -71,7 +71,7 @@ export async function scanSpace(
   try {
     const timeoutId = setTimeout(() => myController.abort(), REQUEST_TIMEOUT_MS);
     // 2026-05-22 — Fix Q follow-up audit. Threading persona.
-    let _persona: 'kevin' | 'serena' | 'harry' | 'tank' | undefined;
+    let _persona: 'kevin' | 'serena' | 'harry' | 'tank' | 'custom' | undefined;
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mod = require('../store/settingsStore') as typeof import('../store/settingsStore');

@@ -442,7 +442,7 @@ const currentPlaybackVolume = (): number => {
   try {
     const settingsMod = require('../store/settingsStore');
     const s = settingsMod.useSettingsStore.getState();
-    const persona = s.caddiePersonality as 'kevin' | 'serena' | 'harry' | 'tank';
+    const persona = s.caddiePersonality as 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
     const dial = s.personaIntensity?.[persona];
     let base = 1.0;
     if (typeof dial === 'number') {
