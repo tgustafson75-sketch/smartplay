@@ -1399,6 +1399,64 @@ export default function SmartVisionScreen() {
       </View>
       </GestureDetector>
 
+      {/* 2026-06-06 — Phase 4.2: inline Mark Tee / Mark Pin buttons.
+          Tim's pain: the legacy mark workflow lives 3 menus deep
+          (Tools → debug → mark-green screen → confirm → back to caddie).
+          With Mode 1 (Mapbox geometry) the T and P markers already have
+          real lat/lng — these buttons capture the CURRENT marker
+          position and write it to setTeeOverride / setGreenOverride.
+          One tap. Override flows automatically through resolveTeeCoords
+          / resolveGreenCoords → SmartFinder + Caddie + the brain's
+          yardage computations. Mode 2 (curated bundled image) holes
+          don't have lat/lng yet — buttons disabled with a hint until
+          Phase 4.3 auto-calibrate ships. */}
+      {usingGpsTile && projection && courseId && (
+        <View style={styles.markRow}>
+          <TouchableOpacity
+            style={styles.markBtn}
+            onPress={() => {
+              try {
+                const teeGeo = pixelsToLatLng(teePx, projection.center, projection.zoom, projection.bearing);
+                if (!Number.isFinite(teeGeo.lat) || !Number.isFinite(teeGeo.lng)) return;
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const teeMod = require('../services/courseTeeOverrides') as typeof import('../services/courseTeeOverrides');
+                void teeMod.setTeeOverride(courseId, holeIndex, { lat: teeGeo.lat, lng: teeGeo.lng });
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const toastMod = require('../store/toastStore') as typeof import('../store/toastStore');
+                toastMod.useToastStore.getState().show(`Tee marked for hole ${holeIndex}`);
+              } catch (e) {
+                console.log('[smartvision] mark tee failed (non-fatal):', e);
+              }
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="flag-outline" size={16} color="#ffffff" />
+            <Text style={styles.markBtnText}>Mark T</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.markBtn}
+            onPress={() => {
+              try {
+                const pinGeo = pixelsToLatLng(pinPx, projection.center, projection.zoom, projection.bearing);
+                if (!Number.isFinite(pinGeo.lat) || !Number.isFinite(pinGeo.lng)) return;
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const greenMod = require('../services/courseGreenOverrides') as typeof import('../services/courseGreenOverrides');
+                void greenMod.setGreenOverride(courseId, holeIndex, { lat: pinGeo.lat, lng: pinGeo.lng });
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const toastMod = require('../store/toastStore') as typeof import('../store/toastStore');
+                toastMod.useToastStore.getState().show(`Pin marked for hole ${holeIndex}`);
+              } catch (e) {
+                console.log('[smartvision] mark pin failed (non-fatal):', e);
+              }
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="location-outline" size={16} color="#ffffff" />
+            <Text style={styles.markBtnText}>Mark P</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Bottom panel — F/M/B yardages from yellow target. Phase 406:
           on landscape, this becomes a right-side column (flexDirection
           column, fixed width = SIDE_PANEL_W, fills available height);
@@ -1499,6 +1557,22 @@ const styles = StyleSheet.create({
   },
   premiumBadgeText: {
     color: '#F5A623', fontSize: 10, fontWeight: '900', letterSpacing: 0.6,
+  },
+  // 2026-06-06 — Phase 4.2: Mark Tee / Mark Pin button row.
+  markRow: {
+    flexDirection: 'row', justifyContent: 'center', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 8,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  markBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingVertical: 8,
+    backgroundColor: 'rgba(0, 200, 150, 0.85)',
+    borderRadius: 8,
+  },
+  markBtnText: {
+    color: '#ffffff', fontSize: 13, fontWeight: '700', letterSpacing: 0.3,
   },
   canvasFallbackTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
   canvasFallbackSub: { color: '#6b7280', fontSize: 13, textAlign: 'center' },
