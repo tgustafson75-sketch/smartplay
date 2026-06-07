@@ -194,7 +194,7 @@ type MarkerKind = 'T' | 'Y' | 'P';
 
 const MARKER_STYLE: Record<MarkerKind, { bg: string; ring: string; text: string; size: number }> = {
   T: { bg: '#3b82f6', ring: '#1e40af', text: '#ffffff', size: 36 }, // blue tee
-  Y: { bg: '#facc15', ring: '#a16207', text: '#1f2937', size: 40 }, // yellow target
+  Y: { bg: '#facc15', ring: '#a16207', text: '#1f2937', size: 40 }, // yellow target — Phase 4.1: now a cart icon (your position)
   P: { bg: '#ef4444', ring: '#7f1d1d', text: '#ffffff', size: 36 }, // red pin
 };
 
@@ -225,6 +225,10 @@ function Marker({ kind, x, y, draggable, onDrag, onDragEnd }: {
       });
   }, [onDrag, onDragEnd]);
 
+  // 2026-06-06 — Phase 4.1 of on-course resilience sprint. The Y marker
+  // (yardage target) is now rendered as a cart icon so the metaphor
+  // matches Tim's mental model ("tap your position"). T (tee) and P
+  // (pin) keep their letter labels — those are fixed reference points.
   const inner = (
     <View
       style={[
@@ -239,11 +243,17 @@ function Marker({ kind, x, y, draggable, onDrag, onDragEnd }: {
           borderColor: s.ring,
           zIndex: draggable ? 30 : 20,
           elevation: draggable ? 12 : 8,
+          alignItems: 'center',
+          justifyContent: 'center',
         },
       ]}
       hitSlop={{ top: 24, bottom: 24, left: 24, right: 24 }}
     >
-      <Text style={[styles.markerText, { color: s.text, fontSize: s.size * 0.42 }]}>{kind}</Text>
+      {kind === 'Y' ? (
+        <Ionicons name="car-sport" size={Math.round(s.size * 0.62)} color={s.text} />
+      ) : (
+        <Text style={[styles.markerText, { color: s.text, fontSize: s.size * 0.42 }]}>{kind}</Text>
+      )}
     </View>
   );
 
@@ -984,6 +994,55 @@ export default function SmartVisionScreen() {
     teeDragStartRef.current = null;
   }, [holeIndex]);
 
+  // 2026-06-06 — Phase 4.1: tap-to-place gesture. Tapping ANYWHERE on
+  // the canvas (image background, not on a marker — markers have their
+  // own Pan gestures that take touch priority) drops the cart (Y target)
+  // at the tap location. Combined with the cart-icon visual swap, this
+  // is the "tap your position" UX. maxDelta keeps a drag from also
+  // firing this tap (so dragging markers stays clean).
+  const canvasTapGesture = useMemo(() => {
+    return Gesture.Tap()
+      .runOnJS(true)
+      .maxDeltaX(8)
+      .maxDeltaY(8)
+      .onEnd((e) => {
+        const next = clampToCanvas({ x: e.x, y: e.y });
+        setTargetByHole(prev => ({ ...prev, [holeIndex]: next }));
+      });
+  }, [clampToCanvas, holeIndex]);
+
+  // 2026-06-06 — Phase 4.1: GPS-init the cart on hole entry when we
+  // have Mapbox geometry to project against (Mode 1 — usingGpsTile).
+  // For curated bundled-image holes (Mode 2 — Echo Hills, Sunnyvale,
+  // etc.) we have no pixel↔latlng mapping, so we let the existing
+  // pixel-axis interpolation default (midpoint of tee→pin) stand.
+  // Only seeds when the user hasn't yet set their own cart position
+  // for this hole (targetByHole[holeIndex] is undefined). Once they
+  // drag or tap, their pick wins until they leave the screen.
+  useEffect(() => {
+    if (targetByHole[holeIndex]) return; // user already placed cart this session
+    if (!usingGpsTile || !projection) return; // Mode 2 — no projection
+    const fix = getLastFix();
+    if (!fix || !fix.location || typeof fix.location.lat !== 'number' || typeof fix.location.lng !== 'number') return;
+    try {
+      const px = projectToPixels(
+        { lat: fix.location.lat, lng: fix.location.lng },
+        projection.center,
+        projection.zoom,
+        projection.bearing,
+      );
+      // Convert image-pixel-offset (with +y up) to canvas coords.
+      const canvasCoord = clampToCanvas({
+        x: px.x + imageW / 2,
+        y: imageH / 2 - px.y,
+      });
+      setTargetByHole(prev => ({ ...prev, [holeIndex]: canvasCoord }));
+    } catch (e) {
+      console.log('[smartvision] gps-init cart failed (non-fatal):', e);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holeIndex, usingGpsTile, projection?.center, projection?.zoom, projection?.bearing, imageW, imageH]);
+
   // ── Hole nav ────────────────────────────────────────────────────
   const goPrev = () => setHoleIndex(i => Math.max(1, i - 1));
   const goNext = () => setHoleIndex(i => Math.min(totalHoles, i + 1));
@@ -1068,7 +1127,12 @@ export default function SmartVisionScreen() {
           becomes a right-side column. On portrait, vertical flow is
           unchanged. */}
       <View style={{ flexDirection: isSplit ? 'row' : 'column', flex: 1 }}>
-      {/* Image canvas + markers */}
+      {/* Image canvas + markers. Phase 4.1 — wrapped in a GestureDetector
+          with a Tap gesture so tapping the image background drops the
+          cart (Y target) at the tap location. Marker Pan gestures take
+          touch priority because they're attached to individual marker
+          subviews; Tap only fires on background taps. */}
+      <GestureDetector gesture={canvasTapGesture}>
       <View style={{ width: imageW, height: imageH, backgroundColor: themeColors.surface_elevated }}>
         {/* Premium course data badge — visible only when Golfbert
             mapping returned data for this hole. Tells the user the map
@@ -1324,14 +1388,16 @@ export default function SmartVisionScreen() {
           </View>
         )}
 
-        {/* First-time hint */}
+        {/* First-time hint. Phase 4.1 — updated copy: tap-to-place is
+            the new primary interaction; drag still works. */}
         <View pointerEvents="none" style={styles.measureHint}>
           <Ionicons name="hand-left-outline" size={12} color="#facc15" />
-          <Text style={styles.measureHintText}>Drag Y to layup · Drag P to set pin</Text>
+          <Text style={styles.measureHintText}>Tap to place your position · Drag P for pin</Text>
         </View>
 
         {/* 2026-06-04 — Save-strategy bookmark button removed with HolePlan. */}
       </View>
+      </GestureDetector>
 
       {/* Bottom panel — F/M/B yardages from yellow target. Phase 406:
           on landscape, this becomes a right-side column (flexDirection
