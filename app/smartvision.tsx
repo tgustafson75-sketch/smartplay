@@ -62,7 +62,8 @@ import { useSmartVision } from '../contexts/SmartVisionContext';
 import { useTeeOverride } from '../services/courseTeeOverrides';
 import { useGreenOverride } from '../services/courseGreenOverrides';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
-import { getLastFix, subscribeFixChange, resolveGreenCoords, resolveTeeCoords } from '../services/smartFinderService';
+import { getLastFix, subscribeFixChange, resolveGreenCoords, resolveTeeCoords, setMarkedFix } from '../services/smartFinderService';
+import { bumpToActive } from '../services/gpsManager';
 import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbertApi';
 import { hasGolfbertCourseMapping } from '../constants/golfbertCourses';
 import { fetchHoleImagery, computeFitView, getCenteredImageryUrl } from '../services/mapboxImagery';
@@ -1024,6 +1025,57 @@ export default function SmartVisionScreen() {
   // Phase 108-followup — tee drag start ref.
   const teeDragStartRef = useRef<{ x: number; y: number } | null>(null);
 
+  // ── Phase 4.4a/b: Shared cart position + GPS auto-reconcile ─────
+  // When the user TAPS or DRAGS the cart marker, derive the cart's
+  // lat/lng (Mode 1: pixelsToLatLng via projection; Mode 2: 2-anchor
+  // calibration if tee+pin are marked). If derivable, propagate via
+  // setMarkedFix so SmartFinder + the caddie brain + every other
+  // GPS-reading surface sees the same position. Then bumpToActive
+  // so the next live GPS tick arrives in ~1s (instead of up to 20s
+  // in stationary mode) — that fresh fix automatically OVERWRITES
+  // lastFix in gpsManager and the cart "auto-corrects" within
+  // seconds, matching Tim's "if signal returns it auto-corrects" UX.
+  //
+  // No new auto-reconcile listener needed — gpsManager's existing
+  // watchPositionAsync onUpdate writes every tick to lastFix
+  // (overwriting marked positions naturally), so the SECOND tick
+  // after the user's tap IS the reconciliation. We only need to
+  // make sure that tick comes fast.
+  const commitCartCanvas = useCallback((canvasCoord: { x: number; y: number }) => {
+    setTargetByHole(prev => ({ ...prev, [holeIndex]: canvasCoord }));
+    let lat: number | null = null;
+    let lng: number | null = null;
+    if (usingGpsTile && projection) {
+      try {
+        const px = { x: canvasCoord.x - imageW / 2, y: imageH / 2 - canvasCoord.y };
+        const geo = pixelsToLatLng(px, projection.center, projection.zoom, projection.bearing);
+        if (Number.isFinite(geo.lat) && Number.isFinite(geo.lng) && isValidWgs84(geo.lat, geo.lng)) {
+          lat = geo.lat;
+          lng = geo.lng;
+        }
+      } catch (e) {
+        console.log('[smartvision] commit cart Mode 1 derive failed:', e);
+      }
+    } else if (calibration2Anchor) {
+      const geo = projectCanvasToLatLngVia2Anchor(canvasCoord);
+      if (geo && Number.isFinite(geo.lat) && Number.isFinite(geo.lng) && isValidWgs84(geo.lat, geo.lng)) {
+        lat = geo.lat;
+        lng = geo.lng;
+      }
+    }
+    if (lat == null || lng == null) return;
+    try {
+      // Mark accuracy as null — this is a user-placed position, not a
+      // GPS reading. classifyAccuracy treats null accuracy as "no
+      // quality info" so downstream consumers don't claim a precision
+      // we don't have.
+      setMarkedFix(lat, lng, null);
+      bumpToActive('smartvision_cart_tap');
+    } catch (e) {
+      console.log('[smartvision] commit cart setMarkedFix failed:', e);
+    }
+  }, [holeIndex, usingGpsTile, projection, imageW, imageH, calibration2Anchor, projectCanvasToLatLngVia2Anchor]);
+
   const onTargetDrag = useCallback((dx: number, dy: number) => {
     if (!targetCanvas) return;
     if (!targetDragStartRef.current) targetDragStartRef.current = targetCanvas;
@@ -1031,8 +1083,8 @@ export default function SmartVisionScreen() {
       x: targetDragStartRef.current.x + dx,
       y: targetDragStartRef.current.y + dy,
     });
-    setTargetByHole(prev => ({ ...prev, [holeIndex]: next }));
-  }, [targetCanvas, holeIndex, clampToCanvas]);
+    commitCartCanvas(next);
+  }, [targetCanvas, clampToCanvas, commitCartCanvas]);
 
   const onPinDrag = useCallback((dx: number, dy: number) => {
     if (!pinCanvas) return;
@@ -1075,9 +1127,13 @@ export default function SmartVisionScreen() {
       .maxDeltaY(8)
       .onEnd((e) => {
         const next = clampToCanvas({ x: e.x, y: e.y });
-        setTargetByHole(prev => ({ ...prev, [holeIndex]: next }));
+        // 2026-06-06 — Phase 4.4a/b: commitCartCanvas also propagates
+        // the derived lat/lng to setMarkedFix + bumpToActive so the
+        // cart position is shared with SmartFinder / brain and a
+        // fresh live GPS tick arrives within ~1s to auto-reconcile.
+        commitCartCanvas(next);
       });
-  }, [clampToCanvas, holeIndex]);
+  }, [clampToCanvas, commitCartCanvas]);
 
   // 2026-06-06 — Phase 4.1: GPS-init the cart on hole entry when we
   // have Mapbox geometry to project against (Mode 1 — usingGpsTile).
