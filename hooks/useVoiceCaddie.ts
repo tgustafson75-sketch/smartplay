@@ -46,7 +46,7 @@ import { getCourse as getApiCourse, courseSummaryForContext } from '../services/
 import { generatePatternInsights } from '../services/patternDetection';
 import { useGhostStore } from '../store/ghostStore';
 import { useSmartFinderStore } from '../store/smartFinderStore';
-import { logVoiceError, logTranscribeError } from '../services/voiceErrorLog';
+import { logVoiceError, logTranscribeError, logVoiceSilentFail } from '../services/voiceErrorLog';
 
 // ─── CONSTANTS ────────────────────────────
 
@@ -839,6 +839,37 @@ export const useVoiceCaddie = ({
       console.log('[voice] brain error:', err);
       logVoiceError('kevin_response', err);
       try { Vibration.vibrate(120); } catch {}
+      // 2026-06-06 — Phase 3 of on-course resilience sprint. Tim's
+      // Echo Hills round hit this catch ~28 times (cellular died at
+      // the course); user got "Hit a snag" canned every time. Now
+      // first try services/localStatusResponder.tryLocalReply — if
+      // the transcript matches a status pattern (yardage, hole, par,
+      // score, holes left, tee, course, club, handicap), produce a
+      // templated reply from local round state + GPS. Phase 1 device
+      // TTS then speaks it via system voice. Coaching / strategy
+      // questions fall through to the existing "Hit a snag" return.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const responder = require('../services/localStatusResponder') as typeof import('../services/localStatusResponder');
+        const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
+          ? (language as 'en' | 'es' | 'zh')
+          : 'en';
+        const local = responder.tryLocalReply(message, langSafe);
+        if (local) {
+          logVoiceSilentFail('local_responder_hit', {
+            queryType: local.queryType,
+            language: langSafe,
+            transcriptHead: message.slice(0, 60),
+          });
+          return { text: local.text, audioBase64: null, toolAction: null };
+        }
+        logVoiceSilentFail('local_responder_miss', {
+          transcriptHead: message.slice(0, 60),
+          language: langSafe,
+        });
+      } catch (e) {
+        console.log('[voice] localStatusResponder threw (non-fatal):', e);
+      }
       return { text: 'Hit a snag on my end. Try again.', audioBase64: null, toolAction: null };
     }
   };
