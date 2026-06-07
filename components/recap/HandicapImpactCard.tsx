@@ -53,6 +53,13 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
   const [posted, setPosted] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
+  // 2026-06-06 — Phase 6.1 followup: when the viewed round is 9-hole,
+  // scale par + AGS × 2 to produce the 18-hole-equivalent differential.
+  // Without this, the recap card showed differential ≈ −15 next to the
+  // already-correct Index (endRound + rebuild were scaled in 5b722ca
+  // but this card was a separate push path that the audit missed).
+  // Tapping "Update Index?" then pushed the wrong unscaled diff AGAIN.
+  const is9Hole = round?.holesPlayed === 9;
   const result = useMemo(() => {
     if (handicapIndex == null || !round) return null;
     // Best-available rating + slope. Phase Q.5b's getHoleGeometry would be
@@ -70,15 +77,30 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
       hole_stroke_index: Number(h),
     }));
 
-    return computeRoundHandicap({
+    // 9-hole scaling: use 18-hole-equivalent par for course-handicap
+    // math; the computeRoundHandicap helper internally computes AGS
+    // from the 9 holes and a differential from that AGS, so we need
+    // to post-scale the differential AND adjusted-gross-score by ×2
+    // (and the raw_score for the display only — actual user score
+    // stays as-is in the round record).
+    const equivalentPar = is9Hole ? par * 2 : par;
+    const out = computeRoundHandicap({
       handicapIndex,
       courseRating: rating,
       slopeRating: slope,
-      par,
+      par: equivalentPar,
       holes,
       recentDifferentials,
     });
-  }, [handicapIndex, round, courseHoles, recentDifferentials]);
+    if (is9Hole) {
+      return {
+        ...out,
+        adjusted_gross_score: out.adjusted_gross_score * 2,
+        score_differential: Math.round(((113 / slope) * ((out.adjusted_gross_score * 2) - rating)) * 10) / 10,
+      };
+    }
+    return out;
+  }, [handicapIndex, round, courseHoles, recentDifferentials, is9Hole]);
 
   // Sim-report gap #4 — when the player hasn't set their Handicap Index
   // yet, render a small invitation card instead of hiding the surface.

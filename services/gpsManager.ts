@@ -379,13 +379,17 @@ export function setMarkedFix(lat: number, lng: number, accuracy_m: number | null
     timestamp: Date.now(),
   };
   // 2026-06-06 — Mark a "user-marked" timestamp so the next 1-2 live
-  // GPS ticks bypass the outlier-rejection gates in processFix. The
-  // mark may be far from the user's actual GPS (off by 50-300m in
-  // the SmartVision tap-to-place flow), and without this bypass the
-  // legitimate live-fix tick that should auto-reconcile would be
-  // rejected as a jump-outlier (Phase 4.4b auto-correct silently
-  // failed before this fix).
-  userMarkedAt = Date.now();
+  // GPS ticks bypass the outlier-rejection gates in processFix. ONLY
+  // arm the bypass when accuracy_m === null (tap-derived from
+  // SmartVision cart placement). Other setMarkedFix callers — like
+  // the on-course Mark button via forceMarkPosition — pass a REAL
+  // accuracy from a high-accuracy getCurrentPositionAsync and want
+  // the outlier gate to keep filtering bad ticks, NOT trust the
+  // next tick blindly. Self-audit catch: pre-gate, every Mark button
+  // press silently disabled outlier filtering for 10s.
+  if (accuracy_m === null) {
+    userMarkedAt = Date.now();
+  }
   smoothingBuffer = [];
   lastTickAt = Date.now();
   // 2026-06-05 — arm the stale-clear so the user-marked position

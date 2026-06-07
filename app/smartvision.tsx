@@ -1041,6 +1041,13 @@ export default function SmartVisionScreen() {
   // (overwriting marked positions naturally), so the SECOND tick
   // after the user's tap IS the reconciliation. We only need to
   // make sure that tick comes fast.
+  // 2026-06-06 — Auto-reconcile pending flag: when commitCartCanvas
+  // calls setMarkedFix, we want the NEXT live GPS tick (which lands
+  // ~1s later via bumpToActive) to also update the visible cart
+  // pixel + yardages so the on-screen cart moves to GPS truth. Set
+  // here; consumed by the effect below watching markBumpTick.
+  const pendingReconcileAtRef = useRef<number>(0);
+
   const commitCartCanvas = useCallback((canvasCoord: { x: number; y: number }) => {
     setTargetByHole(prev => ({ ...prev, [holeIndex]: canvasCoord }));
     let lat: number | null = null;
@@ -1071,10 +1078,67 @@ export default function SmartVisionScreen() {
       // we don't have.
       setMarkedFix(lat, lng, null);
       bumpToActive('smartvision_cart_tap');
+      // Arm the reconcile flag so the next markBumpTick (live GPS
+      // arrival) projects the new fix back to canvas and snaps the
+      // cart visually + recomputes yardages from GPS truth.
+      pendingReconcileAtRef.current = Date.now();
     } catch (e) {
       console.log('[smartvision] commit cart setMarkedFix failed:', e);
     }
   }, [holeIndex, usingGpsTile, projection, imageW, imageH, calibration2Anchor, projectCanvasToLatLngVia2Anchor]);
+
+  // 2026-06-06 — Auto-reconcile: when a live GPS tick arrives within
+  // 10s of a user mark, project the new GPS position to canvas and
+  // update targetByHole so the cart marker visually moves to GPS
+  // truth AND the yardage memos recompute against the corrected
+  // position. Without this, the cart stayed pinned at the tapped
+  // pixel forever and "auto-reconciles within seconds" was UX-broken
+  // (cross-commit audit bug B).
+  useEffect(() => {
+    if (pendingReconcileAtRef.current === 0) return;
+    if (Date.now() - pendingReconcileAtRef.current > 10_000) {
+      pendingReconcileAtRef.current = 0;
+      return;
+    }
+    const fix = getLastFix();
+    if (!fix || !fix.location) return;
+    let canvasCoord: { x: number; y: number } | null = null;
+    if (usingGpsTile && projection) {
+      try {
+        const px = projectToPixels(
+          { lat: fix.location.lat, lng: fix.location.lng },
+          projection.center, projection.zoom, projection.bearing,
+        );
+        canvasCoord = clampToCanvas({ x: px.x + imageW / 2, y: imageH / 2 - px.y });
+      } catch { /* skip — leave existing target */ }
+    } else if (calibration2Anchor) {
+      // For Mode 2 we need the inverse: lat/lng → canvas. The 2-anchor
+      // calibration only gives canvas → lat/lng. We can derive inverse
+      // by parameterizing along the same axis: t = (geo - teeGeo) /
+      // (greenGeo - teeGeo) in lat or lng (use whichever has larger
+      // delta to avoid division by tiny number). Then canvas = teePx +
+      // t * (pinPx - teePx).
+      const tG = calibration2Anchor.teeGeo;
+      const gG = calibration2Anchor.greenGeo;
+      const dLat = gG.lat - tG.lat;
+      const dLng = gG.lng - tG.lng;
+      const useLat = Math.abs(dLat) > Math.abs(dLng);
+      const t = useLat
+        ? (fix.location.lat - tG.lat) / (dLat || 1)
+        : (fix.location.lng - tG.lng) / (dLng || 1);
+      const tA = calibration2Anchor.teePx;
+      canvasCoord = clampToCanvas({
+        x: tA.x + t * calibration2Anchor.axisDx,
+        y: tA.y + t * calibration2Anchor.axisDy,
+      });
+    }
+    if (canvasCoord) {
+      setTargetByHole(prev => ({ ...prev, [holeIndex]: canvasCoord! }));
+      pendingReconcileAtRef.current = 0;
+      console.log('[smartvision] cart auto-reconciled to live GPS');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markBumpTick]);
 
   const onTargetDrag = useCallback((dx: number, dy: number) => {
     if (!targetCanvas) return;

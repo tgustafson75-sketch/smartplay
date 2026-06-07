@@ -218,6 +218,21 @@ export default function CustomCaddieScreen() {
             setSelfieB64(null);
             setCustomCaddiePortraitB64(null);
             setUseCustomCaddie(false);
+            // 2026-06-06 — Cross-commit audit: if the cycler had landed
+            // on 'custom', leaving it stale means the persona display
+            // says "My Caddie" but the avatar + voice fall back to
+            // Kevin. Sync the cycler back to Kevin on Clear so all
+            // three (label / avatar / voice) match.
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const settingsMod = require('../../store/settingsStore') as typeof import('../../store/settingsStore');
+              const s = settingsMod.useSettingsStore.getState();
+              if (s.caddiePersonality === 'custom') {
+                s.setCaddiePersonality('kevin');
+              }
+            } catch (e) {
+              console.log('[customCaddie] clear → reset persona failed (non-fatal):', e);
+            }
           },
         },
       ],
