@@ -1165,15 +1165,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // returned — high, medium, low confidence, even no_dominant_fault —
     // ship it now and skip the OpenAI + Sonnet 20-40s climb. Library
     // uploads (no tier or tier='full') stay on the full chain.
+    // 2026-06-07 — Quick-tier fast-fail extended to cover Haiku-null.
+    // Previously only short-circuited when winner.parsed != null;
+    // null Haiku output fell through to 30-40s OpenAI+Sonnet
+    // escalation. For tier=quick the user already opted into "speed
+    // wins" — a fast 502 (~5s) lets the user retry on warm Haiku
+    // immediately, much better than waiting 35s for a chain that
+    // often produces the same null result. Library uploads (tier=
+    // 'full') still benefit from full escalation safety net.
     const tier = typeof ctx.tier === 'string' && ctx.tier === 'quick' ? 'quick' : 'full';
-    const quickShortCircuit = tier === 'quick' && winner.parsed != null;
+    const quickShortCircuit = tier === 'quick';
     if (quickShortCircuit) {
       console.log('[swing-analysis] tier=quick short-circuit; skipping OpenAI + Sonnet escalation', {
         winner_provider: winner.provider,
         winner_confidence: winner.parsed?.confidence,
         winner_fault: winner.parsed?.primary_fault,
+        winner_null: winner.parsed == null,
       });
-      escalationReason = (escalationReason ?? '') + '_quick_tier_short_circuit';
+      escalationReason = (escalationReason ?? '') + (
+        winner.parsed != null
+          ? '_quick_tier_short_circuit'
+          : '_quick_tier_fast_fail_haiku_null'
+      );
     }
 
     // Stage 2 — OpenAI gpt-4o (mid-tier escalation)

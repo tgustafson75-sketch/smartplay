@@ -1223,6 +1223,41 @@ interface DerivedInsight {
   nextSwingArrow: string;
 }
 
+// 2026-06-07 — Staged progress copy for the analyzing window. The user
+// previously saw "Analyzing your swing…" frozen for 8-15s; now the
+// copy rotates through stages that match where the pipeline actually
+// is (frame extraction → vision read → biomechanics backfill). UI-only
+// rotation — no plumbing into analyzeSwing — fires while `analyzing`
+// is true and resets on completion. Reduces perceived latency
+// significantly even though wall-clock is unchanged.
+const ANALYZE_STAGE_COPY = [
+  'Pulling key frames…',      // 0-3s
+  'Reading your swing…',       // 3-7s
+  'Mapping the body lines…',   // 7-12s
+  'Almost there…',             // 12s+
+] as const;
+
+function useAnalyzeStageText(analyzing: boolean): string {
+  const [stageIdx, setStageIdx] = useState(0);
+  useEffect(() => {
+    if (!analyzing) {
+      setStageIdx(0);
+      return;
+    }
+    const startedAt = Date.now();
+    setStageIdx(0);
+    const tick = setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < 3_000) setStageIdx(0);
+      else if (elapsed < 7_000) setStageIdx(1);
+      else if (elapsed < 12_000) setStageIdx(2);
+      else setStageIdx(3);
+    }, 500);
+    return () => clearInterval(tick);
+  }, [analyzing]);
+  return ANALYZE_STAGE_COPY[stageIdx];
+}
+
 function InsightCard({
   colors, analyzing, analysisError, analysis, validity, insight, caddieName, dominantMiss, onRetake, onPressDrill,
 }: {
@@ -1242,6 +1277,10 @@ function InsightCard({
   // with a Record-again CTA. No Top Focus, no Drill, no Next Swing
   // Focus — those imply a real read that doesn't exist.
   const showInvalidState = !analyzing && !analysisError && !validity.valid && analysis !== null;
+  // Staged progress copy (Win #10) — rotates through phases while
+  // analyzing is true; gives the user real signal that work is
+  // happening instead of a single frozen "Analyzing your swing…"
+  const stageText = useAnalyzeStageText(analyzing);
 
   return (
     <View style={[styles.card, { backgroundColor: colors.surface_elevated, borderColor: colors.border, marginTop: 10 }]}>
@@ -1256,7 +1295,7 @@ function InsightCard({
           {analyzing ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <ActivityIndicator size="small" color={colors.accent} />
-              <Text style={[styles.bubbleText, { color: colors.text_muted }]}>Analyzing your swing…</Text>
+              <Text style={[styles.bubbleText, { color: colors.text_muted }]}>{stageText}</Text>
             </View>
           ) : analysisError ? (
             <Text style={[styles.bubbleText, { color: colors.text_muted }]}>
