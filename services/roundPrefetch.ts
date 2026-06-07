@@ -34,6 +34,7 @@
 
 import { fetchCourseGeometry } from './courseGeometryService';
 import { fetchCourseContent } from './courseContentService';
+import { fetchCourseIntelligence } from './courseIntelligenceService';
 import type { CourseHole } from '../store/roundStore';
 
 type PrefetchArgs = {
@@ -94,6 +95,26 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<void> {
       console.log('[roundPrefetch] content failed (non-fatal):', e instanceof Error ? e.message : String(e));
     });
 
-  await Promise.allSettled([geometryP, contentP]);
+  // 2026-06-06 — Phase 2.5: also fetch the web-search-grounded
+  // course intelligence brief. Same fire-and-forget contract —
+  // never throws. Result lives in services/courseIntelligenceService's
+  // in-memory mirror + AsyncStorage cache, consumed by
+  // hooks/useVoiceCaddie's brain-call context builder.
+  const courseLocStr = courseLocation
+    ? `${courseLocation.lat.toFixed(4)},${courseLocation.lng.toFixed(4)}`
+    : '';
+  const intelP = fetchCourseIntelligence({
+    courseId,
+    courseName,
+    location: courseLocStr,
+  })
+    .then((r) => {
+      console.log('[roundPrefetch] intelligence done for', courseId, '— source:', r.source, 'chars:', r.intelligence?.length ?? 0);
+    })
+    .catch((e) => {
+      console.log('[roundPrefetch] intelligence failed (non-fatal):', e instanceof Error ? e.message : String(e));
+    });
+
+  await Promise.allSettled([geometryP, contentP, intelP]);
   console.log('[roundPrefetch] complete for', courseId, '— elapsed', Date.now() - startedAt, 'ms');
 }

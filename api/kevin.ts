@@ -367,6 +367,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       smartVisionContext = null,
       activeCourseId = null,
       courseContext = null,
+      // 2026-06-06 — Phase 2.5: web-search-grounded course intelligence
+      // brief, fetched client-side at round start via
+      // services/courseIntelligenceService. ~200-400 char string with
+      // signature holes / character / tactical patterns. Injected
+      // verbatim below so the brain has REAL specifics for unfamiliar
+      // courses instead of guessing from training data.
+      courseIntelligence = null,
       roundMode = 'free_play',
       patternInsights = null,
       ghostContext = null,
@@ -850,6 +857,8 @@ You have access to lookup_course and lookup_hole tools that can fetch real data 
 Do NOT use these tools for casual conversation about golf in general. Only when the user is referencing a specific course or hole. After looking up data, speak naturally — don't read raw API output. Translate yardages and pars into friendly, conversational form.
 
 ${courseContext ? `COURSE LOADED (use this — do not call lookup_hole for current course):\n${String(courseContext)}` : ''}
+
+${courseIntelligence ? `COURSE INTELLIGENCE (pulled from live web search at round start — these are SPECIFICS about THIS course, prefer over generic theory when the player asks about layout / strategy / signature holes):\n${String(courseIntelligence)}` : ''}
 
 ${(() => {
   type PatternInsights = {

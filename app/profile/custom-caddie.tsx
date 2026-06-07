@@ -22,7 +22,6 @@ import {
   Alert,
   ActivityIndicator,
   TextInput,
-  Switch,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -58,7 +57,6 @@ export default function CustomCaddieScreen() {
   const {
     selfieB64,
     customCaddiePortraitB64,
-    useCustomCaddie,
     customCaddieName,
     setSelfieB64,
     setCustomCaddiePortraitB64,
@@ -571,23 +569,21 @@ export default function CustomCaddieScreen() {
             returnKeyType="done"
           />
 
-          {/* Original toggle preserved so users on the toggle-flow path
-              still work. After cycler integration ships and is tested,
-              this toggle could be removed entirely (Tim's call). */}
+          {/* 2026-06-06 — Broken Switch removed. The cycler in the •••
+              menu is now the canonical way to activate the custom
+              caddie ("My Caddie" / chosen name as the 5th persona);
+              the old Switch was disconnected from the persona slider
+              and didn't reliably swap the experience (Tim's report).
+              Picking "{customCaddieName ?? 'My Caddie'}" in the cycler
+              auto-flips useCustomCaddie behind the scenes — no
+              standalone toggle needed. */}
           <View style={styles.toggleRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.rowLabel}>Use my custom caddie</Text>
+              <Text style={styles.rowLabel}>To use this caddie</Text>
               <Text style={styles.rowSub}>
-                Or pick &quot;{customCaddieName ?? 'My Caddie'}&quot; in the persona cycler (••• menu).
+                Open the ••• menu and tap the &quot;Caddie:&quot; row to cycle to &quot;{customCaddieName ?? 'My Caddie'}&quot;.
               </Text>
             </View>
-            <Switch
-              value={useCustomCaddie}
-              onValueChange={setUseCustomCaddie}
-              disabled={!customCaddiePortraitB64}
-              trackColor={{ false: '#1e3a28', true: '#00C896' }}
-              thumbColor={useCustomCaddie ? '#04140c' : '#9ca3af'}
-            />
           </View>
 
           {/* 2026-05-26 — Fix DY: Step 4 — record YOUR voice for the

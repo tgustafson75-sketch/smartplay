@@ -23,6 +23,7 @@ import {
 } from '../services/fillerLibrary';
 import { checkContent } from '../services/contentGuardrail';
 import { resolveAckClip } from '../services/quickAckClips';
+import { resolveGreetingClip } from '../services/quickGreetingClips';
 // 2026-05-21 — Consolidation 4: routine voice traces gated through devLog.
 import { devLog } from '../services/devLog';
 import { isSessionInFlight } from '../services/listeningSession';
@@ -668,6 +669,19 @@ export const useVoiceCaddie = ({
       const penaltyContext = penaltyLines.length > 0 ? penaltyLines.join(' ') : null;
 
       const courseContext = isRoundActive ? courseContextRef.current : null;
+      // 2026-06-06 — Phase 2.5: web-search-grounded course intelligence
+      // brief. Cached client-side by services/courseIntelligenceService
+      // via the round-prefetch path; null when no fetch has landed yet
+      // (off-course, or first turn before prefetch resolves). Read sync
+      // from the module-level memory mirror — no AsyncStorage hop here.
+      let courseIntelligence: string | null = null;
+      try {
+        if (isRoundActive && activeCourseId) {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const intelMod = require('../services/courseIntelligenceService') as typeof import('../services/courseIntelligenceService');
+          courseIntelligence = intelMod.getCachedCourseIntelligenceSync(activeCourseId);
+        }
+      } catch { /* non-fatal — brain still works without intel */ }
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), BRAIN_TIMEOUT_MS);
@@ -701,6 +715,7 @@ export const useVoiceCaddie = ({
           activeCourse,
           activeCourseId,
           courseContext,
+          courseIntelligence,
           roundMode,
           patternInsights,
           ghostContext,
@@ -1342,7 +1357,27 @@ export const useVoiceCaddie = ({
             onResponseReceived(result.voice_response);
             recordKevinTurn(result.voice_response);
             wrappedOnVoiceStateChange('speaking');
-            await speakResponse(result.voice_response);
+            // 2026-06-06 — Pre-rendered greeting clip shortcut. When
+            // the matched intent is social_greeting and the text comes
+            // back as one of the canned per-persona lines, play the
+            // bundled MP3 instead of running /api/voice TTS. Saves the
+            // same ~$0.001 + 400ms as the ack-clip path. Falls through
+            // to speakResponse when no clip matches (e.g. custom
+            // persona, which has no rendered greetings).
+            const greetPersona = useSettingsStore.getState().caddiePersonality ?? 'kevin';
+            const greetClip = intent.intent_type === 'social_greeting'
+              ? resolveGreetingClip(result.voice_response, greetPersona)
+              : null;
+            if (greetClip != null && voiceEnabled) {
+              try {
+                await playLocalFile(greetClip, undefined, { userInitiated: true });
+              } catch (e) {
+                console.log('[voice] greeting clip play failed, falling back to speak:', e);
+                await speakResponse(result.voice_response);
+              }
+            } else {
+              await speakResponse(result.voice_response);
+            }
           }
           if (result.tool_action) onToolAction?.(result.tool_action);
           // 2026-05-25 — Fix Z: when an intent-handler's voice_response
