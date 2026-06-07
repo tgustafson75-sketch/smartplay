@@ -672,14 +672,20 @@ export const useVoiceCaddie = ({
       // 2026-06-06 — Phase 2.5: web-search-grounded course intelligence
       // brief. Cached client-side by services/courseIntelligenceService
       // via the round-prefetch path; null when no fetch has landed yet
-      // (off-course, or first turn before prefetch resolves). Read sync
-      // from the module-level memory mirror — no AsyncStorage hop here.
+      // (off-course, or first turn before prefetch resolves, or cold-
+      // launched mid-round before warm runs). Read sync from the
+      // module-level memory mirror; if miss, fire-and-forget a warm
+      // from AsyncStorage so the NEXT brain call lands the intel.
       let courseIntelligence: string | null = null;
       try {
         if (isRoundActive && activeCourseId) {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const intelMod = require('../services/courseIntelligenceService') as typeof import('../services/courseIntelligenceService');
           courseIntelligence = intelMod.getCachedCourseIntelligenceSync(activeCourseId);
+          if (!courseIntelligence) {
+            // Fire-and-forget warm. Mirror will be populated for next turn.
+            void intelMod.warmCourseIntelligenceMirror(activeCourseId);
+          }
         }
       } catch { /* non-fatal — brain still works without intel */ }
 
@@ -1105,6 +1111,13 @@ export const useVoiceCaddie = ({
     const source = opts?.source ?? 'manual';
     try {
       isProcessingRef.current = true;
+      // 2026-06-06 — Belt-and-suspenders: clear userInterruptedRef at
+      // the top of every fresh processAudioUri so the flag never
+      // latches true across sessions. Already cleared at the START
+      // branch of handleMicPress, but processAudioUri can also be
+      // invoked from the VAD path / programmatic paths that bypass
+      // handleMicPress entirely.
+      userInterruptedRef.current = false;
       wrappedOnVoiceStateChange('thinking');
 
       // 2026-06-05 — File-size guard. Matches the captureUtterance
@@ -1338,9 +1351,16 @@ export const useVoiceCaddie = ({
           }
         }
 
+        // 2026-06-06 — `social_greeting` is NO LONGER excluded here.
+        // It was excluded when the dispatch path routed social_greeting
+        // to the brain (returning success:false). Now that
+        // socialGreetingHandler is registered and returns
+        // success:true + voice_response, treating it as a non-hit was
+        // making the greeting clips dead code AND paying the full
+        // brain round-trip on every "hey kevin". Including it here
+        // makes the local handler reply fire + the greeting clip play.
         const isCommandHit =
           intent.intent_type !== 'unknown' &&
-          intent.intent_type !== 'social_greeting' &&
           intent.intent_type !== 'conversational' &&
           intent.confidence !== 'low' &&
           (result.success || result.follow_up_needed);

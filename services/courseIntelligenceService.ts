@@ -99,6 +99,18 @@ export async function fetchCourseIntelligence(
   if (!courseId || !courseName) {
     return { intelligence: null, source: 'error', cached_at: Date.now() };
   }
+  // 2026-06-06 — apiUrl safety: empty string would build a relative
+  // URL that throws "Network request failed" in RN. Skip the fetch
+  // entirely (returning cache if present) instead of failing silently.
+  if (!apiUrl) {
+    console.log('[courseIntel] no apiUrl — skipping fetch, returning cache only');
+    const cached = await readCache(courseId);
+    if (cached) {
+      memoryMirror.set(courseId, cached);
+      return { intelligence: cached.intelligence, source: 'cache_stale_returned', cached_at: cached.cached_at };
+    }
+    return { intelligence: null, source: 'error', cached_at: Date.now() };
+  }
   // Prefer fresh cache
   const cached = await readCache(courseId);
   if (cached && Date.now() - cached.cached_at < CACHE_TTL_MS) {
@@ -125,9 +137,24 @@ export async function fetchCourseIntelligence(
       }
       return { intelligence: null, source: 'error', cached_at: Date.now() };
     }
-    const data = (await res.json()) as { intelligence?: string | null };
+    const data = (await res.json()) as { intelligence?: string | null; source?: string };
+    // 2026-06-06 — Don't poison cache when the server returned its
+    // 200-with-error fallback (Anthropic failure / quota etc.). Also
+    // belt-and-suspenders catch literal 'UNKNOWN' from an older
+    // deployed instance that didn't normalize server-side.
+    const rawIntel = typeof data.intelligence === 'string' ? data.intelligence.trim() : '';
+    const isServerError = data.source === 'error';
+    const isUnknownSentinel = /^unknown$/i.test(rawIntel);
+    if (isServerError || isUnknownSentinel) {
+      console.log('[courseIntel] skip cache write — server error or UNKNOWN sentinel');
+      if (cached) {
+        memoryMirror.set(courseId, cached);
+        return { intelligence: cached.intelligence, source: 'cache_stale_returned', cached_at: cached.cached_at };
+      }
+      return { intelligence: null, source: 'error', cached_at: Date.now() };
+    }
     const entry: CourseIntelCache = {
-      intelligence: typeof data.intelligence === 'string' && data.intelligence.trim() ? data.intelligence.trim() : null,
+      intelligence: rawIntel.length > 0 ? rawIntel : null,
       cached_at: Date.now(),
     };
     await writeCache(courseId, entry);
@@ -140,5 +167,20 @@ export async function fetchCourseIntelligence(
       return { intelligence: cached.intelligence, source: 'cache_stale_returned', cached_at: cached.cached_at };
     }
     return { intelligence: null, source: 'error', cached_at: Date.now() };
+  }
+}
+
+/**
+ * 2026-06-06 — Cold-start seeder. Reads any persisted cache for
+ * courseId into the in-memory mirror so getCachedCourseIntelligenceSync
+ * works on app cold-launch mid-round (process killed + relaunched)
+ * without waiting for the next prefetch. Called by roundStore on
+ * persist-rehydrate for the active courseId.
+ */
+export async function warmCourseIntelligenceMirror(courseId: string | null | undefined): Promise<void> {
+  if (!courseId) return;
+  const cached = await readCache(courseId);
+  if (cached && Date.now() - cached.cached_at < CACHE_TTL_MS) {
+    memoryMirror.set(courseId, cached);
   }
 }

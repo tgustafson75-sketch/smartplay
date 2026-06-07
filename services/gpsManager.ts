@@ -141,6 +141,15 @@ let batterySaverFloor: GpsMode | null = null;
 let smoothingBuffer: GpsFix[] = [];
 // Phase 107 / B2 — track outlier counts for telemetry.
 let outliersDiscarded = 0;
+// 2026-06-06 — Timestamp of the most recent setMarkedFix call. While
+// (now - userMarkedAt) < USER_MARK_OUTLIER_BYPASS_MS, the next live
+// GPS tick bypasses the jump-outlier + absolute-jump gates so it can
+// reconcile against the user-marked position (which may be 50-300m
+// off the real GPS). Without this bypass the SmartVision tap-to-place
+// flow would lock the marked spot in forever — the legitimate live
+// fix that should auto-correct gets rejected as a jump-outlier.
+let userMarkedAt = 0;
+const USER_MARK_OUTLIER_BYPASS_MS = 10_000;
 
 const subscribers = new Set<Subscriber>();
 
@@ -196,8 +205,14 @@ function processFix(raw: GpsFix): boolean {
     console.log(`[gps:outlier-rejected] accuracy_m=${raw.accuracy_m.toFixed(1)} (>${OUTLIER_ACCURACY_M})`);
     return false;
   }
+  // 2026-06-06 — User-mark bypass: when the user just placed a
+  // position via setMarkedFix (SmartVision tap-to-place), the next
+  // live fix is EXPECTED to jump far from the marked spot — that's
+  // the auto-reconcile. Bypass the outlier gates during
+  // USER_MARK_OUTLIER_BYPASS_MS so the legitimate live fix lands.
+  const userMarkBypassActive = userMarkedAt > 0 && (Date.now() - userMarkedAt) < USER_MARK_OUTLIER_BYPASS_MS;
   // (2) Discard if position jumps > 50m within 5s of the last accepted fix.
-  if (lastFix && (raw.timestamp - lastFix.timestamp) < OUTLIER_JUMP_WINDOW_MS) {
+  if (!userMarkBypassActive && lastFix && (raw.timestamp - lastFix.timestamp) < OUTLIER_JUMP_WINDOW_MS) {
     const jump = haversineMeters(lastFix, raw);
     if (jump > OUTLIER_JUMP_M) {
       outliersDiscarded++;
@@ -210,13 +225,19 @@ function processFix(raw: GpsFix): boolean {
   // many seconds after the last clean fix (slips through gate 2).
   // A golfer can't physically traverse OUTLIER_ABSOLUTE_JUMP_M between
   // watch ticks even at full cart speed (≈4 m/s ⇒ would need ~75s).
-  if (lastFix) {
+  if (!userMarkBypassActive && lastFix) {
     const absoluteJump = haversineMeters(lastFix, raw);
     if (absoluteJump > OUTLIER_ABSOLUTE_JUMP_M) {
       outliersDiscarded++;
       console.log(`[gps:outlier-rejected] absolute_jump_m=${absoluteJump.toFixed(1)} dt_ms=${raw.timestamp - lastFix.timestamp}`);
       return false;
     }
+  }
+  // 2026-06-06 — Clear the bypass once a live fix has actually
+  // landed; subsequent ticks resume normal outlier gating.
+  if (userMarkBypassActive) {
+    userMarkedAt = 0;
+    console.log('[gps:user-mark-bypass] reconcile fix accepted, bypass cleared');
   }
   // Rolling smoothing.
   smoothingBuffer.push(raw);
@@ -357,6 +378,14 @@ export function setMarkedFix(lat: number, lng: number, accuracy_m: number | null
     speed: null,
     timestamp: Date.now(),
   };
+  // 2026-06-06 — Mark a "user-marked" timestamp so the next 1-2 live
+  // GPS ticks bypass the outlier-rejection gates in processFix. The
+  // mark may be far from the user's actual GPS (off by 50-300m in
+  // the SmartVision tap-to-place flow), and without this bypass the
+  // legitimate live-fix tick that should auto-reconcile would be
+  // rejected as a jump-outlier (Phase 4.4b auto-correct silently
+  // failed before this fix).
+  userMarkedAt = Date.now();
   smoothingBuffer = [];
   lastTickAt = Date.now();
   // 2026-06-05 — arm the stale-clear so the user-marked position

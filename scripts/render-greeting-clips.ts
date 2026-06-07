@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-type Persona = 'kevin' | 'serena' | 'harry' | 'tank';
+type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
 type OpenAIVoice = 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer' | 'verse';
 
 const VOICE_BY_PERSONA: Record<Persona, OpenAIVoice> = {
@@ -27,6 +27,10 @@ const VOICE_BY_PERSONA: Record<Persona, OpenAIVoice> = {
   serena: 'nova',
   tank:   'ash',
   harry:  'fable',
+  // 'custom' skipped in the render loop — user's own recorded voice
+  // carries their greetings. Placeholder value here satisfies the
+  // exhaustive Record type.
+  custom: 'onyx',
 };
 
 // MUST stay in sync with services/intents/socialGreetingHandler.ts
@@ -60,6 +64,9 @@ const GREETINGS_BY_PERSONA: Record<Persona, string[]> = {
     "Talk to me.",
     "Go ahead.",
   ],
+  // Custom persona has no server-rendered greetings — empty pool.
+  // The render loop below explicitly skips 'custom' anyway.
+  custom: [],
 };
 
 async function main(): Promise<void> {
@@ -72,6 +79,8 @@ async function main(): Promise<void> {
   await fs.mkdir(outRoot, { recursive: true });
 
   for (const persona of Object.keys(VOICE_BY_PERSONA) as Persona[]) {
+    // Skip 'custom' — user's own voice plays from local clips.
+    if (persona === 'custom') continue;
     const personaDir = path.join(outRoot, persona);
     await fs.mkdir(personaDir, { recursive: true });
     const voice = VOICE_BY_PERSONA[persona];

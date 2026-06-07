@@ -199,11 +199,18 @@ export default function Settings() {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const calcMod = require('../services/handicapCalculator') as typeof import('../services/handicapCalculator');
       const rounds = roundMod.useRoundStore.getState().roundHistory;
-      const eligible = rounds.filter(r => r.holesPlayed >= 9 && r.totalScore > 0);
+      // 2026-06-06 — Phase 6.1 followup: match the rebuild filter
+      // (exactly 9 OR exactly 18 holes — no partial 10-17). Previously
+      // partials passed the gate then got silently dropped by
+      // rebuildDifferentialsFromHistory, surfacing as "Could not
+      // compute" with no explanation.
+      const eligible = rounds.filter(
+        r => (r.holesPlayed === 9 || r.holesPlayed === 18) && r.totalScore > 0,
+      );
       if (eligible.length < 3) {
         Alert.alert(
           'Need more rounds',
-          `Recalculation needs at least 3 rounds of 9+ holes. You have ${eligible.length}. Play more rounds or import past rounds (Settings → Help → Import Past Round).`,
+          `Recalculation needs at least 3 complete 9- or 18-hole rounds. You have ${eligible.length}. Play more rounds or import past rounds (Settings → Help → Import Past Round). Partial rounds (10-17 holes) aren't counted.`,
         );
         return;
       }
@@ -1105,7 +1112,17 @@ export default function Settings() {
 
           {/* PER-PERSONA INTENSITY DIAL — slider per caddie. Default Tank=70,
               Harry=90, Kevin/Serena=100. */}
-          {ACTIVE_PERSONAS.map((p, idx, arr) => (
+          {ACTIVE_PERSONAS.map((p, idx, arr) => {
+            // 2026-06-06 — Display the user's chosen custom caddie name
+            // here instead of the static "My Caddie" fallback. Also
+            // belt-and-suspenders `?? 100` for personaIntensity reads
+            // in case a hydrated payload missed the v11 seed.
+            const customName = p === 'custom'
+              ? (usePlayerProfileStore.getState().customCaddieName ?? 'My Caddie')
+              : null;
+            const displayName = customName ?? getCaddieName(p);
+            const intensityVal = personaIntensity[p] ?? 100;
+            return (
             <View
               key={p}
               style={[
@@ -1114,31 +1131,32 @@ export default function Settings() {
               ]}
             >
               <View style={{ flex: 1 }}>
-                <Text style={labelStyle}>{getCaddieName(p)}</Text>
+                <Text style={labelStyle}>{displayName}</Text>
                 <Text style={subStyle}>
-                  {`Volume + cadence (${personaIntensity[p]}/100). Lower = quieter, fewer signature phrases.`}
+                  {`Volume + cadence (${intensityVal}/100). Lower = quieter, fewer signature phrases.`}
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 <TouchableOpacity
-                  onPress={() => setPersonaIntensity(p, Math.max(0, personaIntensity[p] - 10))}
+                  onPress={() => setPersonaIntensity(p, Math.max(0, intensityVal - 10))}
                   style={[styles.intensityStep, { borderColor: colors.border }]}
                   accessibilityRole="button"
-                  accessibilityLabel={`Lower ${getCaddieName(p)} intensity`}
+                  accessibilityLabel={`Lower ${displayName} intensity`}
                 >
                   <Text style={[styles.intensityStepText, { color: colors.text_primary }]}>−</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => setPersonaIntensity(p, Math.min(100, personaIntensity[p] + 10))}
+                  onPress={() => setPersonaIntensity(p, Math.min(100, intensityVal + 10))}
                   style={[styles.intensityStep, { borderColor: colors.border }]}
                   accessibilityRole="button"
-                  accessibilityLabel={`Raise ${getCaddieName(p)} intensity`}
+                  accessibilityLabel={`Raise ${displayName} intensity`}
                 >
                   <Text style={[styles.intensityStepText, { color: colors.text_primary }]}>+</Text>
                 </TouchableOpacity>
               </View>
             </View>
-          ))}
+            );
+          })}
 
           <PillRow
             label="Distance Unit"

@@ -57,7 +57,10 @@ console.log('\n=== Scenario 1: persona resolution ===');
 
 for (const p of ALL_PERSONAS) {
   const name = getCaddieName(p);
-  const expected = p.charAt(0).toUpperCase() + p.slice(1);
+  // 2026-06-06 — 'custom' resolves to the static "My Caddie"
+  // fallback (user-chosen names live in the runtime profile store,
+  // not in lib/persona). All other personas capitalize from key.
+  const expected = p === 'custom' ? 'My Caddie' : p.charAt(0).toUpperCase() + p.slice(1);
   check(`getCaddieName('${p}')`, name === expected, `expected '${expected}', got '${name}'`);
 }
 
@@ -70,10 +73,11 @@ check('getCaddieName(null)', getCaddieName(null) === 'Kevin', `expected 'Kevin',
 check('getCaddieName(undefined)', getCaddieName(undefined) === 'Kevin', `expected 'Kevin', got '${getCaddieName(undefined)}'`);
 check('getCaddieName("garbage")', getCaddieName('garbage') === 'Kevin', `expected 'Kevin', got '${getCaddieName('garbage')}'`);
 
-// Pronoun helpers — Tank/Harry are male personas (pronouns "he/him/his")
+// Pronoun helpers — Tank/Harry/Kevin male, Serena female, Custom they/them
+// (gender-neutral so any user-chosen identity works).
 for (const p of ALL_PERSONAS) {
-  const expectedSubj = p === 'serena' ? 'she' : 'he';
-  const expectedPos = p === 'serena' ? 'her' : 'his';
+  const expectedSubj = p === 'serena' ? 'she' : p === 'custom' ? 'they' : 'he';
+  const expectedPos = p === 'serena' ? 'her' : p === 'custom' ? 'their' : 'his';
   check(`getCaddieSubject('${p}')`, getCaddieSubject(p) === expectedSubj, `expected '${expectedSubj}', got '${getCaddieSubject(p)}'`);
   check(`getCaddiePossessive('${p}')`, getCaddiePossessive(p) === expectedPos, `expected '${expectedPos}', got '${getCaddiePossessive(p)}'`);
 }

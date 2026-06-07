@@ -1164,8 +1164,12 @@ export default function SmartVisionScreen() {
     } catch (e) {
       console.log('[smartvision] gps-init cart failed (non-fatal):', e);
     }
+    // 2026-06-06 — markBumpTick added so the effect re-runs when a
+    // GPS fix lands AFTER mount. Without it, opening SmartVision
+    // before the first fix arrives left the cart stuck at the
+    // midpoint default for the rest of the hole.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [holeIndex, usingGpsTile, projection?.center, projection?.zoom, projection?.bearing, imageW, imageH]);
+  }, [holeIndex, usingGpsTile, projection?.center, projection?.zoom, projection?.bearing, imageW, imageH, markBumpTick]);
 
   // ── Hole nav ────────────────────────────────────────────────────
   const goPrev = () => setHoleIndex(i => Math.max(1, i - 1));

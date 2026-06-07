@@ -907,7 +907,12 @@ export const useRoundStore = create<RoundState>()(
         // estimated index without pretending to be exactly USGA-correct.
         // Requires 9+ holes (matches endRound's gate) to count for
         // handicap purposes.
-        if (input.holesPlayed >= 9) {
+        // 2026-06-06 — Phase 6.1 followup: tighten filter to 9 OR 18
+        // exact (no partial 10-17), and double 9-hole totalScore as
+        // the 18-hole-equivalent before differential math. Previously
+        // 9-hole imports got differential ≈ −32 against neutral 72.0
+        // and dragged the estimated Index way down.
+        if (input.holesPlayed === 9 || input.holesPlayed === 18) {
           try {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             const profileMod = require('./playerProfileStore');
@@ -917,7 +922,8 @@ export const useRoundStore = create<RoundState>()(
             // Differential from total score against the neutral course
             // baseline. Skip per-hole AGS cap since imported rounds
             // don't carry per-hole pars (just totals).
-            const diff = calcMod.computeScoreDifferential(input.totalScore, 72.0, 113);
+            const adjustedScore = input.holesPlayed === 9 ? input.totalScore * 2 : input.totalScore;
+            const diff = calcMod.computeScoreDifferential(adjustedScore, 72.0, 113);
             profile.pushDifferential(diff);
             if (profile.handicap_index != null) {
               const after = calcMod.estimateNewIndex([...profile.recent_differentials, diff]);
@@ -1142,7 +1148,16 @@ export const useRoundStore = create<RoundState>()(
         // Falls back to defaults (rating 72.0, slope 113) for local
         // courses without confirmed rating data — keeps the differential
         // honest enough to trend rather than be exactly USGA-correct.
-        if (holesPlayed >= 9) {
+        // 2026-06-06 — Phase 6.1 followup: only post differentials for
+        // complete 9 OR 18 hole rounds. Partial 10-17 hole rounds were
+        // previously admitted via `holesPlayed >= 9` and shoved a
+        // misleading differential (raw partial-score against neutral
+        // 72.0 rating) into the rolling pool. Match the rebuild filter
+        // tightening in services/handicapCalculator.ts. 9-hole rounds
+        // also need the ×2 scaling — previously a 40-stroke 9-hole
+        // round computed differential ≈ −32 against the 72.0 baseline
+        // and dragged the estimated Index into negative territory.
+        if (holesPlayed === 9 || holesPlayed === 18) {
           try {
             const profileMod = require('./playerProfileStore');
             const profile = profileMod.usePlayerProfileStore.getState();
@@ -1161,32 +1176,37 @@ export const useRoundStore = create<RoundState>()(
             // anchors to the neutral baseline.
             const courseRating = 72.0;
             const slopeRating = 113;
+            // For 9-hole rounds, parTotal carries 9 holes (~36). To
+            // keep the differential math comparable to 18-hole rounds
+            // we double the AGS and treat it as the 18-hole-equivalent
+            // (see services/handicapCalculator.ts:212-238 for the same
+            // approach in the rebuild path).
+            const is9 = holesPlayed === 9;
             const parTotal = holes.reduce((a, h) => a + h.par, 0);
+            const equivalentPar = is9 ? parTotal * 2 : parTotal;
 
             if (profile.handicap_index != null && holes.length > 0) {
-              const result = calcMod.computeRoundHandicap({
-                handicapIndex: profile.handicap_index,
-                courseRating,
-                slopeRating,
-                par: parTotal,
-                holes,
-                recentDifferentials: profile.recent_differentials,
-              });
-              profile.pushDifferential(result.score_differential);
-              // Refresh handicap_index from post-push differentials.
+              const courseHandicap = calcMod.computeCourseHandicap(
+                profile.handicap_index, courseRating, slopeRating, equivalentPar,
+              );
+              const ags = calcMod.computeAdjustedGrossScore(holes, courseHandicap);
+              const equivalentAgs = is9 ? ags * 2 : ags;
+              const scoreDifferential = calcMod.computeScoreDifferential(equivalentAgs, courseRating, slopeRating);
+              profile.pushDifferential(scoreDifferential);
               const after = calcMod.estimateNewIndex(
-                [...profile.recent_differentials, result.score_differential],
+                [...profile.recent_differentials, scoreDifferential],
               );
               if (after?.newIndex != null && Number.isFinite(after.newIndex)) {
                 profile.setHandicapIndex(after.newIndex);
               }
-              console.log(`[handicap] differential=${result.score_differential.toFixed(1)} newIndex=${after?.newIndex ?? '?'}`);
+              console.log(`[handicap] holesPlayed=${holesPlayed} differential=${scoreDifferential.toFixed(1)} newIndex=${after?.newIndex ?? '?'}`);
             } else if (holes.length > 0) {
               // No index yet — still push the differential so when the
               // user enters their starting Index, recent_differentials
               // is already populated.
               const ags = calcMod.computeAdjustedGrossScore(holes, 18);
-              const diff = calcMod.computeScoreDifferential(ags, courseRating, slopeRating);
+              const equivalentAgs = is9 ? ags * 2 : ags;
+              const diff = calcMod.computeScoreDifferential(equivalentAgs, courseRating, slopeRating);
               profile.pushDifferential(diff);
               console.log(`[handicap] differential=${diff.toFixed(1)} (no index yet)`);
             }
