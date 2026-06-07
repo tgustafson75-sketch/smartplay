@@ -65,14 +65,21 @@ import { logVoiceError, logTranscribeError, logVoiceSilentFail } from '../servic
 // "user wandered away" backstop. 45s comfortably covers any
 // natural question without truncating; user can still tap to stop.
 const AUTO_STOP_MS = 45_000;
-// 2026-06-06 — Bumped 15s → 25s and 30s → 45s. Cold-start on the
-// first tap of the session (Lambda warm, Anthropic SDK warm, TLS
-// hot) was hitting the 15s transcribe cap or the 30s brain cap and
-// surfacing "That took too long" on the very first question. Both
-// caps now have generous cold-start headroom; warm subsequent turns
-// still finish in <2s and aren't penalized.
-const TRANSCRIBE_TIMEOUT_MS = 25000;
-const BRAIN_TIMEOUT_MS = 45000;
+// 2026-06-07 — Bumped 25s → 40s and 45s → 60s. Tim still hits
+// "That took too long" on the first interaction after a fresh app
+// launch. Root cause: services/voiceWarmup pre-hits /api/transcribe
+// via openai.audio.speech.create (TTS) — which warms the SDK + TLS
+// layer but NOT Whisper itself (Whisper is a separate OpenAI model
+// with its own first-call cold-start, typically 5-10s). So the first
+// real transcribe pays:
+//   Lambda warm (good) + Whisper cold (5-10s) + audio upload (1-3s)
+//   + Whisper inference (1-3s) = could exceed 25s on slow cellular.
+// 40s gives generous headroom for that combined window. Brain
+// pushed to 60s for symmetry — the brain prompt cache hit varies
+// with conversation history size, and the prior 45s could clip
+// the first cold-Sonnet turn on a long context.
+const TRANSCRIBE_TIMEOUT_MS = 40000;
+const BRAIN_TIMEOUT_MS = 60000;
 
 // 2026-06-06 — handleMicPress silence-VAD config. Mirrors the
 // SILENCE_DB_THRESHOLD / SPEECH_DETECT_DB / SILENCE_TIMEOUT_MS in

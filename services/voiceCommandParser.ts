@@ -22,7 +22,15 @@ export async function parseVoiceIntent(
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    // 2026-06-07 — Bumped 8s → 15s. The classifier runs on Anthropic
+    // Haiku via Vercel Lambda — cold-start can exceed 8s on first
+    // interaction even after voiceWarmup pings the SDK. Abort at 8s
+    // was returning 'unknown' confidence:'low', falling through to
+    // the brain — adding the full /api/kevin round-trip on top of
+    // the already-slow classifier wait. 15s lets the classifier
+    // finish cleanly on cold start; subsequent warm calls still
+    // resolve in ~200-500ms.
+    const timeout = setTimeout(() => controller.abort(), 15000);
 
     // 2026-05-21 — Fix Q: pass persona so the classifier's follow-up
     // question (when emitted) is styled in the active caddie's voice.

@@ -26,22 +26,41 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 2026-06-04 — Pre-warm. Client hits this with ?mode=warmup after
-  // splash completes so the OpenAI SDK + TLS to api.openai.com are
-  // hot when the first real transcribe lands. Note: query param (not
-  // body) because this handler disables bodyParser (formidable parses
-  // multipart later). openai.audio.speech.create warms the SAME SDK
-  // HTTP layer that openai.audio.transcriptions.create uses, so this
-  // primes Whisper's connection too. Mirrors api/voice.ts shape.
+  // 2026-06-04 / 2026-06-07 — Pre-warm. Client hits this with
+  // ?mode=warmup after splash completes. Now ALSO hits Whisper
+  // directly with a 1-byte WAV so the FIRST real transcribe doesn't
+  // pay a 5-10s Whisper cold-start (Tim's "took too long" report on
+  // first interaction — TTS warm doesn't transitively warm Whisper).
+  // Total cost: ~$0.0002 (TTS single space + ~0.001s Whisper on
+  // empty audio). Fire-and-forget if Whisper warmup rejects; the
+  // SDK + TLS warm already provided most of the win.
   if (req.query?.mode === 'warmup') {
     try {
-      const mp3 = await openai.audio.speech.create({
+      const ttsP = openai.audio.speech.create({
         model: 'gpt-4o-mini-tts',
         voice: 'onyx',
         input: ' ',
+      }).then(mp3 => mp3.arrayBuffer());
+      // Tiny silent WAV (44-byte header + 0 samples). Whisper accepts
+      // it and returns an empty transcription — model gets paged in,
+      // first real transcribe lands on hot Whisper. PCM 16-bit mono
+      // 8kHz so the file is genuinely 44 bytes. File uploaded via
+      // the SDK's File polyfill.
+      const silentWav = Buffer.from([
+        0x52,0x49,0x46,0x46, 0x24,0x00,0x00,0x00, 0x57,0x41,0x56,0x45,
+        0x66,0x6d,0x74,0x20, 0x10,0x00,0x00,0x00, 0x01,0x00,0x01,0x00,
+        0x40,0x1f,0x00,0x00, 0x80,0x3e,0x00,0x00, 0x02,0x00,0x10,0x00,
+        0x64,0x61,0x74,0x61, 0x00,0x00,0x00,0x00,
+      ]);
+      const warmupFile = new File([new Uint8Array(silentWav)], 'warmup.wav', { type: 'audio/wav' });
+      const whisperP = openai.audio.transcriptions.create({
+        model: 'whisper-1',
+        file: warmupFile,
+      }).then(() => undefined).catch((e) => {
+        console.log('[transcribe] whisper warmup failed (non-fatal):', e instanceof Error ? e.message : String(e));
       });
-      await mp3.arrayBuffer();
-      console.log('[transcribe] warmup completed (OpenAI SDK hot)');
+      await Promise.allSettled([ttsP, whisperP]);
+      console.log('[transcribe] warmup completed (TTS + Whisper hot)');
     } catch (e) {
       console.log('[transcribe] warmup failed (non-fatal):', e instanceof Error ? e.message : String(e));
     }
