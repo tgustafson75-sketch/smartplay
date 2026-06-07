@@ -60,7 +60,6 @@ export default function Scorecard() {
   const isCompetition = useRoundStore(s => s.isCompetition);
   const currentRoundId = useRoundStore(s => s.currentRoundId);
   const roundHistory = useRoundStore(s => s.roundHistory);
-  const setCurrentHole = useRoundStore(s => s.setCurrentHole);
   const logScore = useRoundStore(s => s.logScore);
   const logPutts = useRoundStore(s => s.logPutts);
   const logShot = useRoundStore(s => s.logShot);
@@ -341,10 +340,23 @@ export default function Scorecard() {
     const fill = hasScore ? SCORE_FILL(diff) : 'transparent';
 
     return (
+      // 2026-06-06 — Phase 5 of on-course resilience sprint. Removed
+      // the row-tap navigation (was: onPress → setCurrentHole(h.hole)).
+      // Tim's perception: tapping a scorecard row "felt like scoring
+      // drove the hole change" because the row tap fires the hole-
+      // transition speak ("Hole 5. Par 4..."). Now scorecard is a
+      // pure VIEWING surface: row press shows visual feedback (still
+      // a touchable for accessibility / future score-detail expansion)
+      // but doesn't change the round's current-hole pointer. The
+      // border-left accent on the current row reflects the ACTUAL
+      // round state, not which row the user just tapped. Score
+      // editing (+/-) is unaffected — those have e.stopPropagation
+      // and call logScore directly. To navigate, use the cockpit
+      // stepper, DataStrip arrows, or voice "I'm on hole N".
       <TouchableOpacity
         key={h.hole}
-        onPress={() => isRoundActive && setCurrentHole(h.hole)}
-        activeOpacity={isRoundActive ? 0.7 : 1}
+        onPress={() => {}}
+        activeOpacity={isRoundActive ? 0.85 : 1}
         style={[
           styles.holeRow,
           { backgroundColor: c.surface, borderBottomColor: c.border },

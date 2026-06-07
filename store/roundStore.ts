@@ -1440,6 +1440,18 @@ export const useRoundStore = create<RoundState>()(
               console.log('[roundStore] per-hole intro failed (non-fatal):', e);
             }
           }
+          // 2026-06-06 — Phase 5 of on-course resilience sprint. Visible
+          // banner on every real hole transition. Doubles up the audible
+          // "Hole 7. Par 4..." announcement and works even when audio is
+          // suppressed (trust=1 Quiet, voiceEnabled=false) or audio is
+          // failing (cellular dead — see Phase 1 device-TTS fallback).
+          // Tim's perception fix: makes a deliberate transition feel
+          // unambiguous rather than buried in audio.
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const toastMod = require('./toastStore') as typeof import('./toastStore');
+            toastMod.useToastStore.getState().show(`Now on hole ${clamped}`);
+          } catch { /* non-fatal */ }
         }
         // Notify holeDetection of manual override so its sustained-position
         // window doesn't immediately race against the user's pick.
