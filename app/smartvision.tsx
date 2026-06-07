@@ -55,6 +55,12 @@ import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSmartVision } from '../contexts/SmartVisionContext';
+// 2026-06-06 — Phase 4.3: reactive reads of marked tee/green geo
+// anchors. When both exist for a Mode 2 (curated bundled-image) hole,
+// we can build a 2-point pixel↔lat/lng calibration and produce real
+// haversine yardages instead of the pixel-axis interpolation fallback.
+import { useTeeOverride } from '../services/courseTeeOverrides';
+import { useGreenOverride } from '../services/courseGreenOverrides';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { getLastFix, subscribeFixChange, resolveGreenCoords, resolveTeeCoords } from '../services/smartFinderService';
 import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbertApi';
@@ -768,6 +774,12 @@ export default function SmartVisionScreen() {
   const teePx = useMemo(() => ({ x: teeCanvas.x - imageW / 2, y: imageH / 2 - teeCanvas.y }), [teeCanvas, imageW, imageH]);
   const pinPx = useMemo(() => ({ x: pinCanvas.x - imageW / 2, y: imageH / 2 - pinCanvas.y }), [pinCanvas, imageW, imageH]);
 
+  // Phase 4.3 calibration hook reads. The full calibration memo lives
+  // below `usingGpsTile` (which it gates on) — but the hook calls must
+  // run unconditionally at the same hook position every render.
+  const teeOverrideGeo = useTeeOverride(courseId, holeIndex);
+  const greenOverrideGeo = useGreenOverride(courseId, holeIndex);
+
   // 2026-05-19 — Live player position (you-are-here cart marker).
   // Splits its positioning logic by render substrate:
   //   - Aerial / Golfbert satellite tile: projection-based math —
@@ -816,6 +828,35 @@ export default function SmartVisionScreen() {
   // or no geometry) — that branch is unchanged.
   const usingGpsTile = projection != null && !!imageUri;
 
+  // ── Phase 4.3: 2-point pixel↔lat/lng calibration for Mode 2 holes ──
+  // When the user has marked BOTH tee and green for a curated bundled-
+  // image hole (Mode 2, no Mapbox projection), we have:
+  //   - teeCanvas pixel + teeOverrideGeo lat/lng (anchor A)
+  //   - pinCanvas pixel + greenOverrideGeo lat/lng (anchor B)
+  // That's enough to compute pixel → lat/lng for any other pixel via
+  // axis projection + linear interpolation. Treats the tee→pin axis as
+  // the hole's geographic line; perpendicular drift is collapsed onto
+  // the axis (1D approximation). Sufficient for Tim's "~10 yard
+  // accuracy" target on straight par 4/5 holes; Phase 4.4 will add
+  // GPS-fix reconciliation to compensate for dogleg lateral.
+  const calibration2Anchor = useMemo(() => {
+    if (usingGpsTile) return null;
+    if (!teeOverrideGeo || !greenOverrideGeo) return null;
+    const teePxA = { x: teeCanvas.x, y: teeCanvas.y };
+    const pinPxA = { x: pinCanvas.x, y: pinCanvas.y };
+    const dx = pinPxA.x - teePxA.x;
+    const dy = pinPxA.y - teePxA.y;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq < 1) return null;
+    return { teePx: teePxA, teeGeo: teeOverrideGeo, greenGeo: greenOverrideGeo, axisDx: dx, axisDy: dy, axisLenSq: lenSq };
+  }, [usingGpsTile, teeOverrideGeo, greenOverrideGeo, teeCanvas.x, teeCanvas.y, pinCanvas.x, pinCanvas.y]);
+  const projectCanvasToLatLngVia2Anchor = useCallback((canvasPx: { x: number; y: number }): { lat: number; lng: number } | null => {
+    if (!calibration2Anchor) return null;
+    const { teePx: tA, teeGeo: tG, greenGeo: gG, axisDx, axisDy, axisLenSq } = calibration2Anchor;
+    const t = ((canvasPx.x - tA.x) * axisDx + (canvasPx.y - tA.y) * axisDy) / axisLenSq;
+    return { lat: tG.lat + t * (gG.lat - tG.lat), lng: tG.lng + t * (gG.lng - tG.lng) };
+  }, [calibration2Anchor]);
+
   // Yellow target — defaults to midpoint of tee→pin if no override set.
   // Stored in CANVAS coords (top-left origin, y down) for direct render.
   const targetOverride = targetByHole[holeIndex];
@@ -861,6 +902,20 @@ export default function SmartVisionScreen() {
       const back = geometry.green_back ? cell(haversineYards(targetGeo.lat, targetGeo.lng, geometry.green_back.lat, geometry.green_back.lng)) : null;
       return { front, middle, back };
     }
+    // Phase 4.3 — Mode 2 calibrated branch. When the user has marked
+    // both tee and green on this curated-image hole, project the
+    // target's canvas pixel via the 2-anchor calibration and use real
+    // haversine math. F/B stay null (we don't have green-depth geo
+    // from the 2-anchor model — would need a 3rd anchor). Middle is
+    // the genuine yards from target → green per the marked positions.
+    const calibratedTargetGeo = !usingGpsTile && calibration2Anchor
+      ? projectCanvasToLatLngVia2Anchor(targetCanvas)
+      : null;
+    if (calibratedTargetGeo && greenOverrideGeo) {
+      const yds = haversineYards(calibratedTargetGeo.lat, calibratedTargetGeo.lng, greenOverrideGeo.lat, greenOverrideGeo.lng);
+      const middle = Number.isFinite(yds) ? Math.round(yds) : null;
+      return { front: null as number | null, middle, back: null as number | null };
+    }
     const h = courseHoles.find(x => x.hole === holeIndex);
     if (h && targetPx && teePx && pinPx) {
       // Pixel-axis interpolation against bundled hole distance. Used
@@ -904,7 +959,10 @@ export default function SmartVisionScreen() {
       };
     }
     return { front: null as number | null, middle: null as number | null, back: null as number | null };
-  }, [usingGpsTile, projection, targetPx, pinPx, teePx, geometry, courseHoles, holeIndex]);
+    // Phase 4.3 — calibration2Anchor + greenOverrideGeo + targetCanvas
+    // added to deps so the calibrated Mode 2 branch recomputes when
+    // user re-marks or drags the cart.
+  }, [usingGpsTile, projection, targetPx, pinPx, teePx, geometry, courseHoles, holeIndex, calibration2Anchor, greenOverrideGeo, targetCanvas, projectCanvasToLatLngVia2Anchor]);
 
   // Carry distance — yards from tee to current yellow target. GPS path
   // uses haversine; pixel-fallback path interpolates against the bundled
@@ -920,6 +978,16 @@ export default function SmartVisionScreen() {
       const yds = haversineYards(targetGeo.lat, targetGeo.lng, geometry.tee.lat, geometry.tee.lng);
       return Number.isFinite(yds) ? Math.round(yds) : null;
     }
+    // Phase 4.3 — Mode 2 calibrated carry. Same 2-anchor pattern as
+    // yardages: project target's canvas pixel via marked tee+green
+    // anchors, then haversine target → marked tee.
+    const calibratedTargetGeo = !usingGpsTile && calibration2Anchor
+      ? projectCanvasToLatLngVia2Anchor(targetCanvas)
+      : null;
+    if (calibratedTargetGeo && teeOverrideGeo) {
+      const yds = haversineYards(calibratedTargetGeo.lat, calibratedTargetGeo.lng, teeOverrideGeo.lat, teeOverrideGeo.lng);
+      return Number.isFinite(yds) ? Math.round(yds) : null;
+    }
     const h = courseHoles.find(x => x.hole === holeIndex);
     if (h && targetPx && teePx && pinPx) {
       const totalSpan = pinPx.y - teePx.y;
@@ -928,7 +996,7 @@ export default function SmartVisionScreen() {
       return Math.round(progress * h.distance);
     }
     return null;
-  }, [usingGpsTile, projection, targetPx, teePx, pinPx, geometry, courseHoles, holeIndex]);
+  }, [usingGpsTile, projection, targetPx, teePx, pinPx, geometry, courseHoles, holeIndex, calibration2Anchor, teeOverrideGeo, targetCanvas, projectCanvasToLatLngVia2Anchor]);
 
   // ── SmartVision context wiring (Phase BJ) ───────────────────────
   // Tells Kevin "SmartVision is open at hole N with these yardages" so
@@ -1399,28 +1467,52 @@ export default function SmartVisionScreen() {
       </View>
       </GestureDetector>
 
-      {/* 2026-06-06 — Phase 4.2: inline Mark Tee / Mark Pin buttons.
-          Tim's pain: the legacy mark workflow lives 3 menus deep
-          (Tools → debug → mark-green screen → confirm → back to caddie).
-          With Mode 1 (Mapbox geometry) the T and P markers already have
-          real lat/lng — these buttons capture the CURRENT marker
-          position and write it to setTeeOverride / setGreenOverride.
-          One tap. Override flows automatically through resolveTeeCoords
-          / resolveGreenCoords → SmartFinder + Caddie + the brain's
-          yardage computations. Mode 2 (curated bundled image) holes
-          don't have lat/lng yet — buttons disabled with a hint until
-          Phase 4.3 auto-calibrate ships. */}
-      {usingGpsTile && projection && courseId && (
+      {/* 2026-06-06 — Phase 4.2 + 4.3: inline Mark Tee / Mark Pin buttons.
+          - Mode 1 (Mapbox geometry, usingGpsTile): T/P markers already
+            have real lat/lng via projection. Buttons invert the marker
+            pixel via pixelsToLatLng → write to course overrides.
+          - Mode 2 (curated bundled image, no projection): no pixel→geo
+            available, so we use the user's CURRENT GPS fix as the geo
+            anchor — user is expected to be physically standing at the
+            tee (or near the green) when they tap. The marker's canvas
+            position acts as the pixel anchor; with both T and P marked,
+            calibration2Anchor activates and downstream haversine math
+            (yardages + carryYards) becomes real, not pixel-interpolated. */}
+      {courseId && (
         <View style={styles.markRow}>
           <TouchableOpacity
             style={styles.markBtn}
             onPress={() => {
               try {
-                const teeGeo = pixelsToLatLng(teePx, projection.center, projection.zoom, projection.bearing);
-                if (!Number.isFinite(teeGeo.lat) || !Number.isFinite(teeGeo.lng)) return;
+                let teeGeoCoords: { lat: number; lng: number } | null = null;
+                if (usingGpsTile && projection) {
+                  const g = pixelsToLatLng(teePx, projection.center, projection.zoom, projection.bearing);
+                  if (Number.isFinite(g.lat) && Number.isFinite(g.lng)) {
+                    teeGeoCoords = { lat: g.lat, lng: g.lng };
+                  }
+                } else {
+                  // Mode 2: use current GPS fix (user stands at the tee).
+                  const fix = getLastFix();
+                  if (fix && Number.isFinite(fix.location.lat) && Number.isFinite(fix.location.lng)) {
+                    teeGeoCoords = { lat: fix.location.lat, lng: fix.location.lng };
+                  }
+                }
+                if (!teeGeoCoords) {
+                  // eslint-disable-next-line @typescript-eslint/no-require-imports
+                  const toastMod = require('../store/toastStore') as typeof import('../store/toastStore');
+                  toastMod.useToastStore.getState().show('No GPS fix — stand at the tee and try again');
+                  return;
+                }
                 // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const teeMod = require('../services/courseTeeOverrides') as typeof import('../services/courseTeeOverrides');
-                void teeMod.setTeeOverride(courseId, holeIndex, { lat: teeGeo.lat, lng: teeGeo.lng });
+                void teeMod.setTeeOverride(courseId, holeIndex, teeGeoCoords);
+                // Phase 4.3 — lock the marker's canvas position into
+                // teeByHole so subsequent drags of T don't shift the
+                // calibration anchor unexpectedly. User can re-mark to
+                // re-anchor.
+                if (!usingGpsTile) {
+                  setTeeByHole(prev => ({ ...prev, [holeIndex]: { x: teeCanvas.x, y: teeCanvas.y } }));
+                }
                 // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const toastMod = require('../store/toastStore') as typeof import('../store/toastStore');
                 toastMod.useToastStore.getState().show(`Tee marked for hole ${holeIndex}`);
@@ -1437,11 +1529,30 @@ export default function SmartVisionScreen() {
             style={styles.markBtn}
             onPress={() => {
               try {
-                const pinGeo = pixelsToLatLng(pinPx, projection.center, projection.zoom, projection.bearing);
-                if (!Number.isFinite(pinGeo.lat) || !Number.isFinite(pinGeo.lng)) return;
+                let pinGeoCoords: { lat: number; lng: number } | null = null;
+                if (usingGpsTile && projection) {
+                  const g = pixelsToLatLng(pinPx, projection.center, projection.zoom, projection.bearing);
+                  if (Number.isFinite(g.lat) && Number.isFinite(g.lng)) {
+                    pinGeoCoords = { lat: g.lat, lng: g.lng };
+                  }
+                } else {
+                  const fix = getLastFix();
+                  if (fix && Number.isFinite(fix.location.lat) && Number.isFinite(fix.location.lng)) {
+                    pinGeoCoords = { lat: fix.location.lat, lng: fix.location.lng };
+                  }
+                }
+                if (!pinGeoCoords) {
+                  // eslint-disable-next-line @typescript-eslint/no-require-imports
+                  const toastMod = require('../store/toastStore') as typeof import('../store/toastStore');
+                  toastMod.useToastStore.getState().show('No GPS fix — stand near the green and try again');
+                  return;
+                }
                 // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const greenMod = require('../services/courseGreenOverrides') as typeof import('../services/courseGreenOverrides');
-                void greenMod.setGreenOverride(courseId, holeIndex, { lat: pinGeo.lat, lng: pinGeo.lng });
+                void greenMod.setGreenOverride(courseId, holeIndex, pinGeoCoords);
+                if (!usingGpsTile) {
+                  setPinByHole(prev => ({ ...prev, [holeIndex]: { x: pinCanvas.x, y: pinCanvas.y } }));
+                }
                 // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const toastMod = require('../store/toastStore') as typeof import('../store/toastStore');
                 toastMod.useToastStore.getState().show(`Pin marked for hole ${holeIndex}`);
