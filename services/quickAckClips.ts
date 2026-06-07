@@ -74,11 +74,56 @@ const EMPTY: ClipMap = {
   record_swing:        null,
   generic:             null,
 };
+// 2026-06-06 — All 32 ack clips rendered + bundled via
+// scripts/render-ack-clips.ts (Kevin onyx / Serena nova / Tank ash /
+// Harry fable). require()'d here so Metro bundles them as assets;
+// resolveAckClip returns the asset module id, which playLocalFile
+// (extended in voiceService.ts to accept string | number) plays
+// directly via Audio.Sound.createAsync.
 const CLIPS: Record<Persona, ClipMap> = {
-  kevin:  { ...EMPTY },
-  serena: { ...EMPTY },
-  harry:  { ...EMPTY },
-  tank:   { ...EMPTY },
+  kevin: {
+    open_smartvision:    require('../assets/audio/acks/kevin/open_smartvision.mp3'),
+    open_smartfinder:    require('../assets/audio/acks/kevin/open_smartfinder.mp3'),
+    open_swinglab:       require('../assets/audio/acks/kevin/open_swinglab.mp3'),
+    log_score:           require('../assets/audio/acks/kevin/log_score.mp3'),
+    log_shot:            require('../assets/audio/acks/kevin/log_shot.mp3'),
+    log_emotional_state: require('../assets/audio/acks/kevin/log_emotional_state.mp3'),
+    record_swing:        require('../assets/audio/acks/kevin/record_swing.mp3'),
+    generic:             require('../assets/audio/acks/kevin/generic.mp3'),
+  },
+  serena: {
+    open_smartvision:    require('../assets/audio/acks/serena/open_smartvision.mp3'),
+    open_smartfinder:    require('../assets/audio/acks/serena/open_smartfinder.mp3'),
+    open_swinglab:       require('../assets/audio/acks/serena/open_swinglab.mp3'),
+    log_score:           require('../assets/audio/acks/serena/log_score.mp3'),
+    log_shot:            require('../assets/audio/acks/serena/log_shot.mp3'),
+    log_emotional_state: require('../assets/audio/acks/serena/log_emotional_state.mp3'),
+    record_swing:        require('../assets/audio/acks/serena/record_swing.mp3'),
+    generic:             require('../assets/audio/acks/serena/generic.mp3'),
+  },
+  harry: {
+    open_smartvision:    require('../assets/audio/acks/harry/open_smartvision.mp3'),
+    open_smartfinder:    require('../assets/audio/acks/harry/open_smartfinder.mp3'),
+    open_swinglab:       require('../assets/audio/acks/harry/open_swinglab.mp3'),
+    log_score:           require('../assets/audio/acks/harry/log_score.mp3'),
+    log_shot:            require('../assets/audio/acks/harry/log_shot.mp3'),
+    log_emotional_state: require('../assets/audio/acks/harry/log_emotional_state.mp3'),
+    record_swing:        require('../assets/audio/acks/harry/record_swing.mp3'),
+    generic:             require('../assets/audio/acks/harry/generic.mp3'),
+  },
+  tank: {
+    open_smartvision:    require('../assets/audio/acks/tank/open_smartvision.mp3'),
+    open_smartfinder:    require('../assets/audio/acks/tank/open_smartfinder.mp3'),
+    open_swinglab:       require('../assets/audio/acks/tank/open_swinglab.mp3'),
+    log_score:           require('../assets/audio/acks/tank/log_score.mp3'),
+    log_shot:            require('../assets/audio/acks/tank/log_shot.mp3'),
+    log_emotional_state: require('../assets/audio/acks/tank/log_emotional_state.mp3'),
+    record_swing:        require('../assets/audio/acks/tank/record_swing.mp3'),
+    generic:             require('../assets/audio/acks/tank/generic.mp3'),
+  },
+  // Custom caddie: no server-rendered clips (the user's own voice
+  // recordings play from customCaddieClips via voiceService). Stays
+  // null so resolveAckClip returns null and the speak fallback fires.
   custom: { ...EMPTY },
 };
 

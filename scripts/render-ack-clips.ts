@@ -20,6 +20,12 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// ESM-safe __dirname equivalent (script runs under ts-node which parses
+// .ts files as ESM by default in modern node).
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
 type OpenAIVoice = 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer' | 'verse';
