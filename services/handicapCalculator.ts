@@ -214,10 +214,24 @@ export function rebuildDifferentialsFromHistory(rounds: {
   totalScore: number;
   holesPlayed: number;
 }[]): number[] {
+  // 2026-06-06 — Phase 6.1: 9-hole rounds get totalScore × 2 as an
+  // 18-hole-equivalent for differential math. Previously a 9-hole
+  // round's raw totalScore (~40 strokes) was being fed into a
+  // computeScoreDifferential() expecting an 18-hole AGS (~80-95),
+  // producing falsely-LOW differentials and biasing the user's
+  // estimated Index down by ~10-15 strokes per 9-hole round in
+  // history. WHS handles 9-hole rounds by pairing them; for our
+  // simplified-estimate path, doubling is the cleanest single-round
+  // approximation (assumes the player would have repeated similar
+  // play on a second 9). Partial 10-17 hole rounds are rejected
+  // entirely — there's no honest way to treat them as either format.
   return rounds
-    .filter(r => r.holesPlayed >= 9 && r.totalScore > 0)
+    .filter(r => r.totalScore > 0 && (r.holesPlayed === 9 || r.holesPlayed === 18))
     .sort((a, b) => a.startedAt - b.startedAt)
-    .map(r => computeScoreDifferential(r.totalScore, 72.0, 113))
+    .map(r => {
+      const adjustedScore = r.holesPlayed === 9 ? r.totalScore * 2 : r.totalScore;
+      return computeScoreDifferential(adjustedScore, 72.0, 113);
+    })
     .slice(-20);
 }
 

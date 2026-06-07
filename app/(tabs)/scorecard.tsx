@@ -85,11 +85,22 @@ export default function Scorecard() {
   );
   const viewCourseName = isRoundActive ? activeCourse : (lastCompletedRound?.courseName ?? null);
 
+  // 2026-06-06 — Phase 6.2 fix: effective nine-hole mode reads from the
+  // ROUND BEING VIEWED, not the live store. After endRound, store
+  // nineHoleMode resets to false, so a viewed 9-hole completed round
+  // previously rendered with back-9 visible + 18 placeholder rows
+  // ("eighteen holes just duplicated" per Tim). lastCompletedRound
+  // already carries its own nineHoleMode flag — use it when viewing
+  // history.
+  const effectiveNineHoleMode = isRoundActive
+    ? nineHoleMode
+    : (lastCompletedRound?.nineHoleMode ?? false);
+
   const viewCourseHoles = isRoundActive
     ? courseHoles
     : (() => {
         if (!lastCompletedRound) return [];
-        const total = nineHoleMode ? 9 : 18;
+        const total = effectiveNineHoleMode ? 9 : 18;
         return Array.from({ length: total }, (_, i) => ({
           hole: i + 1, par: 4, distance: 0,
           front: 0, back: 0,
@@ -100,7 +111,16 @@ export default function Scorecard() {
       })();
 
   const totalScore = Object.values(viewScores).reduce((a, b) => a + (b as number), 0);
-  const totalPar = viewCourseHoles.slice(0, nineHoleMode ? 9 : 18).reduce((a, h) => a + h.par, 0);
+  // 2026-06-06 — Phase 6.4 fix: course-shape vs partial-round semantics.
+  // Previously totalPar summed par for ALL holes in the round (9 or 18)
+  // regardless of how many the player had scored. On a 3-hole partial
+  // mid-round view of an 18-hole round, totalPar=72, totalScore=12,
+  // scoreVsPar=-60 — misleading "60 under" reading. Sum par for HOLES
+  // SCORED only (and only first 9 in nine-hole mode for safety).
+  const scoredHoleNums = new Set(Object.keys(viewScores).map(n => Number(n)));
+  const totalPar = viewCourseHoles
+    .filter(h => (effectiveNineHoleMode ? h.hole <= 9 : h.hole <= 18) && scoredHoleNums.has(h.hole))
+    .reduce((a, h) => a + h.par, 0);
   const scoreVsPar = totalScore - totalPar;
   const holesPlayed = Object.keys(viewScores).length;
 
@@ -275,7 +295,7 @@ export default function Scorecard() {
       ]));
       return out;
     };
-    if (!nineHoleMode) {
+    if (!effectiveNineHoleMode) {
       lines.push(...drawNine(1, 9, 'OUT'));
       lines.push('');
       lines.push(...drawNine(10, 18, 'IN'));
@@ -306,7 +326,7 @@ export default function Scorecard() {
       Alert.alert('Share', 'Could not open share sheet.');
       console.log('[scorecard] share error', e);
     }
-  }, [viewCourseName, isCompetition, totalScore, scoreVsParDisplay, nineHoleMode, viewCourseHoles, viewScores, clubUsage, recap]);
+  }, [viewCourseName, isCompetition, totalScore, scoreVsParDisplay, effectiveNineHoleMode, viewCourseHoles, viewScores, clubUsage, recap]);
 
   const handleQuickScore = (hole: number, score: number) => {
     for (let i = 0; i < score; i++) {
@@ -577,7 +597,7 @@ export default function Scorecard() {
         )}
 
         {/* PER-HOLE ROWS — Back 9. */}
-        {hasAnythingToShow && !nineHoleMode && back9.length > 0 && (
+        {hasAnythingToShow && !effectiveNineHoleMode && back9.length > 0 && (
           <View style={[styles.section, styles.holeListWrap]}>
             <Text style={[styles.sectionLabel, { color: c.text_muted }]}>BACK 9</Text>
             <View style={[styles.holeList, { backgroundColor: c.surface, borderColor: c.border }]}>
