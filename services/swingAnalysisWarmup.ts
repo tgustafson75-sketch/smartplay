@@ -21,12 +21,18 @@
  * send a flood of warmups. One warmup per 30s is the cap.
  */
 
-const WARMUP_DEDUPE_MS = 30_000;
+// 2026-06-07 — Bumped 30s → 60s. Multi-shot Cage sessions can have
+// 60-90s between swings; the prior 30s dedupe meant shot 2+ paid
+// cold Lambda cost again. Cage Mode's handleSwingAgain also now
+// calls prewarmSwingAnalysis (cage-mode.tsx:805) so the warmup
+// re-fires the moment the user moves on. opts.force bypasses the
+// dedupe entirely for the rare callers that want guaranteed warm.
+const WARMUP_DEDUPE_MS = 60_000;
 let lastWarmupAt = 0;
 
-export function prewarmSwingAnalysis(): void {
+export function prewarmSwingAnalysis(opts?: { force?: boolean }): void {
   const now = Date.now();
-  if (now - lastWarmupAt < WARMUP_DEDUPE_MS) return;
+  if (!opts?.force && now - lastWarmupAt < WARMUP_DEDUPE_MS) return;
   lastWarmupAt = now;
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';

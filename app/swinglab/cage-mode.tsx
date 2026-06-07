@@ -700,101 +700,93 @@ export default function CageModeScreen() {
         .find((s) => s.timestamp >= startedAt && s.timestamp <= endedAt + 2000);
       if (matched) setWatchSwing(matched);
 
-      // Hand the locally-built features to Kevin's cage_swing_review tool.
-      // /api/kevin/coach exists (vercel.json rewrites to api/cage-coach.ts).
-      // The endpoint accepts arbitrary features in the body; Sonnet
-      // responds to what's present. With our sparser payload it leans on
-      // strike timing + notes; no fabricated bullseye_offsets to riff on.
-      const coachRes = await coachReview(features, voiceGender, caddiePersonality);
-      const coachData = coachRes.kind === 'ok' ? coachRes.data : {
-        kevin_response: "I saw the swing — couldn't put words to it just now. Take another and we'll see.",
-        confidence: 'low' as const,
-      };
-      setCoach(coachData);
-      if (coachRes.kind === 'ok' && voiceEnabled) {
-        void (async () => {
-          await configureAudioForSpeech();
-          await speak(coachRes.data.kevin_response, voiceGender, language, apiUrl);
-        })();
-      }
-
-      // 2026-05-23 — Persist this cage swing + coach review to the
-      // Library (cageStore.sessionHistory) so the player can revisit
-      // it later. Ingests with source='live_cage' so the row badge
-      // reads CAGE not UPLOAD; primary_issue carries the coach's
-      // verbal response as the mechanical_breakdown line. Watch +
-      // acoustic notes ride along in the upload.notes field.
-      //
-      // 2026-05-23 (Fix #7) — Attribution: same family-aware override
-      // as the SmartMotion path. When a family member is active in
-      // familyStore (a coach is hitting in the cage with the student
-      // recording, or a parent is recording their kid), persist the
-      // swing under THAT member's name with perspective='watching_someone'
-      // so getAnalyzerKind routes it to full-body swing analysis (Phase
-      // K) instead of the account holder's POV branch.
-      try {
-        const famState = useFamilyStore.getState();
-        const activeMember = famState.active_member_id
-          ? famState.members.find(m => m.id === famState.active_member_id) ?? null
-          : null;
-        const firstName = activeMember?.firstName
-          ?? usePlayerProfileStore.getState().firstName
-          ?? null;
-        const perspective: 'pov_self' | 'watching_someone' =
-          activeMember ? 'watching_someone' : 'pov_self';
-        const club = matched?.club ?? 'unknown';
-        const noteParts = [...notes];
-        if (matched) {
-          noteParts.push(`Watch swing: ${matched.club}`);
-        }
-        if (coachData.kevin_response) noteParts.push(coachData.kevin_response);
-        const sessionId = useCageStore.getState().ingestUploadedSwing({
-          clipUri: recorded.uri,
-          club,
-          upload: {
-            uploaded_at: Date.now(),
-            notes: noteParts.join(' • ') || 'Cage swing',
-            duration_sec: null,
-            has_audio: true,
-            source_device: 'phone',
-            tag: null,
-            swinger: firstName,
-            perspective,
-          },
-          source: 'live_cage',
-        });
-        // 2026-05-28 — Fix EZ: apply the pre-fired ball detection
-        // result (if any) to the freshly-ingested session. The
-        // analyzer pipeline (Fix ES) reads ball_area_norm off the
-        // session and threads it into the vision prompt as an anchor.
-        // Net effect: by the time analysis fires, the model already
-        // knows where the ball was at address — better impact-frame
-        // selection, more confident fault reads.
-        if (pendingBallDetectionRef.current) {
-          useCageStore.getState().setSessionBallArea(sessionId, pendingBallDetectionRef.current);
-          console.log('[cage-mode] applied pre-fired ball detection to session', sessionId);
-          pendingBallDetectionRef.current = null;
-        }
-        const issue: PrimaryIssue = {
-          issue_id: 'cage_coach_review',
-          name: 'Cage swing — coach review',
-          category: 'other',
-          severity: 'minor',
-          occurrence_count: 1,
-          visual_reference_path: null,
-          mechanical_breakdown: coachData.kevin_response,
-          feel_cue: 'Run another swing and see if the same pattern shows up.',
-          detected_in_shots: [],
-          confidence: (coachData.confidence ?? 'medium') as PrimaryIssue['confidence'],
-        };
-        useCageStore.getState().setSessionAnalysis(sessionId, issue, null);
-        useCageStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
-        console.log('[cage-mode] persisted swing to Library', sessionId);
-      } catch (e) {
-        console.log('[cage-mode] Library persist failed (non-fatal):', e);
-      }
-
+      // 2026-06-07 — Optimistic RESULT. Show the acoustic/watch data
+      // immediately and run coach review + Library persist in the
+      // background. Previously we awaited coachReview (5-12s Sonnet
+      // call) before flipping to RESULT, so the user stared at a
+      // spinner for the whole window even though all the locally-
+      // computed metrics were ready. Now: RESULT renders instantly
+      // with coach: null; the coach card fills in via setCoach when
+      // the review lands ~5-12s later, and Library persist happens
+      // alongside.
       setPhase('RESULT');
+
+      void (async () => {
+        try {
+          const coachRes = await coachReview(features, voiceGender, caddiePersonality);
+          const coachData = coachRes.kind === 'ok' ? coachRes.data : {
+            kevin_response: "I saw the swing — couldn't put words to it just now. Take another and we'll see.",
+            confidence: 'low' as const,
+          };
+          setCoach(coachData);
+          if (coachRes.kind === 'ok' && voiceEnabled) {
+            void (async () => {
+              await configureAudioForSpeech();
+              await speak(coachRes.data.kevin_response, voiceGender, language, apiUrl);
+            })();
+          }
+
+          // 2026-05-23 — Persist this cage swing + coach review to the
+          // Library (cageStore.sessionHistory). Stays in the background
+          // task so it doesn't block the RESULT render.
+          try {
+            const famState = useFamilyStore.getState();
+            const activeMember = famState.active_member_id
+              ? famState.members.find(m => m.id === famState.active_member_id) ?? null
+              : null;
+            const firstName = activeMember?.firstName
+              ?? usePlayerProfileStore.getState().firstName
+              ?? null;
+            const perspective: 'pov_self' | 'watching_someone' =
+              activeMember ? 'watching_someone' : 'pov_self';
+            const club = matched?.club ?? 'unknown';
+            const noteParts = [...notes];
+            if (matched) {
+              noteParts.push(`Watch swing: ${matched.club}`);
+            }
+            if (coachData.kevin_response) noteParts.push(coachData.kevin_response);
+            const sessionId = useCageStore.getState().ingestUploadedSwing({
+              clipUri: recorded.uri,
+              club,
+              upload: {
+                uploaded_at: Date.now(),
+                notes: noteParts.join(' • ') || 'Cage swing',
+                duration_sec: null,
+                has_audio: true,
+                source_device: 'phone',
+                tag: null,
+                swinger: firstName,
+                perspective,
+              },
+              source: 'live_cage',
+            });
+            if (pendingBallDetectionRef.current) {
+              useCageStore.getState().setSessionBallArea(sessionId, pendingBallDetectionRef.current);
+              console.log('[cage-mode] applied pre-fired ball detection to session', sessionId);
+              pendingBallDetectionRef.current = null;
+            }
+            const issue: PrimaryIssue = {
+              issue_id: 'cage_coach_review',
+              name: 'Cage swing — coach review',
+              category: 'other',
+              severity: 'minor',
+              occurrence_count: 1,
+              visual_reference_path: null,
+              mechanical_breakdown: coachData.kevin_response,
+              feel_cue: 'Run another swing and see if the same pattern shows up.',
+              detected_in_shots: [],
+              confidence: (coachData.confidence ?? 'medium') as PrimaryIssue['confidence'],
+            };
+            useCageStore.getState().setSessionAnalysis(sessionId, issue, null);
+            useCageStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
+            console.log('[cage-mode] persisted swing to Library', sessionId);
+          } catch (e) {
+            console.log('[cage-mode] Library persist failed (non-fatal):', e);
+          }
+        } catch (e) {
+          console.log('[cage-mode] background coach/persist threw (non-fatal):', e);
+        }
+      })();
     } catch (e) {
       setErrorMessage(e instanceof Error ? e.message : String(e));
       setPhase('ERROR');
@@ -802,6 +794,18 @@ export default function CageModeScreen() {
   }, [voiceEnabled, voiceGender, language, apiUrl]);
 
   const handleSwingAgain = useCallback(() => {
+    // 2026-06-07 — Re-warm the swing-analysis Vercel function on every
+    // "Swing Again" tap. Multi-shot cage sessions often have 60-90s
+    // between swings, longer than Vercel's idle timeout — so shot 2+
+    // was paying cold-Lambda + cold-SDK cost again (~3-8s waste). The
+    // warmup is fire-and-forget; by the time the user actually swings
+    // ~10-20s later, everything's hot.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis();
+    } catch (e) {
+      console.log('[cage] re-warm failed (non-fatal):', e);
+    }
     setResult(null);
     setCoach(null);
     setWatchSwing(null);

@@ -340,7 +340,11 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         s => getTranscriptionStatus(s.id) === 'done',
       );
       if (!haveTranscriptAlready && !everyShotTranscriptionDone) {
-        const TRANSCRIPT_BUDGET_MS = 5_000;
+        // 2026-06-07 — Trimmed 5s → 2.5s. Transcripts arriving after
+        // this still apply via re-analyze in the background; the
+        // user shouldn't wait 5s for an audio transcript before
+        // analysis kicks off.
+        const TRANSCRIPT_BUDGET_MS = 2_500;
         const POLL_MS = 250;
         const deadline = Date.now() + TRANSCRIPT_BUDGET_MS;
         while (Date.now() < deadline) {

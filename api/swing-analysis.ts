@@ -614,6 +614,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Returns 200 in <50ms without doing AI work; ideal for fire-and-
     // forget client calls.
     if (body.mode === 'warmup') {
+      // 2026-06-07 — Real-warm Anthropic Haiku (1 token, no images)
+      // to actually open the HTTP/2 pool to Anthropic. Prior path
+      // returned 200 in <50ms which warmed only the Lambda runtime,
+      // not the SDK's TLS+H2 connection — leaving the FIRST real
+      // swing-analysis paying ~0.5-2s of HTTPS setup. Fire-and-
+      // forget: SDK errors don't block the 200 response.
+      try {
+        await anthropicHaiku.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'warmup' }],
+        });
+      } catch (e) {
+        console.log('[swing-analysis] warmup haiku ping failed (non-fatal):', e instanceof Error ? e.message : String(e));
+      }
       return res.status(200).json({
         warmed: true,
         timestamp: Date.now(),
@@ -966,11 +981,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const tryAnthropic = async (): Promise<AttemptResult> => {
       const t0 = Date.now();
       try {
+        // 2026-06-07 — Ephemeral prompt caching. The system prompt
+        // (PUTT_SYSTEM_PROMPT or SYSTEM_PROMPT) is ~6-8 KB / ~2K
+        // tokens of stable text re-sent on every swing. Wrapping
+        // it with cache_control:'ephemeral' means the first call
+        // writes the cache; subsequent calls within 5 min read it,
+        // cutting input-token cost by ~90% and time-to-first-token
+        // by 30-50%. Compounds with the Haiku speed path below.
         const completion = await anthropic.messages.create({
           model: 'claude-sonnet-4-6',
           max_tokens: 800,
           temperature: 0.2,
-          system: systemPrompt,
+          system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
           messages: [{ role: 'user', content: userContent }],
         });
         const block = completion.content.find(c => c.type === 'text');
@@ -1003,11 +1025,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const tryHaiku = async (): Promise<AttemptResult> => {
       const t0 = Date.now();
       try {
+        // 2026-06-07 — Ephemeral prompt caching (same as Sonnet path
+        // above). Haiku 4.5 supports prompt caching natively; the
+        // shared SYSTEM_PROMPT becomes a cache hit on every swing
+        // within the 5-min TTL — drops time-to-first-token ~30-50%.
         const completion = await anthropicHaiku.messages.create({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 800,
           temperature: 0.2,
-          system: systemPrompt,
+          system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
           messages: [{ role: 'user', content: userContent }],
         });
         const block = completion.content.find(c => c.type === 'text');
