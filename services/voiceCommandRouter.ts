@@ -2,6 +2,7 @@ import type { VoiceIntent, AppContext, IntentHandler, IntentResult } from '../ty
 import { parseVoiceIntent } from './voiceCommandParser';
 import { useVoiceMissStore, type VoiceMissType } from '../store/voiceMissStore';
 import { getActiveSurface } from './activeSurfaceRegistry';
+import { precheckLocalIntent } from './localIntentPrecheck';
 
 export interface RoutingLog {
   timestamp: number;
@@ -40,19 +41,29 @@ export class VoiceCommandRouter {
   }
 
   async route(text: string, context: AppContext, apiUrl: string): Promise<{ intent: VoiceIntent; result: IntentResult }> {
-    const intent = await this.parse(text, context, apiUrl);
+    // 2026-06-06 — Local pre-classifier (services/localIntentPrecheck.ts).
+    // High-frequency unambiguous phrases ("what's my score", "yards to
+    // pin", "open SmartFinder") match here and skip the 200-500ms
+    // Haiku classifier round-trip + $0.0005 cost. On no match → null
+    // → fall through to cloud parse as today. Zero regression risk:
+    // if precheck is wrong, the handler still produces a correct
+    // local answer (Phase 3 localStatusResponder proved the patterns).
+    const localIntent = precheckLocalIntent(text);
+    const intent = localIntent ?? await this.parse(text, context, apiUrl);
     const result = await this.dispatch(intent, context);
     this.recordHistory(intent, result);
     return { intent, result };
   }
 
   async dispatch(intent: VoiceIntent, context: AppContext): Promise<IntentResult> {
-    // 2026-06-04 — `social_greeting` and `conversational` are explicit
-    // catch-all intents the classifier picks for greetings and free-form
-    // questions. They behave like `unknown` here — fall through to the
-    // brain. They never carry a follow_up_question and are NOT logged
-    // to the voice-miss surface (they're not classifier failures).
-    if (intent.intent_type === 'social_greeting' || intent.intent_type === 'conversational') {
+    // 2026-06-04 — `conversational` falls through to the brain (free-form
+    // questions need the LLM). Does not log to voice-miss (intentional).
+    // 2026-06-06 — `social_greeting` NO LONGER routes to brain; it falls
+    // through to the new socialGreetingHandler below. The handler picks a
+    // canned per-persona line and returns it as a normal IntentResult.
+    // Brain is never called for greetings — saves the most expensive
+    // round-trip on the most predictable utterance.
+    if (intent.intent_type === 'conversational') {
       return {
         success: false,
         voice_response: null,

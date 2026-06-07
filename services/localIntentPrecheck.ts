@@ -1,0 +1,132 @@
+/**
+ * 2026-06-06 — Local pre-classifier for high-frequency voice intents.
+ *
+ * Runs BEFORE /api/voice-intent (Anthropic Haiku) on every voice
+ * command. Regex-matches a curated set of unambiguous, high-frequency
+ * phrases and synthesizes a VoiceIntent directly. If no pattern
+ * matches → returns null → caller falls through to the cloud
+ * classifier as today.
+ *
+ * Saves the 200-500ms classifier round-trip + ~$0.0005 per matched
+ * call. Covers the most-used status queries and the most-used tool
+ * commands. Audit confirmed handlers are already local — the only
+ * cost on these intents was the upstream classifier.
+ *
+ * Design rules:
+ *   - Patterns are intentionally NARROW. False positives are worse
+ *     than false negatives — if a regex is ambiguous, leave it out
+ *     and let Haiku decide.
+ *   - Every synthesized intent carries confidence: 'high' so the
+ *     downstream router doesn't treat it as low-confidence (which
+ *     would route to brain).
+ *   - raw_text is the original transcript (untouched) so handlers
+ *     that re-read it still work.
+ *   - Returns null on any partial / ambiguous match.
+ *
+ * The patterns mirror the localStatusResponder regex set (Phase 3,
+ * services/localStatusResponder.ts) because that's the proven
+ * coverage; this just promotes them to fire on the happy path too.
+ */
+
+import type { VoiceIntent } from '../types/voiceIntent';
+
+interface Pattern {
+  rx: RegExp;
+  build: (raw: string, match: RegExpMatchArray) => VoiceIntent;
+}
+
+const intent = (
+  raw: string,
+  intent_type: string,
+  parameters: Record<string, unknown> = {},
+): VoiceIntent => ({
+  intent_type,
+  parameters,
+  confidence: 'high',
+  follow_up_question: null,
+  raw_text: raw,
+});
+
+// Ordered list — first match wins. Yardage patterns come before
+// generic "what" patterns so "yardage to front" → green_front,
+// not query_status:hole.
+const PATTERNS: Pattern[] = [
+  // ── DISTANCE / YARDAGE (most specific first) ──────────────
+  {
+    rx: /\b(front\s+(?:edge|of)|to\s+the\s+front|yards?\s+to\s+(?:the\s+)?front)\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'green_front' }),
+  },
+  {
+    rx: /\b(back\s+(?:edge|of)|to\s+the\s+back|yards?\s+to\s+(?:the\s+)?back)\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'green_back' }),
+  },
+  {
+    rx: /\b(middle\s+of\s+the\s+green|to\s+the\s+middle|yards?\s+to\s+(?:the\s+)?middle|to\s+the\s+pin|to\s+the\s+flag)\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'green_middle' }),
+  },
+  {
+    rx: /\b(how\s+far|yardage|yards?\s+to|distance\s+to|how\s+many\s+yards?)\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'distance_to_green' }),
+  },
+
+  // ── SCORE / ROUND STATUS ──────────────────────────────────
+  {
+    rx: /\b(what(?:'s|s)?\s+my\s+score|how\s+am\s+i\s+doing|my\s+score|score\s+(?:today|so\s+far)|vs\.?\s+par|under\s+par|over\s+par)\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'score' }),
+  },
+  {
+    rx: /\b(what\s+hole|which\s+hole|hole\s+am\s+i\s+on|what\s+hole\s+is\s+this)\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'hole' }),
+  },
+  {
+    rx: /\b(how\s+many\s+(?:more\s+)?holes?\s+(?:left|to\s+go|remaining)|holes?\s+(?:left|remaining))\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'holes_left' }),
+  },
+  {
+    rx: /\b(what(?:'s|s)?\s+(?:the\s+)?par|par\s+(?:here|of\s+this\s+hole|on\s+this))\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'par' }),
+  },
+
+  // ── PROFILE / COURSE ──────────────────────────────────────
+  {
+    rx: /\b(what(?:'s|s)?\s+my\s+handicap|my\s+handicap)\b/i,
+    build: (raw) => intent(raw, 'handicap_query'),
+  },
+  {
+    rx: /\b(what\s+course|which\s+course|where\s+am\s+i\s+playing|what(?:'s|s)?\s+the\s+course)\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'course' }),
+  },
+
+  // ── TOOL OPEN (high frequency) ────────────────────────────
+  {
+    rx: /\b(open\s+smart\s*finder|smart\s*finder|rangefinder|range\s+finder|lock\s+(?:the\s+)?distance)\b/i,
+    build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartfinder' }),
+  },
+  {
+    rx: /\b(open\s+smart\s*vision|smart\s*vision|show\s+(?:me\s+)?the\s+(?:hole|layout|map)|pull\s+up\s+the\s+map)\b/i,
+    build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartvision' }),
+  },
+  {
+    rx: /\b(open\s+swing\s*lab|swing\s*lab|let(?:'s|s)?\s+practice|open\s+practice)\b/i,
+    build: (raw) => intent(raw, 'open_tool', { tool_name: 'swinglab' }),
+  },
+];
+
+/**
+ * Try to classify the transcript locally without calling the cloud
+ * classifier. Returns a high-confidence VoiceIntent on match, or
+ * null when no pattern matches (caller falls through to cloud).
+ */
+export function precheckLocalIntent(transcript: string): VoiceIntent | null {
+  if (!transcript || typeof transcript !== 'string') return null;
+  const t = transcript.trim();
+  if (!t) return null;
+  // Cap length to avoid pathological regex backtracking on a wall of
+  // text — high-frequency intents are always short.
+  if (t.length > 200) return null;
+  for (const p of PATTERNS) {
+    const m = t.match(p.rx);
+    if (m) return p.build(t, m);
+  }
+  return null;
+}

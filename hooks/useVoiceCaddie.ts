@@ -22,6 +22,7 @@ import {
   classifyQuery,
 } from '../services/fillerLibrary';
 import { checkContent } from '../services/contentGuardrail';
+import { resolveAckClip } from '../services/quickAckClips';
 // 2026-05-21 — Consolidation 4: routine voice traces gated through devLog.
 import { devLog } from '../services/devLog';
 import { isSessionInFlight } from '../services/listeningSession';
@@ -1412,7 +1413,31 @@ export const useVoiceCaddie = ({
       // generation, which both stops the currently-playing clip and
       // causes any queued not-yet-running bodies to skip.
       await stopSpeaking();
-      if (kevinResponse.audioBase64 && voiceEnabled) {
+      // 2026-06-06 — Pre-rendered ack-clip shortcut. The brain's
+      // defaults map (api/kevin.ts) emits 8 fixed strings for tool
+      // actions ("Got it.", "On it.", etc.) that don't need a fresh
+      // OpenAI TTS round-trip each time. If a matching pre-rendered
+      // mp3 is bundled for the current persona, play that locally;
+      // saves ~$0.001 + 400ms per tool fire. Falls back to the
+      // standard audioBase64 / speak() path when no clip is bundled
+      // (today: all null until scripts/render-ack-clips.ts runs).
+      const ackPersona = (useSettingsStore.getState().caddiePersonality ?? 'kevin') as string;
+      const ackClip = resolveAckClip(kevinResponse.text, ackPersona);
+      if (ackClip != null && voiceEnabled) {
+        // playLocalFile expects a uri string; require()'d module ids
+        // are passed through Audio.Sound.createAsync which accepts
+        // both string and number sources. Cast through unknown.
+        try {
+          await playLocalFile(ackClip, undefined, { userInitiated: true });
+        } catch (e) {
+          console.log('[voice] ack clip play failed, falling back to speak:', e);
+          if (kevinResponse.audioBase64) {
+            await speakFromBase64(kevinResponse.audioBase64, { userInitiated: true });
+          } else {
+            await speakResponse(kevinResponse.text);
+          }
+        }
+      } else if (kevinResponse.audioBase64 && voiceEnabled) {
         // Phase V.7+ — user-initiated reply, plays at L1 too.
         await speakFromBase64(kevinResponse.audioBase64, { userInitiated: true });
       } else {

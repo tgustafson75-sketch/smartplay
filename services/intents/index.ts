@@ -26,6 +26,7 @@ import { positionDeclareHandler } from './positionDeclareHandler';
 import { inRoundDiagnosticHandler } from './inRoundDiagnosticHandler';
 import { confirmPositionHandler } from './confirmPositionHandler';
 import { setHoleNoteHandler } from './setHoleNoteHandler';
+import { socialGreetingHandler } from './socialGreetingHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
 
@@ -61,6 +62,7 @@ voiceCommandRouter.registerHandler(positionDeclareHandler);
 voiceCommandRouter.registerHandler(inRoundDiagnosticHandler);
 voiceCommandRouter.registerHandler(confirmPositionHandler);
 voiceCommandRouter.registerHandler(setHoleNoteHandler);
+voiceCommandRouter.registerHandler(socialGreetingHandler);
 
 export {
   openToolHandler,
@@ -91,4 +93,5 @@ export {
   inRoundDiagnosticHandler,
   confirmPositionHandler,
   setHoleNoteHandler,
+  socialGreetingHandler,
 };

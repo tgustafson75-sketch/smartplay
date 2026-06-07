@@ -618,7 +618,7 @@ export const isSpeaking = (): boolean => currentSound !== null;
 // when the real response calls either of those functions.
 
 export const playLocalFile = async (
-  uri: string,
+  source: string | number,
   knownDurationMs?: number,
   opts?: SpeakOpts,
 ): Promise<void> => enqueueSpeak(async () => {
@@ -645,8 +645,14 @@ export const playLocalFile = async (
   await configureAudioForSpeech();
 
   try {
+    // 2026-06-06 — accept both URI strings (filler clips written to
+    // cache by getCaddieClip) AND require()'d asset module numbers
+    // (pre-rendered ack clips bundled at build time via Phase 4.4's
+    // quickAckClips manifest). Audio.Sound.createAsync's first arg
+    // is AVPlaybackSource = { uri: string } | number | Asset.
+    const playbackSource = typeof source === 'number' ? source : { uri: source };
     const { sound, status } = await Audio.Sound.createAsync(
-      { uri },
+      playbackSource,
       { shouldPlay: true, volume: currentPlaybackVolume() },
     );
 
