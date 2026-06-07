@@ -385,10 +385,17 @@ export function setMarkedFix(lat: number, lng: number, accuracy_m: number | null
   // the on-course Mark button via forceMarkPosition — pass a REAL
   // accuracy from a high-accuracy getCurrentPositionAsync and want
   // the outlier gate to keep filtering bad ticks, NOT trust the
-  // next tick blindly. Self-audit catch: pre-gate, every Mark button
-  // press silently disabled outlier filtering for 10s.
+  // next tick blindly.
+  // 2026-06-07 GPS-audit #2: when a real-accuracy Mark fires INSIDE
+  // an active bypass window (SmartVision tap was within last 10s),
+  // explicitly DISARM the bypass — otherwise the next live tick
+  // after the Mark would bypass outlier gates, defeating the
+  // outlier filtering the user just trusted the Mark button to
+  // provide.
   if (accuracy_m === null) {
     userMarkedAt = Date.now();
+  } else {
+    userMarkedAt = 0;
   }
   smoothingBuffer = [];
   lastTickAt = Date.now();

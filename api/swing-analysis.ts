@@ -618,17 +618,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // to actually open the HTTP/2 pool to Anthropic. Prior path
       // returned 200 in <50ms which warmed only the Lambda runtime,
       // not the SDK's TLS+H2 connection — leaving the FIRST real
-      // swing-analysis paying ~0.5-2s of HTTPS setup. Fire-and-
-      // forget: SDK errors don't block the 200 response.
-      try {
-        await anthropicHaiku.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 1,
-          messages: [{ role: 'user', content: 'warmup' }],
-        });
-      } catch (e) {
+      // swing-analysis paying ~0.5-2s of HTTPS setup.
+      // Self-audit L1: TRUE fire-and-forget (no await). The 200
+      // returns immediately; the SDK call proceeds in the Lambda's
+      // background, opening the H2 pool. Vercel's runtime keeps the
+      // Lambda alive for ~3-5s post-response — plenty for the
+      // 1-token call to complete and prime the connection.
+      anthropicHaiku.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'warmup' }],
+      }).catch((e) => {
         console.log('[swing-analysis] warmup haiku ping failed (non-fatal):', e instanceof Error ? e.message : String(e));
-      }
+      });
       return res.status(200).json({
         warmed: true,
         timestamp: Date.now(),

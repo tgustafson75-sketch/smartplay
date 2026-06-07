@@ -1071,6 +1071,19 @@ export default function SmartVisionScreen() {
       }
     }
     if (lat == null || lng == null) return;
+    // 2026-06-07 GPS-audit #3: only propagate to setMarkedFix when the
+    // SmartVision screen is on the SAME hole as the live round. If
+    // the user is browsing other holes (e.g. peeking ahead at hole 7
+    // while playing hole 3), a tap on hole-7 image derives lat/lng
+    // for hole 7 — writing that to lastFix would corrupt the cockpit
+    // location tag, shotLocationService, and the brain context with
+    // wrong-hole coords. The visual cart still places on the canvas
+    // (setTargetByHole above); we just skip the global fix update.
+    if (isRoundActive && holeIndex !== currentHole) {
+      console.log('[smartvision] cart commit visualization-only (browsing hole', holeIndex, 'while currentHole=', currentHole, ')');
+      pendingReconcileAtRef.current = 0;
+      return;
+    }
     try {
       // Mark accuracy as null — this is a user-placed position, not a
       // GPS reading. classifyAccuracy treats null accuracy as "no
@@ -1085,7 +1098,7 @@ export default function SmartVisionScreen() {
     } catch (e) {
       console.log('[smartvision] commit cart setMarkedFix failed:', e);
     }
-  }, [holeIndex, usingGpsTile, projection, imageW, imageH, calibration2Anchor, projectCanvasToLatLngVia2Anchor]);
+  }, [holeIndex, usingGpsTile, projection, imageW, imageH, calibration2Anchor, projectCanvasToLatLngVia2Anchor, currentHole, isRoundActive]);
 
   // 2026-06-06 — Auto-reconcile: when a live GPS tick arrives within
   // 10s of a user mark, project the new GPS position to canvas and
@@ -1219,11 +1232,25 @@ export default function SmartVisionScreen() {
         projection.zoom,
         projection.bearing,
       );
-      // Convert image-pixel-offset (with +y up) to canvas coords.
-      const canvasCoord = clampToCanvas({
-        x: px.x + imageW / 2,
-        y: imageH / 2 - px.y,
-      });
+      // 2026-06-07 GPS-audit #7: skip seeding when the projected
+      // pixel falls outside the canvas bounds. Common cause: user
+      // opens SmartVision in the parking lot or on a different hole
+      // than the one the image represents — projectToPixels returns
+      // an off-canvas coord; clampToCanvas would pin the cart to the
+      // edge of the image, then pixelsToLatLng round-trip yields a
+      // lat/lng at the image boundary (NOT the player's real
+      // position) and yardages would render confidently wrong.
+      // Leave the midpoint default; user can tap to place when they
+      // actually want to position themselves on the image.
+      const unclamped = { x: px.x + imageW / 2, y: imageH / 2 - px.y };
+      const onCanvas =
+        unclamped.x >= 0 && unclamped.x <= imageW &&
+        unclamped.y >= 0 && unclamped.y <= imageH;
+      if (!onCanvas) {
+        console.log('[smartvision] gps-init skipped — fix is off-image', unclamped);
+        return;
+      }
+      const canvasCoord = clampToCanvas(unclamped);
       setTargetByHole(prev => ({ ...prev, [holeIndex]: canvasCoord }));
     } catch (e) {
       console.log('[smartvision] gps-init cart failed (non-fatal):', e);

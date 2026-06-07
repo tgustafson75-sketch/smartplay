@@ -504,13 +504,23 @@ function resolveHoleDataWithFallback(hole: number): import('../store/roundStore'
 // confidence. Same no-fake-precision principle as the Phase 418
 // validation gate and the SmartFinder GPS-quality framing. The
 // number is still useful as a reference; just labelled honestly.
-function staticYardages(hData: import('../store/roundStore').CourseHole, hole: number): GreenYardages {
+// 2026-06-07 GPS-audit #5: accept an explicit `reason` override so
+// callers can distinguish "no GPS fix" from "no green coords" — the
+// UI was conflating both as "Green coordinates unavailable for this
+// course" even when the course DID have geometry but the user had
+// no live GPS. Default stays 'no_geometry' for the legacy callsites
+// where the fallback truly is missing course data.
+function staticYardages(
+  hData: import('../store/roundStore').CourseHole,
+  hole: number,
+  reason: GreenYardagesReason = 'no_geometry',
+): GreenYardages {
   return {
     front: typeof hData.front === 'number' ? hData.front : null,
     middle: typeof hData.distance === 'number' ? hData.distance : null,
     back: typeof hData.back === 'number' ? hData.back : null,
     hole_number: hole,
-    reason: 'no_geometry',
+    reason,
   };
 }
 
@@ -525,8 +535,11 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
   }
   if (!fix) {
     // No GPS yet (pre-round, cold-start, indoor) — render the
-    // bundled scorecard yardages so the user has SOMETHING.
-    return staticYardages(hData, hole);
+    // bundled scorecard yardages so the user has SOMETHING. Reason
+    // 'no_fix' lets the UI surface "Waiting for GPS fix…" + a
+    // Refresh CTA instead of mislabelling the failure as missing
+    // course geometry.
+    return staticYardages(hData, hole, 'no_fix');
   }
 
   const { front, middle, back, source } = resolveGreenCoords(hole);
@@ -583,7 +596,9 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
   }
   const syncFix = getLastFixInternal();
   if (!syncFix) {
-    return staticYardages(hData, hole);
+    // 2026-06-07 GPS-audit #5: surface no-fix explicitly so UI can
+    // tell the user GPS isn't ready, not "course data missing".
+    return staticYardages(hData, hole, 'no_fix');
   }
   const { front, middle, back, source } = resolveGreenCoords(hole);
   if (!front && !middle && !back) {

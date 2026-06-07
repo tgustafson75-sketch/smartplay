@@ -87,11 +87,32 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
   const fixAge = fix ? now - fix.timestamp : Infinity;
   const accuracy = fix?.accuracy_m ?? null;
   const quality = classifyAccuracy(accuracy);
+  // 2026-06-07 GPS-audit #4: a SmartVision tap writes setMarkedFix
+  // with accuracy_m === null. classifyAccuracy(null) returns 'none',
+  // which would otherwise route us to static_card with "GPS not
+  // ready" copy — directly contradicting the user who JUST told us
+  // where they are. Treat a recent null-accuracy fix as a valid
+  // user-asserted position with 'med' confidence.
+  const isUserMarkedFix = fix != null && accuracy == null && fixAge < 30_000;
   const gpsHealthy =
     fix != null &&
     fixAge < 10_000 &&
     quality.level !== 'weak' &&
     quality.level !== 'none';
+
+  if (isUserMarkedFix) {
+    const y = getGreenYardagesSync(hole);
+    if (y && y.middle != null && y.reason === 'ok') {
+      return {
+        value: y.middle,
+        source: 'gps_live',
+        confidence: 'med',
+        reason: 'Using your marked position.',
+        asOf: fix.timestamp,
+        is_fallback: false,
+      };
+    }
+  }
 
   if (gpsHealthy) {
     const y = getGreenYardagesSync(hole);

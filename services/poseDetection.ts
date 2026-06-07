@@ -587,8 +587,16 @@ export async function analyzeSwing(
     // ~7-8s for a normally-recoverable Haiku hiccup instead of
     // 30-40s escalation OR a forced re-record. Only fires for
     // tier=quick — tier=full already has the escalation safety net.
-    if (!res.ok && res.status === 502 && context.tier === 'quick') {
-      V6('STAGE 4 — tier=quick 502, auto-retry once after 1200ms', {
+    // 2026-06-07 self-audit H1: skip retry when the first attempt
+    // already burned >30s (slow Lambda or genuine server timeout).
+    // Without the cap, first-attempt 55s + 1.2s wait + retry 55s =
+    // ~111s wall clock — longer than Vercel's 60s function maxDuration
+    // means the retry hits a dead server anyway. Fast-fail (~5s) is
+    // the intended trigger; anything slow has already failed
+    // meaningfully and the retry won't help.
+    const RETRY_ELIGIBILITY_CAP_MS = 30_000;
+    if (!res.ok && res.status === 502 && context.tier === 'quick' && elapsedMs < RETRY_ELIGIBILITY_CAP_MS) {
+      V6('STAGE 4 — tier=quick 502 (fast-fail), auto-retry once after 1200ms', {
         first_attempt_elapsed_ms: elapsedMs,
       });
       await new Promise(r => setTimeout(r, 1_200));
@@ -606,6 +614,11 @@ export async function analyzeSwing(
           error_head: (e instanceof Error ? e.message : String(e)).slice(0, 120),
         });
       }
+    } else if (!res.ok && res.status === 502 && context.tier === 'quick') {
+      V6('STAGE 4 — tier=quick 502 but first attempt slow, skipping retry', {
+        first_attempt_elapsed_ms: elapsedMs,
+        cap_ms: RETRY_ELIGIBILITY_CAP_MS,
+      });
     }
     if (!res.ok) {
       const body = await res.text().catch(() => '<unreadable>');
@@ -839,13 +852,17 @@ export async function analyzeSwingTentative(
         frames: [{ b64: frame.b64, media_type: frame.media_type }],
         // 2026-06-02 — Fix GM: thread tier:'quick' into the tentative
         // fallback context. The tentative path is by definition a
-        // fast-degraded fallback — a single frame, "best we can do"
-        // observation. Running the full Haiku→OpenAI→Sonnet escalation
-        // chain on it defeats the purpose: by the time we're asking
-        // for tentative, the user has already waited 30-40s for the
-        // primary attempt. Quick (Haiku-only) keeps the fallback in
-        // the 2-5s budget and matches the design intent.
-        context: { ...context, tier: 'quick' as const },
+        // 2026-06-07 self-audit H3: switched tier='quick' → tier='full'
+        // here. With Win #6 (fast-fail tier=quick on Haiku null) +
+        // auto-retry-once, the PRIMARY analyzeSwing already gets two
+        // Haiku attempts. Tentative running ALSO at tier='quick'
+        // would just add 2 more Haiku attempts — if Haiku is broken
+        // on this clip, all 4 fail and the user gets nothing.
+        // Tentative is the LAST resort after primary failed; switching
+        // it to tier='full' brings in the OpenAI → Sonnet escalation
+        // safety net (30-40s, but a much higher chance of producing
+        // SOMETHING usable from the single tentative frame).
+        context: { ...context, tier: 'full' as const },
         mode: 'tentative',
       }),
       signal: AbortSignal.timeout(TENTATIVE_TIMEOUT_MS),

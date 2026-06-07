@@ -194,6 +194,15 @@ export default function CageModeScreen() {
   // ingestUploadedSwing fires (post-recording); we apply the ref to
   // the session via setSessionBallArea right after ingest.
   const pendingBallDetectionRef = useRef<{ x: number; y: number; r: number } | null>(null);
+  // 2026-06-07 — Generation counter to fence the background
+  // coachReview / Library-persist task spawned by Win #3's optimistic
+  // RESULT. handleSwingAgain bumps this; the in-flight task captures
+  // the current value at start and bails before setState if the value
+  // has moved on. Without this, batch mode (which auto-advances 4s
+  // after RESULT) raced the 5-12s background task, writing the prior
+  // swing's coach blurb onto the next swing's blank state AND
+  // attributing Library-persist to the wrong session.
+  const swingGenerationRef = useRef<number>(0);
   const [ballDetectStatus, setBallDetectStatus] = useState<'idle' | 'detecting' | 'found' | 'not_found'>('idle');
   // 2026-05-28 — Fix FH: calibration prompt state declared here; the
   // showCalibratePrompt boolean uses `phase` which is declared a few
@@ -711,9 +720,21 @@ export default function CageModeScreen() {
       // alongside.
       setPhase('RESULT');
 
+      // 2026-06-07 self-audit C1: capture the current swing generation
+      // so the background task knows whether it's still relevant. In
+      // batch mode, handleSwingAgain bumps the counter ~4s into
+      // RESULT; if coachReview takes 8s, the task would otherwise
+      // write to the NEXT swing's blank state and persist to the
+      // wrong session. Guard each setState/persist on generation
+      // unchanged.
+      const swingGen = swingGenerationRef.current;
       void (async () => {
         try {
           const coachRes = await coachReview(features, voiceGender, caddiePersonality);
+          if (swingGenerationRef.current !== swingGen) {
+            console.log('[cage-mode] swing generation moved on; dropping stale coach + persist');
+            return;
+          }
           const coachData = coachRes.kind === 'ok' ? coachRes.data : {
             kevin_response: "I saw the swing — couldn't put words to it just now. Take another and we'll see.",
             confidence: 'low' as const,
@@ -745,6 +766,16 @@ export default function CageModeScreen() {
               noteParts.push(`Watch swing: ${matched.club}`);
             }
             if (coachData.kevin_response) noteParts.push(coachData.kevin_response);
+            // 2026-06-07 self-audit C1: belt-and-suspenders generation
+            // check before the Library write. Even if setCoach above
+            // passed the check, in batch mode handleSwingAgain could
+            // have run between the await and now; persisting here
+            // would tag the prior recorded.uri under the wrong cage
+            // session id.
+            if (swingGenerationRef.current !== swingGen) {
+              console.log('[cage-mode] swing generation moved on during persist; aborting');
+              return;
+            }
             const sessionId = useCageStore.getState().ingestUploadedSwing({
               clipUri: recorded.uri,
               club,
@@ -794,6 +825,13 @@ export default function CageModeScreen() {
   }, [voiceEnabled, voiceGender, language, apiUrl]);
 
   const handleSwingAgain = useCallback(() => {
+    // 2026-06-07 self-audit C1: bump the swing generation so any
+    // in-flight optimistic-RESULT background task (coachReview +
+    // Library persist) bails on completion instead of writing the
+    // prior swing's coach blurb onto the next swing's blank state.
+    // Batch mode (which auto-advances 4s after RESULT) would
+    // otherwise race the 5-12s background task every shot.
+    swingGenerationRef.current += 1;
     // 2026-06-07 — Re-warm the swing-analysis Vercel function on every
     // "Swing Again" tap. Multi-shot cage sessions often have 60-90s
     // between swings, longer than Vercel's idle timeout — so shot 2+
