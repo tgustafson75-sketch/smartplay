@@ -1464,7 +1464,7 @@ export const useRoundStore = create<RoundState>()(
           // banner on every real hole transition. Doubles up the audible
           // "Hole 7. Par 4..." announcement and works even when audio is
           // suppressed (trust=1 Quiet, voiceEnabled=false) or audio is
-          // failing (cellular dead — see Phase 1 device-TTS fallback).
+          // failing (cellular dead — speak() catch logs silently).
           // Tim's perception fix: makes a deliberate transition feel
           // unambiguous rather than buried in audio.
           try {

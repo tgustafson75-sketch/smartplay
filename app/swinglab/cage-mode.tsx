@@ -839,7 +839,11 @@ export default function CageModeScreen() {
           if (coachRes.kind === 'ok' && voiceEnabled) {
             void (async () => {
               await configureAudioForSpeech();
-              await speak(coachRes.data.kevin_response, voiceGender, language, apiUrl);
+              // 2026-06-07 audit r5: { userInitiated: true } per the
+              // voice-userinitiated-rule. The coach response is a
+              // delayed reply to the user's record tap; without this
+              // flag, L1 (Quiet/Cockpit) silently drops the speak.
+              await speak(coachRes.data.kevin_response, voiceGender, language, apiUrl, { userInitiated: true });
             })();
           }
         } catch (e) {

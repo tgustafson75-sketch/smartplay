@@ -27,7 +27,11 @@
  *   - Mapbox satellite tiles — OS Image cache handles per-screen warmup.
  *   - Brain replies — dynamic per turn (Phase 3 will add a local
  *     responder for status queries).
- *   - TTS — handled by Phase 1's device-TTS fallback in speak() catch.
+ *   - TTS — Phase 1's device-TTS fallback was reverted (see
+ *     phase1-device-tts-crash memory). speak() catch is the d06e37f-
+ *     shape (clean cleanup + log) until expo-speech rebuilds with
+ *     the native module bundled. Until then, voice output relies on
+ *     /api/voice; offline = silent on first reply.
  *   - Landmarks — bundled via require() in services/holeContextResolver,
  *     always available offline.
  */

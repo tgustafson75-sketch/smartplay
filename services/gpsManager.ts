@@ -260,6 +260,10 @@ function processFix(raw: GpsFix): boolean {
     accuracy_m: raw.accuracy_m,
     speed: raw.speed,
     timestamp: raw.timestamp,
+    // 2026-06-07 audit r5: explicit 'live' provenance so future
+    // consumers can rely on the source discriminator. Live ticks
+    // (this path) write 'live'; setMarkedFix writes 'user_mark'.
+    source: 'live',
   };
   // Motion tracking — stationary -> walking on real motion.
   if (lastFix) {
@@ -341,6 +345,10 @@ export function setSimulatedFix(loc: { lat: number; lng: number }, accuracy_m = 
     accuracy_m,
     speed: null,
     timestamp: Date.now(),
+    // 2026-06-07 audit r5: simulated fixes behave as live for
+    // downstream consumers (harness testing relies on shot
+    // detection firing on simulated movement).
+    source: 'live',
   };
   lastTickAt = Date.now();
   // 2026-06-05 — arm the stale-clear so a sim fix doesn't hard-clear
@@ -845,6 +853,10 @@ export async function getOneShotFix(opts?: { maxAgeMs?: number }): Promise<GpsFi
       accuracy_m: pos.coords.accuracy ?? null,
       speed: pos.coords.speed ?? null,
       timestamp: pos.timestamp,
+      // 2026-06-07 audit r5: one-shot reads (refreshFix path) are
+      // genuine live GPS — mark as 'live' so the type discriminator
+      // is consistent.
+      source: 'live',
     };
     lastFix = fix;
     // 2026-06-05 — arm stale-clear so explicit one-shot reads (e.g.

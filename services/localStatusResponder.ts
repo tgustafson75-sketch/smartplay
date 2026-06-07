@@ -14,11 +14,14 @@
  *             "Hit a snag" text — appropriate for coaching/strategy
  *             questions the brain genuinely needs.
  *   - text  → templated reply built from local round state. Caller
- *             returns it as if /api/kevin had replied. Phase 1's
- *             device-TTS fallback then speaks it via system voice.
+ *             returns it as if /api/kevin had replied. speak() runs
+ *             via /api/voice (Phase 1's device-TTS fallback was
+ *             reverted — see phase1-device-tts-crash memory).
  *
- * Combined with Phase 1 + Phase 2: "What's my yardage?" on dead
- * cellular → device TTS speaks "118 to the middle of the green."
+ * Combined with Phase 2's prefetch: "What's my yardage?" produces a
+ * local templated reply that gets spoken via /api/voice when network
+ * is reachable; offline = silent reply but the caption + visual UI
+ * still surface the answer.
  *
  * Honest about GPS confidence. When accuracy_m > 15 (weak fix), the
  * reply says "roughly 118, GPS is iffy right now" instead of stating
