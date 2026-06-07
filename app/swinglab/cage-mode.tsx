@@ -720,99 +720,127 @@ export default function CageModeScreen() {
       // alongside.
       setPhase('RESULT');
 
-      // 2026-06-07 self-audit C1: capture the current swing generation
-      // so the background task knows whether it's still relevant. In
-      // batch mode, handleSwingAgain bumps the counter ~4s into
-      // RESULT; if coachReview takes 8s, the task would otherwise
-      // write to the NEXT swing's blank state and persist to the
-      // wrong session. Guard each setState/persist on generation
-      // unchanged.
+      // 2026-06-07 audit r4 — C1 regression fix: persist to Library
+      // IMMEDIATELY (before awaiting coachReview) so a quick "Swing
+      // Again" tap doesn't lose the recorded swing entirely. The
+      // initial persist uses a "coach review pending" placeholder;
+      // when the real coachReview lands and the swing is still
+      // current (swingGen check), patch the Library entry + setCoach.
+      // If the swing has moved on by then, the persist already
+      // captured the clip — only the UI update + coach patch get
+      // dropped. Net: no data loss, no UI corruption.
       const swingGen = swingGenerationRef.current;
+
+      // Library persist NOW with placeholder coach.
+      let persistedSessionId: string | null = null;
+      try {
+        const famState = useFamilyStore.getState();
+        const activeMember = famState.active_member_id
+          ? famState.members.find(m => m.id === famState.active_member_id) ?? null
+          : null;
+        const firstName = activeMember?.firstName
+          ?? usePlayerProfileStore.getState().firstName
+          ?? null;
+        const perspective: 'pov_self' | 'watching_someone' =
+          activeMember ? 'watching_someone' : 'pov_self';
+        const club = matched?.club ?? 'unknown';
+        const noteParts = [...notes];
+        if (matched) {
+          noteParts.push(`Watch swing: ${matched.club}`);
+        }
+        persistedSessionId = useCageStore.getState().ingestUploadedSwing({
+          clipUri: recorded.uri,
+          club,
+          upload: {
+            uploaded_at: Date.now(),
+            notes: noteParts.join(' • ') || 'Cage swing',
+            duration_sec: null,
+            has_audio: true,
+            source_device: 'phone',
+            tag: null,
+            swinger: firstName,
+            perspective,
+          },
+          source: 'live_cage',
+        });
+        if (pendingBallDetectionRef.current) {
+          useCageStore.getState().setSessionBallArea(persistedSessionId, pendingBallDetectionRef.current);
+          console.log('[cage-mode] applied pre-fired ball detection to session', persistedSessionId);
+          pendingBallDetectionRef.current = null;
+        }
+        // Placeholder analysis so the Library row renders something
+        // immediately. Real coach response patches in below when
+        // coachReview lands.
+        const placeholderIssue: PrimaryIssue = {
+          issue_id: 'cage_coach_review',
+          name: 'Cage swing — coach review',
+          category: 'other',
+          severity: 'minor',
+          occurrence_count: 1,
+          visual_reference_path: null,
+          mechanical_breakdown: 'Coach review pending…',
+          feel_cue: 'Run another swing and see if the same pattern shows up.',
+          detected_in_shots: [],
+          confidence: 'low',
+        };
+        useCageStore.getState().setSessionAnalysis(persistedSessionId, placeholderIssue, null);
+        useCageStore.getState().setSessionAnalysisStatus(persistedSessionId, 'ok');
+        console.log('[cage-mode] persisted swing to Library (pre-coach)', persistedSessionId);
+      } catch (e) {
+        console.log('[cage-mode] Library persist failed (non-fatal):', e);
+      }
+
       void (async () => {
         try {
           const coachRes = await coachReview(features, voiceGender, caddiePersonality);
-          if (swingGenerationRef.current !== swingGen) {
-            console.log('[cage-mode] swing generation moved on; dropping stale coach + persist');
-            return;
-          }
           const coachData = coachRes.kind === 'ok' ? coachRes.data : {
             kevin_response: "I saw the swing — couldn't put words to it just now. Take another and we'll see.",
             confidence: 'low' as const,
           };
-          setCoach(coachData);
+
+          // Patch the Library entry with real coach response (even
+          // if the swing has moved on — the Library row still
+          // benefits from real text, and the session id is stable).
+          if (persistedSessionId) {
+            try {
+              const patchedIssue: PrimaryIssue = {
+                issue_id: 'cage_coach_review',
+                name: 'Cage swing — coach review',
+                category: 'other',
+                severity: 'minor',
+                occurrence_count: 1,
+                visual_reference_path: null,
+                mechanical_breakdown: coachData.kevin_response,
+                feel_cue: 'Run another swing and see if the same pattern shows up.',
+                detected_in_shots: [],
+                confidence: (coachData.confidence ?? 'medium') as PrimaryIssue['confidence'],
+              };
+              useCageStore.getState().setSessionAnalysis(persistedSessionId, patchedIssue, null);
+              useCageStore.getState().setSessionAnalysisStatus(persistedSessionId, 'ok');
+              console.log('[cage-mode] patched Library swing with real coach response', persistedSessionId);
+            } catch (e) {
+              console.log('[cage-mode] coach patch failed (non-fatal):', e);
+            }
+          }
+
+          // UI update + voice playback ONLY if the swing is still
+          // current. If the user advanced to a new swing, dropping
+          // these is correct — they're irrelevant to the current
+          // RESULT view.
+          if (swingGenerationRef.current !== swingGen) {
+            console.log('[cage-mode] swing generation moved on; skipping stale setCoach + speak');
+            return;
+          }
+          const coachData2 = coachRes.kind === 'ok' ? coachRes.data : {
+            kevin_response: "I saw the swing — couldn't put words to it just now. Take another and we'll see.",
+            confidence: 'low' as const,
+          };
+          setCoach(coachData2);
           if (coachRes.kind === 'ok' && voiceEnabled) {
             void (async () => {
               await configureAudioForSpeech();
               await speak(coachRes.data.kevin_response, voiceGender, language, apiUrl);
             })();
-          }
-
-          // 2026-05-23 — Persist this cage swing + coach review to the
-          // Library (cageStore.sessionHistory). Stays in the background
-          // task so it doesn't block the RESULT render.
-          try {
-            const famState = useFamilyStore.getState();
-            const activeMember = famState.active_member_id
-              ? famState.members.find(m => m.id === famState.active_member_id) ?? null
-              : null;
-            const firstName = activeMember?.firstName
-              ?? usePlayerProfileStore.getState().firstName
-              ?? null;
-            const perspective: 'pov_self' | 'watching_someone' =
-              activeMember ? 'watching_someone' : 'pov_self';
-            const club = matched?.club ?? 'unknown';
-            const noteParts = [...notes];
-            if (matched) {
-              noteParts.push(`Watch swing: ${matched.club}`);
-            }
-            if (coachData.kevin_response) noteParts.push(coachData.kevin_response);
-            // 2026-06-07 self-audit C1: belt-and-suspenders generation
-            // check before the Library write. Even if setCoach above
-            // passed the check, in batch mode handleSwingAgain could
-            // have run between the await and now; persisting here
-            // would tag the prior recorded.uri under the wrong cage
-            // session id.
-            if (swingGenerationRef.current !== swingGen) {
-              console.log('[cage-mode] swing generation moved on during persist; aborting');
-              return;
-            }
-            const sessionId = useCageStore.getState().ingestUploadedSwing({
-              clipUri: recorded.uri,
-              club,
-              upload: {
-                uploaded_at: Date.now(),
-                notes: noteParts.join(' • ') || 'Cage swing',
-                duration_sec: null,
-                has_audio: true,
-                source_device: 'phone',
-                tag: null,
-                swinger: firstName,
-                perspective,
-              },
-              source: 'live_cage',
-            });
-            if (pendingBallDetectionRef.current) {
-              useCageStore.getState().setSessionBallArea(sessionId, pendingBallDetectionRef.current);
-              console.log('[cage-mode] applied pre-fired ball detection to session', sessionId);
-              pendingBallDetectionRef.current = null;
-            }
-            const issue: PrimaryIssue = {
-              issue_id: 'cage_coach_review',
-              name: 'Cage swing — coach review',
-              category: 'other',
-              severity: 'minor',
-              occurrence_count: 1,
-              visual_reference_path: null,
-              mechanical_breakdown: coachData.kevin_response,
-              feel_cue: 'Run another swing and see if the same pattern shows up.',
-              detected_in_shots: [],
-              confidence: (coachData.confidence ?? 'medium') as PrimaryIssue['confidence'],
-            };
-            useCageStore.getState().setSessionAnalysis(sessionId, issue, null);
-            useCageStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
-            console.log('[cage-mode] persisted swing to Library', sessionId);
-          } catch (e) {
-            console.log('[cage-mode] Library persist failed (non-fatal):', e);
           }
         } catch (e) {
           console.log('[cage-mode] background coach/persist threw (non-fatal):', e);

@@ -113,15 +113,16 @@ class ShotDetector {
       // updates so yardages auto-refresh as the player walks. Idempotent.
       startSmartFinderGpsTracking();
       this.unsubscribeGps = subscribeGps((fix) => {
-        // 2026-06-07 GPS-audit #1: skip user-marked / tap-derived
-        // fixes. gpsManager.setMarkedFix writes speed:null for both
-        // SmartVision cart taps and the on-course Mark button. Real
-        // GPS ticks always carry a numeric speed (0 when stationary,
-        // >0 when walking). Without this gate, a SmartVision tap
-        // ≥30y from the prior cart position could pass the cartMode
-        // speed gate (latestSpeed=0) and emit a phantom 'shot_likely'
-        // — creating false score entries.
-        if (fix.speed === null) return;
+        // 2026-06-07 GPS-audit #1 (round 4): gate on source === 'user_mark'
+        // not speed === null. Initial fix used speed===null as the
+        // discriminator, but Android `Location.coords.speed` is
+        // legitimately null on stationary watchPositionAsync ticks
+        // AND on getCurrentPositionAsync — so the prior gate silently
+        // disabled real shot detection on Android stationary samples.
+        // GpsFix now carries an explicit `source` field; only
+        // user-mark writes (SmartVision tap + Mark button via
+        // setMarkedFix) get the skip. Live ticks always pass through.
+        if (fix.source === 'user_mark') return;
         this.ingest({
           lat: fix.lat,
           lng: fix.lng,

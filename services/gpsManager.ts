@@ -31,6 +31,16 @@ export interface GpsFix {
   accuracy_m: number | null;
   speed: number | null;
   timestamp: number;
+  // 2026-06-07 audit r4: explicit provenance so consumers can
+  // distinguish live GPS ticks from setMarkedFix writes.
+  // 'live'      = watchPositionAsync / getCurrentPositionAsync tick
+  //               from the OS (may legitimately have speed===null
+  //               on Android stationary samples)
+  // 'user_mark' = setMarkedFix call (SmartVision tap or Mark button)
+  // Default 'live' for back-compat; setMarkedFix overrides to
+  // 'user_mark'. shotDetectionService gates on this to avoid
+  // phantom shot emissions from taps.
+  source?: 'live' | 'user_mark';
 }
 
 type Subscriber = (fix: GpsFix) => void;
@@ -377,6 +387,7 @@ export function setMarkedFix(lat: number, lng: number, accuracy_m: number | null
     accuracy_m,
     speed: null,
     timestamp: Date.now(),
+    source: 'user_mark' as const,
   };
   // 2026-06-06 — Mark a "user-marked" timestamp so the next 1-2 live
   // GPS ticks bypass the outlier-rejection gates in processFix. ONLY

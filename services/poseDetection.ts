@@ -141,7 +141,13 @@ const REQUEST_TIMEOUT_MS = 55_000;
 // chew 50s on the primary then the tentative aborts before its
 // reduced-frame retry completes). 30s gives the tentative real
 // breathing room while staying inside the user's patience budget.
-const TENTATIVE_TIMEOUT_MS = 30_000;
+// 2026-06-07 audit r4: bumped 30s → 55s. Tentative now uses
+// tier='full' (audit r3 H3 fix) so the server can climb the full
+// Haiku → OpenAI → Sonnet escalation chain (30-40s under load).
+// 30s client cap was aborting that chain mid-escalation, defeating
+// the safety net. 55s fits inside Vercel's 60s function maxDuration
+// while giving the server room to complete the deep dive.
+const TENTATIVE_TIMEOUT_MS = 55_000;
 
 /**
  * Sample 5 key frames from a swing clip via expo-video-thumbnails. Each
