@@ -571,12 +571,42 @@ export async function analyzeSwing(
         throw err;
       }
     };
-    const res = await tryFetch(1);
-    const elapsedMs = Date.now() - t0;
+    let res = await tryFetch(1);
+    let elapsedMs = Date.now() - t0;
     V6('STAGE 4 — /api/swing-analysis response', {
       status: res.status,
       elapsed_ms: elapsedMs,
     });
+    // 2026-06-07 — Auto-retry-once for tier=quick 502. After Win #6
+    // shipped fast-fail on Haiku null (server returns 502 in ~5s
+    // instead of escalating 30-40s), the client was leaving the
+    // user with an error message + "tap Record to try another
+    // swing" — losing the speed win to a manual re-record. Retry
+    // once with a 1.2s delay so the warm Haiku + warm prompt cache
+    // can produce a successful read on the second attempt. Net UX:
+    // ~7-8s for a normally-recoverable Haiku hiccup instead of
+    // 30-40s escalation OR a forced re-record. Only fires for
+    // tier=quick — tier=full already has the escalation safety net.
+    if (!res.ok && res.status === 502 && context.tier === 'quick') {
+      V6('STAGE 4 — tier=quick 502, auto-retry once after 1200ms', {
+        first_attempt_elapsed_ms: elapsedMs,
+      });
+      await new Promise(r => setTimeout(r, 1_200));
+      const retryT0 = Date.now();
+      try {
+        res = await tryFetch(1);
+        elapsedMs = Date.now() - t0;
+        V6('STAGE 4 — auto-retry response', {
+          status: res.status,
+          retry_elapsed_ms: Date.now() - retryT0,
+          total_elapsed_ms: elapsedMs,
+        });
+      } catch (e) {
+        V6('STAGE 4 — auto-retry threw, surfacing original error', {
+          error_head: (e instanceof Error ? e.message : String(e)).slice(0, 120),
+        });
+      }
+    }
     if (!res.ok) {
       const body = await res.text().catch(() => '<unreadable>');
       // Phase AF — capture full body (clipped at 800) + status text so the
