@@ -63,8 +63,26 @@ import { logVoiceError, logTranscribeError, logVoiceSilentFail } from '../servic
 // "user wandered away" backstop. 45s comfortably covers any
 // natural question without truncating; user can still tap to stop.
 const AUTO_STOP_MS = 45_000;
-const TRANSCRIBE_TIMEOUT_MS = 15000;
-const BRAIN_TIMEOUT_MS = 30000;
+// 2026-06-06 — Bumped 15s → 25s and 30s → 45s. Cold-start on the
+// first tap of the session (Lambda warm, Anthropic SDK warm, TLS
+// hot) was hitting the 15s transcribe cap or the 30s brain cap and
+// surfacing "That took too long" on the very first question. Both
+// caps now have generous cold-start headroom; warm subsequent turns
+// still finish in <2s and aren't penalized.
+const TRANSCRIBE_TIMEOUT_MS = 25000;
+const BRAIN_TIMEOUT_MS = 45000;
+
+// 2026-06-06 — handleMicPress silence-VAD config. Mirrors the
+// SILENCE_DB_THRESHOLD / SPEECH_DETECT_DB / SILENCE_TIMEOUT_MS in
+// services/voiceService.ts (captureUtterance) so the manual-tap path
+// behaves identically to the follow-up-listen path. Tim's report:
+// "first question waits forever if you don't tap to stop listening"
+// — silence-VAD was only on captureUtterance, the first turn (which
+// always uses handleMicPress) had no silence detector and only the
+// 45s hard cap.
+const MIC_SILENCE_DB_THRESHOLD = -40;
+const MIC_SPEECH_DETECT_DB = -30;
+const MIC_SILENCE_TIMEOUT_MS = 4000;
 
 // 2026-05-26 — Fix BA: client-side close-intent matcher for the
 // follow-up listen loop. The brain handles most "no thanks" well, but
@@ -322,6 +340,17 @@ export const useVoiceCaddie = ({
   const recordingRef    = useRef<Audio.Recording | null>(null);
   const isProcessingRef = useRef(false);
   const autoStopTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 2026-06-06 — Silence-VAD polling timer for handleMicPress.
+  // Cleared in clearAutoStop() alongside autoStopTimer.
+  const silenceVadTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 2026-06-06 — User interrupted caddie mid-speech by tapping. Set in
+  // handleMicPress's isSpeaking() branch; checked by processAudioUri
+  // (and intent-router success branch) after awaiting speak so the
+  // follow-up-listen loop is suppressed — otherwise tapping to stop
+  // a long answer would immediately open the mic again and feel "stuck."
+  // Cleared by handleMicPress at function entry (next user action
+  // implicitly clears the prior interrupt).
+  const userInterruptedRef = useRef(false);
 
   // Phase BJ — propagate KevinPresence.isThinking from any voice state
   // change. Speaking is already auto-tracked by KevinPresenceProvider via
@@ -512,6 +541,10 @@ export const useVoiceCaddie = ({
     if (autoStopTimer.current) {
       clearTimeout(autoStopTimer.current);
       autoStopTimer.current = null;
+    }
+    if (silenceVadTimer.current) {
+      clearInterval(silenceVadTimer.current);
+      silenceVadTimer.current = null;
     }
   };
 
@@ -1000,7 +1033,7 @@ export const useVoiceCaddie = ({
         console.log('[voice] follow-up depth cap reached — ending loop', { depth: followUpDepthRef.current });
         shouldRecurse = false;
       }
-      if (shouldRecurse) {
+      if (shouldRecurse && !userInterruptedRef.current) {
         followUpDepthRef.current += 1;
         await runFollowUpListenLoop();
       }
@@ -1207,7 +1240,7 @@ export const useVoiceCaddie = ({
         }
         if (result.tool_action) onToolAction?.(result.tool_action);
         const replyEndsWithQuestion = (result.voice_response ?? '').trim().endsWith('?');
-        if (replyEndsWithQuestion && voiceEnabled) {
+        if (replyEndsWithQuestion && voiceEnabled && !userInterruptedRef.current) {
           await runFollowUpListenLoop();
         }
         wrappedOnVoiceStateChange('idle');
@@ -1319,7 +1352,7 @@ export const useVoiceCaddie = ({
           // and left the user stranded — "Hole 6 / Hole 6 / Hole 6"
           // entries with no enrichment.
           const replyEndsWithQuestion = (result.voice_response ?? '').trim().endsWith('?');
-          if (replyEndsWithQuestion && voiceEnabled) {
+          if (replyEndsWithQuestion && voiceEnabled && !userInterruptedRef.current) {
             await runFollowUpListenLoop();
           }
           wrappedOnVoiceStateChange('idle');
@@ -1398,7 +1431,7 @@ export const useVoiceCaddie = ({
       // listening" gap Tim flagged tonight.
       const kevinText = (kevinResponse.text ?? '').trim();
       const endsWithQuestion = kevinText.endsWith('?');
-      if (endsWithQuestion && voiceEnabled) {
+      if (endsWithQuestion && voiceEnabled && !userInterruptedRef.current) {
         await runFollowUpListenLoop();
       }
 
@@ -1437,6 +1470,17 @@ export const useVoiceCaddie = ({
     if (isSessionInFlight()) return;
 
     if (isSpeaking()) {
+      // 2026-06-06 — Tim's report: tapping to interrupt mid-speech
+      // "gets stuck and I have to restart the app." Root cause: the
+      // processAudioUri (or intent-router-success) await chain was
+      // mid-`await speakResponse/speakFromBase64`. stopSpeaking()
+      // kills the sound → speak promise resolves → the caller's NEXT
+      // step fires runFollowUpListenLoop() (when Kevin's reply ends
+      // with `?`), which OPENS THE MIC. User just signalled "I'm
+      // done," app immediately demanded more input — that's the
+      // "stuck" state. Set the flag here so the in-flight caller
+      // skips its follow-up and goes cleanly idle.
+      userInterruptedRef.current = true;
       await stopSpeaking();
       isProcessingRef.current = false;
       wrappedOnVoiceStateChange('idle');
@@ -1515,6 +1559,11 @@ export const useVoiceCaddie = ({
     }
 
     // ── START recording ───────────────────
+    // 2026-06-06 — Clear the user-interrupted flag at the start of a
+    // fresh capture. The flag was set when the user tapped to interrupt
+    // a prior reply; once they're starting a new question, that state
+    // is no longer relevant.
+    userInterruptedRef.current = false;
     try {
       // Phase BM — cache the mic permission grant in a module-level flag so
       // every subsequent tap skips the 30-80ms IPC roundtrip to the OS
@@ -1568,7 +1617,28 @@ export const useVoiceCaddie = ({
 
       await configureAudioForRecording();
 
-      const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
+      // 2026-06-06 — Silence-VAD on manual-tap path. Same pattern as
+      // captureUtterance: track speech onset (hasSpoken flips true
+      // once metering > SPEECH_DETECT_DB), track most-recent loud
+      // sample (lastLoudAt), and when (hasSpoken && now - lastLoudAt
+      // ≥ SILENCE_TIMEOUT_MS), auto-trigger handleMicPress() to stop
+      // and process. Eliminates the "first question waits forever"
+      // gap Tim reported — the first turn no longer needs a manual
+      // tap to end. 45s AUTO_STOP_MS remains as the wandered-away
+      // backstop.
+      let micHasSpoken = false;
+      let micLastLoudAt = Date.now();
+      const { recording } = await Audio.Recording.createAsync(
+        { ...RECORDING_OPTIONS, isMeteringEnabled: true },
+        (status) => {
+          if (!status.isRecording) return;
+          const metering = (status as { metering?: number }).metering;
+          if (typeof metering !== 'number') return;
+          if (metering > MIC_SPEECH_DETECT_DB) micHasSpoken = true;
+          if (metering > MIC_SILENCE_DB_THRESHOLD) micLastLoudAt = Date.now();
+        },
+        100,
+      );
 
       // 2026-06-05 — Same 100ms mic warm-up gap captureUtterance uses.
       // Without it, the first ~50-150ms of audio on a cold mic is
@@ -1577,11 +1647,25 @@ export const useVoiceCaddie = ({
       // reports — the first tap's recording is too quiet for Whisper
       // to land a confident transcript, so the user retries.
       await new Promise<void>(r => setTimeout(r, 100));
+      micLastLoudAt = Date.now();
 
       recordingRef.current = recording;
       devLog('[voice] recording started');
 
-      // Auto-stop after AUTO_STOP_MS
+      // 2026-06-06 — Silence-VAD polling timer. Checks every 200ms
+      // whether the user has stopped talking. When the condition trips,
+      // fires handleMicPress() to stop+process (same as a manual tap
+      // or AUTO_STOP_MS firing). silenceVadTimerRef gets cleared in
+      // the STOP branch via clearAutoStop() — we attach to the same
+      // ref pattern so the existing teardown covers it.
+      silenceVadTimer.current = setInterval(() => {
+        if (!recordingRef.current) return;
+        if (micHasSpoken && Date.now() - micLastLoudAt >= MIC_SILENCE_TIMEOUT_MS) {
+          handleMicPress();
+        }
+      }, 200);
+
+      // Auto-stop after AUTO_STOP_MS (hard cap / wandered-away backstop)
       autoStopTimer.current = setTimeout(() => {
         if (recordingRef.current) {
           handleMicPress();
