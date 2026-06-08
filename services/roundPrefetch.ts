@@ -39,6 +39,7 @@
 import { fetchCourseGeometry } from './courseGeometryService';
 import { fetchCourseContent } from './courseContentService';
 import { fetchCourseIntelligence } from './courseIntelligenceService';
+import { prefetchHoles, isMapboxConfigured, type HoleImageryInput } from './mapboxImagery';
 import type { CourseHole } from '../store/roundStore';
 
 type PrefetchArgs = {
@@ -119,6 +120,40 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<void> {
       console.log('[roundPrefetch] intelligence failed (non-fatal):', e instanceof Error ? e.message : String(e));
     });
 
-  await Promise.allSettled([geometryP, contentP, intelP]);
+  // 2026-06-07 — Mapbox tile prefetch for all 18 holes so SmartVision
+  // Mode 1 (satellite tile) is fully offline-safe mid-round even on
+  // first-visit holes. Previously fetchHoleImagery cached opportunistically
+  // per-screen-mount; a first-time visit to a hole with no cell would
+  // show a blank canvas. Tile cache lives in expo-file-system; each
+  // tile is 50-150 KB, so 18 holes ≈ 1-3 MB.
+  // Fire-and-forget after the geometry/content fetches because tile
+  // prefetch wants the green/tee lat/lngs from courseGeometry that
+  // may have come in via geometryP.
+  let tileP: Promise<unknown> = Promise.resolve();
+  if (isMapboxConfigured()) {
+    const tileInputs: HoleImageryInput[] = holes
+      .filter(h => typeof h.teeLat === 'number' && typeof h.teeLng === 'number' && typeof h.middleLat === 'number' && typeof h.middleLng === 'number')
+      .map(h => ({
+        courseId,
+        holeNumber: h.hole,
+        par: h.par,
+        yardage: typeof h.distance === 'number' ? h.distance : 350,
+        tee: { lat: h.teeLat as number, lng: h.teeLng as number },
+        green: { lat: h.middleLat as number, lng: h.middleLng as number },
+      }));
+    if (tileInputs.length > 0) {
+      tileP = prefetchHoles(tileInputs)
+        .then(() => {
+          console.log('[roundPrefetch] mapbox tiles prefetched for', courseId, '— count:', tileInputs.length);
+        })
+        .catch((e) => {
+          console.log('[roundPrefetch] mapbox prefetch failed (non-fatal):', e instanceof Error ? e.message : String(e));
+        });
+    } else {
+      console.log('[roundPrefetch] mapbox skipped — no holes have full tee+green coords yet');
+    }
+  }
+
+  await Promise.allSettled([geometryP, contentP, intelP, tileP]);
   console.log('[roundPrefetch] complete for', courseId, '— elapsed', Date.now() - startedAt, 'ms');
 }
