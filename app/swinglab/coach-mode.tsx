@@ -143,16 +143,18 @@ export default function CoachMode() {
   };
 
   // ── Capture handoffs ────────────────────────────────────────────
-  // Both routes already respect familyStore.active_member_id post
-  // Fix #7. We just navigate; perspective + swinger are correct on
-  // ingest. The glasses path is voice-driven ("record this"); we show
-  // an instruction card instead of taking a tap action.
+  // 2026-06-07 — Phone capture now uses the new unified Smart Motion
+  // interface (was the old quick-record "goofy" screen). Smart Motion
+  // reads familyStore.active_member_id on ingest, so the swing is
+  // attributed to the active student with perspective 'watching_someone'.
+  // The glasses path is voice-driven ("record this"); we show an
+  // instruction card instead of taking a tap action.
   const startPhoneCapture = () => {
     if (!activeMember) {
       Alert.alert('Pick a player first', 'Tap a player or add one to get started.');
       return;
     }
-    router.push('/swinglab/quick-record' as never);
+    router.push('/swinglab/smartmotion' as never);
   };
 
   const exitCoachMode = () => {

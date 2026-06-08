@@ -61,11 +61,8 @@ export function SmartMotionHeader({
   return (
     <View style={[styles.header, { borderBottomColor: colors.border }, style]}>
       <View style={styles.headerBrand}>
-        <Ionicons name="golf-outline" size={22} color={colors.accent} />
-        <View style={{ marginLeft: 8 }}>
-          <Text style={[styles.brandWordmark, { color: colors.text_primary }]}>SMART PLAY, SMART MOTION</Text>
-          <Text style={[styles.brandSub, { color: colors.accent }]}>{subtitle}</Text>
-        </View>
+        <Text style={[styles.brandWordmark, { color: colors.text_primary }]}>SMARTMOTION</Text>
+        <Text style={[styles.brandSub, { color: colors.accent }]}>{subtitle}</Text>
       </View>
       {onSettings ? (
         <Pressable onPress={onSettings} hitSlop={10} accessibilityRole="button" accessibilityLabel="Settings">

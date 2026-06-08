@@ -46,7 +46,24 @@ export type StrikeDetectionResult =
   | { kind: 'too-short'; floorDb: number }
   | { kind: 'noisy-environment'; floorDb: number };
 
-export function detectStrikes(samples: MeterSample[]): StrikeDetectionResult {
+/**
+ * 2026-06-07 — Optional per-device calibration. When the user has run
+ * the 10-strike calibration, the Smart Motion segmentation engine passes
+ * `thresholdDb` (the calibration's transientThresholdDb — dB above floor)
+ * so detection matches the user's actual mic distance / strike loudness
+ * instead of the universal 30 dB default. `minRecordingMs` lets short
+ * calibration captures through without the 2s full-session floor.
+ */
+export interface DetectStrikesOptions {
+  /** dB above the noise floor a peak must exceed. Default 30. */
+  thresholdDb?: number;
+  /** Minimum recording length to accept. Default 2000ms. */
+  minRecordingMs?: number;
+}
+
+export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOptions): StrikeDetectionResult {
+  const thresholdDb = opts?.thresholdDb ?? STRIKE_THRESHOLD_DB;
+  const minRecordingMs = opts?.minRecordingMs ?? MIN_RECORDING_MS;
   if (samples.length < 2) {
     return { kind: 'too-short', floorDb: -160 };
   }
@@ -58,7 +75,7 @@ export function detectStrikes(samples: MeterSample[]): StrikeDetectionResult {
   const totalMs = lastSample.timeMs - first.timeMs;
   const floorDb = median(samples.map((s) => s.dB));
 
-  if (totalMs < MIN_RECORDING_MS) {
+  if (totalMs < minRecordingMs) {
     return { kind: 'too-short', floorDb };
   }
   if (floorDb > NOISY_FLOOR_DB) {
@@ -67,7 +84,7 @@ export function detectStrikes(samples: MeterSample[]): StrikeDetectionResult {
 
   const startMs = first.timeMs;
   const endMs = lastSample.timeMs;
-  const peakThresholdDb = floorDb + STRIKE_THRESHOLD_DB;
+  const peakThresholdDb = floorDb + thresholdDb;
 
   // First pass: find candidate peaks (local maxima above threshold,
   // outside head/tail rejection windows).

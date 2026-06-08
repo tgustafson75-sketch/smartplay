@@ -1,5 +1,6 @@
 import { Audio } from 'expo-av';
 import type { MeterSample } from './strikeDetector';
+import { setAudioModeSerial } from '../voiceService';
 
 /**
  * Audio metering recorder — wraps expo-av Audio.Recording with
@@ -56,6 +57,18 @@ export type MeteringHandle = {
 export async function startMeteredRecording(
   onSample?: (sample: MeterSample) => void,
 ): Promise<MeteringHandle> {
+  // 2026-06-07 — REQUIRED on iOS: without recording audio mode,
+  // prepareToRecordAsync throws. Smart Motion runs this metering track
+  // in parallel with the camera capture (same proven pattern as
+  // acousticImpactDetector); the serialized setter avoids the audio-
+  // singleton race with the caddie mic / camera. Without this the whole
+  // acoustic feature silently no-ops on iOS.
+  await setAudioModeSerial({
+    allowsRecordingIOS: true,
+    playsInSilentModeIOS: true,
+    staysActiveInBackground: false,
+  });
+
   const recording = new Audio.Recording();
   // We discard the audio file — only the metering callback matters.
   // Using LOW quality keeps the temp file small. METERING_INTERVAL_MS
@@ -78,22 +91,31 @@ export async function startMeteredRecording(
 
   await recording.startAsync();
 
+  // 2026-06-07 — idempotent teardown. Smart Motion can race stop() (user
+  // taps Stop) against cancel() (screen unmount); a double
+  // stopAndUnloadAsync on the same Recording rejects. The `done` latch
+  // makes the second call a no-op so dual-source teardown is safe.
+  let done = false;
   return {
     async stop() {
+      const uri = recording.getURI();
+      if (done) return { samples, uri, durationMs: Date.now() - startedAt };
+      done = true;
       try {
         await recording.stopAndUnloadAsync();
       } catch {
         // expo-av sometimes throws on stop after a brief recording;
         // we still want to return whatever samples we collected.
       }
-      const uri = recording.getURI();
       return {
         samples,
-        uri,
+        uri: recording.getURI() ?? uri,
         durationMs: Date.now() - startedAt,
       };
     },
     async cancel() {
+      if (done) return;
+      done = true;
       try {
         await recording.stopAndUnloadAsync();
       } catch {

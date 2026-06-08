@@ -835,10 +835,8 @@ function AppNavigator() {
           name="swinglab/space-scan"
           options={{ animation: 'slide_from_bottom' }}
         />
-        <Stack.Screen
-          name="swinglab/cage-mode"
-          options={{ animation: 'slide_from_bottom', headerShown: false }}
-        />
+        {/* 2026-06-07 — Cage Mode retired: merged into Smart Motion
+            (unified capture). Route + screen file removed. */}
         {/* 2026-05-23 — Coach Mode (Fix #8). Watching-someone wrapper
             built on Fix #7's perspective threading. */}
         <Stack.Screen
