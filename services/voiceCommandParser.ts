@@ -1,5 +1,6 @@
 import type { VoiceIntent, AppContext, IntentConfidence } from '../types/voiceIntent';
 import type { Persona, VoiceGender } from '../lib/persona';
+import { isDegraded, recordFailure, recordSuccess } from './voiceCircuitBreaker';
 
 export async function parseVoiceIntent(
   text: string,
@@ -20,6 +21,15 @@ export async function parseVoiceIntent(
     };
   }
 
+  // 2026-06-07 audit r6 — Circuit breaker short-circuit. If
+  // /api/voice-intent has been hammered with failures recently,
+  // skip the fetch entirely and return 'unknown'. The router will
+  // route the resulting failure to localStatusResponder (also
+  // shipped in r6) which may produce a useful templated answer.
+  if (isDegraded('voice-intent')) {
+    console.log('[voiceCommandParser] /api/voice-intent degraded — short-circuit');
+    return failure(text);
+  }
   try {
     const controller = new AbortController();
     // 2026-06-07 — Bumped 8s → 15s. The classifier runs on Anthropic
@@ -54,8 +64,10 @@ export async function parseVoiceIntent(
     }).finally(() => clearTimeout(timeout));
 
     if (!res.ok) {
+      recordFailure('voice-intent');
       return failure(text);
     }
+    recordSuccess('voice-intent');
 
     const data = await res.json() as {
       intent_type?: string;
@@ -91,6 +103,7 @@ export async function parseVoiceIntent(
 
   } catch (err) {
     console.log('[voiceCommandParser] error:', err);
+    recordFailure('voice-intent');
     return failure(text);
   }
 }

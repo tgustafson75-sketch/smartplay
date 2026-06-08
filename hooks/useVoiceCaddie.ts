@@ -24,6 +24,7 @@ import {
 import { checkContent } from '../services/contentGuardrail';
 import { resolveAckClip } from '../services/quickAckClips';
 import { resolveGreetingClip } from '../services/quickGreetingClips';
+import { isDegraded as isVoiceEndpointDegraded, recordFailure as recordVoiceEndpointFailure, recordSuccess as recordVoiceEndpointSuccess } from '../services/voiceCircuitBreaker';
 // 2026-05-21 — Consolidation 4: routine voice traces gated through devLog.
 import { devLog } from '../services/devLog';
 import { isSessionInFlight } from '../services/listeningSession';
@@ -696,6 +697,16 @@ export const useVoiceCaddie = ({
         }
       } catch { /* non-fatal — brain still works without intel */ }
 
+      // 2026-06-07 audit r6 — Circuit breaker short-circuit. If
+      // /api/kevin has been hammered with failures recently, skip
+      // the fetch and route to the catch path immediately so the
+      // local-status responder fallback fires without paying the
+      // 60s radio-wake-and-timeout cost.
+      if (isVoiceEndpointDegraded('kevin')) {
+        console.log('[voice] /api/kevin degraded — short-circuit to local fallback');
+        throw new Error('brain_endpoint_degraded');
+      }
+
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), BRAIN_TIMEOUT_MS);
 
@@ -873,6 +884,7 @@ export const useVoiceCaddie = ({
       }).finally(() => clearTimeout(timeout));
 
       if (!res.ok) {
+        recordVoiceEndpointFailure('kevin');
         // Phase V.7+ — short haptic so Tim feels the network blip even if
         // he's not looking at the screen. Bubble text + speakResponse local
         // TTS still show/play; this just adds a tactile "something went
@@ -880,6 +892,7 @@ export const useVoiceCaddie = ({
         try { Vibration.vibrate(120); } catch {}
         return { text: 'Sorry, lost you for a moment. Try again.', audioBase64: null, toolAction: null };
       }
+      recordVoiceEndpointSuccess('kevin');
       const data = await res.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null };
 
       // Points — every successful caddie response is a real interaction
@@ -898,6 +911,10 @@ export const useVoiceCaddie = ({
       };
 
     } catch (err) {
+      // 2026-06-07 audit r6 — Record failure for circuit breaker.
+      // 3 failures within 30s → /api/kevin marked degraded for 60s,
+      // Local Mode auto-engages.
+      recordVoiceEndpointFailure('kevin');
       console.log('[voice] brain error:', err);
       logVoiceError('kevin_response', err);
       try { Vibration.vibrate(120); } catch {}
@@ -1159,6 +1176,18 @@ export const useVoiceCaddie = ({
         console.log('[voice] file size probe failed (continuing):', e);
       }
 
+      // 2026-06-07 audit r6 — Circuit breaker short-circuit for
+      // /api/transcribe. Voice is effectively muted when transcribe
+      // fails consistently; better to fast-fail with a clear message
+      // than burn another 40s on a doomed network call.
+      if (isVoiceEndpointDegraded('transcribe')) {
+        console.log('[voice] /api/transcribe degraded — short-circuit');
+        onResponseReceived('Cell signal weak — voice paused. Tap again when you have signal.');
+        wrappedOnVoiceStateChange('idle');
+        isProcessingRef.current = false;
+        return;
+      }
+
       const formData = new FormData();
       formData.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
       formData.append('language', language);
@@ -1182,6 +1211,8 @@ export const useVoiceCaddie = ({
       // assuming the mic missed them. Empty transcript on a 200 is
       // still "user said nothing" — silent return.
       if (!transcribeRes.ok || transcribeData.error) {
+        // 2026-06-07 audit r6 — Record failure for circuit breaker.
+        recordVoiceEndpointFailure('transcribe');
         console.error('[voice] transcribe failed', transcribeRes.status, transcribeData.error);
         logTranscribeError(transcribeRes.status, transcribeData.error ?? `HTTP ${transcribeRes.status}`);
         try { Vibration.vibrate(120); } catch {}
@@ -1194,6 +1225,7 @@ export const useVoiceCaddie = ({
         isProcessingRef.current = false;
         return;
       }
+      recordVoiceEndpointSuccess('transcribe');
 
       devLog('[voice] transcript:', transcript);
 
@@ -1529,6 +1561,11 @@ export const useVoiceCaddie = ({
       const aborted = err instanceof Error && err.name === 'AbortError'
         || message.toLowerCase().includes('aborted');
       console.log('[voice] process error:', err);
+      // 2026-06-07 audit r6 — Most failures here are transcribe-related
+      // (the fetch threw or aborted). Record for the circuit breaker
+      // so repeated cellular weak-signal stretches degrade /api/transcribe
+      // and short-circuit subsequent attempts.
+      recordVoiceEndpointFailure('transcribe');
       if (aborted) {
         logTranscribeError(null, message, { source: 'process_audio_abort' });
         onResponseReceived('That took too long. Please try again.');
