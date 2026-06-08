@@ -55,8 +55,10 @@ import {
 import {
   extractPoseFramesFromVideo,
   analyzeSwingFromVideo,
+  deriveSwingTempo,
   type PoseFrame,
   type SwingBiomechanics,
+  type SwingTempo,
 } from '../../services/poseAnalysisApi';
 import { startMeteredRecording, type MeteringHandle } from '../../services/swing/audioMetering';
 import { detectStrikes } from '../../services/swing/strikeDetector';
@@ -195,6 +197,7 @@ export default function SmartMotion() {
   const [coachNote, setCoachNote] = useState('');
   const [playbackMs, setPlaybackMs] = useState(0);
   const [showSkeleton, setShowSkeleton] = useState(true);
+  const [tempo, setTempo] = useState<SwingTempo | null>(null);
   const [swingAnalyzing, setSwingAnalyzing] = useState(false);
   const analysisCacheRef = useRef<Record<number, SwingAnalysis>>({});
 
@@ -379,6 +382,26 @@ export default function SmartMotion() {
     })();
     return () => { cancelled = true; };
   }, [clipUri, videoDurationMs]);
+
+  // Acoustic-anchored tempo for the selected swing. Impact comes from the
+  // acoustic strike detector (segment.strikeMs); top-of-backswing is read
+  // from pose. Recomputes when the selected swing changes.
+  useEffect(() => {
+    const seg = segments[selectedSwing];
+    if (!clipUri || !seg || seg.strikeMs == null) { setTempo(null); return; }
+    let cancelled = false;
+    setTempo(null);
+    void (async () => {
+      try {
+        const t = await deriveSwingTempo(clipUri, seg.strikeMs);
+        if (!cancelled) setTempo(t);
+      } catch (e) {
+        console.log('[smartmotion] tempo derive failed (non-fatal):', e);
+        if (!cancelled) setTempo(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [clipUri, segments, selectedSwing]);
 
   // Library re-analyze (clipUriParam) path.
   useEffect(() => {
@@ -748,22 +771,39 @@ export default function SmartMotion() {
 
         {/* BOTTOM PANEL — floating data + controls */}
         <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 8 }]}>
-          {reel}
-          {skeletonRow}
-
+          {/* REVIEW STATS — speed cards, tempo, body analysis (matches redesign) */}
           {isReview ? (
             <>
+              {skeletonRow}
               <View style={styles.speedRow}>
-                <SpeedStat label="CLUB" value={metrics.club_speed.value != null ? String(metrics.club_speed.value) : null} unit="mph" estimate={!isTruthGrade(metrics.club_speed.source)} />
-                <SpeedStat label="BALL" value={metrics.ball_speed.value != null ? String(metrics.ball_speed.value) : null} unit="mph" estimate={!isTruthGrade(metrics.ball_speed.source)} />
-                <SpeedStat label="CARRY" value={metrics.carry_yards.value != null ? String(metrics.carry_yards.value) : null} unit="yds" estimate={!isTruthGrade(metrics.carry_yards.source)} />
+                <SpeedStat
+                  label="CLUB"
+                  value={metrics.club_speed.value != null ? String(metrics.club_speed.value) : null}
+                  unit="mph"
+                  estimate={!isTruthGrade(metrics.club_speed.source)}
+                  style={{ flex: 1 }}
+                />
+                <SpeedStat
+                  label="BALL"
+                  value={metrics.ball_speed.value != null ? String(metrics.ball_speed.value) : null}
+                  unit="mph"
+                  estimate={!isTruthGrade(metrics.ball_speed.source)}
+                  style={{ flex: 1 }}
+                />
+                <SpeedStat
+                  label="CARRY"
+                  value={metrics.carry_yards.value != null ? String(metrics.carry_yards.value) : null}
+                  unit="yds"
+                  estimate={!isTruthGrade(metrics.carry_yards.source)}
+                  style={{ flex: 1 }}
+                />
               </View>
-              <View style={styles.dataRow}>
-                <View style={{ flex: 1 }}><TempoBar ratio={null} /></View>
-              </View>
+              <TempoBar ratio={tempo?.ratio ?? null} />
               <BodyAnalysisRow items={bodyItems} />
             </>
           ) : null}
+
+          {reel}
 
           <View style={styles.controlsRow}>
             <View style={{ flex: 1 }}>

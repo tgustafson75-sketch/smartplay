@@ -589,3 +589,118 @@ export async function extractPoseFramesFromVideo(videoUri: string, durationMs: n
   if (frames.length === 0) return null;
   return frames;
 }
+
+// ─── Acoustic-anchored tempo ─────────────────────────────────────────
+
+/** Backswing:downswing tempo for a single swing. Ratio ≈ 3:1 is the
+ *  tour standard. `ratio` is null when pose couldn't yield a trustworthy
+ *  top-of-backswing — the UI then shows "—" rather than a fabricated
+ *  number. */
+export interface SwingTempo {
+  ratio: number | null;
+  backswingMs: number | null;
+  downswingMs: number | null;
+  /** Top-of-backswing time relative to clip start (ms). */
+  topMs: number | null;
+  source: 'acoustic_pose' | 'none';
+  confidence: 'med' | 'low';
+}
+
+const NO_TEMPO: SwingTempo = {
+  ratio: null, backswingMs: null, downswingMs: null, topMs: null,
+  source: 'none', confidence: 'low',
+};
+
+/**
+ * 2026-06-08 — Acoustic-anchored swing tempo.
+ *
+ * The classic tour ratio is backswing:downswing ≈ 3:1. We measure it
+ * honestly from two anchors:
+ *   • IMPACT — supplied by the caller from the acoustic strike detector
+ *     (services/swing/strikeDetector), precise to the audio sample. This
+ *     is `impactMs` (relative to clip start).
+ *   • TOP-OF-BACKSWING + TAKEAWAY — read from pose: we densely sample
+ *     frames in the ~1.5s window before impact and track the hands
+ *     (wrist keypoints). The frame where the hands are highest (minimum
+ *     wrist-y, since image y grows downward) is the top of the
+ *     backswing; takeaway is the first frame where the hands have left
+ *     their address height.
+ *
+ * Everything derives from real signal — no hardcoded clip fractions like
+ * SWING_POSITIONS above. When the pose curve doesn't show a clean
+ * interior peak (occlusion, subject too small, partial swing) we return
+ * ratio:null. Pose-derived → confidence ceilings at 'med'.
+ */
+export async function deriveSwingTempo(
+  videoUri: string,
+  impactMs: number,
+  opts?: { windowMs?: number; samples?: number },
+): Promise<SwingTempo> {
+  const windowMs = opts?.windowMs ?? 1500;
+  const samples = Math.max(8, opts?.samples ?? 14);
+  const startMs = Math.max(0, impactMs - windowMs);
+  if (impactMs - startMs < 400) return NO_TEMPO; // need room for a swing
+
+  const times: number[] = [];
+  for (let i = 0; i < samples; i++) {
+    times.push(Math.round(startMs + ((impactMs - startMs) * i) / (samples - 1)));
+  }
+
+  // Sample pose at each time; track average wrist height (hands).
+  const series: { t: number; y: number }[] = [];
+  for (const t of times) {
+    try {
+      const { uri } = await VideoThumbnails.getThumbnailAsync(videoUri, { time: t, quality: 0.6 });
+      const frame = await analyzePoseFromUri(uri, t);
+      if (!frame) continue;
+      const lw = getKp(frame, 'left_wrist');
+      const rw = getKp(frame, 'right_wrist');
+      const ys = [lw?.y, rw?.y].filter((v): v is number => typeof v === 'number');
+      if (ys.length === 0) continue;
+      series.push({ t, y: ys.reduce((a, b) => a + b, 0) / ys.length });
+    } catch {
+      // a few gaps are fine
+    }
+  }
+  if (series.length < 6) return NO_TEMPO;
+
+  // Top of backswing = hands highest = minimum y. Must be interior
+  // (not first/last sample) to count as a real reversal.
+  let topIdx = 0;
+  for (let i = 1; i < series.length; i++) {
+    if (series[i].y < series[topIdx].y) topIdx = i;
+  }
+  if (topIdx === 0 || topIdx === series.length - 1) return NO_TEMPO;
+
+  // Takeaway = first sample where the hands have risen meaningfully from
+  // address (first-sample) height. Threshold scales to observed travel
+  // so it's robust to normalized-vs-pixel coordinates.
+  const addressY = series[0].y;
+  const travel = addressY - series[topIdx].y; // positive: hands went up
+  if (travel <= 0) return NO_TEMPO;
+  const onsetDelta = travel * 0.2;
+  let takeIdx = 0;
+  for (let i = 0; i <= topIdx; i++) {
+    if (addressY - series[i].y >= onsetDelta) { takeIdx = i; break; }
+  }
+
+  const topMs = series[topIdx].t;
+  const backswingMs = topMs - series[takeIdx].t;
+  const downswingMs = impactMs - topMs;
+
+  // Sanity windows for a real full/partial swing.
+  if (downswingMs < 80 || downswingMs > 700) return NO_TEMPO;
+  if (backswingMs < 250 || backswingMs > 1600) return NO_TEMPO;
+  const ratio = backswingMs / downswingMs;
+  if (!(ratio >= 1.0 && ratio <= 6.0)) return NO_TEMPO;
+
+  const clean = series.length >= 9 && takeIdx > 0;
+  return {
+    ratio: Math.round(ratio * 10) / 10,
+    backswingMs,
+    downswingMs,
+    topMs,
+    source: 'acoustic_pose',
+    confidence: clean ? 'med' : 'low',
+  };
+}
