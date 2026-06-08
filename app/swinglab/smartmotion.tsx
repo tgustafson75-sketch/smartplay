@@ -41,6 +41,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOverlay';
+import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 import { useTheme } from '../../contexts/ThemeContext';
 import { analyzeSwing, type SwingAnalysis } from '../../services/poseDetection';
@@ -192,6 +193,10 @@ export default function SmartMotion() {
   const [annotateOpen, setAnnotateOpen] = useState(false);
   const [showLayman, setShowLayman] = useState(false);
   const [coachNote, setCoachNote] = useState('');
+  const [playbackMs, setPlaybackMs] = useState(0);
+  const [showSkeleton, setShowSkeleton] = useState(true);
+  const [swingAnalyzing, setSwingAnalyzing] = useState(false);
+  const analysisCacheRef = useRef<Record<number, SwingAnalysis>>({});
 
   const cameraRef = useRef<CameraView>(null);
   const videoRef = useRef<Video>(null);
@@ -251,7 +256,7 @@ export default function SmartMotion() {
   }, []);
 
   const runAnalysis = useCallback(
-    async (uri: string) => {
+    async (uri: string, segment?: SwingSegment) => {
       setPhase('analyzing');
       setAnalysis(null);
       setAnalysisError(null);
@@ -259,6 +264,8 @@ export default function SmartMotion() {
       setBiomech(null);
       setVideoDurationMs(null);
       ingestedSessionIdRef.current = null;
+      analysisCacheRef.current = {};
+      const boundaries = segment ? { startSec: segment.startMs / 1000, endSec: segment.endMs / 1000 } : undefined;
 
       try {
         // Coach Mode attribution: when a family member is active (coach
@@ -297,7 +304,7 @@ export default function SmartMotion() {
         const result = await Promise.race([
           analyzeSwing(uri, {
             club: 'unknown',
-            swing_number: 1,
+            swing_number: segment?.index ?? 1,
             caddie_name: caddiePersonality,
             angle,
             language,
@@ -307,13 +314,14 @@ export default function SmartMotion() {
               first_name: profile.firstName ?? null,
             },
             tier: 'quick',
-          }),
+          }, boundaries),
           new Promise<Awaited<ReturnType<typeof analyzeSwing>>>((resolve) =>
             setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), 30000),
           ),
         ]);
         if (result.kind === 'ok') {
           setAnalysis(result.analysis);
+          analysisCacheRef.current[(segment?.index ?? 1) - 1] = result.analysis;
           const sessionId = ingestedSessionIdRef.current;
           if (sessionId) {
             try {
@@ -418,17 +426,47 @@ export default function SmartMotion() {
     setPage(Math.round(e.nativeEvent.contentOffset.x / w));
   }, []);
 
-  const selectSwing = useCallback((idx: number) => {
-    setSelectedSwing(idx);
-    setSegments((prev) => {
-      const seg = prev[idx];
-      if (seg) {
-        videoRef.current?.setPositionAsync(seg.startMs).catch(() => undefined);
-        videoRef.current?.playAsync().catch(() => undefined);
-      }
-      return prev;
-    });
-  }, []);
+  const selectSwing = useCallback(
+    async (idx: number) => {
+      const seg = segments[idx];
+      if (!seg) return;
+      setSelectedSwing(idx);
+      videoRef.current?.setPositionAsync(seg.startMs).catch(() => undefined);
+      videoRef.current?.playAsync().catch(() => undefined);
+
+      const cached = analysisCacheRef.current[idx];
+      if (cached) { setAnalysis(cached); return; }
+      if (!clipUri) return;
+      // Per-swing analysis on demand — windowed to this segment.
+      setSwingAnalyzing(true);
+      try {
+        const r = await Promise.race([
+          analyzeSwing(clipUri, {
+            club: 'unknown',
+            swing_number: seg.index,
+            caddie_name: caddiePersonality,
+            angle,
+            language,
+            player_context: {
+              handicap: profile.handicap ?? null,
+              dominant_miss: profile.dominantMiss ?? null,
+              first_name: profile.firstName ?? null,
+            },
+            tier: 'quick',
+          }, { startSec: seg.startMs / 1000, endSec: seg.endMs / 1000 }),
+          new Promise<Awaited<ReturnType<typeof analyzeSwing>>>((resolve) =>
+            setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), 30000),
+          ),
+        ]);
+        if (r.kind === 'ok') {
+          setAnalysis(r.analysis);
+          analysisCacheRef.current[idx] = r.analysis;
+        }
+      } catch { /* keep prior analysis on failure */ }
+      setSwingAnalyzing(false);
+    },
+    [segments, clipUri, angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName],
+  );
 
   const startRecording = useCallback(async () => {
     if (!cameraRef.current || recordingPromiseRef.current) return;
@@ -527,7 +565,9 @@ export default function SmartMotion() {
         return;
       }
       setClipUri(recorded.uri);
-      void runAnalysis(recorded.uri);
+      // Analyze the FIRST detected swing windowed to its segment; other
+      // swings analyze on-demand when selected in the reel.
+      void runAnalysis(recorded.uri, detectedSegments[0]);
     } catch (e) {
       recordingPromiseRef.current = null;
       stoppingRef.current = false;
@@ -580,6 +620,38 @@ export default function SmartMotion() {
       <View style={styles.actionBtn} />
     );
 
+  // ── pause / scrub to a swing position (skeleton attached) ──
+  const seekToPosition = (pos: NonNullable<PoseFrame['position']>) => {
+    const f = poseFrames?.find((p) => p.position === pos);
+    if (f) {
+      videoRef.current?.setPositionAsync(f.timestampMs).catch(() => undefined);
+      videoRef.current?.pauseAsync().catch(() => undefined);
+    }
+  };
+  const P_SCRUB: { key: NonNullable<PoseFrame['position']>; label: string }[] = [
+    { key: 'P1_address', label: 'Address' },
+    { key: 'P4_top', label: 'Top' },
+    { key: 'P6_impact', label: 'Impact' },
+    { key: 'P10_finish', label: 'Finish' },
+  ];
+  const skeletonRow =
+    isReview && poseFrames && poseFrames.length > 0 ? (
+      <View style={styles.skelRow}>
+        <Pressable
+          onPress={() => setShowSkeleton((v) => !v)}
+          style={[styles.skelToggle, { borderColor: showSkeleton ? colors.accent : 'rgba(255,255,255,0.3)', backgroundColor: showSkeleton ? colors.accent_muted : 'rgba(0,0,0,0.4)' }]}
+        >
+          <Ionicons name="body-outline" size={13} color={showSkeleton ? colors.accent : '#fff'} />
+          <Text style={[styles.skelToggleText, { color: showSkeleton ? colors.accent : '#fff' }]}>Skeleton</Text>
+        </Pressable>
+        {P_SCRUB.map((p) => (
+          <Pressable key={p.key} onPress={() => seekToPosition(p.key)} style={styles.scrubChip}>
+            <Text style={styles.scrubChipText}>{p.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+    ) : null;
+
   // ── swing reel (multi-swing) ──
   const reel =
     isReview && segments.length > 1 ? (
@@ -592,7 +664,7 @@ export default function SmartMotion() {
             return (
               <Pressable
                 key={i}
-                onPress={() => selectSwing(i)}
+                onPress={() => void selectSwing(i)}
                 style={[styles.reelChip, { borderColor: sel ? tone : 'rgba(255,255,255,0.3)', backgroundColor: sel ? tone : 'rgba(0,0,0,0.5)' }]}
               >
                 <Text style={[styles.reelChipText, { color: sel ? '#06281b' : '#fff' }]}>{s.index}</Text>
@@ -617,6 +689,7 @@ export default function SmartMotion() {
             shouldPlay
             useNativeControls={false}
             onLoad={(s) => { if ('durationMillis' in s && s.durationMillis) setVideoDurationMs(s.durationMillis); }}
+            onPlaybackStatusUpdate={(s) => { if ('positionMillis' in s && typeof s.positionMillis === 'number') setPlaybackMs(s.positionMillis); }}
           />
         ) : (
           <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" mode="video" />
@@ -625,6 +698,13 @@ export default function SmartMotion() {
         {/* Smart Capture — tap exposed video to freeze + mark up. */}
         {isReview && clipUri ? (
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setAnnotateOpen(true)} accessibilityRole="button" accessibilityLabel="Freeze and mark up this swing" />
+        ) : null}
+
+        {/* Attached skeletal overlay — real keypoints tracked to playback. */}
+        {isReview && showSkeleton && poseFrames && poseFrames.length > 0 ? (
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <SwingBodyOverlay frames={poseFrames} currentTimeMs={playbackMs} showSkeleton showTrace={false} />
+          </View>
         ) : null}
 
         {phase !== 'analyzing' ? <CaptureGuides mode={angle} /> : null}
@@ -669,6 +749,7 @@ export default function SmartMotion() {
         {/* BOTTOM PANEL — floating data + controls */}
         <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 8 }]}>
           {reel}
+          {skeletonRow}
 
           {isReview ? (
             <>
@@ -729,6 +810,13 @@ export default function SmartMotion() {
           <Text style={[styles.backChipText, { color: colors.text_muted }]}>Capture</Text>
         </Pressable>
       </View>
+
+      {isReview && segments.length > 1 ? (
+        <View style={styles.swingTag}>
+          <Text style={[styles.swingTagText, { color: colors.text_muted }]}>SWING {selectedSwing + 1} OF {segments.length}</Text>
+          {swingAnalyzing ? <ActivityIndicator size="small" color={colors.accent} /> : null}
+        </View>
+      ) : null}
 
       {!isReview ? (
         <Text style={[styles.muted, { color: colors.text_muted }]}>Record a swing to see your full breakdown, drill, and notes here.</Text>
@@ -869,6 +957,15 @@ const styles = StyleSheet.create({
   reelLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   reelChip: { width: 34, height: 34, borderRadius: 17, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   reelChipText: { fontSize: 14, fontWeight: '900' },
+
+  skelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  skelToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  skelToggleText: { fontSize: 11, fontWeight: '800' },
+  scrubChip: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5, backgroundColor: 'rgba(0,0,0,0.4)' },
+  scrubChipText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+
+  swingTag: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  swingTagText: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
 
   speedRow: { flexDirection: 'row', gap: 8 },
   dataRow: { flexDirection: 'row', gap: 8 },
