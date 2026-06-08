@@ -119,6 +119,23 @@ export default function HarnessScreen() {
   const [states, setStates] = useState<Record<string, RowState>>({});
   const [running, setRunning] = useState(false);
 
+  // Declared with all hooks, before any early return — rules-of-hooks.
+  const summary = useMemo(() => {
+    let pass = 0, fail = 0, skip = 0;
+    let total = 0;
+    let totalMs = 0;
+    Object.values(states).forEach(rs => {
+      if (rs.kind === 'done') {
+        total++;
+        totalMs += rs.report.durationMs;
+        if (rs.report.status === 'pass') pass++;
+        else if (rs.report.status === 'fail') fail++;
+        else skip++;
+      }
+    });
+    return { pass, fail, skip, total, totalMs };
+  }, [states]);
+
   if (_scenariosLoadError) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -188,22 +205,6 @@ export default function HarnessScreen() {
     console.log('[harness] === Run All done ===');
     setRunning(false);
   };
-
-  const summary = useMemo(() => {
-    let pass = 0, fail = 0, skip = 0;
-    let total = 0;
-    let totalMs = 0;
-    Object.values(states).forEach(rs => {
-      if (rs.kind === 'done') {
-        total++;
-        totalMs += rs.report.durationMs;
-        if (rs.report.status === 'pass') pass++;
-        else if (rs.report.status === 'fail') fail++;
-        else skip++;
-      }
-    });
-    return { pass, fail, skip, total, totalMs };
-  }, [states]);
 
   if (!isOwner) {
     return (

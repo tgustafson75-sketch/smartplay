@@ -75,7 +75,6 @@ export default function ReferenceAssetAuthoringScreen() {
   // suggested-action could still navigate here). Non-owner renders
   // null so the route silently no-ops.
   const profileEmail = usePlayerProfileStore(s => s.email);
-  if (!isOwnerEmail(profileEmail)) return null;
   const byCategory = useReferenceAuthoringStore(s => s.byCategory);
   const setImage = useReferenceAuthoringStore(s => s.setImage);
   const setVideo = useReferenceAuthoringStore(s => s.setVideo);
@@ -230,6 +229,9 @@ export default function ReferenceAssetAuthoringScreen() {
     const e = byCategory[c.id];
     return e && (e.imageUri || e.videoUri);
   }).length;
+
+  // Owner-only gate AFTER all hooks (rules-of-hooks). Non-owner no-ops.
+  if (!isOwnerEmail(profileEmail)) return null;
 
   return (
     <SafeAreaView style={[styles.root, { paddingTop: insets.top }]} edges={['left', 'right']}>

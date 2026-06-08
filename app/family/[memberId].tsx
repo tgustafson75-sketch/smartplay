@@ -51,6 +51,10 @@ export default function FamilyMemberScreen() {
   const [history, setHistory] = useState<JuniorSwingAnalysis[] | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [recordingActive, setRecordingActive] = useState(false);
+  // Declared up here (with all hooks, before the !member early return)
+  // so hook order stays stable — rules-of-hooks.
+  const [comparing, setComparing] = useState(false);
+  const { width: windowWidth } = useWindowDimensions();
 
   const refreshHistory = useCallback(async () => {
     if (!member) return;
@@ -112,7 +116,6 @@ export default function FamilyMemberScreen() {
   // video clip + the prior one and runs swingComparisonEngine via the
   // central engine. Toast surfaces the overall_match + leads with the
   // top takeaway. Defensive: requires >=2 swings in history.
-  const [comparing, setComparing] = useState(false);
   const tryCompare = async () => {
     if (!history || history.length < 2) {
       const toast = await import('../../store/toastStore');
@@ -251,7 +254,7 @@ export default function FamilyMemberScreen() {
               <View style={[styles.trendCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <JuniorSwingTrendChart
                   history={history}
-                  width={Math.max(240, useWindowDimensions().width - 64)}
+                  width={Math.max(240, windowWidth - 64)}
                   height={84}
                   label={`${member.firstName}'s LAST ${Math.min(12, history.length)} SWINGS`}
                   showRange

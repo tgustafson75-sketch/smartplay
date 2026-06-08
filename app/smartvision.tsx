@@ -64,6 +64,9 @@ import { useGreenOverride } from '../services/courseGreenOverrides';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { getLastFix, subscribeFixChange, resolveGreenCoords, resolveTeeCoords, setMarkedFix } from '../services/smartFinderService';
 import { bumpToActive } from '../services/gpsManager';
+import { verifyShotAtLocation, correctShotClub, type ShotTrackResult } from '../services/shotTracking';
+import ShotTrackedSheet from '../components/round/ShotTrackedSheet';
+import type { ClubName } from '../store/clubStatsStore';
 import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbertApi';
 import { hasGolfbertCourseMapping } from '../constants/golfbertCourses';
 import { fetchHoleImagery, computeFitView, getCenteredImageryUrl } from '../services/mapboxImagery';
@@ -494,6 +497,10 @@ export default function SmartVisionScreen() {
   // satellite tile. Null means no premium data; existing geometry path
   // handles rendering with point-only data (status quo).
   const [golfbertHole, setGolfbertHole] = useState<GolfbertHole | null>(null);
+  // 2026-06-07 — Shot tracked via cart-mark verification (shotTracking).
+  // Set after a same-hole cart tap during an active round; drives the
+  // ShotTrackedSheet (distance + approach + tap-to-scroll club correct).
+  const [trackedShot, setTrackedShot] = useState<ShotTrackResult | null>(null);
   // hasGolfbertCourseMapping is checked inside the load effect; no
   // top-level derived value needed.
 
@@ -1098,7 +1105,20 @@ export default function SmartVisionScreen() {
     } catch (e) {
       console.log('[smartvision] commit cart setMarkedFix failed:', e);
     }
-  }, [holeIndex, usingGpsTile, projection, imageW, imageH, calibration2Anchor, projectCanvasToLatLngVia2Anchor, currentHole, isRoundActive]);
+    // 2026-06-07 — Verify + auto-track the shot to the scorecard. The cart
+    // mark is the ball's resting spot → back-fills the prior shot's
+    // distance and logs the next shot's start, with a default club.
+    // Guard: don't log a duplicate while a tracked shot is still awaiting
+    // the user's confirm (re-taps just reposition the cart visually).
+    if (isRoundActive && holeIndex === currentHole && !trackedShot) {
+      try {
+        const r = verifyShotAtLocation({ lat, lng });
+        if (r.ok) setTrackedShot(r);
+      } catch (e) {
+        console.log('[smartvision] shot tracking failed (non-fatal):', e);
+      }
+    }
+  }, [holeIndex, usingGpsTile, projection, imageW, imageH, calibration2Anchor, projectCanvasToLatLngVia2Anchor, currentHole, isRoundActive, trackedShot]);
 
   // 2026-06-06 — Auto-reconcile: when a live GPS tick arrives within
   // 10s of a user mark, project the new GPS position to canvas and
@@ -1745,6 +1765,20 @@ export default function SmartVisionScreen() {
         )}
       </View>
       </View>{/* close split-screen container */}
+
+      {/* Shot Tracked sheet — floats above the canvas after a cart-mark verify. */}
+      {trackedShot ? (
+        <View style={[styles.shotTrackedWrap, { bottom: insets.bottom + 16 }]} pointerEvents="box-none">
+          <ShotTrackedSheet
+            result={trackedShot}
+            onCorrectClub={(club: ClubName) => {
+              if (trackedShot.shotId) correctShotClub(trackedShot.shotId, club);
+              setTrackedShot({ ...trackedShot, club });
+            }}
+            onDismiss={() => setTrackedShot(null)}
+          />
+        </View>
+      ) : null}
     </GestureHandlerRootView>
   );
 }
@@ -1773,6 +1807,7 @@ function YdCell({ label, value, emphasis = false, stacked = false }: {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000000' },
+  shotTrackedWrap: { position: 'absolute', left: 12, right: 12, zIndex: 50 },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',

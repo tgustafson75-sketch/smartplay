@@ -74,11 +74,10 @@ export default function AskYourSwingCard({ session }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const frameUri = resolveFrameUri(session);
-  if (!frameUri) return null;
 
   const submitQuestion = useCallback(async (q: string) => {
     const trimmed = q.trim();
-    if (!trimmed) return;
+    if (!trimmed || !frameUri) return;
     setBusy(true);
     setError(null);
     setAnswer(null);
@@ -142,6 +141,9 @@ export default function AskYourSwingCard({ session }: Props) {
       setListening(false);
     }
   }, [listening, busy, language, submitQuestion]);
+
+  // Render gate AFTER all hooks (rules-of-hooks): no analyzable frame → no card.
+  if (!frameUri) return null;
 
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
