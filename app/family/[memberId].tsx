@@ -183,7 +183,7 @@ export default function FamilyMemberScreen() {
               {member.handedness !== 'unknown' ? ` · ${member.handedness}-handed` : ''}
             </Text>
             {member.nickname ? (
-              <Text style={[styles.heroNickname, { color: colors.accent }]}>"{member.nickname}"</Text>
+              <Text style={[styles.heroNickname, { color: colors.accent }]}>&quot;{member.nickname}&quot;</Text>
             ) : null}
           </View>
         </View>
@@ -192,7 +192,7 @@ export default function FamilyMemberScreen() {
         <View style={[styles.ctaCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
           <Text style={[styles.ctaTitle, { color: colors.text_primary }]}>Hands-free</Text>
           <Text style={[styles.ctaHint, { color: colors.text_muted }]}>
-            Say "Coach {member.firstName}'s swing" to start a tagged recording on the glasses, then "Analyze {member.firstName}'s swing" to hear the feedback.
+            Say &quot;Coach {member.firstName}&apos;s swing&quot; to start a tagged recording on the glasses, then &quot;Analyze {member.firstName}&apos;s swing&quot; to hear the feedback.
           </Text>
           <View style={styles.ctaRow}>
             <Pressable
@@ -297,7 +297,7 @@ export default function FamilyMemberScreen() {
               First swing coming up
             </Text>
             <Text style={[styles.emptyText, { color: colors.text_muted }]}>
-              Tap "Record {member.firstName}'s swing" above (or say it), capture on the glasses or phone, then "Analyze {member.firstName}'s swing." We'll start tracking progress from there.
+              Tap &quot;Record {member.firstName}&apos;s swing&quot; above (or say it), capture on the glasses or phone, then &quot;Analyze {member.firstName}&apos;s swing.&quot; We&apos;ll start tracking progress from there.
             </Text>
           </View>
         )}

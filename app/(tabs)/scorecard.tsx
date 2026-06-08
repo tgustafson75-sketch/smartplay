@@ -148,6 +148,10 @@ export default function Scorecard() {
     let teeShotCount = 0;
     let fairwayHits = 0;
     for (const s of viewShots) {
+      // Audit M5 — skip synthetic quick-score placeholders (`qs-<hole>-`);
+      // they have no real outcome and would inflate fairway% on
+      // chip-scored rounds.
+      if (typeof s.id === 'string' && s.id.startsWith('qs-')) continue;
       if (s.shot_in_hole_index !== 1) continue;
       const holeData = viewCourseHoles.find(h => h.hole === s.hole);
       if (!holeData || holeData.par < 4) continue;

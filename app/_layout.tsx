@@ -70,6 +70,7 @@ import CaddieSuggestionCard from '../components/CaddieSuggestionCard';
 import GpsQualityOverlay from '../components/dev/GpsQualityOverlay';
 import CaptureOverlay from '../components/CaptureOverlay';
 import { UpdateAvailableBanner } from '../components/UpdateAvailableBanner';
+import { OfflineBanner } from '../components/OfflineBanner';
 import NativeFallbackBanner from '../components/NativeFallbackBanner';
 import CaptionStrip from '../components/CaptionStrip';
 import { GlobalToolsMenu } from '../components/tools/GlobalToolsMenu';
@@ -690,6 +691,9 @@ function AppNavigator() {
           reload. Suppressed mid-round and during voice interaction so
           the user isn't yanked off mid-hole / mid-conversation. */}
       <UpdateAvailableBanner />
+      {/* 2026-06-07 (audit) — global offline banner. Reactive (no native
+          NetInfo): inferred from network fetch outcomes, OTA-safe. */}
+      <OfflineBanner />
       {/* 2026-05-23 — Native fallback banner. Surfaces when DAT or
           MediaPipe native bridges fail to load at boot, so the player
           knows they're in cloud mode rather than confused by silent

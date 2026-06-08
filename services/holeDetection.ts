@@ -27,6 +27,9 @@
 import { useRoundStore } from '../store/roundStore';
 import { fetchCourseGeometry, getHoleGeometry } from './courseGeometryService';
 import { getLastFix, classifyAccuracy } from './smartFinderService';
+// 2026-06-07 (audit N2) — gpsManager's fix carries `speed` (smartFinder's
+// LastFix does not), used for the cart-speed gate below.
+import { getLastFix as getGpsManagerFix } from './gpsManager';
 import { haversineYards } from '../utils/geoDistance';
 import { isValidGolfCoord } from '../utils/coordGuard';
 import { ownerSentinel } from './ownerSentinel';
@@ -300,6 +303,19 @@ async function tick(): Promise<void> {
   // hole based on stale coords).
   const quality = classifyAccuracy(fix.accuracy_m, fix.timestamp);
   if (quality.level === 'weak' || quality.level === 'none' || quality.level === 'stale') {
+    candidateHole = null;
+    candidateSince = 0;
+    return;
+  }
+
+  // 2026-06-07 (audit N2) — cart-speed gate. Don't auto-advance while
+  // moving at cart speed: a player driving PAST the next tee could
+  // otherwise trip a premature transition. Walking (< ~2.7 m/s ≈ 6 mph)
+  // is fine; null speed (common on stationary Android fixes) is treated
+  // as not-moving → allowed. Only affects opt-in Auto Hole Advance.
+  const MAX_WALK_SPEED_MS = 2.7;
+  const gpsSpeed = getGpsManagerFix()?.speed ?? null;
+  if (typeof gpsSpeed === 'number' && gpsSpeed > MAX_WALK_SPEED_MS) {
     candidateHole = null;
     candidateSince = 0;
     return;

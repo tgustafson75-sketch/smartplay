@@ -991,19 +991,34 @@ export const useRoundStore = create<RoundState>()(
           currentRoundId: null,
           roundStartTime: null,
           preRoundYardageSnapshot: null,
+          // 2026-06-07 (audit M2) — clear per-round caddie/location state so
+          // the NEXT round doesn't inherit the prior round's tone/tags.
+          mentalState: 'neutral',
+          riskMode: 'normal',
+          currentLocationType: 'unknown',
+          currentTeeBox: null,
+          active_ghost: null,
         });
         try {
           const toast = require('./toastStore');
           toast.useToastStore.getState().show('Round discarded — nothing saved.');
         } catch { /* non-fatal */ }
         // Same orchestrated teardown as endRound (GPS / shot detection /
-        // hole detection). Fire-and-forget on its own microtask.
+        // hole detection + walking-activity ticker). Fire-and-forget.
         void (async () => {
           try {
             const { shotDetectionService } = await import('../services/shotDetectionService');
             shotDetectionService.stop();
           } catch (e) {
             console.log('[roundStore] discard teardown failed (non-fatal):', e);
+          }
+          // 2026-06-07 (audit M2) — discard also leaked the walking-activity
+          // ticker that endRound stops; mirror that teardown here.
+          try {
+            const wd = await import('../services/walkingDetector');
+            wd.stopActivityTicker();
+          } catch (e) {
+            console.log('[roundStore] discard ticker stop failed (non-fatal):', e);
           }
         })();
       },
@@ -1102,6 +1117,13 @@ export const useRoundStore = create<RoundState>()(
           currentRoundId: null,
           roundStartTime: null,
           preRoundYardageSnapshot: null,
+          // 2026-06-07 (audit M2) — clear per-round caddie/location state so
+          // the next round starts neutral (matches discardRound).
+          mentalState: 'neutral',
+          riskMode: 'normal',
+          currentLocationType: 'unknown',
+          currentTeeBox: null,
+          active_ghost: null,
         }));
         const total = Object.values(s.scores).reduce((a, b) => a + b, 0);
         const holesPlayed = Object.keys(s.scores).length;
@@ -1409,7 +1431,20 @@ export const useRoundStore = create<RoundState>()(
         // (Tim's Mariners report: tab showed "Hole 10" at a 9-hole
         // course). Also clamp the low end to 1 in case anything ever
         // calls setCurrentHole(0) or a negative.
-        const maxHole = state.courseHoles.length > 0 ? state.courseHoles.length : 18;
+        // 2026-06-07 (audit M4) — clamp using the SAME authority the
+        // caddie's end-of-round check uses (getCourseHoleCount: bundled
+        // metadata → live length → 18) so the two can't desync (round
+        // ending early or never auto-ending). Respects nineHoleMode.
+        const maxHole = (() => {
+          if (state.nineHoleMode) return 9;
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const { getCourseHoleCount } = require('../data/courses') as typeof import('../data/courses');
+            return getCourseHoleCount(state.activeCourseId, state.courseHoles.length);
+          } catch {
+            return state.courseHoles.length > 0 ? state.courseHoles.length : 18;
+          }
+        })();
         const clamped = Math.max(1, Math.min(hole, maxHole));
         if (clamped !== hole) {
           devLog(`[roundStore] setCurrentHole(${hole}) clamped to ${clamped} (course max=${maxHole})`);

@@ -27,19 +27,23 @@ const FAILURE_WINDOW_MS = 30_000;
 const FAILURE_THRESHOLD = 3;
 const DEGRADED_MS = 60_000;
 
-export type VoiceEndpoint = 'voice' | 'kevin' | 'transcribe' | 'voice-intent';
+// 2026-06-07 (audit) — added 'swing-analysis' so weak-signal range
+// sessions short-circuit instead of paying full timeout+retry per swing.
+export type VoiceEndpoint = 'voice' | 'kevin' | 'transcribe' | 'voice-intent' | 'swing-analysis';
 
 const failures: Record<VoiceEndpoint, number[]> = {
   voice: [],
   kevin: [],
   transcribe: [],
   'voice-intent': [],
+  'swing-analysis': [],
 };
 const degradedUntil: Record<VoiceEndpoint, number> = {
   voice: 0,
   kevin: 0,
   transcribe: 0,
   'voice-intent': 0,
+  'swing-analysis': 0,
 };
 // Track whether we've already auto-engaged Local Mode this session so we
 // don't toast twice (or fight a user who manually turned it off).
@@ -90,6 +94,13 @@ export function recordFailure(endpoint: VoiceEndpoint): void {
  */
 export function recordSuccess(endpoint: VoiceEndpoint): void {
   failures[endpoint] = [];
+  // 2026-06-07 (audit) — any successful network call means we're online;
+  // clear the reactive offline banner. Dynamic require avoids a cycle.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const c = require('../store/connectivityStore') as typeof import('../store/connectivityStore');
+    c.reportOnline();
+  } catch { /* non-fatal */ }
 }
 
 /**
@@ -125,12 +136,14 @@ export function getCircuitBreakerSnapshot(): {
       kevin: now < degradedUntil.kevin,
       transcribe: now < degradedUntil.transcribe,
       'voice-intent': now < degradedUntil['voice-intent'],
+      'swing-analysis': now < degradedUntil['swing-analysis'],
     },
     failureCount: {
       voice: failures.voice.length,
       kevin: failures.kevin.length,
       transcribe: failures.transcribe.length,
       'voice-intent': failures['voice-intent'].length,
+      'swing-analysis': failures['swing-analysis'].length,
     },
     localModeAutoEngaged,
   };

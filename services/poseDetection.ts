@@ -165,6 +165,11 @@ const TENTATIVE_TIMEOUT_MS = 55_000;
 import * as VT from 'expo-video-thumbnails';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Audio } from 'expo-av';
+// 2026-06-07 (audit) — share the circuit breaker + reactive connectivity
+// signal with the voice paths so weak-signal range sessions short-circuit
+// instead of paying full timeout+retry per swing.
+import { isDegraded, recordSuccess, recordFailure } from './voiceCircuitBreaker';
+import { reportOnline, reportNetworkFailure } from '../store/connectivityStore';
 
 // Phase V.6 diagnostic — single grep target. Filter via:
 //   adb logcat | grep V6-DIAG
@@ -529,6 +534,13 @@ export async function analyzeSwing(
     return { kind: 'no_frames' };
   }
 
+  // Circuit breaker: if swing-analysis is degraded (3 recent failures),
+  // short-circuit before paying the radio-wake + timeout cost again.
+  if (isDegraded('swing-analysis')) {
+    V6('STAGE 3 SKIP — swing-analysis degraded (circuit breaker), short-circuit');
+    return { kind: 'no_network' };
+  }
+
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   try {
     const wireFrames = frames.map(({ b64, media_type }) => ({ b64, media_type }));
@@ -643,6 +655,7 @@ export async function analyzeSwing(
         const parsed = JSON.parse(body) as { error?: string };
         if (parsed?.error) userMsg = parsed.error.slice(0, 160);
       } catch { /* body wasn't JSON */ }
+      recordFailure('swing-analysis');
       return { kind: 'error', message: userMsg };
     }
     const data = (await res.json()) as SwingAnalysis;
@@ -757,6 +770,9 @@ export async function analyzeSwing(
       }
     }
 
+    // Success — clear the breaker window + mark online.
+    recordSuccess('swing-analysis');
+    reportOnline();
     return {
       kind: 'ok',
       analysis: data,
@@ -768,7 +784,11 @@ export async function analyzeSwing(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     V6('STAGE 4 — fetch threw', { error: msg });
-    if (/network|abort|timeout|fetch/i.test(msg)) return { kind: 'no_network' };
+    recordFailure('swing-analysis');
+    if (/network|abort|timeout|fetch/i.test(msg)) {
+      reportNetworkFailure();
+      return { kind: 'no_network' };
+    }
     return { kind: 'error', message: msg };
   }
 }

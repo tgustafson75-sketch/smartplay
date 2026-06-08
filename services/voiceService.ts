@@ -2,6 +2,11 @@ import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import { File, Paths } from 'expo-file-system';
 import { noteAudioActivity } from './audioLifecycle';
 import { logVoiceSilentFail, logVoiceError, logTranscribeError } from './voiceErrorLog';
+// 2026-06-07 (audit) — wire TTS into the circuit breaker so spoken replies
+// short-circuit under weak signal instead of burning the full 12s timeout
+// then going silent. Feeds the reactive connectivity signal too.
+import { isDegraded as cbIsDegraded, recordSuccess as cbRecordSuccess, recordFailure as cbRecordFailure } from './voiceCircuitBreaker';
+import { reportOnline as cbReportOnline, reportNetworkFailure as cbReportNetworkFailure } from '../store/connectivityStore';
 // 2026-05-30 — Fix FX: voice/network circuit-breaker. After 3 consecutive
 // fetch failures within 30s on any of /api/voice, /api/kevin, or
 // /api/transcribe, that endpoint is marked degraded for 60s and we
@@ -1005,6 +1010,18 @@ export const speak = async (
     // monolingual_v1 with an English accent.
     const ttsModel = language === 'en' ? 'eleven_monolingual_v1' : 'eleven_multilingual_v2';
 
+    // Circuit breaker: if /api/voice is degraded, skip the fetch entirely
+    // so we don't burn the 12s timeout then go silent. The caption text
+    // still rendered upstream; we just don't pay the dead radio cost.
+    if (cbIsDegraded('voice')) {
+      clearTimeout(voiceTimeout);
+      currentAbortController = null;
+      logVoiceSilentFail('speak_circuit_degraded', { speechId: myId, textHead: text.slice(0, 60) });
+      notifyCaption(null);
+      notifySpeaking(false);
+      return;
+    }
+
     const response = await fetch(apiUrl + '/api/voice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1034,10 +1051,14 @@ export const speak = async (
       const errBody = await response.text().catch(() => '<unreadable>');
       console.log('[voice] speak API error:', response.status, response.statusText, '— body:', errBody.slice(0, 300));
       logVoiceSilentFail('speak_api_error', { speechId: myId, status: response.status, error: errBody.slice(0, 300) });
+      cbRecordFailure('voice');
       notifyCaption(null);
       notifySpeaking(false);
       return;
     }
+    // Got bytes from the server → online; clear the breaker window.
+    cbRecordSuccess('voice');
+    cbReportOnline();
 
     const arrayBuffer = await response.arrayBuffer();
     if (myId !== currentSpeechId) {
@@ -1244,6 +1265,9 @@ export const speak = async (
     if (!(err instanceof Error && err.name === 'AbortError')) {
       console.log('[voice] speak error:', err);
       logVoiceSilentFail('speak_catch', { speechId: myId, error: err instanceof Error ? err.message : String(err) });
+      const emsg = err instanceof Error ? err.message : String(err);
+      cbRecordFailure('voice');
+      if (/network|abort|timeout|fetch/i.test(emsg)) cbReportNetworkFailure();
     }
   }
 });

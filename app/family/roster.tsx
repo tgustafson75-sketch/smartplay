@@ -173,7 +173,7 @@ export default function FamilyRosterScreen() {
               Add your first family member
             </Text>
             <Text style={[styles.emptyHint, { color: colors.text_muted }]}>
-              Coaches kids + partners + friends with age-appropriate feedback. Record their swings hands-free on the glasses: "Record Emma's swing."
+              Coaches kids + partners + friends with age-appropriate feedback. Record their swings hands-free on the glasses: &quot;Record Emma&apos;s swing.&quot;
             </Text>
             <Pressable
               onPress={openAdd}
@@ -224,10 +224,10 @@ export default function FamilyRosterScreen() {
               <Text style={[styles.tipTitle, { color: colors.text_primary }]}>Hands-free flow</Text>
               <Text style={[styles.tipBody, { color: colors.text_muted }]}>
                 Once a member is on the roster, you can say:
-                {'\n'}• "Coach Emma's swing" — starts a tagged recording
-                {'\n'}• "Analyze Emma's swing" — runs the junior analyzer + speaks the result
-                {'\n'}• "How's Emma's progress?" — reads recent trend
-                {'\n'}• "Stop recording" — ends the family session
+                {'\n'}• &quot;Coach Emma&apos;s swing&quot; — starts a tagged recording
+                {'\n'}• &quot;Analyze Emma&apos;s swing&quot; — runs the junior analyzer + speaks the result
+                {'\n'}• &quot;How&apos;s Emma&apos;s progress?&quot; — reads recent trend
+                {'\n'}• &quot;Stop recording&quot; — ends the family session
               </Text>
             </View>
           </>

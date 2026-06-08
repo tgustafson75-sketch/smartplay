@@ -36,7 +36,7 @@
  *     always available offline.
  */
 
-import { fetchCourseGeometry } from './courseGeometryService';
+import { fetchCourseGeometry, getHoleGeometry } from './courseGeometryService';
 import { fetchCourseContent } from './courseContentService';
 import { fetchCourseIntelligence } from './courseIntelligenceService';
 import { prefetchHoles, isMapboxConfigured, type HoleImageryInput } from './mapboxImagery';
@@ -131,27 +131,42 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<void> {
   // may have come in via geometryP.
   let tileP: Promise<unknown> = Promise.resolve();
   if (isMapboxConfigured()) {
-    const tileInputs: HoleImageryInput[] = holes
-      .filter(h => typeof h.teeLat === 'number' && typeof h.teeLng === 'number' && typeof h.middleLat === 'number' && typeof h.middleLng === 'number')
-      .map(h => ({
-        courseId,
-        holeNumber: h.hole,
-        par: h.par,
-        yardage: typeof h.distance === 'number' ? h.distance : 350,
-        tee: { lat: h.teeLat as number, lng: h.teeLng as number },
-        green: { lat: h.middleLat as number, lng: h.middleLng as number },
-      }));
-    if (tileInputs.length > 0) {
-      tileP = prefetchHoles(tileInputs)
-        .then(() => {
+    // 2026-06-07 (audit) — build tile inputs AFTER geometry resolves and
+    // source coords from the loaded geometry first. Previously tileInputs
+    // was built synchronously from the (possibly coord-less) `holes` param
+    // before geometryP settled, so first-visit holes were skipped → blank
+    // satellite canvas offline mid-round.
+    tileP = geometryP
+      .then(() => {
+        const tileInputs: HoleImageryInput[] = holes
+          .map((h) => {
+            const geo = getHoleGeometry(courseId, h.hole);
+            const tee = geo?.tee
+              ?? (typeof h.teeLat === 'number' && typeof h.teeLng === 'number' ? { lat: h.teeLat, lng: h.teeLng } : null);
+            const green = geo?.green
+              ?? (typeof h.middleLat === 'number' && typeof h.middleLng === 'number' ? { lat: h.middleLat, lng: h.middleLng } : null);
+            if (!tee || !green) return null;
+            return {
+              courseId,
+              holeNumber: h.hole,
+              par: h.par,
+              yardage: typeof h.distance === 'number' ? h.distance : 350,
+              tee,
+              green,
+            } as HoleImageryInput;
+          })
+          .filter((x): x is HoleImageryInput => x != null);
+        if (tileInputs.length === 0) {
+          console.log('[roundPrefetch] mapbox skipped — no holes have full tee+green coords');
+          return;
+        }
+        return prefetchHoles(tileInputs).then(() => {
           console.log('[roundPrefetch] mapbox tiles prefetched for', courseId, '— count:', tileInputs.length);
-        })
-        .catch((e) => {
-          console.log('[roundPrefetch] mapbox prefetch failed (non-fatal):', e instanceof Error ? e.message : String(e));
         });
-    } else {
-      console.log('[roundPrefetch] mapbox skipped — no holes have full tee+green coords yet');
-    }
+      })
+      .catch((e) => {
+        console.log('[roundPrefetch] mapbox prefetch failed (non-fatal):', e instanceof Error ? e.message : String(e));
+      });
   }
 
   await Promise.allSettled([geometryP, contentP, intelP, tileP]);

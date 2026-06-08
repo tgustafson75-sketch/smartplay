@@ -1223,7 +1223,7 @@ export default function Settings() {
             <View style={styles.rowText}>
               <Text style={labelStyle}>Ray-Ban Meta temple tap · Blocked</Text>
               <Text style={subStyle}>
-                Meta has not exposed an SDK that lets third-party apps subscribe to the glasses' touchpad / temple-tap events. Until that ships, glasses-as-mic + Active Listening is the path: pair the glasses for Bluetooth audio and the caddie hears you hands-free.
+                Meta has not exposed an SDK that lets third-party apps subscribe to the glasses&apos; touchpad / temple-tap events. Until that ships, glasses-as-mic + Active Listening is the path: pair the glasses for Bluetooth audio and the caddie hears you hands-free.
               </Text>
             </View>
           </View>

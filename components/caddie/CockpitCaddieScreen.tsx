@@ -393,7 +393,7 @@ export default function CockpitCaddieScreen({
             accessibilityLabel="What's the play here — strategic recommendation from the caddie brain"
           >
             <Text style={[styles.playButtonText, { color: colors.accent }]}>
-              ⛳  What's the play?
+              ⛳  What&apos;s the play?
             </Text>
           </Pressable>
         )}

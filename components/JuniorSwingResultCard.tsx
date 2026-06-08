@@ -119,7 +119,7 @@ export default function JuniorSwingResultCard({
 
       {!compact && analysis.coachComment && (
         <Text style={[styles.coachQuote, { color: colors.text_secondary }]}>
-          "{analysis.coachComment}"
+          &quot;{analysis.coachComment}&quot;
         </Text>
       )}
     </View>

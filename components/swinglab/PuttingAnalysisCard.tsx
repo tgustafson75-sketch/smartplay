@@ -125,7 +125,7 @@ export default function PuttingAnalysisCard({ analysis }: Props) {
       {/* Caddie comment quote */}
       {analysis.caddieComment ? (
         <Text style={[styles.coachQuote, { color: colors.text_secondary }]}>
-          "{analysis.caddieComment}"
+          &quot;{analysis.caddieComment}&quot;
         </Text>
       ) : null}
     </View>

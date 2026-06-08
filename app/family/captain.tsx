@@ -250,10 +250,10 @@ export default function CaptainScreen() {
         <View style={[styles.tipCard, { borderColor: colors.border }]}>
           <Text style={[styles.tipTitle, { color: colors.text_primary }]}>Captain voice flow</Text>
           <Text style={[styles.tipBody, { color: colors.text_muted }]}>
-            • "Coach Mia's swing" — starts a tagged recording for Mia
-            {'\n'}• "Analyze Mia's swing" — runs analysis + speaks feedback
-            {'\n'}• "How's the team doing?" (TBD) — team-wide trend roll-up
-            {'\n'}• "Stop recording" — ends the session
+            • &quot;Coach Mia&apos;s swing&quot; — starts a tagged recording for Mia
+            {'\n'}• &quot;Analyze Mia&apos;s swing&quot; — runs analysis + speaks feedback
+            {'\n'}• &quot;How&apos;s the team doing?&quot; (TBD) — team-wide trend roll-up
+            {'\n'}• &quot;Stop recording&quot; — ends the session
           </Text>
         </View>
       </ScrollView>
@@ -350,7 +350,7 @@ function BroadcastCard({
         </Text>
       </View>
       <Text style={[styles.broadcastHint, { color: colors.text_muted }]}>
-        Sends through your phone's Messages app to {teamName || 'the team'}. No data leaves the device.
+        Sends through your phone&apos;s Messages app to {teamName || 'the team'}. No data leaves the device.
       </Text>
       {/* Template pills — tap to draft. Edit before send. */}
       <View style={styles.templateRow}>
