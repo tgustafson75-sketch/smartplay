@@ -81,17 +81,14 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // and we route the same place. Both names work end-to-end.
   tightlie: { type: 'navigate', path: '/lie-analysis' },
   // 2026-05-21 — Day 2 / Fix 9B: Option D speed path. Voice "open
-  // SmartMotion" is a record-NOW intent — skip the canonical
-  // smartmotion screen's NoClipHero marketing card and land the user
-  // on the live camera (quick-record). After recording, quick-record
-  // routes back to /swinglab/smartmotion?clipUri=... where the
-  // Phase 416 two-card + Phase 418 validation gate take over for the
-  // analysis depth. Library + SwingLab card entries still land on
-  // /swinglab/smartmotion directly (review / intro context).
+  // 2026-06-07 — Smart Motion rebuild: the unified screen now captures
+  // in place (opens straight to the live camera in its 'setup' phase),
+  // so the record-NOW intent lands directly on /swinglab/smartmotion —
+  // no quick-record hop. Cage Mode merged into Smart Motion (see below).
   // Aliases: "smartmotion", "smart_motion", "smart motion" — classifier
   // normalizes spaces/underscores.
-  smartmotion: { type: 'navigate', path: '/swinglab/quick-record' },
-  smart_motion: { type: 'navigate', path: '/swinglab/quick-record' },
+  smartmotion: { type: 'navigate', path: '/swinglab/smartmotion' },
+  smart_motion: { type: 'navigate', path: '/swinglab/smartmotion' },
   // 2026-05-19 — Acoustic Test Bench (Phase BO.1) was reachable via
   // SwingLab tile but had no voice intent route. The classifier could
   // emit tool_name='acoustic' / 'acoustic_test' / 'test_bench' but
@@ -125,13 +122,12 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // path the Coach Mode UI uses.
   coach_mode: { type: 'navigate', path: '/swinglab/coach-mode' },
   coachmode: { type: 'navigate', path: '/swinglab/coach-mode' },
-  // 2026-05-24 — Hands-free Cage Mode entry. Voice triggers
-  // ("start cage session", "start practice", "open cage mode") land
-  // here. The cage-mode screen already wires its own swing-capture
-  // flow on mount; this handler just routes there. cagemode alias
-  // catches the no-space variant the classifier sometimes emits.
-  cage_mode: { type: 'navigate', path: '/swinglab/cage-mode' },
-  cagemode: { type: 'navigate', path: '/swinglab/cage-mode' },
+  // 2026-06-07 — Cage Mode merged into Smart Motion (rebuild). The
+  // legacy cage voice phrasings ("start cage session", "start practice",
+  // "open cage mode") now route to the unified Smart Motion screen,
+  // which captures in place. Aliases kept so existing phrasings resolve.
+  cage_mode: { type: 'navigate', path: '/swinglab/smartmotion' },
+  cagemode: { type: 'navigate', path: '/swinglab/smartmotion' },
   // 2026-05-25 — Swing Library voice route. "Open library", "swing
   // library", "show me my swings" all land on the library list inside
   // SwingLab. Distinct from "open SwingLab" (which lands on the hub);

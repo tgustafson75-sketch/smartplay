@@ -360,17 +360,11 @@ export default function CockpitCaddieScreen({
         <SmartToolsRow
           onVision={() => router.push('/smartvision' as never)}
           onMotion={() => {
-            // 2026-05-21 — Day 2 / Fix 9B: cockpit MOTION button now
-            // routes to the canonical SmartMotion's fast path. The
-            // prior /swinglab/cage-drill destination has become the
-            // dedicated Cage Mode (/swinglab/cage-mode) which is the
-            // practice/lesson tool — different intent than mid-round
-            // single-swing capture. Push to /swinglab/quick-record so
-            // the camera goes live immediately (Option D speed path,
-            // same flow as the voice intent + Tools menu). After
-            // recording, quick-record routes back to
-            // /swinglab/smartmotion with the clipUri for analysis.
-            router.push('/swinglab/quick-record' as never);
+            // 2026-06-07 — Smart Motion rebuild: the unified screen
+            // captures in place (opens live to the camera in 'setup'),
+            // so the cockpit MOTION button routes straight there. Cage
+            // Mode is merged into Smart Motion; no quick-record hop.
+            router.push('/swinglab/smartmotion' as never);
           }}
           onPlay={() => router.push('/lie-analysis' as never)}
           onSettings={() => router.push('/settings' as never)}

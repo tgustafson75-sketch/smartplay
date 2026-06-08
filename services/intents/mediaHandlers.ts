@@ -129,15 +129,14 @@ export const mediaCaptureHandler: IntentHandler = {
       (intent.parameters as { raw_utterance?: unknown }).raw_utterance ?? intent.raw_text ?? '',
     ).trim() || undefined;
 
-    // 2026-05-24 — Hands-free swing fallback. When the swing capture
-    // surface isn't wired (user not on Cage Mode), route to Quick Record
-    // instead of blocking with an instructional reply. Keeps "record my
-    // swing" / "watch my swing" as a one-shot voice action from any
-    // screen — voice opens the camera, user doesn't have to navigate
-    // into Cage Mode first.
+    // 2026-06-07 — Hands-free swing fallback. When no live capture
+    // surface is wired, route to Smart Motion (rebuild: it captures in
+    // place, opening straight to the camera). Keeps "record my swing" /
+    // "watch my swing" as a one-shot voice action from any screen —
+    // voice opens the camera, no navigation into a separate mode first.
     if (kind === 'swing' && !isCaptureWired('swing')) {
       try {
-        router.push('/swinglab/quick-record' as never);
+        router.push('/swinglab/smartmotion' as never);
         track('media_capture_handler_quick_record_route');
         return {
           success: true,

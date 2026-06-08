@@ -1,0 +1,485 @@
+/**
+ * 2026-06-07 — Smart Motion HUD kit (rebuild Phase 1).
+ *
+ * Presentational components for the redesigned Smart Motion surface,
+ * matching the clean launch-monitor mockups in
+ * `~/Downloads/SmartMotion Redesign Pics`:
+ *   - dark chrome + brand green (#00C896 / colors.accent)
+ *   - right-rail metric cards, bottom speed stats + tempo + body row
+ *   - "Ball Smash Detected" acoustic card
+ *   - Down-the-Line / Face-On segmented toggle
+ *   - GOOD SWING verdict badge + footer chips
+ *
+ * These are PURE presentation — no data fetching, no capture logic.
+ * The unified Smart Motion screen feeds them from the real pipelines
+ * (swingMetricsService, pose biomechanics, acoustic segmentation).
+ *
+ * Metric honesty (see memory smartmotion-metrics-honesty): we do NOT
+ * render spin rate / face angle / launch angle — a phone + single mic
+ * can't measure them. Cards carry an `estimate` flag so AI/pose-derived
+ * values read as estimates, consistent with swingMetricsService tiering.
+ */
+
+import React from 'react';
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../contexts/ThemeContext';
+import type { ThemeColors } from '../../theme/tokens';
+
+export type Angle = 'down_the_line' | 'face_on';
+export type SmTone = 'good' | 'warn' | 'bad' | 'neutral';
+
+function toneColor(tone: SmTone, colors: ThemeColors): string {
+  switch (tone) {
+    case 'good': return colors.success;
+    case 'warn': return colors.warning;
+    case 'bad': return colors.error;
+    default: return colors.text_muted;
+  }
+}
+
+// ─── Header ──────────────────────────────────────────────────────────
+
+export function SmartMotionHeader({
+  mode,
+  onSettings,
+  style,
+}: {
+  mode: Angle;
+  onSettings?: () => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const subtitle = mode === 'down_the_line' ? 'DOWN THE LINE ANALYSIS' : 'FACE-ON ANALYSIS';
+  return (
+    <View style={[styles.header, { borderBottomColor: colors.border }, style]}>
+      <View style={styles.headerBrand}>
+        <Ionicons name="golf-outline" size={22} color={colors.accent} />
+        <View style={{ marginLeft: 8 }}>
+          <Text style={[styles.brandWordmark, { color: colors.text_primary }]}>SMART PLAY, SMART MOTION</Text>
+          <Text style={[styles.brandSub, { color: colors.accent }]}>{subtitle}</Text>
+        </View>
+      </View>
+      {onSettings ? (
+        <Pressable onPress={onSettings} hitSlop={10} accessibilityRole="button" accessibilityLabel="Settings">
+          <Ionicons name="settings-outline" size={20} color={colors.text_muted} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+// ─── Down-the-Line / Face-On toggle ──────────────────────────────────
+
+export function ModeToggle({
+  value,
+  onChange,
+  style,
+}: {
+  value: Angle;
+  onChange: (a: Angle) => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const opts: { key: Angle; label: string }[] = [
+    { key: 'down_the_line', label: 'DOWN THE LINE' },
+    { key: 'face_on', label: 'FACE-ON' },
+  ];
+  return (
+    <View style={[styles.toggle, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
+      {opts.map((o) => {
+        const active = o.key === value;
+        return (
+          <Pressable
+            key={o.key}
+            onPress={() => onChange(o.key)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            style={[styles.toggleBtn, active && { backgroundColor: colors.accent_muted, borderColor: colors.accent }]}
+          >
+            <Text style={[styles.toggleLabel, { color: active ? colors.accent : colors.text_muted }]}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+// ─── Metric card + rail ──────────────────────────────────────────────
+
+export interface MetricSpec {
+  key: string;
+  label: string;
+  /** Formatted value, or null for genuinely-missing real metrics. */
+  value: string | null;
+  unit?: string;
+  /** Sub-status line, e.g. "IN TO OUT", "DOWN", "OPEN". */
+  status?: string;
+  statusTone?: SmTone;
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
+  /** AI/pose-derived → shows an "est" chip per the honesty policy. */
+  estimate?: boolean;
+}
+
+export function MetricCard({ spec, style }: { spec: MetricSpec; style?: StyleProp<ViewStyle> }) {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.metricCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }, style]}>
+      <View style={styles.metricTop}>
+        {spec.icon ? <Ionicons name={spec.icon} size={14} color={colors.text_muted} /> : null}
+        <Text style={[styles.metricLabel, { color: colors.text_muted }]} numberOfLines={1}>{spec.label}</Text>
+        {spec.estimate ? (
+          <Text style={[styles.estChip, { color: colors.text_muted, borderColor: colors.border }]}>est</Text>
+        ) : null}
+      </View>
+      <View style={styles.metricValueRow}>
+        <Text style={[styles.metricValue, { color: colors.text_primary }]}>
+          {spec.value ?? '—'}
+        </Text>
+        {spec.value != null && spec.unit ? (
+          <Text style={[styles.metricUnit, { color: colors.text_muted }]}>{spec.unit}</Text>
+        ) : null}
+      </View>
+      {spec.status ? (
+        <Text style={[styles.metricStatus, { color: toneColor(spec.statusTone ?? 'neutral', colors) }]} numberOfLines={1}>
+          {spec.status}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+export function MetricRail({ metrics, style }: { metrics: MetricSpec[]; style?: StyleProp<ViewStyle> }) {
+  return (
+    <View style={[styles.rail, style]}>
+      {metrics.map((m) => <MetricCard key={m.key} spec={m} />)}
+    </View>
+  );
+}
+
+// ─── Speed stats (bottom strip) ──────────────────────────────────────
+
+export function SpeedStat({
+  label,
+  value,
+  unit,
+  tone = 'neutral',
+  estimate,
+  style,
+}: {
+  label: string;
+  value: string | null;
+  unit?: string;
+  tone?: SmTone;
+  estimate?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.speedStat, { backgroundColor: colors.surface_elevated, borderColor: colors.border }, style]}>
+      <Text style={[styles.speedLabel, { color: colors.text_muted }]} numberOfLines={1}>
+        {label}{estimate ? ' · est' : ''}
+      </Text>
+      <Text style={[styles.speedValue, { color: tone === 'neutral' ? colors.text_primary : toneColor(tone, colors) }]}>
+        {value ?? '—'}
+      </Text>
+      {value != null && unit ? <Text style={[styles.speedUnit, { color: colors.text_muted }]}>{unit}</Text> : null}
+    </View>
+  );
+}
+
+// ─── Tempo bar ───────────────────────────────────────────────────────
+
+export function TempoBar({
+  ratio,
+  idealLow = 2.8,
+  idealHigh = 3.4,
+  style,
+}: {
+  ratio: number | null;
+  idealLow?: number;
+  idealHigh?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  // Map ratio onto a 2.0–4.0 visual track.
+  const trackLo = 2.0;
+  const trackHi = 4.0;
+  const clamp = (n: number) => Math.max(0, Math.min(1, n));
+  const pos = ratio == null ? null : clamp((ratio - trackLo) / (trackHi - trackLo));
+  const idealStart = clamp((idealLow - trackLo) / (trackHi - trackLo));
+  const idealWidth = clamp((idealHigh - idealLow) / (trackHi - trackLo));
+  const inIdeal = ratio != null && ratio >= idealLow && ratio <= idealHigh;
+  return (
+    <View style={[styles.tempoWrap, { backgroundColor: colors.surface_elevated, borderColor: colors.border }, style]}>
+      <View style={styles.tempoHead}>
+        <Text style={[styles.metricLabel, { color: colors.text_muted }]}>TEMPO</Text>
+        <Text style={[styles.tempoRatio, { color: colors.text_primary }]}>
+          {ratio == null ? '—' : `${ratio.toFixed(1)} : 1`}
+        </Text>
+        <Text style={[styles.tempoVerdict, { color: inIdeal ? colors.success : colors.warning }]}>
+          {ratio == null ? '' : inIdeal ? 'GOOD' : 'OFF'}
+        </Text>
+      </View>
+      <View style={[styles.tempoTrack, { backgroundColor: colors.surface }]}>
+        <View style={[styles.tempoIdeal, { left: `${idealStart * 100}%`, width: `${idealWidth * 100}%`, backgroundColor: colors.accent_muted }]} />
+        {pos != null ? (
+          <View style={[styles.tempoMarker, { left: `${pos * 100}%`, backgroundColor: inIdeal ? colors.success : colors.warning }]} />
+        ) : null}
+      </View>
+      <Text style={[styles.tempoRange, { color: colors.text_muted }]}>IDEAL {idealLow.toFixed(1)}–{idealHigh.toFixed(1)}</Text>
+    </View>
+  );
+}
+
+// ─── Body analysis row ───────────────────────────────────────────────
+
+export interface BodyItem {
+  key: string;
+  label: string;
+  tone: SmTone;
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
+}
+
+const TONE_VERDICT: Record<SmTone, string> = {
+  good: 'Good',
+  warn: 'Check',
+  bad: 'Fault',
+  neutral: '—',
+};
+
+export function BodyAnalysisRow({ items, style }: { items: BodyItem[]; style?: StyleProp<ViewStyle> }) {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.bodyWrap, { backgroundColor: colors.surface_elevated, borderColor: colors.border }, style]}>
+      <Text style={[styles.metricLabel, { color: colors.text_muted, marginBottom: 8 }]}>BODY ANALYSIS</Text>
+      <View style={styles.bodyRow}>
+        {items.map((it) => (
+          <View key={it.key} style={styles.bodyItem}>
+            <Ionicons name={it.icon ?? 'body-outline'} size={18} color={toneColor(it.tone, colors)} />
+            <Text style={[styles.bodyLabel, { color: colors.text_secondary }]} numberOfLines={1}>{it.label}</Text>
+            <Text style={[styles.bodyVerdict, { color: toneColor(it.tone, colors) }]}>{TONE_VERDICT[it.tone]}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// ─── Acoustic pickup card ────────────────────────────────────────────
+
+export function AcousticPickupCard({
+  detected,
+  swingCount,
+  calibrated = true,
+  style,
+}: {
+  detected: boolean;
+  /** Swings detected in the open window (multi-swing flow). */
+  swingCount?: number;
+  calibrated?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  // Static waveform bars — animated variant lands when live metering is wired.
+  const bars = [0.3, 0.6, 0.9, 0.5, 1, 0.7, 0.4, 0.8, 0.55, 0.35];
+  const active = detected && calibrated;
+  const accent = active ? colors.accent : colors.text_muted;
+  return (
+    <View style={[styles.acousticCard, { backgroundColor: colors.surface_elevated, borderColor: active ? colors.accent : colors.border }, style]}>
+      <View style={styles.acousticHead}>
+        <Ionicons name="pulse-outline" size={16} color={accent} />
+        <Text style={[styles.acousticTitle, { color: colors.text_muted }]}>ACOUSTIC PICKUP</Text>
+      </View>
+      <View style={styles.waveRow}>
+        {bars.map((h, i) => (
+          <View key={i} style={[styles.waveBar, { height: 6 + h * 22, backgroundColor: accent, opacity: active ? 1 : 0.35 }]} />
+        ))}
+      </View>
+      <Text style={[styles.acousticStatus, { color: active ? colors.success : colors.text_muted }]}>
+        {!calibrated
+          ? 'Tap to calibrate (10 strikes)'
+          : detected
+            ? (swingCount != null ? `${swingCount} swing${swingCount === 1 ? '' : 's'} detected` : 'Ball Smash Detected')
+            : 'Listening…'}
+      </Text>
+    </View>
+  );
+}
+
+// ─── Capture framing guides ──────────────────────────────────────────
+// Alignment overlay drawn on the live camera / replay, matching the
+// redesign mockups. Down-the-line gets a target line down the middle +
+// a ball-area marker; face-on gets vertical target/ball reference lines.
+// Decorative + framing aid only (pointerEvents none) — no fake tracer.
+
+function GuideLabel({ text, color, bg }: { text: string; color: string; bg: string }) {
+  return <Text style={[styles.guideLabel, { color, backgroundColor: bg }]}>{text}</Text>;
+}
+
+export function CaptureGuides({ mode, style }: { mode: Angle; style?: StyleProp<ViewStyle> }) {
+  const { colors } = useTheme();
+  const line = colors.accent;
+  const labelBg = colors.overlay;
+  if (mode === 'down_the_line') {
+    return (
+      <View style={[StyleSheet.absoluteFill, styles.guideRoot, style]} pointerEvents="none">
+        <View style={styles.guideTopCenter}>
+          <GuideLabel text="TARGET" color={colors.text_primary} bg={labelBg} />
+        </View>
+        <View style={[styles.guideVLine, { borderColor: line, left: '50%' }]} />
+        <View style={styles.guideBallArea}>
+          <View style={[styles.guideBallBox, { borderColor: line }]} />
+          <GuideLabel text="BALL AREA" color={colors.text_primary} bg={labelBg} />
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View style={[StyleSheet.absoluteFill, styles.guideRoot, style]} pointerEvents="none">
+      <View style={[styles.guideVLine, { borderColor: line, left: '32%' }]} />
+      <View style={[styles.guideVLine, { borderColor: line, left: '68%' }]} />
+      <View style={[styles.guideSideLabel, { left: '32%' }]}>
+        <GuideLabel text="TARGET LINE" color={colors.text_primary} bg={labelBg} />
+      </View>
+      <View style={[styles.guideSideLabel, { left: '68%' }]}>
+        <GuideLabel text="BALL LINE" color={colors.text_primary} bg={labelBg} />
+      </View>
+      <View style={styles.guideBallArea}>
+        <View style={[styles.guideBallBox, { borderColor: line }]} />
+        <GuideLabel text="BALL AREA" color={colors.text_primary} bg={labelBg} />
+      </View>
+    </View>
+  );
+}
+
+// ─── Verdict badge ───────────────────────────────────────────────────
+
+export function VerdictBadge({
+  verdict,
+  tone = 'good',
+  style,
+}: {
+  verdict: string;
+  tone?: SmTone;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const c = toneColor(tone, colors);
+  const icon = tone === 'good' ? 'checkmark-circle' : tone === 'bad' ? 'alert-circle' : 'information-circle';
+  return (
+    <View style={[styles.verdict, { backgroundColor: colors.surface_elevated, borderColor: c }, style]}>
+      <Ionicons name={icon} size={18} color={c} />
+      <Text style={[styles.verdictText, { color: c }]}>{verdict}</Text>
+    </View>
+  );
+}
+
+// ─── Footer chips ────────────────────────────────────────────────────
+
+export function FooterChips({
+  club,
+  shot,
+  distanceYds,
+  style,
+}: {
+  club?: string | null;
+  shot?: number | null;
+  distanceYds?: number | null;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const Chip = ({ label, value }: { label: string; value: string }) => (
+    <View style={styles.chip}>
+      <Text style={[styles.chipLabel, { color: colors.text_muted }]}>{label}</Text>
+      <Text style={[styles.chipValue, { color: colors.accent }]}>{value}</Text>
+    </View>
+  );
+  return (
+    <View style={[styles.footer, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
+      <Chip label="CLUB" value={club ?? '—'} />
+      <Chip label="SHOT" value={shot != null ? String(shot) : '—'} />
+      <Chip label="DIST" value={distanceYds != null ? `${distanceYds} YDS` : '—'} />
+    </View>
+  );
+}
+
+// ─── Styles ──────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  headerBrand: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
+  brandWordmark: { fontSize: 13, fontWeight: '800', letterSpacing: 1.2 },
+  brandSub: { fontSize: 10, fontWeight: '700', letterSpacing: 1.4, marginTop: 1 },
+
+  toggle: { flexDirection: 'row', borderRadius: 10, borderWidth: 1, padding: 3, gap: 3 },
+  toggleBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: 'transparent', alignItems: 'center' },
+  toggleLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+
+  rail: { gap: 8 },
+  metricCard: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
+  metricTop: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  metricLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8, flexShrink: 1 },
+  estChip: { fontSize: 8, fontWeight: '700', letterSpacing: 0.5, borderWidth: 1, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1, overflow: 'hidden' },
+  metricValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4, marginTop: 4 },
+  metricValue: { fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
+  metricUnit: { fontSize: 11, fontWeight: '600' },
+  metricStatus: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginTop: 2 },
+
+  speedStat: { flex: 1, borderWidth: 1, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center' },
+  speedLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.8 },
+  speedValue: { fontSize: 20, fontWeight: '900', marginTop: 3 },
+  speedUnit: { fontSize: 9, fontWeight: '600', marginTop: 1 },
+
+  tempoWrap: { borderWidth: 1, borderRadius: 12, padding: 10 },
+  tempoHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tempoRatio: { fontSize: 14, fontWeight: '900', flex: 1 },
+  tempoVerdict: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  tempoTrack: { height: 8, borderRadius: 4, marginTop: 8, overflow: 'hidden', justifyContent: 'center' },
+  tempoIdeal: { position: 'absolute', top: 0, bottom: 0, borderRadius: 4 },
+  tempoMarker: { position: 'absolute', width: 4, top: -2, bottom: -2, borderRadius: 2, marginLeft: -2 },
+  tempoRange: { fontSize: 9, fontWeight: '600', letterSpacing: 0.6, marginTop: 6 },
+
+  bodyWrap: { borderWidth: 1, borderRadius: 12, padding: 10 },
+  bodyRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
+  bodyItem: { flex: 1, alignItems: 'center', gap: 3 },
+  bodyLabel: { fontSize: 10, fontWeight: '600' },
+  bodyVerdict: { fontSize: 11, fontWeight: '800' },
+
+  acousticCard: { borderWidth: 1, borderRadius: 12, padding: 10 },
+  acousticHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  acousticTitle: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
+  waveRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 30, marginTop: 8 },
+  waveBar: { flex: 1, borderRadius: 2 },
+  acousticStatus: { fontSize: 11, fontWeight: '700', marginTop: 6 },
+
+  verdict: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 16 },
+  verdictText: { fontSize: 13, fontWeight: '900', letterSpacing: 1 },
+
+  guideRoot: { alignItems: 'center', justifyContent: 'center' },
+  guideLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 1, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' },
+  guideTopCenter: { position: 'absolute', top: '14%' },
+  guideVLine: { position: 'absolute', top: '14%', bottom: '22%', width: 0, borderLeftWidth: 1.5, borderStyle: 'dashed', marginLeft: -0.75, opacity: 0.7 },
+  guideSideLabel: { position: 'absolute', top: '10%', marginLeft: -34 },
+  guideBallArea: { position: 'absolute', bottom: '14%', alignItems: 'center', gap: 4 },
+  guideBallBox: { width: 54, height: 30, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 6, opacity: 0.7 },
+
+  footer: { flexDirection: 'row', borderWidth: 1, borderRadius: 10, paddingVertical: 8 },
+  chip: { flex: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 },
+  chipLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
+  chipValue: { fontSize: 13, fontWeight: '900' },
+});

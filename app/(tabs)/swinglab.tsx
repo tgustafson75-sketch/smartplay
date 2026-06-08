@@ -68,24 +68,18 @@ interface LauncherCardSpec {
 // visible launch blocker on the SwingLab tab. Pulled the card
 // entirely rather than building a stub.
 const CARDS: LauncherCardSpec[] = [
+  // 2026-06-07 — Rebuild: Smart Motion is now THE go-to capture surface.
+  // Cage Mode + quick-record are being merged into it (open ~1-min
+  // window, acoustic multi-swing segmentation, clean redesign). The
+  // standalone Cage Mode card was removed here; its capability lives in
+  // Smart Motion. Coach Mode stays separate (instructor tool). See
+  // memory smartmotion-rebuild.
   {
     key: 'smartmotion',
     icon: 'camera-outline',
-    title: 'SmartMotion',
-    sub: 'AI Swing Analysis · Body Mechanics · Shot Tracing (coming)',
+    title: 'Smart Motion',
+    sub: 'AI swing analysis · acoustic swing detection · body mechanics',
     route: '/swinglab/smartmotion',
-  },
-  // 2026-05-21 — Day 2 / Fix 9B: Cage Mode added as its own card so
-  // it's discoverable alongside SmartMotion. Cage Mode is the
-  // dedicated practice + lesson environment (bullseye gate, ball-speed
-  // detection, watch IMU, cage calibration, batch-count selector).
-  // SmartMotion stays the quick swing check. Zero overlap.
-  {
-    key: 'cage-mode',
-    icon: 'scan-outline',
-    title: 'Cage Mode',
-    sub: 'Practice + lessons · bullseye gate · ball-speed · 1/3/5/10 swing batches',
-    route: '/swinglab/cage-mode',
   },
   // 2026-05-23 — Coach Mode (Fix #8). Wrapper for "watching someone
   // else swing" — pro picks/adds a student, captures their swing
@@ -201,7 +195,7 @@ export default function SwingLab() {
         title="SwingLab"
         lines={[
           "SwingLab is your practice hub — capture swings, run drills, study reps.",
-          "Tap any card to jump in — SmartMotion for quick, Cage Mode for full sessions.",
+          "Tap Smart Motion to capture and analyze your swings; Coach Mode is for working with someone else.",
           "Every swing you analyze feeds my read of your tendencies on the course.",
         ]}
         spokenText="SwingLab. Practice hub. Tap a card to jump in."
