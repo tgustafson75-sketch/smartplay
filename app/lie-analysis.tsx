@@ -237,6 +237,37 @@ export default function LieAnalysisScreen() {
     }
   }, [playIntent, speakAnalysis, voiceEnabled, voiceGender, language, includeStrategy, playerNotes]);
 
+  // 2026-06-07 (audit) — drain "Save for later" photos. Previously
+  // handleSaveForLater copied the photo to lie_analysis_pending/ and
+  // promised "I'll analyze it when you're back online", but NOTHING ever
+  // read that directory back: the analysis never happened and files
+  // leaked forever. On open, resume the oldest pending photo through the
+  // normal analysis flow and remove it once analysis is kicked off.
+  const drainedRef = useRef(false);
+  useEffect(() => {
+    if (drainedRef.current || imageUri) return;
+    drainedRef.current = true;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const dir = (FileSystem.documentDirectory ?? '') + 'lie_analysis_pending/';
+        const info = await FileSystem.getInfoAsync(dir);
+        if (!info.exists) return;
+        const files = (await FileSystem.readDirectoryAsync(dir)).filter(f => f.endsWith('.jpg')).sort();
+        if (files.length === 0 || cancelled) return;
+        const oldest = dir + files[0];
+        setImageUri(oldest);
+        runAnalysis(oldest);
+        // Remove once analysis is underway so it isn't re-drained; any
+        // additional pending photos drain on subsequent opens.
+        await FileSystem.deleteAsync(oldest, { idempotent: true });
+      } catch (e) {
+        console.log('[lie-analysis] drain pending failed:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [imageUri, runAnalysis]);
+
   const handleCapture = useCallback(async () => {
     if (!cameraRef.current) return;
     try {

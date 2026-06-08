@@ -505,6 +505,8 @@ interface RoundState {
   // after forgetting to log several). Each operates on shot.id.
   editShot: (id: string, patch: Partial<ShotResult>) => void;
   deleteShot: (id: string) => void;
+  /** Remove synthetic quick-score placeholder shots for a hole (audit fix). */
+  clearQuickScorePlaceholders: (hole: number) => void;
   bulkLogShots: (shots: ShotResult[]) => void;
   /**
    * Phase B — Set the end_location of the last shot on `hole` (typically called when the
@@ -1011,6 +1013,11 @@ export const useRoundStore = create<RoundState>()(
 
       endRound: () => {
         const s = get();
+        // Guard: no active round → no-op. Without this, a double-tap
+        // (final-hole auto-end racing the End Round button) or a stray
+        // call appends a phantom roundHistory entry and can push a bogus
+        // handicap differential. (audit 2026-06-07)
+        if (!s.isRoundActive) return '';
 
         // Phase B refinement + Phase Q.5b Component 3 — close out the
         // final played hole's last shot end_location to its green centroid
@@ -1649,6 +1656,17 @@ export const useRoundStore = create<RoundState>()(
       editShot: (id, patch) =>
         set(s => ({
           shots: s.shots.map(x => x.id === id ? { ...x, ...patch } : x),
+        })),
+
+      // 2026-06-07 (audit) — clear quick-score placeholder shots for a hole
+      // before re-scoring. Quick-score taps mint `score` synthetic shots
+      // (ids prefixed `qs-<hole>-`); without clearing the prior batch,
+      // re-scoring a hole accumulated phantom shots (corrupting recap /
+      // GIR / club-usage / longest-drive stats). Only removes synthetic
+      // quick-score shots — real tracked/voice/auto shots are untouched.
+      clearQuickScorePlaceholders: (hole) =>
+        set(s => ({
+          shots: s.shots.filter(x => !(typeof x.id === 'string' && x.id.startsWith(`qs-${hole}-`))),
         })),
 
       // Phase 109-followup — delete a logged shot by id. Re-numbers the

@@ -64,7 +64,7 @@ import { useGreenOverride } from '../services/courseGreenOverrides';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { getLastFix, subscribeFixChange, resolveGreenCoords, resolveTeeCoords, setMarkedFix } from '../services/smartFinderService';
 import { bumpToActive } from '../services/gpsManager';
-import { verifyShotAtLocation, correctShotClub, type ShotTrackResult } from '../services/shotTracking';
+import { verifyShotAtLocation, correctShotClub, confirmTrackedShot, type ShotTrackResult } from '../services/shotTracking';
 import ShotTrackedSheet from '../components/round/ShotTrackedSheet';
 import type { ClubName } from '../store/clubStatsStore';
 import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbertApi';
@@ -1054,6 +1054,9 @@ export default function SmartVisionScreen() {
   // pixel + yardages so the on-screen cart moves to GPS truth. Set
   // here; consumed by the effect below watching markBumpTick.
   const pendingReconcileAtRef = useRef<number>(0);
+  // Last committed cart lat/lng — shot logging reads this on a DISCRETE
+  // commit (tap-end / drag-end), never per drag frame (would log phantoms).
+  const lastCartFixRef = useRef<{ lat: number; lng: number } | null>(null);
 
   const commitCartCanvas = useCallback((canvasCoord: { x: number; y: number }) => {
     setTargetByHole(prev => ({ ...prev, [holeIndex]: canvasCoord }));
@@ -1077,7 +1080,7 @@ export default function SmartVisionScreen() {
         lng = geo.lng;
       }
     }
-    if (lat == null || lng == null) return;
+    if (lat == null || lng == null) { lastCartFixRef.current = null; return; }
     // 2026-06-07 GPS-audit #3: only propagate to setMarkedFix when the
     // SmartVision screen is on the SAME hole as the live round. If
     // the user is browsing other holes (e.g. peeking ahead at hole 7
@@ -1089,6 +1092,7 @@ export default function SmartVisionScreen() {
     if (isRoundActive && holeIndex !== currentHole) {
       console.log('[smartvision] cart commit visualization-only (browsing hole', holeIndex, 'while currentHole=', currentHole, ')');
       pendingReconcileAtRef.current = 0;
+      lastCartFixRef.current = null;
       return;
     }
     try {
@@ -1105,20 +1109,28 @@ export default function SmartVisionScreen() {
     } catch (e) {
       console.log('[smartvision] commit cart setMarkedFix failed:', e);
     }
-    // 2026-06-07 — Verify + auto-track the shot to the scorecard. The cart
-    // mark is the ball's resting spot → back-fills the prior shot's
-    // distance and logs the next shot's start, with a default club.
-    // Guard: don't log a duplicate while a tracked shot is still awaiting
-    // the user's confirm (re-taps just reposition the cart visually).
-    if (isRoundActive && holeIndex === currentHole && !trackedShot) {
-      try {
-        const r = verifyShotAtLocation({ lat, lng });
-        if (r.ok) setTrackedShot(r);
-      } catch (e) {
-        console.log('[smartvision] shot tracking failed (non-fatal):', e);
-      }
+    // 2026-06-07 — Stash the committed cart fix. Shot logging happens on a
+    // DISCRETE commit (tap-end / drag-end → maybeTrackShot), NEVER here:
+    // commitCartCanvas runs per drag frame, so logging here logged dozens
+    // of phantom shots per drag and inflated the score.
+    lastCartFixRef.current = { lat, lng };
+  }, [holeIndex, usingGpsTile, projection, imageW, imageH, calibration2Anchor, projectCanvasToLatLngVia2Anchor, currentHole, isRoundActive]);
+
+  // Log a shot from the last committed cart fix — called only on a DISCRETE
+  // commit (tap-end / drag-end), so a drag can't mint phantom shots. One
+  // tracked shot is pending at a time until the user confirms the sheet.
+  const maybeTrackShot = useCallback(() => {
+    const fix = lastCartFixRef.current;
+    if (!fix) return;
+    if (!isRoundActive || holeIndex !== currentHole) return;
+    if (trackedShot) return;
+    try {
+      const r = verifyShotAtLocation(fix);
+      if (r.ok) setTrackedShot(r);
+    } catch (e) {
+      console.log('[smartvision] shot tracking failed (non-fatal):', e);
     }
-  }, [holeIndex, usingGpsTile, projection, imageW, imageH, calibration2Anchor, projectCanvasToLatLngVia2Anchor, currentHole, isRoundActive, trackedShot]);
+  }, [isRoundActive, holeIndex, currentHole, trackedShot]);
 
   // 2026-06-06 — Auto-reconcile: when a live GPS tick arrives within
   // 10s of a user mark, project the new GPS position to canvas and
@@ -1229,8 +1241,9 @@ export default function SmartVisionScreen() {
         // cart position is shared with SmartFinder / brain and a
         // fresh live GPS tick arrives within ~1s to auto-reconcile.
         commitCartCanvas(next);
+        maybeTrackShot();
       });
-  }, [clampToCanvas, commitCartCanvas]);
+  }, [clampToCanvas, commitCartCanvas, maybeTrackShot]);
 
   // 2026-06-06 — Phase 4.1: GPS-init the cart on hole entry when we
   // have Mapbox geometry to project against (Mode 1 — usingGpsTile).
@@ -1575,7 +1588,7 @@ export default function SmartVisionScreen() {
               y={targetCanvas.y}
               draggable
               onDrag={onTargetDrag}
-              onDragEnd={() => { targetDragStartRef.current = null; }}
+              onDragEnd={() => { targetDragStartRef.current = null; maybeTrackShot(); }}
             />
           </>
         )}
@@ -1775,7 +1788,10 @@ export default function SmartVisionScreen() {
               if (trackedShot.shotId) correctShotClub(trackedShot.shotId, club);
               setTrackedShot({ ...trackedShot, club });
             }}
-            onDismiss={() => setTrackedShot(null)}
+            onDismiss={() => {
+              if (trackedShot.shotId) confirmTrackedShot(trackedShot.shotId);
+              setTrackedShot(null);
+            }}
           />
         </View>
       ) : null}

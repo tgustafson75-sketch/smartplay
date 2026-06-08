@@ -8,7 +8,7 @@
  * the club re-points the learned bag model via correctShotClub.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -53,6 +53,8 @@ export default function ShotTrackedSheet({
   const { colors } = useTheme();
   const [editing, setEditing] = useState(false);
   const [club, setClub] = useState<ClubName | null>(result.club);
+  // Keep the chip in sync if the tracked shot's club changes externally.
+  useEffect(() => { setClub(result.club); }, [result.club]);
 
   const estimated = result.distanceSource === 'hole_yardage';
 

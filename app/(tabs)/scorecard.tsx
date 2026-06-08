@@ -63,6 +63,7 @@ export default function Scorecard() {
   const logScore = useRoundStore(s => s.logScore);
   const logPutts = useRoundStore(s => s.logPutts);
   const logShot = useRoundStore(s => s.logShot);
+  const clearQuickScorePlaceholders = useRoundStore(s => s.clearQuickScorePlaceholders);
   const heroMoments = useRelationshipStore(s => s.heroMoments);
 
   const lastCompletedRound = useMemo(() => {
@@ -329,9 +330,15 @@ export default function Scorecard() {
   }, [viewCourseName, isCompetition, totalScore, scoreVsParDisplay, effectiveNineHoleMode, viewCourseHoles, viewScores, clubUsage, recap]);
 
   const handleQuickScore = (hole: number, score: number) => {
+    // Audit fix (2026-06-07): clear any prior quick-score placeholders for
+    // this hole first so re-scoring doesn't accumulate phantom shots
+    // (which corrupted recap / GIR / fairway / club-usage stats). The
+    // `qs-<hole>-` id prefix marks these as synthetic so real
+    // tracked/voice/auto shots are never touched.
+    clearQuickScorePlaceholders(hole);
     for (let i = 0; i < score; i++) {
       const placeholder: ShotResult = {
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + i,
+        id: `qs-${hole}-${i}`,
         feel: null, direction: null, shape: null, club: null,
         hole, timestamp: Date.now(), acousticContact: null,
         outcome: 'clean', penalty_strokes: 0, rules_decision: undefined,
