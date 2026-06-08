@@ -59,6 +59,16 @@ import {
   type Landmark,
 } from '../services/landmarks';
 
+// ─── GPS HELPERS ──────────────────────────
+
+// 2026-05-31 — Fix GA: consolidated to canonical haversine. Same
+// rationale as the smartvision.tsx update — three inline copies of
+// the same formula was a maintenance liability and the deterministic
+// 246yd artifact in the harness traced to one of these unguarded
+// inline implementations being fed out-of-range coords. WGS84 guard
+// returns NaN on bad input (caller must check Number.isFinite).
+import { haversineYards as canonicalHaversineYards } from '../utils/geoDistance';
+
 const CLUBS = [
   'Driver', '3W', '5W', 'Hybrid',
   '3i', '4i', '5i', '6i', '7i', '8i', '9i',
@@ -82,16 +92,6 @@ function getHoleBackgroundUri(courseId: string | null, holeNumber: number): stri
 
 // ─── SATELLITE CACHE ──────────────────────
 const SATELLITE_CACHE: Record<string, string> = {};
-
-// ─── GPS HELPERS ──────────────────────────
-
-// 2026-05-31 — Fix GA: consolidated to canonical haversine. Same
-// rationale as the smartvision.tsx update — three inline copies of
-// the same formula was a maintenance liability and the deterministic
-// 246yd artifact in the harness traced to one of these unguarded
-// inline implementations being fed out-of-range coords. WGS84 guard
-// returns NaN on bad input (caller must check Number.isFinite).
-import { haversineYards as canonicalHaversineYards } from '../utils/geoDistance';
 
 function isValidWgs84(lat: number, lng: number): boolean {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
@@ -220,7 +220,7 @@ export default function HoleView() {
   } | null>(null);
   const [gpsValid, setGpsValid] = useState(false);
   const [centerYards, setCenterYards] = useState(distance);
-  const [imageReady, setImageReady] = useState(false);
+  const [imageReady, _setImageReady] = useState(false);
   const [measureMode, setMeasureMode] = useState(false);
   const [tapPoint, setTapPoint] = useState<{ x: number; y: number } | null>(null);
   const [measureYards, setMeasureYards] = useState<number | null>(null);
@@ -487,7 +487,7 @@ export default function HoleView() {
   // Vector and satellite share the same shorter aspect; bundled uses tall.
   const IMAGE_HEIGHT = displayType === 'bundled' ? IMAGE_HEIGHT_BUNDLED : IMAGE_HEIGHT_SAT;
 
-  const imageSource =
+  const _imageSource =
     displayType === 'bundled' ? bundledImage
     : displayType === 'satellite' ? { uri: satelliteUrl! }
     : null;
@@ -712,7 +712,7 @@ export default function HoleView() {
     }
   }, [
     satelliteUrl, hole, par, centerYards, courseName,
-    firstName, dominantMiss, isRoundActive, apiUrl, voiceGender, language,
+    firstName, dominantMiss, isRoundActive, apiUrl, voiceGender, language, caddiePersonality,
   ]);
 
   useEffect(() => {

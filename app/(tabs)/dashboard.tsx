@@ -108,7 +108,7 @@ export default function Dashboard() {
     handicap_index,
     personalBest,
     goal,
-    dominantMiss,
+    dominantMiss: _dominantMiss,
     longestDrive,
     longestPutt,
     kevinRead,

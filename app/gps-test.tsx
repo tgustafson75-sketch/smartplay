@@ -36,14 +36,12 @@ import {
   type GpsFix,
 } from '../services/gpsManager';
 import { haversineYards } from '../utils/geoDistance';
-import { startSyntheticRound, stopSyntheticRound, isSimulatedActive, subscribeToWalk, subscribeHarnessEvents, clearHarnessEvents, setSimulatorMovementMode, getSimulatorMovementMode, type MockRound, type MovementMode, type SimulatedWalkState, type HarnessEvent } from '../services/simulatedGPS';
+import { startSyntheticRound, stopSyntheticRound, subscribeToWalk, subscribeHarnessEvents, clearHarnessEvents, setSimulatorMovementMode, getSimulatorMovementMode, type MockRound, type MovementMode, type SimulatedWalkState, type HarnessEvent } from '../services/simulatedGPS';
 import { useRoundStore } from '../store/roundStore';
 import { useOffCourseStore } from '../services/offCourseDetector';
 import { runAuditV2 } from '../services/audit/scenarioRunner';
 import type { AuditReport } from '../services/audit/types';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const PEBBLE_MOCK_ROUND: MockRound = require('../__mocks__/mockRound.json');
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const MENIFEE_MOCK_ROUND: MockRound = require('../__mocks__/menifeeRound.json');
 
 interface Anchor {

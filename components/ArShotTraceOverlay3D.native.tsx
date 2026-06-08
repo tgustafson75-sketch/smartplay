@@ -34,6 +34,14 @@
  *   altitude_ft / 3) to stay isotropic for the three.js camera.
  */
 
+/* eslint-disable react/no-unknown-property --
+ * This file renders react-three-fiber JSX (<mesh>, <ambientLight>,
+ * <tubeGeometry>, etc.). Props like position / args / emissive /
+ * emissiveIntensity / intensity / geometry / rotation / transparent /
+ * side are VALID three.js element props that r3f maps to the underlying
+ * object3D — not DOM/RN props. The react plugin's no-unknown-property
+ * rule doesn't know the r3f catalog, so disable it for this file. */
+
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Canvas, useFrame } from '@react-three/fiber/native';

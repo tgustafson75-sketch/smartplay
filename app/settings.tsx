@@ -33,7 +33,6 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import type { ThemeColors } from '../theme/tokens';
 import { getCaddieName, ACTIVE_PERSONAS } from '../lib/persona';
-import { clearMicDenial } from '../services/voicePermissionService';
 import {
   startSimulatedWalk, stopSimulatedWalk, getAvailableWalks,
   subscribeToWalk, isSimulatedActive, type SimulatedWalkState,

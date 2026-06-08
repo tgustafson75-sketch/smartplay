@@ -23,7 +23,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import {
   Modal, View, Text, ScrollView, Pressable, StyleSheet,
-  Animated, Easing, Image, Dimensions,
+  Animated, Easing, Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';

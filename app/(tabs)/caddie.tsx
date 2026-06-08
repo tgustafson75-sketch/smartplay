@@ -4,7 +4,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Pressable,
   StyleSheet,
   Modal,
   Alert,
@@ -35,7 +34,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 // useSettingsStore.cockpitMode; off by default. Voice/avatar code
 // below is byte-identical to pre-Cockpit when the toggle is off.
 import CockpitCaddieScreen from '../../components/caddie/CockpitCaddieScreen';
-import { DistanceCard, type FrontMiddleBack } from '../../components/caddie/cockpit/DistanceCard';
+import { type FrontMiddleBack } from '../../components/caddie/cockpit/DistanceCard';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useFamilyStore } from '../../store/familyStore';
@@ -48,7 +47,6 @@ import { getCourseList, getCourse, getCourseHoleCount } from '../../data/courses
 import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
 import StartRoundCourseCard from '../../components/course/StartRoundCourseCard';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
-import { detectNearestLocalCourse } from '../../services/nearestCourseDetector';
 import { openYouTubeChannel } from '../../services/youtubeLinks';
 import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types/patterns';
 import { getCourse as getApiCourse, courseToHoles } from '../../services/golfCourseApi';
@@ -154,23 +152,23 @@ export default function CaddieTab() {
   const _isRoundActiveForLayout = useRoundStore(s => s.isRoundActive);
   const _preRoundBudget = W >= 540 ? 280 : 200;
   const _avatarMaxH = H - insets.top - insets.bottom - 56 - (_isRoundActiveForLayout ? 160 : _preRoundBudget);
-  const avatarFrameHeight = Math.min(Math.round(W * 16 / 9), _avatarMaxH);
+  const _avatarFrameHeight = Math.min(Math.round(W * 16 / 9), _avatarMaxH);
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
   const familyMembers = useFamilyStore(s => s.members);
   const activeFamilyMemberId = useFamilyStore(s => s.active_member_id);
-  const activeFamilyMember = useMemo(
+  const _activeFamilyMember = useMemo(
     () => familyMembers.find(m => m.id === activeFamilyMemberId && !m.archived) ?? null,
     [familyMembers, activeFamilyMemberId],
   );
-  const activeFamilyCount = useMemo(
+  const _activeFamilyCount = useMemo(
     () => familyMembers.filter(m => !m.archived).length,
     [familyMembers],
   );
   // 2026-06-04 — Coach Mode toggle. Hides the "Coach X" pill below
   // when off. Toggle lives in the L4 green-arrow expandable row.
-  const coachModeEnabled = useSettingsStore(s => s.coachModeEnabled);
-  const setCoachModeEnabled = useSettingsStore(s => s.setCoachModeEnabled);
+  const _coachModeEnabled = useSettingsStore(s => s.coachModeEnabled);
+  const _setCoachModeEnabled = useSettingsStore(s => s.setCoachModeEnabled);
 
   // ── Stores ──────────────────────────────
   // Audit 101 / W1 — useShallow subscribes only to the listed fields with
@@ -183,7 +181,7 @@ export default function CaddieTab() {
     currentHole,
     currentYardage,
     club,
-    activeCourse,
+    activeCourse: _activeCourse,
     courseHoles,
     scores: _scores,
     nineHoleMode,
@@ -555,7 +553,7 @@ export default function CaddieTab() {
   // L1 Quiet's new SmartFinder hero needs the F/M/B triplet, not just
   // the middle. Pulled the same way liveYardage is (sync read + markTick
   // re-subscribe) so we don't add another GPS subscription.
-  const fmb = useMemo<FrontMiddleBack | null>(() => {
+  const _fmb = useMemo<FrontMiddleBack | null>(() => {
     if (!isRoundActive) return null;
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -598,7 +596,7 @@ export default function CaddieTab() {
     setCastMode: s.setCastMode,
   })));
 
-  const { firstName, goal, subscription_status, trial_started_at, dominantMiss, useCustomCaddie, customCaddiePortraitB64, customCaddieName } = usePlayerProfileStore(useShallow((s) => ({
+  const { firstName: _firstName, goal: _goal, subscription_status, trial_started_at, dominantMiss: _dominantMiss, useCustomCaddie, customCaddiePortraitB64, customCaddieName } = usePlayerProfileStore(useShallow((s) => ({
     firstName: s.firstName,
     goal: s.goal,
     subscription_status: s.subscription_status,
@@ -610,7 +608,7 @@ export default function CaddieTab() {
   })));
   const setUseCustomCaddie = usePlayerProfileStore((s) => s.setUseCustomCaddie);
   const activeCustomPortrait = useCustomCaddie ? customCaddiePortraitB64 : null;
-  const { skip_briefings, proactive_kevin_enabled } = useSettingsStore(useShallow((s) => ({
+  const { skip_briefings, proactive_kevin_enabled: _proactive_kevin_enabled } = useSettingsStore(useShallow((s) => ({
     skip_briefings: s.skip_briefings,
     proactive_kevin_enabled: s.proactive_kevin_enabled,
   })));
@@ -626,10 +624,10 @@ export default function CaddieTab() {
   );
 
   const {
-    roundsTogether,
-    sessionsTogether,
-    currentMentalState,
-    heroMoments,
+    roundsTogether: _roundsTogether,
+    sessionsTogether: _sessionsTogether,
+    currentMentalState: _currentMentalState,
+    heroMoments: _heroMoments,
     incrementRounds,
     isSpiralRisk,
   } = useRelationshipStore();
@@ -1003,7 +1001,6 @@ export default function CaddieTab() {
         console.log('[caddie] opener failed (non-fatal):', e);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── SmartVision ──────────────────────────

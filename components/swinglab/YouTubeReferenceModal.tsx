@@ -108,7 +108,7 @@ export default function YouTubeReferenceModal({ visible, onClose, defaultClub = 
           if (!label && result.fetchedTitle) setLabel(result.fetchedTitle);
           if (!proName && result.fetchedAuthorName) setProName(result.fetchedAuthorName);
         }
-      } catch (e) {
+      } catch {
         if (seq !== previewSeqRef.current) return;
         setPreview({ kind: 'invalid', reason: 'Preview failed — check the URL and your network.' });
       } finally {
@@ -137,7 +137,7 @@ export default function YouTubeReferenceModal({ visible, onClose, defaultClub = 
       // Don't await beyond onClose — caller resets its own state on
       // mount via the visible-effect above.
       void id;
-    } catch (e) {
+    } catch {
       useToastStore.getState().show('Couldn\'t add reference. Try again.');
     } finally {
       setSaving(false);

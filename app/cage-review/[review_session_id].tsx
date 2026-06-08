@@ -173,7 +173,7 @@ export default function CageReviewInterview() {
       setQuestion('How was that one?');
       setScreenState('question');
     }
-  }, [apiUrl, sessionHistory, voiceEnabled, voiceGender, language]);
+  }, [apiUrl, sessionHistory, voiceEnabled, voiceGender, language, caddiePersonality]);
 
   const startRecording = async () => {
     try {
@@ -318,7 +318,7 @@ export default function CageReviewInterview() {
     } catch {
       router.replace('/cage' as never);
     }
-  }, [apiUrl, router]);
+  }, [apiUrl, router, caddiePersonality, voiceGender]);
 
   // ── Progress info ─────────────────────────────────────────────────────────
 

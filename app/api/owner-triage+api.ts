@@ -63,7 +63,7 @@ interface TriageRequestBody {
   entry?: { id?: string; text?: string; timestamp?: number; context?: Record<string, unknown> };
   recentEvents?: unknown[];
   settingsSnapshot?: Record<string, unknown>;
-  recentIssues?: Array<{ text: string; timestamp: number }>;
+  recentIssues?: { text: string; timestamp: number }[];
   bundleInfo?: { updateId?: string | null; createdAt?: string | null };
 }
 

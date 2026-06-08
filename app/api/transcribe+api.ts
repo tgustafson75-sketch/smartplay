@@ -47,7 +47,7 @@ const AUDIO_MIME_BY_TYPE: Record<string, string> = {
   'audio/x-m4a':'audio/mp4',
 };
 
-const SUBSTITUTIONS: ReadonlyArray<[RegExp, string]> = [
+const SUBSTITUTIONS: readonly [RegExp, string][] = [
   [/\bspark motion\b/gi, 'SmartMotion'],
   [/\bsmart bishop\b/gi, 'SmartVision'],
   [/\bsmart fission\b/gi, 'SmartVision'],

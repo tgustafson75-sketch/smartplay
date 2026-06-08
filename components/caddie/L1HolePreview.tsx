@@ -57,7 +57,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   // it's just green screens."
   const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
   const previewCourseId = useRoundStore(s => s.previewCourseId);
-  const homeCourseName = usePlayerProfileStore(s => s.homeCourse);
+  const _homeCourseName = usePlayerProfileStore(s => s.homeCourse);
   // 2026-05-17 — Removed the hard "palms" fallback at the tail of the
   // cascade. Previously when there was no active round, no pending
   // course, no preview, and no home-course set, we'd return the literal

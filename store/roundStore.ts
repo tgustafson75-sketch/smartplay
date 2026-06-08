@@ -626,13 +626,17 @@ export const useRoundStore = create<RoundState>()(
         if (green?.middleLat && green?.middleLng) {
           const distToGreen = haversineYards(coords, { lat: green.middleLat, lng: green.middleLng });
           if (distToGreen <= GREEN_RADIUS_YARDS) {
-            if (s.currentLocationType === 'green' && s.currentTeeBox === null) return {};
+            // 2026-06-07 (audit N1) — dedup on the actual discriminator
+            // (currentLocationType) only; green/fairway always null the
+            // tee box, so the prior `&& currentTeeBox === null` was a
+            // brittle coincidence.
+            if (s.currentLocationType === 'green') return {};
             return { currentLocationType: 'green', currentTeeBox: null };
           }
         }
 
-        // Default fairway. Dedup.
-        if (s.currentLocationType === 'fairway' && s.currentTeeBox === null) return {};
+        // Default fairway. Dedup on location type.
+        if (s.currentLocationType === 'fairway') return {};
         return { currentLocationType: 'fairway', currentTeeBox: null };
       }),
 
@@ -1726,13 +1730,36 @@ export const useRoundStore = create<RoundState>()(
         }),
 
       // Phase 109-followup — bulk-add multiple shots (catch-up flow).
-      // Each shot goes through the same back-fill + index pipeline as
-      // logShot via repeated apply.
-      bulkLogShots: (shots) => {
-        for (const shot of shots) {
-          get().logShot(shot);
-        }
-      },
+      // 2026-06-07 (audit M3) — single atomic append that assigns indices
+      // but does NOT run logShot's per-shot back-fill. The back-fill sets
+      // the PREVIOUS shot's end_location to the next shot's start, which
+      // chained end-locations across catch-up shots that weren't actually
+      // sequential in time, corrupting their distances. Contract: bulk
+      // shots must carry their own start/end locations (they're complete,
+      // already-ordered records); we preserve them verbatim.
+      bulkLogShots: (shots) =>
+        set(s => {
+          if (shots.length === 0) return {};
+          let roundIdx = s.shots.length;
+          const perHole = new Map<number, number>();
+          for (const x of s.shots) perHole.set(x.hole, (perHole.get(x.hole) ?? 0) + 1);
+          const batch: ShotResult[] = shots.map(shot => {
+            const incomingStart = shot.start_location ?? shot.gps_location ?? null;
+            roundIdx += 1;
+            const holeCount = (perHole.get(shot.hole) ?? 0) + 1;
+            perHole.set(shot.hole, holeCount);
+            return {
+              ...shot,
+              start_location: incomingStart,
+              gps_location: shot.gps_location ?? incomingStart,
+              hole_number: shot.hole_number ?? shot.hole,
+              shot_in_hole_index: shot.shot_in_hole_index ?? holeCount,
+              shot_in_round_index: shot.shot_in_round_index ?? roundIdx,
+              player_id: shot.player_id ?? 'primary',
+            };
+          });
+          return { shots: [...s.shots, ...batch] };
+        }),
 
       updateShotWeather: (shotId, weather) =>
         set(s => ({

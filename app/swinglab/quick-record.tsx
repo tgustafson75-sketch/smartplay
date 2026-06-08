@@ -15,7 +15,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { QuickTutorial } from '../../components/QuickTutorial';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Linking , useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,7 +23,6 @@ import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo
 import { useTheme } from '../../contexts/ThemeContext';
 import { useFamilyStore } from '../../store/familyStore';
 import KidSwingGuideOverlay, { type GuidePhase } from '../../components/KidSwingGuideOverlay';
-import { useWindowDimensions } from 'react-native';
 // 2026-05-24 (Metrics C2) — Mirror Cage Mode's parallel-audio-recorder
 // pattern so SmartMotion's IN-APP record path produces a discrete
 // audio file + impact_ms for /api/acoustic-detect. Same lifecycle,

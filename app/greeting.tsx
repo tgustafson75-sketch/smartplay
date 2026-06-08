@@ -47,7 +47,7 @@ import { getGreetingAssetForPersona } from '../services/kevinGreetingManifest';
 // video (with built-in audio) INSTEAD of the avatar + bundled mp3.
 // Side effect: kills the boot cut-off bug because the video owns its
 // own audio — no separate playLocalFile to race the screen transition.
-import { getCaddieClip, hasCaddieClip } from '../services/getCaddieClip';
+import { getCaddieClip } from '../services/getCaddieClip';
 
 // 2026-06-03 — Greeting-complete signal exported for future consumers.
 // Resolves when ANY greeting playback path sets
@@ -81,9 +81,9 @@ export default function GreetingScreen() {
   const router = useRouter();
   const _insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const voiceGender = useSettingsStore(s => s.voiceGender);
+  const _voiceGender = useSettingsStore(s => s.voiceGender);
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
-  const language = useSettingsStore(s => s.language);
+  const _language = useSettingsStore(s => s.language);
   // 2026-05-28 — Fix FS: gate the audio-kickoff effect on settings
   // hydration. Without this, the effect could fire while caddiePersonality
   // is still the default 'kevin' even though the user persisted Serena /
@@ -91,7 +91,7 @@ export default function GreetingScreen() {
   // the hook re-renders with the persisted values; the audio effect
   // sees a stable state then fires.
   const settingsHydrated = useSettingsStore(s => s.hasHydrated);
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const _apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
   const { width: W, height: H } = useWindowDimensions();
 
   const [phase, setPhase] = useState<Phase>('ENTERING');

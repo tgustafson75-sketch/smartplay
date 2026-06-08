@@ -22,6 +22,12 @@ import React, { useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
+
+import type { Scenario, ScenarioCategory } from '../services/harness/scenarios';
+import type { ScenarioReport } from '../services/harness/assert';
 
 // 2026-05-25 — Per-row crash boundary. Without this, ONE bad scenario
 // (e.g. a non-string in detail / oversized error / weird unicode) takes
@@ -67,9 +73,6 @@ function safeText(v: unknown, maxLen = 500): string {
   const s = typeof v === 'string' ? v : (typeof v === 'object' ? JSON.stringify(v) : String(v));
   return s.length > maxLen ? s.slice(0, maxLen) + '…' : s;
 }
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
 
 // Lazy-load the harness scenarios so a top-level import-time error
 // (e.g. a transitive module crashing at load) surfaces as a visible
@@ -88,9 +91,6 @@ function loadScenarios() {
   }
 }
 loadScenarios();
-
-import type { Scenario, ScenarioCategory } from '../services/harness/scenarios';
-import type { ScenarioReport } from '../services/harness/assert';
 
 type RowState =
   | { kind: 'idle' }

@@ -149,7 +149,7 @@ function Field({
 }
 
 function SlopeChip({
-  direction, severity, breakInches, confidence, colors,
+  direction, severity, breakInches, confidence, colors: _colors,
 }: {
   direction: PuttingAnalysis['greenSlope']['direction'];
   severity: PuttingAnalysis['greenSlope']['severity'];

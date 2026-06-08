@@ -17,7 +17,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator,
-} from 'react-native';
+ useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -33,7 +33,6 @@ import {
 import JuniorSwingResultCard from '../../components/JuniorSwingResultCard';
 import JuniorSwingCompare from '../../components/JuniorSwingCompare';
 import JuniorSwingTrendChart from '../../components/JuniorSwingTrendChart';
-import { useWindowDimensions } from 'react-native';
 
 const BAND_LABEL: Record<AgeBand, string> = {
   tiny: 'Tiny',

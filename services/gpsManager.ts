@@ -713,6 +713,14 @@ export function stopGpsManager(): void {
     try { appStateSub.remove(); } catch {}
     appStateSub = null;
   }
+  // 2026-06-07 (audit N4) — CONTRACT: `subscribers` is round-scoped.
+  // stopGpsManager() clears ALL of them globally (cheap teardown that
+  // matches today's consumers — shotDetection + caddie effects — which
+  // all RE-SUBSCRIBE on the next startGpsManager/round start). Footgun:
+  // any future consumer that subscribes ONCE at app boot (not per round)
+  // would be silently dropped here after the first round ends. Such a
+  // consumer must either re-subscribe on round start or this clear must
+  // be narrowed to internal subscriptions first.
   subscribers.clear();
   lastFix = null;
   clearStaleHardTimer();

@@ -45,6 +45,9 @@ export function UndoMarkBanner() {
     if (remaining <= 0) return;
     const t = setTimeout(() => setTick(n => n + 1), remaining + 50);
     return () => clearTimeout(t);
+    // Intentionally keyed on markedAt only — we re-arm the timer when a
+    // NEW mark lands, not on every unrelated field change of `current`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.markedAt]);
 
   // Pull active inside render so window-expiration also hides it

@@ -51,7 +51,6 @@ import { initCaddieRewards, resetCaddieRewardsForRound } from '../services/caddi
 // called anyway (which only happens after the user starts a round),
 // so the lazy pattern is equivalent for normal use AND eliminates the
 // boot risk.
-import { useToastStore } from '../store/toastStore';
 import { consumeDeferredPaywall } from '../services/paywallGuard';
 import { initAudioLifecycle } from '../services/audioLifecycle';
 import { initBatteryMonitor } from '../services/batteryMonitor';

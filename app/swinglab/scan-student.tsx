@@ -86,7 +86,7 @@ export default function ScanStudent() {
   const [step, setStep] = useState<Step>('setup');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [uprightFrame, setUprightFrame] = useState<PoseFrame | null>(null);
-  const [addressFrame, setAddressFrame] = useState<PoseFrame | null>(null);
+  const [_addressFrame, setAddressFrame] = useState<PoseFrame | null>(null);
   const [resultProfile, setResultProfile] = useState<PlayerCalibrationProfile | null>(null);
 
   // ── Persist action ──────────────────────────────────────────────
