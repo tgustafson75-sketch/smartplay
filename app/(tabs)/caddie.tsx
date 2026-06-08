@@ -72,7 +72,7 @@ import { awaitGreetingComplete } from '../greeting';
 // survives tab focus changes. Only the orchestrator's runtime configure()
 // stays here (apiUrl/voice/language can change at any time).
 import { conversationalLoggingOrchestrator } from '../../services/conversationalLoggingOrchestrator';
-import { setActiveSurface } from '../../services/activeSurfaceRegistry';
+import { setActiveSurface, clearActiveSurface } from '../../services/activeSurfaceRegistry';
 import { evaluateRoundProgress } from '../../services/teamIntelligence';
 import QuickLogShotSheet from '../../components/QuickLogShotSheet';
 import { fetchCourseGeometry } from '../../services/courseGeometryService';
@@ -681,14 +681,14 @@ export default function CaddieTab() {
         return () => {
           clearTimeout(t);
           setMode('badge');
-          setActiveSurface(null);
+          clearActiveSurface('caddie');
           ScreenOrientation.unlockAsync();
         };
       }
 
       return () => {
         setMode('badge');
-        setActiveSurface(null);
+        clearActiveSurface('caddie');
         ScreenOrientation.unlockAsync();
       };
     // eslint-disable-next-line react-hooks/exhaustive-deps

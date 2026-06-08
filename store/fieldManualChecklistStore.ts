@@ -16,7 +16,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPersistStorage } from '../services/ssrSafeStorage';
 
 export interface ChecklistEntry {
   checked: boolean;
@@ -59,7 +59,7 @@ export const useFieldManualChecklistStore = create<FieldManualChecklistState>()(
     }),
     {
       name: 'fieldManualChecklist-v1',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPersistStorage()),
       version: 1,
       // 2026-06-06 — Forward-compatible migrate scaffold.
       migrate: (persisted) => persisted as FieldManualChecklistState,

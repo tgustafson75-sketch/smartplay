@@ -38,7 +38,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPersistStorage } from '../services/ssrSafeStorage';
 
 // Mirror of services/swingReferences.ts CanonicalIssue. Kept as plain
 // string in the store so a schema bump on the canonical list doesn't
@@ -133,7 +133,7 @@ export const useReferenceAuthoringStore = create<ReferenceAuthoringState>()(
     }),
     {
       name: '@smartplay/reference_authoring',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPersistStorage()),
       version: 1,
       // 2026-06-06 — Forward-compatible migrate scaffold.
       migrate: (persisted) => persisted as ReferenceAuthoringState,

@@ -35,6 +35,9 @@
  */
 
 import { Audio } from 'expo-av';
+// 2026-06-08 (audit M1) — serialize audio-mode writes (runs in parallel
+// with the camera + can race a TTS mode write).
+import { setAudioModeSerial } from './voiceService';
 import {
   METER_INTERVAL_MS as CAGE_METER_INTERVAL_MS,
   METER_BUFFER_SAMPLES,
@@ -174,7 +177,7 @@ export async function startImpactRecording(opts?: {
     const perm = await Audio.getPermissionsAsync();
     if (!perm.granted) return false;
 
-    await Audio.setAudioModeAsync({
+    await setAudioModeSerial({
       allowsRecordingIOS: true,
       playsInSilentModeIOS: true,
       staysActiveInBackground: false,
@@ -364,7 +367,12 @@ export async function stopAndDetectImpact(): Promise<ImpactReading | null> {
     audio_uri = state.recording.getURI();
   } catch { /* noop */ }
 
-  if (state.meterSamples.length === 0) return null;
+  if (state.meterSamples.length === 0) {
+    // 2026-06-08 (audit) — clean up the temp audio file on the null path;
+    // the caller only cleans up when it receives a non-null reading.
+    void cleanupImpactRecording(audio_uri);
+    return null;
+  }
 
   // Peak detection — single global max. Could be smarter (peak-pair
   // detection for echoes once we add server-side speed math), but for
@@ -374,7 +382,10 @@ export async function stopAndDetectImpact(): Promise<ImpactReading | null> {
     if (s.db > peak.db) peak = s;
   }
 
-  if (peak.db < MIN_IMPACT_DB) return null;
+  if (peak.db < MIN_IMPACT_DB) {
+    void cleanupImpactRecording(audio_uri);
+    return null;
+  }
 
   const confidence =
     peak.db >= -10 ? 0.85 :

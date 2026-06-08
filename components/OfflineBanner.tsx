@@ -4,18 +4,49 @@
  * Reads the reactive connectivityStore (inferred from network fetch
  * outcomes — no native module, OTA-safe). Shows a thin banner when the
  * app has decided it's offline so the user understands why analysis /
- * voice are degraded. Auto-hides on the next successful network call.
+ * voice are degraded.
+ *
+ * 2026-06-08 (audit M1) — recovery probe. The only reportOnline paths are
+ * successful voice/swing/brain calls; a user who regains signal but makes
+ * no such call (just walks the hole on local GPS) would see the banner
+ * stuck forever. While offline, this fires a cheap ping on app-foreground
+ * and on a slow interval, flipping back online on success.
  */
 
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, AppState } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useConnectivityStore } from '../store/connectivityStore';
+import { useConnectivityStore, reportOnline } from '../store/connectivityStore';
+
+const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
 
 export function OfflineBanner() {
   const insets = useSafeAreaInsets();
   const isOnline = useConnectivityStore((s) => s.isOnline);
+
+  useEffect(() => {
+    if (isOnline) return;
+    let cancelled = false;
+    const probe = async () => {
+      if (!apiUrl) return;
+      try {
+        await fetch(apiUrl + '/api/kevin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: '__ping__', language: 'en' }),
+          signal: AbortSignal.timeout(6000),
+        });
+        if (!cancelled) reportOnline();
+      } catch {
+        /* still offline */
+      }
+    };
+    const interval = setInterval(() => { void probe(); }, 20_000);
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') void probe(); });
+    return () => { cancelled = true; clearInterval(interval); sub.remove(); };
+  }, [isOnline]);
+
   if (isOnline) return null;
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + 4 }]} pointerEvents="none">

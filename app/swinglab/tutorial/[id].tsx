@@ -17,7 +17,7 @@ import { useTutorialStore, MAX_ACTIVE_TUTORIALS } from '../../../store/tutorialS
 import { clubLabel } from '../../../services/clubRecognition';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { getCaddieName } from '../../../lib/persona';
-import { setActiveSurface } from '../../../services/activeSurfaceRegistry';
+import { setActiveSurface, clearActiveSurface } from '../../../services/activeSurfaceRegistry';
 
 export default function TutorialDetail() {
   const router = useRouter();
@@ -33,7 +33,7 @@ export default function TutorialDetail() {
   // drills-pillar caddie (Serena by default).
   useEffect(() => {
     setActiveSurface('drill_detail');
-    return () => { setActiveSurface(null); };
+    return () => { clearActiveSurface('drill_detail'); };
   }, []);
 
   if (!tutorial) {

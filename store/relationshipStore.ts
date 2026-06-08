@@ -159,15 +159,17 @@ export const useRelationshipStore = create<RelationshipState>()(
       addHeroMoment: (moment) => {
         const kevinSaid = "Got it. That's yours.";
         set(s => ({
+          // 2026-06-08 (audit M3) — cap to last 100 (each carries a
+          // clipUri); was unbounded → persisted AsyncStorage growth.
           heroMoments: [
             ...s.heroMoments,
             {
               ...moment,
-              id: `${Date.now()}_hero`,
+              id: `${Date.now()}_${Math.random().toString(36).slice(2, 6)}_hero`,
               timestamp: Date.now(),
               kevinSaid,
             },
-          ],
+          ].slice(-100),
           firstPureShot: s.firstPureShot ?? Date.now(),
         }));
         return kevinSaid;
@@ -190,15 +192,16 @@ export const useRelationshipStore = create<RelationshipState>()(
 
       recordBreakthrough: (description, roundNumber) =>
         set(s => ({
+          // 2026-06-08 (audit M3) — cap to last 50; was unbounded.
           breakthroughs: [
             ...s.breakthroughs,
             {
-              id: `${Date.now()}_bt`,
+              id: `${Date.now()}_${Math.random().toString(36).slice(2, 6)}_bt`,
               description,
               timestamp: Date.now(),
               roundNumber,
             },
-          ],
+          ].slice(-50),
           firstBreak90: description.includes('90')
             ? (s.firstBreak90 ?? Date.now())
             : s.firstBreak90,

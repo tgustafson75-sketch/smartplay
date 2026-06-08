@@ -1108,12 +1108,17 @@ export const useVoiceCaddie = ({
         await processFollowUp(round1);
         return;
       }
+      // 2026-06-08 (audit M2) — if the user tapped to stop during round 1
+      // (or its nudge), don't progress to round 2 and re-open the mic.
+      if (userInterruptedRef.current) return;
       // Round 2 — gentle nudge then one more listen.
       const nudge = "Did you need some guidance, or are you good?";
       onResponseReceived(nudge);
       recordKevinTurn(nudge);
       wrappedOnVoiceStateChange('speaking');
       await speakResponse(nudge);
+      // Re-check after the nudge: a tap-to-stop during the nudge sets this.
+      if (userInterruptedRef.current) return;
       wrappedOnVoiceStateChange('listening');
       const round2 = await captureUtterance(FOLLOW_UP_CAPTURE_MS, apiUrl, language);
       if (round2 && round2.trim()) {

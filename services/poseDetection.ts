@@ -225,18 +225,21 @@ export async function probeDurationMs(clipUri: string): Promise<number> {
   // FALLS DOWN to 4s/2s if 8s itself failed (i.e., short clip).
   try {
     await VT.getThumbnailAsync(clipUri, { time: 8_000, quality: 0.3 });
-    // 8s succeeded — clip is at least 8s. Try longer for tighter bound.
+    // 8s succeeded — clip is at least 8s. Walk upward; the LAST ms that
+    // succeeds is the tightest lower bound. (audit — prior code returned
+    // inside the first iteration, so 30s was never tried and a >15s clip
+    // was always estimated at 15s.)
+    let lower = 8_000;
     for (const ms of [15_000, 30_000]) {
       try {
         await VT.getThumbnailAsync(clipUri, { time: ms, quality: 0.3 });
-        V6('STAGE 1 — duration via VT lower bound', { at_least_ms: ms });
-        return ms;
+        lower = ms; // this time existed → clip is at least ms
       } catch {
-        V6('STAGE 1 — duration via VT lower bound', { at_least_ms: 8_000 });
-        return 8_000;
+        break; // failed → clip is shorter than ms; `lower` is the bound
       }
     }
-    return 8_000;
+    V6('STAGE 1 — duration via VT lower bound', { at_least_ms: lower });
+    return lower;
   } catch {
     // 8s failed — clip is short. Probe down.
     for (const ms of [4_000, 2_000]) {

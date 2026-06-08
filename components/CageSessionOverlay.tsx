@@ -27,7 +27,7 @@ import { useFamilyStore } from '../store/familyStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { runPhaseKOnSession } from '../services/videoUpload';
 import { cageLog } from '../services/cageTelemetry';
-import { setActiveSurface } from '../services/activeSurfaceRegistry';
+import { setActiveSurface, clearActiveSurface } from '../services/activeSurfaceRegistry';
 import { evaluateCageEnd } from '../services/teamIntelligence';
 import {
   startImpactRecording,
@@ -135,7 +135,7 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
     // cage-pillar caddie (Tank by default) into voice / brain / avatar.
     setActiveSurface('cage');
     return () => {
-      setActiveSurface(null);
+      clearActiveSurface('cage');
       ScreenOrientation.unlockAsync();
     };
   }, []);

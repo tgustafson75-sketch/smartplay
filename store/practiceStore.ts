@@ -30,7 +30,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPersistStorage } from '../services/ssrSafeStorage';
 
 interface PracticeStats {
   lastSessionDate: number;
@@ -130,7 +130,7 @@ export const usePracticeStore = create<PracticeStats>()(
       // state type when adding actual migration logic.
       version: 1,
       migrate: (s) => s as never,
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => getPersistStorage()),
     },
   ),
 );

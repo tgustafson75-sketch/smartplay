@@ -66,10 +66,15 @@ export function verifyShotAtLocation(loc: ShotLocation, opts?: { club?: ClubName
   const holeShots = round.shots.filter((s) => (s.hole_number ?? s.hole) === hole);
   const prev = holeShots[holeShots.length - 1] ?? null;
 
-  // START of this completed shot = where the previous shot came to rest,
-  // or the tee for the first shot of the hole.
+  // START of this completed shot = where the previous shot came to REST
+  // (its end_location), or the tee for the first shot of the hole.
+  // 2026-06-08 (audit M3) — do NOT fall back to prev.start_location: a
+  // voice-logged or penalty shot has a start but no end, and chaining
+  // from its start over-counted this shot's distance AND made logShot
+  // back-fill that prior shot a 0-yard end. With no usable rest anchor we
+  // drop to the hole-yardage fallback below instead.
   const startLoc: ShotLocation | null =
-    prev?.end_location ?? prev?.start_location ?? (holeShots.length === 0 ? getTeeCentroid(hole) : null);
+    prev?.end_location ?? (holeShots.length === 0 ? getTeeCentroid(hole) : null);
 
   // Distance of THIS shot.
   let shotDistanceYards: number | null = null;
@@ -123,11 +128,22 @@ export function correctShotClub(shotId: string, newClub: ClubName): void {
   useRoundStore.getState().editShot(shotId, { club: newClub });
 }
 
+// 2026-06-08 (audit) — guard against double-record: two rapid taps on the
+// sheet's confirm (before it unmounts) would feed the bag model twice for
+// one shot and skew the rolling average.
+const confirmedShotIds = new Set<string>();
+
 /** Confirm a tracked shot — feeds the real bag model ONCE with the final
  *  club + measured distance. Called when the user dismisses the sheet. */
 export function confirmTrackedShot(shotId: string): void {
+  if (confirmedShotIds.has(shotId)) return;
   const shot = useRoundStore.getState().shots.find((s) => s.id === shotId);
   if (!shot || !shot.club) return;
+  confirmedShotIds.add(shotId);
+  // Bound the set so it can't grow unbounded over a long session.
+  if (confirmedShotIds.size > 200) {
+    confirmedShotIds.delete(confirmedShotIds.values().next().value as string);
+  }
   const yards = shot.distance_yards ?? null;
   if (yards != null && yards > 0) {
     useClubStatsStore.getState().record(shot.club as ClubName, yards);

@@ -688,7 +688,9 @@ export default function SmartVisionScreen() {
   const teeCoord = useMemo(() => {
     if (geometry?.tee) return geometry.tee;
     const h = courseHoles.find(x => x.hole === holeIndex);
-    if (h && h.teeLat !== 0 && h.teeLng !== 0) {
+    // 2026-06-08 (audit m1) — canonical WGS84 validity (rejects near-zero
+    // placeholders + leaked-meters values), not just `!== 0`.
+    if (h && isValidWgs84(h.teeLat, h.teeLng)) {
       console.log(`[smartvision] hole ${holeIndex}: tee from courseHoles fallback (golfcourseapi had no tee)`);
       return { lat: h.teeLat, lng: h.teeLng };
     }

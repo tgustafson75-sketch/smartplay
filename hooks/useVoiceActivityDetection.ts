@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Alert } from 'react-native';
 import { Audio } from 'expo-av';
+// 2026-06-08 (audit M1) — route audio-mode writes through the serial queue
+// so an Auto-Listen mic restart can't race a TTS playback mode write and
+// flip routing / silent-mode mid-utterance.
+import { setAudioModeSerial } from '../services/voiceService';
 
 // ─── TUNABLE CONSTANTS ────────────────────
 // Phase AB — SILENCE_DURATION_MS bumped from 1500 → 2800. Natural
@@ -64,10 +68,6 @@ export function useVoiceActivityDetection({
   onSpeechStart,
   onSpeechEnd,
 }: UseVoiceActivityDetectionOptions): UseVoiceActivityDetectionResult {
-  if (Platform.OS === 'web') {
-    return { isListening: false, currentLevel: -160 };
-  }
-
   const [isListening, setIsListening] = useState(false);
   const [currentLevel, setCurrentLevel] = useState(-160);
 
@@ -82,6 +82,12 @@ export function useVoiceActivityDetection({
   const onSpeechEndRef   = useRef(onSpeechEnd);
   useEffect(() => { onSpeechStartRef.current = onSpeechStart; }, [onSpeechStart]);
   useEffect(() => { onSpeechEndRef.current   = onSpeechEnd;   }, [onSpeechEnd]);
+  // 2026-06-08 (audit M3) — read `enabled` through a ref in
+  // finishRecording's restart check; the status-update callback captured
+  // the value at recording-creation time, so a TRAILING→finish in flight
+  // could re-acquire the mic with a stale `true` after Auto-Listen was off.
+  const enabledRef = useRef(enabled);
+  useEffect(() => { enabledRef.current = enabled; }, [enabled]);
 
   const startRecording = async (): Promise<void> => {
     try {
@@ -94,9 +100,10 @@ export function useVoiceActivityDetection({
         return;
       }
 
-      await Audio.setAudioModeAsync({
+      await setAudioModeSerial({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
       });
 
       const { recording } = await Audio.Recording.createAsync(VAD_RECORDING_OPTIONS);
@@ -174,7 +181,7 @@ export function useVoiceActivityDetection({
     }
 
     // Restart immediately to keep listening
-    if (enabled) {
+    if (enabledRef.current) {
       startRecording();
     } else {
       setIsListening(false);
@@ -198,7 +205,7 @@ export function useVoiceActivityDetection({
   };
 
   useEffect(() => {
-    if (enabled) {
+    if (enabled && Platform.OS !== 'web') {
       startRecording();
     } else {
       stopRecording();
@@ -208,5 +215,8 @@ export function useVoiceActivityDetection({
     };
   }, [enabled]);
 
+  // Web has no VAD recording path; return idle. AFTER all hooks so hook
+  // order stays stable (rules-of-hooks).
+  if (Platform.OS === 'web') return { isListening: false, currentLevel: -160 };
   return { isListening, currentLevel };
 }

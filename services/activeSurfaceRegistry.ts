@@ -49,6 +49,17 @@ export function getActiveSurface(): ActiveSurface {
   return activeSurface;
 }
 
+/**
+ * 2026-06-08 (audit M2) — clear the active surface ONLY if `surface` is
+ * still the registered one. A screen's blur cleanup must use this (not
+ * setActiveSurface(null)): during a transition, screen B's focus can run
+ * before screen A's blur cleanup, so an unconditional null would wipe B's
+ * just-registered surface and make pickOpener() choose the wrong persona.
+ */
+export function clearActiveSurface(surface: ActiveSurface): void {
+  if (activeSurface === surface) setActiveSurface(null);
+}
+
 // Phase 105 — subscribe to surface changes. Returns an unsub fn.
 export function subscribeActiveSurface(cb: SurfaceListener): () => void {
   listeners.add(cb);
