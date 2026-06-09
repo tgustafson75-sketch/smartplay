@@ -638,6 +638,27 @@ check('Hard-to-see issues (path/face/attack) gated behind a cited cue',
     offenders.length === 0 ? 'no "wire it later" markers feeding the UI' : `offending files: ${offenders.join(', ')}`);
 }
 
+// ─── 2026-06-09: ball-departure strike verifier + ball/target design ───────
+check('Ball-departure verifier endpoint + client wired',
+  exists('api/ball-departure.ts') &&
+    /export async function detectBallDeparture/.test(read('services/swing/ballDeparture.ts')),
+  'server endpoint + client service present');
+
+check('SmartMotion runs + surfaces the ball-departure cross-check',
+  /detectBallDeparture/.test(smSrc) && /ballDeparture/.test(smSrc) &&
+    /Sound only/.test(smSrc) && /Ball strike confirmed/.test(smSrc),
+  'verifier called on stop + honest confirmed/sound-only/unseen UI');
+
+check('Ball-departure verdict is honest (departed = before && !after)',
+  /departed = before && !after/.test(read('api/ball-departure.ts')),
+  'no departure claimed unless a ball was visible then gone');
+
+const targetOverlaySrc = read('components/swinglab/CageTargetingCard.tsx');
+check('Ball/target overlay matches redesign (vertical TARGET line + BALL box)',
+  /y2="100%"/.test(targetOverlaySrc) && /SvgRect/.test(targetOverlaySrc) &&
+    />TARGET</.test(targetOverlaySrc) && />BALL</.test(targetOverlaySrc),
+  'full-height target line + labeled ball box per mockups 7701/7702');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

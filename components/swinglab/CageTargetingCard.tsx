@@ -25,7 +25,7 @@
 
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Modal, Image, useWindowDimensions } from 'react-native';
-import Svg, { Circle as SvgCircle, Line as SvgLine } from 'react-native-svg';
+import Svg, { Circle as SvgCircle, Line as SvgLine, Rect as SvgRect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import type { ThemeColors } from '../../theme/tokens';
 
@@ -295,41 +295,69 @@ export function CageTargetingOverlay({
   target: TargetPoint | null;
 }) {
   if (!ballArea && !target) return null;
+  // 2026-06-09 — Matched to the ChatGPT redesign mockups (7701/7702):
+  //   TARGET = full-height vertical dashed line + a "TARGET" pill at top.
+  //   BALL   = a labeled BOX (not a bare dot) around the placed ball spot.
+  // Both points are user-placed, so this stays honest — no inferred flight.
+  const ACCENT = '#00C896';
   return (
-    <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-      {/* Aim line ball→target — the "engaged" start line. Both points are
-          user-placed, so this is honest (no inferred ball flight). */}
-      {ballArea && target && (
-        <SvgLine
-          x1={`${ballArea.x * 100}%`} y1={`${ballArea.y * 100}%`}
-          x2={`${target.x * 100}%`} y2={`${target.y * 100}%`}
-          stroke="#F0C030" strokeWidth={1.8} strokeDasharray="6,5" opacity={0.85}
-        />
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+        {/* TARGET — vertical dashed aim line down the whole frame. */}
+        {target && (
+          <SvgLine
+            x1={`${target.x * 100}%`} y1="0%"
+            x2={`${target.x * 100}%`} y2="100%"
+            stroke={ACCENT} strokeWidth={2} strokeDasharray="7,6" opacity={0.9}
+          />
+        )}
+        {/* BALL — labeled box around the placed spot. r is a fraction of the
+            frame; render a square box centered on it. */}
+        {ballArea && (
+          <SvgRect
+            x={`${(ballArea.x - ballArea.r) * 100}%`}
+            y={`${(ballArea.y - ballArea.r) * 100}%`}
+            width={`${ballArea.r * 2 * 100}%`}
+            height={`${ballArea.r * 2 * 100}%`}
+            rx={6}
+            stroke={ACCENT} strokeWidth={2.2}
+            fill={ACCENT} fillOpacity={0.1}
+          />
+        )}
+      </Svg>
+      {/* Pill labels (RN views — crisper text than SVG, easy to center). */}
+      {target && (
+        <View style={[overlayStyles.pill, { left: `${target.x * 100}%` }]}>
+          <Text style={overlayStyles.pillText}>TARGET</Text>
+        </View>
       )}
       {ballArea && (
-        <SvgCircle
-          cx={`${ballArea.x * 100}%`}
-          cy={`${ballArea.y * 100}%`}
-          // r as % of HEIGHT (matches placement math which used height).
-          // react-native-svg accepts strings; this scales with viewport.
-          r={`${ballArea.r * 100}%`}
-          stroke="#00C896" strokeWidth={2.2}
-          fill="#00C896" fillOpacity={0.12}
-        />
+        <View style={[overlayStyles.pill, overlayStyles.ballPill, { left: `${ballArea.x * 100}%`, top: `${(ballArea.y + ballArea.r) * 100}%` }]}>
+          <Text style={overlayStyles.pillText}>BALL</Text>
+        </View>
       )}
-      {target && (
-        <>
-          <SvgCircle
-            cx={`${target.x * 100}%`}
-            cy={`${target.y * 100}%`}
-            r={12}
-            stroke="#F0C030" strokeWidth={2.2} fill="none"
-          />
-        </>
-      )}
-    </Svg>
+    </View>
   );
 }
+
+const overlayStyles = StyleSheet.create({
+  pill: {
+    position: 'absolute',
+    top: 10,
+    transform: [{ translateX: -28 }],
+    backgroundColor: 'rgba(15,22,32,0.9)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  ballPill: {
+    backgroundColor: 'rgba(0,200,150,0.92)',
+    transform: [{ translateX: -22 }, { translateY: 6 }],
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  pillText: { color: '#ffffff', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+});
 
 const styles = StyleSheet.create({
   card: { padding: 14, borderRadius: 12, borderWidth: 1, gap: 10, marginVertical: 10 },

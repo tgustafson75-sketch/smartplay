@@ -90,6 +90,7 @@ import {
 import ClubPickerModal, { clubIdToSmashKey, clubIdToServerKey, clubIdLabel } from '../../components/cage/ClubPickerModal';
 import type { ClubId } from '../../services/clubRecognition';
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
+import { detectBallDeparture, type BallDepartureResult } from '../../services/swing/ballDeparture';
 
 const RECORDING_MAX_SECONDS = 60; // open window — player swings freely
 
@@ -211,6 +212,8 @@ export default function SmartMotion() {
   const [biomech, setBiomech] = useState<SwingBiomechanics | null>(null);
   const [videoDurationMs, setVideoDurationMs] = useState<number | null>(null);
   const [ballSpeed, setBallSpeed] = useState<BallSpeedResult | null>(null);
+  // Camera cross-check of the acoustic strike (ball there → gone at impact).
+  const [ballDeparture, setBallDeparture] = useState<BallDepartureResult | null>(null);
   const [liveDb, setLiveDb] = useState<number | null>(null);
   const [segments, setSegments] = useState<SwingSegment[]>([]);
   const [selectedSwing, setSelectedSwing] = useState(0);
@@ -549,6 +552,7 @@ export default function SmartMotion() {
     setBiomech(null);
     setVideoDurationMs(null);
     setBallSpeed(null);
+    setBallDeparture(null);
     setLiveDb(null);
     // Clear caches BEFORE resetting selection so no stale per-swing
     // analysis/tempo can be read for the new recording (audit #2).
@@ -632,6 +636,7 @@ export default function SmartMotion() {
       }
     }
     setBallSpeed(null);
+    setBallDeparture(null);
     setSegments([]);
     setSelectedSwing(0);
     setLiveDb(null);
@@ -723,6 +728,18 @@ export default function SmartMotion() {
         return;
       }
       setClipUri(recorded.uri);
+      // Camera cross-check of the acoustic strike: did the ball actually
+      // leave its spot at impact? Only runs when a ball spot exists. Honest
+      // false-positive guard (TV/clap can't move the ball) + launch seed.
+      const sid = ingestedSessionIdRef.current;
+      const ballAreaNow = sid
+        ? (useCageStore.getState().sessionHistory.find((x) => x.id === sid)?.ball_area_norm ?? null)
+        : null;
+      if (firstStrikeMs != null && ballAreaNow) {
+        void detectBallDeparture({ videoUri: recorded.uri, impactMs: firstStrikeMs, ballArea: ballAreaNow })
+          .then((r) => { if (r) setBallDeparture(r); })
+          .catch(() => undefined);
+      }
       // Analyze the FIRST detected swing windowed to its segment; other
       // swings analyze on-demand when selected in the reel.
       void runAnalysis(recorded.uri, detectedSegments[0]);
@@ -998,6 +1015,25 @@ export default function SmartMotion() {
             {isReview ? <VerdictBadge verdict={verdict.text} tone={verdict.tone} style={{ flex: 1 }} /> : null}
           </View>
 
+          {/* Strike cross-check — camera confirms the acoustic strike. Honest:
+              only shown when we actually ran the check (ball spot existed). */}
+          {isReview && ballDeparture ? (
+            <View style={styles.verifyRow}>
+              <Ionicons
+                name={ballDeparture.departed ? 'checkmark-circle' : 'alert-circle'}
+                size={14}
+                color={ballDeparture.departed ? colors.success : colors.warning}
+              />
+              <Text style={[styles.verifyText, { color: ballDeparture.departed ? colors.success : colors.warning }]}>
+                {ballDeparture.departed
+                  ? `Ball strike confirmed${ballDeparture.direction !== 'unknown' ? ` · launch ${ballDeparture.direction}` : ''}`
+                  : ballDeparture.ball_present_before
+                    ? 'Sound only — ball didn’t leave its spot'
+                    : 'Couldn’t see the ball to confirm'}
+              </Text>
+            </View>
+          ) : null}
+
           <View style={styles.controlsRow}>
             <ModeToggle value={angle} onChange={setAngle} style={{ flex: 1 }} />
             <View style={{ width: 130 }}>{actionBtn}</View>
@@ -1243,6 +1279,8 @@ const styles = StyleSheet.create({
   speedRow: { flexDirection: 'row', gap: 8 },
   dataRow: { flexDirection: 'row', gap: 8 },
   controlsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  verifyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 2 },
+  verifyText: { fontSize: 12, fontWeight: '700' },
 
 
   actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 12 },
