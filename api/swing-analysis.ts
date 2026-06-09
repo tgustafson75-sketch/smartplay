@@ -786,6 +786,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         `Do NOT take the audio as ground truth over your visual read — both inform the diagnosis.`
       );
     }
+    // 2026-06-08 — typed COACH NOTE (instructor's written note on this swing).
+    // Same treatment as coach_audio: expert context, not ground truth.
+    const coachNoteRaw = typeof ctx.coach_note === 'string' ? ctx.coach_note.trim() : '';
+    if (coachNoteRaw.length > 0) {
+      const trimmedNote = coachNoteRaw.length > 1500 ? coachNoteRaw.slice(0, 1500) + '…[truncated]' : coachNoteRaw;
+      ctxLines.push(
+        `COACH'S NOTE on this swing (written by the instructor):\n"${trimmedNote}"\n` +
+        `Treat as expert context. Confirm it against what you see, weave it into the read, ` +
+        `and note honestly if your visual evidence disagrees. Not ground truth over your own read.`
+      );
+    }
     // 2026-05-21 — Fix B: camera angle is chosen BEFORE recording and
     // routed in so biomechanical reads use the correct orientation.
     // Down-the-line view = camera behind the player looking down the

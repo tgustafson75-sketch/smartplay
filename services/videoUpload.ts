@@ -482,6 +482,9 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         tier: 'quick',
         ...(cageAngleCtx ? { angle: cageAngleCtx } : {}),
         ...(coachAudio.length > 0 ? { coach_audio: coachAudio } : {}),
+        // 2026-06-08 — fold the coach's typed note into the analysis so a
+        // re-analyzed library/coach swing incorporates the instructor's read.
+        ...((liveSession?.coach_note ?? '').trim().length > 0 ? { coach_note: (liveSession!.coach_note ?? '').trim() } : {}),
       }, boundaries, {
         faultFrameBaseName: `${sessionId}_${swing.id}_fault`,
       });

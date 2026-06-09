@@ -510,6 +510,12 @@ export async function analyzeSwing(
     // ground truth, and can call out mismatches (player said X but
     // I see Y). Empty / null = vision-only analysis as before.
     coach_audio?: string | null;
+    // 2026-06-08 — typed coach NOTE (setSessionCoachNote on the swing-detail
+    // screen). Like coach_audio but written, not spoken: the instructor's
+    // note on this swing ("hips stalled at impact"). Threaded into the
+    // analyst prompt as expert context (not ground truth) so library/coach
+    // analysis incorporates the coach's read.
+    coach_note?: string | null;
   },
   boundaries?: { startSec: number; endSec: number },
   // Phase 403b — when provided, the persisted fault-frame JPEG will be
