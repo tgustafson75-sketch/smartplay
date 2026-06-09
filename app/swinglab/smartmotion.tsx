@@ -951,21 +951,33 @@ export default function SmartMotion() {
 
           <View style={styles.controlsRow}>
             <View style={{ flex: 1 }}>
-              <AcousticPickupCard
-                detected={phase === 'recording' ? liveDb != null && liveDb > -30 : segments.length > 0}
-                swingCount={isReview ? confirmedCount(segments) : undefined}
-                calibrated={calibrated}
-              />
+              {/* 2026-06-09 — The card's "Tap to calibrate" label is now wired:
+                  tapping the meter (when uncalibrated) opens the calibrate
+                  screen. Removed the separate redundant "Calibrate acoustics"
+                  button below — one clear path now. Once calibrated the card
+                  is a passive status readout (no tap). */}
+              {!calibrated ? (
+                <Pressable
+                  onPress={() => router.push('/swinglab/calibrate' as never)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Calibrate acoustics, 10 strikes"
+                >
+                  <AcousticPickupCard
+                    detected={phase === 'recording' ? liveDb != null && liveDb > -30 : segments.length > 0}
+                    swingCount={isReview ? confirmedCount(segments) : undefined}
+                    calibrated={calibrated}
+                  />
+                </Pressable>
+              ) : (
+                <AcousticPickupCard
+                  detected={phase === 'recording' ? liveDb != null && liveDb > -30 : segments.length > 0}
+                  swingCount={isReview ? confirmedCount(segments) : undefined}
+                  calibrated={calibrated}
+                />
+              )}
             </View>
             {isReview ? <VerdictBadge verdict={verdict.text} tone={verdict.tone} style={{ flex: 1 }} /> : null}
           </View>
-
-          {!calibrated ? (
-            <Pressable onPress={() => router.push('/swinglab/calibrate' as never)} style={[styles.calibrateLink, { borderColor: colors.accent }]}>
-              <Ionicons name="options-outline" size={14} color={colors.accent} />
-              <Text style={[styles.calibrateText, { color: colors.accent }]}>Calibrate acoustics (10 strikes)</Text>
-            </Pressable>
-          ) : null}
 
           <View style={styles.controlsRow}>
             <ModeToggle value={angle} onChange={setAngle} style={{ flex: 1 }} />
@@ -1198,8 +1210,6 @@ const styles = StyleSheet.create({
   dataRow: { flexDirection: 'row', gap: 8 },
   controlsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 
-  calibrateLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderRadius: 10, paddingVertical: 9 },
-  calibrateText: { fontSize: 12, fontWeight: '800' },
 
   actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 12 },
   actionBtnText: { color: '#fff', fontWeight: '900', fontSize: 15 },
