@@ -170,8 +170,12 @@ export default function Dashboard() {
     }
     const teeShots = fullPool.filter(s => s.shot_in_hole_index === 1);
     const teeShotCount = teeShots.length;
-    const cleanTeeCount = teeShots.filter(s => s.outcome === 'clean' || s.outcome == null).length;
-    const fairwayPct = teeShotCount === 0 ? 0 : Math.round((cleanTeeCount / teeShotCount) * 100);
+    // 2026-06-09 (honesty) — only count tee shots with a KNOWN outcome. Treating
+    // untracked (outcome == null) shots as "clean" inflated fairway % with
+    // missing data. Percentage is now over tracked tee shots only.
+    const trackedTeeShots = teeShots.filter(s => s.outcome != null);
+    const cleanTeeCount = trackedTeeShots.filter(s => s.outcome === 'clean').length;
+    const fairwayPct = trackedTeeShots.length === 0 ? 0 : Math.round((cleanTeeCount / trackedTeeShots.length) * 100);
     const teeWithYds = teeShots.filter((s): s is typeof s & { distance_yards: number } =>
       typeof s.distance_yards === 'number' && s.distance_yards > 0,
     );

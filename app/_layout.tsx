@@ -136,6 +136,13 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   // Owner-only; surfaces "X loaded vs Y missing" without needing
   // adb logcat. Wired in via the centralized DEBUG_ROUTES gate.
   '/native-modules-debug',
+  // 2026-06-09 — Audit cleanup: route these through the central gate too.
+  // /dev/CourseTruth was a dev-only screen reachable by deep link with NO
+  // gating; harness + caddie-clip-test self-gate at the screen level but
+  // belong in the single source of truth.
+  '/dev/CourseTruth',
+  '/harness',
+  '/caddie-clip-test',
 ]);
 
 function AppNavigator() {

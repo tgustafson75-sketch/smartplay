@@ -731,6 +731,34 @@ check('practiceStore averages carry per-club, not by total swing count',
     /woodCarryCount/.test(read('store/practiceStore.ts')),
   'per-club sample counts fix deflated driver/3W carry averages');
 
+check('Ghost match rebuilds running delta after a restart',
+  /rehydrateProgress/.test(read('store/ghostStore.ts')) &&
+    /rehydrateProgress/.test(read('app/(tabs)/caddie.tsx')),
+  'ghost delta recomputed from persisted scores (no reset-to-zero on relaunch)');
+
+check('AR shot tracer labels carry/apex as estimates',
+  /~\{trace\.flight\.carry_yd\}y/.test(read('components/ArShotTraceOverlay.tsx')) &&
+    /Landing around/.test(read('services/arShotTracer.ts')),
+  'simulated flight shown/spoken as ~estimate, not exact');
+
+check('Dashboard fairway % excludes untracked tee shots',
+  /trackedTeeShots/.test(read('app/(tabs)/dashboard.tsx')),
+  'untracked (null outcome) tee shots no longer counted as fairway hits');
+
+check('Recap does not fabricate par for unknown holes',
+  /typeof holeParsMap\[hc\.hole_number\] === 'number'/.test(read('services/recapGenerator.ts')) &&
+    !/holeParsMap\[hc\.hole_number\] \?\? 4/.test(read('services/recapGenerator.ts')),
+  'holes with unknown par are not narrated with a fake par-4');
+
+check('Dev/owner-only routes centrally gated',
+  /\/dev\/CourseTruth/.test(read('app/_layout.tsx')) &&
+    /'\/harness'/.test(read('app/_layout.tsx')),
+  'CourseTruth + harness + caddie-clip-test in DEBUG_ROUTES');
+
+check('Orphaned retired routes removed',
+  !exists('app/swinglab/camera-setup.tsx') && !exists('app/swinglab/quick-record.tsx') && !exists('app/demo.tsx'),
+  'dead screens deleted');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

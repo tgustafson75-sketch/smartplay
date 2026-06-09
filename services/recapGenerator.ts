@@ -116,13 +116,18 @@ export async function generateRecap(
     return buildHoleComparison(holeNum, holeShots, score);
   });
 
-  // Build API payload
-  const holes = hole_comparisons.map(hc => ({
-    hole_number: hc.hole_number,
-    par: holeParsMap[hc.hole_number] ?? 4,
-    score: hc.actual_score,
-    shots_summary: hc.actual_shots.length > 0 ? shotsSummary(hc.actual_shots) : null,
-  }));
+  // Build API payload. 2026-06-09 (honesty) — only narrate holes whose par we
+  // actually know. Defaulting unknown par to 4 made the recap assert wrong
+  // score-vs-par phrasing; omit those holes from the par-based narration
+  // instead of fabricating a par.
+  const holes = hole_comparisons
+    .filter(hc => typeof holeParsMap[hc.hole_number] === 'number')
+    .map(hc => ({
+      hole_number: hc.hole_number,
+      par: holeParsMap[hc.hole_number],
+      score: hc.actual_score,
+      shots_summary: hc.actual_shots.length > 0 ? shotsSummary(hc.actual_shots) : null,
+    }));
 
   // Call /api/recap for Kevin summaries
   let holeSummaries: Array<{ hole_number: number; summary: string }> = [];

@@ -11,6 +11,12 @@ interface GhostState {
   holes_compared: number;
 
   activateGhost: (record: RoundRecord) => void;
+  /** 2026-06-09 — Rehydrate after an app restart mid-round. The ghost store
+   *  isn't persisted, but roundStore.active_ghost + the round scores are; on
+   *  relaunch we re-attach the ghost record AND rebuild the running per-hole
+   *  delta from the already-played scores, so "ahead/behind by N" survives the
+   *  restart instead of resetting to zero. */
+  rehydrateProgress: (record: RoundRecord, currentScores: Record<number, number>) => void;
   deactivateGhost: () => void;
   updateHole: (holeNumber: number, currentScore: number) => void;
   getLabel: () => string | null;
@@ -42,6 +48,15 @@ export const useGhostStore = create<GhostState>((set, get) => ({
     overall_delta: 0,
     holes_compared: 0,
   }),
+
+  rehydrateProgress: (record, currentScores) => {
+    set({ ghostRecord: record, holeResults: {}, overall_delta: 0, holes_compared: 0 });
+    // Replay the already-logged holes through updateHole so overall_delta and
+    // holes_compared rebuild exactly as if they'd never been lost.
+    for (const [holeStr, score] of Object.entries(currentScores)) {
+      if (typeof score === 'number') get().updateHole(Number(holeStr), score);
+    }
+  },
 
   deactivateGhost: () => set({
     ghostRecord: null,

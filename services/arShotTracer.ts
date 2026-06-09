@@ -257,11 +257,13 @@ export function buildNarration(trace: ActiveTrace): {
   const launch = trace.club
     ? `${caddieName} — tracking that ${trace.club}.`
     : `${caddieName} — tracking.`;
-  const apex = `Apex ${trace.flight.apex_ft} feet.`;
+  // Flight is simulated from club-typical defaults, not measured ball flight —
+  // narrate it as an estimate ("about") so we never imply a tracked number.
+  const apex = `Apex about ${trace.flight.apex_ft} feet.`;
   const lateralBit = Math.abs(trace.flight.landing_lateral_yd) >= 6
     ? `, ${Math.abs(trace.flight.landing_lateral_yd)} yards ${trace.flight.landing_lateral_yd > 0 ? 'right' : 'left'}`
     : '';
-  const landing = `Landing ${trace.flight.carry_yd} yards${lateralBit}.`;
+  const landing = `Landing around ${trace.flight.carry_yd} yards${lateralBit}.`;
   return { launch, apex, landing };
 }
 

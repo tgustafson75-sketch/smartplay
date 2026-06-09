@@ -210,11 +210,11 @@ export default function ArShotTraceOverlay({
             <SvgText x={apex.x + 8} y={apex.y - 8}
               fill="none" stroke="rgba(0,0,0,0.75)" strokeWidth={3}
               fontSize={12} fontWeight="800">
-              {trace.flight.apex_ft}ft
+              ~{trace.flight.apex_ft}ft
             </SvgText>
             <SvgText x={apex.x + 8} y={apex.y - 8}
               fill="#fef3c7" fontSize={12} fontWeight="800">
-              {trace.flight.apex_ft}ft
+              ~{trace.flight.apex_ft}ft
             </SvgText>
           </>
         )}
@@ -224,11 +224,11 @@ export default function ArShotTraceOverlay({
             <SvgText x={landing.x + 10} y={landing.y + 6}
               fill="none" stroke="rgba(0,0,0,0.75)" strokeWidth={3}
               fontSize={13} fontWeight="900">
-              {trace.flight.carry_yd}y
+              ~{trace.flight.carry_yd}y
             </SvgText>
             <SvgText x={landing.x + 10} y={landing.y + 6}
               fill="#ffffff" fontSize={13} fontWeight="900">
-              {trace.flight.carry_yd}y
+              ~{trace.flight.carry_yd}y
             </SvgText>
           </>
         )}

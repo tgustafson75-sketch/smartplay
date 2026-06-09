@@ -741,7 +741,12 @@ export default function CaddieTab() {
     if (!isRoundActive || !active_ghost) return;
     if (useGhostStore.getState().ghostRecord != null) return; // already live
     const record = roundHistory.find(r => r.id === active_ghost.source_round_id);
-    if (record) useGhostStore.getState().activateGhost(record);
+    if (record) {
+      // Rebuild the running delta from the round scores already logged before
+      // the restart (was resetting to zero with a bare activateGhost).
+      const currentScores = useRoundStore.getState().scores ?? {};
+      useGhostStore.getState().rehydrateProgress(record, currentScores);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally runs once on mount
 

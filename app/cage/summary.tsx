@@ -227,11 +227,11 @@ export default function CageSummary() {
           accent="coach"
         />
 
-        {/* Phase J — Primary Issue + Drill recommendation cards. Reserved
-             slots: render placeholder copy when the underlying fields on
-             session.primary_issue / session.drill_recommendation are null
-             (today, always — Phase K populates them). When Phase K ships,
-             these cards render real analysis automatically. */}
+        {/* Primary Issue + Drill recommendation cards. These ARE populated by
+             the analysis effect above (analyzeSwing → classifySession →
+             recommendDrill); they render placeholder copy only when a given
+             session genuinely has no analysis yet. (Comment corrected
+             2026-06-09 — the old "today, always null" note was stale.) */}
         {/* Phase K — analyzing indicator while pose detection runs */}
         {analyzing && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4, marginBottom: 10 }}>
