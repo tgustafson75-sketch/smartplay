@@ -618,6 +618,26 @@ check('Hard-to-see issues (path/face/attack) gated behind a cited cue',
   /HARD_TO_SEE_2D/.test(swingApiSrc) && /OBSERVABILITY LIMIT/.test(swingApiSrc),
   'detected_issue path/face/attack → none without evidence; prompt warns on 2D limits');
 
+// ─── 2026-06-09: deferred-wiring tripwire ──────────────────────────────────
+// Root cause of the acoustic-meter miss: a UI element shipped reading
+// hardcoded constants with a comment promising to wire the real signal
+// "later" — and a normal audit didn't catch it because the component
+// EXISTED. This guard fails the build if any "wire it later" marker ships
+// in the SmartMotion flagship, so a placeholder can't quietly reach users.
+{
+  const FLAGSHIP = [
+    'app/swinglab/smartmotion.tsx',
+    'components/smartmotion/SmartMotionHud.tsx',
+  ];
+  // Narrow, intent-revealing markers — NOT generic words like "fake"/"placeholder"
+  // that appear in honest comments or RN props.
+  const DEFER_MARKERS = /(until\s+\w+\s+(?:is\s+)?wired|reflects state until|not yet wired|wired when|hardcoded\s+(?:level|value|fill|step))/i;
+  const offenders = FLAGSHIP.filter((f) => DEFER_MARKERS.test(read(f)));
+  check('No deferred-wiring placeholders in SmartMotion flagship',
+    offenders.length === 0,
+    offenders.length === 0 ? 'no "wire it later" markers feeding the UI' : `offending files: ${offenders.join(', ')}`);
+}
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
