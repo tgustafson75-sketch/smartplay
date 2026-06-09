@@ -32,6 +32,22 @@ export async function captureGolferSelfie(): Promise<string | null> {
     [{ resize: { width: 256, height: 256 } }],
     { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG },
   );
+  // 2026-06-08 — copy out of the cache dir into persistent storage so the
+  // avatar survives an OS cache eviction (cache uris can be cleared,
+  // leaving a blank avatar). AI-stylized portraits are data: URLs and
+  // already durable. Falls back to the cache uri if the copy fails.
+  try {
+    const FS = await import('expo-file-system/legacy');
+    if (FS.documentDirectory) {
+      const dir = `${FS.documentDirectory}avatars/`;
+      await FS.makeDirectoryAsync(dir, { intermediates: true }).catch(() => undefined);
+      const dest = `${dir}selfie-${Date.now()}.jpg`;
+      await FS.copyAsync({ from: manip.uri, to: dest });
+      return dest;
+    }
+  } catch (e) {
+    console.log('[golferAvatar] persist copy failed (using cache uri)', e);
+  }
   return manip.uri;
 }
 

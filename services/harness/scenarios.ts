@@ -18,6 +18,10 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { usePracticeStore } from '../../store/practiceStore';
 import { resolveGreenCoords } from '../smartFinderService';
 import { synthesizeSwingMetrics } from '../swingMetricsService';
+import { useClubStatsStore } from '../../store/clubStatsStore';
+import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { useFamilyStore } from '../../store/familyStore';
+import { bagDistances } from '../shotStrategy';
 
 export type ScenarioCategory = 'critical' | 'high' | 'nice';
 
@@ -423,12 +427,65 @@ const SCEN_17: Scenario = {
   }),
 };
 
+// ─── 2026-06-08 session surfaces (N18-N20) ──────────────────────────
+
+const SCEN_18: Scenario = {
+  id: 'N18',
+  title: 'Bag distances feed the caddie (clubStats → bagDistances)',
+  category: 'nice',
+  run: () => runWithAsserts('N18', 'bagDistances reflects clubStats', async (a) => {
+    const stats = useClubStatsStore.getState();
+    const before = JSON.parse(JSON.stringify(stats.stats ?? {}));
+    stats.record('7I', 150);
+    const bag = bagDistances();
+    a.expect('7I present in bag after a logged shot', typeof bag['7I'] === 'number' && (bag['7I'] ?? 0) > 0);
+    a.expect('Putter excluded from full-shot bag', bag['Putter'] === undefined);
+    useClubStatsStore.setState({ stats: before });
+  }),
+};
+
+const SCEN_19: Scenario = {
+  id: 'N19',
+  title: 'User role default + setRole round-trip',
+  category: 'nice',
+  run: () => runWithAsserts('N19', 'role round-trip', async (a) => {
+    const p = usePlayerProfileStore.getState();
+    const beforeRole = p.role;
+    a.expect('role is one of golfer/instructor/student',
+      ['golfer', 'instructor', 'student'].includes(p.role));
+    p.setRole('instructor');
+    a.expectEqual('setRole instructor sticks', usePlayerProfileStore.getState().role, 'instructor');
+    usePlayerProfileStore.getState().setRole(beforeRole);
+  }),
+};
+
+const SCEN_20: Scenario = {
+  id: 'N20',
+  title: 'Golfer avatar photo round-trips on a family member',
+  category: 'nice',
+  run: () => runWithAsserts('N20', 'avatar_photo_uri round-trip', async (a) => {
+    const fam = useFamilyStore.getState();
+    const id = fam.addMember({
+      firstName: 'HarnessAvatarTest', nickname: null, relationship: 'friend',
+      age: null, skillLevel: 'first_swings', handedness: 'unknown',
+      approximate_handicap: null, avatar_emoji: '🏌️', avatar_photo_uri: 'file:///tmp/test.jpg',
+    });
+    a.expectEqual('photo persisted on add',
+      useFamilyStore.getState().getMember(id)?.avatar_photo_uri, 'file:///tmp/test.jpg');
+    useFamilyStore.getState().updateMember(id, { avatar_photo_uri: null });
+    a.expect('photo cleared on update',
+      !useFamilyStore.getState().getMember(id)?.avatar_photo_uri);
+    useFamilyStore.getState().removeMember(id);
+  }),
+};
+
 // ─── Registry ───────────────────────────────────────────────────────
 
 export const ALL_SCENARIOS: readonly Scenario[] = [
   SCEN_1, SCEN_2, SCEN_3, SCEN_4, SCEN_5, SCEN_6, SCEN_7, SCEN_8, SCEN_9,
   SCEN_10, SCEN_11, SCEN_12, SCEN_13, SCEN_14,
   SCEN_15, SCEN_16, SCEN_17,
+  SCEN_18, SCEN_19, SCEN_20,
 ] as const;
 
 // Suppress unused-import false positive (i18n must be imported to ensure

@@ -647,6 +647,11 @@ export default function HoleView() {
     startGPS().catch((err) => {
       console.log('[hole-view] GPS startup failed (non-fatal)', err);
       setGpsValid(false);
+      // Don't degrade silently on this screen — tell the user (audit).
+      try {
+        const { useToastStore } = require('../store/toastStore') as typeof import('../store/toastStore');
+        useToastStore.getState().show('GPS is having trouble — yardages may be slow. Check Location is on.');
+      } catch { /* best-effort */ }
     });
     return () => { gpsWatchRef.current?.remove(); };
   }, [isRoundActive, middleLat, middleLng]);
