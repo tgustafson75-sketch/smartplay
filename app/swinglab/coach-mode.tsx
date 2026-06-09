@@ -34,13 +34,16 @@
 import React, { useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
-  Modal, Alert, Image,
+  Modal, Alert, Image, Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useFamilyStore, type FamilyMember } from '../../store/familyStore';
+import { useToastStore } from '../../store/toastStore';
+import { GolferAvatar } from '../../components/GolferAvatar';
+import { captureGolferSelfie, stylizeGolferSelfie } from '../../services/golferAvatar';
 import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak } from '../../services/voiceService';
@@ -58,6 +61,7 @@ export default function CoachMode() {
   const activeMemberId = useFamilyStore(s => s.active_member_id);
   const setActiveMember = useFamilyStore(s => s.setActiveMember);
   const addMember = useFamilyStore(s => s.addMember);
+  const updateMember = useFamilyStore(s => s.updateMember);
   // Members excluding archived ones — Tank shouldn't pick a retired student.
   const roster = useMemo(() => members.filter(m => !m.archived), [members]);
   const activeMember = roster.find(m => m.id === activeMemberId) ?? null;
@@ -121,6 +125,34 @@ export default function CoachMode() {
   // ── Player selection ────────────────────────────────────────────
   const pickPlayer = (member: FamilyMember) => {
     setActiveMember(member.id);
+  };
+
+  // ── Avatar: tap to add a selfie or an AI-stylized portrait ──────
+  const onAvatarPress = (m: FamilyMember) => {
+    const setSelfie = async () => {
+      const uri = await captureGolferSelfie();
+      if (uri) updateMember(m.id, { avatar_photo_uri: uri });
+    };
+    const setStylized = async (style: 'caddie' | 'pro') => {
+      const uri = await captureGolferSelfie();
+      if (!uri) return;
+      useToastStore.getState().show(`Creating ${m.firstName}'s ${style} avatar…`);
+      const styled = await stylizeGolferSelfie(uri, style);
+      // Fall back to the raw selfie if stylization fails — honest, never blank.
+      updateMember(m.id, { avatar_photo_uri: styled ?? uri });
+      if (!styled) useToastStore.getState().show('Used your selfie — AI styling unavailable.');
+    };
+    Alert.alert(
+      `${m.firstName}'s photo`,
+      'Add a selfie, or let AI style it into a caddie or pro golfer.',
+      [
+        { text: 'Take selfie', onPress: () => void setSelfie() },
+        { text: 'AI caddie avatar', onPress: () => void setStylized('caddie') },
+        { text: 'AI pro-golfer avatar', onPress: () => void setStylized('pro') },
+        ...(m.avatar_photo_uri ? [{ text: 'Remove photo', style: 'destructive' as const, onPress: () => updateMember(m.id, { avatar_photo_uri: null }) }] : []),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    );
   };
 
   const quickAddPlayer = () => {
@@ -211,7 +243,19 @@ export default function CoachMode() {
                     accessibilityLabel={`Coach ${m.firstName}`}
                     accessibilityState={{ selected }}
                   >
-                    <Text style={styles.memberAvatar}>{m.avatar_emoji ?? '🏌️'}</Text>
+                    <Pressable
+                      onPress={() => onAvatarPress(m)}
+                      hitSlop={6}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Set ${m.firstName}'s photo`}
+                    >
+                      <GolferAvatar
+                        firstName={m.firstName}
+                        photoUri={m.avatar_photo_uri}
+                        size={40}
+                        ringColor={selected ? colors.accent : undefined}
+                      />
+                    </Pressable>
                     <Text style={[styles.memberName, { color: colors.text_primary }]} numberOfLines={1}>
                       {m.firstName}
                     </Text>

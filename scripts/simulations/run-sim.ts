@@ -485,6 +485,16 @@ check('playerProfile has role + coachCredentials + GHIN excluded from persist',
   /const\s*\{\s*ghin_number\b/.test(profileSrc2),
   'role + credentials + GHIN-at-rest privacy');
 
+// Golfer avatars (initials default → selfie → AI-stylized)
+check('GolferAvatar component + capture service exist',
+  exists('components/GolferAvatar.tsx') &&
+  /export\s+async\s+function\s+captureGolferSelfie/.test(read('services/golferAvatar.ts')) &&
+  /export\s+async\s+function\s+stylizeGolferSelfie/.test(read('services/golferAvatar.ts')),
+  'avatar + selfie/AI-stylize wired');
+check('FamilyMember carries avatar_photo_uri',
+  /avatar_photo_uri\??:/.test(read('store/familyStore.ts')),
+  'member photo field present');
+
 // Removed dead feature stays removed
 check('scan-golfer / playerCalibration removed',
   !exists('app/swinglab/scan-student.tsx') && !exists('store/playerCalibrationStore.ts') && !exists('services/playerCalibration.ts'),

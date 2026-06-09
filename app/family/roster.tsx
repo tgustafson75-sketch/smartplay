@@ -26,6 +26,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
+import { GolferAvatar } from '../../components/GolferAvatar';
+import { captureGolferSelfie, stylizeGolferSelfie } from '../../services/golferAvatar';
+import { useToastStore } from '../../store/toastStore';
 import {
   useFamilyStore,
   ageBand,
@@ -100,6 +103,7 @@ export default function FamilyRosterScreen() {
       skillLevel: m.skillLevel,
       handedness: m.handedness,
       avatar_emoji: m.avatar_emoji,
+      avatar_photo_uri: m.avatar_photo_uri ?? null,
     });
     setEditorOpen(true);
   };
@@ -120,6 +124,7 @@ export default function FamilyRosterScreen() {
       handedness: draft.handedness,
       approximate_handicap: null,
       avatar_emoji: draft.avatar_emoji,
+      avatar_photo_uri: draft.avatar_photo_uri ?? null,
     };
     if (editingId) {
       updateMember(editingId, payload);
@@ -127,6 +132,28 @@ export default function FamilyRosterScreen() {
       addMember(payload);
     }
     setEditorOpen(false);
+  };
+
+  const onDraftPhoto = () => {
+    const setSelfie = async () => {
+      const uri = await captureGolferSelfie();
+      if (uri) setDraft((d) => ({ ...d, avatar_photo_uri: uri }));
+    };
+    const setStyled = async (style: 'caddie' | 'pro') => {
+      const uri = await captureGolferSelfie();
+      if (!uri) return;
+      useToastStore.getState().show(`Creating ${style} avatar…`);
+      const styled = await stylizeGolferSelfie(uri, style);
+      setDraft((d) => ({ ...d, avatar_photo_uri: styled ?? uri }));
+      if (!styled) useToastStore.getState().show('Used your selfie — AI styling unavailable.');
+    };
+    Alert.alert('Profile photo', 'Add a selfie, or let AI style it into a caddie or pro golfer.', [
+      { text: 'Take selfie', onPress: () => void setSelfie() },
+      { text: 'AI caddie avatar', onPress: () => void setStyled('caddie') },
+      { text: 'AI pro-golfer avatar', onPress: () => void setStyled('pro') },
+      ...(draft.avatar_photo_uri ? [{ text: 'Remove photo', style: 'destructive' as const, onPress: () => setDraft((d) => ({ ...d, avatar_photo_uri: null })) }] : []),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
   };
 
   const onRemove = () => {
@@ -193,7 +220,7 @@ export default function FamilyRosterScreen() {
                   style={styles.rowMain}
                   onPress={() => router.push(`/family/${m.id}` as never)}
                 >
-                  <Text style={styles.rowAvatar}>{m.avatar_emoji}</Text>
+                  <GolferAvatar firstName={m.firstName} photoUri={m.avatar_photo_uri} size={40} style={{ marginRight: 10 }} />
                   <View style={styles.rowText}>
                     <Text style={[styles.rowName, { color: colors.text_primary }]} numberOfLines={1}>
                       {m.firstName}
@@ -296,6 +323,20 @@ export default function FamilyRosterScreen() {
                 colors={colors}
               />
 
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 }}>
+                <GolferAvatar firstName={draft.firstName || '?'} photoUri={draft.avatar_photo_uri} size={48} />
+                <Pressable
+                  onPress={onDraftPhoto}
+                  style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.accent, backgroundColor: colors.accent_muted, alignItems: 'center' }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add or change profile photo"
+                >
+                  <Text style={{ color: colors.accent, fontWeight: '700', fontSize: 13 }}>
+                    {draft.avatar_photo_uri ? 'Change photo' : 'Add selfie / AI avatar'}
+                  </Text>
+                </Pressable>
+              </View>
+
               <Pressable
                 onPress={onSave}
                 style={[styles.primaryBtn, { backgroundColor: colors.accent, marginTop: 18 }]}
@@ -338,6 +379,7 @@ interface EditableDraft {
   skillLevel: SkillLevel;
   handedness: FamilyMember['handedness'];
   avatar_emoji: string;
+  avatar_photo_uri?: string | null;
 }
 
 function emptyDraft(): EditableDraft {
@@ -352,6 +394,7 @@ function emptyDraft(): EditableDraft {
     // parent skips the picker. Analysis handles 'unknown' safely.
     handedness: 'unknown',
     avatar_emoji: '👧',
+    avatar_photo_uri: null,
   };
 }
 

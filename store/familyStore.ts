@@ -72,8 +72,13 @@ export interface FamilyMember {
   /** Optional simplified handicap (kids rarely have one; capture an
    *  approximate "shoots 110ish" as 38 etc. when parent provides one). */
   approximate_handicap: number | null;
-  /** Local-only avatar emoji or initial — never an image upload. */
+  /** Fallback avatar emoji. The roster/coach UI prefers initials, then a
+   *  photo when set (avatar_photo_uri), with this as a last resort. */
   avatar_emoji: string;
+  /** 2026-06-08 — optional profile photo: a file URI (raw selfie) or a
+   *  data: URL (AI-stylized caddie/pro portrait via /api/image-edit). When
+   *  set, the avatar shows the photo instead of initials. */
+  avatar_photo_uri?: string | null;
   /** 2026-05-22 — Captain extension. Optional team affiliation for
    *  teammate / coach relationships ("Heritage HS Varsity Girls").
    *  Members on the same team show up grouped on the Captain screen. */
