@@ -759,6 +759,12 @@ check('Orphaned retired routes removed',
   !exists('app/swinglab/camera-setup.tsx') && !exists('app/swinglab/quick-record.tsx') && !exists('app/demo.tsx'),
   'dead screens deleted');
 
+check('SmartMotion bottom panel is a translucent fade, not an opaque block',
+  /LinearGradient/.test(smSrc) &&
+    /backgroundColor: 'transparent', \/\/ translucent gradient/.test(smSrc) &&
+    /placeBallMode \? \(/.test(smSrc) && /glassCard/.test(smSrc),
+  'gradient fade + glass cards + panel hidden while placing the ball box');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

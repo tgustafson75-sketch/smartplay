@@ -40,6 +40,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
+import { LinearGradient } from 'expo-linear-gradient';
 import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOverlay';
 import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
 import CageTargetingCard, { CageTargetingOverlay } from '../../components/swinglab/CageTargetingCard';
@@ -992,8 +993,22 @@ export default function SmartMotion() {
           </View>
         ) : null}
 
-        {/* BOTTOM PANEL — floating data + controls */}
+        {/* BOTTOM PANEL — floating data + controls. While placing the ball box
+            it's hidden so the full floor is visible + tappable; otherwise it's
+            a soft translucent fade (not an opaque block) so the camera shows
+            through, matching the clean overlay design. */}
+        {phase === 'setup' && placeBallMode ? (
+          <View style={[styles.placeHint, { bottom: insets.bottom + 24, backgroundColor: colors.overlay }]} pointerEvents="none">
+            <Ionicons name="hand-left-outline" size={15} color={colors.accent} />
+            <Text style={[styles.placeHintText, { color: colors.accent }]}>Tap the floor where your ball is</Text>
+          </View>
+        ) : (
         <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 8 }]}>
+          <LinearGradient
+            colors={['rgba(6,15,9,0)', 'rgba(6,15,9,0.5)', 'rgba(6,15,9,0.85)']}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
           {/* REVIEW STATS — speed cards, tempo, body analysis (matches redesign) */}
           {isReview ? (
             <>
@@ -1060,6 +1075,7 @@ export default function SmartMotion() {
                     swingCount={isReview ? confirmedCount(segments) : undefined}
                     calibrated={calibrated}
                     levelDb={phase === 'recording' ? liveDb : null}
+                    style={styles.glassCard}
                   />
                 </Pressable>
               ) : (
@@ -1068,6 +1084,7 @@ export default function SmartMotion() {
                   swingCount={isReview ? confirmedCount(segments) : undefined}
                   calibrated={calibrated}
                   levelDb={phase === 'recording' ? liveDb : null}
+                  style={styles.glassCard}
                 />
               )}
             </View>
@@ -1127,8 +1144,10 @@ export default function SmartMotion() {
             shot={isReview ? selectedSwing + 1 : null}
             distanceYds={isReview ? metrics.carry_yards.value : null}
             distanceEst={isReview && metrics.carry_yards.value != null}
+            style={styles.glassCard}
           />
         </View>
+        )}
       </View>
     </View>
   );
@@ -1337,10 +1356,19 @@ const styles = StyleSheet.create({
 
   bottomPanel: {
     position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5,
-    backgroundColor: 'rgba(6,15,9,0.78)',
-    paddingHorizontal: 10, paddingTop: 10, gap: 8,
+    backgroundColor: 'transparent', // translucent gradient fade renders behind
+    overflow: 'hidden',
+    paddingHorizontal: 10, paddingTop: 14, gap: 8,
     borderTopLeftRadius: 18, borderTopRightRadius: 18,
   },
+  placeHint: {
+    position: 'absolute', alignSelf: 'center', zIndex: 6,
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999,
+  },
+  placeHintText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
+  // Translucent "glass" card bg so the camera shows through the bottom panel.
+  glassCard: { backgroundColor: 'rgba(12,22,16,0.55)' },
   tempoDetail: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3, marginTop: -2 },
   engagePill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
   engageText: { fontSize: 11, fontWeight: '900', letterSpacing: 0.6 },
