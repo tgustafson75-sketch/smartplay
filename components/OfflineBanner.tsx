@@ -28,6 +28,8 @@ export function OfflineBanner() {
   useEffect(() => {
     if (isOnline) return;
     let cancelled = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const probe = async () => {
       if (!apiUrl) return;
       try {
@@ -42,9 +44,23 @@ export function OfflineBanner() {
         /* still offline */
       }
     };
-    const interval = setInterval(() => { void probe(); }, 20_000);
-    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') void probe(); });
-    return () => { cancelled = true; clearInterval(interval); sub.remove(); };
+    // 2026-06-08 (audit #2) — back off the poll so a long offline stretch
+    // (e.g. a dead-zone hole) doesn't wake the radio every 20s all round.
+    // 20s for the first couple tries, then 45s, then 90s. Foreground
+    // returns reset the cadence for a fast reconnect check.
+    const schedule = () => {
+      const delay = attempts < 2 ? 20_000 : attempts < 5 ? 45_000 : 90_000;
+      timer = setTimeout(async () => {
+        attempts += 1;
+        await probe();
+        if (!cancelled) schedule();
+      }, delay);
+    };
+    schedule();
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') { attempts = 0; void probe(); }
+    });
+    return () => { cancelled = true; if (timer) clearTimeout(timer); sub.remove(); };
   }, [isOnline]);
 
   if (isOnline) return null;

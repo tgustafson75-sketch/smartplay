@@ -123,6 +123,9 @@ export interface MetricSpec {
   icon?: React.ComponentProps<typeof Ionicons>['name'];
   /** AI/pose-derived → shows an "est" chip per the honesty policy. */
   estimate?: boolean;
+  /** Confidence tier of the estimate. 'low' is shown as "est · low" so a
+   *  noisy-frame read is visibly distinct from a clean one (honesty). */
+  confidence?: 'high' | 'med' | 'low';
 }
 
 export function MetricCard({ spec, style }: { spec: MetricSpec; style?: StyleProp<ViewStyle> }) {
@@ -133,7 +136,9 @@ export function MetricCard({ spec, style }: { spec: MetricSpec; style?: StylePro
         {spec.icon ? <Ionicons name={spec.icon} size={14} color={colors.text_muted} /> : null}
         <Text style={[styles.metricLabel, { color: colors.text_muted }]} numberOfLines={1}>{spec.label}</Text>
         {spec.estimate ? (
-          <Text style={[styles.estChip, { color: colors.text_muted, borderColor: colors.border }]}>est</Text>
+          <Text style={[styles.estChip, { color: colors.text_muted, borderColor: colors.border }]}>
+            {spec.confidence === 'low' ? 'est · low' : 'est'}
+          </Text>
         ) : null}
       </View>
       <View style={styles.metricValueRow}>

@@ -109,6 +109,7 @@ function metricToSpec(key: string, label: string, m: SwingMetric, icon?: MetricS
     value: m.value != null ? String(m.value) : null,
     unit: m.unit || undefined,
     estimate: !isTruthGrade(m.source),
+    confidence: m.confidenceLabel,
     status: m.value != null && m.range ? `${m.range[0]}–${m.range[1]}` : undefined,
     statusTone: 'neutral',
     icon,

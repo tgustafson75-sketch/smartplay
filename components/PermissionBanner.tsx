@@ -35,11 +35,13 @@ export function PermissionBanner() {
 
   useEffect(() => {
     void refresh();
-    // Poll while ungranted so a Settings-side grant dismisses us
-    // without depending on Caddie tab focus events.
+    // 2026-06-08 (audit #2) — only poll while UNgranted. Once granted the
+    // banner is hidden anyway; the 5s interval was running all round for
+    // nothing.
+    if (granted) return;
     const id = setInterval(() => { void refresh(); }, 5000);
     return () => clearInterval(id);
-  }, [refresh]);
+  }, [refresh, granted]);
 
   const handleTap = async () => {
     if (busy) return;

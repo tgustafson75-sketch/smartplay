@@ -270,7 +270,12 @@ export default function PlayTab() {
     setNotesDictating(true);
     try {
       const { captureUtterance } = await import('../../services/voiceService');
-      const transcript = await captureUtterance(15_000, apiUrlForNotes, notesLanguage);
+      // 2026-06-08 (audit #2) — hard outer timeout so a native voice-service
+      // hang can never strand the mic in "listening" forever.
+      const transcript = await Promise.race([
+        captureUtterance(15_000, apiUrlForNotes, notesLanguage),
+        new Promise<string>((_, reject) => setTimeout(() => reject(new Error('dictation timeout')), 20_000)),
+      ]);
       if (transcript && transcript.trim()) {
         setSetupNotes(prev => (prev ? prev.trim() + ' ' : '') + transcript.trim());
       }

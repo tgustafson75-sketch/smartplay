@@ -746,7 +746,12 @@ export const useSettingsStore = create<SettingsState>()(
         // widened. Lookup sites also use ?? 100 as a runtime guard, so
         // this is belt-and-suspenders for older payloads.
         if (version < 11) {
-          if (p.personaIntensity && (p.personaIntensity as Record<string, number>).custom == null) {
+          // 2026-06-08 (audit #2) — defensive: if an incomplete prior
+          // migration left personaIntensity missing/non-object, seed the
+          // full shape rather than spread-merging onto undefined.
+          if (!p.personaIntensity || typeof p.personaIntensity !== 'object') {
+            p.personaIntensity = { kevin: 100, serena: 100, harry: 90, tank: 70, custom: 100 };
+          } else if ((p.personaIntensity as Record<string, number>).custom == null) {
             p.personaIntensity = { ...p.personaIntensity, custom: 100 };
           }
         }

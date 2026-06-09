@@ -283,7 +283,17 @@ function AppNavigator() {
       // line needed. Suppression honors caddieSuggestions mode below.
       const settings = useSettingsStore.getState();
       if (settings.caddieSuggestions === 'off') return;
-      useSettingsStore.getState().setCaddiePersonality(accepted.toPersona);
+      // 2026-06-08 (audit #2) — a thrown persona switch must not silently
+      // swallow the user's accepted handoff.
+      try {
+        useSettingsStore.getState().setCaddiePersonality(accepted.toPersona);
+      } catch (e) {
+        console.log('[handoff] persona switch failed', e);
+        try {
+          const { useToastStore } = require('../store/toastStore') as typeof import('../store/toastStore');
+          useToastStore.getState().show('Couldn’t switch caddie — try again.');
+        } catch { /* best-effort */ }
+      }
     });
 
     return () => { unsubAccept(); };

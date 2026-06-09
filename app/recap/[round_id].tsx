@@ -200,6 +200,10 @@ export default function RecapScreen() {
   const flatListRef = useRef<FlatList>(null);
   const [recap, setRecap] = useState<RoundRecap | null>(null);
   const [loading, setLoading] = useState(true);
+  // 2026-06-08 (audit #2) — distinguish "timed out" from "still loading" and
+  // allow a manual retry instead of a back-button-only dead-end.
+  const [timedOut, setTimedOut] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
   const [speaking, setSpeaking] = useState(false);
   const [narrating, setNarrating] = useState(false);
   const narratingRef = useRef(false);
@@ -227,7 +231,8 @@ export default function RecapScreen() {
         return;
       }
       if (attempts >= MAX_ATTEMPTS) {
-        // Give up — leave loading false so the empty-state UI renders.
+        // Give up — flag timed-out so the empty state offers a retry.
+        setTimedOut(true);
         setLoading(false);
         return;
       }
@@ -235,7 +240,7 @@ export default function RecapScreen() {
     };
     void tick();
     return () => { cancelled = true; };
-  }, [round_id]);
+  }, [round_id, retryNonce]);
 
   const handleShare = useCallback(async () => {
     if (!recap || sharing) return;
@@ -373,8 +378,16 @@ export default function RecapScreen() {
           <View style={styles.backBtn} />
         </View>
         <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>Recap not ready yet</Text>
-          <Text style={styles.emptyText}>Your round data is saved. The recap will be available the next time you open the app.</Text>
+          <Text style={styles.emptyTitle}>{timedOut ? 'Recap is taking longer than usual' : 'Recap not ready yet'}</Text>
+          <Text style={styles.emptyText}>Your round data is saved{timedOut ? ' — tap Try again, or it’ll be ready next time you open the app.' : '. The recap will be available the next time you open the app.'}</Text>
+          {timedOut ? (
+            <TouchableOpacity
+              style={styles.emptyBtn}
+              onPress={() => { setTimedOut(false); setLoading(true); setRetryNonce(n => n + 1); }}
+            >
+              <Text style={styles.emptyBtnText}>Try again</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity style={styles.emptyBtn} onPress={() => router.replace('/(tabs)/caddie' as never)}>
             <Text style={styles.emptyBtnText}>Back to {caddieName}</Text>
           </TouchableOpacity>

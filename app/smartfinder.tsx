@@ -1170,6 +1170,7 @@ function TargetCameraOverlay({
   const pitchRef = useRef(-10);
   const lastYardsRef = useRef<number | null>(null);
   const lastBearingRef = useRef<number | null>(null);
+  const lastPlayerLocRef = useRef<{ lat: number; lng: number } | null>(null);
 
   const avgCarryDriver = usePracticeStore(s => s.avgCarryDriver);
   const avgCarry3Wood = usePracticeStore(s => s.avgCarry3Wood);
@@ -1227,7 +1228,15 @@ function TargetCameraOverlay({
       lastBearingRef.current = nextBearing;
       setTargetBearing(nextBearing);
     }
-    setPlayerLoc(fix.location);
+    // 2026-06-08 (audit #2) — playerLoc is the player's GPS (stable during
+    // a reticle drag). Only update when it actually moves, so the hazard
+    // useMemos don't recompute (haversine over every polygon vertex) on
+    // every drag pixel.
+    const prev = lastPlayerLocRef.current;
+    if (!prev || prev.lat !== fix.location.lat || prev.lng !== fix.location.lng) {
+      lastPlayerLocRef.current = fix.location;
+      setPlayerLoc(fix.location);
+    }
   }, []);
 
   const playsLike = useMemo(() => {

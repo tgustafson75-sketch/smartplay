@@ -81,10 +81,17 @@ export default function ImportRoundScreen() {
       setPhase({ kind: 'error', uri: phase.uri, message: 'No hole scores were readable. Try a clearer screenshot.', retryable: true });
       return;
     }
-    const id = addImportedRound(input);
-    useToastStore.getState().show(`Round imported (${input.totalScore} on ${input.holesPlayed} holes)`);
-    console.log('[import-round] persisted', id, input.courseName, input.totalScore);
-    router.back();
+    // 2026-06-08 (audit #2) — guard the persist so a throw can't leave the
+    // user stuck on the confirm screen with no feedback.
+    try {
+      const id = addImportedRound(input);
+      useToastStore.getState().show(`Round imported (${input.totalScore} on ${input.holesPlayed} holes)`);
+      console.log('[import-round] persisted', id, input.courseName, input.totalScore);
+      router.back();
+    } catch (e) {
+      console.log('[import-round] persist failed', e);
+      setPhase({ kind: 'error', uri: phase.uri, message: 'Couldn’t save the round. Try again.', retryable: true });
+    }
   }, [phase, addImportedRound, router]);
 
   return (
