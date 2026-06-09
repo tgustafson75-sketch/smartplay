@@ -634,7 +634,13 @@ function sequencingFromFrames(top: PoseFrame, impact: PoseFrame): number | null 
 }
 
 /**
- * 2026-06-08 — Acoustic-anchored swing tempo + transition.
+ * 2026-06-08 — Vision swing tempo + transition (acoustic-verified impact).
+ *
+ * PRINCIPLE: tempo character — takeaway, top-of-backswing, transition —
+ * is VISION/pose-derived (analysis of the actual swing motion), NOT
+ * acoustic. Acoustic only supplies the verified impact instant (its real
+ * role is smash factor + shot verification/quality), never the shape of
+ * the tempo. Putt tempo is likewise fully vision.
  *
  * The classic tour ratio is backswing:downswing ≈ 3:1, and the
  * transition (top-of-backswing changeover) is where it lives. We measure

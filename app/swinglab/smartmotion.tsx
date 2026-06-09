@@ -176,6 +176,16 @@ export default function SmartMotion() {
   const { clipUri: clipUriParam, angle: angleParam } = useLocalSearchParams<{ clipUri?: string; angle?: string }>();
 
   const profile = usePlayerProfileStore();
+  // Swinger's handedness — the active family member when recording someone
+  // else, otherwise the account holder. Mirrors the capture guides.
+  const activeMemberHandedness = useFamilyStore(s => {
+    const m = s.active_member_id ? s.members.find(x => x.id === s.active_member_id) : null;
+    return m?.handedness ?? null;
+  });
+  const swingerHandedness: 'right' | 'left' =
+    activeMemberHandedness === 'left' || activeMemberHandedness === 'right'
+      ? activeMemberHandedness
+      : profile.handedness ?? 'right';
   const caddiePersonality = useSettingsStore((s) => s.caddiePersonality);
   const language = useSettingsStore((s) => s.language);
   const appliedCalibration = useAcousticCalibrationStore((s) => s.appliedCalibration);
@@ -241,6 +251,22 @@ export default function SmartMotion() {
   const setSessionTarget = useCageStore(s => s.setSessionTarget);
   const ballArea = cageSession?.ball_area_norm ?? null;
   const targetPoint = cageSession?.target_norm ?? null;
+
+  // Engage mode — placing a target "engages" the session: the caddie now
+  // has a committed aim line (ball→target). Aim read is the start-line
+  // angle from vertical (+ = right), honest because both points are
+  // user-placed (no inferred ball flight). Foundation for target-aware
+  // club/strategy logic.
+  const engaged = ballArea != null && targetPoint != null;
+  const aimRead = useMemo(() => {
+    if (!ballArea || !targetPoint) return null;
+    const dx = targetPoint.x - ballArea.x;
+    const dy = ballArea.y - targetPoint.y; // up the frame = positive (toward target)
+    if (dy <= 0.02) return null; // target not meaningfully above the ball
+    const deg = Math.round((Math.atan2(dx, dy) * 180) / Math.PI); // + right, - left
+    if (Math.abs(deg) <= 2) return 'straight';
+    return `${Math.abs(deg)}° ${deg > 0 ? 'right' : 'left'}`;
+  }, [ballArea, targetPoint]);
 
   const metrics: SwingMetricSet = useMemo(
     () =>
@@ -824,7 +850,7 @@ export default function SmartMotion() {
           </View>
         ) : null}
 
-        {phase !== 'analyzing' ? <CaptureGuides mode={angle} /> : null}
+        {phase !== 'analyzing' ? <CaptureGuides mode={angle} handedness={swingerHandedness} /> : null}
 
         {/* TOP BAR (interactive) */}
         <View style={[styles.topBar, { paddingTop: insets.top + 6 }]}>
@@ -868,6 +894,14 @@ export default function SmartMotion() {
           {/* REVIEW STATS — speed cards, tempo, body analysis (matches redesign) */}
           {isReview ? (
             <>
+              {engaged ? (
+                <View style={[styles.engagePill, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}>
+                  <Ionicons name="locate" size={13} color={colors.accent} />
+                  <Text style={[styles.engageText, { color: colors.accent }]}>
+                    RANGE · ENGAGED{aimRead ? ` · aim ${aimRead}` : ''}
+                  </Text>
+                </View>
+              ) : null}
               {skeletonRow}
               <View style={styles.speedRow}>
                 <SpeedStat
@@ -1107,6 +1141,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 18, borderTopRightRadius: 18,
   },
   tempoDetail: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3, marginTop: -2 },
+  engagePill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
+  engageText: { fontSize: 11, fontWeight: '900', letterSpacing: 0.6 },
   reelWrap: { gap: 6 },
   reelLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   reelChip: { width: 34, height: 34, borderRadius: 17, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },

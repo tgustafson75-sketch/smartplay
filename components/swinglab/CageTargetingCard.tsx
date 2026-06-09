@@ -297,6 +297,15 @@ export function CageTargetingOverlay({
   if (!ballArea && !target) return null;
   return (
     <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+      {/* Aim line ball→target — the "engaged" start line. Both points are
+          user-placed, so this is honest (no inferred ball flight). */}
+      {ballArea && target && (
+        <SvgLine
+          x1={`${ballArea.x * 100}%`} y1={`${ballArea.y * 100}%`}
+          x2={`${target.x * 100}%`} y2={`${target.y * 100}%`}
+          stroke="#F0C030" strokeWidth={1.8} strokeDasharray="6,5" opacity={0.85}
+        />
+      )}
       {ballArea && (
         <SvgCircle
           cx={`${ballArea.x * 100}%`}

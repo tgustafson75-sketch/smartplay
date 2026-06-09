@@ -321,11 +321,20 @@ function GuideLabel({ text, color, bg }: { text: string; color: string; bg: stri
   return <Text style={[styles.guideLabel, { color, backgroundColor: bg }]}>{text}</Text>;
 }
 
-export function CaptureGuides({ mode, style }: { mode: Angle; style?: StyleProp<ViewStyle> }) {
+export function CaptureGuides({
+  mode, handedness = 'right', style,
+}: {
+  mode: Angle;
+  /** Swinger's hand — mirrors the face-on TARGET/BALL lines for lefties. */
+  handedness?: 'right' | 'left';
+  style?: StyleProp<ViewStyle>;
+}) {
   const { colors } = useTheme();
   const line = colors.accent;
   const labelBg = colors.overlay;
   if (mode === 'down_the_line') {
+    // Down-the-line is center-symmetric (target up, ball bottom-center) —
+    // no handedness mirroring needed.
     return (
       <View style={[StyleSheet.absoluteFill, styles.guideRoot, style]} pointerEvents="none">
         <View style={styles.guideTopCenter}>
@@ -339,14 +348,18 @@ export function CaptureGuides({ mode, style }: { mode: Angle; style?: StyleProp<
       </View>
     );
   }
+  // Face-on: RH golfer aims target-line left, ball-line right. Lefty
+  // mirrors — swap the two columns.
+  const targetLeft = handedness === 'left' ? '68%' : '32%';
+  const ballLeft = handedness === 'left' ? '32%' : '68%';
   return (
     <View style={[StyleSheet.absoluteFill, styles.guideRoot, style]} pointerEvents="none">
-      <View style={[styles.guideVLine, { borderColor: line, left: '32%' }]} />
-      <View style={[styles.guideVLine, { borderColor: line, left: '68%' }]} />
-      <View style={[styles.guideSideLabel, { left: '32%' }]}>
+      <View style={[styles.guideVLine, { borderColor: line, left: targetLeft }]} />
+      <View style={[styles.guideVLine, { borderColor: line, left: ballLeft }]} />
+      <View style={[styles.guideSideLabel, { left: targetLeft }]}>
         <GuideLabel text="TARGET LINE" color={colors.text_primary} bg={labelBg} />
       </View>
-      <View style={[styles.guideSideLabel, { left: '68%' }]}>
+      <View style={[styles.guideSideLabel, { left: ballLeft }]}>
         <GuideLabel text="BALL LINE" color={colors.text_primary} bg={labelBg} />
       </View>
       <View style={styles.guideBallArea}>

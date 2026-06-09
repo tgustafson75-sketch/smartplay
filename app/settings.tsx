@@ -160,6 +160,7 @@ export default function Settings() {
   const {
     name,
     handicap,
+    handedness,
     dominantMiss,
     physicalLimitation,
     goal,
@@ -167,6 +168,7 @@ export default function Settings() {
     preferredTee,
     setName,
     setHandicap,
+    setHandedness,
     setDominantMiss,
     setPhysicalLimitation,
     setGoal,
@@ -696,6 +698,16 @@ export default function Settings() {
             onChangeText={setEditLimitation}
             placeholder="e.g. Bad left knee"
             placeholderTextColor="#374151"
+          />
+
+          <PillRow
+            label="Handedness"
+            options={[
+              { label: 'Right', value: 'right' },
+              { label: 'Left', value: 'left' },
+            ]}
+            value={handedness}
+            onSelect={(v) => setHandedness(v as 'right' | 'left')}
           />
 
           <PillRow

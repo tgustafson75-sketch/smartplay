@@ -1395,16 +1395,29 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
   const [pointA, setPointA] = useState<{ x: number; y: number } | null>(null);
   const [pointB, setPointB] = useState<{ x: number; y: number } | null>(null);
   const [pitchAtMeasure, setPitchAtMeasure] = useState<number | null>(null);
+  // Live tilt for the real-time level indicator. pitch = fore/aft (incline
+  // along the aim), roll = side tilt. Updated ~5×/s.
+  const [tilt, setTilt] = useState<{ pitch: number; roll: number }>({ pitch: 0, roll: 0 });
 
   useEffect(() => {
     DeviceMotion.setUpdateInterval(200);
     const sub = DeviceMotion.addListener(data => {
       if (data.rotation) {
-        pitchRef.current = ((data.rotation.beta ?? 0) * 180) / Math.PI;
+        const pitch = ((data.rotation.beta ?? 0) * 180) / Math.PI;
+        const roll = ((data.rotation.gamma ?? 0) * 180) / Math.PI;
+        pitchRef.current = pitch;
+        setTilt({ pitch, roll });
       }
     });
     return () => sub.remove();
   }, []);
+
+  // Live slope estimate (% grade) along the aim, from how far the phone is
+  // off vertical. Honest: this is an ESTIMATE that depends on a steady hold
+  // — not a surveyed green map. Surfaced live so the player can "read" the
+  // incline before committing.
+  const liveSlopePct = Math.round(Math.tan((Math.abs(tilt.pitch) - 90) * Math.PI / 180) * 100);
+  const liveLevel = Math.abs(liveSlopePct) < 1 && Math.abs(tilt.roll) < 2;
 
   const handleTap = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
     const { locationX, locationY } = event.nativeEvent;
@@ -1441,6 +1454,22 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
   return (
     <>
       <TouchableOpacity activeOpacity={1} style={StyleSheet.absoluteFill} onPress={handleTap} />
+
+      {/* Live level indicator — hold the phone along the ball→hole line and
+          read the incline in real time. Honest estimate (depends on a
+          steady hold), not a surveyed green map. */}
+      <View style={{ position: 'absolute', top: insets.top + 12, left: 16, right: 16, alignItems: 'center' }} pointerEvents="none">
+        <View style={{ backgroundColor: 'rgba(0,0,0,0.72)', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center', minWidth: 190 }}>
+          <Text style={{ color: liveLevel ? '#00C896' : '#fff', fontSize: 13, fontWeight: '900', letterSpacing: 1 }}>
+            {liveLevel ? 'LEVEL ✓' : `${liveSlopePct > 0 ? 'UPHILL' : 'DOWNHILL'} ~${Math.abs(liveSlopePct)}%`}
+          </Text>
+          <View style={{ marginTop: 8, width: 170, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center' }}>
+            <View style={{ position: 'absolute', left: '50%', width: 1.5, height: 14, backgroundColor: 'rgba(255,255,255,0.55)', top: -4, marginLeft: -0.75 }} />
+            <View style={{ position: 'absolute', left: `${50 + Math.max(-45, Math.min(45, liveSlopePct * 5))}%`, width: 12, height: 12, borderRadius: 6, marginLeft: -6, backgroundColor: slopeColor(liveSlopePct) }} />
+          </View>
+          <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 9, marginTop: 6, fontWeight: '600' }}>estimate · hold steady over the line</Text>
+        </View>
+      </View>
 
       {/* Overlay markers + connecting line */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">

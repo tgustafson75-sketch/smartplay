@@ -34,6 +34,9 @@ interface PlayerProfileState {
   name: string;
   firstName: string;
   handicap: number;
+  /** Player's swinging hand. Mirrors SmartMotion guides/overlays and L/R
+   *  coaching for lefties. Defaults to 'right'. */
+  handedness: 'right' | 'left';
   dominantMiss: 'left' | 'right' | 'straight' | null;
   // Phase BB — broader miss-type taxonomy for richer Kevin grounding.
   // Coexists with dominantMiss (which is direction-only). missType
@@ -152,6 +155,7 @@ interface PlayerProfileState {
 
   setName: (name: string) => void;
   setHandicap: (hcp: number) => void;
+  setHandedness: (h: 'right' | 'left') => void;
   setDominantMiss: (miss: 'left' | 'right' | 'straight' | null) => void;
   setMissType: (m: 'slice' | 'hook' | 'thin' | 'fat' | 'pull' | 'push' | 'varies' | null) => void;
   setExperienceContext: (e: 'starting' | 'improving' | 'returning' | 'competitive' | null) => void;
@@ -204,6 +208,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       name: '',
       firstName: '',
       handicap: 18,
+      handedness: 'right',
       dominantMiss: null,
       missType: null,
       experienceContext: null,
@@ -253,6 +258,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setName: (name) =>
         set({ name, firstName: name.split(' ')[0] ?? name }),
       setHandicap: (hcp) => set({ handicap: hcp }),
+      setHandedness: (h) => set({ handedness: h }),
       setDominantMiss: (miss) => set({ dominantMiss: miss }),
       setMissType: (m) => {
         // Auto-derive directional dominantMiss from missType so older
