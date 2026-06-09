@@ -628,6 +628,9 @@ check('Hard-to-see issues (path/face/attack) gated behind a cited cue',
   const FLAGSHIP = [
     'app/swinglab/smartmotion.tsx',
     'components/smartmotion/SmartMotionHud.tsx',
+    'app/(tabs)/caddie.tsx',
+    'components/CaddieDataStrip.tsx',
+    'components/swinglab/CageTargetingCard.tsx',
   ];
   // Narrow, intent-revealing markers — NOT generic words like "fake"/"placeholder"
   // that appear in honest comments or RN props.
@@ -693,7 +696,7 @@ check('Pre-record ball box: drop before recording + verifier runs on placement',
   // Endpoints NOT served by Vercel routes (and therefore exempt): Google
   // Maps staticmap (external), and the Meta-glasses swing-tempo placeholder
   // which is handled by an Expo Router app/api route, not vercel.json.
-  const EXEMPT = new Set(['staticmap', 'swing-tempo']);
+  const EXEMPT = new Set(['staticmap']);
   for (const f of walk('services')) {
     let src = '';
     try { src = require('fs').readFileSync(f, 'utf8'); } catch { continue; }
@@ -709,6 +712,24 @@ check('Pre-record ball box: drop before recording + verifier runs on placement',
     missing.length === 0,
     missing.length === 0 ? `${calledApis.size} api calls all routed` : `UNROUTED (will 404): ${missing.join(', ')}`);
 }
+
+// ─── 2026-06-09 audit fixes (honesty + wiring) ─────────────────────────────
+check('Caddie bag distances only include real (logged) clubs',
+  /if \(!stats\.hasSamples\(c\)\) continue/.test(read('services/shotStrategy.ts')),
+  "bagDistances gates on hasSamples — no STANDARD_YARDS leak into 'real distances'");
+
+check('Caddie TARGET no longer a hardcoded CENTER',
+  !/const targetDirection = 'CENTER'/.test(read('app/(tabs)/caddie.tsx')),
+  'frozen CENTER placeholder removed (honest — until a real aim engine)');
+
+check('SmartMotion camera audio muted (no iOS dual-recorder conflict)',
+  /mode="video" mute/.test(read('app/swinglab/smartmotion.tsx')),
+  'camera mute prevents audio-session collision with the metering recorder');
+
+check('practiceStore averages carry per-club, not by total swing count',
+  /driverCarryCount/.test(read('store/practiceStore.ts')) &&
+    /woodCarryCount/.test(read('store/practiceStore.ts')),
+  'per-club sample counts fix deflated driver/3W carry averages');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 

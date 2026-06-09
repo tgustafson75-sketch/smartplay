@@ -1889,8 +1889,11 @@ export default function CaddieTab() {
   // otherwise use the bundled-aware count so Echo Hills + Mariners Point
   // don't default to 18 when their bundled scorecard says 9.
   const totalHoles = nineHoleMode ? 9 : getCourseHoleCount(useRoundStore.getState().activeCourseId, courseHoles.length);
-  // targetDirection: not yet in aim engine — show CENTER until wired
-  const targetDirection = 'CENTER';
+  // targetDirection: there is no aim engine computing a real LEFT/CENTER/RIGHT
+  // target yet, so show "—" rather than a hardcoded "CENTER" that reads like a
+  // live value. Wire to a real aim recommendation before showing a direction.
+  // (2026-06-09 honesty fix — was a frozen 'CENTER' placeholder.)
+  const targetDirection = '—';
 
   const currentStroke = useMemo(() => {
     // 2026-05-19 — STROKE = "the next stroke you're about to hit",

@@ -37,6 +37,10 @@ interface PracticeStats {
   swingCount: number;
   avgCarryDriver: number;
   avgCarry3Wood: number;
+  /** Per-club carry sample counts — the running averages above divide by
+   *  THESE, not the total swing count (2026-06-09 fix). */
+  driverCarryCount: number;
+  woodCarryCount: number;
   typicalMiss: 'left' | 'right' | 'straight';
   overTheTopCount: number;
   fatShotCount: number;
@@ -51,6 +55,8 @@ export const usePracticeStore = create<PracticeStats>()(
       swingCount: 0,
       avgCarryDriver: 0,
       avgCarry3Wood: 0,
+      driverCarryCount: 0,
+      woodCarryCount: 0,
       typicalMiss: 'straight',
       overTheTopCount: 0,
       fatShotCount: 0,
@@ -98,16 +104,25 @@ export const usePracticeStore = create<PracticeStats>()(
 
         const isDriver = club === 'driver' || club === 'd';
         const newSwingCount = state.swingCount + 1;
+        // 2026-06-09 fix — average each club's carry over ITS OWN sample count,
+        // not the total swing count (which deflated every average in a mixed
+        // session). Track per-club counts and divide by those.
+        const driverSample = isDriver && carry > 0;
+        const woodSample = !isDriver && carry > 0;
+        const newDriverCount = driverSample ? state.driverCarryCount + 1 : state.driverCarryCount;
+        const newWoodCount = woodSample ? state.woodCarryCount + 1 : state.woodCarryCount;
 
         return {
           lastSessionDate: Date.now(),
           swingCount: newSwingCount,
-          avgCarryDriver: isDriver && carry > 0
-            ? ((state.avgCarryDriver * state.swingCount + carry) / newSwingCount)
+          avgCarryDriver: driverSample
+            ? (state.avgCarryDriver * state.driverCarryCount + carry) / newDriverCount
             : state.avgCarryDriver,
-          avgCarry3Wood: !isDriver && carry > 0
-            ? ((state.avgCarry3Wood * state.swingCount + carry) / newSwingCount)
+          avgCarry3Wood: woodSample
+            ? (state.avgCarry3Wood * state.woodCarryCount + carry) / newWoodCount
             : state.avgCarry3Wood,
+          driverCarryCount: newDriverCount,
+          woodCarryCount: newWoodCount,
           overTheTopCount: isOverTheTop ? state.overTheTopCount + 1 : state.overTheTopCount,
           fatShotCount: isFat ? state.fatShotCount + 1 : state.fatShotCount,
           typicalMiss: nextTypicalMiss,
@@ -118,6 +133,8 @@ export const usePracticeStore = create<PracticeStats>()(
         swingCount: 0,
         avgCarryDriver: 0,
         avgCarry3Wood: 0,
+        driverCarryCount: 0,
+        woodCarryCount: 0,
         typicalMiss: 'straight',
         overTheTopCount: 0,
         fatShotCount: 0,

@@ -901,7 +901,13 @@ export default function SmartMotion() {
             onPlaybackStatusUpdate={(s) => { if ('positionMillis' in s && typeof s.positionMillis === 'number') setPlaybackMs(s.positionMillis); }}
           />
         ) : (
-          <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" mode="video" />
+          // 2026-06-09 — `mute` disables the camera's own audio track. We run a
+          // SEPARATE Audio.Recording for acoustic strike metering; on iOS the
+          // audio session is a singleton, so two concurrent recorders can
+          // collide and silently kill metering (→ no strikes/segments/tempo).
+          // We never use the clip's audio (playback is muted), so muting the
+          // camera is lossless and removes the contention.
+          <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" mode="video" mute />
         )}
 
         {/* Smart Capture — tap exposed video to freeze + mark up. */}
