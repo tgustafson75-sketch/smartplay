@@ -42,13 +42,17 @@ export interface ShotTrackResult {
 
 let shotSeq = 0;
 
-/** Remaining-to-green from a location: GPS green centroid first, then the
- *  resolver's known hole yardage (static card) as a fallback. */
+/** Remaining-to-green from a location — requires the GPS green centroid.
+ *  2026-06-08 (audit #1): removed the static tee-to-green fallback. The
+ *  hole's scorecard yardage is the FULL tee→green distance, not the
+ *  remaining from an arbitrary cart-tap; returning it from mid-fairway
+ *  reported ~450y at 150y out and corrupted shot-distance deltas. When we
+ *  don't have the green location we honestly return null (caller shows
+ *  "—" and the tee-shot path still uses resolveYardage explicitly). */
 function approachFromLocation(hole: number, loc: ShotLocation): number | null {
   const green = getGreenCentroid(hole);
   if (green) return Math.round(haversineYards(loc, green));
-  const r = resolveYardage(hole);
-  return r.value;
+  return null;
 }
 
 /**

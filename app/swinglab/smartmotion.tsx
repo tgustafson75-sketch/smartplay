@@ -539,6 +539,9 @@ export default function SmartMotion() {
     setSegments([]);
     setSelectedSwing(0);
     setCoachNote('');
+    setTempo(null);
+    tempoCacheRef.current = {};
+    analysisCacheRef.current = {};
     setPage(0);
     pagerRef.current?.scrollTo({ x: 0, animated: false });
     setPhase('setup');
@@ -1006,7 +1009,7 @@ export default function SmartMotion() {
             biomech?.verdicts?.weightShift,
             biomech?.verdicts?.posture,
             biomech?.verdicts?.sequencing,
-          ].filter((v): v is string => !!v);
+          ].filter((v): v is string => !!v && v.trim().length > 0);
           if (tempo?.ratio != null) partial.push(`Tempo ${tempo.ratio.toFixed(1)} : 1 (backswing : downswing).`);
           if (partial.length === 0) {
             return <Text style={[styles.muted, { color: colors.text_muted }]}>{analysisError ?? 'No analysis available for this swing.'}</Text>;

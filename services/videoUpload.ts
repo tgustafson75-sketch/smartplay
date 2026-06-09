@@ -155,7 +155,14 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       uploadLog('phase-k-skip-putting', { session_id: sessionId, source_device: session.upload?.source_device ?? null, tag: session.upload?.tag ?? null }, sessionId);
       V6('STAGE 0 SKIP — putting session routes to puttingAnalysisService');
       const putting = await import('./puttingAnalysisService');
-      const videoUri = session.shots.find(s => s.clipUri)?.clipUri ?? null;
+      const puttShot = session.shots.find(s => s.clipUri) ?? null;
+      const videoUri = puttShot?.clipUri ?? null;
+      // 2026-06-08 (audit #1) — restrict frame sampling to THIS putt's
+      // window in a multi-putt master clip; without boundaries we sampled
+      // the whole video and analyzed a neighboring putt.
+      const puttBoundaries = (puttShot?.clipStartSeconds != null && puttShot?.clipEndSeconds != null)
+        ? { startSec: puttShot.clipStartSeconds, endSec: puttShot.clipEndSeconds }
+        : undefined;
       void (async () => {
         try {
           // 2026-05-22 — Extract putt-phase key frames locally before
@@ -168,7 +175,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
           if (videoUri) {
             try {
               const extractor = await import('./puttFrameExtractor');
-              frames_base64 = await extractor.extractPuttFramesForAnalysis(videoUri);
+              frames_base64 = await extractor.extractPuttFramesForAnalysis(videoUri, puttBoundaries);
             } catch (e) {
               console.log('[videoUpload] putt frame extract failed (non-fatal):', e);
             }

@@ -225,11 +225,10 @@ export default function HoleShotMap({
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>DISTANCE</Text>
               <Text style={styles.detailValue}>
-                {selected.start_location && selected.end_location
-                  ? Math.round(haversineYards(selected.start_location, selected.end_location)) + ' yd'
-                  : selected.distance_yards
-                    ? selected.distance_yards + ' yd'
-                    : '—'}
+                {/* Show the distance recorded at shot time — never a
+                    render-time recalc (it can drift from the stored value
+                    if locations changed). Honesty: one number, the real one. */}
+                {selected.distance_yards != null ? selected.distance_yards + ' yd' : '—'}
               </Text>
             </View>
             <View style={styles.detailRow}>

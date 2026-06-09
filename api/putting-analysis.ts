@@ -197,6 +197,10 @@ function unknownShell(caddieName: string, body: RequestBody | null): Record<stri
   return {
     puttId: 'putt_' + Date.now().toString(36),
     timestamp: new Date().toISOString(),
+    // Honesty: this is a no-input fallback — every value below is a generic
+    // default, NOT a measurement. partialCapture flags the UI to show the
+    // "—"/caveat treatment instead of presenting these as real reads.
+    partialCapture: true,
     holeNumber: body?.hole_number ?? undefined,
     distanceFeet: body?.distance_feet ?? 0,
     greenSlope: { direction: 'straight', severity: 'subtle', breakInches: 0, confidence: 25 },

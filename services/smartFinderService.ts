@@ -179,13 +179,16 @@ export function subscribeFixChange(cb: FixChangeListener): () => void {
 let gpsUnsub: (() => void) | null = null;
 export function startSmartFinderGpsTracking(): void {
   if (gpsUnsub) return;
+  // persistent: this fan-out is app-boot-scoped (UI consumers stay mounted
+  // across rounds). Without it, gpsManager's round-end clear would drop it
+  // and live yardages would go dead after the first round (audit #1).
   gpsUnsub = subscribeGps((fix) => {
     notifyFixChange({
       location: { lat: fix.lat, lng: fix.lng },
       accuracy_m: fix.accuracy_m,
       timestamp: fix.timestamp,
     });
-  });
+  }, { persistent: true });
 }
 export function stopSmartFinderGpsTracking(): void {
   if (gpsUnsub) { gpsUnsub(); gpsUnsub = null; }

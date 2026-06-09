@@ -104,10 +104,27 @@ async function resolveLocalCourseId(localSlug: string): Promise<string | null> {
       console.log('[courseGeometry] no search hits for', hint.search);
       return null;
     }
-    // Prefer city match if hint provides one
-    const top = hint.expectedCity
-      ? real.find(r => (r.location ?? '').toLowerCase().includes(hint.expectedCity!)) ?? real[0]
-      : real[0];
+    // 2026-06-08 (audit #1) — disambiguate by NAME first, then city. A
+    // bare city-substring match could resolve to the wrong course when a
+    // city has several courses ("San Jose Golf Course" vs "San Jose
+    // Municipal"). Wrong id → wrong geometry/hazards/yardages cached for
+    // every future lookup. Prefer exact/contained club-name match, then
+    // name-token + city, then city only (legacy), then first.
+    const searchLc = hint.search.toLowerCase();
+    const cityLc = hint.expectedCity?.toLowerCase();
+    const nameOf = (r: typeof real[number]) => (r.club_name ?? '').toLowerCase();
+    const cityOf = (r: typeof real[number]) => (r.location ?? '').toLowerCase();
+    const nameMatches = (r: typeof real[number]) => {
+      const n = nameOf(r);
+      return n.length > 0 && (n === searchLc || n.includes(searchLc) || searchLc.includes(n));
+    };
+    const cityMatches = (r: typeof real[number]) => !!cityLc && cityOf(r).includes(cityLc);
+    const top =
+      real.find(r => nameOf(r) === searchLc) ??
+      real.find(r => nameMatches(r) && cityMatches(r)) ??
+      real.find(r => nameMatches(r)) ??
+      (cityLc ? real.find(cityMatches) : undefined) ??
+      real[0];
     if (!top?.id) return null;
     console.log('[courseGeometry] resolved', localSlug, '→', top.id, '(' + top.club_name + ')');
     await writeResolvedId(localSlug, top.id);

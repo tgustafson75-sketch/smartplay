@@ -167,6 +167,12 @@ let userMarkedAt = 0;
 const USER_MARK_OUTLIER_BYPASS_MS = 10_000;
 
 const subscribers = new Set<Subscriber>();
+// 2026-06-08 (audit #1) — persistent (app-boot-scoped) subscribers survive
+// stopGpsManager(). The fan-out loops iterate `subscribers`; on round-end
+// teardown we clear `subscribers` then RE-ADD these, so a once-at-boot
+// consumer (smartFinderService's GPS fan-out) keeps receiving fixes across
+// rounds instead of going silently dead after round 1.
+const persistentSubscribers = new Set<Subscriber>();
 
 function breadcrumb(message: string, data?: Record<string, unknown>) {
   try {
@@ -532,6 +538,13 @@ async function startWatchInternal() {
       // logging only. Now surfaces via ownerSentinel so a silent
       // dead-GPS round is at least visible to Tim mid-round.
       ownerSentinel('gps.startWatch.allAccuracyFailed', lastWatchErr ?? new Error('No subscription'));
+      // 2026-06-08 (audit #1) — also tell the USER. A silent dead-GPS
+      // round (locked-down OEM / location services off) otherwise looks
+      // like the app is broken while the phone "has GPS".
+      try {
+        const { useToastStore } = require('../store/toastStore') as typeof import('../store/toastStore');
+        useToastStore.getState().show('GPS unavailable on this device — check Location Services, then restart the app.');
+      } catch { /* toast is best-effort */ }
     }
   } catch (err) {
     ownerSentinel('gps.startWatchInternal', err);
@@ -727,6 +740,8 @@ export function stopGpsManager(): void {
   // consumer must either re-subscribe on round start or this clear must
   // be narrowed to internal subscriptions first.
   subscribers.clear();
+  // Re-add app-boot-scoped consumers so they survive round teardown.
+  for (const cb of persistentSubscribers) subscribers.add(cb);
   lastFix = null;
   clearStaleHardTimer();
   // 2026-05-20 — Day 1 / Fix 4: clear the simulator flag on
@@ -775,10 +790,12 @@ export function getGpsStats(): {
   return { mode, lastFix, outliersDiscarded, smoothingBufferSize: smoothingBuffer.length };
 }
 
-/** Subscribe to fixes. Returns an unsubscribe fn. */
-export function subscribe(cb: Subscriber): () => void {
+/** Subscribe to fixes. Returns an unsubscribe fn. Pass `{ persistent: true }`
+ *  for app-boot-scoped consumers that must survive round-end teardown. */
+export function subscribe(cb: Subscriber, opts?: { persistent?: boolean }): () => void {
   subscribers.add(cb);
-  return () => { subscribers.delete(cb); };
+  if (opts?.persistent) persistentSubscribers.add(cb);
+  return () => { subscribers.delete(cb); persistentSubscribers.delete(cb); };
 }
 
 /** Shot intent event — bump to active for 60s. */

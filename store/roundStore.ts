@@ -1865,6 +1865,9 @@ export const useRoundStore = create<RoundState>()(
         activeCourseId: s.activeCourseId,
         courseLocation: s.courseLocation,
         recentCourseIds: s.recentCourseIds,
+        // Persist the last previewed/selected course so a cold start
+        // restores the user's pick instead of defaulting to Menifee.
+        previewCourseId: s.previewCourseId,
         courseHoles: s.courseHoles,
         nineHoleMode: s.nineHoleMode,
         isCompetition: s.isCompetition,
