@@ -37,7 +37,8 @@ import { useCourseGeometryOverrideStore } from '../store/courseGeometryOverrideS
 // so once the user drags the tee/pin to where they actually sit on a
 // hole image, the markers come up there on every subsequent visit.
 import { useHoleMarkerCalibrationStore } from '../store/holeMarkerCalibrationStore';
-import VectorHoleView, { type PlottedShot } from '../components/smartvision/VectorHoleView';
+import VectorHoleView from '../components/smartvision/VectorHoleView';
+import { ShotPlotSvg, ShotPlotCallout, projectShots, type PlottedShot } from '../components/smartvision/ShotPlotLayer';
 import GolfshotHoleView from '../components/smartvision/GolfshotHoleView';
 import { ShareToSocial } from '../components/ShareToSocial';
 import { useTranslation } from 'react-i18next';
@@ -222,6 +223,7 @@ export default function HoleView() {
         distanceYards: s.distance_yards ?? null,
       }));
   }, [roundShots, hole]);
+  const [selectedSatShotIdx, setSelectedSatShotIdx] = useState<number | null>(null);
   const { setMode } = useKevinPresence();
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -766,21 +768,30 @@ export default function HoleView() {
     setMeasureYards(yards > 1 && yards < 800 ? Math.round(yards) : null);
   };
 
-  // ── GPS pixel position (satellite) ─────
-  const getPlayerPixel = (): { x: number; y: number } | null => {
-    if (!gpsValid || !gpsCoords) return null;
+  // ── GPS pixel projection (satellite) ─────
+  // North-up Mapbox tile centered on the tee→green 0.55 interpolation;
+  // meters-per-pixel from the zoom. Shared by the player dot and the shot
+  // plot so they line up.
+  const projectSat = (lat: number, lng: number): { x: number; y: number } | null => {
     if (Math.abs(middleLat) < 0.01) return null;
     const zoom = getHoleZoom(distance, par);
     const mpp = mppForZoom(zoom);
     const imageCenterLat = teeLat + (middleLat - teeLat) * 0.55;
     const imageCenterLng = teeLng + (middleLng - teeLng) * 0.55;
-    const dyM = (gpsCoords.latitude - imageCenterLat) * 111320;
-    const dxM = (gpsCoords.longitude - imageCenterLng) * 111320 * Math.cos(imageCenterLat * Math.PI / 180);
+    const dyM = (lat - imageCenterLat) * 111320;
+    const dxM = (lng - imageCenterLng) * 111320 * Math.cos(imageCenterLat * Math.PI / 180);
     return { x: IMAGE_WIDTH / 2 + dxM / mpp, y: IMAGE_HEIGHT / 2 - dyM / mpp };
   };
+  const getPlayerPixel = (): { x: number; y: number } | null =>
+    gpsValid && gpsCoords ? projectSat(gpsCoords.latitude, gpsCoords.longitude) : null;
 
   const playerPixel = isRoundActive && gpsValid ? getPlayerPixel() : null;
   const greenPixel = { x: IMAGE_WIDTH / 2, y: IMAGE_HEIGHT * 0.2 };
+  // Shots projected into the satellite frame for plotting.
+  const satShots = projectShots(plottedShots, (loc) => projectSat(loc.lat, loc.lng));
+  const selectedSatShot = selectedSatShotIdx != null
+    ? satShots.find(p => p.index === selectedSatShotIdx) ?? null
+    : null;
 
   // 2026-06-04 — HolePlan removed; Plan UI derived state + Lock Plan
   // surface below stripped out.
@@ -876,6 +887,7 @@ export default function HoleView() {
               width={IMAGE_WIDTH}
               height={IMAGE_HEIGHT}
               imageOverrideUri={getHoleBackgroundUri(courseId ?? null, hole) ?? undefined}
+              shots={plottedShots}
             />
           ) : (
             <View style={styles.noImage}>
@@ -913,7 +925,12 @@ export default function HoleView() {
                   )}
                 </>
               )}
+              {/* Shot plot — numbered, tappable start→rest markers. */}
+              <ShotPlotSvg points={satShots} selectedIndex={selectedSatShotIdx} onSelect={setSelectedSatShotIdx} />
             </Svg>
+          )}
+          {displayType === 'satellite' && imageReady && (
+            <ShotPlotCallout point={selectedSatShot} width={IMAGE_WIDTH} height={IMAGE_HEIGHT} />
           )}
 
           {/* Bundled image: shot-line SVG + draggable markers + distance panel */}

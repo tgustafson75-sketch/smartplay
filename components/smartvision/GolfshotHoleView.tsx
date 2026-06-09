@@ -31,7 +31,8 @@ import {
 } from 'react-native';
 import Svg, { Line, Circle, Text as SvgText } from 'react-native-svg';
 import { resolveHoleImage, type HoleImageResolution } from '../../services/holeImageMapper';
-import { haversineYards } from '../../utils/geoDistance';
+import { haversineYards, projectToAxis } from '../../utils/geoDistance';
+import { ShotPlotSvg, ShotPlotCallout, projectShots, type PlottedShot } from './ShotPlotLayer';
 import WindageBadge from './WindageBadge';
 
 interface LatLng { lat: number; lng: number }
@@ -59,6 +60,9 @@ export interface GolfshotHoleViewProps {
    *  top so existing tee/pin drag persistence keeps working. Sourced
    *  by callers from CourseHole.backgroundImageUri. */
   imageOverrideUri?: string;
+  /** Completed shots for this hole — drawn as a numbered, tappable
+   *  start→rest plot projected onto the calibrated tee→green frame. */
+  shots?: PlottedShot[];
 }
 
 // Calibration constants tuned against the bundled Palms-aspect screenshots.
@@ -75,8 +79,9 @@ export default function GolfshotHoleView({
   tee, green, greenFront, greenBack,
   width, height,
   onLayupMoved, onPinMoved,
-  imageOverrideUri,
+  imageOverrideUri, shots,
 }: GolfshotHoleViewProps) {
+  const [selectedShot, setSelectedShot] = useState<number | null>(null);
   // ─── Image resolution ──────────────────────────────────────────────
   // 2026-05-24 — If caller provided an override URI (CourseHole.
   // backgroundImageUri), use it directly. Skip holeImageMapper's
@@ -213,6 +218,23 @@ export default function GolfshotHoleView({
   const greenRadiusYd = Math.max(8, (frontOffsetYd + backOffsetYd) / 2 || 14);
   const greenRadiusPx = greenRadiusYd / yardsPerPixel;
 
+  // ─── Shot plot ─────────────────────────────────────────────────────
+  // Project shots onto the calibrated tee→green frame (tee at
+  // TEE_INIT_FRAC, green at PIN_INIT_FRAC, hole vertical). Cross-axis →
+  // horizontal offset from center. Approximate, consistent with the
+  // F/M/B calibration this view already uses.
+  const plottedShots = projectShots(shots, (loc) => {
+    if (!tee || !green) return null;
+    const { x: crossYd, y: alongYd } = projectToAxis(loc, tee, green);
+    return {
+      x: width / 2 + crossYd / yardsPerPixel,
+      y: height * TEE_INIT_FRAC - alongYd / yardsPerPixel,
+    };
+  });
+  const selectedShotPt = selectedShot != null
+    ? plottedShots.find(p => p.index === selectedShot) ?? null
+    : null;
+
   // ─── Render ───────────────────────────────────────────────────────
   return (
     <View style={[styles.frame, { width, height }]}>
@@ -278,6 +300,14 @@ export default function GolfshotHoleView({
           {yToPinYd}y
         </SvgText>
       </Svg>
+
+      {/* Shot plot — separate Svg (not pointerEvents:none) so the rest
+          markers are tappable; empty areas have no drawn element so taps
+          fall through. Drawn below the draggable P/Y markers. */}
+      <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
+        <ShotPlotSvg points={plottedShots} selectedIndex={selectedShot} onSelect={setSelectedShot} />
+      </Svg>
+      <ShotPlotCallout point={selectedShotPt} width={width} height={height} />
 
       {/* Draggable P marker (red — pin). */}
       <View
