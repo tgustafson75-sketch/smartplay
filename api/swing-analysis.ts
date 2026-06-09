@@ -260,6 +260,16 @@ Canonical issues (pick the one that best matches what you see):
 - reverse_pivot: weight shifts backward on downswing
 - none: ONLY use this when frames are unreadable (player not visible, blur, occlusion) AND no other tendency is even partially visible
 
+OBSERVABILITY LIMIT — read before naming a path/face/attack-angle issue:
+club_face_open, club_face_closed, swing_path_outside_in, swing_path_inside_out,
+attack_angle_steep, and attack_angle_shallow are genuinely HARD to judge from a
+few 2D phone-camera stills. Only name one of these if you can point to a SPECIFIC
+frame and the visible club / shaft / face cue that shows it, and state that cue in
+the evidence field (e.g. "Frame 3: shaft points well outside the ball-target line"). If you
+cannot cite a concrete visible cue, prefer 'none' — do not guess a path or face from
+a textbook slice/hook pattern. NEVER name a swing path or attack angle from a
+face-on or glasses-POV clip; those angles cannot show it.
+
 Severity scale:
 - minor: tendency present but not consistent
 - moderate: clear pattern, contributing to misses
@@ -522,6 +532,21 @@ function normalizeAnalysis(
     parsed.fix = '';
     parsed.drill = '';
     parsed.evidence = '';
+  }
+  // 2026-06-09 (honesty) — issues that 2D phone stills genuinely can't show
+  // reliably (club face angle, swing path direction, attack angle) must be
+  // backed by a cited visible cue. Without evidence we will NOT surface them
+  // as facts — drop to 'none' rather than present a guess as a confident read.
+  // (primary_fault is already evidence-gated above; detected_issue was not.)
+  const HARD_TO_SEE_2D: ReadonlySet<string> = new Set([
+    'club_face_open', 'club_face_closed',
+    'swing_path_outside_in', 'swing_path_inside_out',
+    'attack_angle_steep', 'attack_angle_shallow',
+  ]);
+  if (HARD_TO_SEE_2D.has(parsed.detected_issue) && parsed.evidence.length === 0) {
+    parsed.detected_issue = 'none';
+    parsed.severity = 'none';
+    parsed.layman_explanation = '';
   }
   return parsed;
 }

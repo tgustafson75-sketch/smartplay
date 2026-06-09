@@ -613,6 +613,11 @@ check('DIST chip labels its estimate; confidence no longer defaults to medium',
     !/analysis\.confidence \?\? 'medium'/.test(smSrc),
   'DIST · est + honest confidence fallback');
 
+const swingApiSrc = read('api/swing-analysis.ts');
+check('Hard-to-see issues (path/face/attack) gated behind a cited cue',
+  /HARD_TO_SEE_2D/.test(swingApiSrc) && /OBSERVABILITY LIMIT/.test(swingApiSrc),
+  'detected_issue path/face/attack → none without evidence; prompt warns on 2D limits');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
