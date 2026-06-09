@@ -654,10 +654,16 @@ check('Ball-departure verdict is honest (departed = before && !after)',
   'no departure claimed unless a ball was visible then gone');
 
 const targetOverlaySrc = read('components/swinglab/CageTargetingCard.tsx');
-check('Ball/target overlay matches redesign (vertical TARGET line + BALL box)',
-  /y2="100%"/.test(targetOverlaySrc) && /SvgRect/.test(targetOverlaySrc) &&
-    />TARGET</.test(targetOverlaySrc) && />BALL</.test(targetOverlaySrc),
-  'full-height target line + labeled ball box per mockups 7701/7702');
+check('Ball/target overlay matches the design reference',
+  /SvgPolygon/.test(targetOverlaySrc) && /SvgEllipse/.test(targetOverlaySrc) &&
+    />TARGET</.test(targetOverlaySrc) && />BALL AREA</.test(targetOverlaySrc),
+  'green perspective ball-area trapezoid + white target line/ring + pills');
+
+check('Pre-record ball box: drop before recording + verifier runs on placement',
+  /draftBall/.test(smSrc) && /placeBallMode/.test(smSrc) &&
+    /Drop a ball box/.test(smSrc) &&
+    /\[clipUri, ballArea, ballDeparture\]/.test(smSrc),
+  'setup placement + effect-based verifier (fires whenever ball spot exists)');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 

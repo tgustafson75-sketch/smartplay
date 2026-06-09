@@ -25,7 +25,7 @@
 
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Modal, Image, useWindowDimensions } from 'react-native';
-import Svg, { Circle as SvgCircle, Line as SvgLine, Rect as SvgRect } from 'react-native-svg';
+import Svg, { Circle as SvgCircle, Line as SvgLine, Ellipse as SvgEllipse, Polygon as SvgPolygon } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import type { ThemeColors } from '../../theme/tokens';
 
@@ -285,78 +285,111 @@ function PlacementModal({
 }
 
 /** Reusable overlay for displaying ball area + target ON the video.
- *  Uses StyleSheet.absoluteFill + percentage-based SVG coords so it
- *  scales cleanly to whatever the parent video container size is. Pass
- *  ballArea + target; null/null = renders nothing. */
+ *  Matched to the SmartMotion design reference:
+ *    TARGET   = dark pill (caret) → white dashed vertical line → flat white
+ *               ellipse ring on the ground.
+ *    BALL AREA = dark pill (caret) → green perspective trapezoid (ground
+ *               quad) around the placed ball.
+ *  Measures its own size so the trapezoid / ring render in real pixels
+ *  (crisp strokes). Both points are user-placed — honest, no inferred flight. */
 export function CageTargetingOverlay({
   ballArea, target,
 }: {
   ballArea: BallArea | null;
   target: TargetPoint | null;
 }) {
+  const [size, setSize] = useState({ w: 0, h: 0 });
   if (!ballArea && !target) return null;
-  // 2026-06-09 — Matched to the ChatGPT redesign mockups (7701/7702):
-  //   TARGET = full-height vertical dashed line + a "TARGET" pill at top.
-  //   BALL   = a labeled BOX (not a bare dot) around the placed ball spot.
-  // Both points are user-placed, so this stays honest — no inferred flight.
-  const ACCENT = '#00C896';
+  const { w, h } = size;
+  const LIME = '#7CE04F';      // ball-area box (grass green, per design)
+  const WHITE = '#FFFFFF';     // target line + ring
+
+  // Target geometry (pixels).
+  let targetLine: { x: number; topY: number; ringY: number } | null = null;
+  if (target && w > 0) {
+    const tx = target.x * w;
+    const ringY = target.y * h;
+    const topY = Math.max(0.04 * h, ringY - 0.30 * h);
+    targetLine = { x: tx, topY, ringY };
+  }
+
+  // Ball-area trapezoid (perspective ground quad), pixels.
+  let ballQuad: { points: string; topY: number; cx: number } | null = null;
+  if (ballArea && w > 0) {
+    const bx = ballArea.x * w;
+    const by = ballArea.y * h;
+    const r = ballArea.r * w;
+    const topY = by - r * 0.8;
+    const bottomY = by + r * 1.3;
+    const topHalf = r * 0.85;
+    const bottomHalf = r * 1.6;
+    ballQuad = {
+      cx: bx,
+      topY,
+      points: `${bx - topHalf},${topY} ${bx + topHalf},${topY} ${bx + bottomHalf},${bottomY} ${bx - bottomHalf},${bottomY}`,
+    };
+  }
+
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-        {/* TARGET — vertical dashed aim line down the whole frame. */}
-        {target && (
-          <SvgLine
-            x1={`${target.x * 100}%`} y1="0%"
-            x2={`${target.x * 100}%`} y2="100%"
-            stroke={ACCENT} strokeWidth={2} strokeDasharray="7,6" opacity={0.9}
-          />
-        )}
-        {/* BALL — labeled box around the placed spot. r is a fraction of the
-            frame; render a square box centered on it. */}
-        {ballArea && (
-          <SvgRect
-            x={`${(ballArea.x - ballArea.r) * 100}%`}
-            y={`${(ballArea.y - ballArea.r) * 100}%`}
-            width={`${ballArea.r * 2 * 100}%`}
-            height={`${ballArea.r * 2 * 100}%`}
-            rx={6}
-            stroke={ACCENT} strokeWidth={2.2}
-            fill={ACCENT} fillOpacity={0.1}
-          />
-        )}
-      </Svg>
-      {/* Pill labels (RN views — crisper text than SVG, easy to center). */}
-      {target && (
-        <View style={[overlayStyles.pill, { left: `${target.x * 100}%` }]}>
-          <Text style={overlayStyles.pillText}>TARGET</Text>
+    <View
+      style={StyleSheet.absoluteFill}
+      pointerEvents="none"
+      onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+    >
+      {w > 0 && (
+        <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+          {targetLine && (
+            <>
+              <SvgLine
+                x1={targetLine.x} y1={targetLine.topY}
+                x2={targetLine.x} y2={targetLine.ringY}
+                stroke={WHITE} strokeWidth={2} strokeDasharray="7,6" opacity={0.95}
+              />
+              {/* flat ring on the ground at the base of the aim line */}
+              <SvgEllipse
+                cx={targetLine.x} cy={targetLine.ringY}
+                rx={Math.max(10, 0.06 * w)} ry={Math.max(4, 0.02 * w)}
+                stroke={WHITE} strokeWidth={1.6} fill="none" opacity={0.9}
+              />
+            </>
+          )}
+          {ballQuad && (
+            <SvgPolygon
+              points={ballQuad.points}
+              stroke={LIME} strokeWidth={2.4}
+              fill={LIME} fillOpacity={0.16}
+            />
+          )}
+        </Svg>
+      )}
+      {/* Pill labels with a downward caret (RN views — crisp text). */}
+      {targetLine && (
+        <View style={[overlayStyles.pillWrap, { left: targetLine.x, top: targetLine.topY - 30 }]}>
+          <View style={overlayStyles.pill}><Text style={overlayStyles.pillText}>TARGET</Text></View>
+          <View style={overlayStyles.caret} />
         </View>
       )}
-      {ballArea && (
-        <View style={[overlayStyles.pill, overlayStyles.ballPill, { left: `${ballArea.x * 100}%`, top: `${(ballArea.y + ballArea.r) * 100}%` }]}>
-          <Text style={overlayStyles.pillText}>BALL</Text>
+      {ballQuad && (
+        <View style={[overlayStyles.pillWrap, { left: ballQuad.cx, top: ballQuad.topY - 30 }]}>
+          <View style={overlayStyles.pill}><Text style={overlayStyles.pillText}>BALL AREA</Text></View>
+          <View style={overlayStyles.caret} />
         </View>
       )}
     </View>
   );
 }
 
+const PILL_BG = 'rgba(18,20,24,0.9)';
 const overlayStyles = StyleSheet.create({
-  pill: {
-    position: 'absolute',
-    top: 10,
-    transform: [{ translateX: -28 }],
-    backgroundColor: 'rgba(15,22,32,0.9)',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  ballPill: {
-    backgroundColor: 'rgba(0,200,150,0.92)',
-    transform: [{ translateX: -22 }, { translateY: 6 }],
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-  },
+  // Centered over its anchor x; caret points down at the line/box.
+  pillWrap: { position: 'absolute', alignItems: 'center', transform: [{ translateX: -45 }], width: 90 },
+  pill: { backgroundColor: PILL_BG, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   pillText: { color: '#ffffff', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  caret: {
+    width: 0, height: 0,
+    borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 6,
+    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: PILL_BG,
+  },
 });
 
 const styles = StyleSheet.create({

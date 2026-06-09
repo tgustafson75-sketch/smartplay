@@ -228,6 +228,18 @@ export default function SmartMotion() {
   const clubRef = useRef<ClubId | null>(lastClub);
   useEffect(() => { clubRef.current = club; }, [club]);
 
+  // Pre-record ball box — let the user drop a ball marker on the live preview
+  // BEFORE recording so the camera strike-verification can run. Held as a
+  // draft (no session yet); persisted into the session on ingest.
+  const [draftBall, setDraftBall] = useState<{ x: number; y: number; r: number } | null>(null);
+  const [placeBallMode, setPlaceBallMode] = useState(false);
+  const [rootSize, setRootSize] = useState({ w: 0, h: 0 });
+  const draftBallRef = useRef<typeof draftBall>(null);
+  useEffect(() => { draftBallRef.current = draftBall; }, [draftBall]);
+  // Acoustic impact time of the first swing — needed by the camera verifier,
+  // which runs from an effect once the clip + ball spot are both available.
+  const firstStrikeMsRef = useRef<number | null>(null);
+
   const [page, setPage] = useState(0);
   const [annotateOpen, setAnnotateOpen] = useState(false);
   const [showLayman, setShowLayman] = useState(false);
@@ -307,6 +319,20 @@ export default function SmartMotion() {
     [analysis, biomech, metrics],
   );
 
+  // Camera strike-verification — did the ball actually leave its spot at
+  // impact? Honest false-positive guard (TV/clap can't move YOUR ball) +
+  // launch-direction seed. Runs once when the clip, a ball spot, and a
+  // detected strike are all present; the ball spot may be pre-record or
+  // placed in review.
+  useEffect(() => {
+    if (!clipUri || !ballArea || firstStrikeMsRef.current == null || ballDeparture) return;
+    let cancelled = false;
+    void detectBallDeparture({ videoUri: clipUri, impactMs: firstStrikeMsRef.current, ballArea })
+      .then((r) => { if (!cancelled && r) setBallDeparture(r); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [clipUri, ballArea, ballDeparture]);
+
   const bodyItems = useMemo(() => deriveBodyItems(analysis, biomech), [analysis, biomech]);
   const verdict = useMemo(() => deriveVerdict(analysis), [analysis]);
   const faultHeadline = useMemo(() => {
@@ -369,6 +395,11 @@ export default function SmartMotion() {
         });
         ingestedSessionIdRef.current = sessionId;
         setSessionId(sessionId);
+        // Carry a pre-record ball box into the session so the targeting
+        // overlay + camera strike-verification use it.
+        if (draftBallRef.current) {
+          setSessionBallArea(sessionId, draftBallRef.current);
+        }
       } catch (e) {
         console.log('[smartmotion] library ingest failed (non-fatal):', e);
       }
@@ -429,7 +460,7 @@ export default function SmartMotion() {
 
       setPhase('review');
     },
-    [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName],
+    [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea],
   );
 
   // Pose biomechanics once the video reports its duration.
@@ -553,6 +584,9 @@ export default function SmartMotion() {
     setVideoDurationMs(null);
     setBallSpeed(null);
     setBallDeparture(null);
+    setDraftBall(null);
+    setPlaceBallMode(false);
+    firstStrikeMsRef.current = null;
     setLiveDb(null);
     // Clear caches BEFORE resetting selection so no stale per-swing
     // analysis/tempo can be read for the new recording (audit #2).
@@ -637,6 +671,7 @@ export default function SmartMotion() {
     }
     setBallSpeed(null);
     setBallDeparture(null);
+    setPlaceBallMode(false); // keep draftBall (carries into the session) but exit place mode
     setSegments([]);
     setSelectedSwing(0);
     setLiveDb(null);
@@ -728,18 +763,10 @@ export default function SmartMotion() {
         return;
       }
       setClipUri(recorded.uri);
-      // Camera cross-check of the acoustic strike: did the ball actually
-      // leave its spot at impact? Only runs when a ball spot exists. Honest
-      // false-positive guard (TV/clap can't move the ball) + launch seed.
-      const sid = ingestedSessionIdRef.current;
-      const ballAreaNow = sid
-        ? (useCageStore.getState().sessionHistory.find((x) => x.id === sid)?.ball_area_norm ?? null)
-        : null;
-      if (firstStrikeMs != null && ballAreaNow) {
-        void detectBallDeparture({ videoUri: recorded.uri, impactMs: firstStrikeMs, ballArea: ballAreaNow })
-          .then((r) => { if (r) setBallDeparture(r); })
-          .catch(() => undefined);
-      }
+      // Remember the strike time; the camera strike-verification runs from an
+      // effect once both the clip and a ball spot are available (the ball spot
+      // may be a pre-record draft or placed in review).
+      firstStrikeMsRef.current = firstStrikeMs;
       // Analyze the FIRST detected swing windowed to its segment; other
       // swings analyze on-demand when selected in the reel.
       void runAnalysis(recorded.uri, detectedSegments[0]);
@@ -853,7 +880,10 @@ export default function SmartMotion() {
   // ── the HUD page (full-bleed camera/replay + floating data) ──
   const hudPage = (
     <View style={{ width: windowWidth, flex: 1 }}>
-      <View style={styles.captureRoot}>
+      <View
+        style={styles.captureRoot}
+        onLayout={(e) => setRootSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+      >
         {isReview && clipUri ? (
           <Video
             ref={videoRef}
@@ -892,6 +922,29 @@ export default function SmartMotion() {
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
             <CageTargetingOverlay ballArea={ballArea} target={targetPoint} />
           </View>
+        ) : null}
+
+        {/* SETUP — drop a ball box on the live preview before recording so the
+            camera strike-verification can run. The draft box renders here;
+            tapping (in place mode) sets its location. */}
+        {phase === 'setup' && draftBall ? (
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <CageTargetingOverlay ballArea={draftBall} target={null} />
+          </View>
+        ) : null}
+        {phase === 'setup' && placeBallMode ? (
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={(e) => {
+              const { locationX, locationY } = e.nativeEvent;
+              if (rootSize.w > 0 && rootSize.h > 0) {
+                setDraftBall({ x: locationX / rootSize.w, y: locationY / rootSize.h, r: 0.07 });
+              }
+              setPlaceBallMode(false);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Tap where your ball is"
+          />
         ) : null}
 
         {phase !== 'analyzing' ? <CaptureGuides mode={angle} handedness={swingerHandedness} /> : null}
@@ -1032,6 +1085,29 @@ export default function SmartMotion() {
                     : 'Couldn’t see the ball to confirm'}
               </Text>
             </View>
+          ) : null}
+
+          {/* SETUP — push the user to drop a ball box so each strike can be
+              camera-confirmed. Tap toggles place mode (then tap the preview). */}
+          {phase === 'setup' ? (
+            <Pressable
+              onPress={() => setPlaceBallMode((v) => !v)}
+              style={[styles.ballNudge, { borderColor: draftBall ? colors.success : colors.accent }]}
+              accessibilityRole="button"
+            >
+              <Ionicons
+                name={placeBallMode ? 'hand-left-outline' : draftBall ? 'checkmark-circle' : 'golf-outline'}
+                size={14}
+                color={draftBall ? colors.success : colors.accent}
+              />
+              <Text style={[styles.ballNudgeText, { color: draftBall ? colors.success : colors.accent }]}>
+                {placeBallMode
+                  ? 'Tap the preview where your ball is'
+                  : draftBall
+                    ? 'Ball box set — tap to move'
+                    : 'Drop a ball box so I can confirm each strike'}
+              </Text>
+            </Pressable>
           ) : null}
 
           <View style={styles.controlsRow}>
@@ -1281,6 +1357,8 @@ const styles = StyleSheet.create({
   controlsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   verifyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 2 },
   verifyText: { fontSize: 12, fontWeight: '700' },
+  ballNudge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10 },
+  ballNudgeText: { fontSize: 12, fontWeight: '700' },
 
 
   actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 12 },
