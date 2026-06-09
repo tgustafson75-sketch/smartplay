@@ -865,6 +865,15 @@ export const useVoiceCaddie = ({
             feel: s.swing_feel ?? null,
             distance_yards: s.distance_yards ?? null,
           })),
+          // Subjective self-reports so the caddie can ADAPT, not just log.
+          // Last 5 emotional states ("I'm frustrated", "feeling locked
+          // in") with valence + hole. Pairs with shot `feel` ("rushed")
+          // already sent above. Server uses these to adjust tone/coaching.
+          emotionalLog: useRoundStore.getState().emotionalLog.slice(-5).map(e => ({
+            state: e.state,
+            valence: e.valence,
+            hole: e.hole,
+          })),
           // PGA HOPE follow-up — server-side persona resolution, intensity
           // dial, and Tank soft-intro flag. Read fresh at call time so
           // settings changes apply to the next utterance without restart.

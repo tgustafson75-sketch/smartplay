@@ -592,62 +592,93 @@ export async function extractPoseFramesFromVideo(videoUri: string, durationMs: n
 
 // ─── Acoustic-anchored tempo ─────────────────────────────────────────
 
-/** Backswing:downswing tempo for a single swing. Ratio ≈ 3:1 is the
- *  tour standard. `ratio` is null when pose couldn't yield a trustworthy
- *  top-of-backswing — the UI then shows "—" rather than a fabricated
- *  number. */
+/** Backswing:downswing tempo + transition read for a single swing.
+ *  Ratio ≈ 3:1 is the tour standard. Every numeric field is null when we
+ *  couldn't read it from real signal — the UI shows "—" rather than a
+ *  fabricated number. */
 export interface SwingTempo {
   ratio: number | null;
   backswingMs: number | null;
   downswingMs: number | null;
-  /** Top-of-backswing time relative to clip start (ms). */
+  /** Top-of-backswing time relative to clip start (ms) — the transition. */
   topMs: number | null;
+  /** Kinematic-sequence score 0..100 (hips lead the downswing = high),
+   *  computed from REAL top + REAL impact frames. Null when either frame
+   *  lacked the hip/shoulder keypoints. This is the "transition quality"
+   *  read — see header note: NOT the fixed-fraction sequencingScore that
+   *  computeBiomechanics() produces. */
+  sequencingScore: number | null;
   source: 'acoustic_pose' | 'none';
   confidence: 'med' | 'low';
 }
 
 const NO_TEMPO: SwingTempo = {
   ratio: null, backswingMs: null, downswingMs: null, topMs: null,
-  source: 'none', confidence: 'low',
+  sequencingScore: null, source: 'none', confidence: 'low',
 };
 
+/** Hips-lead-the-downswing score (0..100) from two real frames. Mirrors
+ *  the formula in computeBiomechanics() but takes caller-supplied frames
+ *  so we can anchor it to the REAL top + impact instead of clip
+ *  fractions. Compares hip-width vs shoulder-width opening between the
+ *  two frames: hips opening faster than shoulders = the tour sequence. */
+function sequencingFromFrames(top: PoseFrame, impact: PoseFrame): number | null {
+  const hipTopW = pairWidth(top, 'left_hip', 'right_hip');
+  const hipImpactW = pairWidth(impact, 'left_hip', 'right_hip');
+  const shTopW = pairWidth(top, 'left_shoulder', 'right_shoulder');
+  const shImpactW = pairWidth(impact, 'left_shoulder', 'right_shoulder');
+  if (!hipTopW || !hipImpactW || !shTopW || !shImpactW || hipTopW <= 0 || shTopW <= 0) return null;
+  const diff = (hipImpactW - hipTopW) / hipTopW - (shImpactW - shTopW) / shTopW;
+  const clamped = Math.max(-0.30, Math.min(0.30, diff));
+  return Math.round(((clamped + 0.30) / 0.60) * 100);
+}
+
 /**
- * 2026-06-08 — Acoustic-anchored swing tempo.
+ * 2026-06-08 — Acoustic-anchored swing tempo + transition.
  *
- * The classic tour ratio is backswing:downswing ≈ 3:1. We measure it
- * honestly from two anchors:
+ * The classic tour ratio is backswing:downswing ≈ 3:1, and the
+ * transition (top-of-backswing changeover) is where it lives. We measure
+ * both honestly from two anchors:
  *   • IMPACT — supplied by the caller from the acoustic strike detector
  *     (services/swing/strikeDetector), precise to the audio sample. This
  *     is `impactMs` (relative to clip start).
- *   • TOP-OF-BACKSWING + TAKEAWAY — read from pose: we densely sample
- *     frames in the ~1.5s window before impact and track the hands
- *     (wrist keypoints). The frame where the hands are highest (minimum
- *     wrist-y, since image y grows downward) is the top of the
- *     backswing; takeaway is the first frame where the hands have left
- *     their address height.
+ *   • TOP-OF-BACKSWING + TAKEAWAY — read from pose: we sample frames
+ *     across the backswing window before impact and track the hands
+ *     (wrist keypoints). Hands highest (min wrist-y, image y grows
+ *     downward) = the top; takeaway = first frame the hands left address
+ *     height. Sequencing is then read from the REAL top + impact frames.
  *
- * Everything derives from real signal — no hardcoded clip fractions like
- * SWING_POSITIONS above. When the pose curve doesn't show a clean
- * interior peak (occlusion, subject too small, partial swing) we return
- * ratio:null. Pose-derived → confidence ceilings at 'med'.
+ * Cost note: each sample is one server pose call (no on-device pose yet —
+ * see services/poseEstimator.ts). We focus samples on the backswing
+ * window (we don't need the downswing densely — impact is already known
+ * acoustically) and keep the count modest; callers should cache per swing
+ * so this runs once. If/when on-device pose lands, pass denser frames
+ * cheaply. Everything derives from real signal — no clip fractions. When
+ * the curve shows no clean interior peak we return all-null.
  */
 export async function deriveSwingTempo(
   videoUri: string,
   impactMs: number,
-  opts?: { windowMs?: number; samples?: number },
+  opts?: { leadMs?: number; tailMs?: number; samples?: number },
 ): Promise<SwingTempo> {
-  const windowMs = opts?.windowMs ?? 1500;
-  const samples = Math.max(8, opts?.samples ?? 14);
-  const startMs = Math.max(0, impactMs - windowMs);
-  if (impactMs - startMs < 400) return NO_TEMPO; // need room for a swing
+  // Backswing-focused window: from ~address up to just before impact. We
+  // don't sample the downswing — impact is the acoustic anchor and the
+  // top sits at the end of the backswing.
+  const leadMs = opts?.leadMs ?? 1400;   // how far before impact to start
+  const tailMs = opts?.tailMs ?? 120;    // stop this long before impact
+  const samples = Math.max(8, opts?.samples ?? 10);
+  const startMs = Math.max(0, impactMs - leadMs);
+  const endMs = impactMs - tailMs;
+  if (endMs - startMs < 350) return NO_TEMPO; // need room for a backswing
 
   const times: number[] = [];
   for (let i = 0; i < samples; i++) {
-    times.push(Math.round(startMs + ((impactMs - startMs) * i) / (samples - 1)));
+    times.push(Math.round(startMs + ((endMs - startMs) * i) / (samples - 1)));
   }
 
-  // Sample pose at each time; track average wrist height (hands).
-  const series: { t: number; y: number }[] = [];
+  // Sample pose at each time; keep the frame so we can read sequencing
+  // from the real top later.
+  const series: { t: number; y: number; frame: PoseFrame }[] = [];
   for (const t of times) {
     try {
       const { uri } = await VideoThumbnails.getThumbnailAsync(videoUri, { time: t, quality: 0.6 });
@@ -657,7 +688,7 @@ export async function deriveSwingTempo(
       const rw = getKp(frame, 'right_wrist');
       const ys = [lw?.y, rw?.y].filter((v): v is number => typeof v === 'number');
       if (ys.length === 0) continue;
-      series.push({ t, y: ys.reduce((a, b) => a + b, 0) / ys.length });
+      series.push({ t, y: ys.reduce((a, b) => a + b, 0) / ys.length, frame });
     } catch {
       // a few gaps are fine
     }
@@ -694,12 +725,25 @@ export async function deriveSwingTempo(
   const ratio = backswingMs / downswingMs;
   if (!(ratio >= 1.0 && ratio <= 6.0)) return NO_TEMPO;
 
-  const clean = series.length >= 9 && takeIdx > 0;
+  // Transition/sequencing from the REAL top + REAL impact frame. One more
+  // pose call (only when tempo itself is valid, so we never pay it for a
+  // throwaway read).
+  let sequencingScore: number | null = null;
+  try {
+    const { uri } = await VideoThumbnails.getThumbnailAsync(videoUri, { time: impactMs, quality: 0.6 });
+    const impactFrame = await analyzePoseFromUri(uri, impactMs);
+    if (impactFrame) sequencingScore = sequencingFromFrames(series[topIdx].frame, impactFrame);
+  } catch {
+    // sequencing is optional — tempo still stands without it
+  }
+
+  const clean = series.length >= 8 && takeIdx > 0;
   return {
     ratio: Math.round(ratio * 10) / 10,
     backswingMs,
     downswingMs,
     topMs,
+    sequencingScore,
     source: 'acoustic_pose',
     confidence: clean ? 'med' : 'low',
   };

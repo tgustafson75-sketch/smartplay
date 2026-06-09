@@ -443,6 +443,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // for on-course pattern reads: "second shot on this hole again
       // pushed right" etc.).
       holeShots = [],
+      // Subjective emotional self-reports (last 5): { state, valence, hole }.
+      // Closes the feedback loop — the caddie ADAPTS tone/coaching to how
+      // the player says they feel, not just logs it.
+      emotionalLog = [],
       // Phase BR — active practice context. Pre-formatted by the client
       // (services/tutorialContext.ts buildFullPracticeContext). Multi-line
       // string when one or more tutorials are active, null otherwise.
@@ -944,6 +948,14 @@ When Tim asks tactical questions ("what's my yardage", "what club", "where do I 
 PATTERN AWARENESS (Phase BJ):
 The body may include \`holeShots\` (this hole) and \`recentShots\` (last shots across the round). When 3+ shots show a clear directional pattern (three pushes right, two pulled left), reference it briefly the next time Tim asks for a tactical read and adjust the suggestion accordingly ("you've been right today — favor left center"). Use this once or twice a round, not every shot.
 
+FEEL & MOOD — ADAPT, DON'T JUST ACKNOWLEDGE:
+Shots carry a \`feel\` field (how the swing felt: "rushed", "smooth", "fat") and the body may include a [HOW TIM SAYS HE FEELS] block (emotional self-reports + valence). These are the player telling you, in his own words, what's going on — your job is to let it CHANGE your coaching, not just mirror it back:
+- Repeated swing feel: if the same feel keyword shows up 2+ times (e.g. "rushed" twice), name it and prescribe the fix on the next tactical read ("you've felt rushed a couple times — let's smooth the tempo, easy to the top"). Don't diagnose mechanics he didn't mention.
+- Negative valence (frustrated, angry, tight): shorten up, lower the intensity, steady him — one calm, concrete thing to focus on. No swing theory, no pep-rally.
+- Positive valence (locked in, confident): stay out of the way, keep it light, reinforce — don't over-coach a good thing.
+- When he corrects a prior read ("actually that felt off, I was rushing"), treat it as feedback: acknowledge once and carry the adjustment (e.g. a tempo cue) into the next suggestion.
+Use this naturally and sparingly — it should feel like a caddie who's paying attention, not a mood tracker reading stats.
+
 KEEP IT SHORT. On-course Kevin is terse. 1-2 sentences for most responses. The walks between shots are for longer conversations, not the shot itself.
 
 SMARTVISION BEHAVIOR:
@@ -1057,8 +1069,18 @@ ${shotsArr.slice(-5).map(s => `  - h${s.hole ?? '?'} #${s.shotIndex ?? '?'}` + (
 [/RECENT PATTERN]
 `
       : '';
-    const onCourseContextBlock = onCourseHoleBlock || onCourseRecentBlock
-      ? `${onCourseHoleBlock}${onCourseRecentBlock}\n`
+    // Subjective emotional self-reports — so the caddie reads the room.
+    const emoArr = Array.isArray(emotionalLog)
+      ? emotionalLog as { state?: string; valence?: string; hole?: number }[]
+      : [];
+    const emotionalBlock = !inRoundDiagnostic && emoArr.length > 0
+      ? `[HOW TIM SAYS HE FEELS]
+${emoArr.slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valence})` : '') + (e.hole != null ? ` · h${e.hole}` : '')).join('\n')}
+[/HOW TIM FEELS]
+`
+      : '';
+    const onCourseContextBlock = onCourseHoleBlock || onCourseRecentBlock || emotionalBlock
+      ? `${onCourseHoleBlock}${onCourseRecentBlock}${emotionalBlock}\n`
       : '';
 
     const userMessage = sv

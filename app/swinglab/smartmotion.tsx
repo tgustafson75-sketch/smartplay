@@ -42,6 +42,8 @@ import { Video, ResizeMode } from 'expo-av';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOverlay';
 import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
+import CageTargetingCard, { CageTargetingOverlay } from '../../components/swinglab/CageTargetingCard';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 import { useTheme } from '../../contexts/ThemeContext';
 import { analyzeSwing, type SwingAnalysis } from '../../services/poseDetection';
@@ -91,6 +93,14 @@ const RECORDING_MAX_SECONDS = 60; // open window — player swings freely
 type Phase = 'setup' | 'recording' | 'analyzing' | 'review';
 
 // ─── data → HUD mappers ──────────────────────────────────────────────
+
+/** Short, honest label for the kinematic-sequence score (0..100). High =
+ *  hips lead the downswing (tour order); low = shoulders lead / over-the-top. */
+function transitionLabel(score: number): string {
+  if (score > 65) return 'hips lead';
+  if (score < 35) return 'shoulders lead';
+  return 'even';
+}
 
 function metricToSpec(key: string, label: string, m: SwingMetric, icon?: MetricSpec['icon']): MetricSpec {
   return {
@@ -199,7 +209,13 @@ export default function SmartMotion() {
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [tempo, setTempo] = useState<SwingTempo | null>(null);
   const [swingAnalyzing, setSwingAnalyzing] = useState(false);
+  // Cage targeting (ball + movable target) — reactive mirror of the
+  // ingested session id so the targeting card/overlay update live.
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [targetFrameUri, setTargetFrameUri] = useState<string | null>(null);
+  const [autoDetectingBall, setAutoDetectingBall] = useState(false);
   const analysisCacheRef = useRef<Record<number, SwingAnalysis>>({});
+  const tempoCacheRef = useRef<Record<string, SwingTempo>>({});
 
   const cameraRef = useRef<CameraView>(null);
   const videoRef = useRef<Video>(null);
@@ -213,6 +229,18 @@ export default function SmartMotion() {
   const audioUriRef = useRef<string | null>(null);
 
   const measuredBallSpeedMph = ballSpeed?.ball_speed_mph ?? null;
+
+  // Cage targeting — subscribe to the ingested session so ball/target
+  // overlays render live, plus the persisted setters. Reuses the same
+  // store + components as the swing-detail screen; isolated from the
+  // strike/pose/verdict pipelines.
+  const cageSession = useCageStore(s =>
+    sessionId ? s.sessionHistory.find(x => x.id === sessionId) ?? null : null,
+  );
+  const setSessionBallArea = useCageStore(s => s.setSessionBallArea);
+  const setSessionTarget = useCageStore(s => s.setSessionTarget);
+  const ballArea = cageSession?.ball_area_norm ?? null;
+  const targetPoint = cageSession?.target_norm ?? null;
 
   const metrics: SwingMetricSet = useMemo(
     () =>
@@ -297,6 +325,7 @@ export default function SmartMotion() {
           source: 'live_cage',
         });
         ingestedSessionIdRef.current = sessionId;
+        setSessionId(sessionId);
       } catch (e) {
         console.log('[smartmotion] library ingest failed (non-fatal):', e);
       }
@@ -383,18 +412,24 @@ export default function SmartMotion() {
     return () => { cancelled = true; };
   }, [clipUri, videoDurationMs]);
 
-  // Acoustic-anchored tempo for the selected swing. Impact comes from the
-  // acoustic strike detector (segment.strikeMs); top-of-backswing is read
-  // from pose. Recomputes when the selected swing changes.
+  // Acoustic-anchored tempo + transition for the selected swing. Impact
+  // comes from the acoustic strike detector (segment.strikeMs);
+  // top-of-backswing is read from pose. Cached per (clip, strike) so
+  // re-selecting a swing is instant and we never re-pay the pose calls.
   useEffect(() => {
     const seg = segments[selectedSwing];
     if (!clipUri || !seg || seg.strikeMs == null) { setTempo(null); return; }
+    const cacheKey = `${clipUri}#${seg.strikeMs}`;
+    const cached = tempoCacheRef.current[cacheKey];
+    if (cached) { setTempo(cached); return; }
     let cancelled = false;
     setTempo(null);
     void (async () => {
       try {
         const t = await deriveSwingTempo(clipUri, seg.strikeMs);
-        if (!cancelled) setTempo(t);
+        if (cancelled) return;
+        tempoCacheRef.current[cacheKey] = t;
+        setTempo(t);
       } catch (e) {
         console.log('[smartmotion] tempo derive failed (non-fatal):', e);
         if (!cancelled) setTempo(null);
@@ -402,6 +437,55 @@ export default function SmartMotion() {
     })();
     return () => { cancelled = true; };
   }, [clipUri, segments, selectedSwing]);
+
+  // Address still for the targeting card / ball auto-detect. Sample near
+  // the start of the selected swing (or ~12% into a single clip) where
+  // the ball is sitting at address.
+  useEffect(() => {
+    if (!clipUri || phase !== 'review') { setTargetFrameUri(null); return; }
+    const seg = segments[selectedSwing];
+    const addressMs = seg ? Math.max(0, seg.startMs) : Math.round((videoDurationMs ?? 3000) * 0.12);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { uri } = await VideoThumbnails.getThumbnailAsync(clipUri, { time: addressMs, quality: 0.8 });
+        if (!cancelled) setTargetFrameUri(uri);
+      } catch (e) {
+        console.log('[smartmotion] address-frame extract failed (non-fatal):', e);
+        if (!cancelled) setTargetFrameUri(null);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clipUri, phase, selectedSwing, segments]);
+
+  // Ball auto-detection — sends the address frame to the same vision
+  // endpoint the swing-detail screen uses (/api/swing-analysis
+  // mode=detect_ball, Claude Haiku). Commits the normalized ball area to
+  // the session; on failure the user can still tap-place via the card.
+  const autoDetectBall = useCallback(async () => {
+    if (!targetFrameUri || !sessionId) return;
+    setAutoDetectingBall(true);
+    try {
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+      const FS = await import('expo-file-system/legacy');
+      const b64 = await FS.readAsStringAsync(targetFrameUri, { encoding: FS.EncodingType.Base64 });
+      const res = await fetch(`${apiUrl}/api/swing-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'detect_ball', frames: [{ b64, media_type: 'image/jpeg' }] }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      const data = (await res.json()) as { found?: boolean; x?: number; y?: number; r?: number };
+      if (data.found && typeof data.x === 'number' && typeof data.y === 'number') {
+        setSessionBallArea(sessionId, { x: data.x, y: data.y, r: typeof data.r === 'number' ? data.r : 0.06 });
+      }
+    } catch (e) {
+      console.log('[smartmotion] ball auto-detect failed (non-fatal):', e);
+    } finally {
+      setAutoDetectingBall(false);
+    }
+  }, [targetFrameUri, sessionId, setSessionBallArea]);
 
   // Library re-analyze (clipUriParam) path.
   useEffect(() => {
@@ -416,6 +500,8 @@ export default function SmartMotion() {
     audioUriRef.current = null;
     recordingPromiseRef.current = null;
     stoppingRef.current = false;
+    setSessionId(null);
+    setTargetFrameUri(null);
     setClipUri(null);
     setAnalysis(null);
     setAnalysisError(null);
@@ -730,6 +816,14 @@ export default function SmartMotion() {
           </View>
         ) : null}
 
+        {/* Ball area + (movable) target overlay — reference markers placed
+            via the targeting card on the analysis page. */}
+        {isReview && (ballArea || targetPoint) ? (
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <CageTargetingOverlay ballArea={ballArea} target={targetPoint} />
+          </View>
+        ) : null}
+
         {phase !== 'analyzing' ? <CaptureGuides mode={angle} /> : null}
 
         {/* TOP BAR (interactive) */}
@@ -799,6 +893,12 @@ export default function SmartMotion() {
                 />
               </View>
               <TempoBar ratio={tempo?.ratio ?? null} />
+              {tempo?.ratio != null && tempo.backswingMs != null && tempo.downswingMs != null ? (
+                <Text style={[styles.tempoDetail, { color: colors.text_muted }]} numberOfLines={1}>
+                  Back {(tempo.backswingMs / 1000).toFixed(1)}s · Down {(tempo.downswingMs / 1000).toFixed(1)}s
+                  {tempo.sequencingScore != null ? ` · Transition: ${transitionLabel(tempo.sequencingScore)}` : ''}
+                </Text>
+              ) : null}
               <BodyAnalysisRow items={bodyItems} />
             </>
           ) : null}
@@ -928,6 +1028,19 @@ export default function SmartMotion() {
               <Text style={[styles.secondaryBtnText, { color: colors.text_secondary }]}>Save note</Text>
             </Pressable>
           </View>
+
+          {/* Ball + target placement. Auto-detect the ball, tap-place the
+              target (movable) — both render as overlays on the swing video. */}
+          <CageTargetingCard
+            colors={colors}
+            frameUri={targetFrameUri}
+            ballArea={ballArea}
+            target={targetPoint}
+            onChangeBallArea={(a) => { if (sessionId) setSessionBallArea(sessionId, a); }}
+            onChangeTarget={(t) => { if (sessionId) setSessionTarget(sessionId, t); }}
+            onAutoDetectBall={targetFrameUri ? autoDetectBall : undefined}
+            autoDetecting={autoDetectingBall}
+          />
         </>
       )}
     </ScrollView>
@@ -993,6 +1106,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingTop: 10, gap: 8,
     borderTopLeftRadius: 18, borderTopRightRadius: 18,
   },
+  tempoDetail: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3, marginTop: -2 },
   reelWrap: { gap: 6 },
   reelLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   reelChip: { width: 34, height: 34, borderRadius: 17, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
