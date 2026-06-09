@@ -97,6 +97,10 @@ export default function SwingDetail() {
   const session = useCageStore(s =>
     swing_id ? s.sessionHistory.find(x => x.id === swing_id) ?? null : null,
   );
+  // Coach report export is an instructor tool — gate the button so a
+  // golfer can't export a report headed with their own name as the
+  // "instructor" (audit). Reactive so a role change in Settings reflects.
+  const isInstructor = usePlayerProfileStore(s => s.role === 'instructor');
   // 2026-05-23 — Hydration guard. AsyncStorage rehydration is async,
   // so sessionHistory starts as [] before persist fills it from disk.
   // Without this, deep-linking to a swing detail before hydration
@@ -655,14 +659,16 @@ export default function SwingDetail() {
                 <Ionicons name="paper-plane-outline" size={20} color="#F0C030" />
               </TouchableOpacity>
             )}
-            <TouchableOpacity
-              onPress={handleExportReport}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              accessibilityRole="button"
-              accessibilityLabel="Export swing report PDF"
-            >
-              <Ionicons name="document-text-outline" size={22} color={colors.accent} />
-            </TouchableOpacity>
+            {isInstructor ? (
+              <TouchableOpacity
+                onPress={handleExportReport}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel="Export swing report PDF"
+              >
+                <Ionicons name="document-text-outline" size={22} color={colors.accent} />
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
               onPress={handleSessionShare}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}

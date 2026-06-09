@@ -392,7 +392,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       partialize: (s) => {
         const { ghin_number, ...rest } = s;
         void ghin_number;
-        return rest as PlayerProfileState;
+        return rest as Omit<PlayerProfileState, 'ghin_number'>;
       },
       storage: createJSONStorage(() => getPersistStorage()),
       // Phase 410 — Sentry breadcrumb on profile hydration so future
