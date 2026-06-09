@@ -61,8 +61,10 @@ export default function WelcomeScreen() {
   const existingHandicap = usePlayerProfileStore(s => s.handicap);
   const existingCaddie = useSettingsStore(s => s.caddiePersonality);
 
+  const existingRole = usePlayerProfileStore(s => s.role);
   const setName = usePlayerProfileStore(s => s.setName);
   const setHandicap = usePlayerProfileStore(s => s.setHandicap);
+  const setRole = usePlayerProfileStore(s => s.setRole);
   const setCaddiePersonality = useSettingsStore(s => s.setCaddiePersonality);
 
   // 2026-05-22 — T&C acceptance gate. Read from store so an interrupted
@@ -78,6 +80,7 @@ export default function WelcomeScreen() {
     existingHandicap != null && existingHandicap !== 18 ? String(existingHandicap) : '',
   );
   const [caddie, setCaddie] = useState<Persona>(existingCaddie ?? 'kevin');
+  const [roleSel, setRoleSel] = useState<'golfer' | 'instructor' | 'student'>(existingRole ?? 'golfer');
   const termsAccepted = termsAcceptedAt != null;
 
   // 2026-05-22 — Smooth CTA enable/disable transition. Animates opacity
@@ -134,6 +137,7 @@ export default function WelcomeScreen() {
     const hcp = parseFloat(handicapText.trim());
     if (Number.isFinite(hcp) && hcp >= 0 && hcp <= 54) setHandicap(hcp);
 
+    setRole(roleSel);
     setCaddiePersonality(caddie);
 
     // Stamp first_opened_at if it isn't set — prevents this screen from
@@ -175,6 +179,27 @@ export default function WelcomeScreen() {
             autoCapitalize="words"
             returnKeyType="next"
           />
+
+          <Text style={[styles.fieldLabel, { color: colors.accent, marginTop: spacing.lg }]}>I&apos;M A…</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {([['golfer', 'Golfer'], ['instructor', 'Instructor'], ['student', 'Student']] as const).map(([val, lbl]) => {
+              const active = roleSel === val;
+              return (
+                <TouchableOpacity
+                  key={val}
+                  onPress={() => setRoleSel(val)}
+                  style={[
+                    { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, alignItems: 'center', backgroundColor: colors.surface, borderColor: active ? colors.accent : colors.border },
+                    active && { backgroundColor: `${colors.accent}15` },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`I'm a ${lbl}`}
+                >
+                  <Text style={{ color: active ? colors.accent : colors.text_primary, fontWeight: active ? '800' : '600', fontSize: 13 }}>{lbl}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
           <Text style={[styles.fieldLabel, { color: colors.accent, marginTop: spacing.lg }]}>HANDICAP (OPTIONAL)</Text>
           <TextInput
