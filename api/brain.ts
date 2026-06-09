@@ -20,9 +20,8 @@
  * URL surfaces in Vercel logs; THEN delete the file + the app/api/brain+api.ts
  * twin in a follow-up batch.
  *
- * Docs reference: services/fieldManual/manualContent.ts mentions both
- * /api/brain and /api/kevin under "Conversational + tool-use" — that's
- * historical context; treat /api/kevin as the canonical entry point.
+ * Historical note: /api/brain and /api/kevin are both conversational +
+ * tool-use entry points; treat /api/kevin as the canonical one.
  * ════════════════════════════════════════════════════════════════════════
  */
 
