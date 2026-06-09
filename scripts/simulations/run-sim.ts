@@ -313,9 +313,14 @@ for (const f of apiFiles) {
   if (!src.includes('getCaddieName')) continue;
   serverPersonaTotal++;
   // The Phase 100 / B4 sweep made every getCaddieName call site accept
-  // either persona or voiceGender. Look for any of the canonical markers
-  // (plain destructure, body.persona, optional chaining).
-  const ok = /typeof\s+(?:body\??\.)?persona\s*===\s*['"]string['"]/.test(src);
+  // either persona or voiceGender. Recognize BOTH canonical styles:
+  //   (a) typeof body.persona === 'string'         (most routes)
+  //   (b) body.persona ?? body.voiceGender ?? ...   (junior/putting)
+  // 2026-06-08 — added (b): the regex was stale and flagged two
+  // already-persona-aware routes as failing (harness-vs-reality drift).
+  const ok =
+    /typeof\s+(?:body\??\.)?persona\s*===\s*['"]string['"]/.test(src) ||
+    /body\??\.persona\s*\?\?/.test(src);
   if (ok) serverPersonaOk++;
   check(`api/${f} accepts both persona+voiceGender`, ok, ok ? 'persona-aware' : 'still voiceGender-only');
 }
@@ -423,6 +428,67 @@ const featureSrc = fs.readFileSync(featurePath, 'utf-8');
 check('featureAccess.canAccess treats lifetime as paid',
   featureSrc.includes("'lifetime'"),
   'lifetime accepted by feature gate');
+
+// ─── Scenario 12: 2026-06-08 session surfaces (keep harness == reality) ─────────
+// Static source checks for the features added/changed this session, so the
+// harness reflects how the app ACTUALLY works now and guards against
+// regression. (Pure file-content checks — no RN runtime needed.)
+
+console.log('\n=== Scenario 12: 2026-06-08 session surfaces ===');
+
+const exists = (rel: string) => fs.existsSync(path.resolve(__dirname, '../../', rel));
+const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, '../../', rel), 'utf-8');
+
+// Tempo / transition (vision-derived, acoustic-verified)
+check('poseAnalysisApi exports deriveSwingTempo',
+  /export\s+async\s+function\s+deriveSwingTempo/.test(read('services/poseAnalysisApi.ts')),
+  'tempo/transition derivation present');
+
+// Shot strategy — bagDistances kept; dead recommendStrategy/bagMaxCarry removed
+const strategySrc = read('services/shotStrategy.ts');
+check('shotStrategy exports bagDistances (used by caddie)',
+  /export\s+function\s+bagDistances/.test(strategySrc), 'bag distances surface present');
+check('shotStrategy dead exports removed',
+  !/export\s+function\s+recommendStrategy/.test(strategySrc) && !/export\s+function\s+bagMaxCarry/.test(strategySrc),
+  'recommendStrategy + bagMaxCarry removed pre-OTA');
+
+// Caddie brain consumes the real bag + the two-shot strategy rule
+const kevinApiSrc = read('api/kevin.ts');
+check('kevin.ts consumes clubDistances + strategy rule',
+  kevinApiSrc.includes('clubDistances') && /CLUB\s*&\s*STRATEGY/i.test(kevinApiSrc),
+  'bag context + strategy prompt wired');
+
+// Coach notes flow into swing analysis
+check('poseDetection swing context carries coach_note',
+  read('services/poseDetection.ts').includes('coach_note'), 'coach_note in analyze context');
+check('swing-analysis prompt uses coach_note',
+  read('api/swing-analysis.ts').includes('coach_note'), 'coach note threaded to prompt');
+
+// Putt ball/target into vision analysis
+check('putting-analysis accepts ball_area_norm + target_norm',
+  /ball_area_norm/.test(read('api/putting-analysis.ts')) && /target_norm/.test(read('api/putting-analysis.ts')),
+  'ball/target anchors in putt prompt');
+
+// Handedness: unknown-safe junior cues
+check('junior-swing handles unknown handedness',
+  /handedness === 'unknown'/.test(read('api/junior-swing-analysis.ts')),
+  'no silent RH default for unknown handedness');
+
+// Coach report export + role + credentials
+check('coachReport exports exportCoachReport',
+  /export\s+async\s+function\s+exportCoachReport/.test(read('services/coachReport.ts')),
+  'coach report generator present');
+const profileSrc2 = read('store/playerProfileStore.ts');
+check('playerProfile has role + coachCredentials + GHIN excluded from persist',
+  /role:\s*'golfer'\s*\|\s*'instructor'\s*\|\s*'student'/.test(profileSrc2) &&
+  profileSrc2.includes('coachCredentials') &&
+  /const\s*\{\s*ghin_number\b/.test(profileSrc2),
+  'role + credentials + GHIN-at-rest privacy');
+
+// Removed dead feature stays removed
+check('scan-golfer / playerCalibration removed',
+  !exists('app/swinglab/scan-student.tsx') && !exists('store/playerCalibrationStore.ts') && !exists('services/playerCalibration.ts'),
+  'dead calibration feature gone');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
