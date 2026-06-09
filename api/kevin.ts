@@ -447,6 +447,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Closes the feedback loop — the caddie ADAPTS tone/coaching to how
       // the player says they feel, not just logs it.
       emotionalLog = [],
+      // Player's REAL bag distances { club: yards }. Strategy/club answers
+      // must use these, not assumptions.
+      clubDistances = {},
       // Phase BR — active practice context. Pre-formatted by the client
       // (services/tutorialContext.ts buildFullPracticeContext). Multi-line
       // string when one or more tutorials are active, null otherwise.
@@ -948,6 +951,9 @@ When Tim asks tactical questions ("what's my yardage", "what club", "where do I 
 PATTERN AWARENESS (Phase BJ):
 The body may include \`holeShots\` (this hole) and \`recentShots\` (last shots across the round). When 3+ shots show a clear directional pattern (three pushes right, two pulled left), reference it briefly the next time Tim asks for a tactical read and adjust the suggestion accordingly ("you've been right today — favor left center"). Use this once or twice a round, not every shot.
 
+CLUB & STRATEGY — USE REAL DISTANCES:
+When a [TIM'S BAG — real distances] block is present, base every club/strategy answer on THOSE numbers, not generic assumptions. Core rule: if the distance to the target is beyond his LONGEST club, it's a two-shot decision — don't tell him to "go for it." Recommend a lay-up to a comfortable wedge number (~90) or short of the first hazard, and say what it leaves ("lay up to ~90, leaves a full gap wedge"). When it's reachable, name the club that matches the number from his bag. Always factor known hazards and doglegs (lay back / take the gap / favor the safe side). Keep it to a club + a one-line why + a confirm.
+
 FEEL & MOOD — ADAPT, DON'T JUST ACKNOWLEDGE:
 Shots carry a \`feel\` field (how the swing felt: "rushed", "smooth", "fat") and the body may include a [HOW TIM SAYS HE FEELS] block (emotional self-reports + valence). These are the player telling you, in his own words, what's going on — your job is to let it CHANGE your coaching, not just mirror it back:
 - Repeated swing feel: if the same feel keyword shows up 2+ times (e.g. "rushed" twice), name it and prescribe the fix on the next tactical read ("you've felt rushed a couple times — let's smooth the tempo, easy to the top"). Don't diagnose mechanics he didn't mention.
@@ -1079,8 +1085,15 @@ ${emoArr.slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valenc
 [/HOW TIM FEELS]
 `
       : '';
-    const onCourseContextBlock = onCourseHoleBlock || onCourseRecentBlock || emotionalBlock
-      ? `${onCourseHoleBlock}${onCourseRecentBlock}${emotionalBlock}\n`
+    // Player's real bag distances — for grounded club/strategy answers.
+    const bagEntries = clubDistances && typeof clubDistances === 'object'
+      ? Object.entries(clubDistances as Record<string, number>).filter(([, y]) => typeof y === 'number' && y > 0)
+      : [];
+    const bagBlock = bagEntries.length > 0
+      ? `[TIM'S BAG — real distances, yds]\n${bagEntries.map(([c, y]) => `  ${c}: ${y}`).join('\n')}\n[/BAG]\n`
+      : '';
+    const onCourseContextBlock = onCourseHoleBlock || onCourseRecentBlock || emotionalBlock || bagBlock
+      ? `${onCourseHoleBlock}${onCourseRecentBlock}${emotionalBlock}${bagBlock}\n`
       : '';
 
     const userMessage = sv

@@ -1392,9 +1392,11 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const pitchRef = useRef(0);
+  const rollRef = useRef(0);
   const [pointA, setPointA] = useState<{ x: number; y: number } | null>(null);
   const [pointB, setPointB] = useState<{ x: number; y: number } | null>(null);
   const [pitchAtMeasure, setPitchAtMeasure] = useState<number | null>(null);
+  const [rollAtMeasure, setRollAtMeasure] = useState<number | null>(null);
   // Live tilt for the real-time level indicator. pitch = fore/aft (incline
   // along the aim), roll = side tilt. Updated ~5×/s.
   const [tilt, setTilt] = useState<{ pitch: number; roll: number }>({ pitch: 0, roll: 0 });
@@ -1406,6 +1408,7 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
         const pitch = ((data.rotation.beta ?? 0) * 180) / Math.PI;
         const roll = ((data.rotation.gamma ?? 0) * 180) / Math.PI;
         pitchRef.current = pitch;
+        rollRef.current = roll;
         setTilt({ pitch, roll });
       }
     });
@@ -1426,15 +1429,17 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
     } else if (!pointB) {
       setPointB({ x: locationX, y: locationY });
       setPitchAtMeasure(pitchRef.current);
+      setRollAtMeasure(rollRef.current);
     } else {
       // Reset on third tap
       setPointA({ x: locationX, y: locationY });
       setPointB(null);
       setPitchAtMeasure(null);
+      setRollAtMeasure(null);
     }
   }, [pointA, pointB]);
 
-  const reset = () => { setPointA(null); setPointB(null); setPitchAtMeasure(null); };
+  const reset = () => { setPointA(null); setPointB(null); setPitchAtMeasure(null); setRollAtMeasure(null); };
 
   // Approximate distance in feet using a simple visual heuristic — pixels mapped
   // to feet via a fixed reference (this is rough by design; a calibrated camera
@@ -1450,6 +1455,26 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
   const slopePct = pitchAtMeasure != null
     ? Math.round(Math.tan((Math.abs(pitchAtMeasure) - 90) * Math.PI / 180) * 100)
     : null;
+
+  // Putt READ — turn the captured metrics into actual advice: pace from
+  // the incline, break direction from the side tilt. Qualitative on
+  // purpose (no fake cup counts) and labeled an estimate — trust your own
+  // read too. This is the "now that we have more metrics" improvement.
+  const puttRead = pointA && pointB && slopePct != null ? (() => {
+    const pace = slopePct > 2 ? 'firm pace — it’s uphill'
+      : slopePct < -2 ? 'soft pace — downhill, let it die'
+      : 'stock pace';
+    const side = rollAtMeasure ?? 0;
+    let breakTxt: string;
+    if (Math.abs(side) >= 4) {
+      breakTxt = side > 0 ? 'strong right break — aim outside the left edge' : 'strong left break — aim outside the right edge';
+    } else if (Math.abs(side) >= 2) {
+      breakTxt = side > 0 ? 'breaks right — aim the left edge' : 'breaks left — aim the right edge';
+    } else {
+      breakTxt = 'plays fairly straight';
+    }
+    return `${breakTxt}, ${pace}.`;
+  })() : null;
 
   return (
     <>
@@ -1517,6 +1542,13 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
               </View>
             </View>
             <Text style={styles.puttHint}>{slopePct != null ? readSlope(slopePct) : 'Hold phone level over ball to read slope.'}</Text>
+            {puttRead ? (
+              <View style={{ marginTop: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#00C896', backgroundColor: 'rgba(0,200,150,0.12)' }}>
+                <Text style={{ color: '#00C896', fontSize: 10, fontWeight: '900', letterSpacing: 1 }}>YOUR READ</Text>
+                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 3 }}>{puttRead}</Text>
+                <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 9, marginTop: 5 }}>estimate from phone tilt — trust your own read too</Text>
+              </View>
+            ) : null}
             <TouchableOpacity style={styles.clearBtn} onPress={reset}>
               <Text style={styles.clearBtnText}>Reset</Text>
             </TouchableOpacity>

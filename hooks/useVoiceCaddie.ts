@@ -21,6 +21,7 @@ import {
   getClipForCategory,
   classifyQuery,
 } from '../services/fillerLibrary';
+import { bagDistances } from '../services/shotStrategy';
 import { checkContent } from '../services/contentGuardrail';
 import { resolveAckClip } from '../services/quickAckClips';
 import { resolveGreetingClip } from '../services/quickGreetingClips';
@@ -874,6 +875,10 @@ export const useVoiceCaddie = ({
             valence: e.valence,
             hole: e.hole,
           })),
+          // Player's REAL bag distances (learned avgs, standard fallback) so
+          // club/strategy answers use actual numbers, not assumptions. The
+          // brain applies the "beyond your longest = two-shot" rule.
+          clubDistances: bagDistances(),
           // PGA HOPE follow-up — server-side persona resolution, intensity
           // dial, and Tank soft-intro flag. Read fresh at call time so
           // settings changes apply to the next utterance without restart.
