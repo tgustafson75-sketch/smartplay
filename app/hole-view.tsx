@@ -37,7 +37,7 @@ import { useCourseGeometryOverrideStore } from '../store/courseGeometryOverrideS
 // so once the user drags the tee/pin to where they actually sit on a
 // hole image, the markers come up there on every subsequent visit.
 import { useHoleMarkerCalibrationStore } from '../store/holeMarkerCalibrationStore';
-import VectorHoleView from '../components/smartvision/VectorHoleView';
+import VectorHoleView, { type PlottedShot } from '../components/smartvision/VectorHoleView';
 import GolfshotHoleView from '../components/smartvision/GolfshotHoleView';
 import { ShareToSocial } from '../components/ShareToSocial';
 import { useTranslation } from 'react-i18next';
@@ -206,6 +206,22 @@ export default function HoleView() {
     activeCourseId,
     activeCourse,
   } = useRoundStore();
+  // Tracked shots for this hole → plotted on the vector view (start→rest,
+  // numbered, tappable). Reactive so a cart-mark mid-hole appears live.
+  const roundShots = useRoundStore(s => s.shots);
+  const plottedShots = useMemo<PlottedShot[]>(() => {
+    return roundShots
+      .filter(s => (s.hole_number ?? s.hole) === hole)
+      .filter(s => s.end_location != null || s.start_location != null)
+      .sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0))
+      .map((s, i) => ({
+        index: i + 1,
+        start: s.start_location ?? null,
+        end: s.end_location ?? null,
+        club: s.club ?? null,
+        distanceYards: s.distance_yards ?? null,
+      }));
+  }, [roundShots, hole]);
   const { setMode } = useKevinPresence();
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -806,6 +822,7 @@ export default function HoleView() {
               currentPos={gpsValid && gpsCoords
                 ? { lat: gpsCoords.latitude, lng: gpsCoords.longitude }
                 : null}
+              shots={plottedShots}
               width={IMAGE_WIDTH}
               height={IMAGE_HEIGHT}
               // 2026-05-17 — Drag-to-anchor. Only active during a round

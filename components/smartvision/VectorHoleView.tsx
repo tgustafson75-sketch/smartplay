@@ -29,9 +29,22 @@ import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, PanResponder } from 'react-native';
 import Svg, {
   Rect, Circle, Path, Line, G, Defs, LinearGradient, Stop, Polygon,
+  Text as SvgText,
 } from 'react-native-svg';
 
 interface LatLng { lat: number; lng: number }
+
+/** A completed shot to plot on the hole. start/end are GPS; either may be
+ *  null (e.g. a shot with only a rest mark). Projected into the same
+ *  tee→green space as the tee/green/player so the plot lines up exactly. */
+export interface PlottedShot {
+  /** 1-based shot number on the hole. */
+  index: number;
+  start: LatLng | null;
+  end: LatLng | null;
+  club?: string | null;
+  distanceYards?: number | null;
+}
 
 interface Props {
   hole: number;
@@ -42,6 +55,10 @@ interface Props {
   currentPos: LatLng | null;
   width: number;
   height: number;
+  /** Completed shots for this hole, drawn as a numbered, tappable
+   *  start→rest plot (honest straight connectors — we know endpoints,
+   *  not the airborne arc). Absent/empty → nothing drawn. */
+  shots?: PlottedShot[];
   /**
    * 2026-05-17 — When supplied, the TEE marker becomes draggable. Long-
    * press and drag it to where the actual tee box is on screen; on
@@ -79,7 +96,10 @@ export default function VectorHoleView({
   hole, par, distance, tee, green, currentPos, width, height,
   onTeeAnchor, onGreenAnchor,
   confidenceLabel, confidenceOverall,
+  shots,
 }: Props) {
+  // Which plotted shot's callout is open (tap a rest marker to toggle).
+  const [selectedShot, setSelectedShot] = useState<number | null>(null);
   // Pre-compute projection: rotate so tee→green axis points UP (negative
   // y in SVG coords); player dot inherits the same projection so the
   // visual matches reality.
@@ -227,6 +247,18 @@ export default function VectorHoleView({
   const greenPx = project(green);
   const playerPx = currentPos ? project(currentPos) : null;
 
+  // Project completed shots into the same space as tee/green/player.
+  const plotted = (shots ?? [])
+    .map(s => ({
+      index: s.index,
+      club: s.club ?? null,
+      distanceYards: s.distanceYards ?? null,
+      startPx: s.start ? project(s.start) : null,
+      endPx: s.end ? project(s.end) : null,
+    }))
+    .filter(p => p.endPx != null || p.startPx != null);
+  const selected = selectedShot != null ? plotted.find(p => p.index === selectedShot) ?? null : null;
+
   // Fairway band as a tapered polygon: narrower at tee, wider toward green
   const halfFairwayPxAtTee = (FAIRWAY_WIDTH_YARDS * 0.6) / yardsPerPx / 2;
   const halfFairwayPxAtGreen = (FAIRWAY_WIDTH_YARDS * 1.0) / yardsPerPx / 2;
@@ -334,6 +366,52 @@ export default function VectorHoleView({
           );
         })}
 
+        {/* Shot plot — start→rest connectors + numbered, tappable rest
+            markers. Straight lines: we know the endpoints from GPS, not
+            the airborne arc, so we don't fake a curve. */}
+        {plotted.map((p) => {
+          const isSel = p.index === selectedShot;
+          return (
+            <G key={`shot-${p.index}`}>
+              {p.startPx && p.endPx && (
+                <Line
+                  x1={p.startPx.x} y1={p.startPx.y}
+                  x2={p.endPx.x} y2={p.endPx.y}
+                  stroke={isSel ? '#fde68a' : '#00C896'}
+                  strokeWidth={isSel ? 3 : 2}
+                  strokeLinecap="round"
+                  opacity={0.95}
+                />
+              )}
+              {p.startPx && (
+                <Circle cx={p.startPx.x} cy={p.startPx.y} r={2.5} fill="#ffffff" opacity={0.7} />
+              )}
+              {p.endPx && (
+                <>
+                  {/* Fat transparent hit target for easy tapping. */}
+                  <Circle
+                    cx={p.endPx.x} cy={p.endPx.y} r={16} fill="transparent"
+                    onPress={() => setSelectedShot(isSel ? null : p.index)}
+                  />
+                  <Circle
+                    cx={p.endPx.x} cy={p.endPx.y} r={9}
+                    fill={isSel ? '#fde68a' : '#00C896'}
+                    stroke="#0a1410" strokeWidth={2}
+                    onPress={() => setSelectedShot(isSel ? null : p.index)}
+                  />
+                  <SvgText
+                    x={p.endPx.x} y={p.endPx.y + 3.5}
+                    fill="#0a1410" fontSize={10} fontWeight="900"
+                    textAnchor="middle"
+                  >
+                    {p.index}
+                  </SvgText>
+                </>
+              )}
+            </G>
+          );
+        })}
+
         {/* Player dot */}
         {playerPx && (
           <>
@@ -342,6 +420,24 @@ export default function VectorHoleView({
           </>
         )}
       </Svg>
+
+      {/* Tapped-shot callout — club + measured distance. */}
+      {selected?.endPx && (
+        <View
+          style={[
+            styles.shotCallout,
+            {
+              left: Math.max(4, Math.min(width - 108, selected.endPx.x - 52)),
+              top: Math.max(4, Math.min(height - 46, selected.endPx.y - 52)),
+            },
+          ]}
+        >
+          <Text style={styles.shotCalloutTitle}>SHOT {selected.index}</Text>
+          <Text style={styles.shotCalloutMeta}>
+            {(selected.club ?? '—')}{selected.distanceYards != null ? ` · ${selected.distanceYards}y` : ''}
+          </Text>
+        </View>
+      )}
 
       {/* 2026-05-17 — Draggable tee/green hit-targets. Sized 44pt for
           fat-finger comfort; transparent by default, dashed green ring
@@ -486,6 +582,28 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     letterSpacing: 0.6,
+  },
+  shotCallout: {
+    position: 'absolute',
+    minWidth: 104,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    borderWidth: 1,
+    borderColor: '#00C896',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  shotCalloutTitle: {
+    color: '#00C896',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  shotCalloutMeta: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+    marginTop: 1,
   },
   dragHandle: {
     position: 'absolute',
