@@ -159,6 +159,8 @@ export default function Settings() {
 
   const {
     name,
+    role,
+    coachCredentials,
     handicap,
     handedness,
     dominantMiss,
@@ -167,6 +169,8 @@ export default function Settings() {
     personalBest,
     preferredTee,
     setName,
+    setRole,
+    setCoachCredentials,
     setHandicap,
     setHandedness,
     setDominantMiss,
@@ -178,6 +182,7 @@ export default function Settings() {
 
   const [editName, setEditName] = useState(name);
   const [editHandicap, setEditHandicap] = useState(String(handicap));
+  const [editCreds, setEditCreds] = useState(coachCredentials ?? '');
   const [editGoal, setEditGoal] = useState(goal ?? '');
   const handicapIndex = usePlayerProfileStore(s => s.handicap_index);
   const setHandicapIndex = usePlayerProfileStore(s => s.setHandicapIndex);
@@ -699,6 +704,31 @@ export default function Settings() {
             placeholder="e.g. Bad left knee"
             placeholderTextColor="#374151"
           />
+
+          <PillRow
+            label="I'm a"
+            options={[
+              { label: 'Golfer', value: 'golfer' },
+              { label: 'Instructor', value: 'instructor' },
+              { label: 'Student', value: 'student' },
+            ]}
+            value={role}
+            onSelect={(v) => setRole(v as 'golfer' | 'instructor' | 'student')}
+          />
+
+          {role === 'instructor' ? (
+            <>
+              <Text style={inputLblStyle}>Credentials (shown on swing reports you send)</Text>
+              <TextInput
+                style={inputFldStyle}
+                value={editCreds}
+                onChangeText={setEditCreds}
+                onBlur={() => setCoachCredentials(editCreds)}
+                placeholder="e.g. LPGA Class A · 25 yrs"
+                placeholderTextColor={colors.text_muted}
+              />
+            </>
+          ) : null}
 
           <PillRow
             label="Handedness"

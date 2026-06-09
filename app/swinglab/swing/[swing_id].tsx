@@ -21,6 +21,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useCageStore, type AnalysisStatus, type CageShot } from '../../../store/cageStore';
 import { useToastStore } from '../../../store/toastStore';
+import { usePlayerProfileStore } from '../../../store/playerProfileStore';
+import { exportCoachReport } from '../../../services/coachReport';
 import { getSwingReference } from '../../../services/swingReferences';
 import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
@@ -423,6 +425,40 @@ export default function SwingDetail() {
     }
   };
 
+  // 2026-06-08 — Coach report export. One clean PDF (instructor header +
+  // logo, dated, fault frame, the AI read + drill + the coach's note) to
+  // send a student — replaces the piecemeal clip-plus-text workflow.
+  const handleExportReport = async () => {
+    if (!session) { useToastStore.getState().show('Nothing to export yet.'); return; }
+    const profile = usePlayerProfileStore.getState();
+    const pi = session.primary_issue ?? null;
+    const swinger = session.upload?.swinger ?? null;
+    const history = useCageStore.getState().sessionHistory;
+    const sameStudent = swinger ? history.filter(h => (h.upload?.swinger ?? null) === swinger) : [];
+    useToastStore.getState().show('Building report…');
+    const res = await exportCoachReport({
+      studentName: swinger,
+      instructorName: profile.name || profile.firstName || 'Your Instructor',
+      instructorCredentials: profile.coachCredentials ?? null,
+      sessionDateMs: session.upload?.uploaded_at ?? Date.now(),
+      sessionNumber: sameStudent.length > 0 ? sameStudent.length : null,
+      // image frames only (never the video clip) for the embedded picture
+      faultFrameUri: session.fault_frame_uri ?? pi?.visual_reference_path ?? null,
+      analysis: pi ? {
+        primaryFault: pi.primary_fault ?? null,
+        observation: pi.mechanical_breakdown ?? pi.layman_explanation ?? null,
+        cause: pi.cause ?? null,
+        fix: pi.fix ?? null,
+        drill: pi.drill ?? null,
+        confidence: pi.confidence ?? null,
+      } : null,
+      coachNote: session.coach_note ?? null,
+    });
+    if (!res.ok) {
+      useToastStore.getState().show(res.reason === 'sharing_unavailable' ? 'Sharing not available on this device.' : 'Couldn’t build the report — try again.');
+    }
+  };
+
   if (!hasHydrated) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -619,6 +655,14 @@ export default function SwingDetail() {
                 <Ionicons name="paper-plane-outline" size={20} color="#F0C030" />
               </TouchableOpacity>
             )}
+            <TouchableOpacity
+              onPress={handleExportReport}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Export swing report PDF"
+            >
+              <Ionicons name="document-text-outline" size={22} color={colors.accent} />
+            </TouchableOpacity>
             <TouchableOpacity
               onPress={handleSessionShare}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
