@@ -665,6 +665,51 @@ check('Pre-record ball box: drop before recording + verifier runs on placement',
     /\[clipUri, ballArea, ballDeparture\]/.test(smSrc),
   'setup placement + effect-based verifier (fires whenever ball spot exists)');
 
+// ─── Deploy guard: every /api/* the client calls must be ROUTED in
+//     vercel.json. Root cause of the ball-departure 404: the function built
+//     (api/*.ts glob) but had no route, so it fell through to the SPA. This
+//     scans client services for /api/<name> and asserts each is routed. ────
+{
+  const vercelJson = read('vercel.json');
+  const routedApis = new Set<string>();
+  for (const m of vercelJson.matchAll(/"dest":\s*"\/api\/([a-z0-9-]+)\.ts"/g)) routedApis.add(m[1]);
+  // Endpoints reached via the generic api/*.ts build without an explicit
+  // route entry would 404 under the routes allowlist; none should rely on that.
+  const SERVICE_DIRS = ['services'];
+  const calledApis = new Set<string>();
+  const walk = (dir: string): string[] => {
+    const out: string[] = [];
+    let entries: string[] = [];
+    try { entries = require('fs').readdirSync(dir); } catch { return out; }
+    for (const e of entries) {
+      const p = `${dir}/${e}`;
+      let stat;
+      try { stat = require('fs').statSync(p); } catch { continue; }
+      if (stat.isDirectory()) out.push(...walk(p));
+      else if (/\.(ts|tsx)$/.test(e)) out.push(p);
+    }
+    return out;
+  };
+  // Endpoints NOT served by Vercel routes (and therefore exempt): Google
+  // Maps staticmap (external), and the Meta-glasses swing-tempo placeholder
+  // which is handled by an Expo Router app/api route, not vercel.json.
+  const EXEMPT = new Set(['staticmap', 'swing-tempo']);
+  for (const f of walk('services')) {
+    let src = '';
+    try { src = require('fs').readFileSync(f, 'utf8'); } catch { continue; }
+    for (const rawLine of src.split('\n')) {
+      const line = rawLine.trim();
+      if (line.startsWith('*') || line.startsWith('//') || line.startsWith('/*')) continue; // skip comments
+      if (line.includes('googleapis') || line.includes('maps/api')) continue;               // skip external
+      for (const m of line.matchAll(/\/api\/([a-z0-9-]+)\b/g)) calledApis.add(m[1]);
+    }
+  }
+  const missing = [...calledApis].filter((a) => !routedApis.has(a) && !EXEMPT.has(a));
+  check('Every client /api/* endpoint is routed in vercel.json',
+    missing.length === 0,
+    missing.length === 0 ? `${calledApis.size} api calls all routed` : `UNROUTED (will 404): ${missing.join(', ')}`);
+}
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
