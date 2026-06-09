@@ -160,8 +160,11 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       // 2026-06-08 (audit #1) — restrict frame sampling to THIS putt's
       // window in a multi-putt master clip; without boundaries we sampled
       // the whole video and analyzed a neighboring putt.
-      const puttBoundaries = (puttShot?.clipStartSeconds != null && puttShot?.clipEndSeconds != null)
-        ? { startSec: puttShot.clipStartSeconds, endSec: puttShot.clipEndSeconds }
+      // 2026-06-08 (audit #2) — if only the start is known, still window the
+      // sample (~30s putt clip) instead of falling back to the whole video
+      // and analyzing a neighboring putt.
+      const puttBoundaries = puttShot?.clipStartSeconds != null
+        ? { startSec: puttShot.clipStartSeconds, endSec: puttShot.clipEndSeconds ?? puttShot.clipStartSeconds + 30 }
         : undefined;
       void (async () => {
         try {

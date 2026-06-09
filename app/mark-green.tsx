@@ -122,7 +122,8 @@ export default function MarkPositionScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    void getOneShotFix({ maxAgeMs: 0 }).then((f) => { if (!cancelled) setFix(f); });
+    void getOneShotFix({ maxAgeMs: 0 }).then((f) => { if (!cancelled) setFix(f); })
+      .catch((err) => { console.log('[mark-green] GPS fix failed (non-fatal)', err); });
     const unsub = subscribeGps((f) => setFix(f));
     return () => { cancelled = true; unsub(); };
   }, []);

@@ -536,12 +536,14 @@ export default function SmartMotion() {
     setVideoDurationMs(null);
     setBallSpeed(null);
     setLiveDb(null);
+    // Clear caches BEFORE resetting selection so no stale per-swing
+    // analysis/tempo can be read for the new recording (audit #2).
+    tempoCacheRef.current = {};
+    analysisCacheRef.current = {};
     setSegments([]);
     setSelectedSwing(0);
     setCoachNote('');
     setTempo(null);
-    tempoCacheRef.current = {};
-    analysisCacheRef.current = {};
     setPage(0);
     pagerRef.current?.scrollTo({ x: 0, animated: false });
     setPhase('setup');

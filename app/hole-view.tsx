@@ -642,7 +642,12 @@ export default function HoleView() {
         },
       );
     };
-    startGPS();
+    // 2026-06-08 (audit #2) — a thrown permission/watch request must not
+    // crash the round; degrade to GPS-invalid and let the UI show it.
+    startGPS().catch((err) => {
+      console.log('[hole-view] GPS startup failed (non-fatal)', err);
+      setGpsValid(false);
+    });
     return () => { gpsWatchRef.current?.remove(); };
   }, [isRoundActive, middleLat, middleLng]);
 
@@ -750,7 +755,12 @@ export default function HoleView() {
   useEffect(() => {
     const key = resolveCourseKey(activeCourseId ?? null, activeCourse ?? null);
     if (!key) { setLandmarks([]); return; }
-    getLandmarksForHole(key, hole).then(setLandmarks);
+    getLandmarksForHole(key, hole).then(setLandmarks).catch((err) => {
+      // 2026-06-08 (audit #2) — landmark fetch failure must not crash the
+      // hole view; just show no landmarks.
+      console.log('[hole-view] landmark load failed (non-fatal)', err);
+      setLandmarks([]);
+    });
     setTeeLandmark(null);
     setApproachLandmark(null);
     setPinLandmark(null);

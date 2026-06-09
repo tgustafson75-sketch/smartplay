@@ -134,6 +134,10 @@ export default function SmartFinder() {
     fetchCourseGeometry(activeCourseId).then(full => {
       if (cancelled) return;
       setGeometry(full?.holes.find(h => h.hole_number === currentHole) ?? null);
+    }).catch(err => {
+      // 2026-06-08 (audit #2) — geometry fetch failure must not crash the
+      // rangefinder; keep any cached geometry, otherwise degrade.
+      console.log('[smartfinder] geometry fetch failed (non-fatal)', err);
     });
     return () => { cancelled = true; };
   }, [activeCourseId, currentHole]);
@@ -442,6 +446,11 @@ function CameraSmartFinder({
   useEffect(() => {
     Location.requestForegroundPermissionsAsync().then(({ status }) => {
       setLocationGranted(status === 'granted');
+    }).catch(err => {
+      // 2026-06-08 (audit #2) — a thrown permission request must not crash
+      // the rangefinder; treat as not-granted and let the UI prompt.
+      console.log('[smartfinder] location permission request failed', err);
+      setLocationGranted(false);
     });
   }, []);
 

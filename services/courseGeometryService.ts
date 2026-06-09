@@ -115,8 +115,11 @@ async function resolveLocalCourseId(localSlug: string): Promise<string | null> {
     const nameOf = (r: typeof real[number]) => (r.club_name ?? '').toLowerCase();
     const cityOf = (r: typeof real[number]) => (r.location ?? '').toLowerCase();
     const nameMatches = (r: typeof real[number]) => {
+      // 2026-06-08 (audit #2) — dropped the bidirectional `searchLc.includes(n)`:
+      // it let a too-short club_name ("Sunnyvale") match a longer hint and
+      // pick the wrong course. Require the result name to CONTAIN the hint.
       const n = nameOf(r);
-      return n.length > 0 && (n === searchLc || n.includes(searchLc) || searchLc.includes(n));
+      return n.length > 0 && (n === searchLc || n.includes(searchLc));
     };
     const cityMatches = (r: typeof real[number]) => !!cityLc && cityOf(r).includes(cityLc);
     const top =

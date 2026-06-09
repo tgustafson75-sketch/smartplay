@@ -520,9 +520,17 @@ export default function SmartVisionScreen() {
         const cached = getHoleGeometry(courseId, holeIndex);
         geo = cached;
         if (!geo) {
-          const c = await fetchCourseGeometry(courseId);
-          if (cancelled) return;
-          geo = c?.holes.find(h => h.hole_number === holeIndex) ?? null;
+          try {
+            const c = await fetchCourseGeometry(courseId);
+            if (cancelled) return;
+            geo = c?.holes.find(h => h.hole_number === holeIndex) ?? null;
+          } catch (e) {
+            // 2026-06-08 (audit #2) — never let a geometry fetch failure
+            // crash the on-course screen; degrade to no-geometry.
+            console.log('[smartvision] geometry fetch failed (non-fatal)', e);
+            if (cancelled) return;
+            geo = null;
+          }
         }
       }
       if (cancelled) return;
@@ -611,19 +619,27 @@ export default function SmartVisionScreen() {
         // centroids). Without this, the tile fetch would still
         // miss because geo.green is null even though we have a
         // usable polygon centroid right here.
-        const uri = await fetchHoleImagery(
-          {
-            courseId,
-            holeNumber: holeIndex,
-            par: geo!.par,
-            yardage: geo!.yardage,
-            tee: effectiveTee,
-            green: effectiveGreen,
-          },
-          { width: reqW, height: reqH },
-        );
-        if (cancelled) return;
-        setImageUri(uri);
+        try {
+          const uri = await fetchHoleImagery(
+            {
+              courseId,
+              holeNumber: holeIndex,
+              par: geo!.par,
+              yardage: geo!.yardage,
+              tee: effectiveTee,
+              green: effectiveGreen,
+            },
+            { width: reqW, height: reqH },
+          );
+          if (cancelled) return;
+          setImageUri(uri);
+        } catch (e) {
+          // 2026-06-08 (audit #2) — imagery fetch failure must not crash
+          // the hole view; fall through to no-image (vector still renders).
+          console.log('[smartvision] imagery fetch failed (non-fatal)', e);
+          if (cancelled) return;
+          setImageUri(null);
+        }
       } else if (imageryMode !== 'curated') {
         // 2026-05-16 — Centroid fallback for local courses that lack
         // BOTH per-hole geometry AND a bundled curated image. Replaces
