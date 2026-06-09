@@ -12,13 +12,17 @@
  *     across all frames — the canonical "swing arc" view used by every
  *     pro swing-review app.
  *
- * Coordinate handling: the pose API output may be normalized (0–1) or
- * pixel-absolute depending on provider. Rather than guess, we compute a
- * viewBox from the bounding box of every keypoint across every frame
- * (with a small padding margin) so the SVG self-fits to whatever
- * coordinate space the API returned. Not pixel-perfect when the video
- * letterboxes inside its container (resizeMode CONTAIN), but it puts
- * the skeleton on the body — the read every user wants.
+ * Coordinate handling — two paths:
+ *   1. ALIGNED (preferred): when frames carry frameW/frameH (captured from
+ *      the source thumbnail), we draw in true frame-pixel space — viewBox =
+ *      "0 0 frameW frameH" with preserveAspectRatio matched to the video's
+ *      resizeMode ("meet" for CONTAIN, "slice" for COVER). The SVG then
+ *      letterboxes/crops EXACTLY like the video, so shoulders/hips/ankles
+ *      land on the body. Normalized (0–1) coords are scaled up to frame
+ *      pixels; pixel-absolute coords are used as-is.
+ *   2. FALLBACK (old swings w/o dims): bbox-fit viewBox — self-fits to the
+ *      keypoint bounding box. Keeps the skeleton roughly on the body but
+ *      can drift since absolute position + frame aspect are unknown.
  */
 
 import React, { useMemo } from 'react';
@@ -48,7 +52,26 @@ type Props = {
   currentTimeMs: number;
   showSkeleton?: boolean;
   showTrace?: boolean;
+  /** Must match the underlying <Video> resizeMode so the overlay
+   *  letterboxes/crops identically. 'contain' = letterbox (meet),
+   *  'cover' = crop (slice). Defaults to 'contain'. */
+  resizeMode?: 'contain' | 'cover';
 };
+
+/** Detect whether keypoint coords are normalized 0–1 vs pixel-absolute by
+ *  the largest coordinate seen. Pixel coords are in the 100s; normalized
+ *  stay ≤ ~1, so a 1.5 threshold separates them robustly. */
+function coordsAreNormalized(frames: PoseFrame[]): boolean {
+  let maxCoord = 0;
+  for (const f of frames) {
+    for (const k of f.keypoints) {
+      if (k.score < MIN_KP_SCORE) continue;
+      if (Math.abs(k.x) > maxCoord) maxCoord = Math.abs(k.x);
+      if (Math.abs(k.y) > maxCoord) maxCoord = Math.abs(k.y);
+    }
+  }
+  return maxCoord <= 1.5;
+}
 
 function getKp(frame: PoseFrame, name: string): Keypoint | null {
   const k = frame.keypoints.find(p => p.name === name);
@@ -105,42 +128,72 @@ export default function SwingBodyOverlay({
   currentTimeMs,
   showSkeleton = true,
   showTrace = true,
+  resizeMode = 'contain',
 }: Props) {
   const live = useMemo(() => interpolateFrame(frames, currentTimeMs), [frames, currentTimeMs]);
   const bbox = useMemo(() => computeBBox(frames), [frames]);
+
+  // Aligned path: when we know the true frame dimensions, draw in frame-pixel
+  // space so the overlay maps onto the body exactly like the video.
+  const aligned = useMemo(() => {
+    const dimFrame = frames.find(f => (f.frameW ?? 0) > 0 && (f.frameH ?? 0) > 0);
+    if (!dimFrame) return null;
+    const fw = dimFrame.frameW as number;
+    const fh = dimFrame.frameH as number;
+    const normalized = coordsAreNormalized(frames);
+    return {
+      fw, fh,
+      // Scale factor to take coords into frame-pixel space.
+      sx: normalized ? fw : 1,
+      sy: normalized ? fh : 1,
+    };
+  }, [frames]);
 
   // Swing trace: smooth-ish path through the lead wrist across all frames.
   // We try right_wrist first (right-handed setup, lead wrist of trail hand
   // = right). If not detected we fall back to left_wrist.
   const tracePath = useMemo(() => {
+    const sx = aligned ? aligned.sx : 1;
+    const sy = aligned ? aligned.sy : 1;
     const sorted = [...frames].sort((a, b) => a.timestampMs - b.timestampMs);
     const traceName = sorted.some(f => getKp(f, 'right_wrist')) ? 'right_wrist' : 'left_wrist';
     const pts = sorted
       .map(f => getKp(f, traceName))
       .filter((k): k is Keypoint => k != null);
     if (pts.length < 2) return null;
-    let d = `M ${pts[0].x} ${pts[0].y}`;
+    let d = `M ${pts[0].x * sx} ${pts[0].y * sy}`;
     for (let i = 1; i < pts.length; i++) {
       const prev = pts[i - 1];
       const cur = pts[i];
       const cx = (prev.x + cur.x) / 2;
       const cy = (prev.y + cur.y) / 2;
-      d += ` Q ${prev.x} ${prev.y} ${cx} ${cy} T ${cur.x} ${cur.y}`;
+      d += ` Q ${prev.x * sx} ${prev.y * sy} ${cx * sx} ${cy * sy} T ${cur.x * sx} ${cur.y * sy}`;
     }
     return d;
-  }, [frames]);
+  }, [frames, aligned]);
 
-  if (!bbox || !live) return null;
-
-  const vb = `${bbox.x} ${bbox.y} ${bbox.w} ${bbox.h}`;
-  // Stroke widths derived from bbox so the overlay stays readable at any
-  // coordinate scale (normalized vs pixel-absolute).
-  const sw = Math.max(bbox.w, bbox.h) * 0.012;
-  const dotR = Math.max(bbox.w, bbox.h) * 0.018;
+  if (!live) return null;
+  // Aligned mode draws in true frame space and matches the video resizeMode;
+  // fallback self-fits to the keypoint bbox.
+  let sx = 1, sy = 1, vb: string, par: string, strokeBase: number;
+  if (aligned) {
+    sx = aligned.sx; sy = aligned.sy;
+    vb = `0 0 ${aligned.fw} ${aligned.fh}`;
+    par = resizeMode === 'cover' ? 'xMidYMid slice' : 'xMidYMid meet';
+    strokeBase = Math.max(aligned.fw, aligned.fh);
+  } else {
+    if (!bbox) return null;
+    vb = `${bbox.x} ${bbox.y} ${bbox.w} ${bbox.h}`;
+    par = 'xMidYMid meet';
+    strokeBase = Math.max(bbox.w, bbox.h);
+  }
+  // Stroke widths derived from the draw space so the overlay stays readable.
+  const sw = strokeBase * 0.012;
+  const dotR = strokeBase * 0.018;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Svg width="100%" height="100%" viewBox={vb} preserveAspectRatio="xMidYMid meet">
+      <Svg width="100%" height="100%" viewBox={vb} preserveAspectRatio={par}>
         {showTrace && tracePath && (
           <Path
             d={tracePath}
@@ -160,7 +213,7 @@ export default function SwingBodyOverlay({
               return (
                 <Line
                   key={`${a}-${b}`}
-                  x1={ka.x} y1={ka.y} x2={kb.x} y2={kb.y}
+                  x1={ka.x * sx} y1={ka.y * sy} x2={kb.x * sx} y2={kb.y * sy}
                   stroke="#22d3ee"
                   strokeWidth={sw}
                   strokeOpacity={0.9}
@@ -173,8 +226,8 @@ export default function SwingBodyOverlay({
               return (
                 <Circle
                   key={i}
-                  cx={k.x}
-                  cy={k.y}
+                  cx={k.x * sx}
+                  cy={k.y * sy}
                   r={dotR}
                   fill="#ffffff"
                   stroke="#22d3ee"

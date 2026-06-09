@@ -478,6 +478,10 @@ async function startWatchInternal() {
         const { useToastStore } = require('../store/toastStore') as typeof import('../store/toastStore');
         useToastStore.getState().show('GPS off — enable Location in Settings to keep yardages live.');
       } catch { /* toast layer unavailable */ }
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('permission_denied');
+      } catch { /* issue-log best-effort */ }
       return;
     }
     const cfg = POLL_CONFIG[mode];
@@ -545,9 +549,21 @@ async function startWatchInternal() {
         const { useToastStore } = require('../store/toastStore') as typeof import('../store/toastStore');
         useToastStore.getState().show('GPS unavailable on this device — check Location Services, then restart the app.');
       } catch { /* toast is best-effort */ }
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('all_accuracy_failed', {
+          error: lastWatchErr instanceof Error ? lastWatchErr.message : String(lastWatchErr ?? 'no subscription'),
+        });
+      } catch { /* issue-log best-effort */ }
     }
   } catch (err) {
     ownerSentinel('gps.startWatchInternal', err);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('watch_setup_error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } catch { /* issue-log best-effort */ }
   }
 }
 

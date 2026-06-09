@@ -58,6 +58,13 @@ const LOCAL_COURSE_API_HINTS: Record<string, LocalCourseHint> = {
   // should resolve this on the first online visit; result cached
   // forever per the resolvedIdMem + AsyncStorage layer above.
   'westlake-cc-nj': { search: 'Westlake Country Club Jackson', expectedCity: 'jackson' },
+  // 2026-06-08 — Final two stored courses linked to golfcourseapi. Both
+  // 'lakes' and 'palms' are nines at Menifee Lakes Country Club (Menifee,
+  // CA); the API lists the club once, so both resolve to that entry for
+  // tee/green coords + yardages. Hole imagery stays course-specific via the
+  // local image sets. Closes the last gap so every stored course links.
+  lakes: { search: 'Menifee Lakes Country Club', expectedCity: 'menifee' },
+  palms: { search: 'Menifee Lakes Country Club', expectedCity: 'menifee' },
 };
 
 const RESOLVED_ID_KEY_PREFIX = 'local-courseapi-id-v1::';

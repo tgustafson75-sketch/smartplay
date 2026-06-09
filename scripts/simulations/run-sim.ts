@@ -36,6 +36,7 @@ import {
   ALL_PERSONAS,
   type Persona,
 } from '../../lib/persona';
+import { detectStrikes, type MeterSample } from '../../services/swing/strikeDetector';
 
 interface ScenarioResult {
   scenario: string;
@@ -499,6 +500,86 @@ check('FamilyMember carries avatar_photo_uri',
 check('scan-golfer / playerCalibration removed',
   !exists('app/swinglab/scan-student.tsx') && !exists('store/playerCalibrationStore.ts') && !exists('services/playerCalibration.ts'),
   'dead calibration feature gone');
+
+// ─── 2026-06-08 session: GPS issue-log, acoustic meter, skeleton alignment,
+//     course↔API linking ───────────────────────────────────────────────────
+const issueLogSrc = read('store/issueLogStore.ts');
+check('GPS failures route to issue log',
+  /gps_error/.test(issueLogSrc) && /addGpsEvent/.test(issueLogSrc),
+  'gps_error kind + addGpsEvent present');
+
+check('owner-logs handles gps_error kind',
+  /case 'gps_error'/.test(read('app/owner-logs.tsx')),
+  'gps_error labeled + colored in log viewer');
+
+check('Acoustic Test Bench card + screen removed',
+  !exists('app/acoustic-test.tsx') && !/acoustic-test/.test(read('app/(tabs)/swinglab.tsx')),
+  'dead acoustic test bench gone (acoustic lives in SmartMotion calibration)');
+
+check('Acoustic pickup is a meter, not equalizer bars',
+  /meterTrack/.test(read('components/smartmotion/SmartMotionHud.tsx')) &&
+    !/const bars = \[/.test(read('components/smartmotion/SmartMotionHud.tsx')),
+  'level meter replaces bar graph');
+
+const overlaySrc = read('components/swinglab/SwingBodyOverlay.tsx');
+check('Skeleton overlay aligns via true frame dims + resizeMode',
+  /resizeMode/.test(overlaySrc) && /aligned/.test(overlaySrc) &&
+    /frameW/.test(read('services/poseAnalysisApi.ts')),
+  'frame-space viewBox + meet/slice match the video');
+
+const geomSrc = read('services/courseGeometryService.ts');
+check('All stored local courses link to golfcourseapi',
+  /lakes:\s*\{/.test(geomSrc) && /palms:\s*\{/.test(geomSrc),
+  'Menifee Lakes (lakes+palms) hints close the last linking gap');
+
+// ─── 2026-06-09: SmartMotion acoustic false-positive fix (TV/ambient) ──────
+// Functional test of detectStrikes — verifies the decay-isolation filter.
+{
+  const STEP = 50; // ms (matches audioMetering METERING_INTERVAL_MS)
+  const N = 60;    // 3000ms recording
+  // A: clean isolated strike — flat floor with one sharp spike that decays.
+  const isolated: MeterSample[] = [];
+  for (let i = 0; i < N; i++) {
+    const t = i * STEP;
+    let dB = -60;
+    if (t === 1500) dB = -18;        // sharp spike (42 dB over floor)
+    else if (t === 1550) dB = -45;   // immediate decay back toward floor
+    else if (t === 1600) dB = -58;
+    isolated.push({ timeMs: t, dB });
+  }
+  const isoRes = detectStrikes(isolated);
+  check('Acoustic: clean isolated strike is detected',
+    isoRes.kind === 'ok' && isoRes.strikes.length >= 1,
+    `expected >=1 strike, got ${isoRes.kind === 'ok' ? isoRes.strikes.length : isoRes.kind}`);
+
+  // B: LOW floor (quiet room, median stays low → kind 'ok') with a short,
+  // sustained loud TV burst that's a minority of the clip. This is the real
+  // garage case: the burst's leading edge has a sharp attack from the floor
+  // (passes the attack filter) but does NOT decay — the decay-isolation
+  // filter must reject it. Interior/trailing peaks fail the attack filter
+  // (their rise traces back through the sustained loud region). Net: 0
+  // strikes, specifically via decay-isolation (not the noisy-floor gate).
+  const burst: MeterSample[] = [];
+  for (let i = 0; i < N; i++) {
+    const t = i * STEP;
+    let dB = -60;
+    if (t >= 1000 && t <= 1600) dB = (i % 2 === 0) ? -20 : -23; // ~22% of clip
+    burst.push({ timeMs: t, dB });
+  }
+  const burstRes = detectStrikes(burst);
+  check('Acoustic: sustained TV burst rejected by decay-isolation',
+    burstRes.kind === 'ok' && burstRes.strikes.length === 0,
+    `expected ok/0 strikes, got ${burstRes.kind === 'ok' ? burstRes.strikes.length : burstRes.kind}`);
+}
+
+check('SmartMotion review video muted (no clip-audio feedback loop)',
+  /isMuted/.test(read('app/swinglab/smartmotion.tsx')),
+  'looping replay no longer plays captured room audio');
+
+check('strikeDetector has decay-isolation filter',
+  /MIN_DECAY_DB/.test(read('services/swing/strikeDetector.ts')) &&
+    /DECAY_WINDOW_MS/.test(read('services/swing/strikeDetector.ts')),
+  'sustained-audio rejection (peak must fall after the spike)');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 

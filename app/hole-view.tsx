@@ -652,6 +652,11 @@ export default function HoleView() {
         const { useToastStore } = require('../store/toastStore') as typeof import('../store/toastStore');
         useToastStore.getState().show('GPS is having trouble — yardages may be slow. Check Location is on.');
       } catch { /* best-effort */ }
+      // Self-log for field review (no ADB needed).
+      try {
+        const { useIssueLogStore } = require('../store/issueLogStore') as typeof import('../store/issueLogStore');
+        useIssueLogStore.getState().addGpsEvent('hole_view_watch_failed', { error: err instanceof Error ? err.message : String(err) });
+      } catch { /* best-effort */ }
     });
     return () => { gpsWatchRef.current?.remove(); };
   }, [isRoundActive, middleLat, middleLng]);

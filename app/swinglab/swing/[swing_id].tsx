@@ -795,6 +795,7 @@ export default function SwingDetail() {
                   currentTimeMs={position * 1000}
                   showSkeleton={showSkeleton}
                   showTrace={showTrace}
+                  resizeMode="contain"
                 />
               )}
               {/* 2026-05-27 — Fix EO: cage targeting overlay. Renders

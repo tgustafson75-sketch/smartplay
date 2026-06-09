@@ -89,14 +89,8 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // normalizes spaces/underscores.
   smartmotion: { type: 'navigate', path: '/swinglab/smartmotion' },
   smart_motion: { type: 'navigate', path: '/swinglab/smartmotion' },
-  // 2026-05-19 — Acoustic Test Bench (Phase BO.1) was reachable via
-  // SwingLab tile but had no voice intent route. The classifier could
-  // emit tool_name='acoustic' / 'acoustic_test' / 'test_bench' but
-  // the handler returned "unknown tool" because the map didn't list
-  // it. Now all three variants resolve to /acoustic-test.
-  acoustic: { type: 'navigate', path: '/acoustic-test' },
-  acoustic_test: { type: 'navigate', path: '/acoustic-test' },
-  test_bench: { type: 'navigate', path: '/acoustic-test' },
+  // 2026-06-08 — Acoustic Test Bench removed (acoustic now lives in
+  // SmartMotion calibration); its voice routes deleted with the screen.
   // 2026-05-19 — Owner GPS Test Bench voice intent. Same gating as
   // Settings → Owner Tools — non-owners get the same "unknown tool"
   // reply via the route's own gate. Aliases catch obvious phrasings.
@@ -170,9 +164,6 @@ const TOOL_LABEL: Record<string, string> = {
   tightlie: 'TightLie',
   smartmotion: 'SmartMotion',
   smart_motion: 'SmartMotion',
-  acoustic: 'Acoustic Test Bench',
-  acoustic_test: 'Acoustic Test Bench',
-  test_bench: 'Acoustic Test Bench',
   gps_test: 'GPS Test Bench',
   gps_test_bench: 'GPS Test Bench',
   mark_green: 'Mark Green',

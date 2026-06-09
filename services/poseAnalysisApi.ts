@@ -42,6 +42,12 @@ export interface PoseFrame {
   /** Position label if the frame matches a canonical PGA swing position. */
   position?: 'P1_address' | 'P2_takeaway' | 'P4_top' | 'P6_impact' | 'P10_finish';
   keypoints: Keypoint[];
+  /** Source frame pixel dimensions (from the extracted thumbnail). Lets the
+   *  overlay build a viewBox at the TRUE frame aspect ratio so joints land
+   *  on the body instead of being stretched to fill the container. Optional
+   *  for backward-compat with swings analyzed before this was captured. */
+  frameW?: number;
+  frameH?: number;
 }
 
 /** Biomechanics summary computed from 5–8 keyframes of a single swing.
@@ -273,10 +279,12 @@ const MEDIUM_CLIP_BACK_WINDOW_MS = 5_000;
  *  detection on it. Returns null on any failure. */
 async function poseAtTime(videoUri: string, timeMs: number, position: PoseFrame['position']): Promise<PoseFrame | null> {
   try {
-    const { uri } = await VideoThumbnails.getThumbnailAsync(videoUri, { time: timeMs, quality: 0.8 });
+    const { uri, width, height } = await VideoThumbnails.getThumbnailAsync(videoUri, { time: timeMs, quality: 0.8 });
     const frame = await analyzePoseFromUri(uri, timeMs);
     if (!frame) return null;
-    return { ...frame, position };
+    // Carry the true frame dimensions so the overlay can align the skeleton
+    // to the body (correct aspect ratio + resize mode) rather than bbox-fit.
+    return { ...frame, position, frameW: width || undefined, frameH: height || undefined };
   } catch (e) {
     console.warn('[pose] poseAtTime failed', position, e);
     return null;

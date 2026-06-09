@@ -106,7 +106,6 @@ const TRIAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 // calls remain as belt-and-suspenders defense.
 const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   '/gps-test',
-  '/acoustic-test',
   '/api-debug',
   '/battery-debug',
   '/cage-debug',

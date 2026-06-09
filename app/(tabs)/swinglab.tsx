@@ -26,7 +26,7 @@
  *     dedicated screen lands.
  */
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -35,12 +35,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
-// 2026-05-28 — Fix FG: hide Acoustic Test Bench from non-owner Tools
-// once the user has applied a calibration. Owner still sees it for
-// triage. Calibration state lives on the acoustic store; isOwnerEmail
-// is the standard gate used across the app.
-import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
-import { usePlayerProfileStore, isOwnerEmail } from '../../store/playerProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { isActiveListeningEnabled } from '../../services/listeningSession';
@@ -111,13 +105,6 @@ const CARDS: LauncherCardSpec[] = [
     sub: 'Captured swings, uploads from camera roll',
     route: '/swinglab/library',
   },
-  {
-    key: 'acoustic',
-    icon: 'pulse-outline',
-    title: 'Acoustic Test Bench',
-    sub: 'Validate strike-detection pipeline before the range',
-    route: '/acoustic-test',
-  },
 ];
 
 export default function SwingLab() {
@@ -129,19 +116,9 @@ export default function SwingLab() {
   // unchanged.
   const { isWide } = useDeviceLayout();
 
-  // 2026-05-28 — Fix FG: filter Acoustic Test Bench out of the card
-  // list for non-owners once they've applied a calibration. The bench
-  // is a one-time setup for typical users; after that it's diagnostic
-  // clutter. Owner always sees it (triage / debug). Non-owners who
-  // never calibrated also still see it so they CAN run it once.
-  const appliedCalibration = useAcousticCalibrationStore(s => s.appliedCalibration);
-  const ownerEmail = usePlayerProfileStore(s => s.email);
-  const visibleCards = useMemo(() => {
-    const isOwner = isOwnerEmail(ownerEmail);
-    if (isOwner) return CARDS;
-    if (!appliedCalibration) return CARDS;
-    return CARDS.filter(c => c.key !== 'acoustic');
-  }, [appliedCalibration, ownerEmail]);
+  // 2026-06-08 — Acoustic Test Bench removed (acoustic is wired into
+  // SmartMotion calibration now); SwingLab shows all cards.
+  const visibleCards = CARDS;
 
   React.useEffect(() => {
     if (trustLevel === 1) return;

@@ -26,6 +26,15 @@ const REJECT_HEAD_MS = 300;            // ignore the first N ms (record-button t
 const REJECT_TAIL_MS = 200;            // ignore the last N ms (stop-button transient)
 const MIN_RECORDING_MS = 2_000;        // shorter recordings are rejected entirely
 const NOISY_FLOOR_DB = -30;            // floor higher than this = environment too loud
+// 2026-06-09 — Decay-isolation filter. A golf strike is an ISOLATED sharp
+// transient: it spikes, then drops back toward the floor within a few
+// hundred ms. Sustained sources (TV dialogue, music, applause) spike but
+// STAY loud afterward. The attack filter alone passed loud TV transients as
+// "strikes" (garage-floor false-positive report). Requiring the level to
+// fall sharply after the peak rejects sustained audio while keeping clean
+// strikes. Mirrors the multi-shot detector's peak-then-decay validation.
+const DECAY_WINDOW_MS = 250;           // look this far past the peak for the drop
+const MIN_DECAY_DB = 15;               // peak must fall ≥ this within the window
 
 export type MeterSample = {
   /** Milliseconds from recording start. */
@@ -127,10 +136,25 @@ export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOption
     }
   }
 
-  // Third pass: debounce. Walk in time order; when two sharp peaks are
+  // Third pass: decay-isolation. After the peak, the level must fall by at
+  // least MIN_DECAY_DB within DECAY_WINDOW_MS. Real strikes decay fast;
+  // sustained TV/music stays loud and is rejected here.
+  const isolated: Sharp[] = [];
+  for (const c of sharp) {
+    let minAfter = c.peakDb;
+    for (let j = c.idx + 1; j < samples.length; j++) {
+      const sj = samples[j];
+      if (!sj) continue;
+      if (sj.timeMs - c.timeMs > DECAY_WINDOW_MS) break;
+      if (sj.dB < minAfter) minAfter = sj.dB;
+    }
+    if (c.peakDb - minAfter >= MIN_DECAY_DB) isolated.push(c);
+  }
+
+  // Fourth pass: debounce. Walk in time order; when two sharp peaks are
   // within MIN_DEBOUNCE_MS, keep only the louder.
   const debounced: Sharp[] = [];
-  for (const s of sharp) {
+  for (const s of isolated) {
     const last = debounced[debounced.length - 1];
     if (last && s.timeMs - last.timeMs < MIN_DEBOUNCE_MS) {
       if (s.peakDb > last.peakDb) {

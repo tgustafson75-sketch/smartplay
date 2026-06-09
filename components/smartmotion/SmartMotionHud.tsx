@@ -28,6 +28,7 @@ import {
   StyleSheet,
   type StyleProp,
   type ViewStyle,
+  type DimensionValue,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -290,20 +291,21 @@ export function AcousticPickupCard({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
-  // Static waveform bars — animated variant lands when live metering is wired.
-  const bars = [0.3, 0.6, 0.9, 0.5, 1, 0.7, 0.4, 0.8, 0.55, 0.35];
   const active = detected && calibrated;
   const accent = active ? colors.accent : colors.text_muted;
+  // Single level METER (not an equalizer): the fill + needle read like a
+  // VU / signal meter. Level reflects state until live metering is wired.
+  const level = !calibrated ? 0.12 : active ? 0.74 : detected ? 0.55 : 0.3;
+  const pct = `${Math.round(level * 100)}%` as DimensionValue;
   return (
     <View style={[styles.acousticCard, { backgroundColor: colors.surface_elevated, borderColor: active ? colors.accent : colors.border }, style]}>
       <View style={styles.acousticHead}>
         <Ionicons name="pulse-outline" size={16} color={accent} />
         <Text style={[styles.acousticTitle, { color: colors.text_muted }]}>ACOUSTIC PICKUP</Text>
       </View>
-      <View style={styles.waveRow}>
-        {bars.map((h, i) => (
-          <View key={i} style={[styles.waveBar, { height: 6 + h * 22, backgroundColor: accent, opacity: active ? 1 : 0.35 }]} />
-        ))}
+      <View style={[styles.meterTrack, { backgroundColor: colors.surface }]}>
+        <View style={[styles.meterFill, { width: pct, backgroundColor: accent, opacity: active ? 1 : 0.5 }]} />
+        <View style={[styles.meterNeedle, { left: pct, backgroundColor: active ? colors.success : accent }]} />
       </View>
       <Text style={[styles.acousticStatus, { color: active ? colors.success : colors.text_muted }]}>
         {!calibrated
@@ -478,8 +480,9 @@ const styles = StyleSheet.create({
   acousticCard: { borderWidth: 1, borderRadius: 12, padding: 10 },
   acousticHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   acousticTitle: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
-  waveRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 30, marginTop: 8 },
-  waveBar: { flex: 1, borderRadius: 2 },
+  meterTrack: { height: 10, borderRadius: 5, marginTop: 10, marginBottom: 2, overflow: 'visible', justifyContent: 'center' },
+  meterFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 5 },
+  meterNeedle: { position: 'absolute', top: -3, bottom: -3, width: 3, borderRadius: 2, marginLeft: -1.5 },
   acousticStatus: { fontSize: 11, fontWeight: '700', marginTop: 6 },
 
   verdict: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 16 },

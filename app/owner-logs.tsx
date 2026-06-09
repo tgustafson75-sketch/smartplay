@@ -40,6 +40,7 @@ function kindLabel(kind: IssueLogKind): string {
     case 'voice_error':       return 'KEVIN';
     case 'voice_silent_fail': return 'SPEAK';
     case 'transcribe_error':  return 'TRANSCRIBE';
+    case 'gps_error':         return 'GPS';
     case 'user':              return 'USER';
   }
 }
@@ -49,6 +50,7 @@ function kindColor(kind: IssueLogKind): string {
     case 'voice_error':       return '#ef4444'; // red — Kevin/brain failed
     case 'voice_silent_fail': return '#f59e0b'; // amber — TTS silent fail
     case 'transcribe_error':  return '#8b5cf6'; // purple — Whisper failed
+    case 'gps_error':         return '#06b6d4'; // cyan — GPS/location failure
     case 'user':              return '#6b7280';
   }
 }

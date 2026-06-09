@@ -828,6 +828,10 @@ export default function SmartMotion() {
             resizeMode={ResizeMode.COVER}
             isLooping
             shouldPlay
+            // 2026-06-09 — Mute the review loop. The captured clip's audio
+            // (e.g. a TV in the room) replaying on loop reads as "audio
+            // feedback"; it adds nothing to silent skeleton/speed analysis.
+            isMuted
             useNativeControls={false}
             onLoad={(s) => { if ('durationMillis' in s && s.durationMillis) setVideoDurationMs(s.durationMillis); }}
             onPlaybackStatusUpdate={(s) => { if ('positionMillis' in s && typeof s.positionMillis === 'number') setPlaybackMs(s.positionMillis); }}
@@ -844,7 +848,7 @@ export default function SmartMotion() {
         {/* Attached skeletal overlay — real keypoints tracked to playback. */}
         {isReview && showSkeleton && poseFrames && poseFrames.length > 0 ? (
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <SwingBodyOverlay frames={poseFrames} currentTimeMs={playbackMs} showSkeleton showTrace={false} />
+            <SwingBodyOverlay frames={poseFrames} currentTimeMs={playbackMs} showSkeleton showTrace={false} resizeMode="cover" />
           </View>
         ) : null}
 
