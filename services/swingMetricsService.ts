@@ -370,7 +370,11 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
       confidence: 0.65,
       estimateNote: 'acoustic (single-mic impact, club-typical)',
     });
-  } else if (clubSpeed.value != null) {
+  } else if (clubSpeed.value != null && clubKey !== 'unknown') {
+    // 2026-06-09 (honesty) — only derive ball speed when we know the club.
+    // ball = club_speed × typical_smash[club]; with an untagged club the
+    // smash ratio would be a generic guess, so we'd be inventing a number.
+    // Show '—' instead and let the user tag the club to unlock it.
     const typicalSmash = TYPICAL_SMASH_BY_CLUB[clubKey] ?? TYPICAL_SMASH_BY_CLUB.unknown;
     ballSpeed = finalize({
       value: Math.round(clubSpeed.value * typicalSmash),

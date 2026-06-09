@@ -282,20 +282,29 @@ export function AcousticPickupCard({
   detected,
   swingCount,
   calibrated = true,
+  levelDb = null,
   style,
 }: {
   detected: boolean;
   /** Swings detected in the open window (multi-swing flow). */
   swingCount?: number;
   calibrated?: boolean;
+  /** Live mic level in dBFS (~[-60,0]) while recording. When provided the
+   *  meter shows the REAL signal; when null (idle/review) the meter sits at
+   *  empty — it never fakes a level. */
+  levelDb?: number | null;
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
   const active = detected && calibrated;
   const accent = active ? colors.accent : colors.text_muted;
   // Single level METER (not an equalizer): the fill + needle read like a
-  // VU / signal meter. Level reflects state until live metering is wired.
-  const level = !calibrated ? 0.12 : active ? 0.74 : detected ? 0.55 : 0.3;
+  // VU / signal meter. Driven by the live mic level (dBFS → 0..1) when
+  // recording; empty when there's no live signal (honest — no fake motion).
+  const FLOOR_DB = -60;
+  const level = levelDb != null
+    ? Math.max(0, Math.min(1, (levelDb - FLOOR_DB) / (0 - FLOOR_DB)))
+    : 0;
   const pct = `${Math.round(level * 100)}%` as DimensionValue;
   return (
     <View style={[styles.acousticCard, { backgroundColor: colors.surface_elevated, borderColor: active ? colors.accent : colors.border }, style]}>
@@ -405,25 +414,41 @@ export function FooterChips({
   club,
   shot,
   distanceYds,
+  distanceEst = false,
+  onClubPress,
   style,
 }: {
   club?: string | null;
   shot?: number | null;
   distanceYds?: number | null;
+  /** When true, the DIST value is a labeled estimate (shows "· est"). */
+  distanceEst?: boolean;
+  /** Tap handler for the CLUB chip — opens the club picker. When set, the
+   *  CLUB chip becomes pressable and shows a tag affordance when untagged. */
+  onClubPress?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
-  const Chip = ({ label, value }: { label: string; value: string }) => (
+  const Chip = ({ label, value, sub }: { label: string; value: string; sub?: string }) => (
     <View style={styles.chip}>
-      <Text style={[styles.chipLabel, { color: colors.text_muted }]}>{label}</Text>
+      <Text style={[styles.chipLabel, { color: colors.text_muted }]}>
+        {label}{sub ? <Text style={{ fontWeight: '600' }}> · {sub}</Text> : null}
+      </Text>
       <Text style={[styles.chipValue, { color: colors.accent }]}>{value}</Text>
     </View>
   );
   return (
     <View style={[styles.footer, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
-      <Chip label="CLUB" value={club ?? '—'} />
+      {onClubPress ? (
+        <Pressable onPress={onClubPress} style={styles.chip} accessibilityRole="button" accessibilityLabel="Set club">
+          <Text style={[styles.chipLabel, { color: colors.text_muted }]}>CLUB</Text>
+          <Text style={[styles.chipValue, { color: club ? colors.accent : colors.text_muted }]}>{club ?? 'Tag ▾'}</Text>
+        </Pressable>
+      ) : (
+        <Chip label="CLUB" value={club ?? '—'} />
+      )}
       <Chip label="SHOT" value={shot != null ? String(shot) : '—'} />
-      <Chip label="DIST" value={distanceYds != null ? `${distanceYds} YDS` : '—'} />
+      <Chip label="DIST" sub={distanceYds != null && distanceEst ? 'est' : undefined} value={distanceYds != null ? `${distanceYds} YDS` : '—'} />
     </View>
   );
 }

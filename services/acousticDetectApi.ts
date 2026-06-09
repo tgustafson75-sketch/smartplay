@@ -37,7 +37,9 @@ export async function detectBallSpeed(args: {
   audioUri: string;
   impact_ms: number | null;
   /** Optional — server uses this for the ball-speed heuristic
-   *  (club-typical × peak-amplitude factor). Defaults to '7I'. */
+   *  (club-typical × peak-amplitude factor). Defaults to 'unknown' so an
+   *  untagged swing returns a null ball speed instead of being silently
+   *  scaled to a 7-iron (honesty: don't imply a club we weren't told). */
   club?: string;
 }): Promise<BallSpeedResult | null> {
   try {
@@ -55,7 +57,7 @@ export async function detectBallSpeed(args: {
       body: JSON.stringify({
         audioBase64,
         impact_ms: args.impact_ms ?? null,
-        club: args.club ?? '7I',
+        club: args.club ?? 'unknown',
       }),
     });
     if (!res.ok) return null;

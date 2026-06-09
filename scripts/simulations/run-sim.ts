@@ -581,6 +581,38 @@ check('strikeDetector has decay-isolation filter',
     /DECAY_WINDOW_MS/.test(read('services/swing/strikeDetector.ts')),
   'sustained-audio rejection (peak must fall after the spike)');
 
+// ─── 2026-06-09: SmartMotion honesty pass (club tag, ball speed, meter) ────
+check('Ball speed no longer silently assumes a 7-iron',
+  /club: args\.club \?\? 'unknown'/.test(read('services/acousticDetectApi.ts')),
+  "detectBallSpeed defaults club to 'unknown' (→ null), not '7I'");
+
+check('Pose ball speed suppressed for untagged club',
+  /clubSpeed\.value != null && clubKey !== 'unknown'/.test(read('services/swingMetricsService.ts')),
+  'unknown club → ball speed —, not club×generic-smash');
+
+const smSrc = read('app/swinglab/smartmotion.tsx');
+check('SmartMotion has a club selector wired',
+  /ClubPickerModal/.test(smSrc) && /clubIdToServerKey/.test(smSrc) && /clubSelectionStore/.test(smSrc),
+  'club picker + server-key map + persisted last club');
+
+check('SmartMotion passes real club into metrics + acoustic',
+  /club: clubIdToSmashKey\(club\)/.test(smSrc) && /club: clubIdToServerKey\(clubRef\.current\)/.test(smSrc),
+  'synthesize + detectBallSpeed receive the tagged club');
+
+check('clubIdToServerKey maps to acoustic-detect keys',
+  /export function clubIdToServerKey/.test(read('components/cage/ClubPickerModal.tsx')),
+  'ClubId → server CLUB_TYPICAL key mapper present');
+
+check('Acoustic meter is driven by live dB, not hardcoded steps',
+  /levelDb/.test(read('components/smartmotion/SmartMotionHud.tsx')) &&
+    !/active \? 0\.74 : detected \? 0\.55/.test(read('components/smartmotion/SmartMotionHud.tsx')),
+  'real live level replaces the 0.12/0.74/0.55/0.3 placeholder');
+
+check('DIST chip labels its estimate; confidence no longer defaults to medium',
+  /distanceEst/.test(smSrc) && /analysis\.confidence \?\? '—'/.test(smSrc) &&
+    !/analysis\.confidence \?\? 'medium'/.test(smSrc),
+  'DIST · est + honest confidence fallback');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

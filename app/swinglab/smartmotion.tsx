@@ -87,6 +87,9 @@ import {
   type BodyItem,
   type SmTone,
 } from '../../components/smartmotion/SmartMotionHud';
+import ClubPickerModal, { clubIdToSmashKey, clubIdToServerKey, clubIdLabel } from '../../components/cage/ClubPickerModal';
+import type { ClubId } from '../../services/clubRecognition';
+import { useClubSelectionStore } from '../../store/clubSelectionStore';
 
 const RECORDING_MAX_SECONDS = 60; // open window — player swings freely
 
@@ -211,6 +214,16 @@ export default function SmartMotion() {
   const [liveDb, setLiveDb] = useState<number | null>(null);
   const [segments, setSegments] = useState<SwingSegment[]>([]);
   const [selectedSwing, setSelectedSwing] = useState(0);
+  // Club tag — drives honest ball speed / smash / carry + the CLUB chip.
+  // Defaults to the last club the user tagged (persisted); null = untagged.
+  const lastClub = useClubSelectionStore((s) => s.lastClub);
+  const setLastClub = useClubSelectionStore((s) => s.setLastClub);
+  const [club, setClub] = useState<ClubId | null>(lastClub);
+  const [clubMenuOpen, setClubMenuOpen] = useState(false);
+  // A club value is needed by detectBallSpeed (server key) at stop time;
+  // keep a ref so the async stop path reads the current selection.
+  const clubRef = useRef<ClubId | null>(lastClub);
+  useEffect(() => { clubRef.current = club; }, [club]);
 
   const [page, setPage] = useState(0);
   const [annotateOpen, setAnnotateOpen] = useState(false);
@@ -274,11 +287,11 @@ export default function SmartMotion() {
       synthesizeSwingMetrics({
         poseFrames,
         clipDurationMs: videoDurationMs,
-        club: null,
+        club: clubIdToSmashKey(club),
         profile: { handicap: profile.handicap ?? null },
         measuredBallSpeedMph,
       }),
-    [poseFrames, videoDurationMs, measuredBallSpeedMph, profile.handicap],
+    [poseFrames, videoDurationMs, measuredBallSpeedMph, profile.handicap, club],
   );
 
   const railMetrics: MetricSpec[] = useMemo(
@@ -396,7 +409,7 @@ export default function SmartMotion() {
                 mechanical_breakdown: a.observation ?? 'Captured this swing.',
                 feel_cue: a.follow_up_question ?? 'Re-record from another angle for a fuller read.',
                 detected_in_shots: [],
-                confidence: (a.confidence ?? 'medium') as PrimaryIssue['confidence'],
+                confidence: (a.confidence ?? 'low') as PrimaryIssue['confidence'],
               };
               useCageStore.getState().setSessionAnalysis(sessionId, primaryIssue, null);
               useCageStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
@@ -685,7 +698,11 @@ export default function SmartMotion() {
     // Best-effort ball speed for the first swing.
     if (audioUriRef.current && firstStrikeMs != null) {
       try {
-        const speed = await detectBallSpeed({ audioUri: audioUriRef.current, impact_ms: firstStrikeMs });
+        const speed = await detectBallSpeed({
+          audioUri: audioUriRef.current,
+          impact_ms: firstStrikeMs,
+          club: clubIdToServerKey(clubRef.current),
+        });
         if (speed) setBallSpeed(speed);
       } catch { /* non-fatal */ }
     }
@@ -966,6 +983,7 @@ export default function SmartMotion() {
                     detected={phase === 'recording' ? liveDb != null && liveDb > -30 : segments.length > 0}
                     swingCount={isReview ? confirmedCount(segments) : undefined}
                     calibrated={calibrated}
+                    levelDb={phase === 'recording' ? liveDb : null}
                   />
                 </Pressable>
               ) : (
@@ -973,6 +991,7 @@ export default function SmartMotion() {
                   detected={phase === 'recording' ? liveDb != null && liveDb > -30 : segments.length > 0}
                   swingCount={isReview ? confirmedCount(segments) : undefined}
                   calibrated={calibrated}
+                  levelDb={phase === 'recording' ? liveDb : null}
                 />
               )}
             </View>
@@ -984,7 +1003,13 @@ export default function SmartMotion() {
             <View style={{ width: 130 }}>{actionBtn}</View>
           </View>
 
-          <FooterChips club={null} shot={isReview ? selectedSwing + 1 : null} distanceYds={isReview ? metrics.carry_yards.value : null} />
+          <FooterChips
+            club={club ? clubIdLabel(club) : null}
+            onClubPress={() => setClubMenuOpen(true)}
+            shot={isReview ? selectedSwing + 1 : null}
+            distanceYds={isReview ? metrics.carry_yards.value : null}
+            distanceEst={isReview && metrics.carry_yards.value != null}
+          />
         </View>
       </View>
     </View>
@@ -1051,7 +1076,7 @@ export default function SmartMotion() {
             <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
               <Text style={[styles.insightLabel, { color: colors.text_muted }]}>TOP FOCUS</Text>
               <Text style={[styles.insightHeadline, { color: colors.text_primary }]}>{faultHeadline.toUpperCase()}</Text>
-              <Text style={[styles.insightConf, { color: colors.text_muted }]}>Confidence: {analysis.confidence ?? 'medium'}</Text>
+              <Text style={[styles.insightConf, { color: colors.text_muted }]}>Confidence: {analysis.confidence ?? '—'}</Text>
             </View>
           ) : null}
 
@@ -1156,6 +1181,15 @@ export default function SmartMotion() {
           </Pressable>
         </View>
       </Modal>
+
+      {/* Club tag picker — standalone mode (does not touch the cage session).
+          Tagging a club unlocks honest ball speed / smash / carry. */}
+      <ClubPickerModal
+        open={clubMenuOpen}
+        onClose={() => setClubMenuOpen(false)}
+        selected={club}
+        onPick={(c) => { setClub(c); setLastClub(c); setClubMenuOpen(false); }}
+      />
     </View>
   );
 }

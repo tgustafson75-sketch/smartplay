@@ -169,6 +169,40 @@ export function clubIdToSmashKey(id: ClubId | null | undefined): string {
   }
 }
 
+/**
+ * 2026-06-09 — Map ClubId to the key used by the server's acoustic
+ * ball-speed table (api/acoustic-detect.ts CLUB_TYPICAL: D / 3W / 5W / H /
+ * 3I…9I / PW / GW / SW / LW). Clubs the table doesn't model (putter,
+ * unknown) return 'unknown' so the server honestly returns a null ball
+ * speed rather than scaling to a wrong club.
+ */
+export function clubIdToServerKey(id: ClubId | null | undefined): string {
+  if (!id) return 'unknown';
+  switch (id) {
+    case 'DR': return 'D';
+    case '3W': return '3W';
+    case '5W': return '5W';
+    case '7W': return '5W';
+    case '2H':
+    case '3H':
+    case '4H':
+    case '5H': return 'H';
+    case '3I': return '3I';
+    case '4I': return '4I';
+    case '5I': return '5I';
+    case '6I': return '6I';
+    case '7I': return '7I';
+    case '8I': return '8I';
+    case '9I': return '9I';
+    case 'PW': return 'PW';
+    case 'GW':
+    case 'AW': return 'GW';
+    case 'SW': return 'SW';
+    case 'LW': return 'LW';
+    default: return 'unknown';
+  }
+}
+
 /** Human-readable club label for surfacing on metric cards. */
 export function clubIdLabel(id: ClubId | null | undefined): string {
   if (!id || id === 'unknown') return 'Untagged';
