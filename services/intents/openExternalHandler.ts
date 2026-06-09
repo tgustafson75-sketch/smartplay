@@ -25,8 +25,49 @@
 
 import { Linking } from 'react-native';
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
+import { getInstructorVideo, type IssueCategory } from '../../constants/instructorVideos';
 
 type ExternalService = 'youtube' | 'youtube_music' | 'spotify' | 'apple_music';
+
+// 2026-06-08 — "pull up a good video for chipping" → bring up a REPUTABLE
+// golf-instruction video, not a random search. Curated topics resolve to
+// our vetted instructor videos (constants/instructorVideos); other golf
+// topics fall back to a focused YouTube search. Non-golf queries are left
+// to the normal music/video flow below.
+const CURATED_TOPICS: { kw: string[]; category: IssueCategory }[] = [
+  { kw: ['slice', 'over the top', 'over-the-top', 'out to in', 'out-to-in', 'swing path', 'club path', 'coming over', 'casting'], category: 'swing_path' },
+  { kw: ['weight', 'transfer', 'weight shift', 'hang back', 'sway', 'reverse pivot'], category: 'weight_transfer' },
+  { kw: ['tempo', 'rhythm', 'timing', 'transition'], category: 'tempo' },
+  { kw: ['ball position'], category: 'ball_position' },
+  { kw: ['grip'], category: 'grip' },
+  { kw: ['posture', 'setup', 'stance', 'early extension', 'spine angle'], category: 'posture' },
+];
+const GOLF_TOPIC_KW = [
+  'chip', 'chipping', 'short game', 'putt', 'putting', 'bunker', 'sand', 'pitch',
+  'pitching', 'wedge', 'flop', 'lag', 'driver', 'driving', 'iron', 'approach',
+  'distance control', 'green read', 'hook', 'fade', 'draw', 'swing', 'golf',
+];
+
+function pickGolfVideo(query: string): { url: string; title: string; instructor: string | null } | null {
+  const q = query.toLowerCase();
+  for (const c of CURATED_TOPICS) {
+    if (c.kw.some(k => q.includes(k))) {
+      const v = getInstructorVideo(c.category);
+      return { url: v.url, title: v.title, instructor: v.instructor };
+    }
+  }
+  if (GOLF_TOPIC_KW.some(k => q.includes(k))) {
+    const topic = query
+      .replace(/\b(a|good|great|me|us|the|some|video|youtube|on|of|for|pull|up|show|find|play|please|how|to)\b/gi, ' ')
+      .replace(/\s+/g, ' ').trim() || query;
+    return {
+      url: `https://www.youtube.com/results?search_query=${encodeURIComponent(`${topic} golf lesson`)}`,
+      title: topic,
+      instructor: null,
+    };
+  }
+  return null;
+}
 
 const SERVICE_LABEL: Record<ExternalService, string> = {
   youtube:       'YouTube',
@@ -73,6 +114,10 @@ export const openExternalHandler: IntentHandler = {
     'play Yacht Rock on YouTube',
     'open Spotify',
     'open Apple Music',
+    'show me a good video of short game on YouTube',
+    'pull up a good YouTube video for chipping',
+    'find me a video on fixing my slice',
+    'pull up a tempo video',
   ],
 
   async execute(intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
@@ -81,6 +126,33 @@ export const openExternalHandler: IntentHandler = {
     const query: string | null = typeof queryRaw === 'string' && queryRaw.trim().length > 0
       ? queryRaw.trim()
       : null;
+
+    // Golf-instruction video request → open a reputable curated video (or
+    // a focused golf search), regardless of which media service the
+    // classifier guessed. One of our vetted instructors brings it up.
+    const golf = query ? pickGolfVideo(query) : null;
+    if (golf) {
+      try {
+        await Linking.openURL(golf.url);
+      } catch (e) {
+        console.log('[openExternalHandler] golf video open failed:', e);
+        return {
+          success: false,
+          voice_response: `Couldn't pull up that video.`,
+          side_effects: ['open_external:failed:youtube_golf'],
+          follow_up_needed: false,
+        };
+      }
+      const voice = golf.instructor
+        ? `Here's a good one — "${golf.title}" by ${golf.instructor}. Pulling it up now.`
+        : `Pulling up a good ${golf.title} video for you.`;
+      return {
+        success: true,
+        voice_response: voice,
+        side_effects: ['open_external:youtube_golf', `open_external:topic=${golf.title.slice(0, 40)}`],
+        follow_up_needed: false,
+      };
+    }
 
     const url = buildUrl(service, query);
     const label = SERVICE_LABEL[service];

@@ -239,6 +239,7 @@ export default function PlayTab() {
   // Phone portrait + fold-closed render unchanged.
   const { isWide } = useDeviceLayout();
   const recentCourseIds = useRoundStore(s => s.recentCourseIds);
+  const previewCourseId = useRoundStore(s => s.previewCourseId);
   const activeCourseId = useRoundStore(s => s.activeCourseId);
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const activeCourse = useRoundStore(s => s.activeCourse);
@@ -459,12 +460,20 @@ export default function PlayTab() {
     // userPosition is null, the sort hasn't run so closestLocal[0]
     // still equals LOCAL_COURSES[0] (Palms) — no regression.
     const gpsNearest = userPosition ? closestLocal[0] : null;
-    const defaultPick = gpsNearest ?? homeMatch ?? LOCAL_COURSES[0];
+    // 2026-06-08 — Fix sticky-Menifee: on tab remount `selected` resets to
+    // null and we used to fall straight back to LOCAL_COURSES[0] (Menifee
+    // Palms), clobbering the user's actual pick. Restore their last
+    // explicit selection (previewCourseId) before the hardcoded default.
+    // Priority: live GPS-nearest → last picked → home → catalog top.
+    const previewMatch = previewCourseId
+      ? LOCAL_COURSES.find(l => l.id === previewCourseId) ?? null
+      : null;
+    const defaultPick = gpsNearest ?? previewMatch ?? homeMatch ?? LOCAL_COURSES[0];
     if (defaultPick) void selectSummary(defaultPick);
     // selectSummary is intentionally not in deps — it'd retrigger on every
     // closure refresh. We only want this once per mount + once GPS resolves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homeCourse, isRoundActive, activeCourseId, activeCourse, userPosition]);
+  }, [homeCourse, isRoundActive, activeCourseId, activeCourse, userPosition, previewCourseId]);
 
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();

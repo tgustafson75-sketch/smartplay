@@ -995,7 +995,34 @@ export default function SmartMotion() {
       {!isReview ? (
         <Text style={[styles.muted, { color: colors.text_muted }]}>Record a swing to see your full breakdown, drill, and notes here.</Text>
       ) : analysis == null ? (
-        <Text style={[styles.muted, { color: colors.text_muted }]}>{analysisError ?? 'No analysis available for this swing.'}</Text>
+        // Null-prevention: even without a full server analysis, surface
+        // whatever the motion DID reveal (biomech verdicts + tempo). One
+        // finding is a finding — never show a bare "nothing" when we read
+        // something. Only fall back to the empty message if truly nothing.
+        (() => {
+          const partial: string[] = [
+            biomech?.verdicts?.hipTurn,
+            biomech?.verdicts?.shoulderTurn,
+            biomech?.verdicts?.weightShift,
+            biomech?.verdicts?.posture,
+            biomech?.verdicts?.sequencing,
+          ].filter((v): v is string => !!v);
+          if (tempo?.ratio != null) partial.push(`Tempo ${tempo.ratio.toFixed(1)} : 1 (backswing : downswing).`);
+          if (partial.length === 0) {
+            return <Text style={[styles.muted, { color: colors.text_muted }]}>{analysisError ?? 'No analysis available for this swing.'}</Text>;
+          }
+          return (
+            <>
+              <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
+                <Text style={[styles.insightLabel, { color: colors.text_muted }]}>WHAT WE READ</Text>
+                <Text style={[styles.insightText, { color: colors.text_secondary }]}>Couldn’t get a full coaching read on this clip, but your motion showed:</Text>
+              </View>
+              {partial.map((line, i) => (
+                <Text key={i} style={[styles.insightBody, { color: colors.text_secondary, backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>{line}</Text>
+              ))}
+            </>
+          );
+        })()
       ) : (
         <>
           {faultHeadline ? (

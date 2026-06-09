@@ -605,12 +605,18 @@ export default function HoleView() {
   }, []);
 
   // ── GPS validity ───────────────────────
+  // 2026-06-08 — Loosened 30m → 55m. Real outdoor phone GPS is commonly
+  // 10–50m (worse under trees); the 30m gate rejected Golfshot-class
+  // fixes and showed "GPS SEARCHING" indefinitely where other apps work.
+  // 55m still keeps obviously-bad fixes out while matching real-world
+  // accuracy. Yardages from a weak fix are flagged elsewhere; showing an
+  // approximate number beats showing nothing (Golfshot parity).
   const checkGpsValid = (coords: {
     latitude: number; longitude: number; accuracy: number;
   }): boolean =>
     Math.abs(coords.latitude) > 0.01 &&
     Math.abs(coords.longitude) > 0.01 &&
-    coords.accuracy < 30;
+    coords.accuracy < 55;
 
   // ── GPS watcher ────────────────────────
   useEffect(() => {

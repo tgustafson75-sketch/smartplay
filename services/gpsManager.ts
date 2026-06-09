@@ -64,7 +64,12 @@ const POLL_CONFIG: Record<GpsMode, { intervalMs: number; accuracy: Location.Accu
 
 // Phase 107 / B2 — outlier rejection thresholds.
 // accuracy_m worse than this = reading discarded entirely.
-const OUTLIER_ACCURACY_M = 60;
+// 2026-06-08 — Raised 60 → 90. Rejecting everything worse than 60m left
+// lastFix null under real outdoor conditions (trees, slow first lock),
+// so the app showed "no signal" while phone/Golfshot still had a fix.
+// 90m still rejects true cell-tower garbage but lets weak-but-usable
+// fixes reach consumers; downstream confidence gates flag low quality.
+const OUTLIER_ACCURACY_M = 90;
 // 2026-06-05 — Absolute-distance outlier gate (cell-tower glitch).
 // The time-windowed jump check below only fires when the bad fix
 // arrives within OUTLIER_JUMP_WINDOW_MS of the last good fix. A
