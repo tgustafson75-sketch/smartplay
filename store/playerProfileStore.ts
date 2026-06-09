@@ -369,6 +369,17 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       // state type when adding actual migration logic.
       version: 1,
       migrate: (s) => s as never,
+      // 2026-06-08 (audit #2, privacy) — keep the GHIN # OUT of the on-disk
+      // blob so there's no plaintext at rest. It stays in memory for the
+      // session (re-enter after a cold start until the encrypted-at-rest
+      // path lands — requires the expo-secure-store native module). Spread-
+      // omit persists every OTHER field unchanged (no enumeration / data
+      // loss). Old blobs purge their stored GHIN on the next persist write.
+      partialize: (s) => {
+        const { ghin_number, ...rest } = s;
+        void ghin_number;
+        return rest as PlayerProfileState;
+      },
       storage: createJSONStorage(() => getPersistStorage()),
       // Phase 410 — Sentry breadcrumb on profile hydration so future
       // user-reported "I lost my data" tickets are debuggable. Records

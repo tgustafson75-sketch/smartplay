@@ -188,6 +188,10 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
             frames_base64,
             spoken_read: session.upload?.notes ?? null,
             notes: session.upload?.notes ?? null,
+            // 2026-06-08 (audit #12) — pass the user-marked ball + aim so
+            // the vision model anchors its read to the real setup.
+            ball_area_norm: session.ball_area_norm ?? null,
+            target_norm: session.target_norm ?? null,
           });
           // 2026-05-22 — Persist the PuttingAnalysis on the session so
           // the cage-review Putting tab can render it without re-running

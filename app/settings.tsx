@@ -1240,6 +1240,28 @@ export default function Settings() {
           </View>
         </CollapsibleSection>
 
+        {/* 2026-06-08 (audit #2, privacy) — plain-language disclosure of
+            what leaves the device and where. Honest about the AI + weather
+            API calls and local-only sensitive data. */}
+        <CollapsibleSection title="Data & Privacy">
+          <View style={rowDivStyle}>
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>What we send for AI coaching</Text>
+              <Text style={subStyle}>
+                When you talk to your caddie, we send your message plus your first name, handicap, and (if set) GHIN to the AI service that powers the coaching, so the advice is personalized. We send your GPS location to a weather service to factor wind and temperature into yardages. We don’t sell your data.
+              </Text>
+            </View>
+          </View>
+          <View style={rowDivStyle}>
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>Stored on this phone</Text>
+              <Text style={subStyle}>
+                Your rounds, scores, swing clips, bag distances, and profile live on this device. Your GHIN number is kept in memory for the session only — it isn’t written to disk — until encrypted-at-rest storage ships.
+              </Text>
+            </View>
+          </View>
+        </CollapsibleSection>
+
         {/* 2026-05-17 — Phase 413 — Health Data privacy section.
             Master toggle for the Health Connect integration plus an
             explicit re-ask button if the user wants to grant

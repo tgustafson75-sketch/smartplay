@@ -29,6 +29,8 @@ interface RequestBody {
   green_centroid?: { lat: number; lng: number } | null;
   green_front?: { lat: number; lng: number } | null;
   green_back?: { lat: number; lng: number } | null;
+  ball_area_norm?: { x: number; y: number; r: number } | null;
+  target_norm?: { x: number; y: number } | null;
   persona?: string | null;
   voiceGender?: 'male' | 'female';
 }
@@ -77,6 +79,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (body.hole_number) ctx.push(`Hole: ${body.hole_number}`);
     if (body.video_url) ctx.push(`Video URL: ${body.video_url}`);
     if (body.green_centroid) ctx.push(`Green centroid: ${JSON.stringify(body.green_centroid)}`);
+    // 2026-06-08 (audit #12) — user-marked ball + aim (normalized 0..1 frame
+    // coords). Anchor the read to these: ball is where it sat, target is
+    // where the player aimed; judge start line / face vs that target.
+    if (body.ball_area_norm) ctx.push(`Ball position in frame (x,y,r normalized 0-1): ${JSON.stringify(body.ball_area_norm)} — this is where the ball sat.`);
+    if (body.target_norm) ctx.push(`Player's aim target in frame (x,y normalized 0-1): ${JSON.stringify(body.target_norm)} — judge start line and face relative to this.`);
     userContent.push({
       type: 'text',
       text: (ctx.length ? ctx.join('\n') + '\n\n' : '') +

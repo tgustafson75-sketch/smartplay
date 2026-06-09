@@ -139,10 +139,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 }
 
 function buildSystem(band: RequestBody['age_band'], caddieName: string, member: MemberInfo): string {
-  const lefty = member.handedness === 'left';
-  const mirrorNote = lefty
-    ? 'IMPORTANT: this golfer is LEFT-HANDED. Mirror any directional cue ("draw" / "fade", "left edge" / "right edge", inside/outside).'
-    : '';
+  // 2026-06-08 (audit #2) — don't silently default unknown handedness to
+  // right-handed cues. Left → mirror; unknown → avoid absolute L/R and
+  // describe relative to the target line so the advice is correct either way.
+  const mirrorNote =
+    member.handedness === 'left'
+      ? 'IMPORTANT: this golfer is LEFT-HANDED. Mirror any directional cue ("draw" / "fade", "left edge" / "right edge", inside/outside).'
+      : member.handedness === 'unknown'
+        ? 'NOTE: handedness is unknown — do NOT use absolute left/right cues. Describe direction relative to the player\'s target line (e.g. "started right of your line") so the cue is correct for a right- or left-hander.'
+        : '';
 
   const tonePresets: Record<RequestBody['age_band'], string> = {
     tiny:

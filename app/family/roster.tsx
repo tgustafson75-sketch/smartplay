@@ -347,7 +347,10 @@ function emptyDraft(): EditableDraft {
     relationship: 'child',
     age: '',
     skillLevel: 'first_swings',
-    handedness: 'right',
+    // 2026-06-08 (audit #2) — default 'unknown' (form shows "Not sure") so a
+    // left-handed child isn't silently given right-handed cues when the
+    // parent skips the picker. Analysis handles 'unknown' safely.
+    handedness: 'unknown',
     avatar_emoji: '👧',
   };
 }

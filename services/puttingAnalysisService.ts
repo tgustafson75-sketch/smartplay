@@ -107,6 +107,11 @@ export interface PuttingAnalysisInput {
   course_id?: string | null;
   hole_number?: number | null;
   distance_feet?: number | null;
+  // 2026-06-08 (audit #1 #12) — user-marked ball + aim target (normalized
+  // 0..1 frame coords) so the vision model can anchor its read to where
+  // the ball actually sat and where the player aimed.
+  ball_area_norm?: { x: number; y: number; r: number } | null;
+  target_norm?: { x: number; y: number } | null;
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────
@@ -172,6 +177,8 @@ export async function analyzePutt(
         green_centroid: geom?.green ?? null,
         green_front: geom?.green_front ?? null,
         green_back: geom?.green_back ?? null,
+        ball_area_norm: input.ball_area_norm ?? null,
+        target_norm: input.target_norm ?? null,
         persona: settings.caddiePersonality,
         voiceGender: settings.voiceGender,
       }),
