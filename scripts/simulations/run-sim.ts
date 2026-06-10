@@ -972,6 +972,22 @@ check('SmartMotion warms the analyzer on open (warm first analysis)',
     /Warm \/api\/swing-analysis the moment SmartMotion opens/.test(smSrc),
   'opening SmartMotion pre-warms /api/swing-analysis so the first recording analyzes fast');
 
+// 2026-06-10 — Ball area threaded into the SWING read (was putt-only).
+check('Ball/stand anchor wired into swing analysis',
+  /ball_area_norm: draftBallRef\.current \?\? ballAreaRef\.current \?\? null/.test(smSrc) &&
+    /ball_area_norm: ballAreaRef\.current \?\? draftBallRef\.current \?\? null/.test(smSrc) &&
+    /target_norm: targetPointRef\.current \?\? null/.test(smSrc),
+  'both swing analyzeSwing calls pass the ball/target anchor (read via refs) so the analyzer uses the setup prior');
+
+// Lead/trail foot stance anchors — general, mirrored correctly, soft.
+const hudSrc = read('components/smartmotion/SmartMotionHud.tsx');
+check('Lead/trail foot stance anchors (general, DTL+FO, mirrored)',
+  /function StanceFeet\(/.test(hudSrc) &&
+    /leadDir =\s*\n?\s*mode === 'face_on'/.test(hudSrc) &&
+    /TRAIL/.test(hudSrc) && /LEAD/.test(hudSrc) &&
+    /<CaptureGuides mode=\{angle\} handedness=\{swingerHandedness\} ball=\{draftBall\}/.test(smSrc),
+  'foot anchors derive from the ball, mirror for FO vs DTL + handedness, and are general guides (never gate the read)');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

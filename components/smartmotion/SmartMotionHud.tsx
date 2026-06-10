@@ -357,12 +357,62 @@ function GuideLabel({ text, color, bg }: { text: string; color: string; bg: stri
   return <Text style={[styles.guideLabel, { color, backgroundColor: bg }]}>{text}</Text>;
 }
 
+// 2026-06-10 — Lead/trail foot STANCE anchors. GENERAL setup guides derived
+// from the ball position — NOT strict hit-zones. They show roughly where the
+// golfer's feet sit at address so the player can frame the shot consistently;
+// the read never depends on a foot actually landing on a marker.
+//
+// Golf-correct geometry:
+//   • Lead foot = target-side foot (RH = left foot, LH = right foot).
+//   • Trail foot = back foot.
+//   • Face-on: the player FACES the camera, so it's MIRRORED — a RH golfer's
+//     lead (left) foot is on the VIEWER's RIGHT.
+//   • Down-the-line: camera is BEHIND the player looking down the target line,
+//     so it's NOT mirrored — a RH golfer's lead (left) foot is on the LEFT.
+//   Both feet sit BELOW the ball (the player stands behind/around it); DTL
+//   drops a touch lower since the golfer fills the foreground.
+function StanceFeet({
+  ball, mode, handedness, color,
+}: {
+  ball: { x: number; y: number; r: number } | null | undefined;
+  mode: Angle;
+  handedness: 'right' | 'left';
+  color: string;
+}) {
+  if (!ball) return null;
+  const STANCE_HALF = 0.11; // ~0.22 of frame width between the feet (general)
+  const leadDir =
+    mode === 'face_on'
+      ? (handedness === 'left' ? -1 : 1) // mirrored (facing camera)
+      : (handedness === 'left' ? 1 : -1); // not mirrored (camera behind)
+  const footDrop = mode === 'face_on' ? 0.10 : 0.16;
+  const clamp = (v: number) => Math.min(0.9, Math.max(0.1, v));
+  const footY = clamp(ball.y + footDrop);
+  const leadX = clamp(ball.x + leadDir * STANCE_HALF);
+  const trailX = clamp(ball.x - leadDir * STANCE_HALF);
+  return (
+    <>
+      <View style={[styles.footAnchor, { left: `${trailX * 100}%`, top: `${footY * 100}%` }]}>
+        <View style={[styles.footDot, { borderColor: color }]} />
+        <Text style={[styles.footLabel, { color }]}>TRAIL</Text>
+      </View>
+      <View style={[styles.footAnchor, { left: `${leadX * 100}%`, top: `${footY * 100}%` }]}>
+        <View style={[styles.footDot, { borderColor: color }]} />
+        <Text style={[styles.footLabel, { color }]}>LEAD</Text>
+      </View>
+    </>
+  );
+}
+
 export function CaptureGuides({
-  mode, handedness = 'right', style,
+  mode, handedness = 'right', ball, style,
 }: {
   mode: Angle;
-  /** Swinger's hand — mirrors the face-on TARGET/BALL lines for lefties. */
+  /** Swinger's hand — mirrors the face-on TARGET/BALL + foot anchors for lefties. */
   handedness?: 'right' | 'left';
+  /** Ball position (normalized 0-1). When present, lead/trail foot anchors are
+   *  drawn relative to it. Optional — guides still render without it. */
+  ball?: { x: number; y: number; r: number } | null;
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
@@ -370,13 +420,14 @@ export function CaptureGuides({
   const labelBg = colors.overlay;
   if (mode === 'down_the_line') {
     // Down-the-line is center-symmetric (target up, ball bottom-center) —
-    // no handedness mirroring needed.
+    // no handedness mirroring needed for the target line.
     return (
       <View style={[StyleSheet.absoluteFill, styles.guideRoot, style]} pointerEvents="none">
         <View style={styles.guideTopCenter}>
           <GuideLabel text="TARGET" color={colors.text_primary} bg={labelBg} />
         </View>
         <View style={[styles.guideVLine, { borderColor: line, left: '50%' }]} />
+        <StanceFeet ball={ball} mode={mode} handedness={handedness} color={line} />
         {/* Ball box is drawn by CageTargetingOverlay (single anchor) — not here. */}
       </View>
     );
@@ -395,6 +446,7 @@ export function CaptureGuides({
       <View style={[styles.guideSideLabel, { left: ballLeft }]}>
         <GuideLabel text="BALL LINE" color={colors.text_primary} bg={labelBg} />
       </View>
+      <StanceFeet ball={ball} mode={mode} handedness={handedness} color={line} />
       {/* Ball box is drawn by CageTargetingOverlay (single anchor) — not here. */}
     </View>
   );
@@ -534,6 +586,11 @@ const styles = StyleSheet.create({
   guideTopCenter: { position: 'absolute', top: '14%' },
   guideVLine: { position: 'absolute', top: '14%', bottom: '22%', width: 0, borderLeftWidth: 1.5, borderStyle: 'dashed', marginLeft: -0.75, opacity: 0.7 },
   guideSideLabel: { position: 'absolute', top: '10%', marginLeft: -34 },
+  // Lead/trail foot stance anchors — soft, general (translucent dot + label),
+  // centered on the computed point via negative margins.
+  footAnchor: { position: 'absolute', width: 48, marginLeft: -24, marginTop: -9, alignItems: 'center', gap: 2, opacity: 0.8 },
+  footDot: { width: 30, height: 15, borderRadius: 8, borderWidth: 1.5, borderStyle: 'dashed', backgroundColor: 'rgba(255,255,255,0.06)' },
+  footLabel: { fontSize: 8, fontWeight: '800', letterSpacing: 1 },
   guideBallArea: { position: 'absolute', bottom: '14%', alignItems: 'center', gap: 4 },
   guideBallBox: { width: 54, height: 30, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 6, opacity: 0.7 },
 

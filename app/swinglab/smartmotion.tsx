@@ -1336,7 +1336,7 @@ export default function SmartMotion() {
                        face-on with no side guides at all.
             Suppressed in review and while analyzing. */}
         {phase !== 'analyzing' && !isReview
-          ? <CaptureGuides mode={angle} handedness={swingerHandedness} />
+          ? <CaptureGuides mode={angle} handedness={swingerHandedness} ball={draftBall} />
           : null}
 
         {/* TOP BAR (interactive) */}
