@@ -662,11 +662,11 @@ check('Ball/target overlay matches the design reference',
     />TARGET</.test(targetOverlaySrc) && />BALL AREA</.test(targetOverlaySrc),
   'green perspective ball-area trapezoid + white target line/ring + pills');
 
-check('Pre-record ball box: drop before recording + verifier runs on placement',
+check('Pre-record ball box: default box + verifier runs on placement',
   /draftBall/.test(smSrc) && /placeBallMode/.test(smSrc) &&
-    /Drop a ball box/.test(smSrc) &&
+    /Line up your ball with the box/.test(smSrc) &&
     /\[clipUri, ballArea, ballDeparture\]/.test(smSrc),
-  'setup placement + effect-based verifier (fires whenever ball spot exists)');
+  'default reference box + effect-based verifier (fires whenever ball spot exists)');
 
 // ─── Deploy guard: every /api/* the client calls must be ROUTED in
 //     vercel.json. Root cause of the ball-departure 404: the function built
@@ -764,6 +764,43 @@ check('SmartMotion bottom panel is a translucent fade, not an opaque block',
     /backgroundColor: 'transparent', \/\/ translucent gradient/.test(smSrc) &&
     /placeBallMode \? \(/.test(smSrc) && /glassCard/.test(smSrc),
   'gradient fade + glass cards + panel hidden while placing the ball box');
+
+// ─── 2026-06-09: SmartMotion unstack + workflow fixes ──────────────────────
+check('Motion data is unstacked (off by default, gated behind Motion step)',
+  /useState\(false\);[\s\S]{0,400}Motion overlay/.test(smSrc) &&
+    /!showSkeleton\) return;/.test(smSrc) && /\{showSkeleton \? \(/.test(smSrc),
+  'pose/tempo/stat cards only compute + render when Motion is on (clean video default)');
+
+check('Verdict no longer claims ANALYZING forever',
+  /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
+    /NO READ — RECORD AGAIN/.test(smSrc),
+  'errored/empty read shows honest state, not a perpetual spinner');
+
+check('Acoustic Listening only while recording',
+  /listening\?: boolean/.test(read('components/smartmotion/SmartMotionHud.tsx')) &&
+    /Calibrated ✓ — Record to listen/.test(read('components/smartmotion/SmartMotionHud.tsx')) &&
+    /listening=\{phase === 'recording'\}/.test(smSrc),
+  'no fake "Listening…" in setup');
+
+check('Calibration auto-applies after a clean read',
+  /Auto-apply: the user shouldn't have to tap/.test(read('app/swinglab/calibrate.tsx')) &&
+    /Dialed in ✓/.test(read('app/swinglab/calibrate.tsx')),
+  'save+apply+confirm without a separate tap');
+
+check('Acoustic card always tappable to (re)calibrate',
+  /Re-calibrate acoustics, 10 strikes/.test(smSrc),
+  'tapping the pill opens calibration whether or not already calibrated');
+
+check('Ball box shown by default + confirmatory (never gates)',
+  /DEFAULT_BALL_BOX = \{/.test(smSrc) && /Line up your ball with the box/.test(smSrc),
+  'default reference box, optional, never blocks recording/analysis');
+
+check('Hands-free voice record (start/stop) wired',
+  exists('services/smartMotionRecordBus.ts') &&
+    /subscribeSmartMotionCommand/.test(smSrc) && /setSmartMotionActive\(true\)/.test(smSrc) &&
+    /isSmartMotionActive\(\)/.test(read('services/intents/mediaHandlers.ts')) &&
+    /emitSmartMotionCommand/.test(read('services/intents/mediaHandlers.ts')),
+  'voice capture phrase drives the open Smart Motion window via the record bus');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 

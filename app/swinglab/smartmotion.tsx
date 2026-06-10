@@ -92,8 +92,13 @@ import ClubPickerModal, { clubIdToSmashKey, clubIdToServerKey, clubIdLabel } fro
 import type { ClubId } from '../../services/clubRecognition';
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
 import { detectBallDeparture, type BallDepartureResult } from '../../services/swing/ballDeparture';
+import { subscribeSmartMotionCommand, setSmartMotionActive } from '../../services/smartMotionRecordBus';
 
 const RECORDING_MAX_SECONDS = 60; // open window — player swings freely
+// Default ball-box position (normalized). Lower-center of the frame, where a
+// teed/placed ball typically sits in a down-the-line or face-on setup. Shown
+// by default so the user just lines their ball up to it — confirmatory only.
+const DEFAULT_BALL_BOX = { x: 0.5, y: 0.72, r: 0.08 };
 
 type Phase = 'setup' | 'recording' | 'analyzing' | 'review';
 
@@ -160,8 +165,10 @@ function deriveBodyItems(a: SwingAnalysis | null, bio: SwingBiomechanics | null)
   ];
 }
 
-function deriveVerdict(a: SwingAnalysis | null): { text: string; tone: SmTone } {
-  if (!a) return { text: 'ANALYZING…', tone: 'neutral' };
+function deriveVerdict(a: SwingAnalysis | null, analyzing: boolean): { text: string; tone: SmTone } {
+  // Honest state: only say "ANALYZING…" while a read is actually in flight. Once
+  // it's done (or errored) with no result, say so instead of spinning forever.
+  if (!a) return { text: analyzing ? 'ANALYZING…' : 'NO READ — RECORD AGAIN', tone: analyzing ? 'neutral' : 'warn' };
   const validity = evaluateSwingValidity(a);
   if (!validity.valid) return { text: 'NO SWING DETECTED', tone: 'warn' };
   if (a.severity === 'none' || a.detected_issue === 'none') return { text: 'GOOD SWING', tone: 'good' };
@@ -229,10 +236,12 @@ export default function SmartMotion() {
   const clubRef = useRef<ClubId | null>(lastClub);
   useEffect(() => { clubRef.current = club; }, [club]);
 
-  // Pre-record ball box — let the user drop a ball marker on the live preview
-  // BEFORE recording so the camera strike-verification can run. Held as a
-  // draft (no session yet); persisted into the session on ingest.
-  const [draftBall, setDraftBall] = useState<{ x: number; y: number; r: number } | null>(null);
+  // Ball box — a DEFAULT reference box is shown automatically so the user just
+  // lines their ball up to it and never has to think about it. It's purely
+  // CONFIRMATORY (camera + acoustic cross-check); it NEVER gates recording or
+  // analysis. Tap to nudge it if their ball sits somewhere else. Persisted into
+  // the session on ingest for the strike verifier.
+  const [draftBall, setDraftBall] = useState<{ x: number; y: number; r: number } | null>(DEFAULT_BALL_BOX);
   const [placeBallMode, setPlaceBallMode] = useState(false);
   const [rootSize, setRootSize] = useState({ w: 0, h: 0 });
   const draftBallRef = useRef<typeof draftBall>(null);
@@ -246,7 +255,11 @@ export default function SmartMotion() {
   const [showLayman, setShowLayman] = useState(false);
   const [coachNote, setCoachNote] = useState('');
   const [playbackMs, setPlaybackMs] = useState(0);
-  const [showSkeleton, setShowSkeleton] = useState(true);
+  // 2026-06-09 — "Motion overlay" is now a SEPARATE on-demand step (off by
+  // default). Default review = watch the swing + Kevin's feedback only, with a
+  // clean video. Turning Motion on computes + shows the skeletal overlay, body
+  // analysis, tempo and speed — so nothing fires all at once over the video.
+  const [showSkeleton, setShowSkeleton] = useState(false);
   const [tempo, setTempo] = useState<SwingTempo | null>(null);
   const [swingAnalyzing, setSwingAnalyzing] = useState(false);
   // Cage targeting (ball + movable target) — reactive mirror of the
@@ -335,7 +348,11 @@ export default function SmartMotion() {
   }, [clipUri, ballArea, ballDeparture]);
 
   const bodyItems = useMemo(() => deriveBodyItems(analysis, biomech), [analysis, biomech]);
-  const verdict = useMemo(() => deriveVerdict(analysis), [analysis]);
+  // "analyzing" = a read is genuinely in flight (no result yet AND no error).
+  const verdict = useMemo(
+    () => deriveVerdict(analysis, analysis == null && !analysisError),
+    [analysis, analysisError],
+  );
   const faultHeadline = useMemo(() => {
     if (!analysis) return null;
     const f = analysis.primary_fault;
@@ -464,9 +481,11 @@ export default function SmartMotion() {
     [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea],
   );
 
-  // Pose biomechanics once the video reports its duration.
+  // Pose biomechanics — only when the user opens the Motion overlay (step 2).
+  // Keeping this off by default means the default review runs ONLY Kevin's
+  // analysis (no simultaneous pose extraction competing for resources).
   useEffect(() => {
-    if (!clipUri || videoDurationMs == null) return;
+    if (!clipUri || videoDurationMs == null || !showSkeleton) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -485,7 +504,7 @@ export default function SmartMotion() {
       }
     })();
     return () => { cancelled = true; };
-  }, [clipUri, videoDurationMs]);
+  }, [clipUri, videoDurationMs, showSkeleton]);
 
   // Acoustic-anchored tempo + transition for the selected swing. Impact
   // comes from the acoustic strike detector (segment.strikeMs);
@@ -493,7 +512,9 @@ export default function SmartMotion() {
   // re-selecting a swing is instant and we never re-pay the pose calls.
   useEffect(() => {
     const seg = segments[selectedSwing];
-    if (!clipUri || !seg || seg.strikeMs == null) { setTempo(null); return; }
+    // Tempo is part of the Motion step (it needs pose); only derive it when the
+    // Motion overlay is open, so the default review stays light.
+    if (!clipUri || !showSkeleton || !seg || seg.strikeMs == null) { setTempo(null); return; }
     const cacheKey = `${clipUri}#${seg.strikeMs}`;
     const cached = tempoCacheRef.current[cacheKey];
     if (cached) { setTempo(cached); return; }
@@ -511,7 +532,7 @@ export default function SmartMotion() {
       }
     })();
     return () => { cancelled = true; };
-  }, [clipUri, segments, selectedSwing]);
+  }, [clipUri, segments, selectedSwing, showSkeleton]);
 
   // Address still for the targeting card / ball auto-detect. Sample near
   // the start of the selected swing (or ~12% into a single clip) where
@@ -585,7 +606,7 @@ export default function SmartMotion() {
     setVideoDurationMs(null);
     setBallSpeed(null);
     setBallDeparture(null);
-    setDraftBall(null);
+    setDraftBall(DEFAULT_BALL_BOX); // keep the default reference box after Record again
     setPlaceBallMode(false);
     firstStrikeMsRef.current = null;
     setLiveDb(null);
@@ -779,6 +800,27 @@ export default function SmartMotion() {
     }
   }, [runAnalysis, appliedCalibration]);
 
+  // ── hands-free voice control (the money shot) ──────────────────────────
+  // Active-listening "caddie, record / start / stop" drives capture without
+  // touching the screen. The screen owns the decision: a command toggles by
+  // phase (recording → stop, else → start) so it's robust to start/stop
+  // mis-classification. Kept in a ref so we subscribe once and always act on
+  // the CURRENT phase. The 60s window also auto-wraps each "minute".
+  const recordCmdRef = useRef<(cmd: 'start' | 'stop' | 'toggle') => void>(() => {});
+  recordCmdRef.current = (cmd) => {
+    const recording = phase === 'recording';
+    if (cmd === 'stop') { if (recording) void stopRecording(); return; }
+    if (cmd === 'start') { if (!recording && phase !== 'analyzing') void startRecording(); return; }
+    // toggle
+    if (recording) void stopRecording();
+    else if (phase !== 'analyzing') void startRecording();
+  };
+  useEffect(() => {
+    setSmartMotionActive(true);
+    const unsub = subscribeSmartMotionCommand((cmd) => recordCmdRef.current(cmd));
+    return () => { setSmartMotionActive(false); unsub(); };
+  }, []);
+
   // ── permission gate ──
   if (!camPerm) {
     return (
@@ -837,21 +879,27 @@ export default function SmartMotion() {
     { key: 'P6_impact', label: 'Impact' },
     { key: 'P10_finish', label: 'Finish' },
   ];
+  // Motion overlay toggle — ALWAYS available in review (turning it on is what
+  // computes pose/body/tempo, so it can't depend on poseFrames existing yet).
+  // Position scrub chips only appear once frames are computed.
+  const poseReady = !!poseFrames && poseFrames.length > 0;
   const skeletonRow =
-    isReview && poseFrames && poseFrames.length > 0 ? (
+    isReview ? (
       <View style={styles.skelRow}>
         <Pressable
           onPress={() => setShowSkeleton((v) => !v)}
           style={[styles.skelToggle, { borderColor: showSkeleton ? colors.accent : 'rgba(255,255,255,0.3)', backgroundColor: showSkeleton ? colors.accent_muted : 'rgba(0,0,0,0.4)' }]}
         >
           <Ionicons name="body-outline" size={13} color={showSkeleton ? colors.accent : '#fff'} />
-          <Text style={[styles.skelToggleText, { color: showSkeleton ? colors.accent : '#fff' }]}>Skeleton</Text>
+          <Text style={[styles.skelToggleText, { color: showSkeleton ? colors.accent : '#fff' }]}>
+            {showSkeleton ? (poseReady ? 'Motion ✓' : 'Reading motion…') : 'Motion'}
+          </Text>
         </Pressable>
-        {P_SCRUB.map((p) => (
+        {showSkeleton && poseReady ? P_SCRUB.map((p) => (
           <Pressable key={p.key} onPress={() => seekToPosition(p.key)} style={styles.scrubChip}>
             <Text style={styles.scrubChipText}>{p.label}</Text>
           </Pressable>
-        ))}
+        )) : null}
       </View>
     ) : null;
 
@@ -1021,37 +1069,44 @@ export default function SmartMotion() {
                 </View>
               ) : null}
               {skeletonRow}
-              <View style={styles.speedRow}>
-                <SpeedStat
-                  label="CLUB"
-                  value={metrics.club_speed.value != null ? String(metrics.club_speed.value) : null}
-                  unit="mph"
-                  estimate={!isTruthGrade(metrics.club_speed.source)}
-                  style={{ flex: 1 }}
-                />
-                <SpeedStat
-                  label="BALL"
-                  value={metrics.ball_speed.value != null ? String(metrics.ball_speed.value) : null}
-                  unit="mph"
-                  estimate={!isTruthGrade(metrics.ball_speed.source)}
-                  style={{ flex: 1 }}
-                />
-                <SpeedStat
-                  label="CARRY"
-                  value={metrics.carry_yards.value != null ? String(metrics.carry_yards.value) : null}
-                  unit="yds"
-                  estimate={!isTruthGrade(metrics.carry_yards.source)}
-                  style={{ flex: 1 }}
-                />
-              </View>
-              <TempoBar ratio={tempo?.ratio ?? null} />
-              {tempo?.ratio != null && tempo.backswingMs != null && tempo.downswingMs != null ? (
-                <Text style={[styles.tempoDetail, { color: colors.text_muted }]} numberOfLines={1}>
-                  Back {(tempo.backswingMs / 1000).toFixed(1)}s · Down {(tempo.downswingMs / 1000).toFixed(1)}s
-                  {tempo.sequencingScore != null ? ` · Transition: ${transitionLabel(tempo.sequencingScore)}` : ''}
-                </Text>
+              {/* MOTION DATA (step 2) — speed / tempo / body only render when the
+                  Motion overlay is on, so the default review keeps a clean video
+                  with just Kevin's read. Translucent cards, fewer at a glance. */}
+              {showSkeleton ? (
+                <>
+                  <View style={styles.speedRow}>
+                    <SpeedStat
+                      label="CLUB"
+                      value={metrics.club_speed.value != null ? String(metrics.club_speed.value) : null}
+                      unit="mph"
+                      estimate={!isTruthGrade(metrics.club_speed.source)}
+                      style={{ flex: 1 }}
+                    />
+                    <SpeedStat
+                      label="BALL"
+                      value={metrics.ball_speed.value != null ? String(metrics.ball_speed.value) : null}
+                      unit="mph"
+                      estimate={!isTruthGrade(metrics.ball_speed.source)}
+                      style={{ flex: 1 }}
+                    />
+                    <SpeedStat
+                      label="CARRY"
+                      value={metrics.carry_yards.value != null ? String(metrics.carry_yards.value) : null}
+                      unit="yds"
+                      estimate={!isTruthGrade(metrics.carry_yards.source)}
+                      style={{ flex: 1 }}
+                    />
+                  </View>
+                  <TempoBar ratio={tempo?.ratio ?? null} />
+                  {tempo?.ratio != null && tempo.backswingMs != null && tempo.downswingMs != null ? (
+                    <Text style={[styles.tempoDetail, { color: colors.text_muted }]} numberOfLines={1}>
+                      Back {(tempo.backswingMs / 1000).toFixed(1)}s · Down {(tempo.downswingMs / 1000).toFixed(1)}s
+                      {tempo.sequencingScore != null ? ` · Transition: ${transitionLabel(tempo.sequencingScore)}` : ''}
+                    </Text>
+                  ) : null}
+                  <BodyAnalysisRow items={bodyItems} />
+                </>
               ) : null}
-              <BodyAnalysisRow items={bodyItems} />
             </>
           ) : null}
 
@@ -1059,34 +1114,25 @@ export default function SmartMotion() {
 
           <View style={styles.controlsRow}>
             <View style={{ flex: 1 }}>
-              {/* 2026-06-09 — The card's "Tap to calibrate" label is now wired:
-                  tapping the meter (when uncalibrated) opens the calibrate
-                  screen. Removed the separate redundant "Calibrate acoustics"
-                  button below — one clear path now. Once calibrated the card
-                  is a passive status readout (no tap). */}
-              {!calibrated ? (
-                <Pressable
-                  onPress={() => router.push('/swinglab/calibrate' as never)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Calibrate acoustics, 10 strikes"
-                >
-                  <AcousticPickupCard
-                    detected={phase === 'recording' ? liveDb != null && liveDb > -30 : segments.length > 0}
-                    swingCount={isReview ? confirmedCount(segments) : undefined}
-                    calibrated={calibrated}
-                    levelDb={phase === 'recording' ? liveDb : null}
-                    style={styles.glassCard}
-                  />
-                </Pressable>
-              ) : (
+              {/* 2026-06-09 — The acoustic card is ALWAYS tappable: tap to
+                  calibrate, or tap again any time to RE-calibrate (accept a new
+                  10-strike read). Previously it was only pressable when
+                  uncalibrated, so tapping the pill after calibrating did
+                  nothing. */}
+              <Pressable
+                onPress={() => router.push('/swinglab/calibrate' as never)}
+                accessibilityRole="button"
+                accessibilityLabel={calibrated ? 'Re-calibrate acoustics, 10 strikes' : 'Calibrate acoustics, 10 strikes'}
+              >
                 <AcousticPickupCard
                   detected={phase === 'recording' ? liveDb != null && liveDb > -30 : segments.length > 0}
                   swingCount={isReview ? confirmedCount(segments) : undefined}
                   calibrated={calibrated}
                   levelDb={phase === 'recording' ? liveDb : null}
+                  listening={phase === 'recording'}
                   style={styles.glassCard}
                 />
-              )}
+              </Pressable>
             </View>
             {isReview ? <VerdictBadge verdict={verdict.text} tone={verdict.tone} style={{ flex: 1 }} /> : null}
           </View>
@@ -1119,16 +1165,14 @@ export default function SmartMotion() {
               accessibilityRole="button"
             >
               <Ionicons
-                name={placeBallMode ? 'hand-left-outline' : draftBall ? 'checkmark-circle' : 'golf-outline'}
+                name={placeBallMode ? 'hand-left-outline' : 'golf-outline'}
                 size={14}
-                color={draftBall ? colors.success : colors.accent}
+                color={colors.accent}
               />
-              <Text style={[styles.ballNudgeText, { color: draftBall ? colors.success : colors.accent }]}>
+              <Text style={[styles.ballNudgeText, { color: colors.accent }]}>
                 {placeBallMode
-                  ? 'Tap the preview where your ball is'
-                  : draftBall
-                    ? 'Ball box set — tap to move'
-                    : 'Drop a ball box so I can confirm each strike'}
+                  ? 'Tap where your ball sits'
+                  : 'Line up your ball with the box · tap to move (optional)'}
               </Text>
             </Pressable>
           ) : null}

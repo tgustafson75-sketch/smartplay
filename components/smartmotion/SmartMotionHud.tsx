@@ -283,6 +283,7 @@ export function AcousticPickupCard({
   swingCount,
   calibrated = true,
   levelDb = null,
+  listening = false,
   style,
 }: {
   detected: boolean;
@@ -293,6 +294,9 @@ export function AcousticPickupCard({
    *  meter shows the REAL signal; when null (idle/review) the meter sits at
    *  empty — it never fakes a level. */
   levelDb?: number | null;
+  /** True ONLY while a recording is actually running. Drives the "Listening…"
+   *  copy so we never claim to be listening when no mic capture is active. */
+  listening?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
@@ -321,7 +325,9 @@ export function AcousticPickupCard({
           ? 'Tap to calibrate (10 strikes)'
           : detected
             ? (swingCount != null ? `${swingCount} swing${swingCount === 1 ? '' : 's'} detected` : 'Ball Smash Detected')
-            : 'Listening…'}
+            : listening
+              ? 'Listening…'
+              : 'Calibrated ✓ — Record to listen'}
       </Text>
     </View>
   );

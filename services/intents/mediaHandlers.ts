@@ -19,6 +19,7 @@ import {
   type CaptureKind,
 } from '../mediaCapture';
 import { track } from '../analytics';
+import { isSmartMotionActive, emitSmartMotionCommand } from '../smartMotionRecordBus';
 import { getActiveSurface } from '../activeSurfaceRegistry';
 import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -128,6 +129,29 @@ export const mediaCaptureHandler: IntentHandler = {
     const rawUtterance = String(
       (intent.parameters as { raw_utterance?: unknown }).raw_utterance ?? intent.raw_text ?? '',
     ).trim() || undefined;
+
+    // 2026-06-09 — Hands-free Smart Motion control. When the Smart Motion
+    // screen is open, a capture phrase drives its OPEN recording window instead
+    // of opening a new surface: "start/record/go" → start, "stop/done/finish"
+    // → stop. The screen toggles by its current phase, so this is robust to
+    // start/stop mis-classification; the 60s window also auto-wraps each minute.
+    if (isSmartMotionActive()) {
+      const u = (rawUtterance ?? '').toLowerCase();
+      const cmd: 'start' | 'stop' | 'toggle' =
+        /\b(stop|done|finish|wrap|enough|that'?s it)\b/.test(u) ? 'stop'
+        : /\b(start|record|go|begin|rolling|capture|watch|hit)\b/.test(u) ? 'start'
+        : 'toggle';
+      emitSmartMotionCommand(cmd);
+      track('media_capture_smartmotion_voice');
+      return {
+        success: true,
+        voice_response: cmd === 'stop'
+          ? 'Wrapping it up — give me a second to read those.'
+          : "Recording — swing away. Say stop when you're done, or I'll wrap at a minute.",
+        side_effects: ['media:smartmotion_' + cmd],
+        follow_up_needed: false,
+      };
+    }
 
     // 2026-06-07 — Hands-free swing fallback. When no live capture
     // surface is wired, route to Smart Motion (rebuild: it captures in

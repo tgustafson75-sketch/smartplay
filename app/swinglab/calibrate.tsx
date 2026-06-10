@@ -115,9 +115,30 @@ export default function CalibrateAcoustics() {
       setPhase('idle');
       return;
     }
-    setResult({ floorDb: res.floorDb, strikes: res.strikes, durationMs, sampleCount });
+    const r = { floorDb: res.floorDb, strikes: res.strikes, durationMs, sampleCount };
+    setResult(r);
     setPhase('done');
-  }, []);
+    // 2026-06-09 — Auto-apply: the user shouldn't have to tap a separate "save"
+    // after a clean read. Save + apply immediately and confirm it's dialed in.
+    const id = saveSession({
+      durationMs: r.durationMs,
+      floorDb: r.floorDb,
+      autoDetected: r.strikes,
+      corrected: r.strikes,
+      sampleCount: r.sampleCount,
+      notes: `10-strike calibration · ${env}`,
+    });
+    const ok = applyCalibration(id);
+    if (ok) {
+      Alert.alert(
+        'Dialed in ✓',
+        `Smart Motion is tuned to your ${env} — read ${r.strikes.length} strike${r.strikes.length === 1 ? '' : 's'}. It'll detect your swings automatically now.`,
+        [{ text: 'Done', onPress: () => router.back() }],
+      );
+    } else {
+      setWarn('Could not derive a calibration from those strikes — try again with cleaner contact.');
+    }
+  }, [env, saveSession, applyCalibration, router]);
 
   const saveAndApply = useCallback(() => {
     if (!result) return;
