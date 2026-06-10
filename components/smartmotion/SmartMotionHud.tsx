@@ -369,10 +369,7 @@ export function CaptureGuides({
           <GuideLabel text="TARGET" color={colors.text_primary} bg={labelBg} />
         </View>
         <View style={[styles.guideVLine, { borderColor: line, left: '50%' }]} />
-        <View style={styles.guideBallArea}>
-          <View style={[styles.guideBallBox, { borderColor: line }]} />
-          <GuideLabel text="BALL AREA" color={colors.text_primary} bg={labelBg} />
-        </View>
+        {/* Ball box is drawn by CageTargetingOverlay (single anchor) — not here. */}
       </View>
     );
   }
@@ -390,10 +387,7 @@ export function CaptureGuides({
       <View style={[styles.guideSideLabel, { left: ballLeft }]}>
         <GuideLabel text="BALL LINE" color={colors.text_primary} bg={labelBg} />
       </View>
-      <View style={styles.guideBallArea}>
-        <View style={[styles.guideBallBox, { borderColor: line }]} />
-        <GuideLabel text="BALL AREA" color={colors.text_primary} bg={labelBg} />
-      </View>
+      {/* Ball box is drawn by CageTargetingOverlay (single anchor) — not here. */}
     </View>
   );
 }

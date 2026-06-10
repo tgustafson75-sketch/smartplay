@@ -1109,10 +1109,10 @@ export default function SmartMotion() {
             no duplicate static box). Shown while lining up and while recording. */}
         {(phase === 'setup' || phase === 'recording') && draftBall ? (
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <CageTargetingOverlay
-              ballArea={draftBall}
-              target={{ x: draftBall.x, y: draftBall.y }}
-            />
+            {/* Ball box only — CaptureGuides draws the angle-specific target
+                line (DTL center vs FO offset) so the DTL/FO toggle switches it.
+                The ball box is the single anchor (no duplicate box). */}
+            <CageTargetingOverlay ballArea={draftBall} target={null} />
           </View>
         ) : null}
         {phase === 'setup' && placeBallMode ? (
@@ -1130,9 +1130,11 @@ export default function SmartMotion() {
           />
         ) : null}
 
-        {/* Static framing guide ONLY when no ball box is shown — otherwise the
-            ball-box overlay above is the single source (no duplicate box/line). */}
-        {phase !== 'analyzing' && !draftBall && !(isReview && (ballArea || targetPoint))
+        {/* Angle-specific framing guide (DTL center line vs FO offset lines) —
+            switches with the DTL/FO toggle. Suppressed in review (the
+            CageTargetingOverlay owns ball + target there). Its own ball box was
+            removed so it doesn't duplicate the CageTargetingOverlay ball box. */}
+        {phase !== 'analyzing' && !isReview
           ? <CaptureGuides mode={angle} handedness={swingerHandedness} />
           : null}
 
