@@ -55,10 +55,16 @@ export const clubChangeHandler: IntentHandler = {
     if (isSmartMotionActive()) {
       if (parsed) {
         useClubSelectionStore.getState().setLastClub(parsed.club_id);
+        // Keep putt mode in sync with the spoken club, exactly like the picker
+        // and the camera club-scan do: putter → analyze as a putt; any other
+        // club → clear back to a full-swing read. Without this, a hands-free
+        // "switch to putter" updated the HUD chip but left the analysis on the
+        // swing path (a putt read on a driver, or vice versa).
+        emitSmartMotionCommand(parsed.club_id === 'PT' ? 'puttOn' : 'puttOff');
         track('club_switched', { club_id: parsed.club_id, club_type: parsed.club_type, source: 'voice' });
         return {
           success: true,
-          voice_response: `Got it, ${clubLabel(parsed.club_id)}.`,
+          voice_response: parsed.club_id === 'PT' ? 'Putter — putt mode on.' : `Got it, ${clubLabel(parsed.club_id)}.`,
           side_effects: [`smartmotion:club_switched:${parsed.club_id}`],
           follow_up_needed: false,
         };

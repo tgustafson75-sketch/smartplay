@@ -993,8 +993,13 @@ function recommendClubForDistance(yards: number | null): string | null {
   return 'Putter';
 }
 
-function estimateCarryTotal(club: string | null, avgCarryDriver: number, avgCarry3Wood: number): { carry: number; total: number } | null {
+function estimateCarryTotal(club: string | null, avgCarryDriver: number, avgCarry3Wood: number): { carry: number; total: number; baseline: boolean } | null {
   if (!club) return null;
+  // baseline = the player has logged NO real practice carries, so these numbers
+  // are generic tour-average fallbacks, not their measured distances. The UI
+  // labels the line "(est.)" in that case so a number is never shown as if it
+  // were the player's own measured carry (honesty rule).
+  const baseline = !(avgCarryDriver > 0);
   const dCarry = avgCarryDriver > 0 ? avgCarryDriver : 240;
   const w3Carry = avgCarry3Wood > 0 ? avgCarry3Wood : Math.max(205, dCarry - 22);
   const map: Record<string, number> = {
@@ -1015,7 +1020,7 @@ function estimateCarryTotal(club: string | null, avgCarryDriver: number, avgCarr
   };
   const carry = Math.round(map[club] ?? 140);
   const rollout = club === 'Driver' ? 18 : club === '3 Wood' ? 14 : club === 'Hybrid' ? 10 : club.includes('Iron') ? 6 : 2;
-  return { carry, total: carry + rollout };
+  return { carry, total: carry + rollout, baseline };
 }
 
 function estimateDispersion(club: string | null, handicap: number): { yards: number; band: 'tight' | 'moderate' | 'wide' } {
@@ -1370,7 +1375,8 @@ function TargetCameraOverlay({
           <Text style={styles.targetIntelLine}>Elevation: unavailable · distance remains primary.</Text>
           {landing && (
             <Text style={styles.targetIntelLine}>
-              Landing Zone: carry {landing.carry} · total {landing.total} · dispersion {dispersion.yards}y ({dispersion.band})
+              Landing Zone{landing.baseline ? ' (est.)' : ''}: carry {landing.carry} · total {landing.total} · dispersion ±{dispersion.yards}y ({dispersion.band})
+              {landing.baseline ? ' · tour-average baseline — log practice to personalize' : ''}
             </Text>
           )}
           {hazardSummary?.nearest && (

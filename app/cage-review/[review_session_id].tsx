@@ -201,7 +201,8 @@ export default function CageReviewInterview() {
       formData.append('audio', { uri, name: 'response.m4a', type: 'audio/m4a' } as unknown as Blob);
       formData.append('language', 'en');
 
-      const res = await fetch(apiUrl + '/api/transcribe', { method: 'POST', body: formData });
+      const res = await fetch(apiUrl + '/api/transcribe', { method: 'POST', body: formData, signal: AbortSignal.timeout(60_000) });
+      if (!res.ok) { recordingRef.current = null; setScreenState('question'); return; }
       const data = await res.json() as { text?: string };
       const text = data.text?.trim() ?? '';
       setTranscript(text);
@@ -227,7 +228,9 @@ export default function CageReviewInterview() {
           voiceGender,
           persona: caddiePersonality,
         }),
+        signal: AbortSignal.timeout(45_000),
       });
+      if (!res.ok) throw new Error(`cage-review extract failed: ${res.status}`);
       const data = await res.json() as { labels?: Record<string, unknown> };
       const rawLabels = (data.labels ?? {}) as Record<string, unknown>;
       const labels: Parameters<typeof updateShotLabels>[2] = {

@@ -109,6 +109,9 @@ export async function detectBallDeparture(args: {
         after_wide: afterWide ?? undefined,
         media_type: 'image/jpeg',
       }),
+      // Bound the wait so a stalled server can't hang the swing flow; this is
+      // a best-effort verifier and the catch below returns null gracefully.
+      signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as Partial<BallDepartureResult> & { configured?: boolean };

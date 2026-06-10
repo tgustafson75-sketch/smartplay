@@ -64,7 +64,9 @@ export async function parseVoiceIntent(
     }).finally(() => clearTimeout(timeout));
 
     if (!res.ok) {
-      recordFailure('voice-intent');
+      // 5xx/4xx is a server problem, not a connectivity loss — don't let it
+      // auto-engage Local Mode / show "cell signal weak".
+      recordFailure('voice-intent', 'server');
       return failure(text);
     }
     recordSuccess('voice-intent');
@@ -103,7 +105,12 @@ export async function parseVoiceIntent(
 
   } catch (err) {
     console.log('[voiceCommandParser] error:', err);
-    recordFailure('voice-intent');
+    // The 15s controller.abort() above fires an AbortError on a slow classifier
+    // — that's server slowness, not a dead network. Only a genuine network
+    // throw should count as 'network' (the kind that flips Local Mode).
+    const name = err instanceof Error ? err.name : '';
+    const aborted = name === 'AbortError' || name === 'TimeoutError';
+    recordFailure('voice-intent', aborted ? 'timeout' : 'network');
     return failure(text);
   }
 }

@@ -838,6 +838,32 @@ check('Putt mode: explicit + decoupled from sticky club (no misroute)',
     !/isPutt = club === 'PT'/.test(smSrc),
   'putt mode is explicit per-recording state (not derived from persisted club), routes to putt analysis + PUTT MODE pill; a sticky putter no longer sends swings to the putt analyzer');
 
+// 2026-06-09 (audit) — putt mode MUST clear on every new recording, or it
+// sticks across "Record again"/the voice loop (the only off-switch, the DTL/
+// FO/PUTT toggle, is hidden in review) and re-traps swings into putt analysis.
+check('Putt mode resets on every new recording (no re-trap via record-again/voice)',
+  /const reset = useCallback\([\s\S]*?setPuttMode\(false\)[\s\S]*?\}, \[/.test(smSrc),
+  'reset() clears puttMode so a putt set once cannot trap later full-swing recordings');
+
+// Voice "switch to putter"/non-putter keeps putt mode in sync (parity with
+// the picker + camera club scan), via the record bus.
+check('Voice club change drives putt mode (puttOn/puttOff bus)',
+  /'puttOn' \| 'puttOff'/.test(read('services/smartMotionRecordBus.ts')) &&
+    /emitSmartMotionCommand\(parsed\.club_id === 'PT' \? 'puttOn' : 'puttOff'\)/.test(read('services/intents/clubHandler.ts')) &&
+    /cmd === 'puttOn'/.test(smSrc) && /cmd === 'puttOff'/.test(smSrc),
+  'a hands-free club change to/from the putter sets/clears putt mode so the analysis branch matches the spoken club');
+
+// The tagged club is sent to the swing analyzer (was hardcoded 'unknown').
+check('Tagged club threaded into analyzeSwing (not hardcoded unknown)',
+  /club: clubRef\.current \? clubIdToServerKey\(clubRef\.current\) : 'unknown'/.test(smSrc),
+  'analyzeSwing receives the real tagged club for context-aware fault reads');
+
+// Uploaded-putt analysis failure is terminal (failed-card), not an infinite spinner.
+check('Uploaded putt failure sets terminal failed status',
+  /putting analyze failed:/.test(read('services/videoUpload.ts')) &&
+    /setSessionAnalysisStatus\(\s*sessionId,\s*'failed'/.test(read('services/videoUpload.ts')),
+  'a putt upload that throws shows the failed-card with Re-analyze instead of spinning forever');
+
 // ─── 2026-06-09 (audit fixes): voice-restart + control bar + slow-mo ───────
 check('Voice record restarts from review (camera re-mount fix)',
   /pendingStartRef/.test(smSrc) && /beginNextRecording/.test(smSrc) &&

@@ -17,7 +17,12 @@
  * open a new capture surface.
  */
 
-export type SmartMotionCommand = 'start' | 'stop' | 'toggle' | 'scanClub';
+// 'puttOn' / 'puttOff' let a hands-free voice club change ("switch to putter" /
+// "now I'm on my 7-iron") set the per-recording putt mode on the Smart Motion
+// screen, matching what picking the putter in the picker or a club scan does —
+// so a voice putter change is analyzed AS A PUTT, and any non-putter club
+// change clears putt mode back to a full-swing read.
+export type SmartMotionCommand = 'start' | 'stop' | 'toggle' | 'scanClub' | 'puttOn' | 'puttOff';
 
 type Listener = (cmd: SmartMotionCommand) => void;
 

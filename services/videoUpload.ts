@@ -223,7 +223,19 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
           }
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          console.log('[videoUpload] putting analyze failed (non-fatal):', msg);
+          console.log('[videoUpload] putting analyze failed:', msg);
+          // Terminal 'failed' status so the swing-detail screen shows the
+          // failed-card (with Re-analyze) instead of spinning "Analyzing…"
+          // forever. Without this, a throw before analyzePutt's own fallback
+          // (e.g. a dynamic-import failure) left the session stuck on the
+          // pending spinner with no way out. Mirrors the swing path (line ~670).
+          try {
+            useCageStore.getState().setSessionAnalysisStatus(
+              sessionId,
+              'failed',
+              "Couldn't read this putt — try Re-analyze, or re-record from a cleaner angle.",
+            );
+          } catch { /* non-fatal */ }
         }
       })();
       return { primary_issue: null, drill_recommendation: null };

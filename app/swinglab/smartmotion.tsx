@@ -95,7 +95,7 @@ import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
 import { useToastStore } from '../../store/toastStore';
 import { detectBallDeparture, type BallDepartureResult } from '../../services/swing/ballDeparture';
-import { subscribeSmartMotionCommand, setSmartMotionActive } from '../../services/smartMotionRecordBus';
+import { subscribeSmartMotionCommand, setSmartMotionActive, type SmartMotionCommand } from '../../services/smartMotionRecordBus';
 import { reconcileFeel, extractFramesB64 } from '../../services/swing/feelReconcile';
 import { analyzePutt, type PuttingAnalysis } from '../../services/puttingAnalysisService';
 
@@ -531,7 +531,9 @@ export default function SmartMotion() {
         // the "Analyzing…" overlay with no way out.
         const result = await Promise.race([
           analyzeSwing(uri, {
-            club: 'unknown',
+            // Thread the tagged club so the analyst has club context (a driver
+            // vs wedge fault read differs); 'unknown' only when truly untagged.
+            club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
             swing_number: segment?.index ?? 1,
             caddie_name: caddiePersonality,
             angle,
@@ -712,6 +714,14 @@ export default function SmartMotion() {
     setBallSpeed(null);
     setBallDeparture(null);
     setPuttAnalysis(null);
+    // Putt mode is EXPLICIT + per-recording: clear it on every reset so it can
+    // never stick across "Record again" / the hands-free voice loop and
+    // silently route a full swing to the putt analyzer. (The only in-UI
+    // off-switch, the DTL/FO/PUTT toggle, is hidden in review and unreachable
+    // by voice — so without this, putt mode set once would trap every later
+    // clip. Re-arm putt mode per recording via the PUTT toggle, picking the
+    // putter, a club scan, or a voice "switch to putter".)
+    setPuttMode(false);
     setFeelText('');
     setFeelReply(null);
     setDraftBall(DEFAULT_BALL_BOX); // keep the default reference box after Record again
@@ -804,7 +814,7 @@ export default function SmartMotion() {
       try {
         const r = await Promise.race([
           analyzeSwing(clipUri, {
-            club: 'unknown',
+            club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
             swing_number: seg.index,
             caddie_name: caddiePersonality,
             angle,
@@ -1037,9 +1047,12 @@ export default function SmartMotion() {
     reset();
   }, [reset]);
 
-  const recordCmdRef = useRef<(cmd: 'start' | 'stop' | 'toggle' | 'scanClub') => void>(() => {});
+  const recordCmdRef = useRef<(cmd: SmartMotionCommand) => void>(() => {});
   recordCmdRef.current = (cmd) => {
     if (cmd === 'scanClub') { void detectClubFromCamera(); return; }
+    // Voice club change set putt mode (parity with the picker / club scan).
+    if (cmd === 'puttOn') { setPuttMode(true); setAngle('down_the_line'); return; }
+    if (cmd === 'puttOff') { setPuttMode(false); return; }
     const recording = phase === 'recording';
     if (cmd === 'stop') { if (recording) void stopRecording(); return; }
     if (cmd === 'start') { if (!recording) beginNextRecording(); return; }

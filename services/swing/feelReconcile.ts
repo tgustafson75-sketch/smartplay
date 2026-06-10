@@ -100,6 +100,9 @@ export async function reconcileFeel(input: FeelReconcileInput): Promise<string |
           language: input.language ?? undefined,
         },
       }),
+      // Server maxDuration is 45s; bound the client a little above it so a
+      // stall can't hang the feel reply forever (catch returns null cleanly).
+      signal: AbortSignal.timeout(50_000),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { answer?: string };
