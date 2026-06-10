@@ -624,28 +624,38 @@ export const useVoiceCaddie = ({
       const watchState = useWatchStore.getState();
       const watchSummary = watchState.getSessionSummary();
 
+      // Defensive: a single malformed session in history (e.g. a shape the
+      // SmartMotion redesign produced) must never throw here and take the whole
+      // brain call down. Guard every field access.
       const recentCageSessions = useCageStore.getState()
         .sessionHistory
         .slice(-3)
         .reverse()
-        .map(s => ({
-          club: s.club,
-          shots: s.shots.length,
-          dominantMiss: s.dominantMiss,
-          rootCause: s.rootCause,
-          summary: s.summary,
-          // 2026-05-25 — Fix AJ Phase 2: surface the spoken commentary
-          // for the most-recent shot in this session so Kevin / Tank /
-          // etc. can answer "what did I just say about that swing".
-          // Trimmed to the freshest entry to keep the brain payload
-          // tight (full transcripts via the swing detail screen).
-          last_shot_commentary: s.shots.length > 0
-            ? (s.shots[s.shots.length - 1].commentary_transcript ?? null)
-            : null,
-          date: new Date(s.date).toLocaleDateString('en-US', {
-            weekday: 'short', month: 'short', day: 'numeric',
-          }),
-        }));
+        .map(s => {
+          const shotsArr = Array.isArray(s.shots) ? s.shots : [];
+          let dateStr = '';
+          try {
+            if (s.date != null) {
+              dateStr = new Date(s.date).toLocaleDateString('en-US', {
+                weekday: 'short', month: 'short', day: 'numeric',
+              });
+            }
+          } catch { dateStr = ''; }
+          return {
+            club: s.club,
+            shots: shotsArr.length,
+            dominantMiss: s.dominantMiss,
+            rootCause: s.rootCause,
+            summary: s.summary,
+            // 2026-05-25 — Fix AJ Phase 2: surface the spoken commentary
+            // for the most-recent shot in this session so Kevin / Tank /
+            // etc. can answer "what did I just say about that swing".
+            last_shot_commentary: shotsArr.length > 0
+              ? (shotsArr[shotsArr.length - 1]?.commentary_transcript ?? null)
+              : null,
+            date: dateStr,
+          };
+        });
 
       const ghostContext = useGhostStore.getState().getSummaryText();
       const smartFinderLock = useSmartFinderStore.getState().currentLock;
@@ -893,13 +903,12 @@ export const useVoiceCaddie = ({
       }).finally(() => clearTimeout(timeout));
 
       if (!res.ok) {
-        recordVoiceEndpointFailure('kevin');
-        // Phase V.7+ — short haptic so Tim feels the network blip even if
-        // he's not looking at the screen. Bubble text + speakResponse local
-        // TTS still show/play; this just adds a tactile "something went
-        // wrong" signal he can sense without glancing down.
-        try { Vibration.vibrate(120); } catch {}
-        return { text: 'Sorry, lost you for a moment. Try again.', audioBase64: null, toolAction: null };
+        // Throw so the catch's minimal-body retry fires. A non-200 here is
+        // often a 413 from the LARGE context body (golfer model + analyses +
+        // course geometry + vision can exceed Vercel's payload cap); the
+        // minimal retry strips all that and succeeds against the healthy
+        // endpoint — so the user still gets a real answer on the first ask.
+        throw new Error(`brain_http_${res.status}`);
       }
       recordVoiceEndpointSuccess('kevin');
       const data = await res.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null };
@@ -920,12 +929,45 @@ export const useVoiceCaddie = ({
       };
 
     } catch (err) {
-      // 2026-06-07 audit r6 — Record failure for circuit breaker.
-      // 3 failures within 30s → /api/kevin marked degraded for 60s,
-      // Local Mode auto-engages.
       recordVoiceEndpointFailure('kevin');
       console.log('[voice] brain error:', err);
       logVoiceError('kevin_response', err);
+
+      // 2026-06-10 — FAIL-SAFE retry. The big context-building block above can
+      // throw (a malformed store entry, a service hiccup) and that would wall
+      // the caddie with "Hit a snag" even though the brain endpoint is healthy.
+      // Retry ONCE with a MINIMAL body that can't throw — just the message +
+      // identity. The endpoint answers fine without the extra context. This is
+      // why the caddie now works on the FIRST ask instead of needing retries.
+      try {
+        const rc = new AbortController();
+        const rt = setTimeout(() => rc.abort(), BRAIN_TIMEOUT_MS);
+        const retryRes = await fetch(apiUrl + '/api/kevin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: rc.signal,
+          body: JSON.stringify({
+            message,
+            language,
+            playerName: name,
+            firstName,
+            handicap,
+            persona: useSettingsStore.getState().caddiePersonality,
+          }),
+        }).finally(() => clearTimeout(rt));
+        if (retryRes.ok) {
+          recordVoiceEndpointSuccess('kevin');
+          const d = await retryRes.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null };
+          return {
+            text: d.text ?? 'Ready when you are.',
+            audioBase64: d.audioBase64 ?? null,
+            toolAction: d.toolAction ?? null,
+          };
+        }
+      } catch (retryErr) {
+        console.log('[voice] brain minimal-retry failed:', retryErr);
+      }
+
       try { Vibration.vibrate(120); } catch {}
       // 2026-06-06 — Phase 3 of on-course resilience sprint. Tim's
       // Echo Hills round hit this catch ~28 times (cellular died at
@@ -958,7 +1000,9 @@ export const useVoiceCaddie = ({
       } catch (e) {
         console.log('[voice] localStatusResponder threw (non-fatal):', e);
       }
-      return { text: 'Hit a snag on my end. Try again.', audioBase64: null, toolAction: null };
+      // Reached only if the healthy endpoint, the minimal retry, AND the local
+      // responder all came up empty — genuinely rare. Keep it warm, not alarmy.
+      return { text: 'Give me one sec and ask me again.', audioBase64: null, toolAction: null };
     }
   };
 
@@ -1582,8 +1626,8 @@ export const useVoiceCaddie = ({
         // Same Cockpit-visibility rationale as the transcribe/empty paths
         // above — without a text feedback, the badge silently cycled back
         // to idle and Tim had no way to tell whether the mic missed him
-        // or the pipeline threw.
-        onResponseReceived('Hit a snag on my end. Try again.');
+        // or the pipeline threw. Keep it warm, not alarmy.
+        onResponseReceived('Give me one sec and ask me again.');
       }
       wrappedOnVoiceStateChange('idle');
     } finally {

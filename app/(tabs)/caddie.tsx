@@ -27,7 +27,6 @@ import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
 import { ActiveListeningPill } from '../../components/caddie/ActiveListeningPill';
 import { PermissionBanner } from '../../components/PermissionBanner';
 import { useRoundStore } from '../../store/roundStore';
-import { useConnectivityStore } from '../../store/connectivityStore';
 import type { ShotLocation, ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
 // Phase Cockpit — alternate Caddie tab layout (v3-style). Gated by
@@ -912,12 +911,12 @@ export default function CaddieTab() {
   // warm so cold-start latency doesn't slap the first real call.
   useEffect(() => {
     const keepWarm = async () => {
-      // 2026-06-07 (audit N3) — only warm during an active round (when
-      // caddie calls actually happen) and skip when offline, instead of
-      // pinging every 4 min unconditionally (battery + dead-radio cost).
+      // 2026-06-10 — Warm the brain whenever the Caddie tab is open, NOT only
+      // during a round. The caddie is used off-course too (chat / "good morning
+      // Kevin"), and gating warmup on isRoundActive meant the FIRST off-course
+      // ask always hit a cold Lambda. The ping is tiny and only runs while this
+      // tab is mounted. Best-effort; a failed ping is harmless.
       try {
-        if (!useRoundStore.getState().isRoundActive) return;
-        if (!useConnectivityStore.getState().isOnline) return;
         await fetch(apiUrl + '/api/kevin', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

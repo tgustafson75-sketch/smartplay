@@ -938,6 +938,23 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-10 — Brain works the FIRST ask: minimal-body retry + warm-on-open.
+const voiceCaddieSrc = read('hooks/useVoiceCaddie.ts');
+check('Brain has a minimal-body fail-safe retry (survives context throw / 413)',
+  /brain minimal-retry failed/.test(voiceCaddieSrc) &&
+    /throw new Error\(`brain_http_\$\{res\.status\}`\)/.test(voiceCaddieSrc) &&
+    !/Hit a snag on my end/.test(voiceCaddieSrc),
+  'a context-builder throw or a too-large-payload 413 retries once with a minimal body against the healthy endpoint, so the first ask still answers');
+
+check('Cage-session context build is throw-proof',
+  /Array\.isArray\(s\.shots\) \? s\.shots : \[\]/.test(voiceCaddieSrc),
+  'a malformed session in history can no longer crash the brain context builder');
+
+check('Caddie brain is warmed whenever the tab is open (not only in a round)',
+  !/if \(!useRoundStore\.getState\(\)\.isRoundActive\) return;/.test(read('app/(tabs)/caddie.tsx')) &&
+    /Warm the brain whenever the Caddie tab is open/.test(read('app/(tabs)/caddie.tsx')),
+  'off-course "good morning Kevin" hits a warm Lambda so the first ask is fast');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
