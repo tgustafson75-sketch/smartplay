@@ -662,11 +662,11 @@ check('Ball/target overlay matches the design reference',
     />TARGET</.test(targetOverlaySrc) && />BALL AREA</.test(targetOverlaySrc),
   'green perspective ball-area trapezoid + white target line/ring + pills');
 
-check('Pre-record ball box: default box + verifier runs on placement',
+check('Pre-record ball box: default box + verifier gated to Motion step',
   /draftBall/.test(smSrc) && /placeBallMode/.test(smSrc) &&
     /Line up your ball with the box/.test(smSrc) &&
-    /\[clipUri, ballArea, ballDeparture\]/.test(smSrc),
-  'default reference box + effect-based verifier (fires whenever ball spot exists)');
+    /\[showSkeleton, clipUri, ballArea, ballDeparture\]/.test(smSrc),
+  'default reference box + verifier runs under Motion (keeps the default read fast)');
 
 // ─── Deploy guard: every /api/* the client calls must be ROUTED in
 //     vercel.json. Root cause of the ball-departure 404: the function built

@@ -354,14 +354,18 @@ export default function SmartMotion() {
   // launch-direction seed. Runs once when the clip, a ball spot, and a
   // detected strike are all present; the ball spot may be pre-record or
   // placed in review.
+  // 2026-06-09 — SPEED: the strike cross-check (thumbnails + crops + a network
+  // call) is part of the on-demand Motion step, NOT the default review. The
+  // default path stays a single fast analyzeSwing call; the verifier only runs
+  // once the user opens Motion, so it never competes with the core read.
   useEffect(() => {
-    if (!clipUri || !ballArea || firstStrikeMsRef.current == null || ballDeparture) return;
+    if (!showSkeleton || !clipUri || !ballArea || firstStrikeMsRef.current == null || ballDeparture) return;
     let cancelled = false;
     void detectBallDeparture({ videoUri: clipUri, impactMs: firstStrikeMsRef.current, ballArea })
       .then((r) => { if (!cancelled && r) setBallDeparture(r); })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [clipUri, ballArea, ballDeparture]);
+  }, [showSkeleton, clipUri, ballArea, ballDeparture]);
 
   const bodyItems = useMemo(() => deriveBodyItems(analysis, biomech), [analysis, biomech]);
   // "analyzing" = a read is genuinely in flight (no result yet AND no error).
