@@ -80,18 +80,22 @@ export function ModeToggle({
   value,
   onChange,
   style,
+  compact = false,
 }: {
   value: Angle;
   onChange: (a: Angle) => void;
   style?: StyleProp<ViewStyle>;
+  /** Compact = small DTL / FO icon chips (keeps the center clear so the
+   *  target-anchor box behind the controls stays visible). */
+  compact?: boolean;
 }) {
   const { colors } = useTheme();
-  const opts: { key: Angle; label: string }[] = [
-    { key: 'down_the_line', label: 'DOWN THE LINE' },
-    { key: 'face_on', label: 'FACE-ON' },
+  const opts: { key: Angle; label: string; short: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
+    { key: 'down_the_line', label: 'DOWN THE LINE', short: 'DTL', icon: 'git-branch-outline' },
+    { key: 'face_on', label: 'FACE-ON', short: 'FO', icon: 'person-outline' },
   ];
   return (
-    <View style={[styles.toggle, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
+    <View style={[styles.toggle, compact && styles.toggleCompact, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
       {opts.map((o) => {
         const active = o.key === value;
         return (
@@ -99,10 +103,12 @@ export function ModeToggle({
             key={o.key}
             onPress={() => onChange(o.key)}
             accessibilityRole="button"
+            accessibilityLabel={o.label}
             accessibilityState={{ selected: active }}
-            style={[styles.toggleBtn, active && { backgroundColor: colors.accent_muted, borderColor: colors.accent }]}
+            style={[compact ? styles.toggleBtnCompact : styles.toggleBtn, active && { backgroundColor: colors.accent_muted, borderColor: colors.accent }]}
           >
-            <Text style={[styles.toggleLabel, { color: active ? colors.accent : colors.text_muted }]}>{o.label}</Text>
+            {compact ? <Ionicons name={o.icon} size={14} color={active ? colors.accent : colors.text_muted} /> : null}
+            <Text style={[styles.toggleLabel, { color: active ? colors.accent : colors.text_muted }]}>{compact ? o.short : o.label}</Text>
           </Pressable>
         );
       })}
@@ -475,7 +481,9 @@ const styles = StyleSheet.create({
   brandSub: { fontSize: 10, fontWeight: '700', letterSpacing: 1.4, marginTop: 1 },
 
   toggle: { flexDirection: 'row', borderRadius: 10, borderWidth: 1, padding: 3, gap: 3 },
+  toggleCompact: { alignSelf: 'flex-start' },
   toggleBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: 'transparent', alignItems: 'center' },
+  toggleBtnCompact: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 7, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: 'transparent' },
   toggleLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
 
   rail: { gap: 8 },

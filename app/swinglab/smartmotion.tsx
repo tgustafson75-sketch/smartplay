@@ -1104,12 +1104,15 @@ export default function SmartMotion() {
           </View>
         ) : null}
 
-        {/* SETUP — drop a ball box on the live preview before recording so the
-            camera strike-verification can run. The draft box renders here;
-            tapping (in place mode) sets its location. */}
-        {phase === 'setup' && draftBall ? (
+        {/* SETUP / RECORDING — the ball box is the SINGLE target origin: the
+            target line runs straight up from the ball box (one unified anchor,
+            no duplicate static box). Shown while lining up and while recording. */}
+        {(phase === 'setup' || phase === 'recording') && draftBall ? (
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <CageTargetingOverlay ballArea={draftBall} target={null} />
+            <CageTargetingOverlay
+              ballArea={draftBall}
+              target={{ x: draftBall.x, y: draftBall.y }}
+            />
           </View>
         ) : null}
         {phase === 'setup' && placeBallMode ? (
@@ -1127,7 +1130,11 @@ export default function SmartMotion() {
           />
         ) : null}
 
-        {phase !== 'analyzing' ? <CaptureGuides mode={angle} handedness={swingerHandedness} /> : null}
+        {/* Static framing guide ONLY when no ball box is shown — otherwise the
+            ball-box overlay above is the single source (no duplicate box/line). */}
+        {phase !== 'analyzing' && !draftBall && !(isReview && (ballArea || targetPoint))
+          ? <CaptureGuides mode={angle} handedness={swingerHandedness} />
+          : null}
 
         {/* TOP BAR (interactive) */}
         <View style={[styles.topBar, { paddingTop: insets.top + 6 }]}>
@@ -1331,7 +1338,8 @@ export default function SmartMotion() {
           ) : null}
 
           <View style={styles.controlsRow}>
-            <ModeToggle value={angle} onChange={setAngle} style={{ flex: 1 }} />
+            <ModeToggle value={angle} onChange={setAngle} compact />
+            <View style={{ flex: 1 }} />
             <View style={{ width: 130 }}>{actionBtn}</View>
           </View>
 
