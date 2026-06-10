@@ -1,44 +1,35 @@
-# SmartPlay Caddie — clean-slate handoff & audit prompt
+# SmartPlay Caddie — new-session handoff (clean slate + full audit)
 
-Paste this into a new chat to continue with full context.
+Paste this into a new chat to start fresh. `main` is clean, validated, and
+deployed; there is **no half-finished work to pick up** — start with a full
+audit, then act on what you find.
 
 ## Context
 - **Real repo:** `/Users/timothyg/smartplay` (NOT the `smartplaycaddie` stub). Expo SDK 54 / RN 0.81 / Hermes, expo-router, Zustand+persist, TypeScript.
-- **I test on ANDROID ~95% of the time.** Weigh fixes accordingly (e.g. `videoExportPreset` is iOS-only; `MediaMetadataRetriever` quirks are Android).
-- **Validate every change:** `npx tsc --noEmit` (0 errors), `npm run lint` (baseline = 3 pre-existing require() warnings, 0 errors), `npx tsx scripts/simulations/run-sim.ts` (currently 236 scenarios, all pass).
-- **Deploy:** commit to `main` → push (Vercel auto-deploys API) → if api/ changed, re-point the pinned alias `vercel alias set <deploy> smartplay-beta.vercel.app` and verify → `npx eas update --branch production` AND `--branch preview` (OTA). `EXPO_PUBLIC_API_URL=https://smartplay-beta.vercel.app`.
-- **Caddie Brain lens (standing rule):** evaluate everything with *"does it belong in the Caddie Brain?"* — route brain responsibilities (player model, what-to-compute, language register, learned state) through the CNS; keep presentation/infra as clean utilities the brain consumes.
+- **I (Tim) test on ANDROID ~95% of the time.** Weigh fixes for Android (e.g. `videoExportPreset` is iOS-only; `MediaMetadataRetriever`/thumbnail quirks are Android).
+- **Validate every change:** `npx tsc --noEmit` (0 errors), `npm run lint` (baseline = 3 pre-existing require() warnings, 0 errors), `npx tsx scripts/simulations/run-sim.ts` (238 scenarios, all pass). Two audit passes to zero bugs on anything substantial.
+- **Deploy:** commit to `main` → push (Vercel auto-deploys API) → if `api/` changed, `vercel alias set <deploy> smartplay-beta.vercel.app` + verify → `npx eas update --branch production` AND `--branch preview`. `EXPO_PUBLIC_API_URL=https://smartplay-beta.vercel.app`.
+- **Standing rule — Caddie Brain lens:** evaluate everything with *"does it belong in the Caddie Brain?"* Route brain responsibilities (player model, what-to-compute, language register, learned state) through the CNS; keep presentation/infra as clean utilities the brain consumes.
 
-## What's LIVE on main (shipped)
-- **Caddie CNS Phase 1** (`store/caddieMemoryStore.ts` — learned bag/tendencies/course memory) + **Phase 2** (`services/caddieMemoryRetrieval.ts` `getCaddieContext()` folded into the brain's `unified_context_block`). Additive, honest (null until enough samples), bounded.
-- **Fail-safe caddie/voice:** circuit breaker never blocks (`isDegraded` always false), no auto-Local-Mode; brain has a minimal-body retry; honest local fallbacks. (See [[caddie-failsafe-no-walls]].)
-- **Honest networking:** timeouts no longer mislabeled "lost connection"; client timeout 63s > server 60s.
-- **Provider architecture:** Anthropic = spine (Haiku→Sonnet), Gemini = fast fallback (re-enabled), OpenAI = ears/mouth only (removed from analysis).
-- **Analysis pretext:** angle (DTL/FO), handedness, ball anchor, CNS-learned tendencies fed to the analyzer.
-- **Acoustics-free uploads:** AI swing localizer + duration-scaled sampling.
-- **B1 tier foundation** (`constants/handicapTiers.ts` — `deriveTier`, `tierToComplexity`, centralized thresholds; behaviour-neutral).
-- **Clip persistence** (`persistClipToDocuments` — uploads + recordings copied to documentDirectory so they replay/re-analyze).
-- **Issue log** now covers GPS + voice + **analysis/app failures** (`addAppEvent`, kinds `analysis_error`/`app_error`); frame-extraction failures log `frame_extraction_empty` with uri scheme + errors.
-- **Foot anchors** corrected (face-on feet ABOVE ball; down-the-line feet to the SIDE along the line).
-- Caddie Clip Test owner tool removed.
+## What's complete & live (don't rebuild)
+- **Caddie CNS — all four phases:** Phase 1 memory store (`store/caddieMemoryStore.ts`), Phase 2 retrieval (`services/caddieMemoryRetrieval.ts` → `unified_context_block`), Phase 3 round reflections (endRound baseline + recap LLM enrichment, deduped by round), Phase 4 signal-independence (`getCourseHoleGuidance` → on-course local responder answers from memory when GPS is weak). All additive, honest (null until enough real samples), bounded.
+- **Fail-safe caddie/voice:** breaker never blocks (`isDegraded`→false), no auto-Local-Mode; brain has a minimal-body retry + local fallback (never "no network" walls).
+- **Honest networking:** timeouts not mislabeled "lost connection"; client 63s > server 60s.
+- **Providers:** Anthropic = spine, Gemini = fast fallback, OpenAI = ears/mouth (out of analysis).
+- **Analysis pretext:** angle (DTL/FO), handedness, ball anchor, CNS tendencies fed to the analyzer; acoustics-free uploads via swing localizer.
+- **Clip persistence:** uploads + recordings copied to documentDirectory (replay/re-analyze survive). `probeDurationMs` has an 8s hang-guard; frame extraction retries jittered times.
+- **Issue log** covers GPS + voice + **analysis/app failures**; empty frame extraction logs `frame_extraction_empty` (uri scheme + thumbnail error) to /owner-logs.
+- **B1 tier constants** (`constants/handicapTiers.ts`, behaviour-neutral). Foot anchors corrected (FO above ball, DTL to the side). Caddie Clip Test owner tool removed.
 
-## OPEN — top priority to confirm/fix
-1. **Re-analyzing existing ANDROID uploads fails (video plays, won't analyze).** Root cause: `expo-video-thumbnails` (`MediaMetadataRetriever`) fails to extract frames from some camera-roll clips (HEVC / variable-frame-rate) that ExoPlayer plays fine. Mitigations shipped: jittered retry, tentative fallback, honest "re-upload" message, `probeDurationMs` 8s hang-guard. **Next:** reproduce on device, read the owner Issue Log entry `frame_extraction_empty` (it shows the uri scheme + the exact thumbnail error) to CONFIRM the cause, then implement the real fix — either transcode the picked clip to constant-frame-rate H.264 (e.g. ffmpeg-kit) or extract frames via an ExoPlayer/expo-video seek surface instead of MediaMetadataRetriever. Also consider re-persisting legacy `content://` clips to documents on first open.
+## Known OPEN threads (audit + decide; not blocking)
+1. **Android re-analyze of some existing uploads** (video plays, won't analyze): root cause is `expo-video-thumbnails`/`MediaMetadataRetriever` failing on certain camera-roll codecs/VFR that ExoPlayer plays. Mitigated (jittered retry, tentative fallback, honest "re-upload" message). **Confirm on-device** via the `/owner-logs` `frame_extraction_empty` entry (shows the exact error + uri scheme), then implement the real fix: transcode picked clips to constant-frame-rate H.264 (e.g. ffmpeg-kit) OR extract frames via an ExoPlayer/expo-video seek surface instead of MediaMetadataRetriever. Also: re-persist legacy `content://` clips to documents on first open.
 2. **Clip-storage GC:** persisted clips aren't deleted when sessions age out of the 50-session window → storage grows. Add a cleanup pass.
+3. **Optional/experimental:** a `feature/tier-language-system` branch holds early B2 (compute-budget gating of heavy pose/biomech by tier) + plans for B3 (jargon→plain register by tier) and Track A (full UI localization — i18next+es/zh are wired and the caddie SPEAKS es/zh, but only ~2% of static UI strings use `t()`; ~1,526 hardcoded across ~135 files — run `npx tsx scripts/audit/i18nAudit.ts`). NOT on main; pick up only if Tim asks.
 
-## PARKED on branch `feature/tier-language-system` (undeployed, awaits Tim's deploy approval)
-- **B2 compute budget** (WIP): `computeBudgetForHandicap` + gating the heavy pose/biomech pass by tier (speed: less compute for higher handicaps; data-driven, not "dumbing down").
-- **Then B3** (language register: jargon→plain by tier in prompts + UI) and **Track A localization**: i18next + es/zh are wired and the caddie SPEAKS es/zh, but only ~2% of static UI strings use `t()` — **~1,526 hardcoded strings across ~135 files** (run `npx tsx scripts/audit/i18nAudit.ts`). Sequence: extract strings AFTER B3 finalizes tier-varied copy so each is translated once. High-traffic-first (onboarding → caddie → round → SmartMotion → recap).
-- Tim wants the whole tier/language bundle completed + tested on the branch, then ONE deploy on his word.
-
-## CNS roadmap (Tim wants these in the plan — AFTER the tier/language work)
-- **Phase 3 — learning/reflection loop:** an Anthropic round-summary pass that distills each round into durable `reflections`/per-course notes (must respect the tier register).
-- **Phase 4 — signal-independence:** on a repeat course with weak GPS/network, answer from course memory (your typical line/club/yardage) instead of live signal. Both should consume the tier `computeBudget`.
-
-## Audit instructions for the new chat
-Do a deep, skeptical, read-only audit FIRST (no changes until confirmed). Priorities:
-1. Confirm the Android re-analyze root cause from a real device repro + the `frame_extraction_empty` issue-log entry; propose the real frame-extraction fix.
-2. Re-verify the analysis path end-to-end (upload + SmartMotion record + re-analyze) for any stranded-spinner / no-terminal-status path.
-3. Data→UI honesty sweep (no fabricated metrics shown as measured).
-4. Then proceed with the parked tier/language plan (B2→B3→Track A) on the branch, tested, deploy only on Tim's approval.
-Always: tsc + lint + 236-scenario sim green before commit; two audit passes to zero bugs on anything substantial.
+## First task for the new session
+Do a deep, skeptical, **read-only full audit FIRST** (no changes until confirmed), prioritizing:
+1. The Android re-analyze root cause (confirm from a device repro + the `frame_extraction_empty` log) and propose the real frame-extraction fix.
+2. Analysis paths end-to-end (upload + SmartMotion record + re-analyze + putt) for any stranded-spinner / no-terminal-status path.
+3. Data→UI honesty (no fabricated metric shown as measured).
+4. CNS correctness (reflections dedupe, signal-independence fallback) under real round data.
+Then act on findings with Tim's go-ahead. Keep tsc + lint + 238-sim green; two audit passes to zero bugs on anything substantial.
