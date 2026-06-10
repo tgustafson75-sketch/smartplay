@@ -293,10 +293,14 @@ function PlacementModal({
  *  Measures its own size so the trapezoid / ring render in real pixels
  *  (crisp strokes). Both points are user-placed — honest, no inferred flight. */
 export function CageTargetingOverlay({
-  ballArea, target,
+  ballArea, target, launchDir = null,
 }: {
   ballArea: BallArea | null;
   target: TargetPoint | null;
+  /** Face-on only: draws an APPROXIMATE diagonal launch line up from the ball
+   *  toward the target side ('left' for RH, 'right' for LH). Labeled ~LAUNCH —
+   *  it's an estimate to be refined with real shot tracing later. */
+  launchDir?: 'left' | 'right' | null;
 }) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   if (!ballArea && !target) return null;
@@ -330,6 +334,19 @@ export function CageTargetingOverlay({
     };
   }
 
+  // Approximate face-on launch line — diagonal up from the ball toward the
+  // target side. Rough by design (refined later with real tracing).
+  let launchLine: { x1: number; y1: number; x2: number; y2: number; labelX: number; labelY: number } | null = null;
+  if (ballArea && launchDir && w > 0) {
+    const bx = ballArea.x * w;
+    const by = ballArea.y * h;
+    const r = ballArea.r * w;
+    const sign = launchDir === 'left' ? -1 : 1;
+    const x1 = bx, y1 = by - r * 0.4;
+    const x2 = bx + sign * 0.17 * w, y2 = Math.max(0.07 * h, by - 0.45 * h);
+    launchLine = { x1, y1, x2, y2, labelX: x2, labelY: y2 };
+  }
+
   return (
     <View
       style={StyleSheet.absoluteFill}
@@ -360,6 +377,13 @@ export function CageTargetingOverlay({
               fill={LIME} fillOpacity={0.16}
             />
           )}
+          {launchLine && (
+            <SvgLine
+              x1={launchLine.x1} y1={launchLine.y1}
+              x2={launchLine.x2} y2={launchLine.y2}
+              stroke={LIME} strokeWidth={2.4} strokeDasharray="8,7" opacity={0.9} strokeLinecap="round"
+            />
+          )}
         </Svg>
       )}
       {/* Pill labels with a downward caret (RN views — crisp text). */}
@@ -373,6 +397,11 @@ export function CageTargetingOverlay({
         <View style={[overlayStyles.pillWrap, { left: ballQuad.cx, top: ballQuad.topY - 30 }]}>
           <View style={overlayStyles.pill}><Text style={overlayStyles.pillText}>BALL AREA</Text></View>
           <View style={overlayStyles.caret} />
+        </View>
+      )}
+      {launchLine && (
+        <View style={[overlayStyles.pillWrap, { left: launchLine.labelX, top: launchLine.labelY - 26 }]}>
+          <View style={overlayStyles.pill}><Text style={overlayStyles.pillText}>~ LAUNCH</Text></View>
         </View>
       )}
     </View>

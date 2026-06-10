@@ -578,9 +578,10 @@ export default function SmartMotion() {
   // re-selecting a swing is instant and we never re-pay the pose calls.
   useEffect(() => {
     const seg = segments[selectedSwing];
-    // Tempo is part of the Motion step (it needs pose); only derive it when the
-    // Motion overlay is open, so the default review stays light.
-    if (!clipUri || !showSkeleton || !seg || seg.strikeMs == null) { setTempo(null); return; }
+    // Tempo is the headline swing metric — compute it in review by default (it
+    // surfaces in the left tempo pill). Skipped for putts (no swing tempo).
+    // Heavier pose/body still wait for the Motion overlay.
+    if (!clipUri || isPutt || !seg || seg.strikeMs == null) { setTempo(null); return; }
     const cacheKey = `${clipUri}#${seg.strikeMs}`;
     const cached = tempoCacheRef.current[cacheKey];
     if (cached) { setTempo(cached); return; }
@@ -598,7 +599,7 @@ export default function SmartMotion() {
       }
     })();
     return () => { cancelled = true; };
-  }, [clipUri, segments, selectedSwing, showSkeleton]);
+  }, [clipUri, segments, selectedSwing, isPutt]);
 
   // Address still for the targeting card / ball auto-detect. Sample near
   // the start of the selected swing (or ~12% into a single clip) where
@@ -1189,6 +1190,20 @@ export default function SmartMotion() {
           ]}
         />
 
+        {/* TEMPO PILL — vertical data pill on the LEFT (review, swings). Tempo
+            is the headline metric; shown here so it's always visible without
+            blocking the ball box. Green when in the 2.8–3.4 window, else amber.
+            Only renders when a real ratio exists (honest — no fake number). */}
+        {isReview && !isPutt && tempo?.ratio != null ? (
+          <View style={[styles.tempoPill, { top: insets.top + 76 }]} pointerEvents="none">
+            <Text style={styles.tempoPillLabel}>TEMPO</Text>
+            <Text style={[styles.tempoPillValue, { color: tempo.ratio >= 2.8 && tempo.ratio <= 3.4 ? '#34d399' : '#f59e0b' }]}>
+              {tempo.ratio.toFixed(1)}
+            </Text>
+            <Text style={styles.tempoPillUnit}>: 1</Text>
+          </View>
+        ) : null}
+
         {/* Smart Capture — tap exposed video to freeze + mark up. */}
         {isReview && clipUri ? (
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setAnnotateOpen(true)} accessibilityRole="button" accessibilityLabel="Freeze and mark up this swing" />
@@ -1205,7 +1220,7 @@ export default function SmartMotion() {
             via the targeting card on the analysis page. */}
         {isReview && (ballArea || targetPoint) ? (
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <CageTargetingOverlay ballArea={ballArea} target={targetPoint} />
+            <CageTargetingOverlay ballArea={ballArea} target={targetPoint} launchDir={angle === 'face_on' ? (swingerHandedness === 'left' ? 'right' : 'left') : null} />
           </View>
         ) : null}
 
@@ -1217,7 +1232,7 @@ export default function SmartMotion() {
             {/* Ball box only — CaptureGuides draws the angle-specific target
                 line (DTL center vs FO offset) so the DTL/FO toggle switches it.
                 The ball box is the single anchor (no duplicate box). */}
-            <CageTargetingOverlay ballArea={draftBall} target={null} />
+            <CageTargetingOverlay ballArea={draftBall} target={null} launchDir={angle === 'face_on' ? (swingerHandedness === 'left' ? 'right' : 'left') : null} />
           </View>
         ) : null}
         {phase === 'setup' && placeBallMode ? (
@@ -1235,11 +1250,10 @@ export default function SmartMotion() {
           />
         ) : null}
 
-        {/* Angle-specific framing guide (DTL center line vs FO offset lines) —
-            switches with the DTL/FO toggle. Suppressed in review (the
-            CageTargetingOverlay owns ball + target there). Its own ball box was
-            removed so it doesn't duplicate the CageTargetingOverlay ball box. */}
-        {phase !== 'analyzing' && !isReview
+        {/* DTL framing guide = center target line (CaptureGuides). FACE-ON uses
+            the CageTargetingOverlay ball box + diagonal ~LAUNCH line instead, so
+            CaptureGuides only renders for down-the-line. Suppressed in review. */}
+        {phase !== 'analyzing' && !isReview && angle === 'down_the_line'
           ? <CaptureGuides mode={angle} handedness={swingerHandedness} />
           : null}
 
@@ -1716,6 +1730,11 @@ const styles = StyleSheet.create({
   recPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, zIndex: 6 },
   puttPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, zIndex: 6, backgroundColor: '#34d399' },
   puttPillText: { color: '#06281b', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
+  // Tempo data pill — vertical, left edge.
+  tempoPill: { position: 'absolute', left: 10, zIndex: 6, alignItems: 'center', backgroundColor: 'rgba(6,15,9,0.6)', borderRadius: 14, paddingVertical: 8, paddingHorizontal: 10, gap: 1 },
+  tempoPillLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
+  tempoPillValue: { fontSize: 22, fontWeight: '900' },
+  tempoPillUnit: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '700' },
   // Setup tool rail — translucent icon buttons on the right edge.
   toolRail: { position: 'absolute', right: 10, gap: 12, zIndex: 7, alignItems: 'center' },
   toolBtn: { width: 46, height: 46, borderRadius: 23, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },

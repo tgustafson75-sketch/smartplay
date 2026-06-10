@@ -852,6 +852,17 @@ check('Universal control bar: record/play-pause/save/delete + slow-mo',
     /deleteSession/.test(smSrc) && /rate=\{playbackRate\}/.test(smSrc),
   'review bar with play/pause, slow-mo (rate prop), save, delete');
 
+check('Tempo pill on the left (review, swings, honest)',
+  /tempoPill/.test(smSrc) && /isReview && !isPutt && tempo\?\.ratio != null/.test(smSrc),
+  'headline tempo shown as a left pill, only when a real ratio exists');
+
+check('Face-on approximate launch line (estimate, not blocking ball box)',
+  /launchDir/.test(read('components/swinglab/CageTargetingCard.tsx')) &&
+    /~ LAUNCH/.test(read('components/swinglab/CageTargetingCard.tsx')) &&
+    /angle === 'face_on' \? \(swingerHandedness/.test(smSrc) &&
+    /angle === 'down_the_line'\n\s*\? <CaptureGuides/.test(smSrc),
+  'face-on draws a diagonal ~LAUNCH line; DTL keeps the center guide');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
