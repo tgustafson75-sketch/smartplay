@@ -25,7 +25,7 @@ import { bagDistances } from '../services/shotStrategy';
 import { checkContent } from '../services/contentGuardrail';
 import { resolveAckClip } from '../services/quickAckClips';
 import { resolveGreetingClip } from '../services/quickGreetingClips';
-import { isDegraded as isVoiceEndpointDegraded, recordFailure as recordVoiceEndpointFailure, recordSuccess as recordVoiceEndpointSuccess } from '../services/voiceCircuitBreaker';
+import { recordFailure as recordVoiceEndpointFailure, recordSuccess as recordVoiceEndpointSuccess } from '../services/voiceCircuitBreaker';
 // 2026-05-21 — Consolidation 4: routine voice traces gated through devLog.
 import { devLog } from '../services/devLog';
 import { isSessionInFlight } from '../services/listeningSession';
@@ -698,16 +698,11 @@ export const useVoiceCaddie = ({
         }
       } catch { /* non-fatal — brain still works without intel */ }
 
-      // 2026-06-07 audit r6 — Circuit breaker short-circuit. If
-      // /api/kevin has been hammered with failures recently, skip
-      // the fetch and route to the catch path immediately so the
-      // local-status responder fallback fires without paying the
-      // 60s radio-wake-and-timeout cost.
-      if (isVoiceEndpointDegraded('kevin')) {
-        console.log('[voice] /api/kevin degraded — short-circuit to local fallback');
-        throw new Error('brain_endpoint_degraded');
-      }
-
+      // 2026-06-10 — FAIL-SAFE: always attempt the brain. (Removed the
+      // breaker short-circuit that pre-skipped the fetch — it caused false
+      // "no network" / silent failures on good Wi-Fi. The fetch has its own
+      // timeout below and the catch path still routes to the local-status
+      // responder fallback if it genuinely fails.)
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), BRAIN_TIMEOUT_MS);
 
@@ -1195,18 +1190,12 @@ export const useVoiceCaddie = ({
         console.log('[voice] file size probe failed (continuing):', e);
       }
 
-      // 2026-06-07 audit r6 — Circuit breaker short-circuit for
-      // /api/transcribe. Voice is effectively muted when transcribe
-      // fails consistently; better to fast-fail with a clear message
-      // than burn another 40s on a doomed network call.
-      if (isVoiceEndpointDegraded('transcribe')) {
-        console.log('[voice] /api/transcribe degraded — short-circuit');
-        onResponseReceived('Cell signal weak — voice paused. Tap again when you have signal.');
-        wrappedOnVoiceStateChange('idle');
-        isProcessingRef.current = false;
-        return;
-      }
-
+      // 2026-06-10 — FAIL-SAFE: always attempt transcription. (Removed the
+      // breaker short-circuit that walled the mic with "Cell signal weak —
+      // voice paused" WITHOUT trying — it fired on a single cold-start blip,
+      // on perfect Wi-Fi, and because it stopped trying it could never clear.
+      // The transcribe fetch has its own timeout; a genuine failure below
+      // gives a brief haptic, not a sticky wall.)
       const formData = new FormData();
       formData.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
       formData.append('language', language);

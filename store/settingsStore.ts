@@ -636,7 +636,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 11,
+      version: 12,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -754,6 +754,16 @@ export const useSettingsStore = create<SettingsState>()(
           } else if ((p.personaIntensity as Record<string, number>).custom == null) {
             p.personaIntensity = { ...p.personaIntensity, custom: 100 };
           }
+        }
+        // v12 — 2026-06-10 — one-time rescue. The circuit breaker used to
+        // AUTO-engage Local Mode after a few transient failures and never
+        // turn it back off, trapping users (incl. on perfect Wi-Fi) with a
+        // quiet caddie + "cell signal weak". Auto-engage is now removed and
+        // Local Mode is user-controlled only. Force it OFF once here so anyone
+        // already trapped by the old behavior boots clean; if they genuinely
+        // want Local Mode they re-enable it in Settings (this won't re-clear).
+        if (version < 12) {
+          p.localMode = false;
         }
         return p as SettingsState;
       },

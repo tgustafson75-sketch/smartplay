@@ -64,30 +64,11 @@ const lastReason: Record<VoiceEndpoint, FailureKind> = {
   'voice-intent': 'network',
   'swing-analysis': 'network',
 };
-// Track whether we've already auto-engaged Local Mode this session so we
-// don't toast twice (or fight a user who manually turned it off).
-let localModeAutoEngaged = false;
-
-function maybeAutoEngageLocalMode(triggeringEndpoint: VoiceEndpoint): void {
-  if (localModeAutoEngaged) return;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const settingsMod = require('../store/settingsStore') as typeof import('../store/settingsStore');
-    const s = settingsMod.useSettingsStore.getState();
-    if (!s.localMode) {
-      s.setLocalMode(true);
-      localModeAutoEngaged = true;
-      console.log(`[circuit-breaker] auto-engaged Local Mode after ${triggeringEndpoint} degradation`);
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const toastMod = require('../store/toastStore') as typeof import('../store/toastStore');
-        toastMod.useToastStore.getState().show('Cell signal weak — Local Mode on');
-      } catch { /* non-fatal */ }
-    }
-  } catch (e) {
-    console.log('[circuit-breaker] localMode auto-engage failed (non-fatal):', e);
-  }
-}
+// 2026-06-10 — Local Mode is no longer auto-engaged by the breaker (it caused
+// a permanent false "cell signal weak" trap on good connectivity). It is a
+// user-controlled setting only. Kept as a constant-false for the diagnostic
+// snapshot's shape.
+const localModeAutoEngaged = false;
 
 /**
  * Record a failure for the given endpoint. If THRESHOLD failures land
@@ -103,11 +84,12 @@ export function recordFailure(endpoint: VoiceEndpoint, kind: FailureKind = 'netw
   if (recent.length >= FAILURE_THRESHOLD && degradedUntil[endpoint] < now) {
     degradedUntil[endpoint] = now + DEGRADED_MS;
     failures[endpoint] = [];
-    console.log(`[circuit-breaker] ${endpoint} marked DEGRADED for ${DEGRADED_MS / 1000}s after ${FAILURE_THRESHOLD} ${kind} failures in ${FAILURE_WINDOW_MS / 1000}s`);
-    // Only a genuine NETWORK trip means "weak signal" → auto-engage Local
-    // Mode. A server slowdown (timeout) or 5xx is not a connectivity problem
-    // and must not flip the user into Local Mode or show "cell signal weak".
-    if (kind === 'network') maybeAutoEngageLocalMode(endpoint);
+    console.log(`[circuit-breaker] ${endpoint} ${kind} failures tracked (telemetry only — NOT blocking)`);
+    // 2026-06-10 — REMOVED auto-engage of Local Mode. Auto-flipping a
+    // PERSISTENT user setting from a transient breaker trip was the bug behind
+    // a false weak-signal Local-Mode toast appearing on perfect Wi-Fi and then
+    // never reverting (a permanent trap until a manual Settings toggle). Local
+    // Mode is now a user choice only. The breaker no longer flips it.
   }
 }
 
@@ -132,21 +114,22 @@ export function recordSuccess(endpoint: VoiceEndpoint): void {
 }
 
 /**
- * True when the endpoint is currently marked degraded. Callers should
- * short-circuit the fetch and return a fallback IMMEDIATELY instead
- * of paying the radio-wake cost.
+ * 2026-06-10 — FAIL-SAFE: the caddie ALWAYS attempts the real call.
+ *
+ * This used to return true after 3 failures and callers would short-circuit
+ * the fetch — which produced false weak-signal "voice paused" / "no
+ * network" walls on perfect Wi-Fi (one cold-start or transient blip tripped
+ * it, and because it then stopped TRYING, a success could never clear it
+ * inside the window). That is the opposite of resilient.
+ *
+ * Now it always returns false: every user-initiated call goes through. Each
+ * real call already has its own timeout AND a graceful fallback (local status
+ * replies on-course, a brief honest line otherwise), so a genuine outage
+ * degrades softly instead of being pre-blocked. Failure counts are still
+ * recorded above for /owner-logs telemetry — they just never gate the user.
  */
-export function isDegraded(endpoint: VoiceEndpoint): boolean {
-  if (Date.now() >= degradedUntil[endpoint]) {
-    // Auto-clear so subsequent calls go through; success path will
-    // then reset failures via recordSuccess.
-    if (degradedUntil[endpoint] !== 0) {
-      degradedUntil[endpoint] = 0;
-      console.log(`[circuit-breaker] ${endpoint} degraded window expired — clear`);
-    }
-    return false;
-  }
-  return true;
+export function isDegraded(_endpoint: VoiceEndpoint): boolean {
+  return false;
 }
 
 /**
@@ -186,5 +169,4 @@ export function resetCircuitBreaker(): void {
     failures[k] = [];
     degradedUntil[k] = 0;
   }
-  localModeAutoEngaged = false;
 }

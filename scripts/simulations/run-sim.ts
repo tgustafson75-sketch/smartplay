@@ -911,9 +911,32 @@ check('Timeout is NOT mislabeled as lost-connection (honest networking)',
   /name === 'TimeoutError'/.test(poseSrc) &&
     /recordFailure\('swing-analysis', 'timeout'\)/.test(poseSrc) &&
     /REQUEST_TIMEOUT_MS = 63_000/.test(poseSrc) &&
-    /export type FailureKind/.test(breakerSrc) &&
-    /if \(kind === 'network'\) maybeAutoEngageLocalMode/.test(breakerSrc),
-  'a server-slowness timeout returns an honest "took too long" (not "check your network"), keeps the client above the 60s server deadline, and never auto-engages Local Mode on Wi-Fi');
+    /export type FailureKind/.test(breakerSrc),
+  'a server-slowness timeout returns an honest "took too long" (not "check your network") and keeps the client above the 60s server deadline');
+
+// 2026-06-10 — FAIL-SAFE caddie: the breaker never blocks the user and never
+// auto-engages Local Mode; the voice path + brain always attempt.
+check('Circuit breaker is fail-safe: never blocks, never auto-engages Local Mode',
+  /export function isDegraded\(_endpoint: VoiceEndpoint\): boolean \{\s*return false;/.test(breakerSrc) &&
+    !/maybeAutoEngageLocalMode/.test(breakerSrc) &&
+    !/Cell signal weak/.test(breakerSrc),
+  'isDegraded always returns false (always attempt), Local Mode auto-engage removed, no "cell signal weak" toast');
+
+check('Voice path has no preemptive "voice paused" / brain short-circuit walls',
+  !/voice paused\. Tap again/.test(read('hooks/useVoiceCaddie.ts')) &&
+    !/isVoiceEndpointDegraded/.test(read('hooks/useVoiceCaddie.ts')),
+  'mic + brain always attempt; removed the breaker short-circuits that walled voice on a transient blip');
+
+check('Brain failure falls back to a real local answer (not a snag prompt)',
+  /brainFallbackReply/.test(read('hooks/useKevin.ts')) &&
+    /tryLocalReply/.test(read('hooks/useKevin.ts')) &&
+    !/Hit a snag on my end/.test(read('hooks/useKevin.ts')),
+  'a failed brain call answers locally (on-course status) or a brief non-alarming line — never "hit a snag / no network"');
+
+check('One-time migration clears auto-trapped Local Mode (settings v12)',
+  /version: 12/.test(read('store/settingsStore.ts')) &&
+    /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
+  'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 

@@ -11,8 +11,25 @@ import type { ToolAction } from '../app/api/kevin+api';
 import { buildFullPracticeContext } from '../services/tutorialContext';
 import { getGreenYardagesSync } from '../services/smartFinderService';
 import { useSmartFinderStore } from '../store/smartFinderStore';
+import { tryLocalReply } from '../services/localStatusResponder';
 
 export type { ToolAction };
+
+// 2026-06-10 — Fail-safe brain fallback. If the brain call genuinely fails,
+// answer LOCALLY when we can (on-course status questions resolve from device
+// state with zero network), otherwise return a brief, non-alarming line — NOT
+// a "no network / lost connection / hit a snag" wall. The caddie always says
+// something useful.
+function brainFallbackReply(message: string, language: string): string {
+  const lang = (language === 'es' || language === 'zh') ? language : 'en';
+  try {
+    const local = tryLocalReply(message, lang);
+    if (local?.text) return local.text;
+  } catch { /* fall through to the brief line */ }
+  if (lang === 'es') return 'Dame un segundo e inténtalo otra vez.';
+  if (lang === 'zh') return '稍等一下，再问我一次。';
+  return 'Give me one sec and ask me again.';
+}
 
 interface KevinCallbacks {
   onToolAction?: (action: ToolAction) => void;
@@ -227,7 +244,7 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
       if (!res.ok) {
         setIsThinking(false);
         setPresenceThinking(false);
-        return "Sorry, lost you for a moment. Try again.";
+        return brainFallbackReply(message, language);
       }
 
       const raw = await res.json() as { text: string; audioBase64: string | null; toolAction: ToolAction | null };
@@ -264,7 +281,7 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
       console.log('[kevin] hook error:', err);
       setIsThinking(false);
       setPresenceThinking(false);
-      return "Hit a snag on my end. Try again.";
+      return brainFallbackReply(message, language);
     }
   }, [
     name, firstName, handicap, language, roundsTogether, sessionsTogether,
