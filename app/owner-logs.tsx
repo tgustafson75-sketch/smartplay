@@ -41,6 +41,8 @@ function kindLabel(kind: IssueLogKind): string {
     case 'voice_silent_fail': return 'SPEAK';
     case 'transcribe_error':  return 'TRANSCRIBE';
     case 'gps_error':         return 'GPS';
+    case 'analysis_error':    return 'ANALYSIS';
+    case 'app_error':         return 'APP';
     case 'user':              return 'USER';
   }
 }
@@ -51,6 +53,8 @@ function kindColor(kind: IssueLogKind): string {
     case 'voice_silent_fail': return '#f59e0b'; // amber — TTS silent fail
     case 'transcribe_error':  return '#8b5cf6'; // purple — Whisper failed
     case 'gps_error':         return '#06b6d4'; // cyan — GPS/location failure
+    case 'analysis_error':    return '#10b981'; // green — swing/frame analysis failure
+    case 'app_error':         return '#f97316'; // orange — other app failure
     case 'user':              return '#6b7280';
   }
 }

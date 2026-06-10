@@ -716,6 +716,18 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         failure_kinds: failureKinds,
         message,
       });
+      // Owner issue log — capture the failure kinds so a field re-analyze
+      // failure is diagnosable (no_frames → extraction/codec; no_network →
+      // connectivity; error → server). Pairs with the frame_extraction_empty
+      // detail logged inside extractKeyFrames.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent('analysis_failed', {
+          source: session.source ?? 'upload',
+          failure_kinds: failureKinds,
+          swings: swings.length,
+        });
+      } catch { /* best-effort */ }
       useCageStore.getState().setSessionAnalysisStatus(sessionId, 'failed', message);
       return { primary_issue: null, drill_recommendation: null };
     }

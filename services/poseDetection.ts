@@ -387,7 +387,21 @@ export async function extractKeyFrames(
       frameFractions.map(async (t, i) => {
         const timeMs = windowStartMs + Math.round(windowDurationMs * t);
         try {
-          const r = await VT.getThumbnailAsync(clipUri, { time: timeMs, quality: 0.8 });
+          // 2026-06-10 — Robustness: phone camera clips are often VARIABLE frame
+          // rate, and Android's MediaMetadataRetriever (behind expo-video-
+          // thumbnails) can return null at an arbitrary time even though the
+          // clip plays fine. Retry at a few nearby times so we land on a
+          // decodable frame instead of failing the whole extraction.
+          let r: { uri: string } | null = null;
+          let lastErr: unknown = null;
+          for (const ct of [timeMs, timeMs + 250, Math.max(0, timeMs - 250), 0]) {
+            try { r = await VT.getThumbnailAsync(clipUri, { time: ct, quality: 0.8 }); break; }
+            catch (e) { lastErr = e; }
+          }
+          if (!r) {
+            perFrameOutcomes.push({ idx: i, t_ms: timeMs, ok: false, error: 'thumbnail_failed_all_retries: ' + (lastErr instanceof Error ? lastErr.message : String(lastErr)) });
+            return null;
+          }
           let rawSize: number | undefined;
           try {
             const info = await import('expo-file-system/legacy').then(m => m.getInfoAsync(r.uri));
@@ -429,6 +443,23 @@ export async function extractKeyFrames(
       }),
     );
     const valid = frames.filter((f): f is Frame => f !== null);
+    // 2026-06-10 — When extraction comes back EMPTY (the "plays manually but
+    // won't re-analyze" case), log the exact cause to the owner issue log:
+    // clip uri scheme + the first thumbnail errors reveal an Android codec/VFR
+    // or content://-uri problem without an ADB cable.
+    if (valid.length === 0) {
+      try {
+        const firstErrs = perFrameOutcomes.filter(o => !o.ok).slice(0, 3).map(o => o.error);
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent('frame_extraction_empty', {
+          uri_scheme: clipUri.split(':')[0],
+          uri_tail: clipUri.slice(-44),
+          attempted: frameFractions.length,
+          errors: firstErrs,
+          bounded: boundaries != null,
+        });
+      } catch { /* logging is best-effort */ }
+    }
     // 2026-05-26 — Fix DL: payload-size summary on top of the
     // per-frame detail. Audit flagged that the per_frame array is
     // hard to scan; a single avg/min/max line catches regressions

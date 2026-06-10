@@ -138,11 +138,10 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   '/native-modules-debug',
   // 2026-06-09 — Audit cleanup: route these through the central gate too.
   // /dev/CourseTruth was a dev-only screen reachable by deep link with NO
-  // gating; harness + caddie-clip-test self-gate at the screen level but
-  // belong in the single source of truth.
+  // gating; harness self-gates at the screen level but belongs in the single
+  // source of truth.
   '/dev/CourseTruth',
   '/harness',
-  '/caddie-clip-test',
 ]);
 
 function AppNavigator() {
@@ -799,13 +798,7 @@ function AppNavigator() {
             most recent /api/swing-analysis call. PASS/CHECK badge
             proves the multi-frame pipe without dashboards. */}
         <Stack.Screen name="swing-analysis-debug" options={{ headerShown: false }} />
-        {/* 2026-05-26 — Owner-only Kevin clip playback test surface.
-            Route file existed (app/caddie-clip-test.tsx) and was
-            reachable from Settings → Owner Tools → "Caddie Clip Test
-            (Kevin)" but missing here meant Expo Router silently
-            dropped the navigation. Tim opened Settings, tapped the
-            row, and saw nothing happen. */}
-        <Stack.Screen name="caddie-clip-test" options={{ headerShown: false }} />
+        {/* 2026-06-10 — Caddie Clip Test removed (owner tool + route + screen). */}
         <Stack.Screen
           name="hole-view"
           options={{ animation: 'slide_from_bottom' }}

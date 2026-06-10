@@ -36,7 +36,13 @@ export type IssueLogKind =
   | 'transcribe_error'
   // 2026-06-08 — GPS / signal failures auto-log here so a field tester can
   // review + export them after a round without an ADB cable.
-  | 'gps_error';
+  | 'gps_error'
+  // 2026-06-10 — Analysis / frame-extraction failures (swing-analysis, pose,
+  // putt) + any other app failure auto-log here so re-analyze / SmartMotion
+  // issues are diagnosable in the field (e.g. "frame_extraction_empty" with the
+  // clip uri scheme + per-frame errors reveals an Android codec/VFR problem).
+  | 'analysis_error'
+  | 'app_error';
 
 export interface IssueLogEntry {
   /** Stable id: `${timestamp}_${random}`. */
@@ -82,6 +88,14 @@ interface IssueLogState {
    *  low-level services (gpsManager) can call it without threading route/
    *  persona. Best-effort: never throws. */
   addGpsEvent: (stage: string, details?: Record<string, unknown>) => void;
+  /** Analysis / frame-extraction / any-other-failure auto-log. Self-context
+   *  like addGpsEvent so low-level services can call it freely. `kind` defaults
+   *  to 'analysis_error'; pass 'app_error' for non-analysis failures. */
+  addAppEvent: (
+    stage: string,
+    details?: Record<string, unknown>,
+    kind?: 'analysis_error' | 'app_error',
+  ) => void;
   clearAll: () => void;
   remove: (id: string) => void;
 }
@@ -169,6 +183,49 @@ export const useIssueLogStore = create<IssueLogState>()(
         };
         set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
         console.log('[issueLog] gps event:', summary);
+      },
+      addAppEvent: (stage, details, kind = 'analysis_error') => {
+        // Self-context snapshot via lazy requires (mirrors addGpsEvent) so
+        // services/poseDetection/videoUpload can log without threading context
+        // or risking a module cycle. Never throws.
+        let context: IssueLogEntry['context'] = {
+          route: kind === 'analysis_error' ? 'analysis' : 'app', persona: null,
+          isRoundActive: false, courseId: null, currentHole: null, appVersion: '1.0.0',
+        };
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const round = require('./roundStore').useRoundStore.getState();
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const settings = require('./settingsStore').useSettingsStore.getState();
+          let appVersion = '1.0.0';
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            appVersion = require('expo-constants').default?.expoConfig?.version ?? '1.0.0';
+          } catch { /* keep default */ }
+          context = {
+            route: kind === 'analysis_error' ? 'analysis' : 'app',
+            persona: settings?.caddiePersonality ?? null,
+            isRoundActive: !!round?.isRoundActive,
+            courseId: round?.activeCourseId ?? null,
+            currentHole: round?.currentHole ?? null,
+            appVersion,
+          };
+        } catch { /* best-effort context */ }
+        const errorMessage = typeof details?.error === 'string'
+          ? details.error
+          : details?.error != null ? String(details.error) : null;
+        const summary = errorMessage ? `${kind}: ${stage} — ${errorMessage.slice(0, 200)}` : `${kind}: ${stage}`;
+        const entry: IssueLogEntry = {
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: Date.now(),
+          text: summary,
+          kind,
+          stage,
+          details,
+          context,
+        };
+        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
+        console.log('[issueLog] app event:', summary);
       },
       clearAll: () => set({ entries: [] }),
       remove: (id) => set(s => ({ entries: s.entries.filter(e => e.id !== id) })),
