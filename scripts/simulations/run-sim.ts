@@ -1041,6 +1041,23 @@ check('Caddie CNS Phase 2 wired into BOTH brain paths (additive, server-pasted b
     /unified_context_block: getCaddieContext\(\{ courseId: activeCourseId, hole: currentHole, club \}\)\.promptBlock/.test(voiceHookSrc),
   'typed-chat (useKevin) and voice (useVoiceCaddie) both fold the memory slice into unified_context_block — the field the server already pastes — so no server change and live builders stay as fallback');
 
+// 2026-06-10 — CNS Phase 3 (reflection loop) + Phase 4 (signal-independence).
+const memStoreSrc = read('store/caddieMemoryStore.ts');
+const retrSrc = read('services/caddieMemoryRetrieval.ts');
+check('Caddie CNS Phase 3: durable round reflections (baseline + recap enrichment, deduped)',
+  /CNS Phase 3 — capture a durable, HONEST BASELINE reflection/.test(roundSrc) &&
+    /recordReflection\(\{/.test(roundSrc) &&
+    /CNS Phase 3 — enrich the round's durable reflection/.test(read('services/recapGenerator.ts')) &&
+    /p\.reflections\.filter\(\(r\) => r\.round_id !== round_id\)/.test(memStoreSrc),
+  'round end writes an honest baseline reflection; the recap LLM summary enriches it; recordReflection dedupes by round so one round = one reflection');
+
+check('Caddie CNS Phase 4: signal-independence (answer from course memory when GPS weak)',
+  /export function getCourseHoleGuidance\(/.test(retrSrc) &&
+    /From memory on hole/.test(retrSrc) &&
+    /CNS Phase 4 — signal-independence/.test(read('services/localStatusResponder.ts')) &&
+    /getCourseHoleGuidance\(\{ courseId: round\.activeCourseId, hole: round\.currentHole \}\)/.test(read('services/localStatusResponder.ts')),
+  'on a repeat course with no/weak GPS, the local responder answers from learned course-hole memory (typical club/line/green) instead of going silent');
+
 // 2026-06-10 — Analysis pretext: handedness + CNS learned tendencies feed the analyzer.
 // 2026-06-10 — B1: central handicap-tier constants (single source of truth).
 const tiersSrc = read('constants/handicapTiers.ts');

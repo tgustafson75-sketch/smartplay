@@ -55,6 +55,7 @@ export type LocalReplyResult = {
     | 'course_name'
     | 'club_current'
     | 'handicap'
+    | 'course_memory'
     | 'no_round';
 };
 
@@ -264,6 +265,21 @@ function yardageReply(transcript: string, lang: LocalReplyLanguage): LocalReplyR
   const round = useRoundStore.getState();
   if (typeof round.currentHole !== 'number' || round.currentHole <= 0) return null;
 
+  // CNS Phase 4 — signal-independence. When GPS can't give a number, lean on
+  // what we've LEARNED about this hole on this course instead of going silent.
+  // English-only append (the learned phrasing isn't localized) appended to the
+  // localized no-fix line.
+  const memoryFallback = (): LocalReplyResult | null => {
+    if (lang !== 'en') return { text: L[lang].noFix, queryType: 'yardage_middle' };
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mod = require('./caddieMemoryRetrieval') as typeof import('./caddieMemoryRetrieval');
+      const g = mod.getCourseHoleGuidance({ courseId: round.activeCourseId, hole: round.currentHole });
+      if (g) return { text: `${L[lang].noFix} ${g.text}`, queryType: 'course_memory' };
+    } catch { /* no memory — fall through */ }
+    return { text: L[lang].noFix, queryType: 'yardage_middle' };
+  };
+
   const green = resolveGreenCoords(round.currentHole);
   if (!green || (!green.middle && !green.front && !green.back)) {
     return { text: L[lang].noGreen, queryType: 'yardage_middle' };
@@ -271,11 +287,11 @@ function yardageReply(transcript: string, lang: LocalReplyLanguage): LocalReplyR
 
   const fix = getLastFix();
   if (!fix || typeof fix.lat !== 'number' || typeof fix.lng !== 'number') {
-    return { text: L[lang].noFix, queryType: 'yardage_middle' };
+    return memoryFallback();
   }
   const quality = classifyAccuracy(fix.accuracy_m, fix.timestamp);
   if (quality.level === 'none' || quality.level === 'stale') {
-    return { text: L[lang].noFix, queryType: 'yardage_middle' };
+    return memoryFallback();
   }
 
   // Determine target: front, back, or middle (default).

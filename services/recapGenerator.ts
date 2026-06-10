@@ -200,5 +200,28 @@ export async function generateRecap(
 
   await saveRecap(roundId, recap);
   console.log('[recap] saved for round', roundId, 'at', courseName);
+
+  // CNS Phase 3 — enrich the round's durable reflection in memory with the
+  // recap's LLM summary (replaces the deterministic baseline written at
+  // endRound). Best-effort; the Phase 2 retrieval surfaces the latest one back
+  // to the brain on the next round.
+  try {
+    if (overallSummary && overallSummary.trim() && courseId) {
+      const mem = await import('../store/caddieMemoryStore');
+      mem.useCaddieMemoryStore.getState().recordReflection({
+        round_id: roundId,
+        course_id: courseId,
+        summary: overallSummary.trim(),
+        keyTakeaways: finalComparisons
+          .filter(c => c.kevin_summary)
+          .slice(0, 3)
+          .map(c => `Hole ${c.hole_number}: ${(c.kevin_summary ?? '').slice(0, 90)}`),
+        nowMs: Date.now(),
+      });
+    }
+  } catch (e) {
+    console.log('[recap] CNS reflection enrich failed (non-fatal):', e);
+  }
+
   return recap;
 }

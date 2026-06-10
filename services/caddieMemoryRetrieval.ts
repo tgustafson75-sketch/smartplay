@@ -127,3 +127,36 @@ export function mergeMemoryIntoContext(existing: string | null, memoryBlock: str
   const merged = [existing, memoryBlock].filter((s) => s && s.trim()).join('\n\n');
   return merged.length > 0 ? merged : null;
 }
+
+/**
+ * CNS Phase 4 — signal-independence. Learned guidance for a specific course +
+ * hole, so on a REPEAT course with weak/absent GPS the caddie can still advise
+ * from memory ("you usually tee 7-iron here; favor left") instead of going
+ * silent. Sync, never throws; returns null when there's nothing learned yet.
+ */
+export function getCourseHoleGuidance(input: {
+  playerId?: string;
+  courseId: string | null;
+  hole: number | null;
+}): { text: string; typicalClub: string | null; bestLine: string | null; greenBehavior: string | null } | null {
+  if (!CNS_RETRIEVAL_ENABLED || !input.courseId || input.hole == null) return null;
+  try {
+    const p = useCaddieMemoryStore.getState().getPlayer(input.playerId);
+    const cm = p.courses[input.courseId];
+    const hm = cm?.holes[input.hole];
+    if (!hm) return null;
+    const parts: string[] = [];
+    if (hm.typicalTeeClub) parts.push(`you usually tee ${hm.typicalTeeClub}`);
+    if (hm.bestLine) parts.push(hm.bestLine);
+    if (hm.greenBehavior) parts.push(`green ${hm.greenBehavior}`);
+    if (parts.length === 0) return null;
+    return {
+      text: `From memory on hole ${input.hole} — ${parts.join('; ')}.`,
+      typicalClub: hm.typicalTeeClub,
+      bestLine: hm.bestLine,
+      greenBehavior: hm.greenBehavior,
+    };
+  } catch {
+    return null;
+  }
+}

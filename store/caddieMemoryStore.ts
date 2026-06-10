@@ -240,7 +240,10 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
             round_id, course_id: course_id ?? null, date: nowMs,
             summary: summary.trim(), keyTakeaways: (keyTakeaways ?? []).slice(0, 5),
           };
-          const reflections = [reflection, ...p.reflections].slice(0, MAX_REFLECTIONS);
+          // Dedupe by round: a round's baseline reflection (written at endRound)
+          // is REPLACED by a richer one (e.g. the recap's LLM summary) for the
+          // same round_id, rather than stacking two entries for one round.
+          const reflections = [reflection, ...p.reflections.filter((r) => r.round_id !== round_id)].slice(0, MAX_REFLECTIONS);
           return { players: { ...s.players, [id]: { ...p, reflections, updated_at: nowMs } } };
         });
       },

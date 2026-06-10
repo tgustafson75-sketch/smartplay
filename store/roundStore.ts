@@ -1106,6 +1106,28 @@ export const useRoundStore = create<RoundState>()(
               nowMs: Date.now(),
               holes: holesData,
             });
+            // CNS Phase 3 — capture a durable, HONEST BASELINE reflection of
+            // this round (deterministic from real scores; the recap's LLM
+            // summary enriches it later via recordReflection). Phase 2 retrieval
+            // surfaces the most-recent reflection back to the brain ("last
+            // round you...").
+            const holesPlayed = holesData.length;
+            if (holesPlayed > 0) {
+              const scoreLine = scoreVsPar === 0 ? 'even par' : scoreVsPar > 0 ? `+${scoreVsPar}` : `${scoreVsPar}`;
+              const summary = `${scoreLine} through ${holesPlayed} hole${holesPlayed === 1 ? '' : 's'}${s.activeCourse ? ` at ${s.activeCourse}` : ''}.`;
+              const takeaways: string[] = [];
+              const trouble = holesData
+                .filter(h => h.par != null && (h.score - (h.par as number)) >= 2)
+                .map(h => `hole ${h.hole}`);
+              if (trouble.length > 0) takeaways.push(`Trouble holes: ${trouble.slice(0, 3).join(', ')}.`);
+              mem.useCaddieMemoryStore.getState().recordReflection({
+                round_id: record.id,
+                course_id: s.activeCourseId,
+                summary,
+                keyTakeaways: takeaways,
+                nowMs: Date.now(),
+              });
+            }
           }
         } catch (e) {
           console.log('[roundStore] caddie-memory recordRoundEnd failed (non-fatal):', e);
