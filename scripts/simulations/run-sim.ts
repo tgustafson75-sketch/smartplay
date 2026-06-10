@@ -723,7 +723,7 @@ check('Caddie TARGET no longer a hardcoded CENTER',
   'frozen CENTER placeholder removed (honest — until a real aim engine)');
 
 check('SmartMotion camera audio muted (no iOS dual-recorder conflict)',
-  /mode="video" mute/.test(read('app/swinglab/smartmotion.tsx')),
+  /mode="video"\s+mute/.test(read('app/swinglab/smartmotion.tsx')),
   'camera mute prevents audio-session collision with the metering recorder');
 
 check('practiceStore averages carry per-club, not by total swing count',
@@ -836,6 +836,21 @@ check('Putt mode: pill + analyzed as a putt (not a swing)',
   /isPutt = club === 'PT'/.test(smSrc) && /analyzePutt\(/.test(smSrc) &&
     /PUTT MODE/.test(smSrc) && /clubRef\.current === 'PT'/.test(smSrc),
   'putter tag routes to putt analysis + shows PUTT MODE confirmation pill');
+
+// ─── 2026-06-09 (audit fixes): voice-restart + control bar + slow-mo ───────
+check('Voice record restarts from review (camera re-mount fix)',
+  /pendingStartRef/.test(smSrc) && /beginNextRecording/.test(smSrc) &&
+    /onCameraReady=\{/.test(smSrc),
+  'voice "record" from review resets→setup→onCameraReady auto-starts (hands-free loop)');
+
+check('startRecording clears prior-swing results (no stale data in loop)',
+  /Clear the prior swing's results so the next minute starts clean/.test(smSrc),
+  'analysis/putt/feel/tempo cleared on each new recording');
+
+check('Universal control bar: record/play-pause/save/delete + slow-mo',
+  /togglePlay/.test(smSrc) && /discardSwing/.test(smSrc) && /cycleSpeed/.test(smSrc) &&
+    /deleteSession/.test(smSrc) && /rate=\{playbackRate\}/.test(smSrc),
+  'review bar with play/pause, slow-mo (rate prop), save, delete');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 

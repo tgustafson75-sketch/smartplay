@@ -93,6 +93,7 @@ import ClubPickerModal, { clubIdToSmashKey, clubIdToServerKey, clubIdLabel } fro
 import { recognizeClubFromBase64, clubLabel, type ClubId } from '../../services/clubRecognition';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
+import { useToastStore } from '../../store/toastStore';
 import { detectBallDeparture, type BallDepartureResult } from '../../services/swing/ballDeparture';
 import { subscribeSmartMotionCommand, setSmartMotionActive } from '../../services/smartMotionRecordBus';
 import { reconcileFeel, extractFramesB64 } from '../../services/swing/feelReconcile';
@@ -260,6 +261,8 @@ export default function SmartMotion() {
   // the session on ingest for the strike verifier.
   const [draftBall, setDraftBall] = useState<{ x: number; y: number; r: number } | null>(DEFAULT_BALL_BOX);
   const [placeBallMode, setPlaceBallMode] = useState(false);
+  const [videoPaused, setVideoPaused] = useState(false); // review play/pause
+  const [playbackRate, setPlaybackRate] = useState(1); // review slow-mo (1 / .5 / .25)
   const [rootSize, setRootSize] = useState({ w: 0, h: 0 });
   // Status-perimeter pulse — a thin border around the video that ties to the
   // analysis phase (green active/done, amber while thinking), like the caddie
@@ -684,6 +687,9 @@ export default function SmartMotion() {
     setSelectedSwing(0);
     setCoachNote('');
     setTempo(null);
+    setVideoPaused(false);
+    setPlaybackRate(1);
+    setShowSkeleton(false); // Motion defaults OFF each review (light default path)
     setPage(0);
     pagerRef.current?.scrollTo({ x: 0, animated: false });
     setPhase('setup');
@@ -796,6 +802,16 @@ export default function SmartMotion() {
     }
     setBallSpeed(null);
     setBallDeparture(null);
+    // Clear the prior swing's results so the next minute starts clean (the
+    // voice loop uses startRecording, not reset).
+    setAnalysis(null);
+    setAnalysisError(null);
+    setPuttAnalysis(null);
+    setTempo(null);
+    setFeelText('');
+    setFeelReply(null);
+    setVideoPaused(false);
+    setPlaybackRate(1);
     setPlaceBallMode(false); // keep draftBall (carries into the session) but exit place mode
     setSegments([]);
     setSelectedSwing(0);
@@ -943,15 +959,53 @@ export default function SmartMotion() {
   // phase (recording → stop, else → start) so it's robust to start/stop
   // mis-classification. Kept in a ref so we subscribe once and always act on
   // the CURRENT phase. The 60s window also auto-wraps each "minute".
+  // From REVIEW the camera is unmounted (the replay <Video> is shown), so
+  // startRecording's `cameraRef.current` is null and a voice "record" would
+  // no-op. We reset() to setup (camera re-mounts) and set this flag; the
+  // CameraView's onCameraReady then auto-starts the next recording. This keeps
+  // the hands-free "do a minute, review, go again" loop working by voice.
+  const pendingStartRef = useRef(false);
+  const beginNextRecording = useCallback(() => {
+    if (phase === 'review') {
+      pendingStartRef.current = true;
+      reset(); // → setup; CameraView mounts; onCameraReady fires startRecording
+    } else if (phase !== 'analyzing' && phase !== 'recording') {
+      void startRecording();
+    }
+  }, [phase, reset, startRecording]);
+
+  // Review video transport + keep/discard for the control bar.
+  const togglePlay = useCallback(() => {
+    setVideoPaused((p) => {
+      const next = !p;
+      if (next) void videoRef.current?.pauseAsync().catch(() => undefined);
+      else void videoRef.current?.playAsync().catch(() => undefined);
+      return next;
+    });
+  }, []);
+  const confirmSave = useCallback(() => {
+    useToastStore.getState().show('Saved to your Swing Library');
+  }, []);
+  // Slow-mo cycle for swing review (rate prop on the Video — safe, declarative).
+  const cycleSpeed = useCallback(() => {
+    setPlaybackRate((r) => (r === 1 ? 0.5 : r === 0.5 ? 0.25 : 1));
+  }, []);
+  const discardSwing = useCallback(() => {
+    const sid = ingestedSessionIdRef.current;
+    if (sid) { try { useCageStore.getState().deleteSession(sid); } catch { /* non-fatal */ } }
+    useToastStore.getState().show('Swing discarded');
+    reset();
+  }, [reset]);
+
   const recordCmdRef = useRef<(cmd: 'start' | 'stop' | 'toggle' | 'scanClub') => void>(() => {});
   recordCmdRef.current = (cmd) => {
     if (cmd === 'scanClub') { void detectClubFromCamera(); return; }
     const recording = phase === 'recording';
     if (cmd === 'stop') { if (recording) void stopRecording(); return; }
-    if (cmd === 'start') { if (!recording && phase !== 'analyzing') void startRecording(); return; }
+    if (cmd === 'start') { if (!recording) beginNextRecording(); return; }
     // toggle
     if (recording) void stopRecording();
-    else if (phase !== 'analyzing') void startRecording();
+    else beginNextRecording();
   };
   useEffect(() => {
     setSmartMotionActive(true);
@@ -983,24 +1037,37 @@ export default function SmartMotion() {
   const isReview = phase === 'review';
 
   // ── action button ──
+  // Universal control bar — clean translucent icons. Setup: Record. Recording:
+  // Stop. Review: Play/Pause · Slow-mo · Save · Delete · Record-again.
   const actionBtn =
     phase === 'recording' ? (
-      <Pressable onPress={() => void stopRecording()} style={[styles.actionBtn, { backgroundColor: colors.error }]}>
-        <Ionicons name="stop" size={18} color="#fff" />
-        <Text style={styles.actionBtnText}>Stop</Text>
+      <Pressable onPress={() => void stopRecording()} style={[styles.barBtn, { backgroundColor: colors.error }]} accessibilityRole="button" accessibilityLabel="Stop recording">
+        <Ionicons name="stop" size={22} color="#fff" />
       </Pressable>
     ) : isReview ? (
-      <Pressable onPress={reset} style={[styles.actionBtn, { backgroundColor: colors.accent }]}>
-        <Ionicons name="refresh" size={18} color="#06281b" />
-        <Text style={[styles.actionBtnText, { color: '#06281b' }]}>Record again</Text>
-      </Pressable>
+      <View style={styles.barRow}>
+        <Pressable onPress={togglePlay} style={[styles.barBtn, styles.barGhost, { borderColor: colors.accent }]} accessibilityRole="button" accessibilityLabel={videoPaused ? 'Play' : 'Pause'}>
+          <Ionicons name={videoPaused ? 'play' : 'pause'} size={20} color={colors.accent} />
+        </Pressable>
+        <Pressable onPress={cycleSpeed} style={[styles.barBtn, styles.barGhost, { borderColor: playbackRate < 1 ? colors.accent : colors.border }]} accessibilityRole="button" accessibilityLabel={`Playback speed ${playbackRate}x`}>
+          <Text style={[styles.barRate, { color: playbackRate < 1 ? colors.accent : colors.text_muted }]}>{playbackRate === 1 ? '1×' : playbackRate === 0.5 ? '½×' : '¼×'}</Text>
+        </Pressable>
+        <Pressable onPress={confirmSave} style={[styles.barBtn, styles.barGhost, { borderColor: colors.success }]} accessibilityRole="button" accessibilityLabel="Save to library">
+          <Ionicons name="bookmark-outline" size={19} color={colors.success} />
+        </Pressable>
+        <Pressable onPress={discardSwing} style={[styles.barBtn, styles.barGhost, { borderColor: colors.error }]} accessibilityRole="button" accessibilityLabel="Delete swing">
+          <Ionicons name="trash-outline" size={19} color={colors.error} />
+        </Pressable>
+        <Pressable onPress={() => beginNextRecording()} style={[styles.barBtn, { backgroundColor: colors.accent }]} accessibilityRole="button" accessibilityLabel="Record again">
+          <Ionicons name="refresh" size={20} color="#06281b" />
+        </Pressable>
+      </View>
     ) : phase === 'setup' ? (
-      <Pressable onPress={() => void startRecording()} style={[styles.actionBtn, { backgroundColor: colors.accent }]}>
-        <Ionicons name="radio-button-on" size={18} color="#06281b" />
-        <Text style={[styles.actionBtnText, { color: '#06281b' }]}>Record</Text>
+      <Pressable onPress={() => void startRecording()} style={[styles.barBtn, styles.barBtnRecord, { backgroundColor: colors.accent }]} accessibilityRole="button" accessibilityLabel="Record">
+        <Ionicons name="radio-button-on" size={26} color="#06281b" />
       </Pressable>
     ) : (
-      <View style={styles.actionBtn} />
+      <View style={styles.barBtn} />
     );
 
   // ── pause / scrub to a swing position (skeleton attached) ──
@@ -1078,7 +1145,9 @@ export default function SmartMotion() {
             style={StyleSheet.absoluteFill}
             resizeMode={ResizeMode.COVER}
             isLooping
-            shouldPlay
+            shouldPlay={!videoPaused}
+            rate={playbackRate}
+            shouldCorrectPitch={false}
             // 2026-06-09 — Mute the review loop. The captured clip's audio
             // (e.g. a TV in the room) replaying on loop reads as "audio
             // feedback"; it adds nothing to silent skeleton/speed analysis.
@@ -1094,7 +1163,18 @@ export default function SmartMotion() {
           // collide and silently kill metering (→ no strikes/segments/tempo).
           // We never use the clip's audio (playback is muted), so muting the
           // camera is lossless and removes the contention.
-          <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" mode="video" mute />
+          <CameraView
+            ref={cameraRef}
+            style={StyleSheet.absoluteFill}
+            facing="back"
+            mode="video"
+            mute
+            onCameraReady={() => {
+              // Auto-start a voice-requested recording once the camera (re)mounts
+              // coming out of review — completes the hands-free loop.
+              if (pendingStartRef.current) { pendingStartRef.current = false; void startRecording(); }
+            }}
+          />
         )}
 
         {/* STATUS PERIMETER — thin pulsing border tied to the analysis phase:
@@ -1365,9 +1445,9 @@ export default function SmartMotion() {
           ) : null}
 
           <View style={styles.controlsRow}>
-            <ModeToggle value={angle} onChange={setAngle} compact />
+            {!isReview ? <ModeToggle value={angle} onChange={setAngle} compact /> : null}
             <View style={{ flex: 1 }} />
-            <View style={{ width: 130 }}>{actionBtn}</View>
+            {actionBtn}
           </View>
 
           <FooterChips
@@ -1689,6 +1769,12 @@ const styles = StyleSheet.create({
 
   actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 12 },
   actionBtnText: { color: '#fff', fontWeight: '900', fontSize: 15 },
+  // Universal control bar — translucent icon buttons.
+  barRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  barBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  barBtnRecord: { width: 56, height: 56, borderRadius: 28 },
+  barGhost: { borderWidth: 1.5, backgroundColor: 'rgba(6,15,9,0.55)' },
+  barRate: { fontSize: 15, fontWeight: '900' },
 
   // analysis page
   cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
