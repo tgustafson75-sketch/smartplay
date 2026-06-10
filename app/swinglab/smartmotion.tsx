@@ -101,7 +101,7 @@ const RECORDING_MAX_SECONDS = 60; // open window — player swings freely
 // Default ball-box position (normalized). Lower-center of the frame, where a
 // teed/placed ball typically sits in a down-the-line or face-on setup. Shown
 // by default so the user just lines their ball up to it — confirmatory only.
-const DEFAULT_BALL_BOX = { x: 0.5, y: 0.72, r: 0.08 };
+const DEFAULT_BALL_BOX = { x: 0.5, y: 0.6, r: 0.08 };
 
 type Phase = 'setup' | 'recording' | 'analyzing' | 'review';
 
@@ -1143,6 +1143,39 @@ export default function SmartMotion() {
           </View>
         </View>
 
+        {/* SETUP TOOL RAIL — translucent icon buttons on the right edge so the
+            bottom + ball box stay clear. Calibrate · scan club · place ball.
+            Same handlers as the old bars, just compact + out of the way. */}
+        {phase === 'setup' ? (
+          <View style={[styles.toolRail, { top: insets.top + 76 }]}>
+            <Pressable
+              onPress={() => router.push('/swinglab/calibrate' as never)}
+              style={[styles.toolBtn, { borderColor: calibrated ? colors.success : colors.accent }]}
+              accessibilityRole="button"
+              accessibilityLabel={calibrated ? 'Re-calibrate acoustics' : 'Calibrate acoustics'}
+            >
+              <Ionicons name="pulse-outline" size={20} color={calibrated ? colors.success : colors.accent} />
+            </Pressable>
+            <Pressable
+              onPress={() => void detectClubFromCamera()}
+              disabled={scanningClub}
+              style={[styles.toolBtn, { borderColor: colors.accent, opacity: scanningClub ? 0.5 : 1 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Scan club with camera"
+            >
+              <Ionicons name={scanningClub ? 'sync' : 'scan-outline'} size={20} color={colors.accent} />
+            </Pressable>
+            <Pressable
+              onPress={() => setPlaceBallMode((v) => !v)}
+              style={[styles.toolBtn, { borderColor: placeBallMode ? colors.success : colors.accent }]}
+              accessibilityRole="button"
+              accessibilityLabel="Place ball box"
+            >
+              <Ionicons name={placeBallMode ? 'hand-left-outline' : 'golf-outline'} size={20} color={placeBallMode ? colors.success : colors.accent} />
+            </Pressable>
+          </View>
+        ) : null}
+
         {/* PUTT MODE pill — confirms the clip is analyzed as a PUTT, not a
             full swing. Shown whenever a putter is tagged. */}
         {isPutt ? (
@@ -1246,13 +1279,12 @@ export default function SmartMotion() {
 
           {reel}
 
+          {/* Acoustic card shows during RECORDING (live meter) + REVIEW (swing
+              count). In SETUP it's hidden — calibration lives on the right-side
+              icon rail so the bottom stays clear of the ball box. */}
+          {phase !== 'setup' ? (
           <View style={styles.controlsRow}>
             <View style={{ flex: 1 }}>
-              {/* 2026-06-09 — The acoustic card is ALWAYS tappable: tap to
-                  calibrate, or tap again any time to RE-calibrate (accept a new
-                  10-strike read). Previously it was only pressable when
-                  uncalibrated, so tapping the pill after calibrating did
-                  nothing. */}
               <Pressable
                 onPress={() => router.push('/swinglab/calibrate' as never)}
                 accessibilityRole="button"
@@ -1270,6 +1302,7 @@ export default function SmartMotion() {
             </View>
             {isReview ? <VerdictBadge verdict={verdict.text} tone={verdict.tone} style={{ flex: 1 }} /> : null}
           </View>
+          ) : null}
 
           {/* Strike cross-check — camera confirms the acoustic strike. Honest:
               only shown when we actually ran the check (ball spot existed). */}
@@ -1290,47 +1323,11 @@ export default function SmartMotion() {
             </View>
           ) : null}
 
-          {/* SETUP — push the user to drop a ball box so each strike can be
-              camera-confirmed. Tap toggles place mode (then tap the preview). */}
-          {phase === 'setup' ? (
-            <Pressable
-              onPress={() => setPlaceBallMode((v) => !v)}
-              style={[styles.ballNudge, { borderColor: draftBall ? colors.success : colors.accent }]}
-              accessibilityRole="button"
-            >
-              <Ionicons
-                name={placeBallMode ? 'hand-left-outline' : 'golf-outline'}
-                size={14}
-                color={colors.accent}
-              />
-              <Text style={[styles.ballNudgeText, { color: colors.accent }]}>
-                {placeBallMode
-                  ? 'Tap where your ball sits'
-                  : 'Line up your ball with the box · tap to move (optional)'}
-              </Text>
-            </Pressable>
-          ) : null}
-
-          {/* SETUP — auto club detection between minutes. Show the club, tap
-              Scan; it tags the club (or asks you to confirm). Hands-free via
-              "caddie, scan my club". Manual picker is the CLUB chip below. */}
-          {phase === 'setup' ? (
-            <Pressable
-              onPress={() => void detectClubFromCamera()}
-              disabled={scanningClub}
-              style={[styles.ballNudge, { borderColor: colors.accent, opacity: scanningClub ? 0.6 : 1 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Scan club with camera"
-            >
-              <Ionicons name={scanningClub ? 'sync' : 'scan-outline'} size={14} color={colors.accent} />
-              <Text style={[styles.ballNudgeText, { color: colors.accent }]}>
-                {scanningClub
-                  ? 'Reading your club…'
-                  : club
-                    ? `Club: ${clubIdLabel(club)} · show a new one + tap to scan`
-                    : 'Show your club + tap to scan (or tap CLUB to pick)'}
-              </Text>
-            </Pressable>
+          {/* SETUP tools (calibrate / scan club / ball box) live on the
+              right-side icon rail (rendered over the camera) so the bottom
+              stays clear of the ball box. A one-line hint shows when placing. */}
+          {phase === 'setup' && placeBallMode ? (
+            <Text style={[styles.setupHintLine, { color: colors.accent }]}>Tap where your ball sits</Text>
           ) : null}
 
           <View style={styles.controlsRow}>
@@ -1603,6 +1600,10 @@ const styles = StyleSheet.create({
   recPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, zIndex: 6 },
   puttPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, zIndex: 6, backgroundColor: '#34d399' },
   puttPillText: { color: '#06281b', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
+  // Setup tool rail — translucent icon buttons on the right edge.
+  toolRail: { position: 'absolute', right: 10, gap: 12, zIndex: 7, alignItems: 'center' },
+  toolBtn: { width: 46, height: 46, borderRadius: 23, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
+  setupHintLine: { fontSize: 12, fontWeight: '800', textAlign: 'center', paddingVertical: 2 },
   recDot: { width: 10, height: 10, borderRadius: 5 },
   recText: { color: '#fff', fontWeight: '800', fontSize: 13 },
 

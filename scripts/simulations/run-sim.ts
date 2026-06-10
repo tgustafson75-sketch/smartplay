@@ -664,7 +664,7 @@ check('Ball/target overlay matches the design reference',
 
 check('Pre-record ball box: default box + verifier gated to Motion step',
   /draftBall/.test(smSrc) && /placeBallMode/.test(smSrc) &&
-    /Line up your ball with the box/.test(smSrc) &&
+    /Place ball box/.test(smSrc) &&
     /\[showSkeleton, clipUri, ballArea, ballDeparture\]/.test(smSrc),
   'default reference box + verifier runs under Motion (keeps the default read fast)');
 
@@ -792,7 +792,7 @@ check('Acoustic card always tappable to (re)calibrate',
   'tapping the pill opens calibration whether or not already calibrated');
 
 check('Ball box shown by default + confirmatory (never gates)',
-  /DEFAULT_BALL_BOX = \{/.test(smSrc) && /Line up your ball with the box/.test(smSrc),
+  /DEFAULT_BALL_BOX = \{/.test(smSrc) && /toolRail/.test(smSrc),
   'default reference box, optional, never blocks recording/analysis');
 
 check('Hands-free voice record (start/stop) wired',
