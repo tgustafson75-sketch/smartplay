@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
-import OpenAI from 'openai';
+// 2026-06-10 — OpenAI removed from the analysis path entirely. Provider
+// architecture: Anthropic = spine (primary), Gemini = fast fallback, OpenAI =
+// ears/mouth only (STT/TTS live in api/kevin.ts + api/voice.ts, not here).
 import { GoogleGenAI } from '@google/genai';
 
 // 2026-05-23 — maxRetries 1 → 3 to absorb Anthropic 529 overloaded_error spikes.
@@ -24,10 +26,6 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout
 // short-circuit at line ~1135 still saves the chain when Haiku
 // produces parseable output even at the upper edge of this window.
 const anthropicHaiku = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 13_000, maxRetries: 1 });
-// 2026-05-26 — Fix AR Phase 2: OpenAI gpt-4o fallback. Lower timeout
-// than Anthropic — by the time we fall back, the user has already been
-// waiting; we'd rather degrade to honest-failure than burn another 25s.
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 1 });
 // 2026-05-26 — Fix AT: Gemini 2.5 Flash as a third resilience layer.
 // Bryson DeChambeau's ad used Gemini for swing analysis Q&A — adding
 // it here means we match (and exceed) that capability with our own
@@ -379,35 +377,30 @@ Rules:
 /**
  * 2026-05-26 — Fix AX: Gemini-first speed-with-escalation orchestration.
  *
- * Architecture: speed is the default, accuracy is the safety net.
+ * 2026-06-10 — Architecture: Anthropic is the SPINE, Gemini is the FAST
+ * FALLBACK, OpenAI is OUT of analysis (ears/mouth only).
  *
- *   1. Call Gemini 2.5 Flash first (typical p50 ~3-6s vs 8-15s on Sonnet)
- *   2. Parse + normalize through the same safety gates as before
- *   3. If the result MEETS the confidence bar — return immediately.
- *      This is the speed path. Most reads (clean clip, person in frame,
- *      common faults) land here.
- *   4. If the result DOESN'T meet the bar — escalate to OpenAI gpt-4o
- *      for a second opinion. Pick whichever provider produced the
- *      higher-confidence diagnostic read.
- *   5. If OpenAI also doesn't pass the bar — escalate to Anthropic
- *      Sonnet 4.6 (slowest, deepest reasoning). Sonnet's temporal
- *      analysis is the strongest backstop when the faster models
- *      can't pin a dominant fault.
- *   6. Among providers that ran, return the BEST result. Best = highest
- *      confidence + diagnostic primary_fault + non-empty evidence.
+ *   1. Anthropic Haiku 4.5 (speed path, ~2-5s). Most reads (clean clip,
+ *      person in frame, common faults) land here and return immediately.
+ *   2. If it doesn't meet the confidence bar AND this is a full-tier read
+ *      (library upload, not SmartMotion quick) — escalate to Anthropic
+ *      Sonnet (deepest temporal reasoning, the strong backstop).
+ *   3. Only if Anthropic produced NO parseable read at all — fall back to
+ *      Gemini 2.5 Flash (fast, funded). A quick Gemini answer beats a 502.
+ *   4. Among providers that ran, return the BEST result (highest confidence
+ *      + diagnostic primary_fault + non-empty evidence).
  *
- * Tradeoff: cost goes UP on hard reads (we may run 2-3 providers vs 1)
- * but DOWN on easy ones (Gemini is cheapest AND we stop after the first
- * good answer). p50 latency cut roughly in half on the common case.
+ * No cross-provider quality ladder = far lower p50 latency, so a read never
+ * approaches the client timeout (the old Gemini→gpt-4o→Sonnet chain could
+ * take 30-50s and get mislabeled as "lost connection").
  */
 
 interface AttemptResult {
-  // 2026-05-27 — Fix EK: 'anthropic_haiku' is the new speed-path
-  // provider. Same Anthropic SDK, different model (claude-haiku-4-5)
-  // with a tighter timeout. The chain order is now Haiku → OpenAI →
-  // Sonnet, with Haiku catching ~70% of common-case reads (clean
-  // contact, clear pose, obvious fault) in 2-4s instead of gpt-4o's
-  // 10-20s. Sonnet still backstops the hard reads.
+  // 'anthropic_haiku' is the speed-path provider (claude-haiku-4-5, vision,
+  // ~2-5s) catching the common-case reads; 'anthropic' (Sonnet) backstops the
+  // hard ones; 'gemini' is the fast fallback when Anthropic returns nothing.
+  // 'openai' is retained in the union for back-compat telemetry only — OpenAI
+  // is no longer called in the analysis path.
   provider: 'gemini' | 'openai' | 'anthropic' | 'anthropic_haiku';
   parsed: SwingAnalysisResponse | null;
   rawText: string;
@@ -1050,52 +1043,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     };
 
-    const tryOpenAI = async (): Promise<AttemptResult> => {
-      const t0 = Date.now();
-      if (!process.env.OPENAI_API_KEY) {
-        return { provider: 'openai', parsed: null, rawText: '', error: 'OPENAI_API_KEY not configured', elapsedMs: 0 };
-      }
-      try {
-        const openaiContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
-          ...frames.map(f => ({
-            type: 'image_url' as const,
-            image_url: {
-              url: `data:${f.media_type ?? 'image/jpeg'};base64,${f.b64}`,
-              detail: 'high' as const,
-            },
-          })),
-          { type: 'text' as const, text: userText },
-        ];
-        const oai = await openai.chat.completions.create({
-          model: 'gpt-4o',
-          max_tokens: 800,
-          temperature: 0.2,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: openaiContent },
-          ],
-        });
-        const rawText = (oai.choices[0]?.message?.content ?? '').trim();
-        const parsed = normalizeAnalysis(rawText, frames.length, mode);
-        return {
-          provider: 'openai',
-          parsed,
-          rawText,
-          error: parsed ? null : (rawText ? 'non_json_response' : 'empty_response'),
-          elapsedMs: Date.now() - t0,
-        };
-      } catch (e) {
-        return {
-          provider: 'openai',
-          parsed: null,
-          rawText: '',
-          error: e instanceof Error ? e.message : 'unknown',
-          elapsedMs: Date.now() - t0,
-        };
-      }
-    };
-
     const tryAnthropic = async (): Promise<AttemptResult> => {
       const t0 = Date.now();
       try {
@@ -1202,55 +1149,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ORCHESTRATION_TOTAL_MS = 48_000;
     const budgetRemaining = () => ORCHESTRATION_TOTAL_MS - (Date.now() - orchestrationStart);
 
-    // 2026-05-26 — Fix CY: BYPASS Gemini. Tim's project hit 429
-    // "prepayment credits depleted" → every Gemini call wasted ~200ms
-    // before falling through, AND when Gemini WAS up it sometimes
-    // returned medium-confidence reads that forced unnecessary
-    // escalation. Until billing is restored, start straight at
-    // OpenAI (which is fast + reliable per /api/health). Flip
-    // USE_GEMINI back to true once Google billing is paid.
-    const USE_GEMINI = false;
+    // 2026-06-10 — Provider architecture (Tim's call): Anthropic is the SPINE
+    // (primary analysis), Gemini is the FAST FALLBACK (re-enabled — Google
+    // billing funded + auto-reload, so the old 429 "credits depleted" era is
+    // over), and OpenAI is OUT of analysis entirely (it's ears/mouth = STT/TTS
+    // only now). Flow: Anthropic Haiku (speed) → Anthropic Sonnet (deep,
+    // full-tier only) → Gemini (fast fallback, only when Anthropic produced no
+    // parseable read). No cross-provider quality ladder = far lower latency,
+    // so analysis no longer approaches the client timeout.
+    const USE_GEMINI = true;
 
-    let winner: AttemptResult = { provider: 'gemini', parsed: null, rawText: '', error: 'bypassed', elapsedMs: 0 };
+    let winner: AttemptResult = { provider: 'anthropic_haiku', parsed: null, rawText: '', error: 'not_attempted', elapsedMs: 0 };
     let escalationReason: string | null = null;
-
-    if (USE_GEMINI) {
-      // Stage 1 — Gemini (speed path)
-      const geminiAttempt = await tryGemini();
-      attempts.push(geminiAttempt);
-      winner = geminiAttempt;
-
-      if (meetsSpeedBar(geminiAttempt.parsed)) {
-        console.log('[swing-analysis] gemini speed-path hit', {
-          elapsedMs: geminiAttempt.elapsedMs,
-          confidence: geminiAttempt.parsed?.confidence,
-          primary_fault: geminiAttempt.parsed?.primary_fault,
-        });
-      } else {
-        if (!geminiAttempt.parsed) {
-          escalationReason = `gemini_${geminiAttempt.error ?? 'unknown_failure'}`;
-        } else if (geminiAttempt.parsed.primary_fault === 'inconclusive') {
-          escalationReason = 'gemini_inconclusive';
-        } else if (geminiAttempt.parsed.confidence !== 'high') {
-          escalationReason = `gemini_low_confidence:${geminiAttempt.parsed.confidence}`;
-        } else {
-          escalationReason = 'gemini_missing_evidence';
-        }
-      }
-    } else {
-      escalationReason = 'gemini_bypassed_via_feature_flag';
-    }
 
     // 2026-05-27 — Fix EK: Stage 1 (NEW) — Anthropic Haiku 4.5.
     // Haiku has vision, runs in ~2-5s vs gpt-4o's 10-20s, and catches
     // the common-case clean reads (obvious contact, clear pose, single
     // unambiguous fault). High-confidence Haiku reads bypass the rest
-    // of the chain entirely. Low-confidence / inconclusive results
-    // escalate normally to OpenAI then Sonnet.
+    // of the chain entirely. Low-confidence / inconclusive full-tier reads
+    // escalate to Anthropic Sonnet; a null Anthropic read falls back to Gemini.
     //
     // Budget gate: need ≥12s remaining (10s Haiku timeout + 2s headroom).
-    // If the budget is somehow already drained at this point in the
-    // orchestration, skip straight to OpenAI.
     if (!meetsSpeedBar(winner.parsed) && budgetRemaining() >= 12_000) {
       console.log('[swing-analysis] running Anthropic Haiku speed-path; budget_ms:', budgetRemaining());
       const haikuAttempt = await tryHaiku();
@@ -1307,28 +1226,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
     }
 
-    // Stage 2 — OpenAI gpt-4o (mid-tier escalation)
-    if (!quickShortCircuit && !meetsSpeedBar(winner.parsed) && budgetRemaining() >= 22_000) {
-      console.log('[swing-analysis] running OpenAI escalation; budget_ms:', budgetRemaining());
-      const openaiAttempt = await tryOpenAI();
-      attempts.push(openaiAttempt);
-      if (scoreAttempt(openaiAttempt.parsed) > scoreAttempt(winner.parsed)) {
-        winner = openaiAttempt;
+    // Stage 2 — Anthropic Sonnet (DEEP quality escalation, the spine's
+    // strong read). Full-tier only; quick-tier (SmartMotion) already shipped
+    // Haiku's read for speed via the short-circuit above.
+    if (!quickShortCircuit && !meetsSpeedBar(winner.parsed) && budgetRemaining() >= 18_000) {
+      console.log('[swing-analysis] escalating to Anthropic Sonnet; budget_ms:', budgetRemaining());
+      const sonnetAttempt = await tryAnthropic();
+      attempts.push(sonnetAttempt);
+      if (scoreAttempt(sonnetAttempt.parsed) > scoreAttempt(winner.parsed)) {
+        winner = sonnetAttempt;
       }
+      if (!meetsSpeedBar(winner.parsed)) {
+        escalationReason = (escalationReason ?? '') + '_sonnet_no_pass';
+      }
+    } else if (!quickShortCircuit && !meetsSpeedBar(winner.parsed)) {
+      escalationReason = (escalationReason ?? '') + '_sonnet_skipped_budget';
+    }
 
-      // Stage 3 — Anthropic Sonnet only if STILL no pass AND budget left.
-      if (!meetsSpeedBar(winner.parsed) && budgetRemaining() >= 18_000) {
-        console.log('[swing-analysis] OpenAI did not pass bar — escalating to Anthropic Sonnet; budget_ms:', budgetRemaining());
-        const anthropicAttempt = await tryAnthropic();
-        attempts.push(anthropicAttempt);
-        if (scoreAttempt(anthropicAttempt.parsed) > scoreAttempt(winner.parsed)) {
-          winner = anthropicAttempt;
-        }
-      } else if (!meetsSpeedBar(winner.parsed)) {
-        escalationReason = (escalationReason ?? '') + '_anthropic_skipped_budget';
+    // Stage 3 — Gemini FAST FALLBACK. Fires only when Anthropic produced NO
+    // parseable read at all (errors / null on every Anthropic attempt) — a
+    // fast Gemini answer beats a 502 + a forced re-record. Runs for BOTH tiers
+    // (this also replaces the old quick-tier fast-fail: a null Haiku now falls
+    // through to Gemini instead of erroring out). Funded + auto-reload.
+    if (USE_GEMINI && !winner.parsed && budgetRemaining() >= 8_000) {
+      console.log('[swing-analysis] Anthropic produced no parseable read — Gemini fast fallback; budget_ms:', budgetRemaining());
+      const geminiAttempt = await tryGemini();
+      attempts.push(geminiAttempt);
+      if (scoreAttempt(geminiAttempt.parsed) > scoreAttempt(winner.parsed)) {
+        winner = geminiAttempt;
       }
-    } else if (!meetsSpeedBar(winner.parsed)) {
-      escalationReason = (escalationReason ?? '') + '_openai_skipped_budget';
+      escalationReason = (escalationReason ?? '') + '_gemini_fallback';
     }
 
     // No provider produced parseable output → 502 with full diagnostics

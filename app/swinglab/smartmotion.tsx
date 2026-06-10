@@ -1063,6 +1063,13 @@ export default function SmartMotion() {
   useEffect(() => {
     setSmartMotionActive(true);
     const unsub = subscribeSmartMotionCommand((cmd) => recordCmdRef.current(cmd));
+    // Warm /api/swing-analysis the moment SmartMotion opens so the FIRST
+    // recording's analysis hits a hot Lambda (no cold-start latency that could
+    // push it toward the client timeout). Mirrors the upload/cage screens.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis();
+    } catch { /* non-fatal */ }
     return () => { setSmartMotionActive(false); unsub(); };
   }, []);
 

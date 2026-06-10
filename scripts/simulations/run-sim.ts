@@ -955,6 +955,23 @@ check('Caddie brain is warmed whenever the tab is open (not only in a round)',
     /Warm the brain whenever the Caddie tab is open/.test(read('app/(tabs)/caddie.tsx')),
   'off-course "good morning Kevin" hits a warm Lambda so the first ask is fast');
 
+// 2026-06-10 — Provider architecture: Anthropic spine, Gemini fast fallback,
+// OpenAI out of analysis (ears/mouth only). (swingApiSrc declared above.)
+check('Analysis providers: Anthropic primary + Gemini fallback, OpenAI removed',
+  /const USE_GEMINI = true/.test(swingApiSrc) &&
+    !/tryOpenAI/.test(swingApiSrc) &&
+    !/openai\.chat\.completions/.test(swingApiSrc) &&
+    !/new OpenAI\(/.test(swingApiSrc) &&
+    /Gemini FAST FALLBACK/.test(swingApiSrc) &&
+    /if \(USE_GEMINI && !winner\.parsed/.test(swingApiSrc) &&
+    /escalating to Anthropic Sonnet/.test(swingApiSrc),
+  'swing analysis runs Anthropic Haiku→Sonnet (spine) and only falls back to Gemini when Anthropic returns nothing parseable; OpenAI is no longer CALLED in the analysis chain');
+
+check('SmartMotion warms the analyzer on open (warm first analysis)',
+  /prewarmSwingAnalysis\(\)/.test(smSrc) &&
+    /Warm \/api\/swing-analysis the moment SmartMotion opens/.test(smSrc),
+  'opening SmartMotion pre-warms /api/swing-analysis so the first recording analyzes fast');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
