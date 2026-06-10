@@ -31,6 +31,7 @@ import {
   Alert,
   Modal,
   TextInput,
+  Animated,
   useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
@@ -260,6 +261,18 @@ export default function SmartMotion() {
   const [draftBall, setDraftBall] = useState<{ x: number; y: number; r: number } | null>(DEFAULT_BALL_BOX);
   const [placeBallMode, setPlaceBallMode] = useState(false);
   const [rootSize, setRootSize] = useState({ w: 0, h: 0 });
+  // Status-perimeter pulse — a thin border around the video that ties to the
+  // analysis phase (green active/done, amber while thinking), like the caddie
+  // face box. Subtle opacity loop; native-driven so it's cheap.
+  const statusPulse = useRef(new Animated.Value(0.45)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(statusPulse, { toValue: 1, duration: 950, useNativeDriver: true }),
+      Animated.timing(statusPulse, { toValue: 0.45, duration: 950, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [statusPulse]);
   const draftBallRef = useRef<typeof draftBall>(null);
   useEffect(() => { draftBallRef.current = draftBall; }, [draftBall]);
   // Acoustic impact time of the first swing — needed by the camera verifier,
@@ -1084,6 +1097,18 @@ export default function SmartMotion() {
           <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" mode="video" mute />
         )}
 
+        {/* STATUS PERIMETER — thin pulsing border tied to the analysis phase:
+            amber while analyzing ("thinking"), green otherwise (live / ready /
+            analyzed). Like the caddie face box. Decorative — never blocks. */}
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            styles.statusBorder,
+            { borderColor: phase === 'analyzing' ? '#f59e0b' : '#34d399', opacity: statusPulse },
+          ]}
+        />
+
         {/* Smart Capture — tap exposed video to freeze + mark up. */}
         {isReview && clipUri ? (
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setAnnotateOpen(true)} accessibilityRole="button" accessibilityLabel="Freeze and mark up this swing" />
@@ -1596,6 +1621,7 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: '#060f09' },
 
   captureRoot: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
+  statusBorder: { borderWidth: 2.5, borderRadius: 2, zIndex: 4 },
 
   topBar: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 5,
