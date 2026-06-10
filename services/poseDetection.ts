@@ -134,7 +134,16 @@ export type SwingAnalysisResult =
 // making the resilience layer unreachable from the client. 55s
 // budgets the full chain inside Vercel's 60s maxDuration with a
 // small grace window for the response round-trip.
-const REQUEST_TIMEOUT_MS = 55_000;
+// 2026-06-09 — bumped 55s → 63s. The old value was BELOW the server's own
+// 60s maxDuration, so on any slow analysis the CLIENT aborted ~5s before the
+// server would have returned — and that abort was then mislabeled as a
+// network loss ("Lost connection — check your network") even on perfect
+// Wi-Fi. The client must wait at least as long as the server can legitimately
+// run (60s) plus response round-trip, so a slow run resolves to a real result
+// or an honest server error instead of a phantom client-side network failure.
+// (With the swing localizer the real analysis now runs on a tight window and
+// rarely approaches this ceiling anyway — this is the failure-mode safety net.)
+const REQUEST_TIMEOUT_MS = 63_000;
 // 2026-05-26 — Fix CO: tentative bumped 15s → 30s. Tim's swing
 // library upload was timing out the FALLBACK path too (primary 55s
 // + tentative 15s = 70s total; server vision chain under load can
@@ -168,7 +177,7 @@ import { Audio } from 'expo-av';
 // 2026-06-07 (audit) — share the circuit breaker + reactive connectivity
 // signal with the voice paths so weak-signal range sessions short-circuit
 // instead of paying full timeout+retry per swing.
-import { isDegraded, recordSuccess, recordFailure } from './voiceCircuitBreaker';
+import { isDegraded, recordSuccess, recordFailure, degradedReason } from './voiceCircuitBreaker';
 import { reportOnline, reportNetworkFailure } from '../store/connectivityStore';
 
 // Phase V.6 diagnostic — single grep target. Filter via:
@@ -448,6 +457,92 @@ export async function extractKeyFrames(
   }
 }
 
+// ─── Swing localizer (acoustics-free) ───────────────────────────────────────
+// 2026-06-09 — Uploaded phone clips have no acoustics to find the swing inside
+// a 30-60s video. We do it in two cheap passes: (1) send COARSE timestamped
+// frames and ask the model WHEN the swing happens; (2) re-extract DENSE frames
+// in a tight window around it and run the normal analysis on just that. So the
+// AI both finds AND reads the swing, with no manual marking and no acoustics.
+const LOCATE_FRAME_WIDTH = 320;
+const LOCATE_FRAME_COMPRESS = 0.5;
+const LOCATE_MIN_CLIP_MS = 12_000;
+const LOCATE_TIMEOUT_MS = 15_000;
+
+// Small, many, evenly-spread frames tagged with timestamps. Cheap to extract
+// and tiny on the wire — used only to ASK "where's the swing", not to read it.
+async function extractCoarseFrames(clipUri: string, durationMs: number, count: number): Promise<Frame[]> {
+  const lo = 0.04;
+  const hi = 0.97;
+  const fracs = Array.from({ length: count }, (_, i) => lo + ((hi - lo) * i) / (count - 1));
+  const out = await Promise.all(
+    fracs.map(async (frac) => {
+      const timeMs = Math.round(durationMs * frac);
+      try {
+        const r = await VT.getThumbnailAsync(clipUri, { time: timeMs, quality: 0.5 });
+        const m = await ImageManipulator.manipulateAsync(
+          r.uri,
+          [{ resize: { width: LOCATE_FRAME_WIDTH } }],
+          { compress: LOCATE_FRAME_COMPRESS, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+        );
+        if (!m.base64) return null;
+        return { b64: m.base64, media_type: 'image/jpeg', time_sec: timeMs / 1000 } as Frame;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return out.filter((f): f is Frame => f !== null);
+}
+
+/**
+ * Find WHEN the swing happens in a long, unbounded clip and return a tight
+ * window around it. Returns null when it can't locate (caller falls back to
+ * wide-spread sampling). Best-effort: its own 15s timeout, never throws,
+ * never trips the analysis breaker.
+ */
+export async function locateSwingWindow(
+  clipUri: string,
+  durationMs: number,
+): Promise<{ startSec: number; endSec: number } | null> {
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  if (!apiUrl || durationMs < LOCATE_MIN_CLIP_MS) return null;
+  // ~1 coarse frame per 4s, clamped 8-14.
+  const count = Math.max(8, Math.min(14, Math.round(durationMs / 1000 / 4)));
+  const frames = await extractCoarseFrames(clipUri, durationMs, count);
+  if (frames.length < 3) return null;
+  try {
+    const res = await fetch(`${apiUrl}/api/swing-analysis`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'locate_swing',
+        frames: frames.map((f) => ({ b64: f.b64, media_type: f.media_type, time_sec: f.time_sec })),
+      }),
+      signal: AbortSignal.timeout(LOCATE_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { found?: boolean; swing_time_sec?: number; confidence?: string };
+    if (!data.found || typeof data.swing_time_sec !== 'number' || !Number.isFinite(data.swing_time_sec)) {
+      V6('LOCATE — no swing located (fallback to wide spread)', { coarse_frames: frames.length });
+      return null;
+    }
+    const durSec = durationMs / 1000;
+    const t = Math.max(0, Math.min(durSec, data.swing_time_sec));
+    // A bit before (top of backswing) through a bit after (follow-through).
+    const startSec = Math.max(0, t - 2.5);
+    const endSec = Math.min(durSec, t + 3);
+    if (endSec - startSec < 1) return null;
+    V6('LOCATE — swing window', {
+      swing_time_sec: t, startSec, endSec,
+      confidence: data.confidence ?? null, coarse_frames: frames.length,
+    });
+    return { startSec, endSec };
+  } catch (e) {
+    V6('LOCATE — failed (fallback to wide spread)', { error: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
 /**
  * Analyze a single swing. Extracts frames, sends to vision endpoint, returns
  * structured swing fault + the list of timestamps (in seconds) those frames
@@ -555,7 +650,24 @@ export async function analyzeSwing(
   // fast sample instead of the default 5-frame 800px. ~6-12s
   // Haiku-vision saving per call, ~40% per-frame payload cut.
   const quickTier = context.tier === 'quick';
-  const frames = await extractKeyFrames(clipUri, boundaries, quickTier);
+  // Acoustics-free localization: for an UNBOUNDED long clip (an untrimmed
+  // phone upload), find the swing FIRST so the dense frames land ON the swing
+  // instead of being spread across a minute of practice/setup/walk-up. Bounded
+  // clips (live SmartMotion windowed on the strike, or a user trim) and short
+  // clips skip this — they're already targeted. Failure falls back silently to
+  // the duration-scaled wide spread inside extractKeyFrames.
+  let effectiveBoundaries = boundaries;
+  if (!effectiveBoundaries) {
+    const durMs = await probeDurationMs(clipUri).catch(() => 0);
+    if (durMs >= LOCATE_MIN_CLIP_MS) {
+      const located = await locateSwingWindow(clipUri, durMs);
+      if (located) {
+        effectiveBoundaries = located;
+        V6('STAGE 2 — using located swing window as boundaries', located);
+      }
+    }
+  }
+  const frames = await extractKeyFrames(clipUri, effectiveBoundaries, quickTier);
   if (frames.length === 0) {
     V6('STAGE 3 SKIP — no_frames (no usable frames extracted)');
     return { kind: 'no_frames' };
@@ -564,8 +676,13 @@ export async function analyzeSwing(
   // Circuit breaker: if swing-analysis is degraded (3 recent failures),
   // short-circuit before paying the radio-wake + timeout cost again.
   if (isDegraded('swing-analysis')) {
-    V6('STAGE 3 SKIP — swing-analysis degraded (circuit breaker), short-circuit');
-    return { kind: 'no_network' };
+    // Honest short-circuit: only a genuine NETWORK trip is "lost connection".
+    // A timeout/5xx trip (server slowness, not connectivity) returns an error
+    // with copy that doesn't blame the user's Wi-Fi.
+    const reason = degradedReason('swing-analysis');
+    V6('STAGE 3 SKIP — swing-analysis degraded (circuit breaker), short-circuit', { reason });
+    if (reason === 'network') return { kind: 'no_network' };
+    return { kind: 'error', message: 'Analyzer is catching up — give it a few seconds, then tap Re-analyze.' };
   }
 
   const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
@@ -682,7 +799,8 @@ export async function analyzeSwing(
         const parsed = JSON.parse(body) as { error?: string };
         if (parsed?.error) userMsg = parsed.error.slice(0, 160);
       } catch { /* body wasn't JSON */ }
-      recordFailure('swing-analysis');
+      // 5xx = server problem, 4xx = request problem; neither is a network loss.
+      recordFailure('swing-analysis', 'server');
       return { kind: 'error', message: userMsg };
     }
     const data = (await res.json()) as SwingAnalysis;
@@ -810,9 +928,23 @@ export async function analyzeSwing(
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    V6('STAGE 4 — fetch threw', { error: msg });
-    recordFailure('swing-analysis');
-    if (/network|abort|timeout|fetch/i.test(msg)) {
+    const name = err instanceof Error ? err.name : '';
+    V6('STAGE 4 — fetch threw', { error: msg, name });
+    // CRITICAL distinction (the false "lost connection on Wi-Fi" bug): an
+    // AbortSignal.timeout fires a TimeoutError when the SERVER took too long.
+    // That is NOT a network loss — the connection was fine, the analysis just
+    // ran past our deadline. Classifying it as no_network told the user to
+    // "check your network" on perfect Wi-Fi AND tripped the breaker into
+    // Local Mode. Treat timeout as its own honest case; reserve no_network
+    // for genuine connectivity errors.
+    const isTimeout = name === 'TimeoutError' || name === 'AbortError' ||
+      (/abort|timeout|timed out/i.test(msg) && !/network request failed|connection|unreachable|dns|offline/i.test(msg));
+    if (isTimeout) {
+      recordFailure('swing-analysis', 'timeout');
+      return { kind: 'error', message: 'That took too long to analyze. Tap Re-analyze to try again.' };
+    }
+    recordFailure('swing-analysis', 'network');
+    if (/network|connection|fetch|unreachable|dns|offline/i.test(msg)) {
       reportNetworkFailure();
       return { kind: 'no_network' };
     }

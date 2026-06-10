@@ -719,6 +719,73 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(500).json({ found: false, error: e instanceof Error ? e.message : 'detection failed' });
       }
     }
+    // 2026-06-09 — Swing LOCATOR. Uploaded phone clips have no acoustics to
+    // find the swing inside a 30-60s video (practice swings + setup + walk-up
+    // + the real swing somewhere in the middle/end). The client sends ~8-14
+    // COARSE frames spread across the whole clip, each tagged with its
+    // timestamp; Haiku returns the timestamp where the ACTUAL swing happens.
+    // The client then re-extracts DENSE frames in a tight window around that
+    // time and runs the normal analysis on just that window — so the AI both
+    // FINDS and READS the swing without any acoustics. One cheap Haiku call.
+    // On any miss/failure it returns { found: false } (200) so the client
+    // falls back to the wide-spread sampling instead of erroring.
+    if (body.mode === 'locate_swing') {
+      const locFrames = (body.frames ?? []) as { b64: string; media_type?: string; time_sec?: number }[];
+      if (!Array.isArray(locFrames) || locFrames.length === 0 || !locFrames[0]?.b64) {
+        return res.status(400).json({ error: 'frames[] with time_sec required for locate_swing' });
+      }
+      if (locFrames.length > 16) {
+        return res.status(400).json({ error: 'maximum 16 locate frames' });
+      }
+      try {
+        const locContent = [
+          ...locFrames.flatMap((f, i) => {
+            const t = typeof f.time_sec === 'number' && Number.isFinite(f.time_sec) ? f.time_sec : i;
+            return [
+              { type: 'text' as const, text: `Frame ${i + 1} — timestamp ${t.toFixed(1)}s:` },
+              {
+                type: 'image' as const,
+                source: {
+                  type: 'base64' as const,
+                  media_type: (f.media_type ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+                  data: f.b64,
+                },
+              },
+            ];
+          }),
+          {
+            type: 'text' as const,
+            text: 'Across these timestamped frames, at which timestamp is the golfer ACTUALLY SWINGING — the downswing through impact and follow-through, body rotated and club in motion? NOT standing at address over the ball, NOT a practice waggle, NOT walking up, NOT waiting or posing after the shot. Return ONLY JSON: { "found": true, "swing_time_sec": <number>, "confidence": "high"|"low" }. If no real swing motion is visible in any frame, return { "found": false }. No prose, no markdown.',
+          },
+        ];
+        const completion = await anthropicHaiku.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 120,
+          temperature: 0.0,
+          system: 'You are a precise golf-swing temporal locator. You are given a sequence of timestamped frames from ONE video and must identify WHEN the actual swing happens. The swing is the moment of motion — backswing/downswing/impact/follow-through with the body rotated and the club moving — distinct from address (standing still over the ball), practice waggles, walk-ups, or post-shot standing. Pick the timestamp closest to impact/follow-through. Return only JSON.',
+          messages: [{ role: 'user', content: locContent }],
+        });
+        const block = completion.content.find(c => c.type === 'text');
+        const raw = block && block.type === 'text' ? block.text.trim() : '';
+        let parsed: { found?: boolean; swing_time_sec?: number; confidence?: string } = {};
+        try {
+          const m = raw.match(/\{[\s\S]*\}/);
+          if (m) parsed = JSON.parse(m[0]);
+        } catch { /* fallthrough → found:false */ }
+        if (!parsed.found || typeof parsed.swing_time_sec !== 'number' || !Number.isFinite(parsed.swing_time_sec)) {
+          return res.status(200).json({ found: false });
+        }
+        return res.status(200).json({
+          found: true,
+          swing_time_sec: Math.max(0, parsed.swing_time_sec),
+          confidence: parsed.confidence === 'high' ? 'high' : 'low',
+        });
+      } catch (e) {
+        console.error('[swing-analysis] locate_swing failed', e);
+        // 200 + found:false so the client gracefully falls back to wide spread.
+        return res.status(200).json({ found: false, error: e instanceof Error ? e.message : 'locate failed' });
+      }
+    }
     const frames = (body.frames ?? []) as { b64: string; media_type?: string }[];
     if (!Array.isArray(frames) || frames.length === 0) {
       return res.status(400).json({ error: 'frames[] (1-12 base64 images) required' });

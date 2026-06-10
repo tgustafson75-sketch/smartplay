@@ -31,6 +31,15 @@ const DEGRADED_MS = 60_000;
 // sessions short-circuit instead of paying full timeout+retry per swing.
 export type VoiceEndpoint = 'voice' | 'kevin' | 'transcribe' | 'voice-intent' | 'swing-analysis';
 
+// 2026-06-09 — Why the endpoint failed, so the breaker can react honestly.
+//   'network' — genuine connectivity loss (offline, DNS, connection refused).
+//               THIS is the only kind that means "weak signal" → Local Mode.
+//   'timeout' — the SERVER took longer than our client deadline. On good
+//               Wi-Fi this is server slowness, NOT a network loss. Must not
+//               flip the offline banner or auto-engage Local Mode.
+//   'server'  — the server answered with a 5xx. Also not a network problem.
+export type FailureKind = 'network' | 'timeout' | 'server';
+
 const failures: Record<VoiceEndpoint, number[]> = {
   voice: [],
   kevin: [],
@@ -44,6 +53,16 @@ const degradedUntil: Record<VoiceEndpoint, number> = {
   transcribe: 0,
   'voice-intent': 0,
   'swing-analysis': 0,
+};
+// Dominant failure reason per endpoint (last recorded). Lets consumers
+// surface honest copy on a short-circuit: a timeout-driven trip should say
+// "analyzer is catching up", a network-driven trip "lost connection".
+const lastReason: Record<VoiceEndpoint, FailureKind> = {
+  voice: 'network',
+  kevin: 'network',
+  transcribe: 'network',
+  'voice-intent': 'network',
+  'swing-analysis': 'network',
 };
 // Track whether we've already auto-engaged Local Mode this session so we
 // don't toast twice (or fight a user who manually turned it off).
@@ -75,17 +94,26 @@ function maybeAutoEngageLocalMode(triggeringEndpoint: VoiceEndpoint): void {
  * within the rolling window, the endpoint is marked degraded for
  * DEGRADED_MS and Local Mode is auto-engaged.
  */
-export function recordFailure(endpoint: VoiceEndpoint): void {
+export function recordFailure(endpoint: VoiceEndpoint, kind: FailureKind = 'network'): void {
   const now = Date.now();
+  lastReason[endpoint] = kind;
   const recent = failures[endpoint].filter(t => now - t < FAILURE_WINDOW_MS);
   recent.push(now);
   failures[endpoint] = recent;
   if (recent.length >= FAILURE_THRESHOLD && degradedUntil[endpoint] < now) {
     degradedUntil[endpoint] = now + DEGRADED_MS;
     failures[endpoint] = [];
-    console.log(`[circuit-breaker] ${endpoint} marked DEGRADED for ${DEGRADED_MS / 1000}s after ${FAILURE_THRESHOLD} failures in ${FAILURE_WINDOW_MS / 1000}s`);
-    maybeAutoEngageLocalMode(endpoint);
+    console.log(`[circuit-breaker] ${endpoint} marked DEGRADED for ${DEGRADED_MS / 1000}s after ${FAILURE_THRESHOLD} ${kind} failures in ${FAILURE_WINDOW_MS / 1000}s`);
+    // Only a genuine NETWORK trip means "weak signal" → auto-engage Local
+    // Mode. A server slowdown (timeout) or 5xx is not a connectivity problem
+    // and must not flip the user into Local Mode or show "cell signal weak".
+    if (kind === 'network') maybeAutoEngageLocalMode(endpoint);
   }
+}
+
+/** Dominant reason the endpoint last failed — null when not degraded. */
+export function degradedReason(endpoint: VoiceEndpoint): FailureKind | null {
+  return isDegraded(endpoint) ? lastReason[endpoint] : null;
 }
 
 /**

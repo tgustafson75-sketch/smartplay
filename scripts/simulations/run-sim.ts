@@ -869,6 +869,26 @@ check('Face-on launch line on REVIEW only + correct mirrored direction; framing 
     /!isReview\n\s*\? <CaptureGuides/.test(smSrc),
   'launch line is a face-on REVIEW approximation pointing the correct (mirrored) way; live capture shows framing guides for both DTL and FO');
 
+// ─── 2026-06-09: acoustics-free swing localizer + honest networking ──────────
+const poseSrc = read('services/poseDetection.ts');
+const apiSrc = read('api/swing-analysis.ts');
+const breakerSrc = read('services/voiceCircuitBreaker.ts');
+
+check('Swing localizer: locate_swing API mode + client locator wired into analyzeSwing',
+  /mode === 'locate_swing'/.test(apiSrc) && /swing_time_sec/.test(apiSrc) &&
+    /export async function locateSwingWindow/.test(poseSrc) &&
+    /const located = await locateSwingWindow/.test(poseSrc) &&
+    /effectiveBoundaries = located/.test(poseSrc),
+  'unbounded long uploads run an AI locate pass (find the swing) then analyze a tight window around it — no acoustics, no manual marking');
+
+check('Timeout is NOT mislabeled as lost-connection (honest networking)',
+  /name === 'TimeoutError'/.test(poseSrc) &&
+    /recordFailure\('swing-analysis', 'timeout'\)/.test(poseSrc) &&
+    /REQUEST_TIMEOUT_MS = 63_000/.test(poseSrc) &&
+    /export type FailureKind/.test(breakerSrc) &&
+    /if \(kind === 'network'\) maybeAutoEngageLocalMode/.test(breakerSrc),
+  'a server-slowness timeout returns an honest "took too long" (not "check your network"), keeps the client above the 60s server deadline, and never auto-engages Local Mode on Wi-Fi');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
