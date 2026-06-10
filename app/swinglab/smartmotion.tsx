@@ -333,6 +333,12 @@ export default function SmartMotion() {
   const setSessionTarget = useCageStore(s => s.setSessionTarget);
   const ballArea = cageSession?.ball_area_norm ?? null;
   const targetPoint = cageSession?.target_norm ?? null;
+  // Refs so the analyze callbacks read the CURRENT ball/target anchor without
+  // needing them in their dep arrays (avoids stale-closure + dep churn).
+  const ballAreaRef = useRef(ballArea);
+  const targetPointRef = useRef(targetPoint);
+  useEffect(() => { ballAreaRef.current = ballArea; }, [ballArea]);
+  useEffect(() => { targetPointRef.current = targetPoint; }, [targetPoint]);
 
   // Engage mode — placing a target "engages" the session: the caddie now
   // has a committed aim line (ball→target). Aim read is the start-line
@@ -544,6 +550,12 @@ export default function SmartMotion() {
               first_name: profile.firstName ?? null,
             },
             tier: 'quick',
+            // Ball/stand anchor — where the ball sits (and by extension where the
+            // golfer stands). The analyzer uses it as a strong prior: "ball is at
+            // (x,y); impact is the frame it leaves that area." Wires the set ball
+            // area into the SWING read (was only wired to the putt read before).
+            ball_area_norm: draftBallRef.current ?? ballAreaRef.current ?? null,
+            target_norm: targetPointRef.current ?? null,
           }, boundaries),
           new Promise<Awaited<ReturnType<typeof analyzeSwing>>>((resolve) =>
             setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), 30000),
@@ -825,6 +837,8 @@ export default function SmartMotion() {
               first_name: profile.firstName ?? null,
             },
             tier: 'quick',
+            ball_area_norm: ballAreaRef.current ?? draftBallRef.current ?? null,
+            target_norm: targetPointRef.current ?? null,
           }, { startSec: seg.startMs / 1000, endSec: seg.endMs / 1000 }),
           new Promise<Awaited<ReturnType<typeof analyzeSwing>>>((resolve) =>
             setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), 30000),
