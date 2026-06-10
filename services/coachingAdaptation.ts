@@ -1,3 +1,5 @@
+import { COMPLEXITY_ADVANCED_MAX_HCP } from '../constants/handicapTiers';
+
 export type CoachingComplexity = 'simple' | 'standard' | 'advanced';
 
 export interface CoachingProfileLike {
@@ -8,7 +10,7 @@ export interface CoachingProfileLike {
 
 export function deriveComplexityLevel(profile: CoachingProfileLike): CoachingComplexity {
   if (profile.experienceContext === 'starting') return 'simple';
-  if (profile.experienceContext === 'competitive' || (profile.handicap ?? 99) <= 8) return 'advanced';
+  if (profile.experienceContext === 'competitive' || (profile.handicap ?? 99) <= COMPLEXITY_ADVANCED_MAX_HCP) return 'advanced';
   return 'standard';
 }
 

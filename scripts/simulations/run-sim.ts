@@ -1030,6 +1030,17 @@ check('Caddie CNS Phase 2 wired into BOTH brain paths (additive, server-pasted b
   'typed-chat (useKevin) and voice (useVoiceCaddie) both fold the memory slice into unified_context_block — the field the server already pastes — so no server change and live builders stay as fallback');
 
 // 2026-06-10 — Analysis pretext: handedness + CNS learned tendencies feed the analyzer.
+// 2026-06-10 — B1: central handicap-tier constants (single source of truth).
+const tiersSrc = read('constants/handicapTiers.ts');
+check('Handicap tiers: single source of truth + behaviour-neutral refactor',
+  /export function deriveTier\(/.test(tiersSrc) &&
+    /export const DEFAULT_HANDICAP = 18/.test(tiersSrc) &&
+    /export function tierToComplexity\(/.test(tiersSrc) &&
+    /COMPLEXITY_ADVANCED_MAX_HCP/.test(read('services/coachingAdaptation.ts')) &&
+    /STRENGTH_LABEL_BREAKS\.precision/.test(read('services/patternDetection.ts')) &&
+    /DISPERSION_HCP_BREAKS\.tight/.test(read('app/smartfinder.tsx')),
+  'handicap tier bands + thresholds live in one file; the scattered magic numbers now reference it at unchanged values (behaviour-neutral)');
+
 check('Analyzer gets handedness + CNS-learned tendencies pretext',
   /handedness\?: 'left' \| 'right' \| null/.test(poseSrc) &&
     /Swinger is \$\{ctx\.handedness\.toUpperCase\(\)\}-HANDED/.test(swingApiSrc) &&

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DISPERSION_HCP_BREAKS } from '../constants/handicapTiers';
 import {
   View,
   Text,
@@ -1025,7 +1026,12 @@ function estimateCarryTotal(club: string | null, avgCarryDriver: number, avgCarr
 
 function estimateDispersion(club: string | null, handicap: number): { yards: number; band: 'tight' | 'moderate' | 'wide' } {
   const base = club === 'Driver' ? 34 : club === '3 Wood' ? 28 : club === 'Hybrid' ? 24 : club?.includes('Iron') ? 18 : 10;
-  const hcpAdjust = handicap <= 2 ? -6 : handicap <= 8 ? -3 : handicap <= 14 ? 0 : handicap <= 22 ? 5 : 9;
+  const hcpAdjust =
+    handicap <= DISPERSION_HCP_BREAKS.tight ? -6
+    : handicap <= DISPERSION_HCP_BREAKS.good ? -3
+    : handicap <= DISPERSION_HCP_BREAKS.neutral ? 0
+    : handicap <= DISPERSION_HCP_BREAKS.loose ? 5
+    : 9;
   const yards = Math.max(8, base + hcpAdjust);
   const band = yards <= 16 ? 'tight' : yards <= 28 ? 'moderate' : 'wide';
   return { yards, band };

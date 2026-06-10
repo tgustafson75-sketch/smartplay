@@ -11,6 +11,7 @@
  *    Expect: subtle left-side aim suggestion, no lecturing. Kevin uses patterns silently.
  */
 
+import { STRENGTH_LABEL_BREAKS } from '../constants/handicapTiers';
 import type { ShotResult, CourseHole } from '../store/roundStore';
 import type { RoundMode, PatternInsights } from '../types/patterns';
 import type { ShotOutcome } from '../types/shot';
@@ -98,9 +99,9 @@ export function generatePatternInsights(
   const strengths: string[] = [];
   if (options?.dominantMiss === 'straight') strengths.push('consistent ball-striking');
   if (options?.handicap != null) {
-    if (options.handicap <= 5)       strengths.push('low-handicap precision');
-    else if (options.handicap <= 10) strengths.push('skilled course management');
-    else if (options.handicap <= 18) strengths.push('solid fundamentals');
+    if (options.handicap <= STRENGTH_LABEL_BREAKS.precision)        strengths.push('low-handicap precision');
+    else if (options.handicap <= STRENGTH_LABEL_BREAKS.management)  strengths.push('skilled course management');
+    else if (options.handicap <= STRENGTH_LABEL_BREAKS.fundamentals) strengths.push('solid fundamentals');
   }
 
   // ── Streak ─────────────────────────────────────────────────────────────────
