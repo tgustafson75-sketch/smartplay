@@ -140,7 +140,7 @@ export default function UploadSwing() {
     setStep('metadata');
   };
 
-  const onSave = () => {
+  const onSave = async () => {
     if (!uri) return;
     setStep('saving');
     uploadLog('save-tap', { club, has_audio: hasAudio, duration_sec: durationSec });
@@ -181,7 +181,7 @@ export default function UploadSwing() {
     const hasKnownDuration = typeof durationSec === 'number' && durationSec > 0;
     const isShortClip = hasKnownDuration && durationSec <= SHORT_CLIP_SEC;
     const isLongClip = hasKnownDuration && durationSec > SHORT_CLIP_SEC;
-    const sessionId = ingestVideoFromPick({
+    const sessionId = await ingestVideoFromPick({
       uri, club, notes: notes.trim() || null, swinger: swinger.trim() || 'Me',
       tag: effectiveTag, has_audio: hasAudio, duration_sec: durationSec,
       source_device: sourceDevice,

@@ -380,23 +380,38 @@ function StanceFeet({
   color: string;
 }) {
   if (!ball) return null;
-  const STANCE_HALF = 0.11; // ~0.22 of frame width between the feet (general)
-  const leadDir =
-    mode === 'face_on'
-      ? (handedness === 'left' ? -1 : 1) // mirrored (facing camera)
-      : (handedness === 'left' ? 1 : -1); // not mirrored (camera behind)
-  const footDrop = mode === 'face_on' ? 0.10 : 0.16;
-  const clamp = (v: number) => Math.min(0.9, Math.max(0.1, v));
-  const footY = clamp(ball.y + footDrop);
-  const leadX = clamp(ball.x + leadDir * STANCE_HALF);
-  const trailX = clamp(ball.x - leadDir * STANCE_HALF);
+  const clamp = (v: number) => Math.min(0.92, Math.max(0.06, v));
+  // The anchors show WHERE THE BODY STANDS to send the ball to the target, so
+  // their position follows the camera angle's golf-setup geometry.
+  let leadX: number, leadY: number, trailX: number, trailY: number;
+  if (mode === 'face_on') {
+    // Camera FACES the golfer → the golfer stands BEHIND the ball, so the feet
+    // sit ABOVE the ball box in frame, spread by stance width. Mirrored (you
+    // face the camera): a right-handed golfer's lead (target) foot is on the
+    // VIEWER's RIGHT.
+    const leadDir = handedness === 'left' ? -1 : 1;
+    const STANCE_HALF = 0.14;
+    const footY = clamp(ball.y - 0.16); // ABOVE the ball
+    leadX = clamp(ball.x + leadDir * STANCE_HALF); leadY = footY;
+    trailX = clamp(ball.x - leadDir * STANCE_HALF); trailY = footY;
+  } else {
+    // DOWN-THE-LINE: camera is behind, looking down the target line. The golfer
+    // stands to ONE SIDE of the ball with feet running ALONG the line — lead
+    // foot toward the target (UP the frame), trail foot back (DOWN). NOT
+    // straddling the ball. Right-handed stands left of the line (lefty mirrors).
+    const side = handedness === 'left' ? 1 : -1; // RH → left of the line
+    const SIDE_OFFSET = 0.24;
+    const footX = clamp(ball.x + side * SIDE_OFFSET);
+    leadX = footX; leadY = clamp(ball.y - 0.12);  // lead toward target (up)
+    trailX = footX; trailY = clamp(ball.y + 0.16); // trail back (down)
+  }
   return (
     <>
-      <View style={[styles.footAnchor, { left: `${trailX * 100}%`, top: `${footY * 100}%` }]}>
+      <View style={[styles.footAnchor, { left: `${trailX * 100}%`, top: `${trailY * 100}%` }]}>
         <View style={[styles.footDot, { borderColor: color }]} />
         <Text style={[styles.footLabel, { color }]}>TRAIL</Text>
       </View>
-      <View style={[styles.footAnchor, { left: `${leadX * 100}%`, top: `${footY * 100}%` }]}>
+      <View style={[styles.footAnchor, { left: `${leadX * 100}%`, top: `${leadY * 100}%` }]}>
         <View style={[styles.footDot, { borderColor: color }]} />
         <Text style={[styles.footLabel, { color }]}>LEAD</Text>
       </View>

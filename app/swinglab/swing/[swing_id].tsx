@@ -520,9 +520,30 @@ export default function SwingDetail() {
     // transition. Also stop any in-flight TTS from a prior auto-narration.
     uploadLog('reanalyze-start', { from_status: analysisStatus }, swing_id);
     void stopSpeaking().catch(() => {});
-    useCageStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
-    spokenForRef.current = null;
-    void runPhaseKOnSession(swing_id);
+    void (async () => {
+      // 2026-06-10 — Honest guard: re-analysis re-extracts frames FROM THE
+      // VIDEO. If the source clip is gone (old upload/recording whose temp file
+      // the OS cleared — the "won't reanalyze / stuck at 0:00" case), there's
+      // nothing to watch. Say so plainly instead of spinning then failing.
+      try {
+        const clip = shot?.clipUri ?? null;
+        if (clip && clip.startsWith('file:')) {
+          const FS = await import('expo-file-system/legacy');
+          const info = await FS.getInfoAsync(clip);
+          if (!info.exists) {
+            useCageStore.getState().setSessionAnalysisStatus(
+              swing_id,
+              'failed',
+              "The original video isn't on this device anymore, so I can't re-watch it. Re-upload the clip and I'll analyze it fresh.",
+            );
+            return;
+          }
+        }
+      } catch { /* fall through — let analysis try */ }
+      useCageStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
+      spokenForRef.current = null;
+      void runPhaseKOnSession(swing_id);
+    })();
   };
 
   // 2026-05-22 — Phase 2 "Compare to..." action. Opens the bottom-sheet

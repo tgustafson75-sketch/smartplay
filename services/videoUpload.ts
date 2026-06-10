@@ -94,6 +94,43 @@ export async function pickVideo(): Promise<PickResult> {
   }
 }
 
+/**
+ * 2026-06-10 — Persist a freshly-captured/picked clip into the app's DOCUMENT
+ * directory so it survives OS cache eviction. The picker (and the camera
+ * recorder) hand back a TEMPORARY uri in cache/tmp; the OS clears those, so an
+ * old upload/recording later "won't reanalyze" and "won't play" (scrub stuck at
+ * 0:00) because the source file is gone. Copying to documentDirectory keeps the
+ * clip readable for replay + re-analysis indefinitely.
+ *
+ * Best-effort: returns the persistent uri on success, the ORIGINAL uri on any
+ * failure (so behavior never regresses — worst case we're back to today).
+ */
+export async function persistClipToDocuments(uri: string, keyHint?: string): Promise<string> {
+  try {
+    if (!uri || !uri.startsWith('file:')) return uri; // ph:// / remote — leave as-is
+    const dir = FileSystem.documentDirectory;
+    if (!dir) return uri;
+    // Already persistent? Don't re-copy.
+    if (uri.startsWith(dir)) return uri;
+    const destDir = `${dir}swing_clips/`;
+    await FileSystem.makeDirectoryAsync(destDir, { intermediates: true }).catch(() => {});
+    const rawExt = (uri.split('?')[0].split('.').pop() ?? 'mov').toLowerCase();
+    const ext = /^[a-z0-9]{2,4}$/.test(rawExt) ? rawExt : 'mov';
+    const safeKey = (keyHint ?? `${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const dest = `${destDir}${safeKey}.${ext}`;
+    await FileSystem.copyAsync({ from: uri, to: dest });
+    const info = await FileSystem.getInfoAsync(dest);
+    if (info.exists && (info.size ?? 0) > 0) {
+      uploadLog('clip-persisted', { dest_tail: dest.slice(-40), size: info.size ?? null });
+      return dest;
+    }
+    return uri;
+  } catch (e) {
+    console.log('[videoUpload] persistClipToDocuments failed (using original uri):', e);
+    return uri;
+  }
+}
+
 /** Probe a video for audio presence + duration via expo-av. Best-effort. */
 export async function probeVideo(uri: string): Promise<{ has_audio: boolean; duration_sec: number | null }> {
   uploadLog('preprocess-start', { uri_tail: uri.slice(-40) });
@@ -889,7 +926,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
  * One-shot ingest helper: hand off picker result + metadata to the store
  * and kick off Phase K analysis. Returns the new session id.
  */
-export function ingestVideoFromPick(args: {
+export async function ingestVideoFromPick(args: {
   uri: string;
   club: string;
   notes?: string | null;
@@ -914,7 +951,7 @@ export function ingestVideoFromPick(args: {
    *  play through on the swing detail screen via ?watch=1 nav param.
    *  Default false preserves current background-analysis behavior. */
   deferAnalysis?: boolean;
-}): string {
+}): Promise<string> {
   // 2026-05-23 — Perspective auto-inference. If the caller didn't pass
   // an explicit perspective, look at familyStore — when a family
   // member is currently active (Tim tapped Emma to coach her), this
@@ -945,8 +982,12 @@ export function ingestVideoFromPick(args: {
     source_device: args.source_device ?? null,
     perspective: inferredPerspective,
   };
+  // Persist the clip into documents BEFORE ingest so the stored clipUri is
+  // durable (replayable + re-analyzable later). Falls back to the original uri
+  // on any copy failure — never blocks the upload.
+  const persistentUri = await persistClipToDocuments(args.uri);
   const sessionId = useCageStore.getState().ingestUploadedSwing({
-    clipUri: args.uri,
+    clipUri: persistentUri,
     club: args.club,
     upload,
   });

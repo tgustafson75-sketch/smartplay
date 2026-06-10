@@ -981,12 +981,24 @@ check('Ball/stand anchor wired into swing analysis',
 
 // Lead/trail foot stance anchors — general, mirrored correctly, soft.
 const hudSrc = read('components/smartmotion/SmartMotionHud.tsx');
-check('Lead/trail foot stance anchors (general, DTL+FO, mirrored)',
+check('Foot stance anchors use correct golf-setup geometry (FO above ball, DTL to the side)',
   /function StanceFeet\(/.test(hudSrc) &&
-    /leadDir =\s*\n?\s*mode === 'face_on'/.test(hudSrc) &&
+    /clamp\(ball\.y - 0\.16\); \/\/ ABOVE the ball/.test(hudSrc) &&   // face-on: feet above ball
+    /const footX = clamp\(ball\.x \+ side \* SIDE_OFFSET\)/.test(hudSrc) && // DTL: feet to the side
+    /leadY = clamp\(ball\.y - 0\.12\)/.test(hudSrc) &&                  // DTL lead toward target (up)
     /TRAIL/.test(hudSrc) && /LEAD/.test(hudSrc) &&
     /<CaptureGuides mode=\{angle\} handedness=\{swingerHandedness\} ball=\{draftBall\}/.test(smSrc),
-  'foot anchors derive from the ball, mirror for FO vs DTL + handedness, and are general guides (never gate the read)');
+  'face-on feet sit ABOVE the ball (golfer stands behind it); down-the-line feet sit to the SIDE along the target line — general guides, never gate the read');
+
+// 2026-06-10 — Clips persisted to documents so old uploads/recordings replay + re-analyze.
+const uploadSrc = read('services/videoUpload.ts');
+check('Captured clips persisted to documents (survive OS cache eviction)',
+  /export async function persistClipToDocuments\(/.test(uploadSrc) &&
+    /swing_clips\//.test(uploadSrc) &&
+    /const persistentUri = await persistClipToDocuments\(args\.uri\)/.test(uploadSrc) &&
+    /persistClipToDocuments\(rawUri\)/.test(smSrc) &&
+    /isn't on this device anymore/.test(read('app/swinglab/swing/[swing_id].tsx')),
+  'uploads + SmartMotion recordings are copied to documentDirectory so they stay replayable/re-analyzable; a missing source clip gives an honest "re-upload" message instead of a stuck spinner');
 
 // 2026-06-10 — Pose pipeline is angle-aware (knows DTL from FO).
 const poseApiSrc = read('services/poseAnalysisApi.ts');

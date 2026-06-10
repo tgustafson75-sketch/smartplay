@@ -428,7 +428,7 @@ export default function SmartMotion() {
   }, []);
 
   const runAnalysis = useCallback(
-    async (uri: string, segment?: SwingSegment) => {
+    async (rawUri: string, segment?: SwingSegment) => {
       setPhase('analyzing');
       setAnalysis(null);
       setAnalysisError(null);
@@ -437,6 +437,15 @@ export default function SmartMotion() {
       setVideoDurationMs(null);
       ingestedSessionIdRef.current = null;
       analysisCacheRef.current = {};
+      // Persist the recorded clip into documents so it survives OS cache
+      // eviction — otherwise an old SmartMotion recording later can't replay
+      // OR re-analyze (the temp recorder file is gone). Already-persistent or
+      // stale uris pass through unchanged. Best-effort; never blocks.
+      let uri = rawUri;
+      try {
+        const { persistClipToDocuments } = await import('../../services/videoUpload');
+        uri = await persistClipToDocuments(rawUri);
+      } catch { /* use rawUri */ }
       const boundaries = segment ? { startSec: segment.startMs / 1000, endSec: segment.endMs / 1000 } : undefined;
 
       try {
