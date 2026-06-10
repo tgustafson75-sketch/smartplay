@@ -753,7 +753,7 @@ check('Recap does not fabricate par for unknown holes',
 check('Dev/owner-only routes centrally gated',
   /\/dev\/CourseTruth/.test(read('app/_layout.tsx')) &&
     /'\/harness'/.test(read('app/_layout.tsx')),
-  'CourseTruth + harness + caddie-clip-test in DEBUG_ROUTES');
+  'CourseTruth + harness in DEBUG_ROUTES');
 
 check('Orphaned retired routes removed',
   !exists('app/swinglab/camera-setup.tsx') && !exists('app/swinglab/quick-record.tsx') && !exists('app/demo.tsx'),

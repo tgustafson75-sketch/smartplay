@@ -205,6 +205,12 @@ export type Frame = { b64: string; media_type: string; time_sec: number };
 // upper-bound fallback) instead of relying on caller-provided
 // durationMs which often arrives null / wrong on uploaded clips.
 export async function probeDurationMs(clipUri: string): Promise<number> {
+  // 2026-06-10 — Overall timeout so a problem clip (slow audio-track load or a
+  // stalling MediaMetadataRetriever on Android) can NEVER hang re-analysis on an
+  // infinite spinner. If probing doesn't finish in time, fall back to the
+  // default duration and let the localizer / wide-spread sampling proceed.
+  const PROBE_TIMEOUT_MS = 8_000;
+  const probe = async (): Promise<number> => {
   // Phase V.6 — try Audio.Sound first (works when video has an audio
   // track), then probe via VT.getThumbnailAsync at large timestamps as a
   // fallback (if a frame extracts at t=Xms, the video is at least that
@@ -263,6 +269,11 @@ export async function probeDurationMs(clipUri: string): Promise<number> {
   }
   V6('STAGE 1 — duration unknown, fallback', { fallback_ms: FALLBACK_DURATION_MS });
   return FALLBACK_DURATION_MS;
+  };
+  return Promise.race([
+    probe(),
+    new Promise<number>((res) => setTimeout(() => res(FALLBACK_DURATION_MS), PROBE_TIMEOUT_MS)),
+  ]);
 }
 
 /**

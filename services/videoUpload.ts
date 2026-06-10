@@ -203,6 +203,10 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       const puttBoundaries = puttShot?.clipStartSeconds != null
         ? { startSec: puttShot.clipStartSeconds, endSec: puttShot.clipEndSeconds ?? puttShot.clipStartSeconds + 30 }
         : undefined;
+      // 2026-06-10 — move OFF 'pending' so re-analyze shows real progress (and
+      // can't strand on the spinner with the retry button disabled). The IIFE
+      // below writes the terminal 'ok' (addPuttingAnalysis) or 'failed'.
+      useCageStore.getState().setSessionAnalysisStatus(sessionId, 'analyzing_pose');
       void (async () => {
         try {
           // 2026-05-22 — Extract putt-phase key frames locally before

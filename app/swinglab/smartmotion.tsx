@@ -445,6 +445,9 @@ export default function SmartMotion() {
       try {
         const { persistClipToDocuments } = await import('../../services/videoUpload');
         uri = await persistClipToDocuments(rawUri);
+        // Point the review/replay + re-analyze state at the DURABLE copy (not
+        // the temp recorder file) so it survives OS cache eviction.
+        if (uri !== rawUri) setClipUri(uri);
       } catch { /* use rawUri */ }
       const boundaries = segment ? { startSec: segment.startMs / 1000, endSec: segment.endMs / 1000 } : undefined;
 
