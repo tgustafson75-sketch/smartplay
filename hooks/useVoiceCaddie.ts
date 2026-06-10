@@ -22,6 +22,7 @@ import {
   classifyQuery,
 } from '../services/fillerLibrary';
 import { bagDistances } from '../services/shotStrategy';
+import { getCaddieContext } from '../services/caddieMemoryRetrieval';
 import { checkContent } from '../services/contentGuardrail';
 import { resolveAckClip } from '../services/quickAckClips';
 import { resolveGreetingClip } from '../services/quickGreetingClips';
@@ -746,6 +747,10 @@ export const useVoiceCaddie = ({
           activeCourseId,
           courseContext,
           courseIntelligence,
+          // 2026-06-10 — CNS Phase 2: learned-memory slice (bag, course/hole
+          // history, tendencies) via the block the server already pastes.
+          // Additive + sync + never-throws; empty memory → null → unchanged.
+          unified_context_block: getCaddieContext({ courseId: activeCourseId, hole: currentHole, club }).promptBlock || null,
           roundMode,
           patternInsights,
           ghostContext,

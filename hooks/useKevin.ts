@@ -12,6 +12,7 @@ import { buildFullPracticeContext } from '../services/tutorialContext';
 import { getGreenYardagesSync } from '../services/smartFinderService';
 import { useSmartFinderStore } from '../store/smartFinderStore';
 import { tryLocalReply } from '../services/localStatusResponder';
+import { getCaddieContext, mergeMemoryIntoContext } from '../services/caddieMemoryRetrieval';
 
 export type { ToolAction };
 
@@ -237,7 +238,17 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
           // geometry + recent shots + vision in one composed
           // newline-separated block, server pastes verbatim into the
           // system prompt. Null when no round / no data.
-          unified_context_block: unifiedPromptBlock,
+          // 2026-06-10 — CNS Phase 2: fold in the learned-memory slice (bag,
+          // course/hole history, tendencies). Additive — merges into the same
+          // block the server already pastes; empty memory → unchanged.
+          unified_context_block: mergeMemoryIntoContext(
+            unifiedPromptBlock,
+            getCaddieContext({
+              courseId: useRoundStore.getState().activeCourseId,
+              hole: currentHole,
+              club,
+            }).promptBlock,
+          ),
         }),
       }).finally(() => clearTimeout(timeout));
 

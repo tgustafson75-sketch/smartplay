@@ -1013,6 +1013,22 @@ check('Caddie CNS Phase 1 writers wired (shot + round + fault), best-effort',
     /caddie-memory recordShot failed \(non-fatal\)/.test(roundSrc),
   'real carries feed the bag, round-end distills per-course memory, swing faults roll the dominant miss — all wrapped so they can never break the hot path');
 
+// 2026-06-10 — Caddie CNS Phase 2: retrieval layer feeds the brain.
+const retrievalSrc = read('services/caddieMemoryRetrieval.ts');
+const kevinHookSrc = read('hooks/useKevin.ts');
+const voiceHookSrc = read('hooks/useVoiceCaddie.ts');
+check('Caddie CNS Phase 2: retrieval is sync, never-throws, gated, honest',
+  /export function getCaddieContext\(/.test(retrievalSrc) &&
+    /CNS_RETRIEVAL_ENABLED/.test(retrievalSrc) &&
+    /catch \{\s*\n?\s*return EMPTY;/.test(retrievalSrc) &&
+    /live GPS still wins/.test(retrievalSrc),
+  'getCaddieContext returns a compact null-safe slice, can never throw, is flag-gated, and tells the brain memory is a prior (GPS still wins live)');
+
+check('Caddie CNS Phase 2 wired into BOTH brain paths (additive, server-pasted block)',
+  /mergeMemoryIntoContext\(\s*\n?\s*unifiedPromptBlock/.test(kevinHookSrc) &&
+    /unified_context_block: getCaddieContext\(\{ courseId: activeCourseId, hole: currentHole, club \}\)\.promptBlock/.test(voiceHookSrc),
+  'typed-chat (useKevin) and voice (useVoiceCaddie) both fold the memory slice into unified_context_block — the field the server already pastes — so no server change and live builders stay as fallback');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
