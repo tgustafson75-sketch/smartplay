@@ -17,6 +17,8 @@ export type SubscriptionStatus = 'trial' | 'expired' | 'active' | 'free' | 'life
 // access. Matching is case-insensitive on the trimmed profile email.
 export const OWNER_EMAILS: readonly string[] = [
   't.gustafson75@gmail.com',
+  // 2026-06-09 — Tim's iOS test device email.
+  't.gustafson@hotmail.com',
   // 2026-05-23 — Tank (Marc Ward), real golf instructor testing the
   // app on his own device. Owner tools access for the testing surfaces.
   'marc.ward3533@gmail.com',

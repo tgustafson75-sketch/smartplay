@@ -802,6 +802,28 @@ check('Hands-free voice record (start/stop) wired',
     /emitSmartMotionCommand/.test(read('services/intents/mediaHandlers.ts')),
   'voice capture phrase drives the open Smart Motion window via the record bus');
 
+// ─── 2026-06-09: auto club detection + single-source club + owner restore ──
+check('Club state is a single source (shared store, reactive)',
+  /const club = useClubSelectionStore\(\(s\) => s\.lastClub\)/.test(smSrc),
+  'voice / scan / picker all update the same club and the HUD reflects it');
+
+check('Auto club detection wired (scan → recognize → set or confirm)',
+  /detectClubFromCamera/.test(smSrc) && /recognizeClubFromBase64/.test(smSrc) &&
+    /takePictureAsync/.test(smSrc) && /scanClub/.test(read('services/smartMotionRecordBus.ts')),
+  'camera scan recognizes club; low-confidence opens picker to confirm');
+
+check('Voice club-change + scan work on Smart Motion (no cage session needed)',
+  /isSmartMotionActive\(\)/.test(read('services/intents/clubHandler.ts')) &&
+    /useClubSelectionStore\.getState\(\)\.setLastClub/.test(read('services/intents/clubHandler.ts')) &&
+    /emitSmartMotionCommand\('scanClub'\)/.test(read('services/intents/clubHandler.ts')),
+  'spoken club updates the shared store; "scan my club" triggers detection');
+
+const ownerProfileSrc = read('store/playerProfileStore.ts');
+check('Owner tools restorable: hotmail allow-listed + settings email input',
+  /t\.gustafson@hotmail\.com/.test(ownerProfileSrc) &&
+    /Account email/.test(read('app/settings.tsx')) && /setAccountEmail/.test(read('app/settings.tsx')),
+  'owner can set email in Settings to unlock Owner Tools (issue log / voice misses / harness)');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

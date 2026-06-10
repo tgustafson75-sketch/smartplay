@@ -191,6 +191,12 @@ export default function Settings() {
   const ghinNumber = usePlayerProfileStore(s => s.ghin_number);
   const setGhinNumber = usePlayerProfileStore(s => s.setGhinNumber);
   const [editGhin, setEditGhin] = useState(ghinNumber ?? '');
+  // 2026-06-09 — Account email. Setting it to an owner-allowlisted address
+  // unlocks Owner Tools (the auto-mirror stops once the allow-list has >1
+  // entry, so this explicit input is the supported path). Mirrors locally.
+  const accountEmail = usePlayerProfileStore(s => s.email);
+  const setAccountEmail = usePlayerProfileStore(s => s.setEmail);
+  const [editEmail, setEditEmail] = useState(accountEmail ?? '');
 
   // 2026-05-26 — Fix BD: WHS handicap recompute from roundHistory.
   // Walks every round (live + Batch-28 imports) ≥ 9 holes, rebuilds
@@ -685,6 +691,21 @@ export default function Settings() {
           />
           <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>
             Optional. We&apos;ll pull your official handicap + score history once GHIN integration ships.
+          </Text>
+
+          <Text style={inputLblStyle}>Account email</Text>
+          <TextInput
+            style={inputFldStyle}
+            value={editEmail}
+            onChangeText={(v) => { setEditEmail(v); setAccountEmail(v.trim() || null); }}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="you@email.com"
+            placeholderTextColor="#374151"
+          />
+          <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>
+            Optional. {isOwnerEmail(editEmail) ? '✓ Owner Tools unlocked.' : 'Owner devices: enter your owner email to unlock Owner Tools.'}
           </Text>
 
           <Text style={inputLblStyle}>Goal</Text>

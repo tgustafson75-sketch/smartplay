@@ -14,6 +14,8 @@
 import type { IntentHandler, IntentResult } from '../../types/voiceIntent';
 import { useCageStore } from '../../store/cageStore';
 import { parseSpokenClub, clubLabel } from '../clubRecognition';
+import { useClubSelectionStore } from '../../store/clubSelectionStore';
+import { isSmartMotionActive, emitSmartMotionCommand } from '../smartMotionRecordBus';
 import { track } from '../analytics';
 
 function noActiveSession(): IntentResult {
@@ -43,13 +45,45 @@ export const clubChangeHandler: IntentHandler = {
   ],
 
   async execute(intent): Promise<IntentResult> {
+    const phrase = String(intent.parameters.club_phrase ?? intent.raw_text ?? '').trim();
+    const parsed = parseSpokenClub(phrase);
+
+    // 2026-06-09 — Hands-free club tagging on the Smart Motion screen (no cage
+    // session needed there). Update the shared club store so the HUD + ball
+    // speed reflect it. "scan/what/this club" with no named club → trigger the
+    // camera club detector.
+    if (isSmartMotionActive()) {
+      if (parsed) {
+        useClubSelectionStore.getState().setLastClub(parsed.club_id);
+        track('club_switched', { club_id: parsed.club_id, club_type: parsed.club_type, source: 'voice' });
+        return {
+          success: true,
+          voice_response: `Got it, ${clubLabel(parsed.club_id)}.`,
+          side_effects: [`smartmotion:club_switched:${parsed.club_id}`],
+          follow_up_needed: false,
+        };
+      }
+      if (/\b(scan|detect|what|which|this|read)\b/.test(phrase.toLowerCase())) {
+        emitSmartMotionCommand('scanClub');
+        return {
+          success: true,
+          voice_response: 'Reading your club — hold it up.',
+          side_effects: ['smartmotion:club_scan'],
+          follow_up_needed: false,
+        };
+      }
+      return {
+        success: false,
+        voice_response: 'Which club — say the club or show it and say scan.',
+        side_effects: ['smartmotion:club_ambiguous'],
+        follow_up_needed: true,
+      };
+    }
+
     const cage = useCageStore.getState();
     if (!cage.activeSession) {
       return noActiveSession();
     }
-
-    const phrase = String(intent.parameters.club_phrase ?? intent.raw_text ?? '').trim();
-    const parsed = parseSpokenClub(phrase);
 
     if (!parsed) {
       track('club_voice_ambiguous', { phrase: phrase.slice(0, 60) });

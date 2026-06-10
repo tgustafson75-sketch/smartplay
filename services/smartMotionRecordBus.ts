@@ -17,7 +17,7 @@
  * open a new capture surface.
  */
 
-export type SmartMotionCommand = 'start' | 'stop' | 'toggle';
+export type SmartMotionCommand = 'start' | 'stop' | 'toggle' | 'scanClub';
 
 type Listener = (cmd: SmartMotionCommand) => void;
 

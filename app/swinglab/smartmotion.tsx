@@ -89,7 +89,8 @@ import {
   type SmTone,
 } from '../../components/smartmotion/SmartMotionHud';
 import ClubPickerModal, { clubIdToSmashKey, clubIdToServerKey, clubIdLabel } from '../../components/cage/ClubPickerModal';
-import type { ClubId } from '../../services/clubRecognition';
+import { recognizeClubFromBase64, clubLabel, type ClubId } from '../../services/clubRecognition';
+import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
 import { detectBallDeparture, type BallDepartureResult } from '../../services/swing/ballDeparture';
 import { subscribeSmartMotionCommand, setSmartMotionActive } from '../../services/smartMotionRecordBus';
@@ -226,14 +227,17 @@ export default function SmartMotion() {
   const [segments, setSegments] = useState<SwingSegment[]>([]);
   const [selectedSwing, setSelectedSwing] = useState(0);
   // Club tag — drives honest ball speed / smash / carry + the CLUB chip.
-  // Defaults to the last club the user tagged (persisted); null = untagged.
-  const lastClub = useClubSelectionStore((s) => s.lastClub);
-  const setLastClub = useClubSelectionStore((s) => s.setLastClub);
-  const [club, setClub] = useState<ClubId | null>(lastClub);
+  // SINGLE SOURCE OF TRUTH: the persisted clubSelectionStore. Reading it
+  // reactively means voice ("change club to 7 iron"), the scan-club detector,
+  // and the manual picker all update the same value and the HUD reflects it.
+  const club = useClubSelectionStore((s) => s.lastClub);
+  const setClub = useClubSelectionStore((s) => s.setLastClub);
+  const setLastClub = setClub; // alias kept for existing call sites
   const [clubMenuOpen, setClubMenuOpen] = useState(false);
+  const [scanningClub, setScanningClub] = useState(false);
   // A club value is needed by detectBallSpeed (server key) at stop time;
   // keep a ref so the async stop path reads the current selection.
-  const clubRef = useRef<ClubId | null>(lastClub);
+  const clubRef = useRef<ClubId | null>(club);
   useEffect(() => { clubRef.current = club; }, [club]);
 
   // Ball box — a DEFAULT reference box is shown automatically so the user just
@@ -800,14 +804,49 @@ export default function SmartMotion() {
     }
   }, [runAnalysis, appliedCalibration]);
 
+  // ── auto club detection (hands-free, between minutes) ──────────────────
+  // Point the camera at the club (or just keep playing); a scan grabs a frame,
+  // recognizes the club, and tags it. High/med confidence → set it + a spoken
+  // "Got it, 7-iron". Low confidence → open the picker so the user CONFIRMS
+  // (UI fallback). Club state is the shared store, so this updates the HUD,
+  // ball speed, etc. everywhere. Never blocks recording.
+  const detectClubFromCamera = useCallback(async () => {
+    if (scanningClub) return;
+    setScanningClub(true);
+    try {
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+      const pic = await cameraRef.current?.takePictureAsync?.({ base64: true, quality: 0.5, skipProcessing: true });
+      const b64 = pic?.base64;
+      if (!apiUrl || !b64) { setClubMenuOpen(true); return; }
+      const res = await recognizeClubFromBase64(b64, apiUrl);
+      if (res.kind === 'ok' && res.club_id !== 'unknown' && res.confidence !== 'low') {
+        setClub(res.club_id);
+        try {
+          const s = useSettingsStore.getState();
+          await configureAudioForSpeech();
+          await speak(`Got it — ${clubLabel(res.club_id)}.`, s.voiceGender, s.language, apiUrl, { userInitiated: true });
+        } catch { /* speech non-fatal */ }
+      } else {
+        // Couldn't confirm — let the user confirm/correct in the picker.
+        setClubMenuOpen(true);
+      }
+    } catch (e) {
+      console.log('[smartmotion] club scan failed:', e);
+      setClubMenuOpen(true);
+    } finally {
+      setScanningClub(false);
+    }
+  }, [scanningClub, setClub]);
+
   // ── hands-free voice control (the money shot) ──────────────────────────
   // Active-listening "caddie, record / start / stop" drives capture without
   // touching the screen. The screen owns the decision: a command toggles by
   // phase (recording → stop, else → start) so it's robust to start/stop
   // mis-classification. Kept in a ref so we subscribe once and always act on
   // the CURRENT phase. The 60s window also auto-wraps each "minute".
-  const recordCmdRef = useRef<(cmd: 'start' | 'stop' | 'toggle') => void>(() => {});
+  const recordCmdRef = useRef<(cmd: 'start' | 'stop' | 'toggle' | 'scanClub') => void>(() => {});
   recordCmdRef.current = (cmd) => {
+    if (cmd === 'scanClub') { void detectClubFromCamera(); return; }
     const recording = phase === 'recording';
     if (cmd === 'stop') { if (recording) void stopRecording(); return; }
     if (cmd === 'start') { if (!recording && phase !== 'analyzing') void startRecording(); return; }
@@ -1173,6 +1212,28 @@ export default function SmartMotion() {
                 {placeBallMode
                   ? 'Tap where your ball sits'
                   : 'Line up your ball with the box · tap to move (optional)'}
+              </Text>
+            </Pressable>
+          ) : null}
+
+          {/* SETUP — auto club detection between minutes. Show the club, tap
+              Scan; it tags the club (or asks you to confirm). Hands-free via
+              "caddie, scan my club". Manual picker is the CLUB chip below. */}
+          {phase === 'setup' ? (
+            <Pressable
+              onPress={() => void detectClubFromCamera()}
+              disabled={scanningClub}
+              style={[styles.ballNudge, { borderColor: colors.accent, opacity: scanningClub ? 0.6 : 1 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Scan club with camera"
+            >
+              <Ionicons name={scanningClub ? 'sync' : 'scan-outline'} size={14} color={colors.accent} />
+              <Text style={[styles.ballNudgeText, { color: colors.accent }]}>
+                {scanningClub
+                  ? 'Reading your club…'
+                  : club
+                    ? `Club: ${clubIdLabel(club)} · show a new one + tap to scan`
+                    : 'Show your club + tap to scan (or tap CLUB to pick)'}
               </Text>
             </Pressable>
           ) : null}
