@@ -857,7 +857,19 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     // gated). Detail screen renders the Biomechanics card iff result is
     // present — zero UX regression when API isn't configured.
     const firstClipSwing = swings.find(s => s.clipUri);
-    if (firstClipSwing?.clipUri) {
+    // Compute-budget gate (B2): the heavy pose pass (pose API per frame) only
+    // AUTO-runs for tiers that use it. Higher-handicap tiers skip it for speed —
+    // it stays reachable: the swing-detail Motion overlay computes it on demand.
+    let autoBiomech = true;
+    try {
+      const profileMod = await import('../store/playerProfileStore');
+      const p = profileMod.usePlayerProfileStore.getState();
+      const hcp = typeof p.handicap_index === 'number' ? p.handicap_index
+        : (typeof p.handicap === 'number' ? p.handicap : null);
+      const { computeBudgetForHandicap } = await import('../constants/handicapTiers');
+      autoBiomech = computeBudgetForHandicap(hcp).autoBiomech;
+    } catch { /* default: run it */ }
+    if (firstClipSwing?.clipUri && autoBiomech) {
       const durationSec = session.upload?.duration_sec ?? 3;
       void (async () => {
         try {

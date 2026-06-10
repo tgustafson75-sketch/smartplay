@@ -63,6 +63,43 @@ export const TIER_LABEL: Record<HandicapTier, string> = {
   high: TIER_BANDS.high.label,
 };
 
+// ─── COMPUTE BUDGET (B2) ─────────────────────────────────────────────────────
+// CADDIE BRAIN LENS: the brain decides HOW MUCH to spend computing for a player.
+// The intent (Tim's) is SPEED — when a tier doesn't need the heavy analysis,
+// don't RUN it (gate at compute time, not display time). Layers turn ON as the
+// player improves; nothing is deleted — heavier analysis stays reachable via an
+// explicit user action (e.g. opening the Motion overlay), this only sets the
+// auto-run DEFAULT. Data-availability gates (sample counts) still apply on top.
+
+export interface ComputeBudget {
+  tier: HandicapTier;
+  /** Auto-run the heavy pose/biomechanics pass (pose API per frame)? */
+  autoBiomech: boolean;
+  /** Surface dispersion cones / yardage spread? */
+  showDispersion: boolean;
+  /** Surface multi-round trends / pattern-shift detection? */
+  showTrends: boolean;
+  /** How many swing-comparison metrics to compute/show (lighter = fewer). */
+  maxComparisonMetrics: number;
+}
+
+const BUDGET_BY_TIER: Record<HandicapTier, Omit<ComputeBudget, 'tier'>> = {
+  // High handicap (default): lightest + fastest — one clear read, no heavy pose
+  // pass, no stat layers. This is the "less to compute = faster" default.
+  high:  { autoBiomech: false, showDispersion: false, showTrends: false, maxComparisonMetrics: 3 },
+  // Mid: add dispersion (it's cheap + useful) but still skip the heavy pose pass.
+  mid:   { autoBiomech: false, showDispersion: true,  showTrends: false, maxComparisonMetrics: 4 },
+  // Low: unlock the full picture — biomech + trends + more comparison metrics.
+  low:   { autoBiomech: true,  showDispersion: true,  showTrends: true,  maxComparisonMetrics: 8 },
+  elite: { autoBiomech: true,  showDispersion: true,  showTrends: true,  maxComparisonMetrics: 8 },
+};
+
+/** The brain's compute budget for a handicap. Unknown handicap → DEFAULT_TIER. */
+export function computeBudgetForHandicap(handicap: number | null | undefined): ComputeBudget {
+  const tier = deriveTier(handicap);
+  return { tier, ...BUDGET_BY_TIER[tier] };
+}
+
 // ─── 2. LEGACY OPERATIONAL THRESHOLDS (values UNCHANGED — behaviour-neutral) ──
 // These were scattered as magic numbers. Centralized here at their current
 // values; B2 decides which to reconcile with the canonical bands above.
