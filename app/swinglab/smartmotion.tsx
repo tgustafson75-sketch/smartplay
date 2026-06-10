@@ -365,10 +365,15 @@ export default function SmartMotion() {
 
   const bodyItems = useMemo(() => deriveBodyItems(analysis, biomech), [analysis, biomech]);
   // "analyzing" = a read is genuinely in flight (no result yet AND no error).
-  const verdict = useMemo(
-    () => deriveVerdict(analysis, analysis == null && !analysisError),
-    [analysis, analysisError],
-  );
+  // Putt mode has its own verdict (the swing `analysis` stays null for putts,
+  // so deriveVerdict would wrongly say ANALYZING/NO READ).
+  const verdict = useMemo(() => {
+    if (isPutt) {
+      if (puttAnalysis) return { text: 'PUTT READ', tone: 'good' as SmTone };
+      return { text: analysisError ? 'NO READ' : 'READING…', tone: 'neutral' as SmTone };
+    }
+    return deriveVerdict(analysis, analysis == null && !analysisError);
+  }, [isPutt, puttAnalysis, analysis, analysisError]);
   const faultHeadline = useMemo(() => {
     if (!analysis) return null;
     const f = analysis.primary_fault;
