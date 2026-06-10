@@ -496,6 +496,22 @@ export default function SwingDetail() {
     analysisStatus === 'analyzing_pose' ||
     analysisStatus === 'analyzing_pattern' ||
     analysisStatus === 'pending';
+  // 2026-06-09 — Uploaded phone clips have NO acoustics to auto-find the
+  // swing, and a 30-60s clip can't be reliably frame-sampled (a ~2s swing
+  // falls between samples). So let the user POINT at it: scrub the video to
+  // their swing, tap "Analyze this moment", and we window a few seconds
+  // around that position and analyze ONLY that — dense frames on the real
+  // swing instead of sparse frames across a minute of setup/practice/walk-up.
+  const onAnalyzeAtPosition = () => {
+    if (!swing_id || !shot || reanalyzing) return;
+    const center = position;
+    const startSec = Math.max(0, center - 2.5);
+    const endSec = (duration ? Math.min(duration, center + 3) : center + 3);
+    useCageStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec);
+    useToastStore.getState().show(`Analyzing the swing at 0:${Math.floor(center).toString().padStart(2, '0')}…`);
+    onReanalyze();
+  };
+
   const onReanalyze = () => {
     if (!swing_id || reanalyzing) return;
     // Phase V.7 — flip status to 'pending' BEFORE clearing spokenForRef so the
@@ -893,6 +909,22 @@ export default function SwingDetail() {
                   <Text style={[styles.failedBtnText, { color: colors.text_muted }]}>Upload another</Text>
                 </TouchableOpacity>
               </View>
+              {/* Last-resort manual fallback — ONLY here, never the default
+                  flow. If the AI still couldn't find the swing on its own
+                  (very long clip, multiple swings it couldn't separate), let
+                  the player scrub to the swing and analyze just that window. */}
+              <Text style={[styles.tsHint, { color: colors.text_muted, marginTop: 12 }]}>
+                Still no read? Scrub the video to your swing, then:
+              </Text>
+              <TouchableOpacity
+                style={[styles.failedBtn, { borderColor: colors.accent, opacity: reanalyzing ? 0.5 : 1, marginTop: 8, alignSelf: 'flex-start' }]}
+                onPress={onAnalyzeAtPosition}
+                disabled={reanalyzing}
+              >
+                <Text style={[styles.failedBtnText, { color: colors.accent }]}>
+                  Analyze the swing at 0:{Math.floor(position).toString().padStart(2, '0')}
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
 

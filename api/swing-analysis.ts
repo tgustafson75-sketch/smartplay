@@ -721,10 +721,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const frames = (body.frames ?? []) as { b64: string; media_type?: string }[];
     if (!Array.isArray(frames) || frames.length === 0) {
-      return res.status(400).json({ error: 'frames[] (1-5 base64 images) required' });
+      return res.status(400).json({ error: 'frames[] (1-12 base64 images) required' });
     }
-    if (frames.length > 5) {
-      return res.status(400).json({ error: 'maximum 5 frames per swing' });
+    // 2026-06-09 — cap raised 5 → 12. An untrimmed phone UPLOAD (no acoustics
+    // to auto-find the swing) needs enough well-spread frames that the actual
+    // swing is captured somewhere in the set; the TEMPORAL ANALYSIS block above
+    // then picks out the swing frames and ignores setup/practice/walk-up. Live
+    // SmartMotion clips stay at 3-5 (they're already windowed on the strike),
+    // so this only widens the unbounded-upload path. Quick-tier 640px frames
+    // keep total payload well under the 9MB guard even at 12.
+    if (frames.length > 12) {
+      return res.status(400).json({ error: 'maximum 12 frames per swing' });
     }
     const totalSize = frames.reduce((acc, f) => acc + (f.b64?.length ?? 0), 0);
     if (totalSize > 9_000_000) {

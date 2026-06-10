@@ -48,7 +48,7 @@ import CageTargetingCard, { CageTargetingOverlay } from '../../components/swingl
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 import { useTheme } from '../../contexts/ThemeContext';
-import { analyzeSwing, type SwingAnalysis } from '../../services/poseDetection';
+import { analyzeSwing, probeDurationMs, type SwingAnalysis } from '../../services/poseDetection';
 import { evaluateSwingValidity } from '../../services/swingValidity';
 import {
   synthesizeSwingMetrics,
@@ -239,9 +239,16 @@ export default function SmartMotion() {
   const setLastClub = setClub; // alias kept for existing call sites
   const [clubMenuOpen, setClubMenuOpen] = useState(false);
   const [scanningClub, setScanningClub] = useState(false);
-  // Putt mode — when a putter is tagged, the clip is analyzed AS A PUTT (green
-  // read + stroke), not a full-swing fault read. A PUTT MODE pill confirms it.
-  const isPutt = club === 'PT';
+  // Putt mode — EXPLICIT, per-recording state (NOT derived from the sticky
+  // club). Deriving it from `club === 'PT'` meant a putter tagged once stayed
+  // tagged in the persisted clubSelectionStore, so EVERY later recording routed
+  // to the putt analyzer instead of the swing analyzer — swings silently stopped
+  // getting a swing read. Now putt mode is turned on deliberately (PUTT toggle,
+  // or picking the putter) and reset on every new recording, so it can't stick.
+  const [puttMode, setPuttMode] = useState(false);
+  const isPutt = puttMode;
+  const puttModeRef = useRef(false);
+  useEffect(() => { puttModeRef.current = puttMode; }, [puttMode]);
   const [puttAnalysis, setPuttAnalysis] = useState<PuttingAnalysis | null>(null);
   // Feels engine — the player tells the caddie how the swing FELT; the caddie
   // reconciles it with the real read and coaches back.
@@ -467,20 +474,51 @@ export default function SmartMotion() {
       // read + stroke), not a full-swing fault read. Isolated branch: the swing
       // path below is untouched for every other club. analyzePutt is
       // fallback-safe (always resolves), so this never hangs.
-      if (clubRef.current === 'PT') {
+      if (puttModeRef.current) {
         try {
-          const frames = await extractFramesB64(uri, videoDurationMs).catch(() => [] as string[]);
-          const sid = ingestedSessionIdRef.current;
-          const ballAreaNow = sid
-            ? (useCageStore.getState().sessionHistory.find((x) => x.id === sid)?.ball_area_norm ?? null)
-            : null;
-          const putt = await analyzePutt({
-            video_url: uri,
-            frames_base64: frames.length > 0 ? frames : undefined,
-            ball_area_norm: ballAreaNow,
-          });
-          setPuttAnalysis(putt);
-          if (sid) { try { useCageStore.getState().addPuttingAnalysis(sid, putt); } catch { /* non-fatal */ } }
+          // 30s watchdog — same guarantee the swing path has. probe /
+          // frame-extraction / analyzePutt are all best-effort, but if any
+          // of them hangs (a thumbnail decode that never resolves) the screen
+          // must NOT be stranded on "Analyzing…" forever. Whichever resolves
+          // first wins; on timeout we fall through to review with no putt read.
+          const puttWork = (async () => {
+            // Frames for the putt read must come from the actual stroke, not the
+            // first 3s of setup. videoDurationMs is null this early (the review
+            // <Video> hasn't loaded yet), so probe it; and when the acoustic
+            // segmenter gave us the stroke window, sample WITHIN it.
+            let puttDurMs = videoDurationMs;
+            if (puttDurMs == null) {
+              puttDurMs = await probeDurationMs(uri).catch(() => null);
+            }
+            const puttFractions = boundaries
+              ? [0.2, 0.5, 0.8].map((f) => {
+                  const span = boundaries.endSec - boundaries.startSec;
+                  const absSec = boundaries.startSec + span * f;
+                  return puttDurMs && puttDurMs > 0 ? (absSec * 1000) / puttDurMs : f;
+                })
+              : undefined;
+            const frames = await extractFramesB64(uri, puttDurMs, puttFractions).catch(() => [] as string[]);
+            const sid = ingestedSessionIdRef.current;
+            const ballAreaNow = sid
+              ? (useCageStore.getState().sessionHistory.find((x) => x.id === sid)?.ball_area_norm ?? null)
+              : null;
+            return analyzePutt({
+              video_url: uri,
+              frames_base64: frames.length > 0 ? frames : undefined,
+              ball_area_norm: ballAreaNow,
+            });
+          })();
+          const putt = await Promise.race([
+            puttWork,
+            new Promise<PuttingAnalysis | null>((resolve) => setTimeout(() => resolve(null), 30000)),
+          ]);
+          if (putt) {
+            setPuttAnalysis(putt);
+            const sid = ingestedSessionIdRef.current;
+            if (sid) { try { useCageStore.getState().addPuttingAnalysis(sid, putt); } catch { /* non-fatal */ } }
+          } else {
+            setAnalysisError('Putt analysis timed out');
+          }
         } catch (e) {
           setAnalysisError(e instanceof Error ? e.message : String(e));
         }
@@ -937,6 +975,7 @@ export default function SmartMotion() {
       const res = await recognizeClubFromBase64(b64, apiUrl);
       if (res.kind === 'ok' && res.club_id !== 'unknown' && res.confidence !== 'low') {
         setClub(res.club_id);
+        setPuttMode(res.club_id === 'PT');
         try {
           const s = useSettingsStore.getState();
           await configureAudioForSpeech();
@@ -1220,7 +1259,11 @@ export default function SmartMotion() {
             via the targeting card on the analysis page. */}
         {isReview && (ballArea || targetPoint) ? (
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <CageTargetingOverlay ballArea={ballArea} target={targetPoint} launchDir={angle === 'face_on' ? (swingerHandedness === 'left' ? 'right' : 'left') : null} />
+            {/* REVIEW launch line (approximation). Face-on only. Direction:
+                the player faces the camera, so it's MIRRORED — a right-handed
+                golfer's target is to THEIR left, which is the VIEWER's RIGHT.
+                (Was 'left' for RH = backwards; that's the wrong-way bug.) */}
+            <CageTargetingOverlay ballArea={ballArea} target={targetPoint} launchDir={angle === 'face_on' ? (swingerHandedness === 'left' ? 'left' : 'right') : null} />
           </View>
         ) : null}
 
@@ -1229,10 +1272,12 @@ export default function SmartMotion() {
             no duplicate static box). Shown while lining up and while recording. */}
         {(phase === 'setup' || phase === 'recording') && draftBall ? (
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            {/* Ball box only — CaptureGuides draws the angle-specific target
-                line (DTL center vs FO offset) so the DTL/FO toggle switches it.
-                The ball box is the single anchor (no duplicate box). */}
-            <CageTargetingOverlay ballArea={draftBall} target={null} launchDir={angle === 'face_on' ? (swingerHandedness === 'left' ? 'right' : 'left') : null} />
+            {/* Ball box only — CaptureGuides draws the angle-specific framing
+                lines (DTL center target line vs FO stance/target+ball lines).
+                NO launch line during LIVE capture: a launch direction is a
+                post-shot approximation, not a setup aid — it only clutters the
+                line-up. The launch line shows on REVIEW instead (above). */}
+            <CageTargetingOverlay ballArea={draftBall} target={null} launchDir={null} />
           </View>
         ) : null}
         {phase === 'setup' && placeBallMode ? (
@@ -1250,10 +1295,13 @@ export default function SmartMotion() {
           />
         ) : null}
 
-        {/* DTL framing guide = center target line (CaptureGuides). FACE-ON uses
-            the CageTargetingOverlay ball box + diagonal ~LAUNCH line instead, so
-            CaptureGuides only renders for down-the-line. Suppressed in review. */}
-        {phase !== 'analyzing' && !isReview && angle === 'down_the_line'
+        {/* Framing guides for BOTH angles during line-up/recording:
+              • DTL  → center target line (ball straight up to target)
+              • FO   → the two stance lines (TARGET LINE + BALL LINE), mirrored
+                       for lefties — restored here; gating to DTL-only had left
+                       face-on with no side guides at all.
+            Suppressed in review and while analyzing. */}
+        {phase !== 'analyzing' && !isReview
           ? <CaptureGuides mode={angle} handedness={swingerHandedness} />
           : null}
 
@@ -1459,7 +1507,15 @@ export default function SmartMotion() {
           ) : null}
 
           <View style={styles.controlsRow}>
-            {!isReview ? <ModeToggle value={angle} onChange={setAngle} compact /> : null}
+            {!isReview ? (
+              <ModeToggle
+                value={angle}
+                onChange={(a) => { setAngle(a); setPuttMode(false); }}
+                isPutt={isPutt}
+                onPutt={() => { setPuttMode(true); setAngle('down_the_line'); }}
+                compact
+              />
+            ) : null}
             <View style={{ flex: 1 }} />
             {actionBtn}
           </View>
@@ -1704,7 +1760,7 @@ export default function SmartMotion() {
         open={clubMenuOpen}
         onClose={() => setClubMenuOpen(false)}
         selected={club}
-        onPick={(c) => { setClub(c); setLastClub(c); setClubMenuOpen(false); }}
+        onPick={(c) => { setClub(c); setLastClub(c); setPuttMode(c === 'PT'); setClubMenuOpen(false); }}
       />
     </View>
   );

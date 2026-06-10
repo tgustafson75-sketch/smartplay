@@ -125,22 +125,34 @@ export default function SwingLab() {
     if (swingLabListeningPromptShown) return;
     if (isActiveListeningEnabled()) return;
     swingLabListeningPromptShown = true;
-    void (async () => {
-      try {
-        const s = useSettingsStore.getState();
-        const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
-        await configureAudioForSpeech();
-        await speak(
-          'Heads up - turn on Active Listening for hands-free swing commands, or just tap me to talk.',
-          s.voiceGender,
-          s.language,
-          apiUrl,
-          { userInitiated: true },
-        );
-      } catch {
-        // Non-fatal; prompt is advisory only.
-      }
-    })();
+    // 2026-06-09 — Play the "turn on Active Listening" prompt RELIABLY (was
+    // getting clipped to a blip). The clip happened because the prompt fired
+    // the instant the tab mounted, colliding with the tab-transition / any
+    // in-flight TTS and getting cut off. Fix: wait for the screen to settle,
+    // and bail if the user already navigated away — so it either plays in
+    // full or not at all, never a half-second stub.
+    let cancelled = false;
+    const t = setTimeout(() => {
+      void (async () => {
+        if (cancelled) return;
+        try {
+          const s = useSettingsStore.getState();
+          const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+          await configureAudioForSpeech();
+          if (cancelled) return;
+          await speak(
+            'Heads up - turn on Active Listening for hands-free swing commands, or just tap me to talk.',
+            s.voiceGender,
+            s.language,
+            apiUrl,
+            { userInitiated: true },
+          );
+        } catch {
+          // Non-fatal; prompt is advisory only.
+        }
+      })();
+    }, 800);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [trustLevel]);
 
   return (

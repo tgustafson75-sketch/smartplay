@@ -330,11 +330,29 @@ export async function extractKeyFrames(
       if (durationMs > LONG_CLIP_THRESHOLD_MS) {
         windowStartMs = 0;
         windowDurationMs = durationMs;
-        // Quick-tier wins even on long clips — the speed cost of 5
-        // wide frames > the marginal accuracy bump on speed-path calls.
-        if (!quickTier) frameFractions = LONG_CLIP_FRACTIONS;
-        V6('STAGE 2 — extractKeyFrames long-clip wide-spread', {
+        // 2026-06-09 — Acoustics-free upload fix. An untrimmed phone
+        // UPLOAD (practice swings + setup + the real swing somewhere in
+        // the middle/end, no acoustic window to narrow on) needs the AI
+        // to FIND the swing itself. It can only do that if the swing is
+        // actually in the frames we send — a fixed 3-5 frame sample is
+        // so sparse across 30-60s that a ~2s swing falls BETWEEN frames
+        // and the read comes back empty ("won't analyze"). So scale the
+        // frame count with clip length (~1 per 5s, 6-12 frames) spread
+        // evenly across the whole clip; the TEMPORAL ANALYSIS block in
+        // api/swing-analysis.ts then picks out the swing frames and
+        // ignores the setup/walk-up ones. Endpoint cap was raised 5→12
+        // to match. (Bounded live SmartMotion clips are unaffected: they
+        // take the `boundaries` branch above and keep the fast 3-frame
+        // sample inside the known strike window.)
+        const durSec = durationMs / 1000;
+        const n = Math.max(6, Math.min(12, Math.round(durSec / 5)));
+        const lo = 0.06;
+        const hi = 0.96;
+        frameFractions = Array.from({ length: n }, (_, i) => lo + ((hi - lo) * i) / (n - 1));
+        V6('STAGE 2 — extractKeyFrames long-clip duration-scaled spread', {
           duration_ms: durationMs,
+          quick_tier: quickTier,
+          frame_count: n,
           target_fractions: frameFractions,
         });
       } else if (durationMs > MEDIUM_CLIP_THRESHOLD_MS) {

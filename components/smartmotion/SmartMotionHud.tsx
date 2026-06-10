@@ -81,6 +81,8 @@ export function ModeToggle({
   onChange,
   style,
   compact = false,
+  isPutt = false,
+  onPutt,
 }: {
   value: Angle;
   onChange: (a: Angle) => void;
@@ -88,20 +90,26 @@ export function ModeToggle({
   /** Compact = small DTL / FO icon chips (keeps the center clear so the
    *  target-anchor box behind the controls stays visible). */
   compact?: boolean;
+  /** When true the PUTT chip is the active one (putt mode). */
+  isPutt?: boolean;
+  /** When provided, a PUTT chip is shown; tapping it enters putt mode. */
+  onPutt?: () => void;
 }) {
   const { colors } = useTheme();
-  const opts: { key: Angle; label: string; short: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
-    { key: 'down_the_line', label: 'DOWN THE LINE', short: 'DTL', icon: 'git-branch-outline' },
-    { key: 'face_on', label: 'FACE-ON', short: 'FO', icon: 'person-outline' },
+  type Opt = { key: string; label: string; short: string; icon: React.ComponentProps<typeof Ionicons>['name']; putt: boolean };
+  const opts: Opt[] = [
+    { key: 'down_the_line', label: 'DOWN THE LINE', short: 'DTL', icon: 'git-branch-outline', putt: false },
+    { key: 'face_on', label: 'FACE-ON', short: 'FO', icon: 'person-outline', putt: false },
+    ...(onPutt ? [{ key: 'putt', label: 'PUTT', short: 'PUTT', icon: 'golf-outline' as const, putt: true }] : []),
   ];
   return (
     <View style={[styles.toggle, compact && styles.toggleCompact, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
       {opts.map((o) => {
-        const active = o.key === value;
+        const active = o.putt ? isPutt : (!isPutt && o.key === value);
         return (
           <Pressable
             key={o.key}
-            onPress={() => onChange(o.key)}
+            onPress={() => (o.putt ? onPutt?.() : onChange(o.key as Angle))}
             accessibilityRole="button"
             accessibilityLabel={o.label}
             accessibilityState={{ selected: active }}

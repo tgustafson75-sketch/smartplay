@@ -293,7 +293,7 @@ function PlacementModal({
  *  Measures its own size so the trapezoid / ring render in real pixels
  *  (crisp strokes). Both points are user-placed — honest, no inferred flight. */
 export function CageTargetingOverlay({
-  ballArea, target, launchDir = null,
+  ballArea, target, launchDir = null, puttLine = false,
 }: {
   ballArea: BallArea | null;
   target: TargetPoint | null;
@@ -301,6 +301,10 @@ export function CageTargetingOverlay({
    *  toward the target side ('left' for RH, 'right' for LH). Labeled ~LAUNCH —
    *  it's an estimate to be refined with real shot tracing later. */
   launchDir?: 'left' | 'right' | null;
+  /** Putt mode (down-the-line): a straight center line from the ball up to a
+   *  PIN marker at the top. Line up the PIN icon with the real pin to anchor
+   *  the putt line (helps line + distance read). */
+  puttLine?: boolean;
 }) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   if (!ballArea && !target) return null;
@@ -334,10 +338,17 @@ export function CageTargetingOverlay({
     };
   }
 
+  // Putt line — straight center line from the ball up to a PIN marker at the
+  // top (down-the-line). Aim the PIN icon at the real pin to anchor the line.
+  let puttGeom: { x: number; y1: number; pinY: number } | null = null;
+  if (ballArea && puttLine && w > 0) {
+    puttGeom = { x: ballArea.x * w, y1: ballArea.y * h - ballArea.r * w * 0.6, pinY: 0.10 * h };
+  }
+
   // Approximate face-on launch line — diagonal up from the ball toward the
   // target side. Rough by design (refined later with real tracing).
   let launchLine: { x1: number; y1: number; x2: number; y2: number; labelX: number; labelY: number } | null = null;
-  if (ballArea && launchDir && w > 0) {
+  if (ballArea && launchDir && !puttLine && w > 0) {
     const bx = ballArea.x * w;
     const by = ballArea.y * h;
     const r = ballArea.r * w;
@@ -384,6 +395,16 @@ export function CageTargetingOverlay({
               stroke={LIME} strokeWidth={2.4} strokeDasharray="8,7" opacity={0.9} strokeLinecap="round"
             />
           )}
+          {puttGeom && (
+            <>
+              <SvgLine
+                x1={puttGeom.x} y1={puttGeom.y1}
+                x2={puttGeom.x} y2={puttGeom.pinY}
+                stroke={WHITE} strokeWidth={2} strokeDasharray="7,6" opacity={0.95} strokeLinecap="round"
+              />
+              <SvgEllipse cx={puttGeom.x} cy={puttGeom.pinY} rx={5} ry={3} stroke={WHITE} strokeWidth={1.6} fill="none" opacity={0.9} />
+            </>
+          )}
         </Svg>
       )}
       {/* Pill labels with a downward caret (RN views — crisp text). */}
@@ -404,6 +425,15 @@ export function CageTargetingOverlay({
           <View style={overlayStyles.pill}><Text style={overlayStyles.pillText}>~ LAUNCH</Text></View>
         </View>
       )}
+      {puttGeom && (
+        <View style={[overlayStyles.pillWrap, { left: puttGeom.x, top: puttGeom.pinY - 30 }]}>
+          <View style={[overlayStyles.pill, overlayStyles.pinPill]}>
+            <Ionicons name="flag" size={12} color="#06281b" />
+            <Text style={[overlayStyles.pillText, { color: '#06281b' }]}>PIN</Text>
+          </View>
+          <View style={overlayStyles.caret} />
+        </View>
+      )}
     </View>
   );
 }
@@ -413,6 +443,7 @@ const overlayStyles = StyleSheet.create({
   // Centered over its anchor x; caret points down at the line/box.
   pillWrap: { position: 'absolute', alignItems: 'center', transform: [{ translateX: -45 }], width: 90 },
   pill: { backgroundColor: PILL_BG, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  pinPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#34d399' },
   pillText: { color: '#ffffff', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
   caret: {
     width: 0, height: 0,

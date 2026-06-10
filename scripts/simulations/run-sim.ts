@@ -832,10 +832,11 @@ check('Feels engine wired (capture → caddie brain reconcile)',
     /\/api\/swing-question/.test(read('services/swing/feelReconcile.ts')),
   "player feel → swing-question reconciles it with the real read + coaches back");
 
-check('Putt mode: pill + analyzed as a putt (not a swing)',
-  /isPutt = club === 'PT'/.test(smSrc) && /analyzePutt\(/.test(smSrc) &&
-    /PUTT MODE/.test(smSrc) && /clubRef\.current === 'PT'/.test(smSrc),
-  'putter tag routes to putt analysis + shows PUTT MODE confirmation pill');
+check('Putt mode: explicit + decoupled from sticky club (no misroute)',
+  /const isPutt = puttMode/.test(smSrc) && /analyzePutt\(/.test(smSrc) &&
+    /PUTT MODE/.test(smSrc) && /puttModeRef\.current/.test(smSrc) &&
+    !/isPutt = club === 'PT'/.test(smSrc),
+  'putt mode is explicit per-recording state (not derived from persisted club), routes to putt analysis + PUTT MODE pill; a sticky putter no longer sends swings to the putt analyzer');
 
 // ─── 2026-06-09 (audit fixes): voice-restart + control bar + slow-mo ───────
 check('Voice record restarts from review (camera re-mount fix)',
@@ -856,12 +857,17 @@ check('Tempo pill on the left (review, swings, honest)',
   /tempoPill/.test(smSrc) && /isReview && !isPutt && tempo\?\.ratio != null/.test(smSrc),
   'headline tempo shown as a left pill, only when a real ratio exists');
 
-check('Face-on approximate launch line (estimate, not blocking ball box)',
+check('Face-on launch line on REVIEW only + correct mirrored direction; framing guides both angles',
   /launchDir/.test(read('components/swinglab/CageTargetingCard.tsx')) &&
     /~ LAUNCH/.test(read('components/swinglab/CageTargetingCard.tsx')) &&
-    /angle === 'face_on' \? \(swingerHandedness/.test(smSrc) &&
-    /angle === 'down_the_line'\n\s*\? <CaptureGuides/.test(smSrc),
-  'face-on draws a diagonal ~LAUNCH line; DTL keeps the center guide');
+    // Review launch line: face-on, mirrored — RH golfer faces camera so target
+    // is the VIEWER's right ('right' for RH / 'left' for LH).
+    /launchDir=\{angle === 'face_on' \? \(swingerHandedness === 'left' \? 'left' : 'right'\) : null\}/.test(smSrc) &&
+    // No launch line during live capture (declutter line-up).
+    /<CageTargetingOverlay ballArea=\{draftBall\} target=\{null\} launchDir=\{null\}/.test(smSrc) &&
+    // Framing guides (incl. restored FO side lines) render for BOTH angles.
+    /!isReview\n\s*\? <CaptureGuides/.test(smSrc),
+  'launch line is a face-on REVIEW approximation pointing the correct (mirrored) way; live capture shows framing guides for both DTL and FO');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
