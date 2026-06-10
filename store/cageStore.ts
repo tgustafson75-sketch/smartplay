@@ -566,7 +566,9 @@ interface CageState {
  * try/catch — derivation failure returns the guest fallback, never
  * blocks ingest.
  */
-function derivePlayerId(): string {
+// 2026-06-10 — exported so the Caddie Memory store derives the SAME player id
+// (one source of truth: family active member → profile email → guest).
+export function derivePlayerId(): string {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fam = require('./familyStore') as typeof import('./familyStore');

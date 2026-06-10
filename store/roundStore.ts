@@ -1083,6 +1083,33 @@ export const useRoundStore = create<RoundState>()(
           shots: [...s.shots],
           round_photos: s.currentRoundPhotos.length > 0 ? [...s.currentRoundPhotos] : undefined,
         };
+        // 2026-06-10 — Caddie CNS Phase 1: distill this round into per-course /
+        // per-hole memory (rounds played, scoring avg, tee club, par). Additive
+        // + best-effort; nothing reads it yet (Phase 2 retrieval). Reuses the
+        // record we just built so it's consistent with roundHistory.
+        try {
+          if (s.activeCourseId) {
+            const holesData = Object.entries(s.scores)
+              .filter(([, sc]) => typeof sc === 'number' && sc > 0)
+              .map(([holeStr, sc]) => {
+                const hole = Number(holeStr);
+                const par = s.courseHoles.find(h => h.hole === hole)?.par ?? null;
+                const teeClub = s.shots.find(x => x.hole === hole)?.club ?? null;
+                return { hole, par, score: sc as number, teeClub, approachClub: null, trouble: [] as string[] };
+              });
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const mem = require('./caddieMemoryStore') as typeof import('./caddieMemoryStore');
+            mem.useCaddieMemoryStore.getState().recordRoundEnd({
+              round_id: record.id,
+              course_id: s.activeCourseId,
+              course_name: s.activeCourse,
+              nowMs: Date.now(),
+              holes: holesData,
+            });
+          }
+        } catch (e) {
+          console.log('[roundStore] caddie-memory recordRoundEnd failed (non-fatal):', e);
+        }
         // 2026-05-16 — Full in-round state reset on round end. Was
         // only flipping isRoundActive false + appending to roundHistory,
         // which left currentHole / scores / shots / activeCourse stale.
@@ -1682,6 +1709,19 @@ export const useRoundStore = create<RoundState>()(
             } catch (e) {
               console.log('[roundStore] longestDrive update failed (non-fatal):', e);
             }
+          }
+
+          // 2026-06-10 — Caddie CNS Phase 1: feed real carries into the learning
+          // bag model. Additive + best-effort; nothing reads it yet (Phase 2).
+          try {
+            const carry = enriched.carry_distance ?? enriched.distance_yards ?? null;
+            if (enriched.club && typeof carry === 'number' && carry > 0) {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const mem = require('./caddieMemoryStore') as typeof import('./caddieMemoryStore');
+              mem.useCaddieMemoryStore.getState().recordShot({ club: enriched.club, carryYds: carry, nowMs: enriched.timestamp ?? 0 });
+            }
+          } catch (e) {
+            console.log('[roundStore] caddie-memory recordShot failed (non-fatal):', e);
           }
 
           return {

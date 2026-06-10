@@ -64,7 +64,7 @@ export type CompareKind = 'self_vs_self' | 'self_vs_pro' | 'self_vs_amateur' | '
 export type MetricDirection = 'better' | 'worse' | 'same' | 'unknown';
 
 export interface MetricDelta {
-  key: keyof Omit<SwingBiomechanics, 'frames' | 'verdicts' | 'metric_confidence'>;
+  key: keyof Omit<SwingBiomechanics, 'frames' | 'verdicts' | 'metric_confidence' | 'angle'>;
   label: string;
   current: number | null;
   reference: number | null;

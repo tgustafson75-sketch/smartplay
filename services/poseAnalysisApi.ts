@@ -88,6 +88,11 @@ export interface SwingBiomechanics {
    *  rotation rates between P4_top and P6_impact. Null when we don't
    *  have both frames or hip/shoulder widths needed to read it. */
   sequencingScore?: number | null;
+  /** 2026-06-10 — camera angle this read was computed for. The pose pipeline is
+   *  angle-aware: the width-foreshortening turn metrics + the lateral-x weight
+   *  shift are nulled for down-the-line (that geometry makes them invalid from
+   *  behind), so we never report a number the angle can't honestly measure. */
+  angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null;
   /** Per-frame pose data we computed metrics from. Empty when the API
    *  failed entirely. UI uses this to render a skeleton overlay later. */
   frames: PoseFrame[];
@@ -301,11 +306,11 @@ async function poseAtTime(videoUri: string, timeMs: number, position: PoseFrame[
  *  frames tagged with `position` (P1_address / P4_top / P6_impact)
  *  for the metric reads — callers must populate those tags before
  *  calling. */
-export function computeBiomechanicsFromFrames(frames: PoseFrame[]): SwingBiomechanics {
-  return computeBiomechanics(frames);
+export function computeBiomechanicsFromFrames(frames: PoseFrame[], angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null): SwingBiomechanics {
+  return computeBiomechanics(frames, angle);
 }
 
-function computeBiomechanics(frames: PoseFrame[]): SwingBiomechanics {
+function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null): SwingBiomechanics {
   const address = frames.find(f => f.position === 'P1_address');
   const top = frames.find(f => f.position === 'P4_top');
   const impact = frames.find(f => f.position === 'P6_impact');
@@ -437,6 +442,17 @@ function computeBiomechanics(frames: PoseFrame[]): SwingBiomechanics {
     }
   }
 
+  // 2026-06-10 — Angle-aware honesty. From DOWN-THE-LINE the camera is behind
+  // the player, so the width-foreshortening turn metrics read inverted and the
+  // lateral-x weight shift is actually depth — both invalid. Null them rather
+  // than surface a wrong number; the verdicts below already render null when the
+  // metric is null. Face-on / glasses / unknown keep the existing behavior.
+  if (angle === 'down_the_line') {
+    hipTurnDeg = null;
+    shoulderTurnDeg = null;
+    weightShiftPct = null;
+  }
+
   // Verdicts — short coaching one-liners based on tour standards.
   const verdicts = {
     hipTurn:
@@ -491,6 +507,7 @@ function computeBiomechanics(frames: PoseFrame[]): SwingBiomechanics {
     hipTurnDeg, shoulderTurnDeg, shoulderTiltDeg,
     weightShiftPct, spineAngleDeltaDeg, headDriftPxNorm, hipSlideRatio,
     sequencingScore,
+    angle: angle ?? null,
     frames, verdicts, metric_confidence,
   };
 }
@@ -515,10 +532,14 @@ function avgScore(frameA: PoseFrame | undefined, frameB: PoseFrame | null | unde
 /** Full pipeline: extract keyframes from a swing video, run pose detection
  *  on each, compute biomechanics. Returns null when the video is invalid
  *  OR the pose API failed for every frame (caller renders fallback). */
-export async function analyzeSwingFromVideo(videoUri: string, durationMs: number): Promise<SwingBiomechanics | null> {
+export async function analyzeSwingFromVideo(
+  videoUri: string,
+  durationMs: number,
+  angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null,
+): Promise<SwingBiomechanics | null> {
   const frames = await extractPoseFramesFromVideo(videoUri, durationMs);
   if (!frames) return null;
-  return computeBiomechanics(frames);
+  return computeBiomechanics(frames, angle);
 }
 
 /** 2026-05-22 — Path A (SmartMotion real pose overlay): same keyframe-

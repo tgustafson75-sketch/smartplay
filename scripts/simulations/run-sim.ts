@@ -988,6 +988,31 @@ check('Lead/trail foot stance anchors (general, DTL+FO, mirrored)',
     /<CaptureGuides mode=\{angle\} handedness=\{swingerHandedness\} ball=\{draftBall\}/.test(smSrc),
   'foot anchors derive from the ball, mirror for FO vs DTL + handedness, and are general guides (never gate the read)');
 
+// 2026-06-10 — Pose pipeline is angle-aware (knows DTL from FO).
+const poseApiSrc = read('services/poseAnalysisApi.ts');
+check('Pose/biomech pipeline is angle-aware (DTL vs FO)',
+  /angle\?: 'down_the_line' \| 'face_on' \| 'glasses_pov' \| null/.test(poseApiSrc) &&
+    /if \(angle === 'down_the_line'\) \{\s*\n\s*hipTurnDeg = null;\s*\n\s*shoulderTurnDeg = null;\s*\n\s*weightShiftPct = null;/.test(poseApiSrc) &&
+    /analyzeSwingFromVideo\(clipUri, videoDurationMs, angle\)/.test(smSrc),
+  'down-the-line nulls the width-foreshortening turn + lateral weight metrics (invalid from behind) instead of reporting wrong numbers; angle threaded end-to-end');
+
+// 2026-06-10 — Caddie CNS Phase 1: memory store + writers (additive, honest).
+const memSrc = read('store/caddieMemoryStore.ts');
+const roundSrc = read('store/roundStore.ts');
+check('Caddie CNS Phase 1: memory store is additive, persisted, honest, bounded',
+  /name: 'caddie-memory-v1'/.test(memSrc) &&
+    /recordShot:/.test(memSrc) && /recordRoundEnd:/.test(memSrc) && /recordSwingFault:/.test(memSrc) &&
+    /samples >= MIN_SAMPLES \? Math\.round\(avg\) : null/.test(memSrc) &&  // honesty: null until learned
+    /MAX_REFLECTIONS|MAX_COURSE_NOTES/.test(memSrc),                        // bounded growth
+  'persisted per-player/course memory; learned distances stay null until enough real samples; growth is capped');
+
+check('Caddie CNS Phase 1 writers wired (shot + round + fault), best-effort',
+  /useCaddieMemoryStore\.getState\(\)\.recordShot\(/.test(roundSrc) &&
+    /useCaddieMemoryStore\.getState\(\)\.recordRoundEnd\(/.test(roundSrc) &&
+    /useCaddieMemoryStore\.getState\(\)\.recordSwingFault\(/.test(smSrc) &&
+    /caddie-memory recordShot failed \(non-fatal\)/.test(roundSrc),
+  'real carries feed the bag, round-end distills per-course memory, swing faults roll the dominant miss — all wrapped so they can never break the hot path');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

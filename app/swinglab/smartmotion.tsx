@@ -564,6 +564,14 @@ export default function SmartMotion() {
         if (result.kind === 'ok') {
           setAnalysis(result.analysis);
           analysisCacheRef.current[(segment?.index ?? 1) - 1] = result.analysis;
+          // Caddie CNS Phase 1 — feed the detected fault into the learning
+          // tendencies (rolling dominant miss). Additive + best-effort.
+          try {
+            const fault = result.analysis.detected_issue ?? null;
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const mem = require('../../store/caddieMemoryStore') as typeof import('../../store/caddieMemoryStore');
+            mem.useCaddieMemoryStore.getState().recordSwingFault({ fault, nowMs: Date.now() });
+          } catch { /* non-fatal */ }
           const sessionId = ingestedSessionIdRef.current;
           if (sessionId) {
             try {
@@ -609,7 +617,7 @@ export default function SmartMotion() {
       try {
         const frames = await extractPoseFramesFromVideo(clipUri, videoDurationMs);
         if (!cancelled) setPoseFrames(frames);
-        const bio = await analyzeSwingFromVideo(clipUri, videoDurationMs);
+        const bio = await analyzeSwingFromVideo(clipUri, videoDurationMs, angle);
         if (!cancelled && bio) {
           setBiomech(bio);
           const sessionId = ingestedSessionIdRef.current;
@@ -622,7 +630,7 @@ export default function SmartMotion() {
       }
     })();
     return () => { cancelled = true; };
-  }, [clipUri, videoDurationMs, showSkeleton]);
+  }, [clipUri, videoDurationMs, showSkeleton, angle]);
 
   // Acoustic-anchored tempo + transition for the selected swing. Impact
   // comes from the acoustic strike detector (segment.strikeMs);
