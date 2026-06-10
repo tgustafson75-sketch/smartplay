@@ -532,6 +532,17 @@ export default function SmartMotion() {
         return;
       }
 
+      // Brain → analysis pretext: feed the CNS learned tendencies as SOFT
+      // priors. The server biases toward a named dominant_miss + lists prior
+      // faults but always trusts the visual read and notes any disagreement.
+      const cnsTend = (() => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const mem = require('../../store/caddieMemoryStore') as typeof import('../../store/caddieMemoryStore');
+          return mem.useCaddieMemoryStore.getState().getPlayer().tendencies;
+        } catch { return { dominantMiss: null as string | null, recentFaults: [] as string[] }; }
+      })();
+
       try {
         // 30s watchdog so a hung network call can't strand the screen on
         // the "Analyzing…" overlay with no way out.
@@ -543,10 +554,16 @@ export default function SmartMotion() {
             swing_number: segment?.index ?? 1,
             caddie_name: caddiePersonality,
             angle,
+            // Handedness pretext so direction-dependent faults read correctly.
+            handedness: swingerHandedness,
             language,
+            // CNS recent faults as prior context (server: "Prior swings showed…").
+            prior_issues: cnsTend.recentFaults.length > 0 ? cnsTend.recentFaults : undefined,
             player_context: {
               handicap: profile.handicap ?? null,
-              dominant_miss: profile.dominantMiss ?? null,
+              // Prefer the LEARNED dominant miss (from real swings) over the
+              // static profile value when we have it.
+              dominant_miss: cnsTend.dominantMiss ?? profile.dominantMiss ?? null,
               first_name: profile.firstName ?? null,
             },
             tier: 'quick',
@@ -604,7 +621,7 @@ export default function SmartMotion() {
 
       setPhase('review');
     },
-    [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea, videoDurationMs],
+    [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea, videoDurationMs, swingerHandedness],
   );
 
   // Pose biomechanics — only when the user opens the Motion overlay (step 2).
@@ -838,6 +855,7 @@ export default function SmartMotion() {
             swing_number: seg.index,
             caddie_name: caddiePersonality,
             angle,
+            handedness: swingerHandedness,
             language,
             player_context: {
               handicap: profile.handicap ?? null,
@@ -859,7 +877,7 @@ export default function SmartMotion() {
       } catch { /* keep prior analysis on failure */ }
       setSwingAnalyzing(false);
     },
-    [segments, clipUri, angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName],
+    [segments, clipUri, angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, swingerHandedness],
   );
 
   const startRecording = useCallback(async () => {

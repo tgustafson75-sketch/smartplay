@@ -590,6 +590,10 @@ export async function analyzeSwing(
     // analyst prompt drops body-rotation reads in that mode and
     // leans on grip / setup / impact-contact cues that ARE visible.
     angle?: 'down_the_line' | 'face_on' | 'glasses_pov';
+    // 2026-06-10 — swinger handedness. Direction-dependent faults (over-the-top,
+    // hip slide, lead side) mirror for lefties; the analyzer prompt uses this to
+    // read direction correctly instead of assuming right-handed.
+    handedness?: 'left' | 'right' | null;
     // 2026-05-21 — Fix E: player's selected language. Routes into
     // the swing-analysis prompt so the observation text comes back
     // in the right language (Spanish / Chinese / English).

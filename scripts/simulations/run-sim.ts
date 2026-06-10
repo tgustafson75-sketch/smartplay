@@ -1029,6 +1029,15 @@ check('Caddie CNS Phase 2 wired into BOTH brain paths (additive, server-pasted b
     /unified_context_block: getCaddieContext\(\{ courseId: activeCourseId, hole: currentHole, club \}\)\.promptBlock/.test(voiceHookSrc),
   'typed-chat (useKevin) and voice (useVoiceCaddie) both fold the memory slice into unified_context_block — the field the server already pastes — so no server change and live builders stay as fallback');
 
+// 2026-06-10 — Analysis pretext: handedness + CNS learned tendencies feed the analyzer.
+check('Analyzer gets handedness + CNS-learned tendencies pretext',
+  /handedness\?: 'left' \| 'right' \| null/.test(poseSrc) &&
+    /Swinger is \$\{ctx\.handedness\.toUpperCase\(\)\}-HANDED/.test(swingApiSrc) &&
+    /handedness: swingerHandedness/.test(smSrc) &&
+    /dominant_miss: cnsTend\.dominantMiss \?\? profile\.dominantMiss/.test(smSrc) &&
+    /prior_issues: cnsTend\.recentFaults\.length > 0/.test(smSrc),
+  'the swing analyzer is told handedness (mirrors direction-dependent faults) and the CNS learned dominant-miss + recent faults as soft priors — closing the brain→analysis loop, with the visual read still winning');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

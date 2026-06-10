@@ -802,6 +802,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const mode = (body.mode === 'tentative' ? 'tentative' : 'analysis') as 'analysis' | 'tentative';
     const ctxLines: string[] = [];
     if (ctx.club) ctxLines.push(`Club: ${ctx.club}`);
+    // 2026-06-10 — Handedness pretext. Without it the analyzer assumes
+    // right-handed and mirrors direction-dependent faults wrong for lefties.
+    if (ctx.handedness === 'left' || ctx.handedness === 'right') {
+      const lead = ctx.handedness === 'left' ? 'right' : 'left';
+      ctxLines.push(
+        `Swinger is ${ctx.handedness.toUpperCase()}-HANDED. Lead (target) side = ${lead} side; trail side = ${ctx.handedness}. ` +
+        `Read direction-dependent faults (over-the-top, hip slide, sway, lead-arm) for a ${ctx.handedness}-handed swing — do NOT assume right-handed.`,
+      );
+    }
     if (ctx.swing_number != null) ctxLines.push(`Swing ${ctx.swing_number} of session`);
     if (ctx.prior_issues && Array.isArray(ctx.prior_issues) && ctx.prior_issues.length > 0) {
       ctxLines.push(`Prior swings showed: ${(ctx.prior_issues as string[]).join(', ')}`);
