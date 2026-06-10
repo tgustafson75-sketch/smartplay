@@ -209,6 +209,11 @@ export interface CageSession {
    *  rendered as its own card on that screen. Independent of
    *  primary_issue / putting_analysis — they coexist. */
   coach_note?: string | null;
+  /** 2026-06-09 — Feels engine. The PLAYER's own words on how the swing felt
+   *  (mechanical "came over the top" or emotional "frustrated"). The caddie
+   *  reconciles it with the real read for coaching. Distinct from the
+   *  owner-only feel_narration_transcript (passive feel-vs-real dataset). */
+  feel_note?: string | null;
   /** 2026-05-27 — Fix EO: cage targeting metadata. Normalized 0-1
    *  coordinates relative to the video frame.
    *  - ball_area_norm: center + radius of the ball setup area. Both
@@ -476,6 +481,8 @@ interface CageState {
    *  AI analysis path — both display side-by-side on the swing
    *  detail screen. Pass empty string or null to clear. */
   setSessionCoachNote: (sessionId: string, note: string | null) => void;
+  /** Feels engine — store the player's stated feel on the session. */
+  setSessionFeel: (sessionId: string, note: string | null) => void;
   /** 2026-05-27 — Fix EO: cage targeting setters. Pass null to clear. */
   setSessionBallArea: (sessionId: string, area: { x: number; y: number; r: number } | null) => void;
   setSessionTarget: (sessionId: string, target: { x: number; y: number } | null) => void;
@@ -1079,6 +1086,16 @@ export const useCageStore = create<CageState>()(
             session.id !== sessionId ? session : {
               ...session,
               coach_note: note && note.trim().length > 0 ? note.trim() : null,
+            }
+          ),
+        })),
+
+      setSessionFeel: (sessionId, note) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              feel_note: note && note.trim().length > 0 ? note.trim() : null,
             }
           ),
         })),

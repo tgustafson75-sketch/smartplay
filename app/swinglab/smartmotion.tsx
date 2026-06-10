@@ -94,6 +94,8 @@ import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
 import { detectBallDeparture, type BallDepartureResult } from '../../services/swing/ballDeparture';
 import { subscribeSmartMotionCommand, setSmartMotionActive } from '../../services/smartMotionRecordBus';
+import { reconcileFeel, extractFramesB64 } from '../../services/swing/feelReconcile';
+import { analyzePutt, type PuttingAnalysis } from '../../services/puttingAnalysisService';
 
 const RECORDING_MAX_SECONDS = 60; // open window — player swings freely
 // Default ball-box position (normalized). Lower-center of the frame, where a
@@ -235,6 +237,16 @@ export default function SmartMotion() {
   const setLastClub = setClub; // alias kept for existing call sites
   const [clubMenuOpen, setClubMenuOpen] = useState(false);
   const [scanningClub, setScanningClub] = useState(false);
+  // Putt mode — when a putter is tagged, the clip is analyzed AS A PUTT (green
+  // read + stroke), not a full-swing fault read. A PUTT MODE pill confirms it.
+  const isPutt = club === 'PT';
+  const [puttAnalysis, setPuttAnalysis] = useState<PuttingAnalysis | null>(null);
+  // Feels engine — the player tells the caddie how the swing FELT; the caddie
+  // reconciles it with the real read and coaches back.
+  const [feelText, setFeelText] = useState('');
+  const [feelReply, setFeelReply] = useState<string | null>(null);
+  const [feelLoading, setFeelLoading] = useState(false);
+  const setSessionFeel = useCageStore((s) => s.setSessionFeel);
   // A club value is needed by detectBallSpeed (server key) at stop time;
   // keep a ref so the async stop path reads the current selection.
   const clubRef = useRef<ClubId | null>(club);
@@ -426,6 +438,31 @@ export default function SmartMotion() {
         console.log('[smartmotion] library ingest failed (non-fatal):', e);
       }
 
+      // PUTT MODE — when a putter is tagged, analyze the clip AS A PUTT (green
+      // read + stroke), not a full-swing fault read. Isolated branch: the swing
+      // path below is untouched for every other club. analyzePutt is
+      // fallback-safe (always resolves), so this never hangs.
+      if (clubRef.current === 'PT') {
+        try {
+          const frames = await extractFramesB64(uri, videoDurationMs).catch(() => [] as string[]);
+          const sid = ingestedSessionIdRef.current;
+          const ballAreaNow = sid
+            ? (useCageStore.getState().sessionHistory.find((x) => x.id === sid)?.ball_area_norm ?? null)
+            : null;
+          const putt = await analyzePutt({
+            video_url: uri,
+            frames_base64: frames.length > 0 ? frames : undefined,
+            ball_area_norm: ballAreaNow,
+          });
+          setPuttAnalysis(putt);
+          if (sid) { try { useCageStore.getState().addPuttingAnalysis(sid, putt); } catch { /* non-fatal */ } }
+        } catch (e) {
+          setAnalysisError(e instanceof Error ? e.message : String(e));
+        }
+        setPhase('review');
+        return;
+      }
+
       try {
         // 30s watchdog so a hung network call can't strand the screen on
         // the "Analyzing…" overlay with no way out.
@@ -482,7 +519,7 @@ export default function SmartMotion() {
 
       setPhase('review');
     },
-    [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea],
+    [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea, videoDurationMs],
   );
 
   // Pose biomechanics — only when the user opens the Motion overlay (step 2).
@@ -610,6 +647,9 @@ export default function SmartMotion() {
     setVideoDurationMs(null);
     setBallSpeed(null);
     setBallDeparture(null);
+    setPuttAnalysis(null);
+    setFeelText('');
+    setFeelReply(null);
     setDraftBall(DEFAULT_BALL_BOX); // keep the default reference box after Record again
     setPlaceBallMode(false);
     firstStrikeMsRef.current = null;
@@ -638,6 +678,43 @@ export default function SmartMotion() {
       try { useCageStore.getState().setSessionCoachNote(sid, coachNote); } catch { /* non-fatal */ }
     }
   }, [coachNote]);
+
+  // Feels engine — store the player's feel + ask the caddie to reconcile it
+  // with the real read and coach back. Safe: always resolves with a message.
+  const submitFeel = useCallback(async () => {
+    const t = feelText.trim();
+    if (!t || feelLoading) return;
+    setFeelLoading(true);
+    setFeelReply(null);
+    const sid = ingestedSessionIdRef.current;
+    if (sid) { try { setSessionFeel(sid, t); } catch { /* non-fatal */ } }
+    try {
+      const a = analysisCacheRef.current[selectedSwing] ?? analysis;
+      const reply = await reconcileFeel({
+        videoUri: clipUri ?? '',
+        feel: t,
+        durationMs: videoDurationMs,
+        caddieName: caddiePersonality,
+        club: club ? clubLabel(club) : null,
+        priorFault: a?.primary_fault ?? a?.detected_issue ?? null,
+        priorCause: a?.cause ?? null,
+        priorFix: a?.fix ?? null,
+        language,
+      });
+      setFeelReply(reply ?? "Saved your feel — I'll factor it into your reads.");
+      if (reply) {
+        try {
+          const s = useSettingsStore.getState();
+          await configureAudioForSpeech();
+          await speak(reply, s.voiceGender, s.language, process.env.EXPO_PUBLIC_API_URL ?? '', { userInitiated: true });
+        } catch { /* speech non-fatal */ }
+      }
+    } catch {
+      setFeelReply('Saved your feel.');
+    } finally {
+      setFeelLoading(false);
+    }
+  }, [feelText, feelLoading, selectedSwing, analysis, clipUri, videoDurationMs, caddiePersonality, club, language, setSessionFeel]);
 
   const onPagerScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const w = e.nativeEvent.layoutMeasurement.width || 1;
@@ -1057,8 +1134,17 @@ export default function SmartMotion() {
           </View>
         </View>
 
+        {/* PUTT MODE pill — confirms the clip is analyzed as a PUTT, not a
+            full swing. Shown whenever a putter is tagged. */}
+        {isPutt ? (
+          <View style={[styles.puttPill, { top: insets.top + 56 }]} pointerEvents="none">
+            <Ionicons name="golf-outline" size={13} color="#06281b" />
+            <Text style={styles.puttPillText}>PUTT MODE</Text>
+          </View>
+        ) : null}
+
         {/* RIGHT RAIL — floating metric cards (review) */}
-        {isReview ? (
+        {isReview && !isPutt ? (
           <View style={[styles.rightRail, { top: insets.top + 60 }]}>
             <MetricRail metrics={railMetrics} />
           </View>
@@ -1283,6 +1369,30 @@ export default function SmartMotion() {
 
       {!isReview ? (
         <Text style={[styles.muted, { color: colors.text_muted }]}>Record a swing to see your full breakdown, drill, and notes here.</Text>
+      ) : isPutt ? (
+        // PUTT MODE — analyzed as a putt (green read + stroke), not a swing.
+        puttAnalysis ? (
+          <>
+            <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.accent }]}>
+              <Text style={[styles.insightLabel, { color: colors.accent }]}>PUTT READ{puttAnalysis.partialCapture ? ' · est' : ''}</Text>
+              <Text style={[styles.insightText, { color: colors.text_primary }]}>{puttAnalysis.caddieComment}</Text>
+            </View>
+            <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
+              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>LINE</Text>
+              <Text style={[styles.insightText, { color: colors.text_secondary }]}>{puttAnalysis.recommendation.line}</Text>
+            </View>
+            <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
+              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>SPEED / FEEL</Text>
+              <Text style={[styles.insightText, { color: colors.text_secondary }]}>{puttAnalysis.recommendation.speedFeel}</Text>
+            </View>
+            <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
+              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>CUE</Text>
+              <Text style={[styles.insightText, { color: colors.text_secondary }]}>{puttAnalysis.recommendation.technicalCue}</Text>
+            </View>
+          </>
+        ) : (
+          <Text style={[styles.muted, { color: colors.text_muted }]}>{analysisError ?? 'Reading your putt…'}</Text>
+        )
       ) : analysis == null ? (
         // Null-prevention: even without a full server analysis, surface
         // whatever the motion DID reveal (biomech verdicts + tempo). One
@@ -1393,6 +1503,35 @@ export default function SmartMotion() {
           />
         </>
       )}
+
+      {/* FEELS ENGINE — tell the caddie how it FELT (mechanical or emotional);
+          it reconciles your feel with the real read and coaches you back. */}
+      {isReview ? (
+        <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
+          <Text style={[styles.insightLabel, { color: colors.text_muted }]}>HOW&apos;D IT FEEL?</Text>
+          <TextInput
+            value={feelText}
+            onChangeText={setFeelText}
+            placeholder="e.g. felt like I came over the top · felt frustrated"
+            placeholderTextColor={colors.text_muted}
+            multiline
+            style={[styles.noteInput, { color: colors.text_primary, borderColor: colors.border }]}
+          />
+          <Pressable
+            onPress={() => { void submitFeel(); }}
+            disabled={feelLoading || feelText.trim().length === 0}
+            style={[styles.secondaryBtn, { borderColor: colors.accent, marginTop: 8, opacity: feelLoading || !feelText.trim() ? 0.6 : 1 }]}
+          >
+            {feelLoading
+              ? <ActivityIndicator size="small" color={colors.accent} />
+              : <Ionicons name="chatbubble-ellipses-outline" size={15} color={colors.accent} />}
+            <Text style={[styles.secondaryBtnText, { color: colors.accent }]}>{feelLoading ? 'Asking your caddie…' : 'Run it by your caddie'}</Text>
+          </Pressable>
+          {feelReply ? (
+            <Text style={[styles.insightText, { color: colors.text_primary, marginTop: 8 }]}>{feelReply}</Text>
+          ) : null}
+        </View>
+      ) : null}
     </ScrollView>
   );
 
@@ -1453,6 +1592,8 @@ const styles = StyleSheet.create({
   rightRail: { position: 'absolute', right: 8, width: 118, gap: 8, zIndex: 4 },
 
   recPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, zIndex: 6 },
+  puttPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, zIndex: 6, backgroundColor: '#34d399' },
+  puttPillText: { color: '#06281b', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
   recDot: { width: 10, height: 10, borderRadius: 5 },
   recText: { color: '#fff', fontWeight: '800', fontSize: 13 },
 

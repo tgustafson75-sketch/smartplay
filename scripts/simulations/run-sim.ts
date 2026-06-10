@@ -824,6 +824,19 @@ check('Owner tools restorable: hotmail allow-listed + settings email input',
     /Account email/.test(read('app/settings.tsx')) && /setAccountEmail/.test(read('app/settings.tsx')),
   'owner can set email in Settings to unlock Owner Tools (issue log / voice misses / harness)');
 
+// ─── 2026-06-09: feels engine + putt mode ──────────────────────────────────
+check('Feels engine wired (capture → caddie brain reconcile)',
+  exists('services/swing/feelReconcile.ts') &&
+    /reconcileFeel/.test(smSrc) && /submitFeel/.test(smSrc) &&
+    /setSessionFeel/.test(read('store/cageStore.ts')) &&
+    /\/api\/swing-question/.test(read('services/swing/feelReconcile.ts')),
+  "player feel → swing-question reconciles it with the real read + coaches back");
+
+check('Putt mode: pill + analyzed as a putt (not a swing)',
+  /isPutt = club === 'PT'/.test(smSrc) && /analyzePutt\(/.test(smSrc) &&
+    /PUTT MODE/.test(smSrc) && /clubRef\.current === 'PT'/.test(smSrc),
+  'putter tag routes to putt analysis + shows PUTT MODE confirmation pill');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
