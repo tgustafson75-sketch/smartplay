@@ -264,19 +264,28 @@ export default function Dashboard() {
 
         {/* ─── 3. PROFILE CARD ───────────────────────────────────────── */}
         <View style={[styles.profileCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-          <View style={[styles.avatar, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}>
-            <Text style={[styles.avatarLetter, { color: colors.accent }]}>
-              {welcomeName.charAt(0).toUpperCase()}
-            </Text>
-          </View>
-          <View style={styles.profileText}>
-            <Text style={[styles.profileName, { color: colors.text_primary }]} numberOfLines={1}>
-              {welcomeName}
-            </Text>
-            <Text style={[styles.profileMeta, { color: colors.text_muted }]} numberOfLines={1}>
-              Handicap {handicap_index != null ? handicap_index.toFixed(1) : (handicap || '—')} · Goal {goal || '—'}
-            </Text>
-          </View>
+          {/* 2026-06-11 — tap the identity area to open the Profile screen
+              (handicap, GHIN, import history). Gear still goes to Settings. */}
+          <TouchableOpacity
+            onPress={() => router.push('/profile' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1, minWidth: 0 }}
+          >
+            <View style={[styles.avatar, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}>
+              <Text style={[styles.avatarLetter, { color: colors.accent }]}>
+                {welcomeName.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <View style={styles.profileText}>
+              <Text style={[styles.profileName, { color: colors.text_primary }]} numberOfLines={1}>
+                {welcomeName}
+              </Text>
+              <Text style={[styles.profileMeta, { color: colors.text_muted }]} numberOfLines={1}>
+                Handicap {handicap_index != null ? handicap_index.toFixed(1) : (handicap || '—')} · Goal {goal || '—'}
+              </Text>
+            </View>
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => router.push('/settings' as never)}
             hitSlop={10}

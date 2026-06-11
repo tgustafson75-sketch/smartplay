@@ -1387,18 +1387,18 @@ export default function Settings() {
               How to use the app →
             </Text>
           </TouchableOpacity>
-          {/* 2026-05-26 — Fix AA: round screenshot import. Lives in
-              Help so testers with existing Golfshot / 18Birdies / GHIN
-              history can bring those rounds into SmartPlay's stats. */}
+          {/* 2026-06-11 — Round import moved to its proper home: the Profile
+              screen (alongside handicap index + GHIN). This Help row now just
+              routes there so the old entry point still lands somewhere useful. */}
           <TouchableOpacity
             style={styles.aboutRow}
-            onPress={() => router.push('/import-round' as never)}
+            onPress={() => router.push('/profile' as never)}
             accessibilityRole="button"
-            accessibilityLabel="Import a past round from a screenshot"
+            accessibilityLabel="Import past rounds from your Profile"
           >
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Import Past Round</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Import Past Rounds</Text>
             <Text style={[styles.aboutValue, { color: colors.accent }]}>
-              From a scorecard screenshot →
+              In Profile · history + handicap →
             </Text>
           </TouchableOpacity>
           {/* 2026-05-22 — Family Coaching roster + library link. Single
