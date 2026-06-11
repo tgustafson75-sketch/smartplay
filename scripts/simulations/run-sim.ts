@@ -1038,6 +1038,16 @@ check('Voice warmup fires on voice-surface mount + app foreground (not just gree
     /voiceEnabled\) prewarmVoice\(\)/.test(vcWarmSrc),
   "useVoiceCaddie warms the four voice Lambdas whenever a voice surface mounts and whenever the app returns to the foreground (gated on voiceEnabled, 30s-deduped) so the FIRST mic tap is hot — not the third");
 
+// 2026-06-10 — Pre-response conversational filler removed. With the warm brain at
+// 4-6s, a filler firing at 400ms finished ~2s in and left dead air (or got chopped),
+// and double-acknowledged the brain's own natural opening. The main voice path now
+// awaits the brain directly. (Tool-action ack clips stay.)
+check('Pre-response conversational filler removed from the main voice path',
+  !/FILLER_DELAY_MS/.test(vcWarmSrc) &&
+    !/getClipForCategory\(classifyQuery/.test(vcWarmSrc) &&
+    /const rawResponse = await sendToBrain\(transcript\)/.test(vcWarmSrc),
+  "the 'Let me see...' bridge no longer fires before Kevin's reply (it conflicted with the now-fast brain that already opens conversationally); the brain response is awaited directly and tool-action ack clips are untouched");
+
 // 2026-06-10 — Pose pipeline is angle-aware (knows DTL from FO).
 const poseApiSrc = read('services/poseAnalysisApi.ts');
 check('Pose/biomech pipeline is angle-aware (DTL vs FO)',

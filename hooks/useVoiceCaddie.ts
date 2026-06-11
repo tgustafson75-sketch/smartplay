@@ -16,12 +16,7 @@ import {
   endCaptureEarly,
   RECORDING_OPTIONS,
 } from '../services/voiceService';
-import {
-  initFillerLibrary,
-  isLibraryGenerated,
-  getClipForCategory,
-  classifyQuery,
-} from '../services/fillerLibrary';
+import { initFillerLibrary } from '../services/fillerLibrary';
 import { bagDistances } from '../services/shotStrategy';
 import { getCaddieContext } from '../services/caddieMemoryRetrieval';
 import { checkContent } from '../services/contentGuardrail';
@@ -425,14 +420,12 @@ export const useVoiceCaddie = ({
     voiceEnabled,
     language,
     responseMode,
-    fillerEnabled,
   } = useSettingsStore(
     useShallow((s) => ({
       voiceGender: s.voiceGender,
       voiceEnabled: s.voiceEnabled,
       language: s.language,
       responseMode: s.responseMode,
-      fillerEnabled: s.fillerEnabled,
     }))
   );
 
@@ -1537,37 +1530,15 @@ export const useVoiceCaddie = ({
         // Fall through to brain on routing errors — never get stuck.
       }
 
-      // 2026-06-04 — Delay-then-cancel filler. The brain often comes back
-      // in <400ms on the warm path, in which case firing a filler at all
-      // produces a "Hmm, let me think..." that overlaps Kevin's real
-      // reply and sounds choppy. Schedule the filler 400ms out; if the
-      // brain answers first, clearTimeout cancels before the filler
-      // ever plays. When the brain is genuinely slow (>400ms), the
-      // filler plays normally and the existing speechId bump (inside
-      // stopSpeaking() below) preempts it when the real reply lands.
-      const FILLER_DELAY_MS = 400;
-      let fillerTimer: ReturnType<typeof setTimeout> | null = null;
-      if (voiceEnabled && fillerEnabled && isLibraryGenerated()) {
-        fillerTimer = setTimeout(() => {
-          const clip = getClipForCategory(classifyQuery(transcript));
-          if (clip) playLocalFile(clip.audio_path).catch(() => {});
-        }, FILLER_DELAY_MS);
-      }
-
-      // 2026-06-05 — try/finally to guarantee fillerTimer cancellation
-      // even when sendToBrain throws. Previously the cancel ran only
-      // on the success path; on a brain exception the filler still
-      // fired 400ms later AFTER "Hit a snag" already played, layering
-      // an orphan "Hmm let me think..." over the error message.
-      let rawResponse: Awaited<ReturnType<typeof sendToBrain>>;
-      try {
-        rawResponse = await sendToBrain(transcript);
-      } finally {
-        if (fillerTimer) {
-          clearTimeout(fillerTimer);
-          fillerTimer = null;
-        }
-      }
+      // 2026-06-10 — Pre-response conversational filler REMOVED. It fired at
+      // 400ms, but the warm brain now answers in 4-6s, so the short filler
+      // ("Let me see...") finished ~2s in and left 2-4s of dead air before the
+      // real reply — or got chopped mid-word on fast turns. Worse, the brain
+      // already opens conversationally ("I hear you...", "Yeah, so..."), so the
+      // filler double-acknowledged. Cleaner: ask -> brief visual thinking state
+      // -> Kevin's natural answer. (Tool-action ack clips below are unaffected —
+      // those confirm an action and are still valuable.)
+      const rawResponse = await sendToBrain(transcript);
       const kevinResponse = {
         ...rawResponse,
         ...checkContent(rawResponse.text, rawResponse.audioBase64),
@@ -1579,11 +1550,9 @@ export const useVoiceCaddie = ({
       // available as conversational antecedent.
       recordKevinTurn(kevinResponse.text);
       wrappedOnVoiceStateChange('speaking');
-      // Cancel any still-playing / queued filler so the user doesn't hear
-      // the bridge phrase ("Okay, let me think about that...") in full
-      // before the real answer. stopSpeaking() bumps the speak-queue
-      // generation, which both stops the currently-playing clip and
-      // causes any queued not-yet-running bodies to skip.
+      // Defensive: clear any lingering audio (e.g. an interrupted prior reply)
+      // before the answer. stopSpeaking() bumps the speak-queue generation, so
+      // any currently-playing clip stops and queued-but-not-running bodies skip.
       await stopSpeaking();
       // 2026-06-06 — Pre-rendered ack-clip shortcut. The brain's
       // defaults map (api/kevin.ts) emits 8 fixed strings for tool
@@ -1659,7 +1628,7 @@ export const useVoiceCaddie = ({
     } finally {
       isProcessingRef.current = false;
     }
-  }, [language, voiceEnabled, voiceGender, fillerEnabled, currentYardage, currentHole, club, isRoundActive, roundMode]);
+  }, [language, voiceEnabled, voiceGender, currentYardage, currentHole, club, isRoundActive, roundMode]);
 
   // ── MAIN MIC HANDLER ─────────────────────
 
