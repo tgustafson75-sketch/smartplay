@@ -334,7 +334,7 @@ export default function Scorecard() {
       Alert.alert(t('scorecard.share'), t('scorecard.share_failed'));
       console.log('[scorecard] share error', e);
     }
-  }, [viewCourseName, isCompetition, totalScore, scoreVsParDisplay, effectiveNineHoleMode, viewCourseHoles, viewScores, clubUsage, recap]);
+  }, [t, viewCourseName, isCompetition, totalScore, scoreVsParDisplay, effectiveNineHoleMode, viewCourseHoles, viewScores, clubUsage, recap]);
 
   const handleQuickScore = (hole: number, score: number) => {
     // Audit fix (2026-06-07): clear any prior quick-score placeholders for
