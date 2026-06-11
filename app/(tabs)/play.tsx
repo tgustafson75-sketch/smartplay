@@ -31,6 +31,7 @@ import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLa
 import { useTheme } from '../../contexts/ThemeContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -229,6 +230,7 @@ type SearchKind = 'courses' | 'range_practice';
 
 export default function PlayTab() {
   const router = useRouter();
+  const { t } = useTranslation();
   // 2026-05-26 — Fix CA: theme-aware styles. Without this the Play
   // tab stayed dark even when the app was in light mode (every other
   // tab respected useTheme). makeStyles() is defined at the bottom
@@ -723,7 +725,7 @@ export default function PlayTab() {
         {isRoundActive && (
           <View style={styles.activeRoundBanner}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.activeRoundLabel}>ACTIVE ROUND</Text>
+              <Text style={styles.activeRoundLabel}>{t('play.active_round')}</Text>
               <Text style={styles.activeRoundCourse} numberOfLines={1}>
                 {activeCourse ?? 'In progress'}
               </Text>
@@ -732,12 +734,12 @@ export default function PlayTab() {
               style={styles.endRoundBtn}
               onPress={() => {
                 Alert.alert(
-                  'End round?',
-                  'Save the scorecard to your history (updates handicap), or discard everything and start fresh.',
+                  t('play.end_round_title'),
+                  t('play.end_round_body'),
                   [
-                    { text: 'Keep playing', style: 'cancel' },
+                    { text: t('play.keep_playing'), style: 'cancel' },
                     {
-                      text: 'Save & end',
+                      text: t('play.save_end'),
                       onPress: () => {
                         const roundId = endRound();
                         try { router.push(`/recap/${roundId}` as never); }
@@ -745,17 +747,17 @@ export default function PlayTab() {
                       },
                     },
                     {
-                      text: 'Discard',
+                      text: t('play.discard'),
                       style: 'destructive',
                       onPress: () => {
                         // 2026-05-17 — confirm-twice on destructive so a
                         // misfire doesn't nuke a round in progress.
                         Alert.alert(
-                          'Discard this round?',
-                          'All shots, scores, and plans from this round will be deleted. This cannot be undone.',
+                          t('play.discard_title'),
+                          t('play.discard_body'),
                           [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Discard everything', style: 'destructive', onPress: () => { discardRound(); } },
+                            { text: t('play.cancel'), style: 'cancel' },
+                            { text: t('play.discard_everything'), style: 'destructive', onPress: () => { discardRound(); } },
                           ],
                         );
                       },
@@ -766,7 +768,7 @@ export default function PlayTab() {
               accessibilityRole="button"
               accessibilityLabel="End round"
             >
-              <Text style={styles.endRoundBtnText}>End Round</Text>
+              <Text style={styles.endRoundBtnText}>{t('play.end_round')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -774,8 +776,8 @@ export default function PlayTab() {
         {/* Header */}
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.h1}>Course Discovery</Text>
-            <Text style={styles.h1Sub}>Search here. Start rounds from Caddie setup.</Text>
+            <Text style={styles.h1}>{t('play.course_discovery')}</Text>
+            <Text style={styles.h1Sub}>{t('play.course_discovery_sub')}</Text>
           </View>
           <TouchableOpacity
             style={styles.scopeBtn}
@@ -787,7 +789,7 @@ export default function PlayTab() {
         </View>
 
         {/* Closest Local */}
-        <Text style={styles.sectionLabel}>CLOSEST LOCAL COURSES</Text>
+        <Text style={styles.sectionLabel}>{t('play.closest_courses')}</Text>
         {/* Phase 405 wave 3 — auto-detect banner. Only renders when GPS
             puts the player within ~550y of a known course, so most users
             never see it (no pollution); when it fires, it's strongly
@@ -867,7 +869,7 @@ export default function PlayTab() {
         </View>
 
         {/* Course search — golfcourseapi-backed lookup for non-local courses. */}
-        <Text style={[styles.sectionLabel, { marginTop: 22 }]}>SEARCH FOR LOCAL COURSES</Text>
+        <Text style={[styles.sectionLabel, { marginTop: 22 }]}>{t('play.search_courses')}</Text>
         <View style={styles.kindRow}>
           {(['courses', 'range_practice'] as SearchKind[]).map(k => (
             <TouchableOpacity
@@ -887,7 +889,7 @@ export default function PlayTab() {
             style={styles.searchInput}
             value={query}
             onChangeText={setQuery}
-            placeholder="Search course or city"
+            placeholder={t('play.search_placeholder')}
             placeholderTextColor="#3a5a40"
             onSubmitEditing={onSearch}
             returnKeyType="search"
@@ -947,7 +949,7 @@ export default function PlayTab() {
         {/* Selected course card */}
         {selected && (
           <>
-            <Text style={[styles.sectionLabel, { marginTop: 22 }]}>SELECTED COURSE</Text>
+            <Text style={[styles.sectionLabel, { marginTop: 22 }]}>{t('play.selected_course')}</Text>
             <View style={styles.selectedCard}>
               <View style={styles.selectedHeader}>
                 <View style={styles.selectedThumb}>
@@ -979,11 +981,11 @@ export default function PlayTab() {
               <View style={styles.actionRow}>
                 <TouchableOpacity style={styles.actionBtn} onPress={handleHoleMap}>
                   <AppIcon name="map-outline" size={14} color="#00C896" />
-                  <Text style={styles.actionBtnText}>View</Text>
+                  <Text style={styles.actionBtnText}>{t('play.view')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionBtn} onPress={handleRangeBook}>
                   <AppIcon name="book-outline" size={14} color="#00C896" />
-                  <Text style={styles.actionBtnText}>Log</Text>
+                  <Text style={styles.actionBtnText}>{t('play.log')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -992,7 +994,7 @@ export default function PlayTab() {
                 (nine-hole + competition), MENTAL state, NOTES. Picked
                 BEFORE the round fires so Kevin briefing + caddie brain
                 have the player's intent in hand. */}
-            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>STRATEGY</Text>
+            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('play.strategy')}</Text>
             <View style={styles.factorGrid}>
               {(Object.keys(ROUND_MODE_CARDS) as RoundMode[]).map(m => {
                 const active = setupMode === m;
@@ -1003,14 +1005,14 @@ export default function PlayTab() {
                     onPress={() => setSetupMode(m)}
                     activeOpacity={0.85}
                   >
-                    <Text style={[styles.factorTitle, active && styles.factorTitleActive]}>{ROUND_MODE_CARDS[m].title}</Text>
-                    <Text style={styles.factorSub} numberOfLines={2}>{ROUND_MODE_CARDS[m].description}</Text>
+                    <Text style={[styles.factorTitle, active && styles.factorTitleActive]}>{t('play.mode_' + m + '_title')}</Text>
+                    <Text style={styles.factorSub} numberOfLines={2}>{t('play.mode_' + m + '_desc')}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
-            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>MENTAL</Text>
+            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('play.mental')}</Text>
             <View style={styles.factorRow}>
               {(['fresh', 'neutral', 'tense'] as const).map(m => {
                 const active = setupMental === m;
@@ -1020,25 +1022,25 @@ export default function PlayTab() {
                     style={[styles.chip, active && styles.chipActive]}
                     onPress={() => setSetupMental(m)}
                   >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{m.charAt(0).toUpperCase() + m.slice(1)}</Text>
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{t('play.mental_' + m)}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
-            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>FORMAT</Text>
+            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('play.format')}</Text>
             <View style={styles.factorRow}>
               <TouchableOpacity
                 style={[styles.chip, setupNineHole && styles.chipActive]}
                 onPress={() => setSetupNineHole(v => !v)}
               >
-                <Text style={[styles.chipText, setupNineHole && styles.chipTextActive]}>9-Hole</Text>
+                <Text style={[styles.chipText, setupNineHole && styles.chipTextActive]}>{t('play.nine_hole')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.chip, setupCompetition && styles.chipActive]}
                 onPress={() => setSetupCompetition(v => !v)}
               >
-                <Text style={[styles.chipText, setupCompetition && styles.chipTextActive]}>Competition</Text>
+                <Text style={[styles.chipText, setupCompetition && styles.chipTextActive]}>{t('play.competition')}</Text>
               </TouchableOpacity>
               {/* 2026-06-10 — Tournament: not a toggle — opens the full group-play
                   flow (scramble/skins/match play/etc). Moved here from the old
@@ -1050,7 +1052,7 @@ export default function PlayTab() {
                 accessibilityLabel="Tournament Mode — group play setup"
               >
                 <AppIcon name="trophy" size={13} color="#00C896" />
-                <Text style={[styles.chipText, { marginLeft: 5 }]}>Tournament</Text>
+                <Text style={[styles.chipText, { marginLeft: 5 }]}>{t('play.tournament')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -1059,7 +1061,7 @@ export default function PlayTab() {
                 round record via startRound. Informational for v1.1
                 (per-tee coordinates aren't wired into SmartFinder
                 math yet); shows up in recap so the score is contextual. */}
-            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>TEE BOX</Text>
+            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('play.tee_box')}</Text>
             <View style={styles.factorRow}>
               {(['gold', 'blue', 'white', 'red'] as const).map(color => {
                 const active = setupTee === color;
@@ -1087,21 +1089,21 @@ export default function PlayTab() {
                       styles.chipText,
                       active && { color: tint, fontWeight: '800' },
                     ]}>
-                      {color.charAt(0).toUpperCase() + color.slice(1)}
+                      {t('play.tee_' + color)}
                     </Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
-            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>NOTES (optional)</Text>
+            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('play.notes')}</Text>
             <View style={styles.notesRow}>
               <TextInput
                 ref={notesInputRef}
                 style={[styles.notesInput, styles.notesInputInRow]}
                 value={setupNotes}
                 onChangeText={setSetupNotes}
-                placeholder="Anything Kevin should know going into this round?"
+                placeholder={t('play.notes_placeholder')}
                 placeholderTextColor="#3a5a40"
                 multiline
                 returnKeyType="done"
@@ -1139,7 +1141,7 @@ export default function PlayTab() {
               activeOpacity={0.88}
             >
               <AppIcon name="flag" size={16} color="#0d1a0d" />
-              <Text style={styles.actionBtnPrimaryText}>Start Round</Text>
+              <Text style={styles.actionBtnPrimaryText}>{t('play.start_round')}</Text>
             </TouchableOpacity>
           </>
         )}
