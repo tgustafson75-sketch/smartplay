@@ -36,7 +36,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 import { useSettingsStore } from '../../store/settingsStore';
-import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { speak, configureAudioForSpeech, isSpeaking } from '../../services/voiceService';
 import { isActiveListeningEnabled } from '../../services/listeningSession';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { getApiBaseUrl } from '../../services/apiBase';
@@ -125,22 +125,24 @@ export default function SwingLab() {
     if (trustLevel === 1) return;
     if (swingLabListeningPromptShown) return;
     if (isActiveListeningEnabled()) return;
-    swingLabListeningPromptShown = true;
-    // 2026-06-09 — Play the "turn on Active Listening" prompt RELIABLY (was
-    // getting clipped to a blip). The clip happened because the prompt fired
-    // the instant the tab mounted, colliding with the tab-transition / any
-    // in-flight TTS and getting cut off. Fix: wait for the screen to settle,
-    // and bail if the user already navigated away — so it either plays in
-    // full or not at all, never a half-second stub.
+    // 2026-06-10 — Reliability fix. The prompt was (a) marked "shown" the
+    // instant the tab mounted — so a fast nav-in/out, or a clipped collision,
+    // permanently suppressed it (you'd see the text but never hear it again),
+    // and (b) firing into any in-flight TTS (e.g. the launch greeting), which
+    // clipped it AND left the audio session flaky for the next turns. Now:
+    //   • wait longer for the tab transition + any greeting tail to clear,
+    //   • SKIP this visit if something is still speaking (no collision) and
+    //     leave the flag UNSET so it retries cleanly next time,
+    //   • mark "shown" only after it actually plays in full.
     let cancelled = false;
     const t = setTimeout(() => {
       void (async () => {
-        if (cancelled) return;
+        if (cancelled || isSpeaking()) return; // never collide with in-flight TTS
         try {
           const s = useSettingsStore.getState();
           const apiUrl = getApiBaseUrl();
           await configureAudioForSpeech();
-          if (cancelled) return;
+          if (cancelled || isSpeaking()) return;
           await speak(
             'Heads up - turn on Active Listening for hands-free swing commands, or just tap me to talk.',
             s.voiceGender,
@@ -148,11 +150,12 @@ export default function SwingLab() {
             apiUrl,
             { userInitiated: true },
           );
+          if (!cancelled) swingLabListeningPromptShown = true; // only after a clean full play
         } catch {
-          // Non-fatal; prompt is advisory only.
+          // Non-fatal; advisory only. Leave the flag unset so it can retry.
         }
       })();
-    }, 800);
+    }, 1200);
     return () => { cancelled = true; clearTimeout(t); };
   }, [trustLevel]);
 
