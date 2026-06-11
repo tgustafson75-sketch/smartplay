@@ -1086,7 +1086,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           contents: [{ role: 'user', parts: geminiContent }],
           config: {
             temperature: 0.2,
-            maxOutputTokens: 800,
+            // 2026-06-11 (audit opt #2) — 800→650. Output is JSON-only
+            // (responseMimeType application/json) with one-sentence schema
+            // fields, so the real max is ~250-450 tokens. 650 trims output-token
+            // cost on the highest-volume call while keeping a safe margin.
+            maxOutputTokens: 650,
             responseMimeType: 'application/json',
           },
         });
@@ -1122,7 +1126,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // by 30-50%. Compounds with the Haiku speed path below.
         const completion = await anthropic.messages.create({
           model: 'claude-sonnet-4-6',
-          max_tokens: 800,
+          // 2026-06-11 (audit opt #2) — 800→650. JSON-only, one-sentence schema
+          // (real max ~250-450 tokens); trims output cost with a safe margin.
+          max_tokens: 650,
           temperature: 0.2,
           system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
           messages: [{ role: 'user', content: userContent }],
@@ -1163,7 +1169,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // within the 5-min TTL — drops time-to-first-token ~30-50%.
         const completion = await anthropicHaiku.messages.create({
           model: 'claude-haiku-4-5-20251001',
-          max_tokens: 800,
+          // 2026-06-11 (audit opt #2) — 800→650. JSON-only, one-sentence schema
+          // (real max ~250-450 tokens). Quick-tier (SmartMotion) path; a rare
+          // truncation falls through to the Gemini fast fallback (null-read
+          // path below), so 650 is safe with deliberate margin.
+          max_tokens: 650,
           temperature: 0.2,
           system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
           messages: [{ role: 'user', content: userContent }],

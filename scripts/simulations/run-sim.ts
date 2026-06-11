@@ -1425,6 +1425,13 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /void analyzeSwingForIndex\(idx\)\.finally\(\(\) => \{ prefetchInFlightRef\.current = false; \}\)/.test(smA),
     'once a swing\'s read lands, the next swing prefetches in the background — bounded to depth 1 with a single in-flight prefetch, so stepping the reel is instant without fanning out concurrent calls');
 
+  const swingApiSrc2 = fs.readFileSync(path.resolve(__dirname, '../../api/swing-analysis.ts'), 'utf-8');
+  check('Swing analysis opt #2: analysis output token caps trimmed 800→650',
+    /maxOutputTokens: 650/.test(swingApiSrc2) &&
+      (swingApiSrc2.match(/max_tokens: 650/g) || []).length >= 2 &&
+      !/max_tokens: 800/.test(swingApiSrc2) && !/maxOutputTokens: 800/.test(swingApiSrc2),
+    'the three analysis calls (Gemini/Sonnet/Haiku) cap output at 650 — JSON-only one-sentence schema (~250-450 real tokens) — trimming output-token cost with a safe margin; locate caps (120/400) untouched');
+
   const listenSrc = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');
   check('Voice: listeningSession dispatches navigate tool_actions',
     /=== 'navigate'/.test(listenSrc) && /router\.push\(path\)/.test(listenSrc),
