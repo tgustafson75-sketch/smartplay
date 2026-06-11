@@ -1055,9 +1055,9 @@ check('Environment mode phase 1: range window + acoustics-off gating (cage uncha
   /environmentMode: 'cage' \| 'range' \| 'course'/.test(read('store/settingsStore.ts')) &&
     /RANGE_RECORDING_MAX_SECONDS = 120/.test(smEnvSrc) &&
     /captureMode === 'range' \? RANGE_RECORDING_MAX_SECONDS : RECORDING_MAX_SECONDS/.test(smEnvSrc) &&
-    /if \(captureMode !== 'range'\) \{/.test(smEnvSrc) &&          // metering only when NOT range
+    /if \(captureMode === 'cage'\) \{/.test(smEnvSrc) &&            // metering only in cage
     /setEnvironmentMode\(environmentMode === 'cage'/.test(smEnvSrc), // toggle cycles modes
-  'range records up to 120s and starts NO metered audio (acoustics off — neighbors/outdoor); cage + course keep the 60s window and acoustic metering exactly as before; a setup-rail toggle cycles cage/range/course');
+  'range records up to 120s and starts NO metered audio; ONLY cage keeps the acoustic metered track (range + course go acoustics-off); a setup-rail toggle cycles cage/range/course');
 
 // 2026-06-10 — Environment mode phase 2: range segments swings from VIDEO.
 check('Environment mode phase 2: range video swing-segmentation (acoustics off)',
@@ -1065,9 +1065,18 @@ check('Environment mode phase 2: range video swing-segmentation (acoustics off)'
     /export async function locateSwings/.test(read('services/poseDetection.ts')) &&
     /mode: 'locate_swings'/.test(read('services/poseDetection.ts')) &&
     /body\.mode === 'locate_swings'/.test(read('api/swing-analysis.ts')) &&
-    /environmentMode === 'range' && detectedSegments\.length === 0/.test(smEnvSrc) &&
+    /stopMode === 'range' && detectedSegments\.length === 0/.test(smEnvSrc) &&
     /segmentsFromVideoSwings\(swings, durMs\)/.test(smEnvSrc),
   'range mode (acoustics off) finds every swing from video: locateSwings() asks the new server locate_swings mode for all swing times, segmentsFromVideoSwings() builds the SAME SwingSegment[] the cage path uses (shared reel + per-swing analysis), and an empty result falls back to single-swing localization');
+
+// 2026-06-10 — Environment mode phase 3: course = acoustics off + single shot,
+// and a live round forces course.
+check('Environment mode phase 3: course is acoustics-off single-shot; a live round forces course',
+  /const effectiveMode.*isRoundActive \? 'course' : environmentMode/.test(smEnvSrc) &&           // round forces course (reactive)
+    /isRoundActive[\s\S]{0,30}\? 'course'[\s\S]{0,60}environmentMode/.test(smEnvSrc) &&           // and at capture time
+    /if \(captureMode === 'cage'\) \{/.test(smEnvSrc) &&                                            // course skips metering (not cage)
+    /disabled=\{isRoundActive\}/.test(smEnvSrc),                                                    // toggle locked during a round
+  'course mode disables acoustics (wind) and is single-shot (skips range multi-segmentation → single-swing localization); a live round forces course sensing regardless of the practice toggle, which is locked + shows CRSE on-course');
 
 // 2026-06-10 — Pose pipeline is angle-aware (knows DTL from FO).
 const poseApiSrc = read('services/poseAnalysisApi.ts');

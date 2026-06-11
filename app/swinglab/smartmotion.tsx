@@ -73,6 +73,7 @@ import { useFamilyStore } from '../../store/familyStore';
 import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useRoundStore } from '../../store/roundStore';
 import {
   SmartMotionHeader,
   ModeToggle,
@@ -210,11 +211,16 @@ export default function SmartMotion() {
   const language = useSettingsStore((s) => s.language);
   // 2026-06-10 — Environment mode (cage/range/course). Default 'cage' keeps every
   // existing path byte-for-byte; 'range' is an additive branch (longer window,
-  // acoustics off, video segmentation). 'course' falls through to cage behavior
-  // until its own phase lands.
+  // acoustics off, video segmentation). 'course' = single shot, acoustics off
+  // (wind), GPS-side distance is the on-course caddie's job.
   const environmentMode = useSettingsStore((s) => s.environmentMode);
   const setEnvironmentMode = useSettingsStore((s) => s.setEnvironmentMode);
-  const recordingMaxSeconds = environmentMode === 'range' ? RANGE_RECORDING_MAX_SECONDS : RECORDING_MAX_SECONDS;
+  // 2026-06-10 (phase 3) — a live round forces COURSE sensing (acoustics off,
+  // single shot) regardless of the practice toggle: you don't want neighbor/
+  // wind acoustic detection on the course. Off-round, the toggle wins.
+  const isRoundActive = useRoundStore((s) => s.isRoundActive);
+  const effectiveMode: 'cage' | 'range' | 'course' = isRoundActive ? 'course' : environmentMode;
+  const recordingMaxSeconds = effectiveMode === 'range' ? RANGE_RECORDING_MAX_SECONDS : RECORDING_MAX_SECONDS;
   const appliedCalibration = useAcousticCalibrationStore((s) => s.appliedCalibration);
   const calibrated = !!appliedCalibration;
 
@@ -930,14 +936,17 @@ export default function SmartMotion() {
     stoppingRef.current = false;
     setPhase('recording');
 
-    // 2026-06-10 — Mode-aware capture. Read fresh so the current toggle wins
-    // without re-creating this callback. Cage/course keep the metered audio
-    // track for acoustic multi-strike segmentation (UNCHANGED). Range disables
-    // acoustics entirely — outdoors there's no net echo and neighbors pollute
-    // the signal — so swing segmentation comes from video instead (phase 2).
-    const captureMode = useSettingsStore.getState().environmentMode;
+    // 2026-06-10 — Mode-aware capture. Read fresh so the current state wins
+    // without re-creating this callback. A live round forces COURSE.
+    //   cage   → metered audio track for acoustic multi-strike segmentation
+    //   range  → acoustics OFF (neighbors/outdoor), 2-min video multi-swing
+    //   course → acoustics OFF (wind), single shot via video localization
+    // Only the CAGE keeps the metered track; range + course go video-only.
+    const captureMode = useRoundStore.getState().isRoundActive
+      ? 'course'
+      : useSettingsStore.getState().environmentMode;
     const maxSec = captureMode === 'range' ? RANGE_RECORDING_MAX_SECONDS : RECORDING_MAX_SECONDS;
-    if (captureMode !== 'range') {
+    if (captureMode === 'cage') {
       // Parallel metered audio track for multi-strike detection.
       try {
         meteringRef.current = await startMeteredRecording((s) => setLiveDb(s.dB));
@@ -1030,13 +1039,17 @@ export default function SmartMotion() {
       // may be a pre-record draft or placed in review).
       firstStrikeMsRef.current = firstStrikeMs;
 
-      // 2026-06-10 — RANGE mode: acoustics are off, so segment the swings from
-      // VIDEO. Find every swing in the clip and build the SAME SwingSegment[]
-      // the cage acoustic path produces, so the reel + per-swing analysis are
-      // shared. An empty result falls through to single-swing localization
-      // (runAnalysis with no segment) — graceful, never a dead end.
+      // 2026-06-10 — RANGE mode: acoustics off → segment swings from VIDEO,
+      // building the SAME SwingSegment[] the cage acoustic path produces (shared
+      // reel + per-swing analysis). COURSE (incl. any live round) is single-shot,
+      // so it SKIPS multi-segmentation and falls through to single-swing
+      // localization (runAnalysis with no segment). Cage uses its acoustic
+      // segments. Empty range result also falls through gracefully.
+      const stopMode = useRoundStore.getState().isRoundActive
+        ? 'course'
+        : useSettingsStore.getState().environmentMode;
       let segsForAnalysis = detectedSegments;
-      if (useSettingsStore.getState().environmentMode === 'range' && detectedSegments.length === 0) {
+      if (stopMode === 'range' && detectedSegments.length === 0) {
         try {
           const pose = await import('../../services/poseDetection');
           const durMs = await pose.probeDurationMs(recorded.uri).catch(() => RANGE_RECORDING_MAX_SECONDS * 1000);
@@ -1463,17 +1476,19 @@ export default function SmartMotion() {
               <Ionicons name={placeBallMode ? 'hand-left-outline' : 'golf-outline'} size={20} color={placeBallMode ? colors.success : colors.accent} />
             </Pressable>
             {/* 2026-06-10 — Environment toggle. Cycles cage → range → course.
-                Cage = acoustic multi-swing (default, unchanged). Range = 2-min
-                video session, acoustics off. Course = single shot + GPS (its
-                own behavior lands in a later phase). */}
+                Cage = acoustic multi-swing. Range = 2-min video multi-swing,
+                acoustics off. Course = single shot, acoustics off. During a live
+                round it's LOCKED to course (acoustics off automatically) — the
+                label shows CRSE and tapping is disabled. */}
             <Pressable
-              onPress={() => setEnvironmentMode(environmentMode === 'cage' ? 'range' : environmentMode === 'range' ? 'course' : 'cage')}
-              style={[styles.toolBtn, { borderColor: colors.accent }]}
+              onPress={() => { if (!isRoundActive) setEnvironmentMode(environmentMode === 'cage' ? 'range' : environmentMode === 'range' ? 'course' : 'cage'); }}
+              disabled={isRoundActive}
+              style={[styles.toolBtn, { borderColor: colors.accent, opacity: isRoundActive ? 0.6 : 1 }]}
               accessibilityRole="button"
-              accessibilityLabel={`Environment mode: ${environmentMode}. Tap to change.`}
+              accessibilityLabel={isRoundActive ? 'Environment locked to course during a round' : `Environment mode: ${effectiveMode}. Tap to change.`}
             >
               <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 }}>
-                {environmentMode === 'cage' ? 'CAGE' : environmentMode === 'range' ? 'RNGE' : 'CRSE'}
+                {effectiveMode === 'cage' ? 'CAGE' : effectiveMode === 'range' ? 'RNGE' : 'CRSE'}
               </Text>
             </Pressable>
           </View>
