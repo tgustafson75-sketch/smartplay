@@ -32,6 +32,7 @@ import {
   Modal,
   TextInput,
   Animated,
+  Vibration,
   useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
@@ -330,6 +331,11 @@ export default function SmartMotion() {
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 2026-06-10 — end-of-window audible cue: the recording window length used,
+  // and whether the window auto-ended (vs a manual stop) so the cue only fires
+  // when the player didn't choose to stop.
+  const recordWindowSecRef = useRef(RECORDING_MAX_SECONDS);
+  const autoStopAtLimitRef = useRef(false);
   const ingestedSessionIdRef = useRef<string | null>(null);
   const stoppingRef = useRef(false);
   const meteringRef = useRef<MeteringHandle | null>(null);
@@ -971,10 +977,13 @@ export default function SmartMotion() {
     }
 
     const startedAt = Date.now();
+    recordWindowSecRef.current = maxSec; // for the end-of-window audible cue
     recordTimerRef.current = setInterval(() => {
       setRecordedSeconds(Math.floor((Date.now() - startedAt) / 1000));
     }, 200);
-    recordTimeoutRef.current = setTimeout(() => { void stopRecording(); }, maxSec * 1000);
+    // 2026-06-10 — When the window auto-ends (vs a manual stop), flag it so
+    // stopRecording can play an audible "that's time, analyzing" cue.
+    recordTimeoutRef.current = setTimeout(() => { autoStopAtLimitRef.current = true; void stopRecording(); }, maxSec * 1000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [micPerm, requestMicPerm]);
 
@@ -1005,6 +1014,33 @@ export default function SmartMotion() {
     }
     setSegments(detectedSegments);
     setSelectedSwing(0);
+
+    // 2026-06-10 — Audible end-of-window cue. ONLY when the window auto-ended
+    // (the player didn't stop themselves) — a light haptic + a brief caddie line
+    // so they know to stop swinging and analysis has started. Mode-aware on the
+    // window length (1 min cage/coach/course, 2 min range). Fully fire-and-forget
+    // and best-effort: it can never block or affect the analysis below. Camera +
+    // metering are already stopped here, so the audio session is free for speech.
+    if (autoStopAtLimitRef.current) {
+      autoStopAtLimitRef.current = false;
+      const windowSec = recordWindowSecRef.current;
+      try { Vibration.vibrate(120); } catch { /* haptic optional */ }
+      const sset = useSettingsStore.getState();
+      if (sset.voiceEnabled) {
+        void (async () => {
+          try {
+            await configureAudioForSpeech();
+            await speak(
+              `That's your ${windowSec >= 120 ? 'two minutes' : 'minute'} — analyzing now.`,
+              sset.voiceGender,
+              sset.language,
+              getApiBaseUrl(),
+              { userInitiated: true },
+            );
+          } catch { /* advisory only */ }
+        })();
+      }
+    }
 
     // Best-effort ball speed for the first swing.
     if (audioUriRef.current && firstStrikeMs != null) {
