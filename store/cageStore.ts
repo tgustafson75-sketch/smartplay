@@ -544,6 +544,11 @@ interface CageState {
    *  re-persisted from a volatile cache/content uri into documentDirectory on
    *  first open, so replay + re-analyze read the durable copy from then on. */
   setShotClipUri: (sessionId: string, shotId: string, clipUri: string) => void;
+  /** 2026-06-10 — Multi-swing UPLOAD expansion. A single uploaded clip can hold
+   *  several swings; once the video locator finds them, replace the session's
+   *  single shot with one windowed shot per swing so each gets its own analysis
+   *  + per-swing card (mirrors the live multi-swing path). No-op if <2 windows. */
+  expandUploadIntoSwings: (sessionId: string, windows: { startSec: number; endSec: number }[]) => void;
   /** Phase R — delete a session from the library. */
   deleteSession: (sessionId: string) => void;
   /** Phase J — set the distance calibration for the current cage. Pass yards.
@@ -1238,6 +1243,26 @@ export const useCageStore = create<CageState>()(
               ),
             }
           ),
+        })),
+
+      expandUploadIntoSwings: (sessionId, windows) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session => {
+            if (session.id !== sessionId) return session;
+            const base = session.shots[0];
+            if (!base || windows.length < 2) return session; // nothing to expand
+            const shots: CageShot[] = windows.map((w, i) => ({
+              ...base, // inherit clipUri, club, etc. from the single uploaded shot
+              id: `${sessionId}_shot_${i}`,
+              clipStartSeconds: w.startSec,
+              clipEndSeconds: w.endSec,
+              detectionOffsetSeconds: w.startSec,
+              detectionMethod: 'manual' as const,
+              aiAnalysis: null,
+              perShotAnalysis: null,
+            }));
+            return { ...session, shots };
+          }),
         })),
 
       deleteSession: (sessionId) =>

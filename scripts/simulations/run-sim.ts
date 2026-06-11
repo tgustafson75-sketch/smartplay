@@ -1078,6 +1078,17 @@ check('Environment mode phase 3: course is acoustics-off single-shot; a live rou
     /disabled=\{isRoundActive\}/.test(smEnvSrc),                                                    // toggle locked during a round
   'course mode disables acoustics (wind) and is single-shot (skips range multi-segmentation → single-swing localization); a live round forces course sensing regardless of the practice toggle, which is locked + shows CRSE on-course');
 
+// 2026-06-10 — Multi-swing UPLOAD expansion: a 60s uploaded video with several
+// swings gets one per-swing card, not "1 of 1".
+const uploadSrc2 = read('services/videoUpload.ts');
+check('Multi-swing UPLOAD expansion (long upload → one analysis per swing)',
+  /expandUploadIntoSwings/.test(read('store/cageStore.ts')) &&
+    /MULTI_SWING_UPLOAD_MIN_MS/.test(uploadSrc2) &&
+    /pose\.locateSwings\(swings\[0\]\.clipUri, durMs\)/.test(uploadSrc2) &&
+    /store\.expandUploadIntoSwings\(sessionId/.test(uploadSrc2) &&
+    /upload-multi-swing-expand/.test(uploadSrc2),
+  'a single uploaded clip long enough to hold multiple swings runs locateSwings; if >1 found, the session is expanded into one windowed shot per swing (each analyzed + carded) reusing the per-shot loop, instead of analyzing the whole clip as one swing');
+
 // 2026-06-10 — Pose pipeline is angle-aware (knows DTL from FO).
 const poseApiSrc = read('services/poseAnalysisApi.ts');
 check('Pose/biomech pipeline is angle-aware (DTL vs FO)',

@@ -176,7 +176,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
   V6('STAGE 0 — runPhaseKOnSession enter', { sessionId });
   cageLog('phase-k-enter', 'ok', { session_id: sessionId });
   const store = useCageStore.getState();
-  const session = store.sessionHistory.find(s => s.id === sessionId);
+  let session = store.sessionHistory.find(s => s.id === sessionId);
   if (!session) {
     uploadLog('phase-k-abort', { status: 'failed', reason: 'session_not_in_store' }, sessionId);
     V6('STAGE 0 ABORT — session not in store', { sessionId });
@@ -290,7 +290,47 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     console.log('[videoUpload] analyzer-router check failed (non-fatal, continuing with swing pipeline):', e);
   }
 
-  const swings = session.shots.filter(s => s.clipUri);
+  let swings = session.shots.filter(s => s.clipUri);
+
+  // 2026-06-10 — Multi-swing UPLOAD support. A single uploaded clip can hold
+  // several swings (a 60s practice video). The live range path segments swings
+  // from video; uploads did NOT — they analyzed the whole clip as one swing
+  // ("1 of 1" on a 6-swing video). Now: for a single unbounded upload long
+  // enough to plausibly hold multiple swings, ask the video locator for ALL of
+  // them and, if it finds >1, expand into one windowed shot per swing so each
+  // gets its own analysis + per-swing card. Short clips / single-swing results
+  // fall straight through to the existing single-swing path (no extra cost,
+  // no regression). Best-effort — any failure leaves the single shot intact.
+  const MULTI_SWING_UPLOAD_MIN_MS = 25_000;
+  if (
+    swings.length === 1 &&
+    swings[0].clipStartSeconds == null &&
+    swings[0].clipUri &&
+    session.source !== 'live_cage'
+  ) {
+    try {
+      const pose = await import('./poseDetection');
+      const durMs = await pose.probeDurationMs(swings[0].clipUri).catch(() => 0);
+      if (durMs >= MULTI_SWING_UPLOAD_MIN_MS) {
+        const found = await pose.locateSwings(swings[0].clipUri, durMs);
+        if (found.length > 1) {
+          const { segmentsFromVideoSwings } = await import('./swing/swingSegmentation');
+          const segs = segmentsFromVideoSwings(found, durMs);
+          store.expandUploadIntoSwings(sessionId, segs.map(seg => ({
+            startSec: seg.startMs / 1000,
+            endSec: seg.endMs / 1000,
+          })));
+          const fresh = useCageStore.getState().sessionHistory.find(x => x.id === sessionId);
+          if (fresh) { session = fresh; swings = session.shots.filter(s => s.clipUri); }
+          uploadLog('upload-multi-swing-expand', { swings_found: found.length, shots: swings.length }, sessionId);
+          V6('STAGE 0 — upload expanded into multi-swing', { found: found.length, shots: swings.length });
+        }
+      }
+    } catch (e) {
+      V6('STAGE 0 — multi-swing upload expansion failed (single-swing fallback)', { error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   V6('STAGE 0 — session loaded', {
     source: session.source ?? 'live_cage',
     club: session.club,
