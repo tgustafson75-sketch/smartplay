@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useRoundStore } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -38,6 +39,7 @@ const SCORE_FILL = (diff: number): string => {
 
 export default function Scorecard() {
   const router = useRouter();
+  const { t } = useTranslation();
   const apiUrl = getApiBaseUrl();
   const { voiceGender, language, voiceEnabled } = useSettingsStore();
   const theme = useTheme();
@@ -329,7 +331,7 @@ export default function Scorecard() {
         message: lines.join('\n'),
       });
     } catch (e) {
-      Alert.alert('Share', 'Could not open share sheet.');
+      Alert.alert(t('scorecard.share'), t('scorecard.share_failed'));
       console.log('[scorecard] share error', e);
     }
   }, [viewCourseName, isCompetition, totalScore, scoreVsParDisplay, effectiveNineHoleMode, viewCourseHoles, viewScores, clubUsage, recap]);
@@ -401,10 +403,10 @@ export default function Scorecard() {
           </Text>
           <View style={{ flex: 1 }}>
             <Text style={[styles.holeMeta, { color: c.text_secondary }]}>
-              Par {h.par}{h.distance > 0 ? ` · ${h.distance} yds` : ''}
+              {t('scorecard.hole_par', { par: h.par })}{h.distance > 0 ? t('scorecard.hole_dist', { dist: h.distance }) : ''}
             </Text>
             {holePutts > 0 && (
-              <Text style={[styles.holeSub, { color: c.text_muted }]}>{holePutts} putts</Text>
+              <Text style={[styles.holeSub, { color: c.text_muted }]}>{t('scorecard.n_putts', { count: holePutts })}</Text>
             )}
           </View>
         </View>
@@ -440,7 +442,7 @@ export default function Scorecard() {
               )}
             </View>
           ) : isCurrent ? (
-            <Text style={[styles.tapToScore, { color: c.accent }]}>Tap to score ↓</Text>
+            <Text style={[styles.tapToScore, { color: c.accent }]}>{t('scorecard.tap_to_score')}</Text>
           ) : (
             <Text style={[styles.scoreEmpty, { color: c.text_muted }]}>—</Text>
           )}
@@ -452,7 +454,7 @@ export default function Scorecard() {
   const renderTotalsRow = (label: 'OUT' | 'IN', total: number, par: number) => (
     <View style={[styles.totalsRow, { backgroundColor: c.surface_elevated, borderBottomColor: c.border }]}>
       <Text style={[styles.totalsLabel, { color: c.accent }]}>{label}</Text>
-      <Text style={[styles.totalsMid, { color: c.text_muted }]}>Par {par}</Text>
+      <Text style={[styles.totalsMid, { color: c.text_muted }]}>{t('scorecard.par_n', { par })}</Text>
       <Text style={[styles.totalsScore, { color: total > 0 ? c.text_primary : c.text_muted }]}>
         {total > 0 ? total : '—'}
       </Text>
@@ -487,15 +489,15 @@ export default function Scorecard() {
             <AppIcon name="chevron-back" size={26} color={c.accent} />
           </TouchableOpacity>
           <View style={styles.titleWrap}>
-            <Text style={[styles.title, { color: c.text_primary }]}>Scorecard</Text>
+            <Text style={[styles.title, { color: c.text_primary }]}>{t('scorecard.title')}</Text>
             {isRoundActive && (
               <View style={[styles.chip, { borderColor: c.accent }]}>
-                <Text style={[styles.chipText, { color: c.accent }]}>● LIVE</Text>
+                <Text style={[styles.chipText, { color: c.accent }]}>{t('scorecard.live')}</Text>
               </View>
             )}
             {!isRoundActive && lastCompletedRound && (
               <View style={[styles.chip, { borderColor: c.text_muted }]}>
-                <Text style={[styles.chipText, { color: c.text_muted }]}>SAVED</Text>
+                <Text style={[styles.chipText, { color: c.text_muted }]}>{t('scorecard.saved')}</Text>
               </View>
             )}
           </View>
@@ -521,28 +523,28 @@ export default function Scorecard() {
         {hasAnythingToShow && (
           <View style={[styles.summary, { backgroundColor: c.surface, borderColor: c.border, paddingVertical: summaryPadV }]}>
             <View style={styles.summaryItem}>
-              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>SCORE</Text>
+              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.score')}</Text>
               <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
                 {totalScore > 0 ? totalScore : '—'}
               </Text>
             </View>
             <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
             <View style={styles.summaryItem}>
-              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>VS PAR</Text>
+              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.vs_par')}</Text>
               <Text style={[styles.summaryValue, { color: scoreVsParColor, fontSize: summaryValueSize }]}>
                 {holesPlayed > 0 ? scoreVsParDisplay : '—'}
               </Text>
             </View>
             <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
             <View style={styles.summaryItem}>
-              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>HOLES</Text>
+              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.holes')}</Text>
               <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>{holesPlayed}</Text>
             </View>
             {roundHeroMoments > 0 && (
               <>
                 <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
                 <View style={styles.summaryItem}>
-                  <Text style={[styles.summaryLabel, { color: c.text_muted }]}>HERO</Text>
+                  <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.hero')}</Text>
                   <Text style={[styles.summaryValue, { color: '#F5A623', fontSize: summaryValueSize }]}>★ {roundHeroMoments}</Text>
                 </View>
               </>
@@ -559,28 +561,28 @@ export default function Scorecard() {
         {holesPlayed > 0 && (
           <View style={[styles.summary, { backgroundColor: c.surface, borderColor: c.border, paddingVertical: summaryPadV, marginTop: 8 }]}>
             <View style={styles.summaryItem}>
-              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>PUTTS</Text>
+              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.putts')}</Text>
               <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
                 {stats.totalPutts > 0 ? stats.totalPutts : '—'}
               </Text>
             </View>
             <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
             <View style={styles.summaryItem}>
-              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>AVG PUTTS</Text>
+              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.avg_putts')}</Text>
               <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
                 {stats.avgPutts != null ? stats.avgPutts.toFixed(1) : '—'}
               </Text>
             </View>
             <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
             <View style={styles.summaryItem}>
-              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>FAIRWAY %</Text>
+              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.fairway_pct')}</Text>
               <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
                 {stats.fairwayPct != null ? `${stats.fairwayPct}%` : '—'}
               </Text>
             </View>
             <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
             <View style={styles.summaryItem}>
-              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>GIR %</Text>
+              <Text style={[styles.summaryLabel, { color: c.text_muted }]}>{t('scorecard.gir_pct')}</Text>
               <Text style={[styles.summaryValue, { color: c.text_primary, fontSize: summaryValueSize }]}>
                 {stats.girPct != null ? `${stats.girPct}%` : '—'}
               </Text>
@@ -590,8 +592,8 @@ export default function Scorecard() {
 
         {!hasAnythingToShow && (
           <View style={styles.noRound}>
-            <Text style={[styles.noRoundText, { color: c.text_muted }]}>No active round</Text>
-            <Text style={[styles.noRoundSub, { color: c.text_muted }]}>Start a round from the Caddie tab</Text>
+            <Text style={[styles.noRoundText, { color: c.text_muted }]}>{t('scorecard.no_round')}</Text>
+            <Text style={[styles.noRoundSub, { color: c.text_muted }]}>{t('scorecard.no_round_sub')}</Text>
           </View>
         )}
 
@@ -600,7 +602,7 @@ export default function Scorecard() {
             of interleaved per-row, which made them appear to pop around. */}
         {hasAnythingToShow && front9.length > 0 && (
           <View style={[styles.section, styles.holeListWrap]}>
-            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>FRONT 9</Text>
+            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>{t('scorecard.front9')}</Text>
             <View style={[styles.holeList, { backgroundColor: c.surface, borderColor: c.border }]}>
               {front9.map(renderHoleRow)}
               {renderTotalsRow('OUT', frontScore, frontPar)}
@@ -611,7 +613,7 @@ export default function Scorecard() {
         {/* PER-HOLE ROWS — Back 9. */}
         {hasAnythingToShow && !effectiveNineHoleMode && back9.length > 0 && (
           <View style={[styles.section, styles.holeListWrap]}>
-            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>BACK 9</Text>
+            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>{t('scorecard.back9')}</Text>
             <View style={[styles.holeList, { backgroundColor: c.surface, borderColor: c.border }]}>
               {back9.map(renderHoleRow)}
               {renderTotalsRow('IN', backScore, backPar)}
@@ -626,7 +628,7 @@ export default function Scorecard() {
         {stickyChipHole != null && (
           <View style={[styles.stickyChipPanel, { backgroundColor: c.surface_elevated, borderColor: c.accent }]}>
             <Text style={[styles.sectionLabel, { color: c.accent, marginBottom: 8 }]}>
-              HOLE {stickyChipHole} · TAP A SCORE
+              {t('scorecard.hole_tap', { hole: stickyChipHole })}
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
               {([-2, -1, 0, 1, 2, 3, 4] as const).map(diff => {
@@ -634,12 +636,12 @@ export default function Scorecard() {
                 if (score < 1) return null;
                 const fill = SCORE_FILL(diff);
                 const label =
-                  diff <= -2 ? 'Eagle' :
-                  diff === -1 ? 'Birdie' :
-                  diff === 0 ? 'Par' :
-                  diff === 1 ? 'Bogey' :
-                  diff === 2 ? 'Double' :
-                  diff === 3 ? 'Triple' : ('+' + diff);
+                  diff <= -2 ? t('scorecard.eagle') :
+                  diff === -1 ? t('scorecard.birdie') :
+                  diff === 0 ? t('scorecard.par_label') :
+                  diff === 1 ? t('scorecard.bogey') :
+                  diff === 2 ? t('scorecard.double') :
+                  diff === 3 ? t('scorecard.triple') : ('+' + diff);
                 return (
                   <TouchableOpacity
                     key={diff}
@@ -660,17 +662,17 @@ export default function Scorecard() {
         {hasAnythingToShow && holesPlayed > 0 && (
           <View style={[styles.totalCard, { backgroundColor: c.surface_elevated, borderColor: c.accent }]}>
             <View style={styles.totalCardItem}>
-              <Text style={[styles.totalCardLabel, { color: c.text_muted }]}>TOTAL</Text>
+              <Text style={[styles.totalCardLabel, { color: c.text_muted }]}>{t('scorecard.total')}</Text>
               <Text style={[styles.totalCardValue, { color: c.text_primary }]}>{totalScore}</Text>
             </View>
             <View style={[styles.totalCardDivider, { backgroundColor: c.border }]} />
             <View style={styles.totalCardItem}>
-              <Text style={[styles.totalCardLabel, { color: c.text_muted }]}>PAR</Text>
+              <Text style={[styles.totalCardLabel, { color: c.text_muted }]}>{t('scorecard.par')}</Text>
               <Text style={[styles.totalCardValue, { color: c.text_primary }]}>{totalPar}</Text>
             </View>
             <View style={[styles.totalCardDivider, { backgroundColor: c.border }]} />
             <View style={styles.totalCardItem}>
-              <Text style={[styles.totalCardLabel, { color: c.text_muted }]}>DIFF</Text>
+              <Text style={[styles.totalCardLabel, { color: c.text_muted }]}>{t('scorecard.diff')}</Text>
               <Text style={[styles.totalCardValue, { color: scoreVsParColor }]}>{scoreVsParDisplay}</Text>
             </View>
           </View>
@@ -679,12 +681,12 @@ export default function Scorecard() {
         {/* CLUB USAGE */}
         {hasAnythingToShow && clubUsage.length > 0 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>CLUB USAGE — THIS ROUND</Text>
+            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>{t('scorecard.club_usage')}</Text>
             <View style={[styles.clubGrid, { backgroundColor: c.surface, borderColor: c.border }]}>
               <View style={[styles.clubRow, styles.clubHeader, { backgroundColor: c.surface_elevated, borderBottomColor: c.border }]}>
-                <Text style={[styles.clubCell, styles.clubColClub, { color: c.text_muted }]}>CLUB</Text>
-                <Text style={[styles.clubCell, styles.clubColCount, { color: c.text_muted }]}>USED</Text>
-                <Text style={[styles.clubCell, styles.clubColAvg, { color: c.text_muted }]}>AVG YDS</Text>
+                <Text style={[styles.clubCell, styles.clubColClub, { color: c.text_muted }]}>{t('scorecard.col_club')}</Text>
+                <Text style={[styles.clubCell, styles.clubColCount, { color: c.text_muted }]}>{t('scorecard.col_used')}</Text>
+                <Text style={[styles.clubCell, styles.clubColAvg, { color: c.text_muted }]}>{t('scorecard.col_avg_yds')}</Text>
               </View>
               {clubUsage.map(item => (
                 <View key={item.club} style={[styles.clubRow, { borderBottomColor: c.border }]}>
@@ -709,13 +711,13 @@ export default function Scorecard() {
         {lifetimeClubUsage.length > 0 && (clubUsage.length === 0 || roundHistory.length >= 2) && (
           <View style={styles.section}>
             <Text style={[styles.sectionLabel, { color: c.text_muted }]}>
-              CLUB USAGE — ACROSS ALL ROUNDS ({roundHistory.length})
+              {t('scorecard.club_usage_all', { n: roundHistory.length })}
             </Text>
             <View style={[styles.clubGrid, { backgroundColor: c.surface, borderColor: c.border }]}>
               <View style={[styles.clubRow, styles.clubHeader, { backgroundColor: c.surface_elevated, borderBottomColor: c.border }]}>
-                <Text style={[styles.clubCell, styles.clubColClub, { color: c.text_muted }]}>CLUB</Text>
-                <Text style={[styles.clubCell, styles.clubColCount, { color: c.text_muted }]}>USED</Text>
-                <Text style={[styles.clubCell, styles.clubColAvg, { color: c.text_muted }]}>AVG YDS</Text>
+                <Text style={[styles.clubCell, styles.clubColClub, { color: c.text_muted }]}>{t('scorecard.col_club')}</Text>
+                <Text style={[styles.clubCell, styles.clubColCount, { color: c.text_muted }]}>{t('scorecard.col_used')}</Text>
+                <Text style={[styles.clubCell, styles.clubColAvg, { color: c.text_muted }]}>{t('scorecard.col_avg_yds')}</Text>
               </View>
               {lifetimeClubUsage.map(item => (
                 <View key={item.club} style={[styles.clubRow, { borderBottomColor: c.border }]}>
@@ -728,7 +730,7 @@ export default function Scorecard() {
               ))}
             </View>
             <Text style={[styles.clubFooter, { color: c.text_muted }]}>
-              Helps you pack the right bag · feeds the caddie&apos;s usage patterns.
+              {t('scorecard.club_footer')}
             </Text>
           </View>
         )}
@@ -737,12 +739,12 @@ export default function Scorecard() {
         {hasAnythingToShow && recapLoaded && recap?.overall_kevin_summary && (
           <View style={styles.section}>
             <View style={styles.kevinHeader}>
-              <Text style={[styles.sectionLabel, { color: c.text_muted }]}>KEVIN&apos;S TAKE</Text>
+              <Text style={[styles.sectionLabel, { color: c.text_muted }]}>{t('scorecard.kevins_take')}</Text>
               {voiceEnabled && (
                 <TouchableOpacity onPress={onSpeakRecap} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <View style={[styles.speakBtn, { borderColor: c.accent }]}>
                     <AppIcon name={speaking ? 'pause' : 'play'} size={12} color={c.accent} />
-                    <Text style={[styles.speakBtnText, { color: c.accent }]}>{speaking ? 'Stop' : 'Listen'}</Text>
+                    <Text style={[styles.speakBtnText, { color: c.accent }]}>{speaking ? t('scorecard.stop') : t('scorecard.listen')}</Text>
                   </View>
                 </TouchableOpacity>
               )}
@@ -757,7 +759,7 @@ export default function Scorecard() {
         {isCompetition && hasAnythingToShow && (
           <View style={[styles.compBadge, { backgroundColor: c.surface, borderColor: '#F5A623' }]}>
             <AppIcon name="trophy" size={14} color="#F5A623" />
-            <Text style={styles.compBadgeText}>Competition Round</Text>
+            <Text style={styles.compBadgeText}>{t('scorecard.competition_round')}</Text>
           </View>
         )}
 
