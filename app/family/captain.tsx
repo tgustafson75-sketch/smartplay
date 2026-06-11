@@ -21,6 +21,7 @@
  */
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import {
   View, Text, ScrollView, Pressable, TextInput, StyleSheet, Linking, Alert,
 } from 'react-native';
@@ -68,7 +69,11 @@ export default function CaptainScreen() {
 
   const teamName = useFamilyStore((s) => s.team_name);
   const setTeamName = useFamilyStore((s) => s.setTeamName);
-  const teamRoster = useFamilyStore((s) => s.teamRoster(teamName || undefined));
+  // 2026-06-10 — useShallow: teamRoster() returns a FRESH array each call
+  // (filter+sort), so a plain selector saw a new reference every render →
+  // forceStoreRerender loop → "Maximum update depth exceeded". Shallow-comparing
+  // the array's (stable) member refs breaks the loop.
+  const teamRoster = useFamilyStore(useShallow((s) => s.teamRoster(teamName || undefined)));
   const addMember = useFamilyStore((s) => s.addMember);
   const updateMember = useFamilyStore((s) => s.updateMember);
   const archiveMember = useFamilyStore((s) => s.archiveMember);

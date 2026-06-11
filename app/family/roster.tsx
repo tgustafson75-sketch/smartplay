@@ -20,6 +20,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import {
   View, Text, ScrollView, Pressable, TextInput, StyleSheet, Alert,
 } from 'react-native';
@@ -76,7 +77,11 @@ export default function FamilyRosterScreen() {
   // partner, siblings, parents, friends). Teammates + coaches live
   // under the Captain screen (app/family/captain.tsx) to keep the
   // two contexts visually distinct without forking the data model.
-  const roster = useFamilyStore((s) => s.familyOnlyRoster());
+  // 2026-06-10 — useShallow: familyOnlyRoster() returns a FRESH array each call
+  // (filter+sort), so a plain selector saw a new reference every render →
+  // forceStoreRerender loop → "Maximum update depth exceeded". Shallow-comparing
+  // the array's (stable) member refs breaks the loop.
+  const roster = useFamilyStore(useShallow((s) => s.familyOnlyRoster()));
   const addMember = useFamilyStore((s) => s.addMember);
   const updateMember = useFamilyStore((s) => s.updateMember);
   const archiveMember = useFamilyStore((s) => s.archiveMember);
