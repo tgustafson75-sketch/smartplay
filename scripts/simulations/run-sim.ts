@@ -1300,6 +1300,31 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('Bulk import: round-import API has a list mode',
     /mode === 'list'/.test(importApiSrc) && /LIST_SYSTEM_PROMPT/.test(importApiSrc) && /rounds:/.test(importApiSrc),
     "/api/round-import branches on mode:'list' with a dedicated prompt + {rounds[]} response");
+
+  // ── Audit fixes ──
+  // #3: malformed rows (null/undefined) don't throw; valid rows still ingest.
+  const dirty = normalizeImportedList(
+    [null, undefined, { total_score: 44, course_name: 'X', played_date: '2026-01-01', score_vs_par: 8, holes_played: null }] as unknown as ListedRoundRow[],
+  );
+  check('Bulk import: tolerates null/malformed rows (audit #3)',
+    dirty.keep.length === 1 && dirty.keep[0].totalScore === 44,
+    'a null/undefined row in the OCR result is skipped without throwing; valid rows still ingest');
+
+  // #1: bulk path suppresses per-round handicap math (the single rebuild owns it).
+  const roundStoreSrc = fs.readFileSync(path.resolve(__dirname, '../../store/roundStore.ts'), 'utf-8');
+  check('Bulk import: addImportedRound honors updateHandicap flag (audit #1)',
+    /updateHandicap\?: boolean/.test(roundStoreSrc) &&
+      /\(input\.updateHandicap \?\? true\) &&/.test(roundStoreSrc),
+    'addImportedRound gates the per-round differential/index work on updateHandicap (default true; bulk passes false)');
+  const listScreenSrc = fs.readFileSync(path.resolve(__dirname, '../../app/import-rounds-list.tsx'), 'utf-8');
+  check('Bulk import: bulk caller passes updateHandicap:false + counts real adds (audit #1)',
+    /updateHandicap: false/.test(listScreenSrc) && /roundHistory\.length - before/.test(listScreenSrc),
+    'the bulk importer suppresses per-round handicap math and counts adds via the history-length delta (dedupe-aware)');
+
+  // #2: re-imports are deduped on (day, course, score, holes).
+  check('Bulk import: addImportedRound dedupes re-imports (audit #2)',
+    /dedupe/.test(roundStoreSrc) && /dupKey/.test(roundStoreSrc) && /return dup\.id;/.test(roundStoreSrc),
+    'a re-imported round matching an existing (day, course, score, holes) is skipped so duplicates do not inflate the handicap window');
 }
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────

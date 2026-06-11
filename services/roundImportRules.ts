@@ -61,7 +61,8 @@ export function normalizeImportedList(
 ): NormalizeListResult {
   const keep: NormalizedListRound[] = [];
   let skippedNoScore = 0;
-  for (const r of rows) {
+  for (const r of rows ?? []) {
+    if (!r || typeof r !== 'object') continue; // defensive: skip a malformed row
     if (typeof r.total_score !== 'number' || !Number.isFinite(r.total_score) || r.total_score <= 0) {
       skippedNoScore++;
       continue;

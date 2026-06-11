@@ -419,7 +419,7 @@ interface RoundState {
       RoundRecord,
       'courseName' | 'startedAt' | 'endedAt' | 'holesPlayed'
         | 'totalScore' | 'scoreVsPar' | 'nineHoleMode' | 'scores' | 'putts'
-    > & { mode?: RoundMode; courseId?: string | null },
+    > & { mode?: RoundMode; courseId?: string | null; updateHandicap?: boolean },
   ) => string;
   /**
    * 2026-05-17 — Discard the active round WITHOUT saving. Resets all
@@ -904,8 +904,26 @@ export const useRoundStore = create<RoundState>()(
           putts: { ...input.putts },
           shots: [],
         };
+        // 2026-06-11 (audit) — dedupe re-imports. The bulk-import UX invites
+        // repeated screenshots, so the same round can arrive twice (and a
+        // duplicate silently inflates the best-8-of-20 handicap window). Skip a
+        // record that matches an existing one on (calendar day, course, score,
+        // holes) and return the existing id so the caller's count stays honest.
+        const dayKey = (t: number) => { const d = new Date(t); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
+        const dupKey = `${dayKey(input.startedAt)}|${(input.courseName ?? '').trim().toLowerCase()}|${input.totalScore}|${input.holesPlayed}`;
+        const dup = state.roundHistory.find(r =>
+          `${dayKey(r.startedAt)}|${(r.courseName ?? '').trim().toLowerCase()}|${r.totalScore}|${r.holesPlayed}` === dupKey);
+        if (dup) {
+          console.log(`[roundStore] addImportedRound dedupe: skipping duplicate ${dupKey} (existing ${dup.id})`);
+          return dup.id;
+        }
         set(s => ({ roundHistory: [...s.roundHistory, record] }));
 
+        // 2026-06-11 (audit) — let the caller suppress per-round handicap math.
+        // The bulk importer passes updateHandicap:false and runs ONE rebuild
+        // from full history afterward, so we don't push N intermediate
+        // differentials (which the rebuild would clobber when ≥3 rounds, but
+        // would leave un-reconciled when <3).
         // 2026-05-26 — Fix BD: feed imported rounds into the handicap
         // pipeline just like endRound does. Mirrors the same neutral-
         // baseline approximation (course rating 72.0, slope 113) used
@@ -919,7 +937,7 @@ export const useRoundStore = create<RoundState>()(
         // the 18-hole-equivalent before differential math. Previously
         // 9-hole imports got differential ≈ −32 against neutral 72.0
         // and dragged the estimated Index way down.
-        if (input.holesPlayed === 9 || input.holesPlayed === 18) {
+        if ((input.updateHandicap ?? true) && (input.holesPlayed === 9 || input.holesPlayed === 18)) {
           try {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             const profileMod = require('./playerProfileStore');

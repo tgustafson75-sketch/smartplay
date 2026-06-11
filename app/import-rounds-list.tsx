@@ -83,11 +83,15 @@ export default function ImportRoundsListScreen() {
   const onConfirm = useCallback(() => {
     if (phase.kind !== 'confirm') return;
     try {
-      let n = 0;
+      // updateHandicap:false — the per-round path no longer touches handicap;
+      // the single rebuild below owns it. Count actual adds via the history-
+      // length delta so dedupe-skipped re-imports don't inflate the toast.
+      const before = useRoundStore.getState().roundHistory.length;
       for (const r of phase.rounds) {
-        addImportedRound(buildListPersistInput(r));
-        n++;
+        addImportedRound({ ...buildListPersistInput(r), updateHandicap: false });
       }
+      const n = useRoundStore.getState().roundHistory.length - before;
+      const dupCount = phase.rounds.length - n;
       // Recompute the index from FULL history so a first-ever import (index was
       // null) still produces a number — addImportedRound only updates an
       // existing index. Mirrors Settings → Recalculate.
@@ -109,7 +113,9 @@ export default function ImportRoundsListScreen() {
       }
       const idx = usePlayerProfileStore.getState().handicap_index;
       useToastStore.getState().show(
-        `Imported ${n} round${n === 1 ? '' : 's'}${idx != null ? ` · Index ${idx.toFixed(1)}` : ''}`,
+        `Imported ${n} round${n === 1 ? '' : 's'}` +
+        `${dupCount > 0 ? ` · ${dupCount} already on record` : ''}` +
+        `${idx != null ? ` · Index ${idx.toFixed(1)}` : ''}`,
       );
       setPhase({ kind: 'pick' });
     } catch (e) {
