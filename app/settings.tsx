@@ -67,15 +67,12 @@ export default function Settings() {
     proactive_kevin_enabled,
     distance_unit,
     theme_preference,
-    fillerEnabled,
     // Phase AC — earbudTapToTalk + setEarbudTapToTalk intentionally
     // dropped from this destructure. The toggle is rendered as a disabled
     // "Coming soon" row because no native media-key listener exists in the
     // build (track-player was removed; see services/mediaKeyBridge.ts).
     voiceOnPhoneSpeaker,
     kevinGreetingEnabled,
-    cageAutoClubDetection,
-    setCageAutoClubDetection,
     setVoiceOnPhoneSpeaker,
     setKevinGreetingEnabled,
     // 2026-05-30 — Fix FY: Local Mode toggle.
@@ -103,7 +100,6 @@ export default function Settings() {
     setProactiveKevinEnabled,
     setDistanceUnit,
     setThemePreference,
-    setFillerEnabled,
   } = useSettingsStore();
 
   // Watch-connected status for the disabled "Galaxy Watch · Not wired"
@@ -901,29 +897,6 @@ export default function Settings() {
           />
 
           <PillRow
-            label="Language"
-            options={[
-              { label: 'English', value: 'en' },
-              { label: 'Español', value: 'es' },
-              { label: '中文', value: 'zh' },
-            ]}
-            value={language}
-            onSelect={(v) => setLanguage(v as 'en' | 'es' | 'zh')}
-          />
-          {/* 2026-05-26 — Fix BC: honest scope disclosure under the
-              Language picker. Voice + caddie responses are fully
-              translated through ElevenLabs multilingual TTS + brain
-              prompt enforcement. In-app text translation covers Tank
-              rules, button labels, brand strings, and core settings
-              today; the full screen-by-screen UI translation pass
-              is queued post-beta. Without this note, ES/ZH users see
-              partially-English UI and assume the setting isn't
-              working at all. */}
-          <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -4, marginBottom: 8 }]}>
-            Voice + caddie responses are fully translated. Some in-app text labels are still being translated; we&apos;ll catch up the rest after beta.
-          </Text>
-
-          <PillRow
             label="Response Style"
             options={[
               { label: 'Brief', value: 'short' },
@@ -1007,12 +980,6 @@ export default function Settings() {
             onValueChange={confirmToggle(`Proactive ${caddieName}`, setProactiveKevinEnabled)}
           />
           <ToggleRow
-            label="Voice Filler"
-            sub={`${caddieName} fills the pause while thinking — 'let me see', 'hmm...'`}
-            value={fillerEnabled}
-            onValueChange={confirmToggle('Voice Filler', setFillerEnabled)}
-          />
-          <ToggleRow
             label="Riding in a cart"
             sub="Tunes shot detection for cart play — shorter at-ball pause, suppresses only while the cart is moving (not for ~12s after it stops). Walking default is more conservative."
             value={cartMode}
@@ -1025,7 +992,7 @@ export default function Settings() {
             controlled via the Trust spectrum (L1 Quiet = Cockpit + tap-to-talk,
             L2 Companion = reactive, L3 Active = volunteers). voiceEnabled
             field stays in the store as an internal kill switch. */}
-        <CollapsibleSection title="Voice">
+        <CollapsibleSection title="Voice & Conversation">
           {/* 2026-05-30 — Fix FY: Local Mode toggle. Conservation +
               stability mode — proactive speech off, brain calls pinned
               to Haiku (the cheapest/fastest tier), navigation intents
@@ -1077,17 +1044,21 @@ export default function Settings() {
             value={voiceOnPhoneSpeaker}
             onValueChange={confirmToggle('Voice on Phone Speaker', setVoiceOnPhoneSpeaker)}
           />
+          {/* 2026-06-10 — Caption moved here from Display (it's about caddie
+              speech, and was the only "voice" thing living under Display). */}
+          <ToggleRow
+            label="Caption caddie speech"
+            sub="Show what the caddie is saying on screen during voice playback. Auto-on for Bluetooth audio."
+            value={ttsCaptions}
+            onValueChange={setTtsCaptions}
+          />
         </CollapsibleSection>
 
         {/* PRACTICE — Phase BL */}
-        <CollapsibleSection title="Practice">
-          <ToggleRow
-            label="Auto Club Detection"
-            sub={'Show the camera button in cage sessions to read the number stamped on a club’s sole. Voice ("switching to 6-iron") and the manual picker still work either way.'}
-            value={cageAutoClubDetection}
-            onValueChange={setCageAutoClubDetection}
-          />
-        </CollapsibleSection>
+        {/* 2026-06-10 — "Practice" card removed: it only held Auto Club
+            Detection, which now lives in Smart Motion (the scan-club tool +
+            voice "switching to 6-iron" + the manual picker). The setting still
+            persists; it just no longer needs its own settings card. */}
 
         {/* 2026-05-19 — single-row "Caddie ${caddieName}" section folded
             into the Caddie's Voice card above. The "Greet me on launch"
@@ -1098,7 +1069,23 @@ export default function Settings() {
             below used to live under separate "Display" and
             "Accessibility & Pacing" headers; merged into one header
             since both control how you SEE or HEAR the app. */}
-        <CollapsibleSection title="Display & Accessibility">
+        <CollapsibleSection title="Language & Display">
+
+          {/* 2026-06-10 — Language moved here from the caddie-voice card: it's
+              app-wide (and people look for it under display/language, not voice). */}
+          <PillRow
+            label="Language"
+            options={[
+              { label: 'English', value: 'en' },
+              { label: 'Español', value: 'es' },
+              { label: '中文', value: 'zh' },
+            ]}
+            value={language}
+            onSelect={(v) => setLanguage(v as 'en' | 'es' | 'zh')}
+          />
+          <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -4, marginBottom: 8 }]}>
+            Changes your caddie&apos;s voice + responses now. On-screen text is still being translated and stays in English for the moment.
+          </Text>
 
           <PillRow
             label="Theme"
@@ -1149,12 +1136,6 @@ export default function Settings() {
             onValueChange={setLargeText}
           />
 
-          <ToggleRow
-            label="Caption caddie speech"
-            sub="Show what the caddie is saying on screen during voice playback. Auto-on for Bluetooth audio."
-            value={ttsCaptions}
-            onValueChange={setTtsCaptions}
-          />
           <ToggleRow
             label="Simple briefing"
             sub={
