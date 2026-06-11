@@ -101,6 +101,15 @@ const CARDS: LauncherCardSpec[] = [
     sub: 'Captured swings, uploads from camera roll',
     route: '/swinglab/library',
   },
+  // 2026-06-11 — Tempo Trainer (Tour Tempo). Standalone audio metronome you
+  // swing to (tick takeaway · tick top · tock strike, 3:1). See tempo-trainer.tsx.
+  {
+    key: 'tempo',
+    icon: 'musical-notes-outline',
+    title: 'Tempo Trainer',
+    sub: 'Swing to the beat · Tour-Tempo 3:1 · tick·tick·tock',
+    route: '/swinglab/tempo-trainer',
+  },
 ];
 
 export default function SwingLab() {

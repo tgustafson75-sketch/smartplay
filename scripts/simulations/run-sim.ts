@@ -1466,6 +1466,21 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /swings\.length > segsForAnalysis\.length/.test(smA),
     'cage mode used at an open range (acoustics heard ≤1 strike for many swings) cross-checks the video locator and uses it when it finds MORE swings — never reduces the count');
 
+  // Tempo Trainer (Tour Tempo) — Tank's idea, v1.
+  const tempoSrc = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/tempo-trainer.tsx'), 'utf-8');
+  check('Tempo Trainer: Tour-Tempo 3:1 metronome (tick·tick·tock) exists',
+    /frames: '24\/8'/.test(tempoSrc) && /tick\.mp3/.test(tempoSrc) && /tock\.mp3/.test(tempoSrc) &&
+      /scheduleCycle/.test(tempoSrc) && /back \+ down/.test(tempoSrc),
+    'a standalone audio metronome plays tick (takeaway) · tick (top) · tock (strike) at a 3:1 ratio across selectable tempos, looped with a rest');
+  const swinglabSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/swinglab.tsx'), 'utf-8');
+  const enJ = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../i18n/locales/en.json'), 'utf-8'));
+  const esJ = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../i18n/locales/es.json'), 'utf-8'));
+  const zhJ = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../i18n/locales/zh.json'), 'utf-8'));
+  check('Tempo Trainer: SwingLab launcher card + i18n in all locales',
+    /key: 'tempo'/.test(swinglabSrc2) && /\/swinglab\/tempo-trainer/.test(swinglabSrc2) &&
+      !!enJ.swinglab?.card_tempo_title && !!esJ.swinglab?.card_tempo_title && !!zhJ.swinglab?.card_tempo_title,
+    'Tempo Trainer is reachable from a SwingLab card, with translated title/sub in en/es/zh');
+
   const swingApiSrc2 = fs.readFileSync(path.resolve(__dirname, '../../api/swing-analysis.ts'), 'utf-8');
   check('Swing analysis opt #2: analysis output token caps trimmed 800→650',
     /maxOutputTokens: 650/.test(swingApiSrc2) &&
