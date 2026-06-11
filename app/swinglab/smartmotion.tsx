@@ -67,7 +67,7 @@ import {
 } from '../../services/poseAnalysisApi';
 import { startMeteredRecording, type MeteringHandle } from '../../services/swing/audioMetering';
 import { detectStrikes } from '../../services/swing/strikeDetector';
-import { segmentsFromStrikes, segmentsFromVideoSwings, confirmedCount, type SwingSegment } from '../../services/swing/swingSegmentation';
+import { segmentsFromStrikes, segmentsFromVideoSwings, type SwingSegment } from '../../services/swing/swingSegmentation';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
 import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
 import { useFamilyStore } from '../../store/familyStore';
@@ -153,7 +153,10 @@ function clubPathSpec(a: SwingAnalysis | null): MetricSpec {
   if (a) {
     if (a.detected_issue === 'swing_path_outside_in') { value = 'OUT→IN'; statusTone = 'warn'; }
     else if (a.detected_issue === 'swing_path_inside_out') { value = 'IN→OUT'; statusTone = 'warn'; }
-    else { value = 'NEUTRAL'; statusTone = 'good'; }
+    // 2026-06-11 (audit) — the server WITHHOLDS a path verdict unless it cited
+    // 2D evidence (its HARD_TO_SEE_2D gate). Don't manufacture a confident green
+    // "NEUTRAL" from the mere absence of a named path fault — leave value null
+    // → renders "—" (not read), matching what the server actually claimed.
   }
   return { key: 'club_path', label: 'CLUB PATH', value, statusTone, estimate: true, icon: 'git-compare-outline' };
 }
@@ -165,7 +168,14 @@ function deriveBodyItems(a: SwingAnalysis | null, bio: SwingBiomechanics | null)
   const sway: SmTone = n ? 'neutral' : fault === 'sway' || fault === 'head_movement' ? 'bad' : 'good';
   const tilt: SmTone = n ? 'neutral' : fault === 'reverse_pivot' || fault === 'plane_too_flat' || fault === 'plane_too_steep' ? 'warn' : 'good';
   const posture: SmTone = n ? 'neutral' : fault === 'early_extension' || fault === 'spine_angle_loss' || issue === 'early_extension' ? 'bad' : 'good';
-  const weight: SmTone = n ? 'neutral' : fault === 'reverse_pivot' ? 'bad' : bio?.weightShiftPct != null && bio.weightShiftPct < 30 ? 'warn' : 'good';
+  // 2026-06-11 (audit) — only claim "good" weight shift when it was actually
+  // MEASURED (bio.weightShiftPct present); a null metric is neutral ("—"), not a
+  // baseless green. (sway/tilt/posture map to real AI fault categories, so their
+  // "good = not flagged by the analysis" reads stay qualitative-honest.)
+  const weight: SmTone = n ? 'neutral'
+    : fault === 'reverse_pivot' ? 'bad'
+    : bio?.weightShiftPct == null ? 'neutral'
+    : bio.weightShiftPct < 30 ? 'warn' : 'good';
   return [
     { key: 'sway', label: 'Sway', tone: sway, icon: 'swap-horizontal-outline' },
     { key: 'tilt', label: 'Tilt', tone: tilt, icon: 'contract-outline' },
@@ -256,6 +266,13 @@ export default function SmartMotion() {
   const [liveDb, setLiveDb] = useState<number | null>(null);
   const [segments, setSegments] = useState<SwingSegment[]>([]);
   const [selectedSwing, setSelectedSwing] = useState(0);
+  // 2026-06-11 (audit) — mirror selectedSwing in a ref so an async per-swing
+  // analysis can detect when its result is STALE (the user scrubbed the reel to
+  // a different swing meanwhile) and avoid showing one swing's read under
+  // another's header. Effect keeps it synced across every setSelectedSwing site
+  // (select, reset, record, the locate fallbacks).
+  const selectedSwingRef = useRef(0);
+  useEffect(() => { selectedSwingRef.current = selectedSwing; }, [selectedSwing]);
   // Club tag — drives honest ball speed / smash / carry + the CLUB chip.
   // SINGLE SOURCE OF TRUTH: the persisted clubSelectionStore. Reading it
   // reactively means voice ("change club to 7 iron"), the scan-club detector,
@@ -466,6 +483,12 @@ export default function SmartMotion() {
       setPoseFrames(null);
       setBiomech(null);
       setVideoDurationMs(null);
+      // 2026-06-11 (audit) — clear acoustic ball speed/departure here too. The
+      // upload/library re-analyze path enters via runAnalysis (not start/reset),
+      // so without this a prior CAGE swing's acoustic ball speed (and the
+      // smash/carry derived from it) bled onto an upload that had no acoustics.
+      setBallSpeed(null);
+      setBallDeparture(null);
       ingestedSessionIdRef.current = null;
       analysisCacheRef.current = {};
       // Persist the recorded clip into documents so it survives OS cache
@@ -587,8 +610,14 @@ export default function SmartMotion() {
       })();
 
       try {
-        // 30s watchdog so a hung network call can't strand the screen on
-        // the "Analyzing…" overlay with no way out.
+        // Watchdog so a hung network call can't strand the screen on the
+        // "Analyzing…" overlay. BOUNDED clips (a segment was passed) skip
+        // analyzeSwing's internal locate, so 30s is plenty. UNBOUNDED clips
+        // (course single-shot, single-swing upload) run an internal
+        // probe(≤8s)+locate(≤25s) BEFORE the analysis fetch — 30s would fire
+        // before the real read even starts and discard it — so give them ~70s.
+        // (audit 2026-06-11)
+        const watchdogMs = boundaries ? 30_000 : 70_000;
         const result = await Promise.race([
           analyzeSwing(uri, {
             // Thread the tagged club so the analyst has club context (a driver
@@ -618,7 +647,7 @@ export default function SmartMotion() {
             target_norm: targetPointRef.current ?? null,
           }, boundaries),
           new Promise<Awaited<ReturnType<typeof analyzeSwing>>>((resolve) =>
-            setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), 30000),
+            setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), watchdogMs),
           ),
         ]);
         if (result.kind === 'ok') {
@@ -701,7 +730,13 @@ export default function SmartMotion() {
     // Tempo is the headline swing metric — compute it in review by default (it
     // surfaces in the left tempo pill). Skipped for putts (no swing tempo).
     // Heavier pose/body still wait for the Motion overlay.
-    if (!clipUri || isPutt || !seg || seg.strikeMs == null) { setTempo(null); return; }
+    // 2026-06-11 (audit) — only derive tempo from an ACOUSTIC impact anchor
+    // (cage; peakDb>0). For video-located segments (range/upload; peakDb===0) the
+    // impact time is only frame-spacing-accurate, and deriveSwingTempo trusts the
+    // passed impact directly (downswing = impact − top), so a number here would
+    // be dishonest — suppress it until impact is pose-anchored. Cage tempo (the
+    // headline metric) is unaffected.
+    if (!clipUri || isPutt || !seg || seg.strikeMs == null || (seg.peakDb ?? 0) <= 0) { setTempo(null); return; }
     const cacheKey = `${clipUri}#${seg.strikeMs}`;
     const cached = tempoCacheRef.current[cacheKey];
     if (cached) { setTempo(cached); return; }
@@ -939,11 +974,14 @@ export default function SmartMotion() {
           ),
         ]);
         if (r.kind === 'ok') {
-          setAnalysis(r.analysis);
-          analysisCacheRef.current[idx] = r.analysis;
+          analysisCacheRef.current[idx] = r.analysis; // always cache the result
+          // Only apply to the display if THIS swing is still selected — a fast
+          // reel scrub could have moved on, and a late-resolving older read
+          // would otherwise overwrite the current swing's view. (audit)
+          if (selectedSwingRef.current === idx) setAnalysis(r.analysis);
         }
       } catch { /* keep prior analysis on failure */ }
-      setSwingAnalyzing(false);
+      if (selectedSwingRef.current === idx) setSwingAnalyzing(false);
     },
     [segments, clipUri, angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, swingerHandedness],
   );
@@ -1090,10 +1128,15 @@ export default function SmartMotion() {
 
     try {
       const pending = recordingPromiseRef.current;
+      // 2026-06-11 (audit) — 8s→20s. Flushing a 60s/120s clip on a slower/older
+      // device can take >8s; the old cap discarded a valid recording as "no
+      // file". Also swallow a late rejection on the orphaned promise (when the
+      // timeout wins the race) so it can't surface as an unhandled rejection.
+      if (pending) void pending.catch(() => undefined);
       const recorded = pending
         ? await Promise.race([
             pending,
-            new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 8000)),
+            new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 20000)),
           ])
         : undefined;
       recordingPromiseRef.current = null;
@@ -1252,7 +1295,7 @@ export default function SmartMotion() {
     // push it toward the client timeout). Mirrors the upload/cage screens.
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis();
+      require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis({ force: true });
     } catch { /* non-fatal */ }
     return () => { setSmartMotionActive(false); unsub(); };
   }, []);
@@ -1356,7 +1399,7 @@ export default function SmartMotion() {
   const reel =
     isReview && segments.length > 1 ? (
       <View style={styles.reelWrap}>
-        <Text style={[styles.reelLabel, { color: '#fff' }]}>{confirmedCount(segments)} SWINGS</Text>
+        <Text style={[styles.reelLabel, { color: '#fff' }]}>{segments.length} SWINGS</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
           {segments.map((s, i) => {
             const sel = i === selectedSwing;
@@ -1398,7 +1441,7 @@ export default function SmartMotion() {
             isMuted
             useNativeControls={false}
             onLoad={(s) => { if ('durationMillis' in s && s.durationMillis) setVideoDurationMs(s.durationMillis); }}
-            onPlaybackStatusUpdate={(s) => { if ('positionMillis' in s && typeof s.positionMillis === 'number') setPlaybackMs(s.positionMillis); }}
+            onPlaybackStatusUpdate={(s) => { if (showSkeleton && 'positionMillis' in s && typeof s.positionMillis === 'number') setPlaybackMs(s.positionMillis); }}
           />
         ) : (
           // 2026-06-09 — `mute` disables the camera's own audio track. We run a
@@ -1688,7 +1731,7 @@ export default function SmartMotion() {
               >
                 <AcousticPickupCard
                   detected={phase === 'recording' ? liveDb != null && liveDb > -30 : segments.length > 0}
-                  swingCount={isReview ? confirmedCount(segments) : undefined}
+                  swingCount={isReview ? segments.length : undefined}
                   calibrated={calibrated}
                   levelDb={phase === 'recording' ? liveDb : null}
                   listening={phase === 'recording'}

@@ -301,6 +301,11 @@ export async function extractKeyFrames(
   clipUri: string,
   boundaries?: { startSec: number; endSec: number },
   quickTier: boolean = false,
+  // 2026-06-11 (audit) — when the caller already probed the duration (analyzeSwing
+  // does before locating), pass it here so the unbounded branch below doesn't
+  // re-run the expensive probeDurationMs (loads an Audio.Sound + several
+  // thumbnail extractions, up to 8s) a second time on the same clip.
+  knownDurationMs?: number,
 ): Promise<Frame[]> {
   if (!clipUri) {
     V6('STAGE 2 — empty clipUri, no frames');
@@ -347,7 +352,9 @@ export async function extractKeyFrames(
         target_fractions: frameFractions,
       });
     } else {
-      const durationMs = await probeDurationMs(clipUri);
+      const durationMs = knownDurationMs != null && knownDurationMs > 0
+        ? knownDurationMs
+        : await probeDurationMs(clipUri);
       if (durationMs > LONG_CLIP_THRESHOLD_MS) {
         windowStartMs = 0;
         windowDurationMs = durationMs;
@@ -792,17 +799,20 @@ export async function analyzeSwing(
   // clips skip this — they're already targeted. Failure falls back silently to
   // the duration-scaled wide spread inside extractKeyFrames.
   let effectiveBoundaries = boundaries;
+  let probedDurMs = 0; // 2026-06-11 (audit) — reused by extractKeyFrames below
   if (!effectiveBoundaries) {
-    const durMs = await probeDurationMs(clipUri).catch(() => 0);
-    if (durMs >= LOCATE_MIN_CLIP_MS) {
-      const located = await locateSwingWindow(clipUri, durMs);
+    probedDurMs = await probeDurationMs(clipUri).catch(() => 0);
+    if (probedDurMs >= LOCATE_MIN_CLIP_MS) {
+      const located = await locateSwingWindow(clipUri, probedDurMs);
       if (located) {
         effectiveBoundaries = located;
         V6('STAGE 2 — using located swing window as boundaries', located);
       }
     }
   }
-  const frames = await extractKeyFrames(clipUri, effectiveBoundaries, quickTier);
+  // Pass the already-probed duration so extractKeyFrames' unbounded branch
+  // doesn't probe the same clip a second time (no-op when boundaries are set).
+  const frames = await extractKeyFrames(clipUri, effectiveBoundaries, quickTier, probedDurMs || undefined);
   if (frames.length === 0) {
     V6('STAGE 3 SKIP — no_frames (no usable frames extracted)');
     return { kind: 'no_frames' };

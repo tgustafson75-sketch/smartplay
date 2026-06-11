@@ -970,9 +970,9 @@ check('Analysis providers: Anthropic primary + Gemini fallback, OpenAI removed',
   'swing analysis runs Anthropic Haiku→Sonnet (spine) and only falls back to Gemini when Anthropic returns nothing parseable; OpenAI is no longer CALLED in the analysis chain');
 
 check('SmartMotion warms the analyzer on open (warm first analysis)',
-  /prewarmSwingAnalysis\(\)/.test(smSrc) &&
+  /prewarmSwingAnalysis\(\{ force: true \}\)/.test(smSrc) &&
     /Warm \/api\/swing-analysis the moment SmartMotion opens/.test(smSrc),
-  'opening SmartMotion pre-warms /api/swing-analysis so the first recording analyzes fast');
+  'opening SmartMotion FORCE pre-warms /api/swing-analysis (bypasses the 60s dedupe) so the first recording analyzes fast even if another screen warmed recently');
 
 // 2026-06-10 — Ball area threaded into the SWING read (was putt-only).
 check('Ball/stand anchor wired into swing analysis',
@@ -1379,6 +1379,44 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('Storage 4c: avatar read falls back to legacy until migration completes',
     /mediaPortrait \?\? customCaddiePortraitB64/.test(caddieSrc),
     'the caddie avatar reads the media store first and falls back to the legacy profile field, so it never flickers/disappears during migration');
+
+  // ── Swing-analysis triple-check fixes ──
+  const smA = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/smartmotion.tsx'), 'utf-8');
+  const poseSrc2 = fs.readFileSync(path.resolve(__dirname, '../../services/poseDetection.ts'), 'utf-8');
+
+  check('Swing analysis: per-swing result is dropped if the reel moved on (stale guard)',
+    /selectedSwingRef\.current === idx\) setAnalysis/.test(smA) &&
+      /useEffect\(\(\) => \{ selectedSwingRef\.current = selectedSwing;/.test(smA),
+    'a late-resolving per-swing analysis only updates the display when its swing is STILL selected — no more one swing\'s read under another\'s header on a fast reel scrub');
+
+  check('Swing analysis: ballSpeed/departure cleared on (re)analyze',
+    /setBallSpeed\(null\);\s*\n\s*setBallDeparture\(null\);\s*\n\s*ingestedSessionIdRef/.test(smA),
+    'runAnalysis clears acoustic ball speed/departure so a prior cage swing\'s value cannot bleed onto an upload/range swing that had no acoustics');
+
+  check('Swing analysis: unbounded clips get a longer analyze watchdog',
+    /const watchdogMs = boundaries \? 30_000 : 70_000;/.test(smA),
+    'course single-shot / single-swing uploads (which run an internal probe+locate before the fetch) no longer time out at 30s before the real read starts');
+
+  check('Swing analysis: tempo only from an acoustic impact anchor',
+    /\(seg\.peakDb \?\? 0\) <= 0\) \{ setTempo\(null\); return; \}/.test(smA),
+    'tempo is suppressed for video-located segments (range/upload, peakDb===0) whose impact time is too coarse to anchor the downswing — never shows a dishonest number');
+
+  check('Swing analysis: club path not manufactured as a green NEUTRAL',
+    !/else \{ value = 'NEUTRAL'; statusTone = 'good'; \}/.test(smA),
+    'CLUB PATH renders "—" when the model did not name a path fault, instead of a confident green NEUTRAL the server deliberately withheld');
+
+  check('Swing analysis: review playback setState gated behind the Motion overlay (perf)',
+    /if \(showSkeleton && 'positionMillis' in s/.test(smA),
+    'playbackMs only updates while the skeleton overlay is open, so the review loop stops re-rendering the whole screen every frame when it is off (default)');
+
+  check('Swing analysis: SmartMotion mount forces a warmup',
+    /prewarmSwingAnalysis\(\{ force: true \}\)/.test(smA),
+    'opening Smart Motion forces a warmup (bypasses the 60s dedupe) so the first analysis hits a hot Lambda');
+
+  check('Swing analysis: no double duration-probe on unbounded clips (perf)',
+    /knownDurationMs\?: number/.test(poseSrc2) &&
+      /extractKeyFrames\(clipUri, effectiveBoundaries, quickTier, probedDurMs \|\| undefined\)/.test(poseSrc2),
+    'analyzeSwing threads its probed duration into extractKeyFrames so the same clip is not probeDurationMs-ed twice on a short/locate-failed upload');
 
   const listenSrc = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');
   check('Voice: listeningSession dispatches navigate tool_actions',
