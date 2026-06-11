@@ -979,16 +979,13 @@ check('Ball/stand anchor wired into swing analysis',
     /target_norm: targetPointRef\.current \?\? null/.test(smSrc),
   'both swing analyzeSwing calls pass the ball/target anchor (read via refs) so the analyzer uses the setup prior');
 
-// Lead/trail foot stance anchors — general, mirrored correctly, soft.
+// 2026-06-10 — Foot-placement guides removed (read goofy; analysis never used them).
 const hudSrc = read('components/smartmotion/SmartMotionHud.tsx');
-check('Foot stance anchors use correct golf-setup geometry (FO above ball, DTL to the side)',
-  /function StanceFeet\(/.test(hudSrc) &&
-    /clamp\(ball\.y - 0\.16\); \/\/ ABOVE the ball/.test(hudSrc) &&   // face-on: feet above ball
-    /const footX = clamp\(ball\.x \+ side \* SIDE_OFFSET\)/.test(hudSrc) && // DTL: feet to the side
-    /leadY = clamp\(ball\.y - 0\.12\)/.test(hudSrc) &&                  // DTL lead toward target (up)
-    /TRAIL/.test(hudSrc) && /LEAD/.test(hudSrc) &&
-    /<CaptureGuides mode=\{angle\} handedness=\{swingerHandedness\} ball=\{draftBall\}/.test(smSrc),
-  'face-on feet sit ABOVE the ball (golfer stands behind it); down-the-line feet sit to the SIDE along the target line — general guides, never gate the read');
+check('Foot-placement stance anchors removed from SmartMotion capture guides (all orientations)',
+  !/function StanceFeet\(/.test(hudSrc) &&     // component gone
+    !/<StanceFeet\b/.test(hudSrc) &&            // not rendered in either orientation
+    !/styles\.footAnchor|footDot:|footLabel:/.test(hudSrc),  // orphaned styles cleaned up
+  'the lead/trail foot anchors are gone from both face-on and down-the-line capture guides; the framing lines (TARGET/BALL) remain');
 
 // 2026-06-10 — Clips persisted to documents so old uploads/recordings replay + re-analyze.
 const uploadSrc = read('services/videoUpload.ts');
@@ -1054,9 +1051,25 @@ check('Caddie CNS Phase 3: durable round reflections (baseline + recap enrichmen
 check('Caddie CNS Phase 4: signal-independence (answer from course memory when GPS weak)',
   /export function getCourseHoleGuidance\(/.test(retrSrc) &&
     /From memory on hole/.test(retrSrc) &&
+    /hm\.played < MIN_HOLE_PLAYS_FOR_GUIDANCE/.test(retrSrc) &&
     /CNS Phase 4 — signal-independence/.test(read('services/localStatusResponder.ts')) &&
     /getCourseHoleGuidance\(\{ courseId: round\.activeCourseId, hole: round\.currentHole \}\)/.test(read('services/localStatusResponder.ts')),
   'on a repeat course with no/weak GPS, the local responder answers from learned course-hole memory (typical club/line/green) instead of going silent');
+
+// 2026-06-10 — Open Thread #2: clip-storage GC. Persisted swing clips + fault
+// frames leak when sessions age out of the 50-session window; a boot mark-and-
+// sweep reclaims orphans. Safety: hydration gate (never sweep empty pre-hydration
+// state), basename match (prefix-drift-proof), all roots (sessions + heroMoments).
+const clipGcSrc = read('services/clipStorageGc.ts');
+const rootLayoutSrc = read('app/_layout.tsx');
+check('Clip-storage GC: boot mark-and-sweep reclaims orphaned clip files (hydration-gated)',
+  /export async function gcOrphanClips\(/.test(clipGcSrc) &&
+    /hasHydrated/.test(clipGcSrc) &&                       // guard 1: never sweep pre-hydration
+    /heroMoments/.test(clipGcSrc) &&                       // guard 3: all referencing roots
+    /shot\.clipUri/.test(clipGcSrc) &&
+    /referenced\.has\(name\)/.test(clipGcSrc) &&           // guard 2: basename match, keep referenced
+    /gcOrphanClips\(\)/.test(rootLayoutSrc),               // wired into boot-guard
+  'sessions age out via slice(-50) with no file cleanup; a hydration-gated boot sweep deletes clip/frame files no session or hero moment references');
 
 // 2026-06-10 — Analysis pretext: handedness + CNS learned tendencies feed the analyzer.
 // 2026-06-10 — B1: central handicap-tier constants (single source of truth).

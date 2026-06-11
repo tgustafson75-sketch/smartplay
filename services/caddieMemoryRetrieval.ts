@@ -25,6 +25,11 @@ import { useCaddieMemoryStore, type ClubModel } from '../store/caddieMemoryStore
  *  Flip to false to fall back to live-context-only with zero other changes. */
 export const CNS_RETRIEVAL_ENABLED = true;
 
+/** Phase 4 honesty floor: "you usually tee X here" implies a REPEAT — one round
+ *  isn't a pattern. Stay silent until the hole has been played at least this many
+ *  times, mirroring the bag's MIN_SAMPLES gate (learned state is null until real). */
+export const MIN_HOLE_PLAYS_FOR_GUIDANCE = 2;
+
 export interface CaddieContext {
   /** Compact newline block for the brain prompt. '' when nothing is learned. */
   promptBlock: string;
@@ -145,6 +150,8 @@ export function getCourseHoleGuidance(input: {
     const cm = p.courses[input.courseId];
     const hm = cm?.holes[input.hole];
     if (!hm) return null;
+    // Honesty gate: don't surface "you usually..." from a single sample.
+    if (hm.played < MIN_HOLE_PLAYS_FOR_GUIDANCE) return null;
     const parts: string[] = [];
     if (hm.typicalTeeClub) parts.push(`you usually tee ${hm.typicalTeeClub}`);
     if (hm.bestLine) parts.push(hm.bestLine);

@@ -478,6 +478,43 @@ function AppNavigator() {
     })();
   }, []);
 
+  // Open Thread #2 — reclaim orphaned clip files. Sessions age out of the
+  // 50-session window via slice(-50) with NO file cleanup, so persisted swing
+  // clips + fault frames leak and storage grows unbounded. Mark-and-sweep once
+  // per boot, but ONLY after both referencing stores (cage + relationship)
+  // finish hydrating — a sweep against pre-hydration empty state would delete
+  // live clips (the gate is also enforced inside gcOrphanClips). Wrapped in
+  // try/catch + dynamic import so it can never crash boot.
+  useEffect(() => {
+    let cancelled = false;
+    const whenHydrated = (store: {
+      persist: { hasHydrated: () => boolean; onFinishHydration: (cb: () => void) => () => void };
+    }) =>
+      new Promise<void>((resolve) => {
+        if (store.persist.hasHydrated()) { resolve(); return; }
+        const unsub = store.persist.onFinishHydration(() => { unsub(); resolve(); });
+      });
+    void (async () => {
+      try {
+        const [cageMod, relMod, gcMod] = await Promise.all([
+          import('../store/cageStore'),
+          import('../store/relationshipStore'),
+          import('../services/clipStorageGc'),
+        ]);
+        await Promise.all([
+          whenHydrated(cageMod.useCageStore),
+          whenHydrated(relMod.useRelationshipStore),
+        ]);
+        if (cancelled) return;
+        const removed = await gcMod.gcOrphanClips();
+        if (removed > 0) devLog('[boot-guard] reclaimed ' + removed + ' orphan clip files');
+      } catch (e) {
+        console.log('[boot-guard] gcOrphanClips failed (non-fatal):', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Phase O.5 — activate the native media session only while a round is
   // active, so other media apps (Spotify, podcasts) keep their system
   // controls when SmartPlay isn't the relevant earbud-tap target.
