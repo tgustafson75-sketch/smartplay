@@ -256,6 +256,15 @@ interface SettingsState {
   cageAutoClubDetection: boolean;
   hasSeenAutoClubPrompt: boolean;
 
+  // 2026-06-10 — Practice/sensing environment. ONE switch the capture +
+  // analysis paths branch on so sensing matches reality:
+  //   cage   — calibrated target distance + acoustic echo ball-speed; GPS off
+  //   range  — manual/eyeball distance, looser acoustic thresholds; GPS off
+  //   course — GPS distance to green; acoustic mostly off (wind); single-shot
+  // Replaces the scattered SpaceType label that was detected but never drove
+  // behavior. Smart-defaulted at read time (course when a GPS round is active).
+  environmentMode: 'cage' | 'range' | 'course';
+
   // 2026-05-22 — Ghost Rounds as first-class. When true (DEFAULT), startRound
   // auto-activates the most-recent prior round on the same course so the
   // player gets a "vs last time" comparison without needing to touch the
@@ -330,6 +339,7 @@ interface SettingsState {
   setHasSeenAutoClubPrompt: (v: boolean) => void;
   // Phase Cockpit
   setCockpitMode: (v: boolean) => void;
+  setEnvironmentMode: (mode: 'cage' | 'range' | 'course') => void;
   // 2026-05-22 — Ghost Rounds.
   setGhostAutoActivate: (v: boolean) => void;
 }
@@ -431,6 +441,7 @@ export const useSettingsStore = create<SettingsState>()(
       autoClubDetection: true,
       cageAutoClubDetection: true,
       hasSeenAutoClubPrompt: false,
+      environmentMode: 'cage' as const,
       cockpitMode: false,
       // 2026-05-22 — Ghost Rounds default ON. 95%-case is the player wants
       // to know how they're tracking against their last round at this course.
@@ -618,6 +629,7 @@ export const useSettingsStore = create<SettingsState>()(
       setCageAutoClubDetection: (v) => set({ cageAutoClubDetection: v, autoClubDetection: v }),
       setHasSeenAutoClubPrompt: (v) => set({ hasSeenAutoClubPrompt: v }),
       setCockpitMode: (v) => set({ cockpitMode: v }),
+      setEnvironmentMode: (mode) => set({ environmentMode: mode }),
       setGhostAutoActivate: (v) => set({ ghostAutoActivate: v }),
       // Phase 105 — per-pillar assignment.
       setCaddieForPillar: (pillar, p) => set((s) => ({
@@ -822,6 +834,7 @@ export const useSettingsStore = create<SettingsState>()(
         autoClubDetection: s.autoClubDetection,
         cageAutoClubDetection: s.cageAutoClubDetection,
         hasSeenAutoClubPrompt: s.hasSeenAutoClubPrompt,
+        environmentMode: s.environmentMode,
         cockpitMode: s.cockpitMode,
         ghostAutoActivate: s.ghostAutoActivate,
         // watchConnected / glassesConnected not persisted — rechecked on mount
