@@ -100,7 +100,8 @@ import { reconcileFeel, extractFramesB64 } from '../../services/swing/feelReconc
 import { analyzePutt, type PuttingAnalysis } from '../../services/puttingAnalysisService';
 import { getApiBaseUrl } from '../../services/apiBase';
 
-const RECORDING_MAX_SECONDS = 60; // open window — player swings freely
+const RECORDING_MAX_SECONDS = 60; // cage / course — open window, player swings freely
+const RANGE_RECORDING_MAX_SECONDS = 120; // range — longer window for a multi-swing session
 // Default ball-box position (normalized). Lower-center of the frame, where a
 // teed/placed ball typically sits in a down-the-line or face-on setup. Shown
 // by default so the user just lines their ball up to it — confirmatory only.
@@ -207,6 +208,13 @@ export default function SmartMotion() {
       : profile.handedness ?? 'right';
   const caddiePersonality = useSettingsStore((s) => s.caddiePersonality);
   const language = useSettingsStore((s) => s.language);
+  // 2026-06-10 — Environment mode (cage/range/course). Default 'cage' keeps every
+  // existing path byte-for-byte; 'range' is an additive branch (longer window,
+  // acoustics off, video segmentation). 'course' falls through to cage behavior
+  // until its own phase lands.
+  const environmentMode = useSettingsStore((s) => s.environmentMode);
+  const setEnvironmentMode = useSettingsStore((s) => s.setEnvironmentMode);
+  const recordingMaxSeconds = environmentMode === 'range' ? RANGE_RECORDING_MAX_SECONDS : RECORDING_MAX_SECONDS;
   const appliedCalibration = useAcousticCalibrationStore((s) => s.appliedCalibration);
   const calibrated = !!appliedCalibration;
 
@@ -922,16 +930,27 @@ export default function SmartMotion() {
     stoppingRef.current = false;
     setPhase('recording');
 
-    // Parallel metered audio track for multi-strike detection.
-    try {
-      meteringRef.current = await startMeteredRecording((s) => setLiveDb(s.dB));
-    } catch {
+    // 2026-06-10 — Mode-aware capture. Read fresh so the current toggle wins
+    // without re-creating this callback. Cage/course keep the metered audio
+    // track for acoustic multi-strike segmentation (UNCHANGED). Range disables
+    // acoustics entirely — outdoors there's no net echo and neighbors pollute
+    // the signal — so swing segmentation comes from video instead (phase 2).
+    const captureMode = useSettingsStore.getState().environmentMode;
+    const maxSec = captureMode === 'range' ? RANGE_RECORDING_MAX_SECONDS : RECORDING_MAX_SECONDS;
+    if (captureMode !== 'range') {
+      // Parallel metered audio track for multi-strike detection.
+      try {
+        meteringRef.current = await startMeteredRecording((s) => setLiveDb(s.dB));
+      } catch {
+        meteringRef.current = null;
+      }
+    } else {
       meteringRef.current = null;
     }
 
     // Assign the camera promise BEFORE arming timers (avoid the stop race).
     try {
-      recordingPromiseRef.current = cameraRef.current.recordAsync({ maxDuration: RECORDING_MAX_SECONDS }) as Promise<{ uri: string } | undefined>;
+      recordingPromiseRef.current = cameraRef.current.recordAsync({ maxDuration: maxSec }) as Promise<{ uri: string } | undefined>;
     } catch (e) {
       recordingPromiseRef.current = null;
       stoppingRef.current = false;
@@ -946,7 +965,7 @@ export default function SmartMotion() {
     recordTimerRef.current = setInterval(() => {
       setRecordedSeconds(Math.floor((Date.now() - startedAt) / 1000));
     }, 200);
-    recordTimeoutRef.current = setTimeout(() => { void stopRecording(); }, RECORDING_MAX_SECONDS * 1000);
+    recordTimeoutRef.current = setTimeout(() => { void stopRecording(); }, maxSec * 1000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [micPerm, requestMicPerm]);
 
@@ -1422,6 +1441,20 @@ export default function SmartMotion() {
             >
               <Ionicons name={placeBallMode ? 'hand-left-outline' : 'golf-outline'} size={20} color={placeBallMode ? colors.success : colors.accent} />
             </Pressable>
+            {/* 2026-06-10 — Environment toggle. Cycles cage → range → course.
+                Cage = acoustic multi-swing (default, unchanged). Range = 2-min
+                video session, acoustics off. Course = single shot + GPS (its
+                own behavior lands in a later phase). */}
+            <Pressable
+              onPress={() => setEnvironmentMode(environmentMode === 'cage' ? 'range' : environmentMode === 'range' ? 'course' : 'cage')}
+              style={[styles.toolBtn, { borderColor: colors.accent }]}
+              accessibilityRole="button"
+              accessibilityLabel={`Environment mode: ${environmentMode}. Tap to change.`}
+            >
+              <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 }}>
+                {environmentMode === 'cage' ? 'CAGE' : environmentMode === 'range' ? 'RNGE' : 'CRSE'}
+              </Text>
+            </Pressable>
           </View>
         ) : null}
 
@@ -1445,7 +1478,7 @@ export default function SmartMotion() {
         {phase === 'recording' ? (
           <View style={[styles.recPill, { top: insets.top + 56, backgroundColor: colors.overlay }]} pointerEvents="none">
             <View style={[styles.recDot, { backgroundColor: colors.error }]} />
-            <Text style={styles.recText}>{recordedSeconds}s · {RECORDING_MAX_SECONDS - recordedSeconds}s left</Text>
+            <Text style={styles.recText}>{recordedSeconds}s · {recordingMaxSeconds - recordedSeconds}s left</Text>
           </View>
         ) : null}
 

@@ -1048,6 +1048,17 @@ check('Pre-response conversational filler removed from the main voice path',
     /const rawResponse = await sendToBrain\(transcript\)/.test(vcWarmSrc),
   "the 'Let me see...' bridge no longer fires before Kevin's reply (it conflicted with the now-fast brain that already opens conversationally); the brain response is awaited directly and tool-action ack clips are untouched");
 
+// 2026-06-10 — Environment mode phase 1: range gets a longer window + acoustics
+// off; cage path unchanged (default). Additive, mode-gated.
+const smEnvSrc = read('app/swinglab/smartmotion.tsx');
+check('Environment mode phase 1: range window + acoustics-off gating (cage unchanged)',
+  /environmentMode: 'cage' \| 'range' \| 'course'/.test(read('store/settingsStore.ts')) &&
+    /RANGE_RECORDING_MAX_SECONDS = 120/.test(smEnvSrc) &&
+    /captureMode === 'range' \? RANGE_RECORDING_MAX_SECONDS : RECORDING_MAX_SECONDS/.test(smEnvSrc) &&
+    /if \(captureMode !== 'range'\) \{/.test(smEnvSrc) &&          // metering only when NOT range
+    /setEnvironmentMode\(environmentMode === 'cage'/.test(smEnvSrc), // toggle cycles modes
+  'range records up to 120s and starts NO metered audio (acoustics off — neighbors/outdoor); cage + course keep the 60s window and acoustic metering exactly as before; a setup-rail toggle cycles cage/range/course');
+
 // 2026-06-10 — Pose pipeline is angle-aware (knows DTL from FO).
 const poseApiSrc = read('services/poseAnalysisApi.ts');
 check('Pose/biomech pipeline is angle-aware (DTL vs FO)',
