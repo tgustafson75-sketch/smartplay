@@ -140,6 +140,67 @@ export async function parseRoundScreenshot(uri: string): Promise<ParseResult> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 2026-06-11 — BULK round-list import (Golfshot / 18Birdies / GHIN history list).
+// Reads a screenshot of a ROUND-HISTORY LIST (many rounds) and ingests them all.
+// The PURE ingestion rules (drop no-score, 40s→9-hole) live in roundImportRules
+// so the sim can exercise them without expo/network; re-exported here for the UI.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type {
+  ListedRoundRow,
+  RoundListImportResult,
+  NormalizedListRound,
+  NormalizeListResult,
+} from './roundImportRules';
+export {
+  NINE_HOLE_SCORE_MAX,
+  normalizeImportedList,
+  buildListPersistInput,
+} from './roundImportRules';
+import type { RoundListImportResult } from './roundImportRules';
+
+export type ParseListResult =
+  | { kind: 'ok'; result: RoundListImportResult }
+  | { kind: 'too_large' }
+  | { kind: 'not_a_list' }
+  | { kind: 'no_network' }
+  | { kind: 'error'; message: string };
+
+/** Resize + POST a round-LIST screenshot to /api/round-import (mode: 'list'). */
+export async function parseRoundListScreenshot(uri: string): Promise<ParseListResult> {
+  try {
+    const manipulated = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 1280 } }],
+      { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+    );
+    const b64 = manipulated.base64;
+    if (!b64) return { kind: 'error', message: 'Could not encode screenshot.' };
+
+    const res = await fetch(`${apiUrl}/api/round-import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_b64: b64, image_media_type: 'image/jpeg', mode: 'list' }),
+    });
+
+    if (res.status === 413) return { kind: 'too_large' };
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      return { kind: 'error', message: typeof errBody.error === 'string' ? errBody.error : `HTTP ${res.status}` };
+    }
+    const data = (await res.json()) as RoundListImportResult;
+    const notAList = (data.rounds ?? []).length === 0 &&
+      (data.warnings ?? []).some(w => /doesn't look like a round-history list|not a round/i.test(w));
+    if (notAList) return { kind: 'not_a_list' };
+    return { kind: 'ok', result: data };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/network|abort|timeout|fetch/i.test(msg)) return { kind: 'no_network' };
+    return { kind: 'error', message: msg };
+  }
+}
+
 /**
  * Translate the API result shape into the input that
  * roundStore.addImportedRound expects. Decoupled from the store

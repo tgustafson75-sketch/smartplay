@@ -38,6 +38,7 @@ import {
 } from '../../lib/persona';
 import { detectStrikes, type MeterSample } from '../../services/swing/strikeDetector';
 import { classifyStroke } from '../../utils/geometryFitting';
+import { normalizeImportedList, buildListPersistInput, type ListedRoundRow } from '../../services/roundImportRules';
 
 interface ScenarioResult {
   scenario: string;
@@ -1247,6 +1248,58 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /cls\.kind === 'line'/.test(overlaySrc) &&
       /cls\.kind === 'circle'/.test(overlaySrc),
     "the freehand PanResponder release classifies the stroke and commits a clean line/roi when confident, raw freehand otherwise");
+}
+
+// ─── Bulk round-list import (Golfshot history → handicap backfill) ───────────────
+{
+  // Representative rows from Tim's real Golfshot history (the screenshots he sent):
+  // 9-hole rounds land in the 30s/40s, 18-hole rounds in the 80s/90s, and a
+  // couple of rows are in-progress with no score.
+  const rows: ListedRoundRow[] = [
+    { played_date: '2026-06-04', course_name: 'Echo Hills Golf Club - Echo Hills', total_score: 39, score_vs_par: 4, holes_played: null },
+    { played_date: '2026-05-25', course_name: 'Menifee Lakes Country Club - Palms', total_score: null, score_vs_par: null, holes_played: null }, // no score → drop
+    { played_date: '2026-05-21', course_name: 'Menifee Lakes Country Club - Palms', total_score: null, score_vs_par: null, holes_played: null }, // no score → drop
+    { played_date: '2026-04-18', course_name: 'Menifee Lakes Country Club - Lakes', total_score: 87, score_vs_par: 15, holes_played: null },
+    { played_date: '2026-02-13', course_name: 'Riverwalk Golf Club', total_score: 93, score_vs_par: 21, holes_played: null },
+    { played_date: '2026-01-19', course_name: 'Echo Hills Golf Club - Echo Hills', total_score: 35, score_vs_par: 4, holes_played: null }, // sub-50 → 9-hole
+    { played_date: '2025-12-16', course_name: 'The Golf Club at Rancho California', total_score: 45, score_vs_par: 9, holes_played: 18 }, // stated 18 overrides forties rule
+  ];
+  const norm = normalizeImportedList(rows);
+
+  check('Bulk import: drops no-score (in-progress) rounds',
+    norm.skippedNoScore === 2 && norm.keep.length === 5,
+    'rows with a blank score are dropped as incomplete; only scored rounds are kept');
+
+  const echo39 = norm.keep.find(r => r.totalScore === 39)!;
+  const echo35 = norm.keep.find(r => r.totalScore === 35)!;
+  check('Bulk import: a 39/35 is read as a 9-hole round (forties rule)',
+    echo39.holesPlayed === 9 && echo39.nineHoleMode && echo39.holesSource === 'forties_rule' &&
+      echo35.holesPlayed === 9 && echo35.holesSource === 'forties_rule',
+    "sub-50 gross → 9-hole so the handicap pipeline doubles it instead of reading a 39 as a brilliant 18");
+
+  const round87 = norm.keep.find(r => r.totalScore === 87)!;
+  const round93 = norm.keep.find(r => r.totalScore === 93)!;
+  check('Bulk import: 80s/90s are 18-hole rounds',
+    round87.holesPlayed === 18 && !round87.nineHoleMode && round93.holesPlayed === 18,
+    'a normal full-round gross stays 18-hole');
+
+  const stated = norm.keep.find(r => r.totalScore === 45)!;
+  check('Bulk import: a stated hole count overrides the score heuristic',
+    stated.holesPlayed === 18 && stated.holesSource === 'stated',
+    'when the screenshot says 18, a 45 is kept as 18-hole (not flipped to 9 by the forties rule)');
+
+  const persist = buildListPersistInput(echo39);
+  check('Bulk import: persist input matches addImportedRound shape',
+    persist.holesPlayed === 9 && persist.nineHoleMode === true && persist.totalScore === 39 &&
+      typeof persist.startedAt === 'number' && persist.startedAt < Date.parse('2026-06-05') &&
+      Object.keys(persist.scores).length === 0,
+    'list rounds persist with the gross + 9/18 flag and empty per-hole scores (handicap uses the total)');
+
+  // The OCR endpoint actually supports the list mode this pipeline calls.
+  const importApiSrc = fs.readFileSync(path.resolve(__dirname, '../../api/round-import.ts'), 'utf-8');
+  check('Bulk import: round-import API has a list mode',
+    /mode === 'list'/.test(importApiSrc) && /LIST_SYSTEM_PROMPT/.test(importApiSrc) && /rounds:/.test(importApiSrc),
+    "/api/round-import branches on mode:'list' with a dedicated prompt + {rounds[]} response");
 }
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
