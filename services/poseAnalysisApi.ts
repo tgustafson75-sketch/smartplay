@@ -18,7 +18,6 @@
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getApiBaseUrl } from './apiBase';
-import { detectOnDevice } from './pose/onDevicePose';
 
 const apiUrl = (): string => getApiBaseUrl();
 
@@ -175,14 +174,22 @@ function normalizeKeypoints(raw: unknown): Keypoint[] {
 /** Run pose detection on a single image (file URI from device or http URL).
  *  Returns null on any failure — caller should render fallback. */
 export async function analyzePoseFromUri(imageUri: string, timestampMs = 0): Promise<PoseFrame | null> {
-  // 2026-06-11 — On-device first (Path A): Google ML Kit runs the pose
-  // locally — free, fast, no network, no API keys. Returns null when the
-  // native module isn't in this build (Expo Go) or the source is a remote
-  // URL, in which case we fall through to the cloud proxy below. This is
-  // the ONLY swap point: tempo, biomech, and the skeleton overlay all read
-  // whatever PoseFrame this returns, regardless of which backend produced it.
-  const onDevice = await detectOnDevice(imageUri, timestampMs);
-  if (onDevice) return onDevice;
+  // 2026-06-11 — On-device MediaPipe first. The BlazePose model + native module
+  // already ship via the withMediaPipePose config plugin (services/
+  // mediaPipePoseService.ts); poseEstimator uses them, but SmartMotion's tempo
+  // (deriveSwingTempo) and biomech (analyzePoseFrames) call THIS function
+  // directly and were therefore stuck on the cloud — which is unconfigured, so
+  // they read null. Route them through the on-device path too. Dynamic import
+  // mirrors poseEstimator and avoids a static cycle (the service imports our
+  // types). Returns null when the native module isn't linked (pre-build) or no
+  // pose was found → we fall through to the cloud proxy below.
+  try {
+    const mp = await import('./mediaPipePoseService');
+    const onDevice = await mp.detectPoseFromUri(imageUri, undefined, timestampMs);
+    if (onDevice) return onDevice;
+  } catch {
+    // fall through to cloud
+  }
 
   let body: { imageUrl?: string; imageBase64?: string };
   if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {

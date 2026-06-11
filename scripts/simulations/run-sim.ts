@@ -1533,30 +1533,21 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       !/useCageStore\(\(s\) => \{[\s\S]*?return listFeelCaptureTuples/.test(cageDbgSrc),
     'the last render-loop crash-class instance is closed (raw store fields selected; the array is built in useMemo, not returned fresh from a selector)');
 
-  // ─── On-device pose (Path A: Google ML Kit) ──────────────────────────────
+  // ─── On-device pose: analyzePoseFromUri → existing MediaPipe service ──────
   const poseApiSrc = fs.readFileSync(path.resolve(__dirname, '../../services/poseAnalysisApi.ts'), 'utf-8');
-  check('Pose: analyzePoseFromUri runs on-device ML Kit BEFORE the cloud proxy',
-    /const onDevice = await detectOnDevice\(imageUri, timestampMs\);[\s\S]*?if \(onDevice\) return onDevice;[\s\S]*?await fetch\(`\$\{apiUrl\(\)\}\/api\/pose-analysis`/.test(poseApiSrc),
-    'the single pose choke point runs the local backend first and only falls through to the cloud — tempo/biomech/skeleton work with no keys once the native module is built in');
+  check('Pose: analyzePoseFromUri runs on-device MediaPipe BEFORE the cloud proxy',
+    /import\('\.\/mediaPipePoseService'\)[\s\S]*?detectPoseFromUri\(imageUri, undefined, timestampMs\)[\s\S]*?if \(onDevice\) return onDevice;[\s\S]*?await fetch\(`\$\{apiUrl\(\)\}\/api\/pose-analysis`/.test(poseApiSrc),
+    'the choke point SmartMotion tempo/biomech use directly now routes to the already-built MediaPipe module first (model + native ship via withMediaPipePose), cloud only as fallback');
 
-  const onDeviceSrc = fs.readFileSync(path.resolve(__dirname, '../../services/pose/onDevicePose.ts'), 'utf-8');
-  check('Pose: on-device backend loads the native module OPTIONALLY (no crash pre-build)',
-    /requireOptionalNativeModule<MlkitPoseModule>\('MlkitPose'\)/.test(onDeviceSrc),
-    'requireOptionalNativeModule returns null in Expo Go / before the native build, so detectOnDevice returns null → cloud fallback, never a hard native dependency');
+  check('Pose: no redundant ML Kit module left behind (reuse MediaPipe, not a 2nd engine)',
+    !/detectOnDevice|onDevicePose|MlkitPose/.test(poseApiSrc),
+    'the duplicate ML Kit backend was removed once the audit found the existing MediaPipe pose path — no second pose native dependency bloating the build');
 
-  check('Pose: ML Kit 33-landmark → COCO-17 map covers the joints tempo+biomech read',
-    ['left_wrist', 'right_wrist', 'left_shoulder', 'right_shoulder', 'left_hip', 'right_hip'].every(j => onDeviceSrc.includes(`'${j}'`)) &&
-      /15: 'left_wrist'/.test(onDeviceSrc) && /11: 'left_shoulder'/.test(onDeviceSrc) && /23: 'left_hip'/.test(onDeviceSrc),
-    'wrists (tempo top), shoulders + hips (turn/coil) map from the correct ML Kit ordinals — getKp() name lookups keep resolving');
-
-  check('Pose: on-device frame carries pixel coords + frameW/frameH for the overlay',
-    /frameW: native\.width, frameH: native\.height/.test(onDeviceSrc),
-    'SwingBodyOverlay builds its viewBox from frameW/frameH, so ML Kit pixel landmarks + image dims land the skeleton on the body');
-
-  const mlkitCfg = fs.readFileSync(path.resolve(__dirname, '../../modules/mlkit-pose/expo-module.config.json'), 'utf-8');
-  check('Pose: local Expo module registers MlkitPoseModule for autolinking',
-    /expo\.modules\.mlkitpose\.MlkitPoseModule/.test(mlkitCfg),
-    "the native module is discoverable by expo prebuild/EAS so requireOptionalNativeModule('MlkitPose') resolves on a real build");
+  const mpSrc = fs.readFileSync(path.resolve(__dirname, '../../services/mediaPipePoseService.ts'), 'utf-8');
+  check('Pose: MediaPipe service projects BlazePose→COCO-17 for tempo+biomech joints',
+    /detectPoseFromUri/.test(mpSrc) &&
+      ['left_wrist', 'right_wrist', 'left_shoulder', 'right_shoulder', 'left_hip', 'right_hip'].every(j => mpSrc.includes(`'${j}'`)),
+    'the existing service already maps the wrists/shoulders/hips getKp() looks up — so wiring it through analyzePoseFromUri needs no downstream changes');
 
   // ─── Handicap: incomplete-round drop + proper 9-hole conversion ──────────
   // Tim's real Golfshot history (score, holes): the May-06 "4" is an
