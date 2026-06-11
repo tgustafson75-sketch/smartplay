@@ -230,6 +230,16 @@ export default function SmartMotion() {
 
   const initialAngle: Angle = angleParam === 'face_on' || angleParam === 'face-on' ? 'face_on' : 'down_the_line';
   const [angle, setAngle] = useState<Angle>(initialAngle);
+  // 2026-06-11 (audit H3) — remember the user's last EXPLICIT angle pick so
+  // reset() can restore it. A putt forces 'down_the_line'; without this, that
+  // forced DTL bled into the next full swing's capture guides + analysis prior.
+  const lastChosenAngleRef = useRef<Angle>(initialAngle);
+  // 2026-06-11 (audit H1) — the auto-window-end timeout is armed inside
+  // startRecording's closure (deps [micPerm, requestMicPerm]) and would otherwise
+  // capture a STALE stopRecording (stale appliedCalibration + stale runAnalysis,
+  // i.e. stale angle). Route the auto-stop through this ref so the hands-free
+  // "let the 60s run out" path always invokes the CURRENT stopRecording.
+  const stopRecordingRef = useRef<() => void>(() => {});
 
   const [phase, setPhase] = useState<Phase>(clipUriParam ? 'analyzing' : 'setup');
   const [clipUri, setClipUri] = useState<string | null>(clipUriParam ?? null);
@@ -814,6 +824,9 @@ export default function SmartMotion() {
     // clip. Re-arm putt mode per recording via the PUTT toggle, picking the
     // putter, a club scan, or a voice "switch to putter".)
     setPuttMode(false);
+    // Restore the user's last explicit angle — a putt forces down-the-line, and
+    // that must not carry into the next full swing's guides/analysis. (audit H3)
+    setAngle(lastChosenAngleRef.current);
     setFeelText('');
     setFeelReply(null);
     setDraftBall(DEFAULT_BALL_BOX); // keep the default reference box after Record again
@@ -1005,8 +1018,7 @@ export default function SmartMotion() {
     }, 200);
     // 2026-06-10 — When the window auto-ends (vs a manual stop), flag it so
     // stopRecording can play an audible "that's time, analyzing" cue.
-    recordTimeoutRef.current = setTimeout(() => { autoStopAtLimitRef.current = true; void stopRecording(); }, maxSec * 1000);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    recordTimeoutRef.current = setTimeout(() => { autoStopAtLimitRef.current = true; void stopRecordingRef.current(); }, maxSec * 1000);
   }, [micPerm, requestMicPerm]);
 
   const stopRecording = useCallback(async () => {
@@ -1137,6 +1149,8 @@ export default function SmartMotion() {
       setPhase('setup');
     }
   }, [runAnalysis, appliedCalibration]);
+  // Keep the auto-stop ref pointed at the current stopRecording (audit H1).
+  stopRecordingRef.current = stopRecording;
 
   // ── auto club detection (hands-free, between minutes) ──────────────────
   // Point the camera at the club (or just keep playing); a scan grabs a frame,
@@ -1716,7 +1730,7 @@ export default function SmartMotion() {
             {!isReview ? (
               <ModeToggle
                 value={angle}
-                onChange={(a) => { setAngle(a); setPuttMode(false); }}
+                onChange={(a) => { setAngle(a); setPuttMode(false); lastChosenAngleRef.current = a; }}
                 isPutt={isPutt}
                 onPutt={() => { setPuttMode(true); setAngle('down_the_line'); }}
                 compact

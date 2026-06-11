@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
-import { getApiBaseUrl } from '../services/apiBase';
+
+// 2026-06-11 (audit) — dedup the persona-handoff intro so a fast double-switch
+// (Kevin→Serena→Kevin) can't stack two overlapping opener clips.
+let personaHandoffTimer: ReturnType<typeof setTimeout> | null = null;
 
 // ─── Phase 105 — Team Caddie Architecture ─────────────────────────────────────
 
@@ -508,12 +511,15 @@ export const useSettingsStore = create<SettingsState>()(
           caddieAssignments: { round: p, cage: p, drills: p, play: p },
         });
         // 2026-05-19 — Persona handoff welcome. When the active caddie
-        // changes (manual or via team handoff), the new persona should
-        // briefly introduce themselves so the user knows who's on the
-        // bag now. userInitiated:true so it bypasses L1 Quiet's
-        // scripted-speech gate — switching caddies IS a user-initiated
-        // action. 500ms delay lets the prior caddie's stopSpeaking
-        // settle before the new voice fires.
+        // changes (manual or via team handoff), the new persona briefly
+        // introduces themselves so the user knows who's on the bag now.
+        // 2026-06-11 (audit) — was a network /api/voice TTS call, which on a
+        // cold Lambda left the switch SILENT (this was the ONE persona moment
+        // that didn't use the bundled clips, while greetings/openers do). Now
+        // play the per-persona BUNDLED opener: zero-network, instant, never
+        // silent. flashCaption keeps the on-screen line (speak() used to set
+        // the caption; the bundled clip doesn't, so we set it explicitly).
+        // 500ms delay lets the prior caddie's stopSpeaking settle first.
         if (prev !== p) {
           const intros: Record<string, string> = {
             kevin: "Hey, Kevin back on the bag. Let's go.",
@@ -522,15 +528,20 @@ export const useSettingsStore = create<SettingsState>()(
             harry: "Harry here. Show me what you've got.",
           };
           const text = intros[p] ?? `${p} stepping in.`;
-          setTimeout(() => {
+          if (personaHandoffTimer) clearTimeout(personaHandoffTimer);
+          personaHandoffTimer = setTimeout(() => {
+            personaHandoffTimer = null;
             try {
               const voiceMod = require('../services/voiceService');
-              const apiUrl = getApiBaseUrl();
-              const lang = get().language ?? 'en';
-              voiceMod.speak?.(text, gender, lang, apiUrl, { userInitiated: true })
-                ?.catch?.((e: unknown) => console.log('[persona-handoff] speak failed', e));
+              const greetMod = require('../services/kevinGreetingManifest');
+              voiceMod.flashCaption?.(text);
+              const clip = greetMod.getOpenerAssetForPersona?.(p);
+              if (clip != null) {
+                voiceMod.playLocalFile?.(clip, undefined, { userInitiated: true })
+                  ?.catch?.((e: unknown) => console.log('[persona-handoff] opener play failed', e));
+              }
             } catch (e) {
-              console.log('[persona-handoff] speak setup failed', e);
+              console.log('[persona-handoff] opener setup failed', e);
             }
           }, 500);
         }

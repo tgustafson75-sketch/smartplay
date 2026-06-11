@@ -1338,6 +1338,25 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /pose\.locateSwings\(clipUriParam/.test(smSrc2) && /swings\.length > 1/.test(smSrc2),
     'a re-analyzed upload (no acoustics) runs the video locator and shows all swings when >1 found; a genuine single-swing upload is unchanged');
 
+  check('SmartMotion: auto-window-end calls the CURRENT stopRecording (audit H1)',
+    /void stopRecordingRef\.current\(\)/.test(smSrc2) && /stopRecordingRef\.current = stopRecording/.test(smSrc2),
+    'the hands-free "let the 60s run out" stop routes through a ref, so it uses current calibration/angle instead of a stale closure');
+
+  check('SmartMotion: reset() restores the user\'s explicit angle after a putt (audit H3)',
+    /lastChosenAngleRef\.current = a/.test(smSrc2) && /setAngle\(lastChosenAngleRef\.current\)/.test(smSrc2),
+    'a putt forces down-the-line; reset() restores the last explicit angle so it does not bleed into the next full swing');
+
+  const settingsSrc2 = fs.readFileSync(path.resolve(__dirname, '../../store/settingsStore.ts'), 'utf-8');
+  check('Voice: persona handoff plays the bundled opener (never silent) (audit)',
+    /getOpenerAssetForPersona/.test(settingsSrc2) && /playLocalFile/.test(settingsSrc2) &&
+      /flashCaption/.test(settingsSrc2) && !/voiceMod\.speak\?\.\(text/.test(settingsSrc2),
+    'the handoff plays the zero-network bundled opener clip (with a flashed caption) instead of network TTS, so a cold Lambda no longer leaves the switch silent');
+
+  const seqSrc = fs.readFileSync(path.resolve(__dirname, '../../services/intents/sequenceHandler.ts'), 'utf-8');
+  check('Voice: chained commands forward a navigating step\'s tool_action (audit 4a)',
+    /lastToolAction = result\.tool_action/.test(seqSrc) && /tool_action: lastToolAction/.test(seqSrc),
+    '"open Smart Motion and switch to quiet mode" now actually navigates — the sequence handler forwards the step tool_action instead of dropping it');
+
   const listenSrc = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');
   check('Voice: listeningSession dispatches navigate tool_actions',
     /=== 'navigate'/.test(listenSrc) && /router\.push\(path\)/.test(listenSrc),

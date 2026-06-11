@@ -63,6 +63,11 @@ export const sequenceHandler: IntentHandler = {
     const responses: string[] = [];
     const sideEffects: string[] = [];
     let allOk = true;
+    // 2026-06-11 (audit) — forward a navigating step's tool_action so a chained
+    // command like "open Smart Motion and switch to quiet mode" actually
+    // navigates. Previously the loop dropped every step's tool_action, so the
+    // nav silently vanished. Last navigating step wins (final destination).
+    let lastToolAction: IntentResult['tool_action'];
 
     for (let i = 0; i < rawSteps.length; i++) {
       const step = rawSteps[i] as SequenceStep;
@@ -79,6 +84,7 @@ export const sequenceHandler: IntentHandler = {
       try {
         const result = await voiceCommandRouter.dispatch(stepIntent, context);
         if (result.voice_response) responses.push(result.voice_response);
+        if (result.tool_action) lastToolAction = result.tool_action;
         if (Array.isArray(result.side_effects)) {
           sideEffects.push(...result.side_effects.map((s) => `seq[${i}]:${s}`));
         }
@@ -99,6 +105,7 @@ export const sequenceHandler: IntentHandler = {
       voice_response: combined || null,
       side_effects: ['sequence:' + rawSteps.length, ...sideEffects],
       follow_up_needed: false,
+      tool_action: lastToolAction,
     };
   },
 };

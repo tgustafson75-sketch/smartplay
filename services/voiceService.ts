@@ -585,6 +585,21 @@ const notifyCaption = (text: string | null) => {
   captionSubscribers.forEach(cb => cb(text));
 };
 
+// 2026-06-11 (audit) — show a caption for a fixed window then auto-clear, for
+// surfaces that play a BUNDLED clip (not speak()) and so don't drive the caption
+// themselves — e.g. the persona handoff, which plays the bundled opener so the
+// switch is never silent. Only clears if the caption is still the one we set
+// (a real speak() that starts meanwhile owns the caption and won't be cleared).
+let flashCaptionTimer: ReturnType<typeof setTimeout> | null = null;
+export const flashCaption = (text: string, ms = 3000): void => {
+  if (flashCaptionTimer) { clearTimeout(flashCaptionTimer); flashCaptionTimer = null; }
+  notifyCaption(text);
+  flashCaptionTimer = setTimeout(() => {
+    flashCaptionTimer = null;
+    if (currentCaption === text) notifyCaption(null);
+  }, ms);
+};
+
 export const getCurrentCaption = (): string | null => currentCaption;
 
 /** 2026-05-22 — Hands-free double-tap replay surface. Returns the most
