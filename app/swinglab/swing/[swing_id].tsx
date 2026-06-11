@@ -153,6 +153,12 @@ export default function SwingDetail() {
     : null;
 
   const videoRef = useRef<Video>(null);
+  // 2026-06-10 — Auto-play the swing ONCE when the detail screen opens (library
+  // + re-analyze paths). Previously only the ?watch=1 route auto-played, so
+  // opening a swing from the library sat on a frozen first frame until you
+  // tapped play. Guarded so it fires a single time; native controls own it
+  // after, and it never loops. Muted (matches the non-watch isMuted prop).
+  const autoplayedRef = useRef(false);
   const leftCompareVideoRef = useRef<Video>(null);
   const rightCompareVideoRef = useRef<Video>(null);
   // Phase V.7+ — default to Kevin analysis. The has_audio probe in
@@ -342,6 +348,19 @@ export default function SwingDetail() {
     const s = status as AVPlaybackStatusSuccess;
     if (s.positionMillis != null) setPosition(s.positionMillis / 1000);
     if (s.durationMillis != null) setDuration(s.durationMillis / 1000);
+    // Auto-play once on open for the normal (non-watch) paths. The ?watch=1
+    // route keeps its own shouldPlay + analyze-on-finish handling below, so we
+    // skip it here. Fires a single time once the clip has a real duration;
+    // isLooping is unset so it plays through once and stops.
+    if (
+      !shouldAutoplayThenAnalyze &&
+      !autoplayedRef.current &&
+      s.durationMillis != null &&
+      s.durationMillis > 0
+    ) {
+      autoplayedRef.current = true;
+      void videoRef.current?.playAsync().catch(() => {});
+    }
     // 2026-05-25 — Path A: when the user routed here with ?watch=1
     // (analysis was deferred at upload time for short clips), fire
     // runPhaseKOnSession the moment the video plays through. Gated
