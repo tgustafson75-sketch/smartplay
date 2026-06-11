@@ -1219,18 +1219,31 @@ export default function SmartMotion() {
         ? 'course'
         : useSettingsStore.getState().environmentMode;
       let segsForAnalysis = detectedSegments;
-      if ((stopMode === 'range' || stopMode === 'cage') && detectedSegments.length === 0) {
+      // RANGE: acoustics off → always segment from VIDEO. CAGE: trust the
+      // acoustic segments, but if they found ≤1 strike, cross-check the video
+      // locator — acoustics under-detect when "cage mode" is used at an OPEN
+      // range (no net echo, wind, other golfers). 2026-06-11: Tim's real 60s
+      // range clip recorded in cage mode heard only 1 strike for 6 real swings.
+      if (stopMode === 'range' || (stopMode === 'cage' && detectedSegments.length <= 1)) {
         try {
           const pose = await import('../../services/poseDetection');
           const durMs = await pose.probeDurationMs(recorded.uri).catch(() => RANGE_RECORDING_MAX_SECONDS * 1000);
-          const swings = await pose.locateSwings(recorded.uri, durMs);
-          if (swings.length > 0) {
-            segsForAnalysis = segmentsFromVideoSwings(swings, durMs);
-            setSegments(segsForAnalysis);
-            setSelectedSwing(0);
+          // cage with exactly 1 strike: only cross-check on a LONG clip — a short
+          // single-strike clip is a legit single swing, don't override it with a
+          // possibly-noisier video read. cage-0 always tries (nothing to lose).
+          const worthVideo = stopMode === 'range' || detectedSegments.length === 0 || durMs > 20_000;
+          if (worthVideo) {
+            const swings = await pose.locateSwings(recorded.uri, durMs);
+            // Use the video segments only if they found MORE swings than acoustics
+            // — never reduce the count, just recover missed ones.
+            if (swings.length > segsForAnalysis.length) {
+              segsForAnalysis = segmentsFromVideoSwings(swings, durMs);
+              setSegments(segsForAnalysis);
+              setSelectedSwing(0);
+            }
           }
         } catch (e) {
-          console.log('[smartmotion] range video segmentation failed (non-fatal):', e);
+          console.log('[smartmotion] video segmentation fallback failed (non-fatal):', e);
         }
       }
       // Analyze the FIRST detected swing windowed to its segment; other

@@ -646,7 +646,11 @@ export async function locateSwings(
   }
   // Denser than single-swing localize so we don't miss swings: ~1 frame / 5s,
   // clamped 12-24 (a 2-min range session needs broad-but-bounded coverage).
-  const count = Math.max(12, Math.min(24, Math.round(durationMs / 1000 / 5)));
+  // 2026-06-11 — ~2.5s frame spacing (was 5s). Validated on Tim's real 60s
+  // range clip: at 5s spacing the model OVER-detected (9 for 6 real swings)
+  // because sparse snapshots each read as a swing; at 2.5s (24 frames) it nailed
+  // 6. Capped at 24 — going denser (30) made the model return [] (input too busy).
+  const count = Math.max(12, Math.min(24, Math.round(durationMs / 1000 / 2.5)));
   const frames = await extractCoarseFrames(clipUri, durationMs, count);
   if (frames.length < 3) {
     logLocate('range_locate_fallback', { reason: 'coarse_frames_failed', extracted: frames.length, wanted: count });

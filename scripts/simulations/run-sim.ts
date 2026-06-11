@@ -1068,7 +1068,7 @@ check('Environment mode phase 2: range video swing-segmentation (acoustics off)'
     /export async function locateSwings/.test(read('services/poseDetection.ts')) &&
     /mode: 'locate_swings'/.test(read('services/poseDetection.ts')) &&
     /body\.mode === 'locate_swings'/.test(read('api/swing-analysis.ts')) &&
-    /\(stopMode === 'range' \|\| stopMode === 'cage'\) && detectedSegments\.length === 0/.test(smEnvSrc) &&
+    /stopMode === 'range' \|\| \(stopMode === 'cage' && detectedSegments\.length <= 1\)/.test(smEnvSrc) &&
     /segmentsFromVideoSwings\(swings, durMs\)/.test(smEnvSrc),
   'range (acoustics off) segments swings from video — locateSwings() asks the server locate_swings mode for all swing times, segmentsFromVideoSwings() builds the SAME SwingSegment[] the cage acoustic path uses; cage also uses this as a SAFETY NET only when acoustics yield 0 segments; empty result still falls back to single-swing localization');
 
@@ -1331,9 +1331,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 // ─── Whole-app audit fixes (pre-SmartMotion-test-day) ───────────────────────────
 {
   const smSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/smartmotion.tsx'), 'utf-8');
-  check('SmartMotion: cage falls back to video locator when acoustics find 0 swings',
-    /\(stopMode === 'range' \|\| stopMode === 'cage'\) && detectedSegments\.length === 0/.test(smSrc2),
-    'a loud bay that zeroes the acoustic strike detector no longer collapses a multi-swing cage reel to "1 of 1" — it falls back to locateSwings (only when there are NO acoustic segments, so working acoustics are untouched)');
+  check('SmartMotion: cage falls back to video locator when acoustics under-detect',
+    /stopMode === 'range' \|\| \(stopMode === 'cage' && detectedSegments\.length <= 1\)/.test(smSrc2) &&
+      /worthVideo/.test(smSrc2),
+    'cage acoustics that zero out (loud bay) OR find ≤1 strike in a long clip (cage mode at an open range) cross-check the video locator and use it when it finds more — working multi-strike acoustic captures are untouched');
 
   check('SmartMotion: uploaded/library clips segment multi-swing from video (the "6 swings, 1 of 1" bug)',
     /pose\.locateSwings\(clipUriParam/.test(smSrc2) && /swings\.length > 1/.test(smSrc2),
@@ -1455,6 +1456,15 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /facing=\{facing\}/.test(smA) && /mirror=\{false\}/.test(smA) &&
       /setFacing\(\(f\) => \(f === 'back' \? 'front' : 'back'\)\)/.test(smA),
     'a setup-phase toggle flips to the front camera for face-on self-framing; mirror={false} keeps the clip un-mirrored so a front face-on clip reads identically to a rear one — handedness/direction faults/ball-target coords unaffected');
+
+  check('Smart Motion: video locate uses ~2.5s frame spacing (denser, accurate)',
+    /Math\.round\(durationMs \/ 1000 \/ 2\.5\)/.test(poseSrc2),
+    'the multi-swing locator samples ~2.5s apart (capped 24) — validated on Tim\'s real 60s clip: 5s spacing over-detected (9 for 6 real swings), 2.5s nailed 6');
+
+  check('Smart Motion: cage cross-checks video when acoustics under-detect',
+    /stopMode === 'cage' && detectedSegments\.length <= 1/.test(smA) &&
+      /swings\.length > segsForAnalysis\.length/.test(smA),
+    'cage mode used at an open range (acoustics heard ≤1 strike for many swings) cross-checks the video locator and uses it when it finds MORE swings — never reduces the count');
 
   const swingApiSrc2 = fs.readFileSync(path.resolve(__dirname, '../../api/swing-analysis.ts'), 'utf-8');
   check('Swing analysis opt #2: analysis output token caps trimmed 800→650',
