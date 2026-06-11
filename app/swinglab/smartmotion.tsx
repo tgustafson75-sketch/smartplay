@@ -491,12 +491,12 @@ export default function SmartMotion() {
       setPoseFrames(null);
       setBiomech(null);
       setVideoDurationMs(null);
-      // 2026-06-11 (audit) — clear acoustic ball speed/departure here too. The
-      // upload/library re-analyze path enters via runAnalysis (not start/reset),
-      // so without this a prior CAGE swing's acoustic ball speed (and the
-      // smash/carry derived from it) bled onto an upload that had no acoustics.
-      setBallSpeed(null);
-      setBallDeparture(null);
+      // NOTE: ball speed/departure are intentionally NOT cleared here. The live
+      // CAGE record path calls runAnalysis AFTER measuring the acoustic ball
+      // speed; clearing it here wiped every cage swing's measured value. The
+      // upload/library path (which has no acoustics) clears them itself before
+      // calling runAnalysis (see the clipUriParam effect). reset()/startRecording
+      // also clear them. (audit 2026-06-11)
       ingestedSessionIdRef.current = null;
       analysisCacheRef.current = {};
       // Persist the recorded clip into documents so it survives OS cache
@@ -821,6 +821,12 @@ export default function SmartMotion() {
   // a genuine single-swing upload behaves exactly as before (no regression).
   useEffect(() => {
     if (!(clipUriParam && phase === 'analyzing' && analysis == null && !analysisError)) return;
+    // 2026-06-11 (audit fix) — an uploaded/library clip has NO acoustics, so any
+    // ball speed/departure from a prior cage swing must be cleared on THIS entry
+    // path (not inside runAnalysis, which the cage record path also calls right
+    // after it measures the real acoustic ball speed).
+    setBallSpeed(null);
+    setBallDeparture(null);
     let cancelled = false;
     void (async () => {
       try {
@@ -853,6 +859,7 @@ export default function SmartMotion() {
     setClipUri(null);
     setAnalysis(null);
     setAnalysisError(null);
+    setSwingAnalyzing(false); // audit: never leave the per-swing spinner stuck
     setPoseFrames(null);
     setBiomech(null);
     setVideoDurationMs(null);
@@ -1010,7 +1017,11 @@ export default function SmartMotion() {
       videoRef.current?.playAsync().catch(() => undefined);
 
       const cached = analysisCacheRef.current[idx];
-      if (cached) { setAnalysis(cached); return; }
+      // 2026-06-11 (audit fix) — clear the analyzing spinner on a cached hit too.
+      // Without this, scrubbing to a cached swing while an earlier read is still
+      // in flight left swingAnalyzing stuck true (the in-flight call's clear is
+      // guarded by the staleness check and never fires) → spinner forever.
+      if (cached) { setAnalysis(cached); setSwingAnalyzing(false); return; }
       if (!clipUri) return;
       // Per-swing analysis on demand — windowed to this segment.
       setSwingAnalyzing(true);

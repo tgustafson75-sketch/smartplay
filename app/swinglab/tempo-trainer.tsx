@@ -57,7 +57,6 @@ export default function TempoTrainerScreen() {
     let mounted = true;
     void (async () => {
       try {
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false, shouldDuckAndroid: true });
         const tick = new Audio.Sound();
         await tick.loadAsync(require('../../assets/audio/tempo/tick.mp3'));
         const tock = new Audio.Sound();
@@ -97,8 +96,12 @@ export default function TempoTrainerScreen() {
     T.push(setTimeout(() => scheduleCycle(back, down), back + down + REST_MS));
   }, [playTick, playTock, flashPulse]);
 
-  const start = useCallback(() => {
+  const start = useCallback(async () => {
     if (!ready) return;
+    // 2026-06-11 (audit) — set the playback audio mode only when actually
+    // starting (so merely visiting the screen doesn't change the app's global
+    // audio session). playsInSilentModeIOS lets the tones be heard on silent.
+    try { await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false, shouldDuckAndroid: true }); } catch { /* tones may be muted on silent */ }
     runningRef.current = true; setRunning(true);
     scheduleCycle(preset.back, preset.down);
   }, [ready, preset.back, preset.down, scheduleCycle]);
@@ -193,7 +196,7 @@ export default function TempoTrainerScreen() {
 
         {/* Start / Stop */}
         <Pressable
-          onPress={running ? stop : start}
+          onPress={running ? stop : () => void start()}
           disabled={!ready}
           style={[styles.playBtn, { backgroundColor: running ? colors.error : colors.accent, opacity: ready ? 1 : 0.5 }]}
           accessibilityRole="button"

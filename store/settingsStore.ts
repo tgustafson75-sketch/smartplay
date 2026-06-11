@@ -520,7 +520,12 @@ export const useSettingsStore = create<SettingsState>()(
         // silent. flashCaption keeps the on-screen line (speak() used to set
         // the caption; the bundled clip doesn't, so we set it explicitly).
         // 500ms delay lets the prior caddie's stopSpeaking settle first.
-        if (prev !== p) {
+        // 2026-06-11 (audit) — skip the bundled-opener handoff for 'custom': there
+        // is no custom opener clip (getOpenerAssetForPersona falls back to Kevin)
+        // and no intro line, so it would announce the user's custom caddie in
+        // KEVIN's voice and flash a literal "custom stepping in." The custom
+        // caddie has its own recorded clips; don't override with Kevin's.
+        if (prev !== p && p !== 'custom') {
           const intros: Record<string, string> = {
             kevin: "Hey, Kevin back on the bag. Let's go.",
             serena: "Hi, Serena here. Let's read this together.",

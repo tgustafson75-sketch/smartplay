@@ -13,17 +13,11 @@
  *   We KEEP the underlying drill content + Cage Mode + Swing Library
  *   logic — they just live behind named cards now.
  *
- * Preservation of existing functionality:
- *   - The previous SwingLab body was copied verbatim to
- *     /app/swinglab/drills.tsx so the Drills card surfaces it as a
- *     dedicated screen. Nothing has been deleted.
- *   - Arena, Swing Library, Acoustic Test Bench route to Pro's
- *     existing screens (unchanged).
- *   - Range Mode + SmartMotion + dedicated Drill detail are tracked
- *     for follow-up steps in the v3-port plan. SmartMotion currently
- *     routes to /swinglab/cage-drill (Pro's existing single-swing
- *     capture); Range Mode shows a "Coming soon" treatment until its
- *     dedicated screen lands.
+ * Current cards (2026-06-11): Smart Motion (/swinglab/smartmotion — the marquee
+ * capture flow, cage/range/course in one), Coach Mode (/swinglab/coach-mode),
+ * Drills (/drills → app/drills/index.tsx), Swing Library (/swinglab/library),
+ * and Tempo Trainer (/swinglab/tempo-trainer — Tour-Tempo audio metronome).
+ * Card title/sub render from i18n (swinglab.card_<key>_title/sub).
  */
 
 import React from 'react';

@@ -1354,6 +1354,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /flashCaption/.test(settingsSrc2) && !/voiceMod\.speak\?\.\(text/.test(settingsSrc2),
     'the handoff plays the zero-network bundled opener clip (with a flashed caption) instead of network TTS, so a cold Lambda no longer leaves the switch silent');
 
+  check('Voice: persona handoff skips the CUSTOM caddie (no Kevin-voice intro)',
+    /if \(prev !== p && p !== 'custom'\)/.test(settingsSrc2),
+    'switching to the user\'s custom caddie no longer announces it in Kevin\'s voice (no custom opener clip) or flashes a literal "custom stepping in"');
+
   const seqSrc = fs.readFileSync(path.resolve(__dirname, '../../services/intents/sequenceHandler.ts'), 'utf-8');
   check('Voice: chained commands forward a navigating step\'s tool_action (audit 4a)',
     /lastToolAction = result\.tool_action/.test(seqSrc) && /tool_action: lastToolAction/.test(seqSrc),
@@ -1391,9 +1395,18 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /useEffect\(\(\) => \{ selectedSwingRef\.current = selectedSwing;/.test(smA),
     'a late-resolving per-swing analysis only updates the display when its swing is STILL selected — no more one swing\'s read under another\'s header on a fast reel scrub');
 
-  check('Swing analysis: ballSpeed/departure cleared on (re)analyze',
-    /setBallSpeed\(null\);\s*\n\s*setBallDeparture\(null\);\s*\n\s*ingestedSessionIdRef/.test(smA),
-    'runAnalysis clears acoustic ball speed/departure so a prior cage swing\'s value cannot bleed onto an upload/range swing that had no acoustics');
+  check('Swing analysis: ballSpeed cleared on the UPLOAD path, NOT in runAnalysis (cage keeps its measured speed)',
+    // The clear lives in the clipUriParam (upload/re-analyze) effect, right
+    // before `let cancelled = false`...
+    /clipUriParam && phase === 'analyzing'[\s\S]{0,400}?setBallSpeed\(null\);\s*\n\s*setBallDeparture\(null\);\s*\n\s*let cancelled = false;/.test(smA) &&
+      // ...and runAnalysis explicitly does NOT clear it (would wipe the acoustic
+      // ball speed the cage record path measures just before calling runAnalysis).
+      /ball speed\/departure are intentionally NOT cleared here/.test(smA),
+    'the upload/re-analyze path (no acoustics) clears stale ball speed; runAnalysis does NOT, so a cage swing keeps the acoustic ball speed it just measured (audit-fixed regression)');
+
+  check('Swing analysis: cached per-swing select clears the analyzing spinner (no stuck spinner)',
+    /if \(cached\) \{ setAnalysis\(cached\); setSwingAnalyzing\(false\); return; \}/.test(smA),
+    'scrubbing to a cached swing while an earlier read is in flight clears swingAnalyzing on the cached hit — the spinner can no longer stick on forever');
 
   check('Swing analysis: unbounded clips get a longer analyze watchdog',
     /const watchdogMs = boundaries \? 30_000 : 70_000;/.test(smA),
