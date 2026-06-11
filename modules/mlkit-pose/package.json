@@ -1,0 +1,7 @@
+{
+  "name": "mlkit-pose",
+  "version": "0.1.0",
+  "description": "On-device Google ML Kit pose detection (BlazePose, 33 landmarks) for SmartPlay Caddie. Consumed via requireOptionalNativeModule('MlkitPose').",
+  "main": "index.ts",
+  "private": true
+}
