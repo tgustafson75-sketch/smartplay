@@ -797,7 +797,7 @@ export default function Settings() {
         )}
 
         {/* CADDIE TEAM — Phase 105 per-pillar assignments */}
-        <CollapsibleSection title="Caddie Team">
+        <CollapsibleSection title="Caddie">
           <Text style={[styles.sectionIntro, { color: colors.text_muted }]}>
             Four caddies, one team. Each part of your game can have a different caddie. We&apos;ve set sensible defaults — change anything anytime.
           </Text>
@@ -878,11 +878,10 @@ export default function Settings() {
           <Text style={[styles.sectionIntro, { color: colors.text_muted, marginTop: 4 }]}>
             Top-left badge during a round showing live accuracy + GPS mode + outlier count. Use during the Garmin comparison test.
           </Text>
-        </CollapsibleSection>
 
-        {/* CADDIE — extra controls */}
-        <CollapsibleSection title={`${caddieName}'s Voice`}>
-          <Text style={[styles.sectionIntro, { color: colors.text_muted }]}>
+          {/* 2026-06-10 — caddie persona controls merged in from the old
+              "{caddieName}'s Voice" card so every caddie setting lives here. */}
+          <Text style={[styles.sectionIntro, { color: colors.text_muted, marginTop: 8 }]}>
             Manually override the active caddie (the team auto-selects per pillar — this picks who speaks right now).
           </Text>
           <PillRow
@@ -1217,7 +1216,7 @@ export default function Settings() {
             "Watch Connected" thinking it pulled real Samsung Health data
             when it was sim-only. Now: label is explicit, toggle is
             disabled, and the description names exactly what's missing. */}
-        <CollapsibleSection title="Connected Hardware">
+        <CollapsibleSection title="Devices & Health">
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
               <Text style={labelStyle}>Samsung Galaxy Watch · Not wired</Text>
@@ -1270,35 +1269,10 @@ export default function Settings() {
               </Text>
             </View>
           </View>
-        </CollapsibleSection>
-
-        {/* 2026-06-08 (audit #2, privacy) — plain-language disclosure of
-            what leaves the device and where. Honest about the AI + weather
-            API calls and local-only sensitive data. */}
-        <CollapsibleSection title="Data & Privacy">
-          <View style={rowDivStyle}>
-            <View style={styles.rowText}>
-              <Text style={labelStyle}>What we send for AI coaching</Text>
-              <Text style={subStyle}>
-                When you talk to your caddie, we send your message plus your first name, handicap, and (if set) GHIN to the AI service that powers the coaching, so the advice is personalized. We send your GPS location to a weather service to factor wind and temperature into yardages. We don’t sell your data.
-              </Text>
-            </View>
-          </View>
-          <View style={rowDivStyle}>
-            <View style={styles.rowText}>
-              <Text style={labelStyle}>Stored on this phone</Text>
-              <Text style={subStyle}>
-                Your rounds, scores, swing clips, bag distances, and profile live on this device. Your GHIN number is kept in memory for the session only — it isn’t written to disk — until encrypted-at-rest storage ships.
-              </Text>
-            </View>
-          </View>
-        </CollapsibleSection>
-
-        {/* 2026-05-17 — Phase 413 — Health Data privacy section.
-            Master toggle for the Health Connect integration plus an
-            explicit re-ask button if the user wants to grant
-            permissions after declining them earlier. */}
-        <CollapsibleSection title="Health Data">
+          {/* 2026-06-10 — Health Data merged into "Devices & Health" (both are
+              external integrations). Master toggle for the Health Connect
+              integration + an explicit re-ask button if permissions were
+              declined earlier. (Data & Privacy relocated just below.) */}
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
               <Text style={labelStyle}>Use Health Connect during rounds</Text>
@@ -1375,8 +1349,30 @@ export default function Settings() {
             still reachable via Reset App Data → relaunch for users who
             need the guided re-do. */}
 
+        {/* 2026-06-08 (audit #2, privacy) — plain-language disclosure of what
+            leaves the device and where. Relocated below Devices & Health in the
+            2026-06-10 settings cleanup. */}
+        <CollapsibleSection title="Data & Privacy">
+          <View style={rowDivStyle}>
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>What we send for AI coaching</Text>
+              <Text style={subStyle}>
+                When you talk to your caddie, we send your message plus your first name, handicap, and (if set) GHIN to the AI service that powers the coaching, so the advice is personalized. We send your GPS location to a weather service to factor wind and temperature into yardages. We don’t sell your data.
+              </Text>
+            </View>
+          </View>
+          <View style={rowDivStyle}>
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>Stored on this phone</Text>
+              <Text style={subStyle}>
+                Your rounds, scores, swing clips, bag distances, and profile live on this device. Your GHIN number is kept in memory for the session only — it isn’t written to disk — until encrypted-at-rest storage ships.
+              </Text>
+            </View>
+          </View>
+        </CollapsibleSection>
+
         {/* Phase AI — Help / Support section. Single canonical contact. */}
-        <CollapsibleSection title="Help">
+        <CollapsibleSection title="Help & About">
           {/* Phase 411 — Quick Start Guide. Same content as the PDF
               tester guide, available in-app so testers can refer back
               during use without hunting for the email attachment. */}
@@ -1507,9 +1503,8 @@ export default function Settings() {
               smartplaycaddie.com/privacy →
             </Text>
           </TouchableOpacity>
-        </CollapsibleSection>
 
-        <CollapsibleSection title="About">
+          {/* 2026-06-10 — About merged into Help & About. */}
           <View style={styles.aboutRow}>
             <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>App</Text>
             <Text style={[styles.aboutValue, { color: colors.text_primary }]}>SmartPlay Caddie Pro</Text>
@@ -1546,13 +1541,11 @@ export default function Settings() {
               {t('labels.meta_glasses_instructions')}
             </Text>
           </View>
-        </CollapsibleSection>
 
-        {/* 2026-05-25 — Fix AE: Beta Feedback section visible to ALL
-            users. Issue Log captures voice ("log this: ...") + Export
-            mails the list to support@smartplaycaddie.com. Owner gets
-            the additional Claude triage button inside the log itself. */}
-        <CollapsibleSection title="Beta Feedback">
+          {/* 2026-06-10 — Beta Feedback (Issue Log) merged into Help & About.
+              Issue Log captures voice ("log this: ...") + Export mails the list
+              to support@smartplaycaddie.com. Owner gets the Claude triage button
+              inside the log itself. */}
           <TouchableOpacity
             style={styles.resetRow}
             onPress={() => router.push('/owner-logs' as never)}
