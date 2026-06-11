@@ -760,11 +760,33 @@ export default function SmartMotion() {
     }
   }, [targetFrameUri, sessionId, setSessionBallArea]);
 
-  // Library re-analyze (clipUriParam) path.
+  // Library / upload re-analyze (clipUriParam) path.
+  // 2026-06-11 (audit C2) — an uploaded clip carries NO acoustics, so — exactly
+  // like range mode — segment swings from VIDEO. Without this, a 6-swing upload
+  // collapsed to a single "1 of 1" read (analyzeSwing's internal locateSwingWindow
+  // is singular). We only segment when the locator finds MORE THAN ONE swing, so
+  // a genuine single-swing upload behaves exactly as before (no regression).
   useEffect(() => {
-    if (clipUriParam && phase === 'analyzing' && analysis == null && !analysisError) {
-      void runAnalysis(clipUriParam);
-    }
+    if (!(clipUriParam && phase === 'analyzing' && analysis == null && !analysisError)) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const pose = await import('../../services/poseDetection');
+        const durMs = await pose.probeDurationMs(clipUriParam).catch(() => 0);
+        const swings = durMs > 0 ? await pose.locateSwings(clipUriParam, durMs) : [];
+        if (!cancelled && swings.length > 1) {
+          const segs = segmentsFromVideoSwings(swings, durMs);
+          setSegments(segs);
+          setSelectedSwing(0);
+          void runAnalysis(clipUriParam, segs[0]);
+          return;
+        }
+      } catch (e) {
+        console.log('[smartmotion] upload video segmentation failed (non-fatal):', e);
+      }
+      if (!cancelled) void runAnalysis(clipUriParam); // single-swing fallback
+    })();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clipUriParam]);
 
@@ -1081,11 +1103,17 @@ export default function SmartMotion() {
       // so it SKIPS multi-segmentation and falls through to single-swing
       // localization (runAnalysis with no segment). Cage uses its acoustic
       // segments. Empty range result also falls through gracefully.
+      // 2026-06-11 (audit C1) — CAGE also falls back to the video locator when
+      // acoustics yield ZERO segments. A loud bay (floor > -30dB), a failed
+      // mic-metering session, or a noisy clip routinely zeroes the strike
+      // detector — without this, a 6-swing cage reel silently collapsed to a
+      // single "1 of 1" read. The fallback only runs when there are NO acoustic
+      // segments, so a working acoustic capture is completely unaffected.
       const stopMode = useRoundStore.getState().isRoundActive
         ? 'course'
         : useSettingsStore.getState().environmentMode;
       let segsForAnalysis = detectedSegments;
-      if (stopMode === 'range' && detectedSegments.length === 0) {
+      if ((stopMode === 'range' || stopMode === 'cage') && detectedSegments.length === 0) {
         try {
           const pose = await import('../../services/poseDetection');
           const durMs = await pose.probeDurationMs(recorded.uri).catch(() => RANGE_RECORDING_MAX_SECONDS * 1000);

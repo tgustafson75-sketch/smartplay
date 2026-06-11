@@ -5,6 +5,7 @@ import { Audio } from 'expo-av';
 // so an Auto-Listen mic restart can't race a TTS playback mode write and
 // flip routing / silent-mode mid-utterance.
 import { setAudioModeSerial } from '../services/voiceService';
+import { useSettingsStore } from '../store/settingsStore';
 
 // ─── TUNABLE CONSTANTS ────────────────────
 // Phase AB — SILENCE_DURATION_MS bumped from 1500 → 2800. Natural
@@ -93,9 +94,14 @@ export function useVoiceActivityDetection({
     try {
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
+        // 2026-06-11 (audit) — flip the toggle OFF so it stops lying. Before
+        // this, a denied mic left Auto-Listen showing ON while nothing was
+        // listening — the user thought the caddie was hearing them. Turning it
+        // off makes the UI reflect reality; they re-enable after granting.
+        try { useSettingsStore.getState().setAutoListenEnabled(false); } catch { /* noop */ }
         Alert.alert(
           'Microphone Required',
-          'Auto-Listen needs microphone access. Please enable it in Settings, or turn off Auto-Listen.',
+          'Auto-Listen needs microphone access. Enable it in Settings, then turn Auto-Listen back on.',
         );
         return;
       }

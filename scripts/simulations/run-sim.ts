@@ -1067,9 +1067,9 @@ check('Environment mode phase 2: range video swing-segmentation (acoustics off)'
     /export async function locateSwings/.test(read('services/poseDetection.ts')) &&
     /mode: 'locate_swings'/.test(read('services/poseDetection.ts')) &&
     /body\.mode === 'locate_swings'/.test(read('api/swing-analysis.ts')) &&
-    /stopMode === 'range' && detectedSegments\.length === 0/.test(smEnvSrc) &&
+    /\(stopMode === 'range' \|\| stopMode === 'cage'\) && detectedSegments\.length === 0/.test(smEnvSrc) &&
     /segmentsFromVideoSwings\(swings, durMs\)/.test(smEnvSrc),
-  'range mode (acoustics off) finds every swing from video: locateSwings() asks the new server locate_swings mode for all swing times, segmentsFromVideoSwings() builds the SAME SwingSegment[] the cage path uses (shared reel + per-swing analysis), and an empty result falls back to single-swing localization');
+  'range (acoustics off) segments swings from video — locateSwings() asks the server locate_swings mode for all swing times, segmentsFromVideoSwings() builds the SAME SwingSegment[] the cage acoustic path uses; cage also uses this as a SAFETY NET only when acoustics yield 0 segments; empty result still falls back to single-swing localization');
 
 // 2026-06-10 — Environment mode phase 3: course = acoustics off + single shot,
 // and a live round forces course.
@@ -1325,6 +1325,45 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('Bulk import: addImportedRound dedupes re-imports (audit #2)',
     /dedupe/.test(roundStoreSrc) && /dupKey/.test(roundStoreSrc) && /return dup\.id;/.test(roundStoreSrc),
     'a re-imported round matching an existing (day, course, score, holes) is skipped so duplicates do not inflate the handicap window');
+}
+
+// ─── Whole-app audit fixes (pre-SmartMotion-test-day) ───────────────────────────
+{
+  const smSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/smartmotion.tsx'), 'utf-8');
+  check('SmartMotion: cage falls back to video locator when acoustics find 0 swings',
+    /\(stopMode === 'range' \|\| stopMode === 'cage'\) && detectedSegments\.length === 0/.test(smSrc2),
+    'a loud bay that zeroes the acoustic strike detector no longer collapses a multi-swing cage reel to "1 of 1" — it falls back to locateSwings (only when there are NO acoustic segments, so working acoustics are untouched)');
+
+  check('SmartMotion: uploaded/library clips segment multi-swing from video (the "6 swings, 1 of 1" bug)',
+    /pose\.locateSwings\(clipUriParam/.test(smSrc2) && /swings\.length > 1/.test(smSrc2),
+    'a re-analyzed upload (no acoustics) runs the video locator and shows all swings when >1 found; a genuine single-swing upload is unchanged');
+
+  const listenSrc = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');
+  check('Voice: listeningSession dispatches navigate tool_actions',
+    /=== 'navigate'/.test(listenSrc) && /router\.push\(path\)/.test(listenSrc),
+    'hands-free "open Smart Motion" now actually navigates (the navigate tool_action was previously dropped — only open_url was handled)');
+
+  const dashSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/dashboard.tsx'), 'utf-8');
+  check('Dashboard: quick-score placeholder shots excluded from lifetime stats',
+    /!s\.id\?\.startsWith\('qs-'\)/.test(dashSrc2),
+    'qs- placeholder shots no longer inflate lifetime fairway% / shot count');
+
+  const scoreSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/scorecard.tsx'), 'utf-8');
+  check('Scorecard: quick-score does NOT fabricate 2 putts/hole',
+    !/logPutts\(hole, 2\)/.test(scoreSrc2),
+    'a bare score tap no longer writes a fake 2-putt that corrupted GIR%/avg-putts and persisted to history');
+
+  const vadSrc = fs.readFileSync(path.resolve(__dirname, '../../hooks/useVoiceActivityDetection.ts'), 'utf-8');
+  check('Voice: denied mic permission turns Auto-Listen toggle OFF',
+    /setAutoListenEnabled\(false\)/.test(vadSrc),
+    'the toggle stops lying — a denied mic flips Auto-Listen off instead of showing ON while nothing listens');
+
+  const cageDbgSrc = fs.readFileSync(path.resolve(__dirname, '../../app/cage-debug.tsx'), 'utf-8');
+  check('Stores: cage-debug Feel Capture viewer no longer uses a fresh-array selector',
+    /useCageStore\(\(s\) => s\.activeSession\)/.test(cageDbgSrc) &&
+      /return listFeelCaptureTuples\(50\)/.test(cageDbgSrc) &&
+      !/useCageStore\(\(s\) => \{[\s\S]*?return listFeelCaptureTuples/.test(cageDbgSrc),
+    'the last render-loop crash-class instance is closed (raw store fields selected; the array is built in useMemo, not returned fresh from a selector)');
 }
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────

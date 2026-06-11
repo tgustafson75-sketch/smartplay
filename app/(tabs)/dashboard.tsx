@@ -165,7 +165,12 @@ export default function Dashboard() {
   // tries" — acceptable until we add par-aware filtering).
   const shotStats = useMemo(() => {
     const allHistoricalShots = roundHistory.flatMap((r) => r.shots);
-    const fullPool = [...allHistoricalShots, ...allShots];
+    // 2026-06-11 (audit) — exclude quick-score placeholder shots (id "qs-…").
+    // handleQuickScore mints synthetic 'clean' shots so a bare score tap logs a
+    // stroke count; counting them here inflated lifetime fairway% and shot count
+    // with fabricated tee shots. scorecard.tsx already filters these for its own
+    // stats — the dashboard was never given the same guard.
+    const fullPool = [...allHistoricalShots, ...allShots].filter(s => !s.id?.startsWith('qs-'));
     const shotsLogged = fullPool.length;
     if (shotsLogged === 0) {
       return { shotsLogged: 0, fairwayPct: 0, avgYds: 0, teeShots: 0 };

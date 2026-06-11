@@ -64,7 +64,6 @@ export default function Scorecard() {
   const currentRoundId = useRoundStore(s => s.currentRoundId);
   const roundHistory = useRoundStore(s => s.roundHistory);
   const logScore = useRoundStore(s => s.logScore);
-  const logPutts = useRoundStore(s => s.logPutts);
   const logShot = useRoundStore(s => s.logShot);
   const clearQuickScorePlaceholders = useRoundStore(s => s.clearQuickScorePlaceholders);
   const heroMoments = useRelationshipStore(s => s.heroMoments);
@@ -353,7 +352,12 @@ export default function Scorecard() {
       logShot(placeholder);
     }
     logScore(hole, score);
-    logPutts(hole, 2);
+    // 2026-06-11 (audit) — do NOT fabricate putts on a bare score tap. The old
+    // hardcoded 2-putt write fed the GIR proxy (strokesToGreen = score minus
+    // putts) and avg-putts/hole with fiction, and persisted into roundHistory.
+    // Leaving putts unset makes the GIR/putt stats skip the hole (honest)
+    // instead of counting a made-up two-putt. Real putts come from the cockpit /
+    // voice / tracked paths, which pass actual values.
     // Fix T (2026-05-23) — scoring is now decoupled from hole advance.
     // Player moves the hole via cockpit/data-strip arrow, scorecard row
     // tap, or voice ("next hole"). Tapping a quick-score number only

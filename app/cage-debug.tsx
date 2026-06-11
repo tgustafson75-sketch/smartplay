@@ -982,11 +982,18 @@ const styles = StyleSheet.create({
 
 // 2026-05-24 — Feel Capture viewer (owner-only dataset reviewer).
 function FeelCaptureViewer() {
-  const tuples = useCageStore((s) => {
-    void s.activeSession;
-    void s.sessionHistory;
+  // 2026-06-11 (audit) — was a fresh-array selector (listFeelCaptureTuples
+  // returns a NEW array each call) → "Maximum update depth exceeded" render
+  // loop, the same crash class fixed in the family screens. Subscribe to the
+  // raw store fields (stable refs) and compute the array in useMemo so the
+  // reference only changes when the underlying data does.
+  const activeSession = useCageStore((s) => s.activeSession);
+  const sessionHistory = useCageStore((s) => s.sessionHistory);
+  const tuples = useMemo(() => {
+    // deps drive recompute; listFeelCaptureTuples reads the store internally.
+    void activeSession; void sessionHistory;
     return listFeelCaptureTuples(50);
-  });
+  }, [activeSession, sessionHistory]);
   if (tuples.length === 0) {
     return (
       <View style={feelStyles.empty}>

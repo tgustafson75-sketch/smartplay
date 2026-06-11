@@ -950,11 +950,16 @@ export const useRoundStore = create<RoundState>()(
             const adjustedScore = input.holesPlayed === 9 ? input.totalScore * 2 : input.totalScore;
             const diff = calcMod.computeScoreDifferential(adjustedScore, 72.0, 113);
             profile.pushDifferential(diff);
-            if (profile.handicap_index != null) {
-              const after = calcMod.estimateNewIndex([...profile.recent_differentials, diff]);
-              if (after?.newIndex != null && Number.isFinite(after.newIndex)) {
-                profile.setHandicapIndex(after.newIndex);
-              }
+            // 2026-06-11 (audit) — always (re)estimate, even with no prior index,
+            // so single-scorecard imports (import-round.tsx, updateHandicap
+            // defaults true) produce a FIRST index once ≥3 differentials exist.
+            // estimateNewIndex self-gates below 3 (returns null). Previously the
+            // `handicap_index != null` guard meant importing rounds one at a
+            // time never produced an index. (profile.recent_differentials is the
+            // pre-push array; [...it, diff] is the correct post-push set.)
+            const after = calcMod.estimateNewIndex([...profile.recent_differentials, diff]);
+            if (after?.newIndex != null && Number.isFinite(after.newIndex)) {
+              profile.setHandicapIndex(after.newIndex);
             }
             console.log(`[handicap] imported-round differential=${diff.toFixed(1)}`);
           } catch (e) {

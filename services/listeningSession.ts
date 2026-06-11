@@ -673,6 +673,23 @@ async function openSession() {
         } else {
           console.warn('[listeningSession] Rejected unsupported URL scheme:', url);
         }
+      } else if (ta && (ta as { type?: string }).type === 'navigate') {
+        // 2026-06-11 (audit) — the brain emits {type:'navigate', path} for tool
+        // opens (Smart Motion, scorecard, library, settings…) since 2026-06-04.
+        // This path only handled 'open_url', so hands-free "open Smart Motion"
+        // spoke its line then went NOWHERE. Mirror caddie.tsx's internal-route
+        // push (same '/'-prefixed guard as open_url above).
+        const path = (ta as { type: 'navigate'; path?: string }).path;
+        if (typeof path === 'string' && path.startsWith('/')) {
+          try {
+            const router = require('expo-router').router;
+            router.push(path);
+          } catch (e) {
+            console.log('[listeningSession] navigate failed', e);
+          }
+        } else {
+          console.warn('[listeningSession] tool_action.navigate missing/invalid path:', path);
+        }
       }
     }
   } catch (e) {
